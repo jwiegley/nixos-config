@@ -206,6 +206,11 @@ in
             proxyPass = "http://127.0.0.1:8081/";
           };
 
+          locations."/jellyfin/" = {
+            proxyPass = "http://127.0.0.1:8096/jellyfin/";
+            proxyWebsockets = true;
+          };
+
           locations."/pi-hole/admin/" = {
             proxyPass = "http://127.0.0.1:8082/admin/";
             proxyWebsockets = true;
@@ -696,9 +701,6 @@ in
           ];
         } //
         backup {
-          path = "Media";
-        } //
-        backup {
           name = "Backups";
           path = "Backups/Misc";
           bucket = "Backups-Misc";
@@ -707,9 +709,8 @@ in
 
     jellyfin = {
       enable = true;
-      dataDir = "/tank/Video";
+      dataDir = "/var/lib/jellyfin";
       user = "johnw";
-      openFirewall = true;
     };
   };
 

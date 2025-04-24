@@ -55,7 +55,8 @@ in
     '';
 
     postBootCommands = ''
-      echo 1 > /sys/bus/pci/rescan
+      /run/current-system/sw/bin/sleep 60
+      /run/current-system/sw/bin/echo 1 > /sys/bus/pci/rescan
       /run/current-system/sw/bin/boltctl enroll --policy auto \
         $(boltctl | grep -A 2 "ThunderBay" \
           | grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
@@ -142,6 +143,7 @@ in
       tmux
       vim
       wget
+      zfs-prune-snapshots
     ];
 
     etc = {
@@ -256,6 +258,8 @@ in
               proxy_cookie_path /admin/ /pi-hole/admin/;
             '';
           };
+          # It would be preferable if this were not here; it may conflict with
+          # some service in the future.
           locations."/api/" = {
             proxyPass = "http://127.0.0.1:8082/api/";
           };
@@ -266,20 +270,27 @@ in
             return = "301 /pi-hole/admin/";
           };
 
-          locations."^~ /silly-tavern/" = {
-            proxyPass = "http://127.0.0.1:8083/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header Host $host;
-              # proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_redirect off;
-            '';
-          };
-          locations."= /silly-tavern" = {
-            return = "301 /silly-tavern/";
-          };
+          # locations."^~ /silly-tavern/" = {
+          #   proxyPass = "http://127.0.0.1:8083/";
+          #   proxyWebsockets = true;
+          #   extraConfig = ''
+          #     proxy_hide_header X-Frame-Options;
+          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+          #     proxy_set_header Host $host;
+          #     # proxy_set_header X-Real-IP $remote_addr;
+          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          #     proxy_set_header X-Forwarded-Proto $scheme;
+          #     proxy_set_header Accept-Encoding "";
+
+          #     proxy_cookie_path / /silly-tavern/;
+
+          #     sub_filter '<base href="/">' '<base href="/silly-tavern/">';
+          #   '';
+          # };
+          # locations."= /silly-tavern" = {
+          #   return = "301 /silly-tavern/";
+          # };
         };
       };
     };
@@ -770,25 +781,25 @@ in
       ];
     };
 
-    silly-tavern = {
-      autoStart = true;
-      image = "ghcr.io/sillytavern/sillytavern:latest";
-      ports = [
-        "8083:8000/tcp"
-      ];
-      environment = {
-        NODE_ENV = "production";
-        FORCE_COLOR = "1";
-      };
-      volumes = [
-        "/var/lib/silly-tavern/config:/home/node/app/config"
-        "/var/lib/silly-tavern/data:/home/node/app/data"
-        "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
-        "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
-      ];
-      extraOptions = [
-      ];
-    };
+    # silly-tavern = {
+    #   autoStart = true;
+    #   image = "ghcr.io/sillytavern/sillytavern:latest";
+    #   ports = [
+    #     "8083:8000/tcp"
+    #   ];
+    #   environment = {
+    #     NODE_ENV = "production";
+    #     FORCE_COLOR = "1";
+    #   };
+    #   volumes = [
+    #     "/var/lib/silly-tavern/config:/home/node/app/config"
+    #     "/var/lib/silly-tavern/data:/home/node/app/data"
+    #     "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
+    #     "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+    #   ];
+    #   extraOptions = [
+    #   ];
+    # };
   };
 
   # system.activationScripts.consoleBlank = ''

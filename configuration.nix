@@ -15,6 +15,15 @@ let
 
   chain-restic-backups = list:
     lib.attrsets.mergeAttrsList (map chain-restic-backups-service (pairs list));
+
+  portal = pkgs.stdenv.mkDerivation {
+    name = "nginx-portal";
+    src = ./nginx-portal;
+    installPhase = ''
+      mkdir -p $out
+      cp -r $src/* $out/
+    '';
+  };
 in
 {
   system.stateVersion = "25.05"; # Did you read the comment?
@@ -191,8 +200,10 @@ in
 
     nginx = {
       enable = true;
+
       recommendedGzipSettings = true;
       recommendedProxySettings = true;
+
       virtualHosts = {
         smokeping.listen = [
           { addr = "0.0.0.0"; port = 8081; }
@@ -202,13 +213,21 @@ in
           forceSSL = false; # Optional, for HTTPS
           enableACME = false; # Optional, for automatic Let's Encrypt
 
+          root = "${portal}";
+
           locations."/smokeping/" = {
             proxyPass = "http://127.0.0.1:8081/";
+          };
+          locations."/smokeping" = {
+            return = "301 /smokeping/";
           };
 
           locations."/jellyfin/" = {
             proxyPass = "http://127.0.0.1:8096/jellyfin/";
             proxyWebsockets = true;
+          };
+          locations."/jellyfin" = {
+            return = "301 /jellyfin/";
           };
 
           locations."/pi-hole/admin/" = {
@@ -237,19 +256,29 @@ in
               proxy_cookie_path /admin/ /pi-hole/admin/;
             '';
           };
-
           locations."/api/" = {
             proxyPass = "http://127.0.0.1:8082/api/";
           };
-
-          # Redirect /pi-hole to /pi-hole/admin/
           locations."/pi-hole" = {
             return = "301 /pi-hole/admin/";
           };
-
-          # Redirect /pi-hole/ to /pi-hole/admin/
           locations."/pi-hole/" = {
             return = "301 /pi-hole/admin/";
+          };
+
+          locations."^~ /silly-tavern/" = {
+            proxyPass = "http://127.0.0.1:8083/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              proxy_set_header Host $host;
+              # proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_redirect off;
+            '';
+          };
+          locations."= /silly-tavern" = {
+            return = "301 /silly-tavern/";
           };
         };
       };
@@ -738,6 +767,26 @@ in
         "--network=host"
         "--cap-add=NET_ADMIN"
         "--cap-add=NET_RAW"
+      ];
+    };
+
+    silly-tavern = {
+      autoStart = true;
+      image = "ghcr.io/sillytavern/sillytavern:latest";
+      ports = [
+        "8083:8000/tcp"
+      ];
+      environment = {
+        NODE_ENV = "production";
+        FORCE_COLOR = "1";
+      };
+      volumes = [
+        "/var/lib/silly-tavern/config:/home/node/app/config"
+        "/var/lib/silly-tavern/data:/home/node/app/data"
+        "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
+        "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+      ];
+      extraOptions = [
       ];
     };
   };

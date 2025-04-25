@@ -189,6 +189,40 @@ in
     mtr.enable = true;
   };
 
+  systemd = {
+    services.git-workspace-archive = {
+      description = "Archive Git repositories";
+      path = with pkgs; [
+        git
+        gitAndTools.git-workspace
+        openssh
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "johnw";
+        Group = "johnw";
+        ExecStart = "/home/johnw/bin/workspace-update --archive";
+      };
+    };
+
+    timers.my-daily-job = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "daily"; # Run daily
+        Unit = "git-workspace-archive.service";
+      };
+    };
+
+    services.podman-pihole = {
+      requires = [ "unbound.service" ];
+      bindsTo = [ "unbound.service" ];
+      after = [
+        "unbound.service"
+        "network-online.target"
+      ];
+    };
+  };
+
   services = {
     hardware.bolt.enable = true;
 
@@ -197,6 +231,62 @@ in
       settings = {
         PasswordAuthentication = false;
         PermitRootLogin = "no";
+      };
+    };
+
+    unbound = {
+      enable = true;
+      settings = {
+        server = {
+          interface = [ "127.0.0.1" ];
+          port = 5353;
+
+          # Minimize data in DNS queries for better privacy
+          qname-minimisation = true;
+
+          # Hide server identity and version
+          hide-identity = true;
+          hide-version = true;
+
+          # Protect against DNS rebinding attacks
+          private-address = [
+            "192.168.0.0/16"
+            "169.254.0.0/16"
+            "172.16.0.0/12"
+            "10.0.0.0/8"
+            "fd00::/8"
+            "fe80::/10"
+          ];
+
+          # Use 0x20 bit encoding to help protect against forgery
+          use-caps-for-id = true;
+
+          # Query logging (for debugging purposes)
+          log-queries = false;
+          # Set verbosity level (0-5, where 1 is recommended for basic logging)
+          verbosity = 1;
+
+          # Define the .local zone as static so you can add your own records
+          local-zone = [ "local. static" ];
+
+          # Add static host records
+          local-data = [
+            "\"router.local. IN A 192.168.50.1\""
+            "\"hera.local. IN A 192.168.50.5\""
+            "\"athena.local. IN A 192.168.50.235\""
+            "\"vulcan.local. IN A 192.168.50.182\""
+            "\"bazigush.local. IN A 192.168.50.33\""
+          ];
+
+          # For PTR records (reverse lookups)
+          local-data-ptr = [
+            "\"192.168.50.1 router.local.\""
+            "\"192.168.50.5 hera.local.\""
+            "\"192.168.50.235 athena.local.\""
+            "\"192.168.50.182 vulcan.local.\""
+            "\"192.168.50.33 bazigush.local.\""
+          ];
+        };
       };
     };
 
@@ -269,28 +359,6 @@ in
           locations."/pi-hole/" = {
             return = "301 /pi-hole/admin/";
           };
-
-          # locations."^~ /silly-tavern/" = {
-          #   proxyPass = "http://127.0.0.1:8083/";
-          #   proxyWebsockets = true;
-          #   extraConfig = ''
-          #     proxy_hide_header X-Frame-Options;
-          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-          #     proxy_set_header Host $host;
-          #     # proxy_set_header X-Real-IP $remote_addr;
-          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          #     proxy_set_header X-Forwarded-Proto $scheme;
-          #     proxy_set_header Accept-Encoding "";
-
-          #     proxy_cookie_path / /silly-tavern/;
-
-          #     sub_filter '<base href="/">' '<base href="/silly-tavern/">';
-          #   '';
-          # };
-          # locations."= /silly-tavern" = {
-          #   return = "301 /silly-tavern/";
-          # };
         };
       };
     };
@@ -769,6 +837,8 @@ in
         WEBPASSWORD = "your_secure_password";
         PIHOLE_INTERFACE = "enp4s0";
         FTLCONF_dns_listeningMode = "all";
+        DNS1 = "127.0.0.1#5353";
+        DNS2 = "127.0.0.1#5353";
       };
       volumes = [
         "/var/lib/pihole/etc-pihole:/etc/pihole"
@@ -780,26 +850,6 @@ in
         "--cap-add=NET_RAW"
       ];
     };
-
-    # silly-tavern = {
-    #   autoStart = true;
-    #   image = "ghcr.io/sillytavern/sillytavern:latest";
-    #   ports = [
-    #     "8083:8000/tcp"
-    #   ];
-    #   environment = {
-    #     NODE_ENV = "production";
-    #     FORCE_COLOR = "1";
-    #   };
-    #   volumes = [
-    #     "/var/lib/silly-tavern/config:/home/node/app/config"
-    #     "/var/lib/silly-tavern/data:/home/node/app/data"
-    #     "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
-    #     "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
-    #   ];
-    #   extraOptions = [
-    #   ];
-    # };
   };
 
   # system.activationScripts.consoleBlank = ''

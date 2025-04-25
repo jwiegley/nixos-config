@@ -156,14 +156,14 @@ in
       };
     };
 
-    services.podman-pihole = {
-      requires = [ "unbound.service" ];
-      bindsTo = [ "unbound.service" ];
-      after = [
-        "unbound.service"
-        "network-online.target"
-      ];
-    };
+    # services.podman-pihole = {
+    #   requires = [ "unbound.service" ];
+    #   bindsTo = [ "unbound.service" ];
+    #   after = [
+    #     "unbound.service"
+    #     "network-online.target"
+    #   ];
+    # };
   };
 
   services = {
@@ -191,61 +191,60 @@ in
       };
     };
 
-    unbound = {
-      enable = true;
-      settings = {
-        server = {
-          interface = [ "127.0.0.1" ];
-          port = 5353;
+    # unbound = {
+    #   enable = true;
+    #   settings = {
+    #     server = {
+    #       interface = [ "127.0.0.1" ];
+    #       port = 5353;
 
-          # Minimize data in DNS queries for better privacy
-          qname-minimisation = true;
+    #       # Minimize data in DNS queries for better privacy
+    #       qname-minimisation = true;
 
-          # Hide server identity and version
-          hide-identity = true;
-          hide-version = true;
+    #       # Hide server identity and version
+    #       hide-identity = true;
+    #       hide-version = true;
 
-          # Protect against DNS rebinding attacks
-          private-address = [
-            "192.168.0.0/16"
-            "169.254.0.0/16"
-            "172.16.0.0/12"
-            "10.0.0.0/8"
-            "fd00::/8"
-            "fe80::/10"
-          ];
+    #       # Protect against DNS rebinding attacks
+    #       private-address = [
+    #         "192.168.0.0/16"
+    #         "169.254.0.0/16"
+    #         "172.16.0.0/12"
+    #         "10.0.0.0/8"
+    #         "fd00::/8"
+    #         "fe80::/10"
+    #       ];
 
-          # Use 0x20 bit encoding to help protect against forgery
-          use-caps-for-id = true;
+    #       # Use 0x20 bit encoding to help protect against forgery
+    #       use-caps-for-id = true;
 
-          # Query logging (for debugging purposes)
-          log-queries = false;
-          # Set verbosity level (0-5, where 1 is recommended for basic logging)
-          verbosity = 1;
+    #       # Query logging (for debugging purposes)
+    #       log-queries = false;
+    #       verbosity = 1;
 
-          # Define the .local zone as static so you can add your own records
-          local-zone = [ "local. static" ];
+    #       # Define the .local zone as static so you can add your own records
+    #       local-zone = [ "local. static" ];
 
-          # Add static host records
-          local-data = [
-            "\"router.local. IN A 192.168.50.1\""
-            "\"hera.local. IN A 192.168.50.5\""
-            "\"athena.local. IN A 192.168.50.235\""
-            "\"vulcan.local. IN A 192.168.50.182\""
-            "\"bazigush.local. IN A 192.168.50.33\""
-          ];
+    #       # Add static host records
+    #       local-data = [
+    #         "\"router.local. IN A 192.168.50.1\""
+    #         "\"hera.local. IN A 192.168.50.5\""
+    #         "\"athena.local. IN A 192.168.50.235\""
+    #         "\"vulcan.local. IN A 192.168.50.182\""
+    #         "\"bazigush.local. IN A 192.168.50.33\""
+    #       ];
 
-          # For PTR records (reverse lookups)
-          local-data-ptr = [
-            "\"192.168.50.1 router.local.\""
-            "\"192.168.50.5 hera.local.\""
-            "\"192.168.50.235 athena.local.\""
-            "\"192.168.50.182 vulcan.local.\""
-            "\"192.168.50.33 bazigush.local.\""
-          ];
-        };
-      };
-    };
+    #       # For PTR records (reverse lookups)
+    #       local-data-ptr = [
+    #         "\"192.168.50.1 router.local.\""
+    #         "\"192.168.50.5 hera.local.\""
+    #         "\"192.168.50.235 athena.local.\""
+    #         "\"192.168.50.182 vulcan.local.\""
+    #         "\"192.168.50.33 bazigush.local.\""
+    #       ];
+    #     };
+    #   };
+    # };
 
     nginx = {
       enable = true;
@@ -804,8 +803,8 @@ in
         WEBPASSWORD = "your_secure_password";
         PIHOLE_INTERFACE = "enp4s0";
         FTLCONF_dns_listeningMode = "all";
-        DNS1 = "127.0.0.1#5353";
-        DNS2 = "127.0.0.1#5353";
+        # DNS1 = "127.0.0.1#5353";
+        # DNS2 = "127.0.0.1#5353";
       };
       volumes = [
         "/var/lib/pihole/etc-pihole:/etc/pihole"

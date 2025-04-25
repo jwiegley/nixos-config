@@ -1,21 +1,5 @@
 { config, lib, pkgs, ... }:
 let
-  chain-restic-backups-service = before: after: {
-    systemd.services."restic-backups-${after}" = {
-      after = [ "restic-backups-${before}.service" ];
-      requires = [ "restic-backups-${before}.service" ];
-    };
-  };
-
-  pairs = list:
-    if builtins.length list < 2
-    then []
-    else [ [ list.${toString 0} list.${toString 1} ] ]
-           ++ pairs (builtins.tail list);
-
-  chain-restic-backups = list:
-    lib.attrsets.mergeAttrsList (map chain-restic-backups-service (pairs list));
-
   portal = pkgs.stdenv.mkDerivation {
     name = "nginx-portal";
     src = ./nginx-portal;

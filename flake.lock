@@ -15,6 +15,26 @@
         "type": "github"
       }
     },
+    "nixos-logwatch": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1738062609,
+        "narHash": "sha256-2Ca37b7X+QUwW7UEL/yfbowtqMOS7JbAscIbCBNUhrU=",
+        "owner": "SFrijters",
+        "repo": "nixos-logwatch",
+        "rev": "966c6dc4df0f78c9c623be15e3190c2ffb0eae98",
+        "type": "github"
+      },
+      "original": {
+        "owner": "SFrijters",
+        "repo": "nixos-logwatch",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1745391562,
@@ -50,6 +70,7 @@
     "root": {
       "inputs": {
         "nixos-hardware": "nixos-hardware",
+        "nixos-logwatch": "nixos-logwatch",
         "nixpkgs": "nixpkgs",
         "nixpkgs-pr": "nixpkgs-pr"
       }

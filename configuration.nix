@@ -136,57 +136,16 @@ in
 
   environment = {
     systemPackages = with pkgs; [
-      git
-      htop
-      restic
-      rsync
-      tmux
-      vim
-      wget
+      mailutils
       zfs-prune-snapshots
     ];
-
-    etc = {
-      "sanoid/sanoid.conf".text = ''
-        [tank]
-
-        use_template = archival
-        recursive = yes
-        process_children_only = yes
-
-        [template_archival]
-
-        frequently = 0
-        hourly = 96
-        daily = 90
-        weekly = 26
-        monthly = 12
-        yearly = 30
-
-        autoprune = yes
-
-        [tank/ChainState/kadena]
-
-        use_template = production
-        recursive = yes
-        process_children_only = yes
-
-        [template_production]
-
-        frequently = 0
-        hourly = 24
-        daily = 14
-        weekly = 4
-        monthly = 3
-        yearly = 0
-
-        autoprune = yes
-      '';
-    };
   };
 
   programs = {
-    mtr.enable = true;
+    git.enable = true;
+    htop.enable = true;
+    tmux.enable = true;
+    vim.enable = true;
   };
 
   systemd = {
@@ -225,6 +184,20 @@ in
 
   services = {
     hardware.bolt.enable = true;
+
+    # Set proper ownership for the secret
+
+    postfix = {
+      enable = true;
+      relayHost = "smtp.fastmail.com";
+      relayPort = 587;
+      config = {
+        smtp_use_tls = "yes";
+        smtp_sasl_auth_enable = "yes";
+        smtp_sasl_security_options = "";
+        smtp_sasl_password_maps = "texthash:/secrets/postfix_sasl";
+      };
+    };
 
     openssh = {
       enable = true;
@@ -361,6 +334,16 @@ in
           };
         };
       };
+    };
+
+    logwatch = {
+      enable = true;
+      range = "since 24 hours ago for those hours";
+      mailto = "johnw@newartisans.com";
+      mailfrom = "johnw@newartisans.com";
+      customServices = [
+        { name = "sshd"; }
+      ];
     };
 
     sanoid = {

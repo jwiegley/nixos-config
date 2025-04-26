@@ -95,27 +95,28 @@ in
     groups = {
       johnw = {};
     };
-    users = {
-      johnw = {
-        uid = 1000;
-        isNormalUser = true;
-        description = "John Wiegley";
-        group = "johnw";
-        extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
-        packages = with pkgs; [
-        ];
-        openssh.authorizedKeys.keys = [
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJAj2IzkXyXEl+ReCg9H+t55oa6GIiumPWeufcYCWy3F yubikey-gnupg"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAING2r8bns7h9vZIfZSGsX+YmTSe2Tv1X8f/Qlqo+RGBb yubikey-14476831-gnupg"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJD0sIKWWVF+zIWcNm/BfsbCQxuUBHD8nRNSpZV+mCf+ ShellFish@iPhone-28062024"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZQeQ/gKkOwuwktwD4z0ZZ8tpxNej3qcHS5ZghRcdAd ShellFish@iPad-22062024"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPvP6nhCLyJLa2LsXLVYN1lbGHfv/ZL+Rt/y3Ao/hfGz Clio"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeIfb6iRmTROLKVslU2R0U//dP9qze1fkJMhE9wWrSJ Athena"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO5RcpNe3ARxlVdeeAmoipizC03EM6HfZsfQ+sWjoPf5 Vulcan"
-          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmBoRIHfrT5RfCh1qyJP+aRwH6zpKJKv8KSk+1Rj8N0 Hera"
-        ];
+    users =
+      let keys = [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJAj2IzkXyXEl+ReCg9H+t55oa6GIiumPWeufcYCWy3F yubikey-gnupg"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAING2r8bns7h9vZIfZSGsX+YmTSe2Tv1X8f/Qlqo+RGBb yubikey-14476831-gnupg"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJD0sIKWWVF+zIWcNm/BfsbCQxuUBHD8nRNSpZV+mCf+ ShellFish@iPhone-28062024"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZQeQ/gKkOwuwktwD4z0ZZ8tpxNej3qcHS5ZghRcdAd ShellFish@iPad-22062024"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPvP6nhCLyJLa2LsXLVYN1lbGHfv/ZL+Rt/y3Ao/hfGz Clio"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeIfb6iRmTROLKVslU2R0U//dP9qze1fkJMhE9wWrSJ Athena"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmBoRIHfrT5RfCh1qyJP+aRwH6zpKJKv8KSk+1Rj8N0 Hera"
+      ]; in {
+        root = {
+          openssh.authorizedKeys = { inherit keys; };
+        };
+        johnw = {
+          uid = 1000;
+          isNormalUser = true;
+          description = "John Wiegley";
+          group = "johnw";
+          extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
+          openssh.authorizedKeys = { inherit keys; };
+        };
       };
-    };
   };
 
   environment = {
@@ -188,7 +189,7 @@ in
       enable = true;
       settings = {
         PasswordAuthentication = false;
-        PermitRootLogin = "no";
+        PermitRootLogin = "yes";
       };
     };
 
@@ -320,15 +321,30 @@ in
       };
     };
 
-    logwatch = {
-      enable = true;
-      range = "since 24 hours ago for those hours";
-      mailto = "johnw@newartisans.com";
-      mailfrom = "johnw@newartisans.com";
-      customServices = [
-        { name = "sshd"; }
-      ];
-    };
+    logwatch =
+      let
+        restic-script = pkgs.writeShellApplication {
+          name = "logwatch-restic";
+          text = ''
+            for fileset in doc src Home Photos Audio Video Backups ; do \
+              echo "=== $fileset ==="; \
+              /run/current-system/sw/bin/restic-$fileset snapshots --json | \
+                ${pkgs.jq}/bin/jq -r 'sort_by(.time) | reverse | .[:4][] | .time'; \
+            done
+          '';
+        };
+      in {
+        enable = true;
+        range = "since 24 hours ago for those hours";
+        mailto = "johnw@newartisans.com";
+        mailfrom = "johnw@newartisans.com";
+        customServices = [
+          { name = "sshd"; }
+          { name = "restic";
+            title = "Restic Backups";
+            script = "${lib.getExe restic-script}"; }
+        ];
+      };
 
     sanoid = {
       enable = true;

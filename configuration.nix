@@ -122,6 +122,7 @@ in
     systemPackages = with pkgs; [
       mailutils
       zfs-prune-snapshots
+      jq
     ];
   };
 

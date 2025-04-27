@@ -8,8 +8,11 @@ let
       cp -r $src/* $out/
     '';
   };
+
+  attrNameList = attrs:
+    builtins.concatStringsSep " " (builtins.attrNames attrs);
 in
-{
+rec {
   system.stateVersion = "25.05"; # Did you read the comment?
 
   imports =
@@ -135,6 +138,24 @@ in
   };
 
   systemd = {
+    services.zpool-scrub = {
+      description = "Scrub ZFS pool";
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        Group = "root";
+        ExecStart = "/run/current-system/sw/bin/zpool scrub rpool tank";
+      };
+    };
+
+    timers.zpool-scrub = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "monthly";
+        Unit = "zpool-scrub.service";
+      };
+    };
+
     services.git-workspace-archive = {
       description = "Archive Git repositories";
       path = with pkgs; [
@@ -150,11 +171,40 @@ in
       };
     };
 
-    timers.my-daily-job = {
+    timers.git-workspace-archive = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "daily"; # Run daily
+        OnCalendar = "daily";
         Unit = "git-workspace-archive.service";
+      };
+    };
+
+    services.restic-check =
+      let
+        restic-check-script = pkgs.writeShellApplication {
+          name = "restic-check";
+          text = ''
+            for fileset in ${attrNameList services.restic.backups} ; do \
+              echo "=== $fileset ==="; \
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h check; \
+            done
+          '';
+        }; in {
+          description = "Run restic check on backup repository";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${lib.getExe restic-check-script}";
+            User = "root";
+          };
+        };
+
+    timers.restic-check = {
+      description = "Timer for restic check";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "weekly";
+        Persistent = true;
       };
     };
 
@@ -168,7 +218,7 @@ in
     # };
   };
 
-  services = {
+  services = rec {
     hardware.bolt.enable = true;
 
     # Set proper ownership for the secret
@@ -326,12 +376,31 @@ in
         restic-script = pkgs.writeShellApplication {
           name = "logwatch-restic";
           text = ''
-            for fileset in doc src Home Photos Audio Video Backups ; do \
+            for fileset in ${attrNameList restic.backups} ; do \
               echo "=== $fileset ==="; \
               /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-                ${pkgs.jq}/bin/jq -r 'sort_by(.time) | reverse | .[:4][] | .time'; \
+                ${pkgs.jq}/bin/jq -r \
+                  'sort_by(.time) | reverse | .[:4][] | .time'; \
             done
           '';
+        };
+        zfs-snapshot-script = pkgs.writeShellApplication {
+          name = "logwatch-zfs-snapshot";
+          text = ''
+            for fs in $(/run/current-system/sw/bin/zfs list \
+                          -H -o name -t filesystem -r tank); do \
+              /run/current-system/sw/bin/zfs list \
+                -H -o name -t snapshot -S creation -d 1 "$fs" | head -1; \
+            done
+          '';
+        };
+        zpool-script = pkgs.writeShellApplication {
+          name = "logwatch-zpool";
+          text = "/run/current-system/sw/bin/zpool status";
+        };
+        systemctl-failed-script = pkgs.writeShellApplication {
+          name = "logwatch-systemctl-failed";
+          text = "/run/current-system/sw/bin/systemctl --failed";
         };
       in {
         enable = true;
@@ -339,10 +408,20 @@ in
         mailto = "johnw@newartisans.com";
         mailfrom = "johnw@newartisans.com";
         customServices = [
+          { name = "systemctl-failed";
+            title = "Failed systemctl services";
+            script = "${lib.getExe systemctl-failed-script}";
+          }
           { name = "sshd"; }
           { name = "restic";
-            title = "Restic Backups";
+            title = "Restic Snapshots";
             script = "${lib.getExe restic-script}"; }
+          { name = "zpool";
+            title = "ZFS Pool Status";
+            script = "${lib.getExe zpool-script}"; }
+          { name = "zfs-snapshot";
+            title = "ZFS Snapshots";
+            script = "${lib.getExe zfs-snapshot-script}"; }
         ];
       };
 

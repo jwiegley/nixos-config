@@ -164,7 +164,6 @@ rec {
         openssh
       ];
       serviceConfig = {
-        Type = "oneshot";
         User = "johnw";
         Group = "johnw";
         ExecStart = "/home/johnw/bin/workspace-update --archive";
@@ -188,12 +187,15 @@ rec {
               echo "=== $fileset ==="; \
               /run/current-system/sw/bin/restic-$fileset \
                 --retry-lock=1h check; \
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h prune; \
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h repair snapshots; \
             done
           '';
         }; in {
           description = "Run restic check on backup repository";
           serviceConfig = {
-            Type = "oneshot";
             ExecStart = "${lib.getExe restic-check-script}";
             User = "root";
           };

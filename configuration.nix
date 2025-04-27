@@ -874,8 +874,13 @@ rec {
         } //
         backup {
           name = "Backups";
-          path = "Backups/Misc";
+          path = "Backups";
           bucket = "Backups-Misc";
+          exclude = [
+            "Git"
+            "Images"
+            "chainweb"
+          ];
         }
         ;
 

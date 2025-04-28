@@ -484,14 +484,20 @@ rec {
           process_children_only = true;
         };
 
-        "tank/ChainState/kadena" = {
-          use_template = [ "production" ];
-          recursive = true;
-          process_children_only = true;
-        };
+        "tank/Downloads".use_template = [ "active" ];
+        "tank/Backups/chainweb".use_template = [ "production" ];
       };
 
       templates = {
+        active = {
+          frequently = 0;
+          hourly = 24;
+          daily = 7;
+          monthly = 3;
+          autosnap = true;
+          autoprune = true;
+        };
+
         archival = {
           frequently = 0;
           hourly = 96;

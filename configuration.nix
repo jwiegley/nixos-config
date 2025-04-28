@@ -951,13 +951,15 @@ rec {
         devices = {
           vulcan.id =
             "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
+            iphone.id =
+            "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
           hera = { id = "DEVICE-ID-OF-LAPTOP"; };
           surface = { id = "DEVICE-ID-OF-LAPTOP"; };
         };
         folders = {
           "Nasim" = {
             path = "/tank/Nasim";
-            devices = [ "vulcan" "surface" ];
+            devices = [ "vulcan" "surface" "iphone" ];
           };
         };
         gui = {

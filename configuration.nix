@@ -88,8 +88,8 @@ rec {
     nameservers = [ "192.168.50.1" ];
 
     firewall = {
-      allowedTCPPorts = [ 53 80 443 ];
-      allowedUDPPorts = [ 53 67 ];
+      allowedTCPPorts = [ 53 80 443 ] ++ [ 8384 22000 ]; # syncthing
+      allowedUDPPorts = [ 53 67 ] ++ [ 22000 21027 ];    # syncthing
     };
     # networkmanager.enable = true;
   };
@@ -126,6 +126,7 @@ rec {
     systemPackages = with pkgs; [
       mailutils
       zfs-prune-snapshots
+      httm
       jq
     ];
   };
@@ -138,6 +139,8 @@ rec {
   };
 
   systemd = {
+    services.syncthing.environment.STNODEFAULTFOLDER = "true";
+
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
       serviceConfig = {
@@ -302,9 +305,16 @@ rec {
 
     nginx = {
       enable = true;
+      # logError = "/var/log/nginx/error.log debug";
 
       recommendedGzipSettings = true;
       recommendedProxySettings = true;
+
+      appendHttpConfig = ''
+        large_client_header_buffers 4 16k;
+        proxy_headers_hash_max_size 1024;
+        proxy_headers_hash_bucket_size 128;
+      '';
 
       virtualHosts = {
         smokeping.listen = [
@@ -312,8 +322,9 @@ rec {
         ];
 
         "vulcan.local" = {
-          forceSSL = false; # Optional, for HTTPS
-          enableACME = false; # Optional, for automatic Let's Encrypt
+          forceSSL = true;      # Optional, for HTTPS
+          sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
+          sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
 
           root = "${portal}";
 
@@ -346,7 +357,7 @@ rec {
               # Fix any hardcoded URLs in the Pi-hole interface
               sub_filter '/admin/' '/pi-hole/admin/';
               sub_filter_once off;
-              sub_filter_types text/html text/css text/javascript application/javascript;
+              sub_filter_types text/css text/javascript application/javascript;
 
               # Pass the Host header
               proxy_set_header Host $host;
@@ -369,6 +380,57 @@ rec {
           locations."/pi-hole/" = {
             return = "301 /pi-hole/admin/";
           };
+
+          locations."/syncthing/" = {
+            proxyPass = "http://127.0.0.1:8384/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # Hide X-Frame-Options to allow API token display to work
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              # Pass the Host header
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              # Increase timeouts
+              proxy_read_timeout 600s;
+              proxy_send_timeout 600s;
+
+              proxy_redirect /rest/ /syncthing/rest/;
+
+              sub_filter '/rest/' '/syncthing/rest/';
+              sub_filter_once off;
+              sub_filter_types text/css text/javascript application/javascript;
+
+              rewrite ^/syncthing/(.*)$ /$1 break;
+            '';
+          };
+          locations."/rest/" = {
+            proxyPass = "http://127.0.0.1:8384/rest/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # Hide X-Frame-Options to allow API token display to work
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              # Pass the Host header
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              # Increase timeouts
+              proxy_read_timeout 600s;
+              proxy_send_timeout 600s;
+            '';
+          };
+          locations."/syncthing" = {
+            return = "301 /syncthing/";
+          };
+
         };
       };
     };
@@ -888,6 +950,38 @@ rec {
       enable = true;
       dataDir = "/var/lib/jellyfin";
       user = "johnw";
+    };
+
+    syncthing = {
+      enable = true;
+      guiAddress = "0.0.0.0:8384";
+      key = "/secrets/syncthing/key.pem";
+      cert = "/secrets/syncthing/cert.pem";
+      user = "johnw";
+      dataDir = "/home/johnw/syncthing";
+      configDir = "/home/johnw/.config/syncthing";
+      overrideDevices = true;
+      overrideFolders = true;
+      settings = {
+        devices = {
+          vulcan.id =
+            "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
+          hera = { id = "DEVICE-ID-OF-LAPTOP"; };
+          surface = { id = "DEVICE-ID-OF-LAPTOP"; };
+        };
+        folders = {
+          "Nasim" = {
+            path = "/tank/Nasim";
+            devices = [ "vulcan" "surface" ];
+          };
+        };
+        gui = {
+          user = "admin";
+          password = "syncthing";
+        };
+      };
+      # Opens 8384 (GUI), 22000 (sync), 21027/UDP (discovery)
+      openDefaultPorts = true;
     };
   };
 

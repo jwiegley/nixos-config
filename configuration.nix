@@ -411,21 +411,6 @@ rec {
           locations."/rest/" = {
             proxyPass = "http://127.0.0.1:8384/rest/";
             proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              # Increase timeouts
-              proxy_read_timeout 600s;
-              proxy_send_timeout 600s;
-            '';
           };
           locations."/syncthing" = {
             return = "301 /syncthing/";

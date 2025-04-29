@@ -88,8 +88,14 @@ rec {
     nameservers = [ "192.168.50.1" ];
 
     firewall = {
-      allowedTCPPorts = [ 53 80 443 ] ++ [ 8384 22000 ]; # syncthing
-      allowedUDPPorts = [ 53 67 ] ++ [ 22000 21027 ];    # syncthing
+
+      allowedTCPPorts = [ 53 80 443 ]
+        ++ [ 8384 22000 ]       # syncthing
+        # ++ [ 8123 ]             # home-assistant
+        ;
+      allowedUDPPorts = [ 53 67 ]
+        ++ [ 22000 21027 ]      # syncthing
+        ;
     };
     # networkmanager.enable = true;
   };
@@ -960,10 +966,10 @@ rec {
         devices = {
           vulcan.id =
             "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
-            iphone.id =
+          iphone.id =
             "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
-            surface.id =
-              "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
+          surface.id =
+            "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
         };
         folders = {
           "Nasim" = {
@@ -979,6 +985,18 @@ rec {
       # Opens 8384 (GUI), 22000 (sync), 21027/UDP (discovery)
       openDefaultPorts = true;
     };
+
+    # home-assistant = {
+    #   enable = true;
+    #   extraComponents = [
+    #     "alexa"
+    #     "nest"
+    #     "lg_thinq"
+    #   ];
+    #   config = {
+    #     default_config = {};
+    #   };
+    # };
   };
 
   virtualisation.oci-containers.containers = {

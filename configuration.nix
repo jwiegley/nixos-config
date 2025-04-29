@@ -127,7 +127,6 @@ rec {
       mailutils
       zfs-prune-snapshots
       httm
-      jq
     ];
   };
 
@@ -225,6 +224,8 @@ rec {
 
   services = rec {
     hardware.bolt.enable = true;
+
+    # cockpit.enable = true;
 
     # Set proper ownership for the secret
 
@@ -807,7 +808,7 @@ rec {
         explicit ? false,
         path,
         name ? path,
-        bucket ? path,
+        bucket ? name,
         exclude ? []
       }: {
         "${name}" = {
@@ -926,7 +927,6 @@ rec {
           ];
         } //
         backup {
-          name = "Backups";
           path = "Backups";
           bucket = "Backups-Misc";
           exclude = [
@@ -934,6 +934,9 @@ rec {
             "Images"
             "chainweb"
           ];
+        } //
+        backup {
+          path = "Nasim";
         }
         ;
 
@@ -959,8 +962,8 @@ rec {
             "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
             iphone.id =
             "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
-          hera = { id = "DEVICE-ID-OF-LAPTOP"; };
-          surface = { id = "DEVICE-ID-OF-LAPTOP"; };
+            surface.id =
+              "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
         };
         folders = {
           "Nasim" = {

@@ -444,7 +444,7 @@ rec {
           name = "logwatch-zfs-snapshot";
           text = ''
             for fs in $(/run/current-system/sw/bin/zfs list \
-                          -H -o name -t filesystem -r tank); do \
+                          -H -o name -t filesystem -r); do \
               /run/current-system/sw/bin/zfs list \
                 -H -o name -t snapshot -S creation -d 1 "$fs" | head -1; \
             done
@@ -485,6 +485,8 @@ rec {
       enable = true;
 
       datasets = {
+        "rpool".use_template = [ "active" ];
+
         "tank" = {
           use_template = [ "archival" ];
           recursive = true;

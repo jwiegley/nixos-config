@@ -13,11 +13,30 @@ let
     builtins.concatStringsSep " " (builtins.attrNames attrs);
 in
 rec {
-  system.stateVersion = "25.05"; # Did you read the comment?
+  system.stateVersion = "25.05";
 
   imports =
     [ ./hardware-configuration.nix
     ];
+
+  nixpkgs.config.packageOverrides = pkgs: {
+    python3Packages = pkgs.python3Packages.override {
+      overrides = self: super: {
+        litellm = super.litellm.overridePythonAttrs (old: {
+          dependencies = (old.dependencies or [ ])
+            ++ super.litellm.optional-dependencies.proxy;
+          propagatedBuildInputs = (old.propagatedBuildInputs or [])
+            ++ (with self; [
+              asyncpg
+              httpx
+              redis
+              sqlalchemy
+              prisma
+            ]);
+        });
+      };
+    };
+  };
 
   boot = {
     loader = {
@@ -89,8 +108,10 @@ rec {
 
     firewall = {
 
-      allowedTCPPorts = [ 53 80 443 ]
+      allowedTCPPorts = [ 53 80 443 9997 3000 ]
         ++ [ 8384 22000 ]       # syncthing
+        ++ [ 8083 ]             # silly-tavern
+        ++ [ 5432 ]             # postgres
         # ++ [ 8123 ]             # home-assistant
         ;
       allowedUDPPorts = [ 53 67 ]
@@ -103,6 +124,7 @@ rec {
   users = {
     groups = {
       johnw = {};
+      typingmind = {};
     };
     users =
       let keys = [
@@ -124,6 +146,13 @@ rec {
           group = "johnw";
           extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
           openssh.authorizedKeys = { inherit keys; };
+          home = "/home/johnw";
+        };
+        typingmind = {
+          isSystemUser = true;
+          group = "typingmind";
+          home = "/var/lib/typingmind";
+          createHome = true;
         };
       };
   };
@@ -133,6 +162,7 @@ rec {
       mailutils
       zfs-prune-snapshots
       httm
+      b3sum
     ];
   };
 
@@ -226,12 +256,94 @@ rec {
     #     "network-online.target"
     #   ];
     # };
+
+    services.typingmind = {
+      description = "TypingMind Service";
+      after = ["network.target"];
+      wantedBy = ["multi-user.target"];
+
+      path = with pkgs; [
+        nodejs
+        rsync
+        yarn
+      ];
+
+      serviceConfig =
+        let
+          typingmind-src = pkgs.fetchFromGitHub {
+            owner = "TypingMind";
+            repo = "typingmind";
+            rev = "83e7f925777af04ffb8247e92ca9adedf3581686";
+            sha256 = "sha256-FuWjC1+qdbuueB9RL9OJZj8hs+y7BY5V75vgTC4h+dU=";
+          };
+          typingmind-script = pkgs.writeShellApplication {
+            name = "run-typingmind";
+            text = ''
+              rsync -a ${typingmind-src}/ ./
+              chmod u+w . yarn.lock
+              yarn install
+              yarn start
+            '';
+          }; in {
+            Type = "simple";
+            User = "johnw";
+            Group = "johnw";
+            WorkingDirectory = users.users.johnw.home + "/typingmind";
+            ExecStart = "${lib.getExe typingmind-script}";
+            Restart = "on-failure";
+          };
+    };
   };
 
   services = rec {
     hardware.bolt.enable = true;
 
-    # cockpit.enable = true;
+    pihole-ftl = {
+      enable = true;
+      openFirewallDHCP = true;
+      queryLogDeleter.enable = true;
+      lists = [
+        {
+          url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
+          description = "Steven Black's unified adlist";
+        }
+      ];
+      settings = {
+        webserver = {
+          port = 7272;
+          api.cli_pw = true;
+        };
+        dns = {
+          port = 5353;
+          domainNeeded = true;
+          expandHosts = true;
+          interface = "enp4s0";
+          listeningMode = "BIND";
+          upstreams = [ "192.168.50.1#53" ];
+        };
+        dhcp = {
+          active = false;
+          # active = true;
+          router = "192.168.50.1";
+          start = "192.168.50.2";
+          end = "192.168.50.255";
+          leastTime = "1d";
+          ipv6 = true;
+          multiDNS = true;
+          hosts = [
+            # Static address for the current host
+            "aa:bb:cc:dd:ee:ff,192.168.10.1,${config.networking.hostName},infinite"
+          ];
+          rapidCommit = true;
+        };
+        misc.dnsmasq_lines = [
+          # This DHCP server is the only one on the network
+          "dhcp-authoritative"
+          # Source: https://data.iana.org/root-anchors/root-anchors.xml
+          "trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16"
+        ];
+      };
+    };
 
     # Set proper ownership for the secret
 
@@ -335,6 +447,13 @@ rec {
 
           root = "${portal}";
 
+          extraConfig = ''
+            add_header 'Access-Control-Allow-Origin' '*';
+            add_header 'Access-Control-Allow-Credentials' 'true';
+            add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+            add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+          '';
+
           locations."/smokeping/" = {
             proxyPass = "http://127.0.0.1:8081/";
           };
@@ -423,6 +542,59 @@ rec {
             return = "301 /syncthing/";
           };
 
+          locations."/glance/" = {
+            proxyPass = "http://127.0.0.1:5678/";
+          };
+
+          locations."/typingmind/" = {
+            proxyPass = "http://127.0.0.1:3000/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # Hide X-Frame-Options to allow API token display to work
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              # Pass the Host header
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              # Increase timeouts
+              proxy_read_timeout 600s;
+              proxy_send_timeout 600s;
+
+              sub_filter 'href="/' 'href="/typingmind/';
+              sub_filter 'src="/' 'src="/typingmind/';
+              sub_filter 'content="/' 'content="/typingmind/';
+              sub_filter_once off;
+              sub_filter_types text/css text/javascript application/javascript;
+            '';
+          };
+
+          locations."/silly-tavern/" = {
+            proxyPass = "http://127.0.0.1:8083/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              proxy_set_header Host $host;
+              # proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header Accept-Encoding "";
+
+              sub_filter 'href="/' 'href="/silly-tavern/';
+              sub_filter 'src="/' 'src="/silly-tavern/';
+              sub_filter 'content="/' 'content="/silly-tavern/';
+              sub_filter_once off;
+              sub_filter_types text/css text/javascript application/javascript;
+            '';
+          };
+          locations."/silly-tavern" = {
+            return = "301 /silly-tavern/";
+          };
         };
       };
     };
@@ -988,6 +1160,236 @@ rec {
       openDefaultPorts = true;
     };
 
+    postgresql = {
+      enable = true;
+      ensureDatabases = [ "db" ];
+      enableTCPIP = true;
+      settings.port = 5432;
+      # dataDir = "/var/lib/postgresql/16";
+
+      # Create a default user and set authentication
+      authentication = pkgs.lib.mkOverride 10 ''
+        #type database DBuser auth-method
+        local all all trust
+      '';
+      initialScript = pkgs.writeText "init.sql" ''
+        CREATE ROLE johnw WITH LOGIN PASSWORD 'password' CREATEDB;
+        CREATE DATABASE db;
+        GRANT ALL PRIVILEGES ON DATABASE db TO johnw;
+      '';
+    };
+
+    litellm = {
+      enable = true;           # jww (2025-05-21): disabled for now
+      package = pkgs.python3Packages.litellm;
+
+      environmentFile = "/secrets/litellm.env";
+
+      settings = {
+        model_list = [
+          {
+            model_name = "deepseek-r1";
+            litellm_params = {
+              model = "openai/r1-1776";
+              api_base = "http://192.168.50.5:8080";
+            };
+          }
+          {
+            model_name = "gpt4o";
+            litellm_params = {
+              model = "gpt-4o";
+              api_key = "os.environ/OPENAI_API_KEY";
+            };
+          }
+        ];
+
+        general_settings = {
+          master_key = "sk-system-key";
+        };
+      };
+
+      environment = {
+        OLLAMA_HOST = "127.0.0.1:11434";
+      };
+
+      host = "0.0.0.0";
+      port = 7600;
+      openFirewall = true;
+    };
+
+    glance = {
+      enable = true;
+      settings = {
+        server = {
+          port = 5678;
+          base-url = "/glance";
+        };
+        pages = [
+          {
+            name = "Home";
+            columns = [
+              {
+                size = "small";
+                widgets = [
+                  {
+                    type = "calendar";
+                    first-day-of-week = "monday";
+                  }
+                  {
+                    type = "rss";
+                    limit = 10;
+                    collapse-after = 3;
+                    cache = "12h";
+                    feeds = [
+                      {
+                        url = "https://selfh.st/rss/";
+                        title = "selfh.st";
+                        limit = 4;
+                      }
+                      {
+                        url = "https://ciechanow.ski/atom.xml";
+                      }
+                      {
+                        url = "https://www.joshwcomeau.com/rss.xml";
+                        title = "Josh Comeau";
+                      }
+                      {
+                        url = "https://samwho.dev/rss.xml";
+                      }
+                      {
+                        url = "https://ishadeed.com/feed.xml";
+                        title = "Ahmad Shadeed";
+                      }
+                    ];
+                  }
+                  {
+                    type = "twitch-channels";
+                    channels = [
+                      "theprimeagen"
+                      "j_blow"
+                      "piratesoftware"
+                      "cohhcarnage"
+                      "christitustech"
+                      "EJ_SA"
+                    ];
+                  }
+                ];
+              }
+              {
+                size = "full";
+                widgets = [
+                  {
+                    type = "group";
+                    widgets = [
+                      {
+                        type = "dns-stats";
+                        service = "pihole-v6";
+                        url = "http://localhost:8082";
+                        allow-insecure = true;
+                        username = "admin";
+                        # jww (2025-05-06): This makes the nix build impure
+                        password = builtins.readFile "/secrets/pihole";
+                      }
+                      {
+                        type = "hacker-news";
+                      }
+                      {
+                        type = "lobsters";
+                      }
+                    ];
+                  }
+                  {
+                    type = "videos";
+                    channels = [
+                      "UCXuqSBlHAE6Xw-yeJA0Tunw" # Linus Tech Tips
+                      "UCR-DXc1voovS8nhAvccRZhg" # Jeff Geerling
+                      "UCsBjURrPoezykLs9EqgamOA" # Fireship
+                      "UCBJycsmduvYEL83R_U4JriQ" # Marques Brownlee
+                      "UCHnyfMqiRRG1u-2MsSQLbXA" # Veritasium
+                    ];
+                  }
+                  {
+                    type = "group";
+                    widgets = [
+                      {
+                        type = "reddit";
+                        subreddit = "technology";
+                        show-thumbnails = true;
+                      }
+                      {
+                        type = "reddit";
+                        subreddit = "selfhosted";
+                        show-thumbnails = true;
+                      }
+                    ];
+                  }
+                ];
+              }
+              {
+                size = "small";
+                widgets = [
+                  {
+                    type = "clock";
+                    timezone = "America/Los_Angeles";
+                  }
+                  {
+                    type = "weather";
+                    location = "Arden-Arcade, United States";
+                    units = "imperial";
+                    hour-format = "12h";
+                  }
+                  {
+                    type = "server-stats";
+                    servers = [
+                      {
+                        type = "local";
+                        name = "Services";
+                      }
+                    ];
+                  }
+                  {
+                    type = "markets";
+                    markets = [
+                      {
+                        symbol = "SPY";
+                        name = "S&P 500";
+                      }
+                      {
+                        symbol = "BTC-USD";
+                        name = "Bitcoin";
+                      }
+                      {
+                        symbol = "NVDA";
+                        name = "NVIDIA";
+                      }
+                      {
+                        symbol = "AAPL";
+                        name = "Apple";
+                      }
+                      {
+                        symbol = "MSFT";
+                        name = "Microsoft";
+                      }
+                    ];
+                  }
+                  # {
+                    #   type = "releases";
+                    #   cache = "1d";
+                    #   repositories = [
+                      #     "glanceapp/glance"
+                      #     "go-gitea/gitea"
+                      #     "immich-app/immich"
+                      #     "syncthing/syncthing"
+                      #   ];
+                      # }
+                ];
+              }
+            ];
+          }
+        ];
+      };
+    };
+
     # home-assistant = {
     #   enable = true;
     #   extraComponents = [
@@ -1027,6 +1429,26 @@ rec {
         "--network=host"
         "--cap-add=NET_ADMIN"
         "--cap-add=NET_RAW"
+      ];
+    };
+
+    silly-tavern = {
+      autoStart = true;
+      image = "ghcr.io/sillytavern/sillytavern:latest";
+      ports = [
+        "8083:8000/tcp"
+      ];
+      environment = {
+        NODE_ENV = "production";
+        FORCE_COLOR = "1";
+      };
+      volumes = [
+        "/var/lib/silly-tavern/config:/home/node/app/config"
+        "/var/lib/silly-tavern/data:/home/node/app/data"
+        "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
+        "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+      ];
+      extraOptions = [
       ];
     };
   };

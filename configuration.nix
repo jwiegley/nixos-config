@@ -96,12 +96,19 @@ rec {
     hostName = "vulcan";
     domain = "local";
 
+    hosts = {
+      "127.0.0.2" = lib.mkForce [];
+      "192.168.50.182" = [ "vulcan.local" "vulcan" ];
+    };
+
     interfaces.enp4s0 = {
       useDHCP = false;
-      ipv4.addresses = [{
-        address = "192.168.50.182";
-        prefixLength = 24;
-      }];
+      ipv4.addresses = [
+        {
+          address = "192.168.50.182";
+          prefixLength = 24;
+        }
+      ];
     };
     defaultGateway = "192.168.50.1";
     nameservers = [ "192.168.50.1" ];
@@ -109,13 +116,13 @@ rec {
     firewall = {
 
       allowedTCPPorts = [ 53 80 443 9997 3000 ]
-        ++ [ 8384 22000 ]       # syncthing
+        # ++ [ 8384 22000 ]       # syncthing
         ++ [ 8083 ]             # silly-tavern
         ++ [ 5432 ]             # postgres
         # ++ [ 8123 ]             # home-assistant
         ;
       allowedUDPPorts = [ 53 67 ]
-        ++ [ 22000 21027 ]      # syncthing
+        # ++ [ 22000 21027 ]      # syncthing
         ;
     };
     # networkmanager.enable = true;
@@ -157,12 +164,70 @@ rec {
       };
   };
 
-  environment = {
+  environment =
+    let
+      dh = pkgs.writeScriptBin "dh" ''
+        #!/usr/bin/env bash
+
+        if ! command -v zfs > /dev/null 2>&1; then
+            echo "ERROR: ZFS not installed on this system"
+            exit 1
+        fi
+
+        sort=""
+        type="filesystem,volume"
+        fields="name,used,refer,avail,compressratio,mounted"
+
+        if [[ "$1" == "-u" ]]; then
+            sort="-s used"
+            shift
+        elif [[ "$1" == "-s" ]]; then
+            type="snapshot"
+            fields="name,refer,creation"
+            shift
+        elif [[ "$1" == "-r" ]]; then
+            sort="-s refer"
+            shift
+        fi
+
+        exec zfs list -o $fields -t $type $sort "$@"
+      '';
+
+      linkdups = with pkgs; stdenv.mkDerivation rec {
+        name = "linkdups-${version}";
+        version = "1.3";
+
+        src = fetchFromGitHub {
+          owner = "jwiegley";
+          repo = "linkdups";
+          rev = "57bb79332d3b79418692d0c974acba83a4fd3fc9";
+          sha256 = "1d400vanbsrmfxf1w4na3r4k3nw18xnv05qcf4rkqajmnfrbzh3h";
+          # date = 2025-05-13T11:29:24-07:00;
+        };
+
+        phases = [ "unpackPhase" "installPhase" ];
+
+        installPhase = ''
+          mkdir -p $out/bin
+          cp -p linkdups $out/bin
+        '';
+
+        meta = {
+          homepage = https://github.com/jwiegley/linkdups;
+          description = "A tool for hard-linking duplicate files";
+          license = lib.licenses.mit;
+          maintainers = with lib.maintainers; [ jwiegley ];
+        };
+      };
+    in {
     systemPackages = with pkgs; [
       mailutils
       zfs-prune-snapshots
       httm
       b3sum
+      haskellPackages.sizes
+      linkdups
+      dh
     ];
   };
 
@@ -174,7 +239,7 @@ rec {
   };
 
   systemd = {
-    services.syncthing.environment.STNODEFAULTFOLDER = "true";
+    # services.syncthing.environment.STNODEFAULTFOLDER = "true";
 
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
@@ -248,15 +313,6 @@ rec {
       };
     };
 
-    # services.podman-pihole = {
-    #   requires = [ "unbound.service" ];
-    #   bindsTo = [ "unbound.service" ];
-    #   after = [
-    #     "unbound.service"
-    #     "network-online.target"
-    #   ];
-    # };
-
     services.typingmind = {
       description = "TypingMind Service";
       after = ["network.target"];
@@ -303,36 +359,95 @@ rec {
       openFirewallDHCP = true;
       queryLogDeleter.enable = true;
       lists = [
-        {
-          url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
-          description = "Steven Black's unified adlist";
-        }
+        { url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
+          description = "Steven Black's unified adlist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt";
+          description = "DNS Blocklists Threat Intelligence Feeds"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/spam-tlds-adblock.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt";
+          description = "DNS Blocklist Multi PRO"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/hoster.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/fake.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/anti.piracy.txt";
+          description = "DNS Blocklist"; }
+        { url = "https://raw.githubusercontent.com/froggeric/DNS-blocklists/refs/heads/main/NoAppleAds";
+          description = "Block Apple ads"; }
+        { url = "https://big.oisd.nl/";
+          description = "oisd big"; }
       ];
       settings = {
-        webserver = {
-          port = 7272;
-          api.cli_pw = true;
-        };
         dns = {
-          port = 5353;
+          port = 53;
           domainNeeded = true;
           expandHosts = true;
           interface = "enp4s0";
           listeningMode = "BIND";
-          upstreams = [ "192.168.50.1#53" ];
+          upstreams = [
+            "192.168.50.1#53"
+            "8.8.8.8"
+            "8.8.4.4"
+          ];
         };
         dhcp = {
-          active = false;
-          # active = true;
+          active = true;
           router = "192.168.50.1";
           start = "192.168.50.2";
-          end = "192.168.50.255";
+          end = "192.168.50.254";
           leastTime = "1d";
-          ipv6 = true;
+          ipv6 = false;
           multiDNS = true;
           hosts = [
             # Static address for the current host
-            "aa:bb:cc:dd:ee:ff,192.168.10.1,${config.networking.hostName},infinite"
+            "cc:2d:b7:01:f8:7f,192.168.50.182,${config.networking.hostName},infinite"
+
+            "1c:1d:d3:e0:d8:2d,192.168.50.5,hera,infinite"
+            "16:f9:5b:42:10:69,hera-wifi"
+            "9c:76:0e:31:5c:6d,192.168.50.235,athena,infinite"
+            "da:b3:f0:75:78:83,athena-wifi"
+            "7a:d4:a8:c5:f7:97,clio"
+            "74:56:3c:b7:24:ac,bazigush"
+
+            # Network hosts
+
+            "6a:9a:43:fb:7e:af,Johns-iPhone"
+            "b2:23:15:55:56:d4,Johns-iPad"
+            "94:21:57:3e:ce:9e,Johns-Watch"
+
+            "62:97:48:33:6f:32,Nasims-iPhone"
+
+            "00:1d:63:67:81:16,Miele-Dishwasher"
+            "08:04:b4:bb:ee:21,Pentair-IntelliCenter-Radio"
+            "08:60:6e:21:14:e0,Asus-RT-N66U"
+            "08:b6:1f:66:71:14,Hubspace-Porch-Light"
+            "0c:83:cc:13:70:e8,MyQ-Garage-Door"
+            "1c:f2:9a:11:b6:0d,Google-Home-Nest-Hub"
+            "44:67:55:03:b3:cc,B-hyve-Sprinkler-Control"
+            "44:bb:3b:4a:99:af,Google-Nest-Downstairs"
+            "44:bb:3b:4b:80:4c,Google-Nest-Upstairs"
+            "44:bb:3b:4c:24:0d,Google-Nest-Family-Room"
+            "54:49:df:3a:0e:7a,Peloton"
+            "54:e0:19:1e:5d:ff,Ring-Video-Doorbell"
+            "5c:fc:e1:47:4e:48,ADT-Home-Security"
+            "60:8a:10:dd:b2:40,Traeger-Ironwood-Grill"
+            "70:c9:32:2b:83:9d,Dreamebot-Robot-Vacuum"
+            "78:2b:64:b4:5d:25,Bose-Portable-Home-Speaker"
+            "78:9c:85:33:54:5d,August-Home-Garage"
+            "78:9c:85:34:a5:0d,August-Home-Side-Door"
+            "78:9c:85:34:a5:33,August-Home-Front-Door"
+            "90:48:46:8d:6b:10,Enphase-Solar-Inverter"
+            "98:ed:5c:8e:56:91,Tesla-Wall-Connector"
+            "b4:8a:0a:f6:13:b8,Flume-Water-Meter"
+            "e8:9f:6d:4a:f9:e8,Pentair-IntelliFlo-3"
+            "fc:12:63:cd:e1:01,192.168.50.121,4G-LTE-Network-Extender,infinite"
           ];
           rapidCommit = true;
         };
@@ -343,6 +458,11 @@ rec {
           "trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16"
         ];
       };
+    };
+
+    pihole-web = {
+      enable = true;
+      ports = [ 8082 ];
     };
 
     # Set proper ownership for the secret
@@ -469,19 +589,16 @@ rec {
             return = "301 /jellyfin/";
           };
 
-          locations."/pi-hole/admin/" = {
-            proxyPass = "http://127.0.0.1:8082/admin/";
+          locations."/pi-hole/" = {
+            proxyPass = "http://127.0.0.1:8082/";
             proxyWebsockets = true;
             extraConfig = ''
-              # Fix Pi-hole's internal redirects
-              proxy_redirect /admin/ /pi-hole/admin/;
-
               # Hide X-Frame-Options to allow API token display to work
               proxy_hide_header X-Frame-Options;
               proxy_set_header X-Frame-Options "SAMEORIGIN";
 
               # Fix any hardcoded URLs in the Pi-hole interface
-              sub_filter '/admin/' '/pi-hole/admin/';
+              sub_filter '="/' '="/pi-hole/';
               sub_filter_once off;
               sub_filter_types text/css text/javascript application/javascript;
 
@@ -492,7 +609,7 @@ rec {
               proxy_set_header X-Forwarded-Proto $scheme;
 
               # Cookie handling
-              proxy_cookie_path /admin/ /pi-hole/admin/;
+              proxy_cookie_path / /pi-hole/;
             '';
           };
           # It would be preferable if this were not here; it may conflict with
@@ -501,46 +618,43 @@ rec {
             proxyPass = "http://127.0.0.1:8082/api/";
           };
           locations."/pi-hole" = {
-            return = "301 /pi-hole/admin/";
-          };
-          locations."/pi-hole/" = {
-            return = "301 /pi-hole/admin/";
+            return = "301 /pi-hole/";
           };
 
-          locations."/syncthing/" = {
-            proxyPass = "http://127.0.0.1:8384/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
+          # locations."/syncthing/" = {
+          #   proxyPass = "http://127.0.0.1:8384/";
+          #   proxyWebsockets = true;
+          #   extraConfig = ''
+          #     # Hide X-Frame-Options to allow API token display to work
+          #     proxy_hide_header X-Frame-Options;
+          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
 
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
+          #     # Pass the Host header
+          #     proxy_set_header Host $host;
+          #     proxy_set_header X-Real-IP $remote_addr;
+          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          #     proxy_set_header X-Forwarded-Proto $scheme;
 
-              # Increase timeouts
-              proxy_read_timeout 600s;
-              proxy_send_timeout 600s;
+          #     # Increase timeouts
+          #     proxy_read_timeout 600s;
+          #     proxy_send_timeout 600s;
 
-              proxy_redirect /rest/ /syncthing/rest/;
+          #     proxy_redirect /rest/ /syncthing/rest/;
 
-              sub_filter '/rest/' '/syncthing/rest/';
-              sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
+          #     sub_filter '/rest/' '/syncthing/rest/';
+          #     sub_filter_once off;
+          #     sub_filter_types text/css text/javascript application/javascript;
 
-              rewrite ^/syncthing/(.*)$ /$1 break;
-            '';
-          };
-          locations."/rest/" = {
-            proxyPass = "http://127.0.0.1:8384/rest/";
-            proxyWebsockets = true;
-          };
-          locations."/syncthing" = {
-            return = "301 /syncthing/";
-          };
+          #     rewrite ^/syncthing/(.*)$ /$1 break;
+          #   '';
+          # };
+          # locations."/rest/" = {
+          #   proxyPass = "http://127.0.0.1:8384/rest/";
+          #   proxyWebsockets = true;
+          # };
+          # locations."/syncthing" = {
+          #   return = "301 /syncthing/";
+          # };
 
           locations."/glance/" = {
             proxyPass = "http://127.0.0.1:5678/";
@@ -1126,39 +1240,39 @@ rec {
       user = "johnw";
     };
 
-    syncthing = {
-      enable = true;
-      guiAddress = "0.0.0.0:8384";
-      key = "/secrets/syncthing/key.pem";
-      cert = "/secrets/syncthing/cert.pem";
-      user = "johnw";
-      dataDir = "/home/johnw/syncthing";
-      configDir = "/home/johnw/.config/syncthing";
-      overrideDevices = true;
-      overrideFolders = true;
-      settings = {
-        devices = {
-          vulcan.id =
-            "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
-          iphone.id =
-            "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
-          surface.id =
-            "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
-        };
-        folders = {
-          "Nasim" = {
-            path = "/tank/Nasim";
-            devices = [ "vulcan" "surface" "iphone" ];
-          };
-        };
-        gui = {
-          user = "admin";
-          password = "syncthing";
-        };
-      };
-      # Opens 8384 (GUI), 22000 (sync), 21027/UDP (discovery)
-      openDefaultPorts = true;
-    };
+    # syncthing = {
+    #   enable = true;
+    #   guiAddress = "0.0.0.0:8384";
+    #   key = "/secrets/syncthing/key.pem";
+    #   cert = "/secrets/syncthing/cert.pem";
+    #   user = "johnw";
+    #   dataDir = "/home/johnw/syncthing";
+    #   configDir = "/home/johnw/.config/syncthing";
+    #   overrideDevices = true;
+    #   overrideFolders = true;
+    #   settings = {
+    #     devices = {
+    #       vulcan.id =
+    #         "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
+    #       iphone.id =
+    #         "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
+    #       surface.id =
+    #         "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
+    #     };
+    #     folders = {
+    #       "Nasim" = {
+    #         path = "/tank/Nasim";
+    #         devices = [ "vulcan" "surface" "iphone" ];
+    #       };
+    #     };
+    #     gui = {
+    #       user = "admin";
+    #       password = "syncthing";
+    #     };
+    #   };
+    #   # Opens 8384 (GUI), 22000 (sync), 21027/UDP (discovery)
+    #   openDefaultPorts = true;
+    # };
 
     postgresql = {
       enable = true;
@@ -1404,33 +1518,33 @@ rec {
   };
 
   virtualisation.oci-containers.containers = {
-    pihole = {
-      autoStart = true;
-      image = "pihole/pihole:latest";
-      ports = [
-        "53:53/tcp"
-        "53:53/udp"
-        "67:67/udp"
-        "8082:8082/tcp"
-      ];
-      environment = {
-        TZ = "America/Los_Angeles";
-        WEBPASSWORD = "your_secure_password";
-        PIHOLE_INTERFACE = "enp4s0";
-        FTLCONF_dns_listeningMode = "all";
-        # DNS1 = "127.0.0.1#5353";
-        # DNS2 = "127.0.0.1#5353";
-      };
-      volumes = [
-        "/var/lib/pihole/etc-pihole:/etc/pihole"
-        "/var/lib/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
-      ];
-      extraOptions = [
-        "--network=host"
-        "--cap-add=NET_ADMIN"
-        "--cap-add=NET_RAW"
-      ];
-    };
+    # pihole = {
+    #   autoStart = true;
+    #   image = "pihole/pihole:latest";
+    #   ports = [
+    #     "53:53/tcp"
+    #     "53:53/udp"
+    #     "67:67/udp"
+    #     "8082:8082/tcp"
+    #   ];
+    #   environment = {
+    #     TZ = "America/Los_Angeles";
+    #     WEBPASSWORD = "your_secure_password";
+    #     PIHOLE_INTERFACE = "enp4s0";
+    #     FTLCONF_dns_listeningMode = "all";
+    #     # DNS1 = "127.0.0.1#5353";
+    #     # DNS2 = "127.0.0.1#5353";
+    #   };
+    #   volumes = [
+    #     "/var/lib/pihole/etc-pihole:/etc/pihole"
+    #     "/var/lib/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
+    #   ];
+    #   extraOptions = [
+    #     "--network=host"
+    #     "--cap-add=NET_ADMIN"
+    #     "--cap-add=NET_RAW"
+    #   ];
+    # };
 
     silly-tavern = {
       autoStart = true;

@@ -115,7 +115,7 @@ rec {
 
     firewall = {
 
-      allowedTCPPorts = [ 53 80 443 9997 3000 ]
+      allowedTCPPorts = [ 53 80 443 9997 ]
         # ++ [ 8384 22000 ]       # syncthing
         ++ [ 8083 ]             # silly-tavern
         ++ [ 5432 ]             # postgres
@@ -353,6 +353,14 @@ rec {
 
   services = rec {
     hardware.bolt.enable = true;
+
+    ntopng = {
+      enable = false;
+      httpPort = 3030;
+      configText = ''
+        --disable-login
+      '';
+    };
 
     pihole-ftl = {
       enable = true;
@@ -682,8 +690,56 @@ rec {
               sub_filter 'src="/' 'src="/typingmind/';
               sub_filter 'content="/' 'content="/typingmind/';
               sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
+              sub_filter_types text/html text/css text/javascript application/javascript;
             '';
+          };
+
+          locations."/ntopng/" = {
+            proxyPass = "http://127.0.0.1:3030/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # Hide X-Frame-Options to allow API token display to work
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              # Pass the Host header
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              sub_filter 'href="/' 'href="/ntopng/';
+              sub_filter 'src="/' 'src="/ntopng/';
+              sub_filter 'content="/' 'content="/ntopng/';
+              sub_filter 'action="/' 'content="/ntopng/';
+              sub_filter_once off;
+              sub_filter_types text/html text/css text/javascript application/javascript;
+            '';
+          };
+          locations."/lua/" = {
+            proxyPass = "http://127.0.0.1:3030/lua/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # Hide X-Frame-Options to allow API token display to work
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+              # Pass the Host header
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              sub_filter 'href="/' 'href="/ntopng/';
+              sub_filter 'src="/' 'src="/ntopng/';
+              sub_filter 'content="/' 'content="/ntopng/';
+              sub_filter 'action="/' 'content="/ntopng/';
+              sub_filter_once off;
+              sub_filter_types text/html text/css text/javascript application/javascript;
+            '';
+          };
+          locations."/dist/" = {
+            proxyPass = "http://127.0.0.1:3030/dist/";
           };
 
           locations."/silly-tavern/" = {
@@ -703,7 +759,7 @@ rec {
               sub_filter 'src="/' 'src="/silly-tavern/';
               sub_filter 'content="/' 'content="/silly-tavern/';
               sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
+              sub_filter_types text/html text/css text/javascript application/javascript;
             '';
           };
           locations."/silly-tavern" = {
@@ -1294,7 +1350,7 @@ rec {
     };
 
     litellm = {
-      enable = true;           # jww (2025-05-21): disabled for now
+      enable = false;           # jww (2025-05-21): disabled for now
       package = pkgs.python3Packages.litellm;
 
       environmentFile = "/secrets/litellm.env";
@@ -1395,15 +1451,15 @@ rec {
                   {
                     type = "group";
                     widgets = [
-                      {
-                        type = "dns-stats";
-                        service = "pihole-v6";
-                        url = "http://localhost:8082";
-                        allow-insecure = true;
-                        username = "admin";
-                        # jww (2025-05-06): This makes the nix build impure
-                        password = builtins.readFile "/secrets/pihole";
-                      }
+                      # {
+                      #   type = "dns-stats";
+                      #   service = "pihole-v6";
+                      #   url = "http://localhost:8082";
+                      #   allow-insecure = true;
+                      #   # username = "admin";
+                      #   # jww (2025-05-06): This makes the nix build impure
+                      #   # password = builtins.readFile "/secrets/pihole";
+                      # }
                       {
                         type = "hacker-news";
                       }

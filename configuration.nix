@@ -19,23 +19,14 @@ rec {
     [ ./hardware-configuration.nix
     ];
 
-  nixpkgs.config.packageOverrides = pkgs: {
-    python3Packages = pkgs.python3Packages.override {
-      overrides = self: super: {
-        litellm = super.litellm.overridePythonAttrs (old: {
-          dependencies = (old.dependencies or [ ])
-            ++ super.litellm.optional-dependencies.proxy;
-          propagatedBuildInputs = (old.propagatedBuildInputs or [])
-            ++ (with self; [
-              asyncpg
-              httpx
-              redis
-              sqlalchemy
-              prisma
-            ]);
-        });
-      };
-    };
+  nixpkgs.config = {
+    allowUnfree = true;
+    # packageOverrides = pkgs: {
+    #   python3Packages = pkgs.python3Packages.override {
+    #     overrides = self: super: {
+    #     };
+    #   };
+    # };
   };
 
   boot = {
@@ -115,14 +106,11 @@ rec {
 
     firewall = {
 
-      allowedTCPPorts = [ 53 80 443 9997 ]
-        # ++ [ 8384 22000 ]       # syncthing
-        ++ [ 8083 ]             # silly-tavern
+      allowedTCPPorts = [ 53 80 443 ]
         ++ [ 5432 ]             # postgres
         # ++ [ 8123 ]             # home-assistant
         ;
       allowedUDPPorts = [ 53 67 ]
-        # ++ [ 22000 21027 ]      # syncthing
         ;
     };
     # networkmanager.enable = true;
@@ -131,7 +119,6 @@ rec {
   users = {
     groups = {
       johnw = {};
-      typingmind = {};
     };
     users =
       let keys = [
@@ -154,12 +141,6 @@ rec {
           extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
           openssh.authorizedKeys = { inherit keys; };
           home = "/home/johnw";
-        };
-        typingmind = {
-          isSystemUser = true;
-          group = "typingmind";
-          home = "/var/lib/typingmind";
-          createHome = true;
         };
       };
   };
@@ -239,8 +220,6 @@ rec {
   };
 
   systemd = {
-    # services.syncthing.environment.STNODEFAULTFOLDER = "true";
-
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
       serviceConfig = {
@@ -311,43 +290,6 @@ rec {
         OnCalendar = "weekly";
         Persistent = true;
       };
-    };
-
-    services.typingmind = {
-      description = "TypingMind Service";
-      after = ["network.target"];
-      wantedBy = ["multi-user.target"];
-
-      path = with pkgs; [
-        nodejs
-        rsync
-        yarn
-      ];
-
-      serviceConfig =
-        let
-          typingmind-src = pkgs.fetchFromGitHub {
-            owner = "TypingMind";
-            repo = "typingmind";
-            rev = "83e7f925777af04ffb8247e92ca9adedf3581686";
-            sha256 = "sha256-FuWjC1+qdbuueB9RL9OJZj8hs+y7BY5V75vgTC4h+dU=";
-          };
-          typingmind-script = pkgs.writeShellApplication {
-            name = "run-typingmind";
-            text = ''
-              rsync -a ${typingmind-src}/ ./
-              chmod u+w . yarn.lock
-              yarn install
-              yarn start
-            '';
-          }; in {
-            Type = "simple";
-            User = "johnw";
-            Group = "johnw";
-            WorkingDirectory = users.users.johnw.home + "/typingmind";
-            ExecStart = "${lib.getExe typingmind-script}";
-            Restart = "on-failure";
-          };
     };
   };
 
@@ -642,8 +584,12 @@ rec {
             return = "301 /pi-hole/";
           };
 
-          # locations."/syncthing/" = {
-          #   proxyPass = "http://127.0.0.1:8384/";
+          locations."/glance/" = {
+            proxyPass = "http://127.0.0.1:5678/";
+          };
+
+          # locations."/ntopng/" = {
+          #   proxyPass = "http://127.0.0.1:3030/";
           #   proxyWebsockets = true;
           #   extraConfig = ''
           #     # Hide X-Frame-Options to allow API token display to work
@@ -656,128 +602,54 @@ rec {
           #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
           #     proxy_set_header X-Forwarded-Proto $scheme;
 
-          #     # Increase timeouts
-          #     proxy_read_timeout 600s;
-          #     proxy_send_timeout 600s;
+          #     proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
 
-          #     proxy_redirect /rest/ /syncthing/rest/;
-
-          #     sub_filter '/rest/' '/syncthing/rest/';
+          #     sub_filter 'href="/' 'href="/ntopng/';
+          #     sub_filter 'src="/' 'src="/ntopng/';
+          #     sub_filter 'content="/' 'content="/ntopng/';
+          #     sub_filter 'action="/' 'content="/ntopng/';
           #     sub_filter_once off;
-          #     sub_filter_types text/css text/javascript application/javascript;
-
-          #     rewrite ^/syncthing/(.*)$ /$1 break;
+          #     sub_filter_types text/html text/css text/javascript application/javascript;
           #   '';
           # };
-          # locations."/rest/" = {
-          #   proxyPass = "http://127.0.0.1:8384/rest/";
+          # locations."/ntopng" = {
+          #   return = "301 /ntopng/";
+          # };
+
+          # locations."/open-webui/" = {
+          #   proxyPass = "http://127.0.0.1:8084/";
           #   proxyWebsockets = true;
+          #   extraConfig = ''
+          #     proxy_hide_header X-Frame-Options;
+          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
+
+          #     proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
+
+          #     sub_filter '"/' '"/open-webui/';
+          #     sub_filter "'/" "'/open-webui/";
+          #     sub_filter_once off;
+          #     sub_filter_types text/html text/css text/javascript application/javascript;
+
+          #     # (Optional) Disable proxy buffering for better streaming response from models
+          #     proxy_buffering off;
+
+          #     # (Optional) Increase max request size for large attachments and long audio messages
+          #     client_max_body_size 20M;
+          #     proxy_read_timeout 10m;
+
+          #     # Pass the Host header
+          #     # proxy_set_header Host $host;
+          #     proxy_set_header X-Real-IP $remote_addr;
+          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          #     proxy_set_header X-Forwarded-Proto $scheme;
+
+          #     # Cookie handling
+          #     proxy_cookie_path / /open-webui/;
+          #   '';
           # };
-          # locations."/syncthing" = {
-          #   return = "301 /syncthing/";
+          # locations."/open-webui" = {
+          #   return = "301 /open-webui/";
           # };
-
-          locations."/glance/" = {
-            proxyPass = "http://127.0.0.1:5678/";
-          };
-
-          locations."/typingmind/" = {
-            proxyPass = "http://127.0.0.1:3000/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              # Increase timeouts
-              proxy_read_timeout 600s;
-              proxy_send_timeout 600s;
-
-              sub_filter 'href="/' 'href="/typingmind/';
-              sub_filter 'src="/' 'src="/typingmind/';
-              sub_filter 'content="/' 'content="/typingmind/';
-              sub_filter_once off;
-              sub_filter_types text/html text/css text/javascript application/javascript;
-            '';
-          };
-
-          locations."/ntopng/" = {
-            proxyPass = "http://127.0.0.1:3030/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              sub_filter 'href="/' 'href="/ntopng/';
-              sub_filter 'src="/' 'src="/ntopng/';
-              sub_filter 'content="/' 'content="/ntopng/';
-              sub_filter 'action="/' 'content="/ntopng/';
-              sub_filter_once off;
-              sub_filter_types text/html text/css text/javascript application/javascript;
-            '';
-          };
-          locations."/lua/" = {
-            proxyPass = "http://127.0.0.1:3030/lua/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              sub_filter 'href="/' 'href="/ntopng/';
-              sub_filter 'src="/' 'src="/ntopng/';
-              sub_filter 'content="/' 'content="/ntopng/';
-              sub_filter 'action="/' 'content="/ntopng/';
-              sub_filter_once off;
-              sub_filter_types text/html text/css text/javascript application/javascript;
-            '';
-          };
-          locations."/dist/" = {
-            proxyPass = "http://127.0.0.1:3030/dist/";
-          };
-
-          locations."/silly-tavern/" = {
-            proxyPass = "http://127.0.0.1:8083/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              proxy_set_header Host $host;
-              # proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_set_header Accept-Encoding "";
-
-              sub_filter 'href="/' 'href="/silly-tavern/';
-              sub_filter 'src="/' 'src="/silly-tavern/';
-              sub_filter 'content="/' 'content="/silly-tavern/';
-              sub_filter_once off;
-              sub_filter_types text/html text/css text/javascript application/javascript;
-            '';
-          };
-          locations."/silly-tavern" = {
-            return = "301 /silly-tavern/";
-          };
         };
       };
     };
@@ -1309,40 +1181,6 @@ rec {
       user = "johnw";
     };
 
-    # syncthing = {
-    #   enable = true;
-    #   guiAddress = "0.0.0.0:8384";
-    #   key = "/secrets/syncthing/key.pem";
-    #   cert = "/secrets/syncthing/cert.pem";
-    #   user = "johnw";
-    #   dataDir = "/home/johnw/syncthing";
-    #   configDir = "/home/johnw/.config/syncthing";
-    #   overrideDevices = true;
-    #   overrideFolders = true;
-    #   settings = {
-    #     devices = {
-    #       vulcan.id =
-    #         "AGFFJSH-MDGXYTO-FSR7GZM-VE4IR2U-OU4AKP4-OLY4WXR-WEF72EY-YRNI3AJ";
-    #       iphone.id =
-    #         "NK7DHKG-WVJZQTY-YOPUQXP-GPUOQY3-EK5ZJA6-M6NKQNJ-6BYBIO6-RUSRXQY";
-    #       surface.id =
-    #         "IXRXTO6-LDI6HZO-3TMVGVK-32CMPYV-TOPUWRZ-OUF3KWI-NEPF6T6-H7BDGAR";
-    #     };
-    #     folders = {
-    #       "Nasim" = {
-    #         path = "/tank/Nasim";
-    #         devices = [ "vulcan" "surface" "iphone" ];
-    #       };
-    #     };
-    #     gui = {
-    #       user = "admin";
-    #       password = "syncthing";
-    #     };
-    #   };
-    #   # Opens 8384 (GUI), 22000 (sync), 21027/UDP (discovery)
-    #   openDefaultPorts = true;
-    # };
-
     postgresql = {
       enable = true;
       ensureDatabases = [ "db" ];
@@ -1362,41 +1200,15 @@ rec {
       '';
     };
 
-    litellm = {
-      enable = false;           # jww (2025-05-21): disabled for now
-      package = pkgs.python3Packages.litellm;
-
-      environmentFile = "/secrets/litellm.env";
-
-      settings = {
-        model_list = [
-          {
-            model_name = "deepseek-r1";
-            litellm_params = {
-              model = "openai/r1-1776";
-              api_base = "http://192.168.50.5:8080";
-            };
-          }
-          {
-            model_name = "gpt4o";
-            litellm_params = {
-              model = "gpt-4o";
-              api_key = "os.environ/OPENAI_API_KEY";
-            };
-          }
-        ];
-
-        general_settings = {
-          master_key = "sk-system-key";
-        };
-      };
-
-      environment = {
-        OLLAMA_HOST = "127.0.0.1:11434";
-      };
-
+    open-webui = {
+      enable = true;
+      port = 8084;
       host = "0.0.0.0";
-      port = 7600;
+      environment = {
+        ANONYMIZED_TELEMETRY = "False";
+        DO_NOT_TRACK = "True";
+        SCARF_NO_ANALYTICS = "True";
+      };
       openFirewall = true;
     };
 
@@ -1464,15 +1276,6 @@ rec {
                   {
                     type = "group";
                     widgets = [
-                      # {
-                      #   type = "dns-stats";
-                      #   service = "pihole-v6";
-                      #   url = "http://localhost:8082";
-                      #   allow-insecure = true;
-                      #   # username = "admin";
-                      #   # jww (2025-05-06): This makes the nix build impure
-                      #   # password = builtins.readFile "/secrets/pihole";
-                      # }
                       {
                         type = "hacker-news";
                       }
@@ -1555,16 +1358,6 @@ rec {
                       }
                     ];
                   }
-                  # {
-                    #   type = "releases";
-                    #   cache = "1d";
-                    #   repositories = [
-                      #     "glanceapp/glance"
-                      #     "go-gitea/gitea"
-                      #     "immich-app/immich"
-                      #     "syncthing/syncthing"
-                      #   ];
-                      # }
                 ];
               }
             ];
@@ -1572,18 +1365,6 @@ rec {
         ];
       };
     };
-
-    # home-assistant = {
-    #   enable = true;
-    #   extraComponents = [
-    #     "alexa"
-    #     "nest"
-    #     "lg_thinq"
-    #   ];
-    #   config = {
-    #     default_config = {};
-    #   };
-    # };
   };
 
   virtualisation.oci-containers.containers = {
@@ -1631,8 +1412,7 @@ rec {
         "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
         "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
       ];
-      extraOptions = [
-      ];
+      extraOptions = [];
     };
   };
 

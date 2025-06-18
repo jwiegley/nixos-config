@@ -1,7 +1,7 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs.url = "github:williamvds/nixpkgs/add_pihole";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # nixpkgs.url = "github:williamvds/nixpkgs/add_pihole";
     nixos-hardware.url = "github:NixOS/nixos-hardware";
 
     nixos-logwatch = {

@@ -110,7 +110,8 @@ rec {
         ++ [ 5432 ]             # postgres
         # ++ [ 8123 ]             # home-assistant
         ;
-      allowedUDPPorts = [ 53 67 ]
+      # allowedUDPPorts = [ 53 67 ]
+      allowedUDPPorts = [ 53 ]
         ;
     };
     # networkmanager.enable = true;
@@ -361,7 +362,7 @@ rec {
           ];
         };
         dhcp = {
-          active = true;
+          active = false;
           router = "192.168.50.1";
           start = "192.168.50.2";
           end = "192.168.50.254";

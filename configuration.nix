@@ -11,8 +11,7 @@ let
 
   attrNameList = attrs:
     builtins.concatStringsSep " " (builtins.attrNames attrs);
-in
-rec {
+in rec {
   system.stateVersion = "25.05";
 
   imports =
@@ -134,6 +133,7 @@ rec {
         root = {
           openssh.authorizedKeys = { inherit keys; };
         };
+
         johnw = {
           uid = 1000;
           isNormalUser = true;
@@ -218,6 +218,13 @@ rec {
     htop.enable = true;
     tmux.enable = true;
     vim.enable = true;
+
+    nix-ld = {
+      enable = true;
+      libraries = with pkgs; [
+        nodejs
+      ];
+    };
   };
 
   systemd = {
@@ -587,6 +594,11 @@ rec {
 
           locations."/glance/" = {
             proxyPass = "http://127.0.0.1:5678/";
+          };
+
+          locations."/litellm/" = {
+            proxyPass = "http://127.0.0.1:4000/litellm/";
+            proxyWebsockets = true;
           };
 
           # locations."/ntopng/" = {
@@ -1184,20 +1196,35 @@ rec {
 
     postgresql = {
       enable = true;
-      ensureDatabases = [ "db" ];
+      ensureDatabases = [ "db" "litellm" ];
+      ensureUsers = [
+        { name = "postgres"; }
+      ];
       enableTCPIP = true;
       settings.port = 5432;
       # dataDir = "/var/lib/postgresql/16";
 
       # Create a default user and set authentication
       authentication = pkgs.lib.mkOverride 10 ''
-        #type database DBuser auth-method
         local all all trust
+        host all all 127.0.0.1/32 trust
+        host all all 192.168.50.0/24 md5
+        host all all 10.88.0.0/16 trust
+        host all all ::1/128 trust
       '';
       initialScript = pkgs.writeText "init.sql" ''
         CREATE ROLE johnw WITH LOGIN PASSWORD 'password' CREATEDB;
+
         CREATE DATABASE db;
         GRANT ALL PRIVILEGES ON DATABASE db TO johnw;
+
+        CREATE ROLE litellm WITH LOGIN PASSWORD 'sk-1234' CREATEDB;
+
+        CREATE DATABASE litellm;
+        GRANT ALL PRIVILEGES ON DATABASE litellm TO litellm;
+        \c litellm
+        GRANT ALL ON SCHEMA public TO litellm;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO litellm;
       '';
     };
 
@@ -1368,54 +1395,50 @@ rec {
     };
   };
 
-  virtualisation.oci-containers.containers = {
-    # pihole = {
-    #   autoStart = true;
-    #   image = "pihole/pihole:latest";
-    #   ports = [
-    #     "53:53/tcp"
-    #     "53:53/udp"
-    #     "67:67/udp"
-    #     "8082:8082/tcp"
-    #   ];
-    #   environment = {
-    #     TZ = "America/Los_Angeles";
-    #     WEBPASSWORD = "your_secure_password";
-    #     PIHOLE_INTERFACE = "enp4s0";
-    #     FTLCONF_dns_listeningMode = "all";
-    #     # DNS1 = "127.0.0.1#5353";
-    #     # DNS2 = "127.0.0.1#5353";
-    #   };
-    #   volumes = [
-    #     "/var/lib/pihole/etc-pihole:/etc/pihole"
-    #     "/var/lib/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
-    #   ];
-    #   extraOptions = [
-    #     "--network=host"
-    #     "--cap-add=NET_ADMIN"
-    #     "--cap-add=NET_RAW"
-    #   ];
-    # };
-
-    silly-tavern = {
-      autoStart = true;
-      image = "ghcr.io/sillytavern/sillytavern:latest";
-      ports = [
-        "8083:8000/tcp"
-      ];
-      environment = {
-        NODE_ENV = "production";
-        FORCE_COLOR = "1";
+  virtualisation.oci-containers = {
+    containers = {
+      litellm = {
+        autoStart = true;
+        image = "ghcr.io/berriai/litellm-database:main-stable";
+        ports = [
+          "4000:4000/tcp"
+        ];
+        environment = {
+          SERVER_ROOT_PATH = "/litellm";
+          LITELLM_MASTER_KEY = "sk-1234";
+          DATABASE_URL =
+            "postgresql://litellm:sk-1234@host.containers.internal:5432/litellm";
+        };
+        volumes = [
+          "/etc/litellm/config.yaml:/app/config.yaml:ro"
+        ];
+        cmd = [
+          "--config" "/app/config.yaml"
+          # "--detailed_debug"
+        ];
       };
-      volumes = [
-        "/var/lib/silly-tavern/config:/home/node/app/config"
-        "/var/lib/silly-tavern/data:/home/node/app/data"
-        "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
-        "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
-      ];
-      extraOptions = [];
+
+      silly-tavern = {
+        autoStart = true;
+        image = "ghcr.io/sillytavern/sillytavern:latest";
+        ports = [
+          "8083:8000/tcp"
+        ];
+        environment = {
+          NODE_ENV = "production";
+          FORCE_COLOR = "1";
+        };
+        volumes = [
+          "/var/lib/silly-tavern/config:/home/node/app/config"
+          "/var/lib/silly-tavern/data:/home/node/app/data"
+          "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
+          "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+        ];
+        extraOptions = [];
+      };
     };
   };
+
 
   # system.activationScripts.consoleBlank = ''
   #   echo "Setting up console blanking..."

@@ -107,7 +107,7 @@ in rec {
 
       allowedTCPPorts = [ 53 80 443 ]
         ++ [ 5432 ]             # postgres
-        # ++ [ 8123 ]             # home-assistant
+        ++ [ 8096 ]             # jellyfin
         ;
       # allowedUDPPorts = [ 53 67 ]
       allowedUDPPorts = [ 53 ]
@@ -599,6 +599,16 @@ in rec {
           locations."/litellm/" = {
             proxyPass = "http://127.0.0.1:4000/litellm/";
             proxyWebsockets = true;
+            extraConfig = ''
+              # (Optional) Disable proxy buffering for better streaming
+              # response from models
+              proxy_buffering off;
+
+              # (Optional) Increase max request size for large attachments
+              # and long audio messages
+              client_max_body_size 20M;
+              proxy_read_timeout 2h;
+            '';
           };
 
           # locations."/ntopng/" = {

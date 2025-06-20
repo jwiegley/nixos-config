@@ -305,11 +305,24 @@ in rec {
     hardware.bolt.enable = true;
 
     ntopng = {
-      enable = false;
+      enable = true;
       httpPort = 3030;
       configText = ''
+        --interface=any
+        --http-port=3030
         --disable-login
+        --local-networks=192.168.50.0/24
+        --redis=127.0.0.1:8085
+        --http-prefix=/ntopng
       '';
+    };
+
+    redis.servers."litellm" = {
+      enable = true;
+      port = 8085;
+      settings = {
+        "aclfile" = "/etc/redis/users.acl";
+      };
     };
 
     fail2ban = {
@@ -611,68 +624,48 @@ in rec {
             '';
           };
 
-          # locations."/ntopng/" = {
-          #   proxyPass = "http://127.0.0.1:3030/";
-          #   proxyWebsockets = true;
-          #   extraConfig = ''
-          #     # Hide X-Frame-Options to allow API token display to work
-          #     proxy_hide_header X-Frame-Options;
-          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
+          locations."/ntopng/" = {
+            proxyPass = "http://127.0.0.1:3030/ntopng/";
+            proxyWebsockets = true;
+          };
+          locations."/ntopng" = {
+            return = "301 /ntopng/";
+          };
 
-          #     # Pass the Host header
-          #     proxy_set_header Host $host;
-          #     proxy_set_header X-Real-IP $remote_addr;
-          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          #     proxy_set_header X-Forwarded-Proto $scheme;
+          locations."/open-webui/" = {
+            proxyPass = "http://127.0.0.1:8084/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              proxy_hide_header X-Frame-Options;
+              proxy_set_header X-Frame-Options "SAMEORIGIN";
 
-          #     proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
+              proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
 
-          #     sub_filter 'href="/' 'href="/ntopng/';
-          #     sub_filter 'src="/' 'src="/ntopng/';
-          #     sub_filter 'content="/' 'content="/ntopng/';
-          #     sub_filter 'action="/' 'content="/ntopng/';
-          #     sub_filter_once off;
-          #     sub_filter_types text/html text/css text/javascript application/javascript;
-          #   '';
-          # };
-          # locations."/ntopng" = {
-          #   return = "301 /ntopng/";
-          # };
+              sub_filter '"/' '"/open-webui/';
+              sub_filter "'/" "'/open-webui/";
+              sub_filter_once off;
+              sub_filter_types text/css text/javascript application/javascript;
 
-          # locations."/open-webui/" = {
-          #   proxyPass = "http://127.0.0.1:8084/";
-          #   proxyWebsockets = true;
-          #   extraConfig = ''
-          #     proxy_hide_header X-Frame-Options;
-          #     proxy_set_header X-Frame-Options "SAMEORIGIN";
+              # (Optional) Disable proxy buffering for better streaming response from models
+              proxy_buffering off;
 
-          #     proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
+              # (Optional) Increase max request size for large attachments and long audio messages
+              client_max_body_size 20M;
+              proxy_read_timeout 10m;
 
-          #     sub_filter '"/' '"/open-webui/';
-          #     sub_filter "'/" "'/open-webui/";
-          #     sub_filter_once off;
-          #     sub_filter_types text/html text/css text/javascript application/javascript;
+              # Pass the Host header
+              # proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
 
-          #     # (Optional) Disable proxy buffering for better streaming response from models
-          #     proxy_buffering off;
-
-          #     # (Optional) Increase max request size for large attachments and long audio messages
-          #     client_max_body_size 20M;
-          #     proxy_read_timeout 10m;
-
-          #     # Pass the Host header
-          #     # proxy_set_header Host $host;
-          #     proxy_set_header X-Real-IP $remote_addr;
-          #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          #     proxy_set_header X-Forwarded-Proto $scheme;
-
-          #     # Cookie handling
-          #     proxy_cookie_path / /open-webui/;
-          #   '';
-          # };
-          # locations."/open-webui" = {
-          #   return = "301 /open-webui/";
-          # };
+              # Cookie handling
+              proxy_cookie_path / /open-webui/;
+            '';
+          };
+          locations."/open-webui" = {
+            return = "301 /open-webui/";
+          };
         };
       };
     };
@@ -1246,6 +1239,7 @@ in rec {
         ANONYMIZED_TELEMETRY = "False";
         DO_NOT_TRACK = "True";
         SCARF_NO_ANALYTICS = "True";
+        ROOT_PATH = "open-webui";
       };
       openFirewall = true;
     };
@@ -1418,6 +1412,9 @@ in rec {
           LITELLM_MASTER_KEY = "sk-1234";
           DATABASE_URL =
             "postgresql://litellm:sk-1234@host.containers.internal:5432/litellm";
+          # REDIS_HOST = "localhost";
+          # REDIS_PORT = "8085" ;
+          # REDIS_PASSWORD = "sk-1234";
         };
         volumes = [
           "/etc/litellm/config.yaml:/app/config.yaml:ro"

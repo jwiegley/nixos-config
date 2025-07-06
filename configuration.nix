@@ -9,6 +9,8 @@ let
     '';
   };
 
+  dynamic-dns-name-com = pkgs.callPackage ./dynamic-dns-name-com.nix { };
+
   attrNameList = attrs:
     builtins.concatStringsSep " " (builtins.attrNames attrs);
 in rec {
@@ -210,6 +212,7 @@ in rec {
       haskellPackages.sizes
       linkdups
       dh
+      dig
     ];
   };
 
@@ -299,6 +302,28 @@ in rec {
         Persistent = true;
       };
     };
+
+    services.dynamic-dns-name-com = {
+      description = "Dynamic DNS Updater for name.com";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${dynamic-dns-name-com}/bin/dynip";
+        WorkingDirectory = "/etc/dynamic-dns-name-com";
+        User = "root";
+        Group = "root";
+      };
+      wantedBy = [ "multi-user.target" ];
+    };
+
+    timers.dynamic-dns-name-com = {
+      description = "Timer for Dynamic DNS Updater";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "15min";
+        Unit = "dynamic-dns-name-com.service";
+      };
+    };
   };
 
   services = rec {
@@ -372,6 +397,7 @@ in rec {
         dns = {
           port = 53;
           domainNeeded = true;
+          domain = "local";
           expandHosts = true;
           interface = "enp4s0";
           listeningMode = "BIND";
@@ -1213,6 +1239,7 @@ in rec {
         host all all 127.0.0.1/32 trust
         host all all 192.168.50.0/24 md5
         host all all 10.88.0.0/16 trust
+        host all all 10.6.0.0/16 trust
         host all all ::1/128 trust
       '';
       initialScript = pkgs.writeText "init.sql" ''

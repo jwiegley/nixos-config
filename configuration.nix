@@ -121,6 +121,7 @@ in rec {
   users = {
     groups = {
       johnw = {};
+      glance = {};
     };
     users =
       let keys = [
@@ -144,6 +145,11 @@ in rec {
           extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
           openssh.authorizedKeys = { inherit keys; };
           home = "/home/johnw";
+        };
+
+        glance = {
+          uid = 510;
+          group = "glance";
         };
       };
   };
@@ -1259,7 +1265,7 @@ in rec {
     };
 
     open-webui = {
-      enable = true;
+      enable = false;
       port = 8084;
       host = "0.0.0.0";
       environment = {

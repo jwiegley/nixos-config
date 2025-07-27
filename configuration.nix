@@ -216,9 +216,11 @@ in rec {
       httm
       b3sum
       haskellPackages.sizes
+      python3
       linkdups
       dh
       dig
+      gitAndTools.git-lfs
     ];
   };
 

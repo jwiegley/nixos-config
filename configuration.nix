@@ -1,4 +1,5 @@
 { config, lib, pkgs, ... }:
+
 let
   portal = pkgs.stdenv.mkDerivation {
     name = "nginx-portal";
@@ -13,6 +14,7 @@ let
 
   attrNameList = attrs:
     builtins.concatStringsSep " " (builtins.attrNames attrs);
+
 in rec {
   system.stateVersion = "25.05";
 
@@ -106,14 +108,47 @@ in rec {
     nameservers = [ "192.168.50.1" ];
 
     firewall = {
-
-      allowedTCPPorts = [ 53 80 443 ]
-        ++ [ 5432 ]             # postgres
-        ++ [ 8096 ]             # jellyfin
+      enable = true;
+      allowedTCPPorts =
+           [ 53 ]               # dns
+        ++ [ 80 443 ]           # nginx (HTTP/S)
+        # ++ [ 5432 ]             # postgres
+        # ++ [ 8096 ]             # jellyfin
+        ++ [ 1790 ]             # nginx (chainweb-node P2P)
         ;
       # allowedUDPPorts = [ 53 67 ]
-      allowedUDPPorts = [ 53 ]
+      allowedUDPPorts =
+           [ 53 ]               # dns
         ;
+      extraCommands = ''
+        iptables -N BLACKLIST || true
+        iptables -A BLACKLIST -j DROP
+
+        # Rate limit connections to chainweb-node P2P
+        iptables -A INPUT -p tcp --dport 1790 -m state --state NEW -m recent \
+          --name ABUSER --set
+        iptables -A INPUT -p tcp --dport 1790 -m state --state NEW -m recent \
+          --name ABUSER --update --seconds 60 --hitcount 6000 -j BLACKLIST
+
+        # All services should be accessible to localhost
+        iptables -A INPUT -p tcp -s 127.0.0.1/32 -j ACCEPT
+        iptables -A INPUT -p udp -s 127.0.0.1/32 -j ACCEPT
+
+        # Services that should be accessible to podman containers
+        iptables -A INPUT -p tcp -m multiport --dports 5432 -s 10.88.0.0/8 -j ACCEPT
+
+        # Services that should be accessible to the home network
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 192.168.50.0/24 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
+
+        # Services that should be accessible to podman or to WireGuard clients
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.0.0.0/8 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.0.0.0/8 -j ACCEPT
+
+        # Anyone else attempting to use these services goes on the black list
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443,5432 -j BLACKLIST
+        iptables -A INPUT -p udp -m multiport --dports 53 -j BLACKLIST
+      '';
     };
     # networkmanager.enable = true;
   };
@@ -487,13 +522,14 @@ in rec {
 
     postfix = {
       enable = true;
-      relayHost = "smtp.fastmail.com";
-      relayPort = 587;
-      config = {
-        smtp_use_tls = "yes";
-        smtp_sasl_auth_enable = "yes";
-        smtp_sasl_security_options = "";
-        smtp_sasl_password_maps = "texthash:/secrets/postfix_sasl";
+      settings = {
+        main = {
+          relayhost = [ "[smtp.fastmail.com]:587" ];
+          smtp_use_tls = "yes";
+          smtp_sasl_auth_enable = "yes";
+          smtp_sasl_security_options = "";
+          smtp_sasl_password_maps = "texthash:/secrets/postfix_sasl";
+        };
       };
     };
 
@@ -573,10 +609,41 @@ in rec {
         proxy_headers_hash_bucket_size 128;
       '';
 
+      streamConfig = ''
+        server {
+          listen 1790;
+          proxy_pass 192.168.50.235:1790;
+          ssl_preread on;
+        }
+      '';
+
       virtualHosts = {
         smokeping.listen = [
           { addr = "0.0.0.0"; port = 8081; }
         ];
+
+        # "vulcan_1790" = {
+        #   serverName = "vulcan.local";
+
+        #   # forceSSL = true;
+        #   # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
+        #   # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
+
+        #   listen = [{ addr = "0.0.0.0"; port = 1790; }];
+
+        #   locations."/" = {
+        #     proxyPass = "https://192.168.50.235:1790/";
+        #     proxyWebsockets = true;
+        #     extraConfig = ''
+        #       proxy_set_header Host $host;
+        #       proxy_set_header X-Real-IP $remote_addr;
+        #       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        #       proxy_set_header X-Forwarded-Proto $scheme;
+        #       proxy_ssl_name $host;
+        #       proxy_ssl_server_name on;
+        #     '';
+        #   };
+        # };
 
         "vulcan.local" = {
           # forceSSL = true;      # Optional, for HTTPS

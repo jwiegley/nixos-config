@@ -138,12 +138,17 @@ in rec {
         iptables -A INPUT -p tcp -m multiport --dports 5432 -s 10.88.0.0/8 -j ACCEPT
 
         # Services that should be accessible to the home network
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 192.168.50.0/24 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -s 192.168.50.5 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -s 192.168.50.112 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22 -s 192.168.50.235 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
         iptables -A INPUT -p udp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
 
         # Services that should be accessible to podman or to WireGuard clients
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.0.0.0/8 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.0.0.0/8 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.88.0.0/8 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.88.0.0/8 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.6.0.0/8 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.6.0.0/8 -j ACCEPT
 
         # Anyone else attempting to use these services goes on the black list
         iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443,5432 -j BLACKLIST

@@ -135,7 +135,7 @@ in rec {
         iptables -A INPUT -p udp -s 127.0.0.1/32 -j ACCEPT
 
         # Services that should be accessible to podman containers
-        iptables -A INPUT -p tcp -m multiport --dports 5432 -s 10.88.0.0/8 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 5432 -s 10.88.0.0/16 -j ACCEPT
 
         # Services that should be accessible to the home network
         iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -s 192.168.50.5 -j ACCEPT
@@ -145,10 +145,10 @@ in rec {
         iptables -A INPUT -p udp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
 
         # Services that should be accessible to podman or to WireGuard clients
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.88.0.0/8 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.88.0.0/8 -j ACCEPT
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.6.0.0/8 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.6.0.0/8 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.88.0.0/16 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.88.0.0/16 -j ACCEPT
+        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.6.0.0/16 -j ACCEPT
+        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.6.0.0/16 -j ACCEPT
 
         # Anyone else attempting to use these services goes on the black list
         iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443,5432 -j BLACKLIST
@@ -1320,7 +1320,7 @@ in rec {
         host all all 192.168.50.0/24 md5
         host all all 10.88.0.0/16 trust
         host all all 10.6.0.0/16 trust
-        host all all ::1/128 trust
+        host all all ::1/128 md5
       '';
       initialScript = pkgs.writeText "init.sql" ''
         CREATE ROLE johnw WITH LOGIN PASSWORD 'password' CREATEDB;
@@ -1506,49 +1506,59 @@ in rec {
     };
   };
 
-  virtualisation.oci-containers = {
-    containers = {
-      litellm = {
-        autoStart = true;
-        image = "ghcr.io/berriai/litellm-database:main-stable";
-        ports = [
-          "4000:4000/tcp"
-        ];
-        environment = {
-          SERVER_ROOT_PATH = "/litellm";
-          LITELLM_MASTER_KEY = "sk-1234";
-          DATABASE_URL =
-            "postgresql://litellm:sk-1234@host.containers.internal:5432/litellm";
-          # REDIS_HOST = "localhost";
-          # REDIS_PORT = "8085" ;
-          # REDIS_PASSWORD = "sk-1234";
-        };
-        volumes = [
-          "/etc/litellm/config.yaml:/app/config.yaml:ro"
-        ];
-        cmd = [
-          "--config" "/app/config.yaml"
-          # "--detailed_debug"
-        ];
+  virtualisation = {
+    podman = {
+      enable = true;
+      autoPrune = {
+        enable = true;
+        flags = [ "--all" ];
       };
+    };
 
-      silly-tavern = {
-        autoStart = true;
-        image = "ghcr.io/sillytavern/sillytavern:latest";
-        ports = [
-          "8083:8000/tcp"
-        ];
-        environment = {
-          NODE_ENV = "production";
-          FORCE_COLOR = "1";
+    oci-containers = {
+      containers = {
+        litellm = {
+          autoStart = true;
+          image = "ghcr.io/berriai/litellm-database:main-stable";
+          ports = [
+            "4000:4000/tcp"
+          ];
+          environment = {
+            SERVER_ROOT_PATH = "/litellm";
+            LITELLM_MASTER_KEY = "sk-1234";
+            DATABASE_URL =
+              "postgresql://litellm:sk-1234@host.containers.internal:5432/litellm";
+              # REDIS_HOST = "localhost";
+              # REDIS_PORT = "8085" ;
+              # REDIS_PASSWORD = "sk-1234";
+          };
+          volumes = [
+            "/etc/litellm/config.yaml:/app/config.yaml:ro"
+          ];
+          cmd = [
+            "--config" "/app/config.yaml"
+            # "--detailed_debug"
+          ];
         };
-        volumes = [
-          "/var/lib/silly-tavern/config:/home/node/app/config"
-          "/var/lib/silly-tavern/data:/home/node/app/data"
-          "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
-          "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
-        ];
-        extraOptions = [];
+
+        silly-tavern = {
+          autoStart = true;
+          image = "ghcr.io/sillytavern/sillytavern:latest";
+          ports = [
+            "8083:8000/tcp"
+          ];
+          environment = {
+            NODE_ENV = "production";
+            FORCE_COLOR = "1";
+          };
+          volumes = [
+            "/var/lib/silly-tavern/config:/home/node/app/config"
+            "/var/lib/silly-tavern/data:/home/node/app/data"
+            "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
+            "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+          ];
+          extraOptions = [];
+        };
       };
     };
   };

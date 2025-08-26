@@ -161,7 +161,9 @@ in rec {
   users = {
     groups = {
       johnw = {};
-      glance = {};
+      glance = {
+        gid = 510;
+      };
     };
     users =
       let keys = [
@@ -190,38 +192,61 @@ in rec {
         glance = {
           uid = 510;
           group = "glance";
+          isSystemUser = true;
+          description = "Glance service user";
         };
       };
   };
 
   environment =
     let
-      dh = pkgs.writeScriptBin "dh" ''
-        #!/usr/bin/env bash
+      dh = pkgs.stdenv.mkDerivation rec {
+        name = "dh-${version}";
+        version = "1.0";
 
-        if ! command -v zfs > /dev/null 2>&1; then
-            echo "ERROR: ZFS not installed on this system"
-            exit 1
-        fi
+        src = pkgs.writeTextFile {
+          name = "dh.sh";
+          text = ''
+            #!/usr/bin/env bash
 
-        sort=""
-        type="filesystem,volume"
-        fields="name,used,refer,avail,compressratio,mounted"
+            if ! command -v zfs > /dev/null 2>&1; then
+                echo "ERROR: ZFS not installed on this system"
+                exit 1
+            fi
 
-        if [[ "$1" == "-u" ]]; then
-            sort="-s used"
-            shift
-        elif [[ "$1" == "-s" ]]; then
-            type="snapshot"
-            fields="name,refer,creation"
-            shift
-        elif [[ "$1" == "-r" ]]; then
-            sort="-s refer"
-            shift
-        fi
+            sort=""
+            type="filesystem,volume"
+            fields="name,used,refer,avail,compressratio,mounted"
 
-        exec zfs list -o $fields -t $type $sort "$@"
-      '';
+            if [[ "$1" == "-u" ]]; then
+                sort="-s used"
+                shift
+            elif [[ "$1" == "-s" ]]; then
+                type="snapshot"
+                fields="name,refer,creation"
+                shift
+            elif [[ "$1" == "-r" ]]; then
+                sort="-s refer"
+                shift
+            fi
+
+            exec zfs list -o $fields -t $type $sort "$@"
+          '';
+        };
+
+        dontUnpack = true;
+        installPhase = ''
+          mkdir -p $out/bin
+          cp $src $out/bin/dh
+          chmod +x $out/bin/dh
+        '';
+
+        meta = with lib; {
+          description = "ZFS dataset helper - simplified zfs list command";
+          license = licenses.mit;
+          maintainers = with maintainers; [ jwiegley ];
+        };
+      };
 
       linkdups = with pkgs; stdenv.mkDerivation rec {
         name = "linkdups-${version}";
@@ -321,23 +346,39 @@ in rec {
 
     services.restic-check =
       let
-        restic-check-script = pkgs.writeShellApplication {
-          name = "restic-check";
+        restic-operations = pkgs.writeShellApplication {
+          name = "restic-operations";
           text = ''
-            for fileset in ${attrNameList services.restic.backups} ; do \
-              echo "=== $fileset ==="; \
-              /run/current-system/sw/bin/restic-$fileset \
-                --retry-lock=1h check; \
-              /run/current-system/sw/bin/restic-$fileset \
-                --retry-lock=1h prune; \
-              /run/current-system/sw/bin/restic-$fileset \
-                --retry-lock=1h repair snapshots; \
+            operation="''${1:-check}"
+            shift || true
+
+            for fileset in ${attrNameList services.restic.backups} ; do
+              echo "=== $fileset ==="
+              case "$operation" in
+                check)
+                  /run/current-system/sw/bin/restic-$fileset \
+                    --retry-lock=1h check
+                  /run/current-system/sw/bin/restic-$fileset \
+                    --retry-lock=1h prune
+                  /run/current-system/sw/bin/restic-$fileset \
+                    --retry-lock=1h repair snapshots
+                  ;;
+                snapshots)
+                  /run/current-system/sw/bin/restic-$fileset snapshots --json | \
+                    ${pkgs.jq}/bin/jq -r \
+                      'sort_by(.time) | reverse | .[:4][] | .time'
+                  ;;
+                *)
+                  echo "Unknown operation: $operation"
+                  exit 1
+                  ;;
+              esac
             done
           '';
         }; in {
           description = "Run restic check on backup repository";
           serviceConfig = {
-            ExecStart = "${lib.getExe restic-check-script}";
+            ExecStart = "${lib.getExe restic-operations} check";
             User = "root";
           };
         };
@@ -413,7 +454,7 @@ in rec {
 
     pihole-ftl = {
       enable = true;
-      openFirewallDHCP = true;
+      openFirewallDHCP = false;  # DHCP is disabled, no need to open firewall
       queryLogDeleter.enable = true;
       lists = [
         { url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
@@ -455,63 +496,8 @@ in rec {
             "8.8.4.4"
           ];
         };
-        dhcp = {
-          active = false;
-          router = "192.168.50.1";
-          start = "192.168.50.2";
-          end = "192.168.50.254";
-          leastTime = "1d";
-          ipv6 = false;
-          multiDNS = true;
-          hosts = [
-            # Static address for the current host
-            "cc:2d:b7:01:f8:7f,192.168.50.182,${config.networking.hostName},infinite"
-
-            "1c:1d:d3:e0:d8:2d,192.168.50.5,hera,infinite"
-            "16:f9:5b:42:10:69,hera-wifi"
-            "9c:76:0e:31:5c:6d,192.168.50.235,athena,infinite"
-            "da:b3:f0:75:78:83,athena-wifi"
-            "7a:d4:a8:c5:f7:97,clio"
-            "74:56:3c:b7:24:ac,bazigush"
-
-            # Network hosts
-
-            "6a:9a:43:fb:7e:af,Johns-iPhone"
-            "b2:23:15:55:56:d4,Johns-iPad"
-            "94:21:57:3e:ce:9e,Johns-Watch"
-
-            "62:97:48:33:6f:32,Nasims-iPhone"
-
-            "00:1d:63:67:81:16,Miele-Dishwasher"
-            "08:04:b4:bb:ee:21,Pentair-IntelliCenter-Radio"
-            "08:60:6e:21:14:e0,Asus-RT-N66U"
-            "08:b6:1f:66:71:14,Hubspace-Porch-Light"
-            "0c:83:cc:13:70:e8,MyQ-Garage-Door"
-            "1c:f2:9a:11:b6:0d,Google-Home-Nest-Hub"
-            "44:67:55:03:b3:cc,B-hyve-Sprinkler-Control"
-            "44:bb:3b:4a:99:af,Google-Nest-Downstairs"
-            "44:bb:3b:4b:80:4c,Google-Nest-Upstairs"
-            "44:bb:3b:4c:24:0d,Google-Nest-Family-Room"
-            "54:49:df:3a:0e:7a,Peloton"
-            "54:e0:19:1e:5d:ff,Ring-Video-Doorbell"
-            "5c:fc:e1:47:4e:48,ADT-Home-Security"
-            "60:8a:10:dd:b2:40,Traeger-Ironwood-Grill"
-            "70:c9:32:2b:83:9d,Dreamebot-Robot-Vacuum"
-            "78:2b:64:b4:5d:25,Bose-Portable-Home-Speaker"
-            "78:9c:85:33:54:5d,August-Home-Garage"
-            "78:9c:85:34:a5:0d,August-Home-Side-Door"
-            "78:9c:85:34:a5:33,August-Home-Front-Door"
-            "90:48:46:8d:6b:10,Enphase-Solar-Inverter"
-            "98:ed:5c:8e:56:91,Tesla-Wall-Connector"
-            "b4:8a:0a:f6:13:b8,Flume-Water-Meter"
-            "e8:9f:6d:4a:f9:e8,Pentair-IntelliFlo-3"
-            "fc:12:63:cd:e1:01,192.168.50.121,4G-LTE-Network-Extender,infinite"
-          ];
-          rapidCommit = true;
-        };
+        # DHCP is disabled - remove all DHCP configuration
         misc.dnsmasq_lines = [
-          # This DHCP server is the only one on the network
-          "dhcp-authoritative"
           # Source: https://data.iana.org/root-anchors/root-anchors.xml
           "trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16"
         ];
@@ -778,17 +764,7 @@ in rec {
 
     logwatch =
       let
-        restic-script = pkgs.writeShellApplication {
-          name = "logwatch-restic";
-          text = ''
-            for fileset in ${attrNameList restic.backups} ; do \
-              echo "=== $fileset ==="; \
-              /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-                ${pkgs.jq}/bin/jq -r \
-                  'sort_by(.time) | reverse | .[:4][] | .time'; \
-            done
-          '';
-        };
+        restic-operations = config.systemd.services.restic-check.serviceConfig.ExecStart;
         zfs-snapshot-script = pkgs.writeShellApplication {
           name = "logwatch-zfs-snapshot";
           text = ''
@@ -820,7 +796,7 @@ in rec {
           { name = "sshd"; }
           { name = "restic";
             title = "Restic Snapshots";
-            script = "${lib.getExe restic-script}"; }
+            script = "${restic-operations} snapshots"; }
           { name = "zpool";
             title = "ZFS Pool Status";
             script = "${lib.getExe zpool-script}"; }
@@ -858,11 +834,11 @@ in rec {
 
         archival = {
           frequently = 0;
-          hourly = 96;
-          daily = 90;
-          weekly = 26;
+          hourly = 24;
+          daily = 30;
+          weekly = 8;
           monthly = 12;
-          yearly = 30;
+          yearly = 5;
           autosnap = true;
           autoprune = true;
         };
@@ -1336,19 +1312,6 @@ in rec {
         GRANT ALL ON SCHEMA public TO litellm;
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO litellm;
       '';
-    };
-
-    open-webui = {
-      enable = false;
-      port = 8084;
-      host = "0.0.0.0";
-      environment = {
-        ANONYMIZED_TELEMETRY = "False";
-        DO_NOT_TRACK = "True";
-        SCARF_NO_ANALYTICS = "True";
-        ROOT_PATH = "open-webui";
-      };
-      openFirewall = true;
     };
 
     glance = {

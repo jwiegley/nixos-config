@@ -10,6 +10,37 @@ let
     '';
   };
 
+  restic-operations = backups: pkgs.writeShellApplication {
+    name = "restic-operations";
+    text = ''
+      operation="''${1:-check}"
+      shift || true
+
+      for fileset in ${attrNameList backups} ; do
+        echo "=== $fileset ==="
+        case "$operation" in
+          check)
+            /run/current-system/sw/bin/restic-$fileset \
+              --retry-lock=1h check
+            /run/current-system/sw/bin/restic-$fileset \
+              --retry-lock=1h prune
+            /run/current-system/sw/bin/restic-$fileset \
+              --retry-lock=1h repair snapshots
+            ;;
+          snapshots)
+            /run/current-system/sw/bin/restic-$fileset snapshots --json | \
+              ${pkgs.jq}/bin/jq -r \
+                'sort_by(.time) | reverse | .[:4][] | .time'
+            ;;
+          *)
+            echo "Unknown operation: $operation"
+            exit 1
+            ;;
+        esac
+      done
+    '';
+  };
+
   dynamic-dns-name-com = pkgs.callPackage ./dynamic-dns-name-com.nix { };
 
   attrNameList = attrs:
@@ -344,44 +375,13 @@ in rec {
       };
     };
 
-    services.restic-check =
-      let
-        restic-operations = pkgs.writeShellApplication {
-          name = "restic-operations";
-          text = ''
-            operation="''${1:-check}"
-            shift || true
-
-            for fileset in ${attrNameList services.restic.backups} ; do
-              echo "=== $fileset ==="
-              case "$operation" in
-                check)
-                  /run/current-system/sw/bin/restic-$fileset \
-                    --retry-lock=1h check
-                  /run/current-system/sw/bin/restic-$fileset \
-                    --retry-lock=1h prune
-                  /run/current-system/sw/bin/restic-$fileset \
-                    --retry-lock=1h repair snapshots
-                  ;;
-                snapshots)
-                  /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-                    ${pkgs.jq}/bin/jq -r \
-                      'sort_by(.time) | reverse | .[:4][] | .time'
-                  ;;
-                *)
-                  echo "Unknown operation: $operation"
-                  exit 1
-                  ;;
-              esac
-            done
-          '';
-        }; in {
-          description = "Run restic check on backup repository";
-          serviceConfig = {
-            ExecStart = "${lib.getExe restic-operations} check";
-            User = "root";
-          };
-        };
+    services.restic-check = {
+      description = "Run restic check on backup repository";
+      serviceConfig = {
+        ExecStart = "${lib.getExe (restic-operations services.restic.backups)} check";
+        User = "root";
+      };
+    };
 
     timers.restic-check = {
       description = "Timer for restic check";
@@ -764,7 +764,12 @@ in rec {
 
     logwatch =
       let
-        restic-operations = config.systemd.services.restic-check.serviceConfig.ExecStart;
+        restic-snapshots = pkgs.writeShellApplication {
+          name = "restic-snapshots";
+          text = ''
+            ${lib.getExe (restic-operations services.restic.backups)} snapshots
+          '';
+        };
         zfs-snapshot-script = pkgs.writeShellApplication {
           name = "logwatch-zfs-snapshot";
           text = ''
@@ -796,7 +801,7 @@ in rec {
           { name = "sshd"; }
           { name = "restic";
             title = "Restic Snapshots";
-            script = "${restic-operations} snapshots"; }
+            script = "${lib.getExe restic-snapshots}"; }
           { name = "zpool";
             title = "ZFS Pool Status";
             script = "${lib.getExe zpool-script}"; }

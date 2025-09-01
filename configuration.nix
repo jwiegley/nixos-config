@@ -119,11 +119,11 @@ in rec {
   networking = {
     hostId = "671bf6f5";
     hostName = "vulcan";
-    domain = "local";
+    domain = "localnet";
 
     hosts = {
       "127.0.0.2" = lib.mkForce [];
-      "192.168.50.182" = [ "vulcan.local" "vulcan" ];
+      "192.168.50.182" = [ "vulcan.localnet" "vulcan" ];
     };
 
     interfaces.enp4s0 = {
@@ -142,59 +142,80 @@ in rec {
       enable = true;
       allowedTCPPorts =
            [ 53 ]               # dns
-        ++ [ 80 443 ]           # nginx (HTTP/S)
-        # ++ [ 5432 ]             # postgres
-        # ++ [ 8096 ]             # jellyfin
+        ++ [ 80 ]               # nginx
+        ++ [ 5432 ]             # postgres
         ++ [ 1790 ]             # nginx (chainweb-node P2P)
         ;
-      # allowedUDPPorts = [ 53 67 ]
       allowedUDPPorts =
            [ 53 ]               # dns
         ;
-      extraCommands = ''
-        iptables -N BLACKLIST || true
-        iptables -A BLACKLIST -j DROP
-
-        # Rate limit connections to chainweb-node P2P
-        iptables -A INPUT -p tcp --dport 1790 -m state --state NEW -m recent \
-          --name ABUSER --set
-        iptables -A INPUT -p tcp --dport 1790 -m state --state NEW -m recent \
-          --name ABUSER --update --seconds 60 --hitcount 6000 -j BLACKLIST
-
-        # All services should be accessible to localhost
-        iptables -A INPUT -p tcp -s 127.0.0.1/32 -j ACCEPT
-        iptables -A INPUT -p udp -s 127.0.0.1/32 -j ACCEPT
-
-        # Services that should be accessible to podman containers
-        iptables -A INPUT -p tcp -m multiport --dports 5432 -s 10.88.0.0/16 -j ACCEPT
-
-        # Services that should be accessible to the home network
-        iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -s 192.168.50.5 -j ACCEPT
-        iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -s 192.168.50.112 -j ACCEPT
-        iptables -A INPUT -p tcp -m multiport --dports 22 -s 192.168.50.235 -j ACCEPT
-        iptables -A INPUT -p tcp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 192.168.50.0/24 -j ACCEPT
-
-        # Services that should be accessible to podman or to WireGuard clients
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.88.0.0/16 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.88.0.0/16 -j ACCEPT
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443 -s 10.6.0.0/16 -j ACCEPT
-        iptables -A INPUT -p udp -m multiport --dports 53 -s 10.6.0.0/16 -j ACCEPT
-
-        # Anyone else attempting to use these services goes on the black list
-        iptables -A INPUT -p tcp -m multiport --dports 22,53,80,443,5432 -j BLACKLIST
-        iptables -A INPUT -p udp -m multiport --dports 53 -j BLACKLIST
-      '';
+      interfaces.podman0.allowedUDPPorts = [ 53 ];
     };
-    # networkmanager.enable = true;
+
+    # jww (2025-08-31): If I use these firewall settings instead of the above,
+    # podman is unable to resolve the hostname "hera.localnet".
+
+    # nftables = {
+    #   enable = true;
+    #   ruleset = ''
+    #     table inet filter {
+    #       set abuser {
+    #         type ipv4_addr
+    #         flags dynamic, timeout
+    #         timeout 24h
+    #       }
+
+    #       chain input {
+    #         type filter hook input priority 0; policy drop;
+
+    #         # Allow established connections
+    #         ct state established,related accept
+
+    #         # Allow localhost
+    #         iif lo accept
+    #         ip saddr 127.0.0.1/32 accept
+
+    #         # Rate limit connections to chainweb-node P2P (port 1790)
+    #         ct state new tcp dport 1790 \
+    #           update @abuser { ip saddr limit rate 600/minute } accept
+
+    #         # Services accessible to podman containers (10.88.0.0/16)
+    #         iifname "podman*" accept
+    #         ip saddr 10.88.0.0/16 tcp dport { 53, 5432 } accept
+    #         ip saddr 10.88.0.0/16 udp dport 53 accept
+
+    #         # Services accessible to WireGuard clients (10.6.0.0/16)
+    #         ip saddr 10.6.0.0/16 tcp dport { 22, 53, 80 } accept
+    #         ip saddr 10.6.0.0/16 udp dport 53 accept
+
+    #         # Services accessible to specific home network devices
+    #         ip saddr 192.168.50.5 tcp dport { 22, 80 } accept
+    #         ip saddr 192.168.50.112 tcp dport { 22, 80 } accept
+    #         ip saddr 192.168.50.235 tcp dport 22 accept
+
+    #         # DNS accessible to entire home network
+    #         ip saddr 192.168.50.0/24 tcp dport 53 accept
+    #         ip saddr 192.168.50.0/24 udp dport 53 accept
+
+    #         # Default policy is drop (set above)
+    #       }
+
+    #       chain forward {
+    #         type filter hook forward priority 0; policy drop;
+    #         # Add forwarding rules if needed
+    #       }
+
+    #       chain output {
+    #         type filter hook output priority 0; policy accept;
+    #       }
+    #     }
+    #   '';
+    # };
   };
 
   users = {
     groups = {
       johnw = {};
-      glance = {
-        gid = 510;
-      };
     };
     users =
       let keys = [
@@ -218,13 +239,6 @@ in rec {
           extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
           openssh.authorizedKeys = { inherit keys; };
           home = "/home/johnw";
-        };
-
-        glance = {
-          uid = 510;
-          group = "glance";
-          isSystemUser = true;
-          description = "Glance service user";
         };
       };
   };
@@ -392,6 +406,11 @@ in rec {
       };
     };
 
+    services.technitium-dns-server.serviceConfig = {
+      WorkingDirectory = lib.mkForce null;
+      BindPaths = lib.mkForce null;
+    };
+
     services.dynamic-dns-name-com = {
       description = "Dynamic DNS Updater for name.com";
       serviceConfig = {
@@ -451,65 +470,10 @@ in rec {
       };
     };
 
-
-    pihole-ftl = {
+    technitium-dns-server = {
       enable = true;
-      openFirewallDHCP = false;  # DHCP is disabled, no need to open firewall
-      queryLogDeleter.enable = true;
-      lists = [
-        { url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
-          description = "Steven Black's unified adlist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt";
-          description = "DNS Blocklists Threat Intelligence Feeds"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/spam-tlds-adblock.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt";
-          description = "DNS Blocklist Multi PRO"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/hoster.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/fake.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/anti.piracy.txt";
-          description = "DNS Blocklist"; }
-        { url = "https://raw.githubusercontent.com/froggeric/DNS-blocklists/refs/heads/main/NoAppleAds";
-          description = "Block Apple ads"; }
-        { url = "https://big.oisd.nl/";
-          description = "oisd big"; }
-      ];
-      settings = {
-        dns = {
-          port = 53;
-          domainNeeded = true;
-          domain = "local";
-          expandHosts = true;
-          interface = "enp4s0";
-          listeningMode = "BIND";
-          upstreams = [
-            "192.168.50.1#53"
-            "8.8.8.8"
-            "8.8.4.4"
-          ];
-        };
-        # DHCP is disabled - remove all DHCP configuration
-        misc.dnsmasq_lines = [
-          # Source: https://data.iana.org/root-anchors/root-anchors.xml
-          "trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16"
-        ];
-      };
+      openFirewall = true;
     };
-
-    pihole-web = {
-      enable = true;
-      ports = [ 8082 ];
-    };
-
-    # Set proper ownership for the secret
 
     postfix = {
       enable = true;
@@ -531,61 +495,6 @@ in rec {
         PermitRootLogin = "yes";
       };
     };
-
-    # unbound = {
-    #   enable = true;
-    #   settings = {
-    #     server = {
-    #       interface = [ "127.0.0.1" ];
-    #       port = 5353;
-
-    #       # Minimize data in DNS queries for better privacy
-    #       qname-minimisation = true;
-
-    #       # Hide server identity and version
-    #       hide-identity = true;
-    #       hide-version = true;
-
-    #       # Protect against DNS rebinding attacks
-    #       private-address = [
-    #         "192.168.0.0/16"
-    #         "169.254.0.0/16"
-    #         "172.16.0.0/12"
-    #         "10.0.0.0/8"
-    #         "fd00::/8"
-    #         "fe80::/10"
-    #       ];
-
-    #       # Use 0x20 bit encoding to help protect against forgery
-    #       use-caps-for-id = true;
-
-    #       # Query logging (for debugging purposes)
-    #       log-queries = false;
-    #       verbosity = 1;
-
-    #       # Define the .local zone as static so you can add your own records
-    #       local-zone = [ "local. static" ];
-
-    #       # Add static host records
-    #       local-data = [
-    #         "\"router.local. IN A 192.168.50.1\""
-    #         "\"hera.local. IN A 192.168.50.5\""
-    #         "\"athena.local. IN A 192.168.50.235\""
-    #         "\"vulcan.local. IN A 192.168.50.182\""
-    #         "\"bazigush.local. IN A 192.168.50.33\""
-    #       ];
-
-    #       # For PTR records (reverse lookups)
-    #       local-data-ptr = [
-    #         "\"192.168.50.1 router.local.\""
-    #         "\"192.168.50.5 hera.local.\""
-    #         "\"192.168.50.235 athena.local.\""
-    #         "\"192.168.50.182 vulcan.local.\""
-    #         "\"192.168.50.33 bazigush.local.\""
-    #       ];
-    #     };
-    #   };
-    # };
 
     nginx = {
       enable = true;
@@ -613,33 +522,25 @@ in rec {
           { addr = "0.0.0.0"; port = 8081; }
         ];
 
-        # "vulcan_1790" = {
-        #   serverName = "vulcan.local";
+        "dns.vulcan" = {
+          serverAliases = [ "dns.vulcan.localnet" ];
 
-        #   # forceSSL = true;
-        #   # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
-        #   # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:5380";
+            extraConfig = ''
+              proxy_redirect off;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              '';
+          };
+        };
 
-        #   listen = [{ addr = "0.0.0.0"; port = 1790; }];
+        "vulcan" = {
+          serverAliases = [ "vulcan.localnet" ];
 
-        #   locations."/" = {
-        #     proxyPass = "https://192.168.50.235:1790/";
-        #     proxyWebsockets = true;
-        #     extraConfig = ''
-        #       proxy_set_header Host $host;
-        #       proxy_set_header X-Real-IP $remote_addr;
-        #       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        #       proxy_set_header X-Forwarded-Proto $scheme;
-        #       proxy_ssl_name $host;
-        #       proxy_ssl_server_name on;
-        #     '';
-        #   };
-        # };
-
-        "vulcan.local" = {
           # forceSSL = true;      # Optional, for HTTPS
-          sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
-          sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
+          # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
+          # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
 
           root = "${portal}";
 
@@ -665,42 +566,6 @@ in rec {
             return = "301 /jellyfin/";
           };
 
-          locations."/pi-hole/" = {
-            proxyPass = "http://127.0.0.1:8082/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Hide X-Frame-Options to allow API token display to work
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              # Fix any hardcoded URLs in the Pi-hole interface
-              sub_filter '="/' '="/pi-hole/';
-              sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
-
-              # Pass the Host header
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              # Cookie handling
-              proxy_cookie_path / /pi-hole/;
-            '';
-          };
-          # It would be preferable if this were not here; it may conflict with
-          # some service in the future.
-          locations."/api/" = {
-            proxyPass = "http://127.0.0.1:8082/api/";
-          };
-          locations."/pi-hole" = {
-            return = "301 /pi-hole/";
-          };
-
-          locations."/glance/" = {
-            proxyPass = "http://127.0.0.1:5678/";
-          };
-
           locations."/litellm/" = {
             proxyPass = "http://127.0.0.1:4000/litellm/";
             proxyWebsockets = true;
@@ -722,41 +587,6 @@ in rec {
           };
           locations."/ntopng" = {
             return = "301 /ntopng/";
-          };
-
-          locations."/open-webui/" = {
-            proxyPass = "http://127.0.0.1:8084/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_hide_header X-Frame-Options;
-              proxy_set_header X-Frame-Options "SAMEORIGIN";
-
-              proxy_set_header Accept-Encoding ""; # no compression allowed or next won't work
-
-              sub_filter '"/' '"/open-webui/';
-              sub_filter "'/" "'/open-webui/";
-              sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
-
-              # (Optional) Disable proxy buffering for better streaming response from models
-              proxy_buffering off;
-
-              # (Optional) Increase max request size for large attachments and long audio messages
-              client_max_body_size 20M;
-              proxy_read_timeout 10m;
-
-              # Pass the Host header
-              # proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              # Cookie handling
-              proxy_cookie_path / /open-webui/;
-            '';
-          };
-          locations."/open-webui" = {
-            return = "301 /open-webui/";
           };
         };
       };
@@ -1317,160 +1147,6 @@ in rec {
         GRANT ALL ON SCHEMA public TO litellm;
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO litellm;
       '';
-    };
-
-    glance = {
-      enable = true;
-      settings = {
-        server = {
-          port = 5678;
-          base-url = "/glance";
-        };
-        pages = [
-          {
-            name = "Home";
-            columns = [
-              {
-                size = "small";
-                widgets = [
-                  {
-                    type = "calendar";
-                    first-day-of-week = "monday";
-                  }
-                  {
-                    type = "rss";
-                    limit = 10;
-                    collapse-after = 3;
-                    cache = "12h";
-                    feeds = [
-                      {
-                        url = "https://selfh.st/rss/";
-                        title = "selfh.st";
-                        limit = 4;
-                      }
-                      {
-                        url = "https://ciechanow.ski/atom.xml";
-                      }
-                      {
-                        url = "https://www.joshwcomeau.com/rss.xml";
-                        title = "Josh Comeau";
-                      }
-                      {
-                        url = "https://samwho.dev/rss.xml";
-                      }
-                      {
-                        url = "https://ishadeed.com/feed.xml";
-                        title = "Ahmad Shadeed";
-                      }
-                    ];
-                  }
-                  {
-                    type = "twitch-channels";
-                    channels = [
-                      "theprimeagen"
-                      "j_blow"
-                      "piratesoftware"
-                      "cohhcarnage"
-                      "christitustech"
-                      "EJ_SA"
-                    ];
-                  }
-                ];
-              }
-              {
-                size = "full";
-                widgets = [
-                  {
-                    type = "group";
-                    widgets = [
-                      {
-                        type = "hacker-news";
-                      }
-                      {
-                        type = "lobsters";
-                      }
-                    ];
-                  }
-                  {
-                    type = "videos";
-                    channels = [
-                      "UCXuqSBlHAE6Xw-yeJA0Tunw" # Linus Tech Tips
-                      "UCR-DXc1voovS8nhAvccRZhg" # Jeff Geerling
-                      "UCsBjURrPoezykLs9EqgamOA" # Fireship
-                      "UCBJycsmduvYEL83R_U4JriQ" # Marques Brownlee
-                      "UCHnyfMqiRRG1u-2MsSQLbXA" # Veritasium
-                    ];
-                  }
-                  {
-                    type = "group";
-                    widgets = [
-                      {
-                        type = "reddit";
-                        subreddit = "technology";
-                        show-thumbnails = true;
-                      }
-                      {
-                        type = "reddit";
-                        subreddit = "selfhosted";
-                        show-thumbnails = true;
-                      }
-                    ];
-                  }
-                ];
-              }
-              {
-                size = "small";
-                widgets = [
-                  {
-                    type = "clock";
-                    timezone = "America/Los_Angeles";
-                  }
-                  {
-                    type = "weather";
-                    location = "Arden-Arcade, United States";
-                    units = "imperial";
-                    hour-format = "12h";
-                  }
-                  {
-                    type = "server-stats";
-                    servers = [
-                      {
-                        type = "local";
-                        name = "Services";
-                      }
-                    ];
-                  }
-                  {
-                    type = "markets";
-                    markets = [
-                      {
-                        symbol = "SPY";
-                        name = "S&P 500";
-                      }
-                      {
-                        symbol = "BTC-USD";
-                        name = "Bitcoin";
-                      }
-                      {
-                        symbol = "NVDA";
-                        name = "NVIDIA";
-                      }
-                      {
-                        symbol = "AAPL";
-                        name = "Apple";
-                      }
-                      {
-                        symbol = "MSFT";
-                        name = "Microsoft";
-                      }
-                    ];
-                  }
-                ];
-              }
-            ];
-          }
-        ];
-      };
     };
   };
 

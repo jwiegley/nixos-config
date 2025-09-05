@@ -143,6 +143,7 @@ in rec {
       allowedTCPPorts =
            [ 53 ]               # dns
         ++ [ 80 ]               # nginx
+        ++ [ 5380 ]             # technitium
         ++ [ 5432 ]             # postgres
         ++ [ 1790 ]             # nginx (chainweb-node P2P)
         ;

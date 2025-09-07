@@ -634,7 +634,14 @@ in rec {
               # and long audio messages
               client_max_body_size 20M;
               proxy_read_timeout 2h;
+
+              sub_filter '="/litellm/litellm' '="/litellm';
+              sub_filter_once off;
+              sub_filter_types text/css text/javascript application/javascript;
             '';
+          };
+          locations."/litellm/litellm/ui/" = {
+            return = "301 /litellm/ui/";
           };
 
           locations."/ntopng/" = {

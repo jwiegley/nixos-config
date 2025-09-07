@@ -1,15 +1,6 @@
 { config, lib, pkgs, ... }:
 
 let
-  portal = pkgs.stdenv.mkDerivation {
-    name = "nginx-portal";
-    src = ./nginx-portal;
-    installPhase = ''
-      mkdir -p $out
-      cp -r $src/* $out/
-    '';
-  };
-
   restore-internet = pkgs.writeShellApplication {
     name = "restore-internet";
     text = ''
@@ -608,8 +599,6 @@ in rec {
           # forceSSL = true;      # Optional, for HTTPS
           # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
           # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
-
-          root = "${portal}";
 
           extraConfig = ''
             add_header 'Access-Control-Allow-Origin' '*';

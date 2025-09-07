@@ -182,10 +182,11 @@ in rec {
       allowedTCPPorts =
            [ 53 ]               # dns
         ++ [ 80 ]               # nginx
-        ++ [ 8080 ]             # organizr
+        ++ [ 1790 ]             # nginx (chainweb-node P2P)
+        ++ [ 2022 ]             # eternal-terminal
         ++ [ 5380 ]             # technitium
         ++ [ 5432 ]             # postgres
-        ++ [ 1790 ]             # nginx (chainweb-node P2P)
+        ++ [ 8080 ]             # organizr
         ;
       allowedUDPPorts =
            [ 53 ]               # dns
@@ -497,6 +498,10 @@ in rec {
 
   services = rec {
     hardware.bolt.enable = true;
+
+    eternal-terminal = {
+      enable = true;
+    };
 
     ntopng = {
       enable = true;

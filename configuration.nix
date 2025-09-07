@@ -508,12 +508,9 @@ in rec {
 
     ntopng = {
       enable = true;
-      httpPort = 3030;
       configText = ''
-        --interface=any
+        --interface=enp4s0
         --http-port=3030
-        --disable-login
-        --local-networks=192.168.50.0/24
         --redis=127.0.0.1:8085
         --http-prefix=/ntopng
       '';

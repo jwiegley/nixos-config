@@ -191,6 +191,7 @@ in rec {
       allowedTCPPorts =
            [ 53 ]               # dns
         ++ [ 80 ]               # nginx
+        ++ [ 8080 ]             # organizr
         ++ [ 5380 ]             # technitium
         ++ [ 5432 ]             # postgres
         ++ [ 1790 ]             # nginx (chainweb-node P2P)
@@ -1266,6 +1267,20 @@ in rec {
             "/var/lib/silly-tavern/data:/home/node/app/data"
             "/var/lib/silly-tavern/plugins:/home/node/app/plugins"
             "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
+          ];
+          extraOptions = [];
+        };
+
+        organizr = {
+          autoStart = true;
+          image = "ghcr.io/organizr/organizr:latest";
+          ports = [
+            "8080:80/tcp"
+          ];
+          environment = {
+          };
+          volumes = [
+            "/var/lib/organizr:/config"
           ];
           extraOptions = [];
         };

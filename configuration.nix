@@ -186,6 +186,7 @@ in rec {
         ++ [ 80 ]               # nginx
         ++ [ 1790 ]             # nginx (chainweb-node P2P)
         ++ [ 2022 ]             # eternal-terminal
+        ++ [ 5201 ]             # iperf3
         ++ [ 5380 ]             # technitium
         ++ [ 5432 ]             # postgres
         ++ [ 8080 ]             # organizr
@@ -373,10 +374,13 @@ in rec {
       python3
       linkdups
       dh
-      dig
       gitAndTools.git-lfs
+      dig
       snort
       ethtool
+      traceroute
+      iperf3
+      nettools
     ];
 
     etc."snort/snort.lua".text = ''
@@ -546,6 +550,12 @@ in rec {
 
     eternal-terminal = {
       enable = true;
+    };
+
+    iperf3 = {
+      enable = true;
+      openFirewall = true;
+      port = 5201;
     };
 
     ntopng = {

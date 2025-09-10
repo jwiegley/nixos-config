@@ -14,8 +14,6 @@ let
           -p 2204 router@192.168.50.1 "$@"
       }
 
-      # if ! ${pkgs.iputils}/bin/ping -c1 -W5 -q 209.51.188.17; then
-
       RULES=$(router iptables -t nat -L -n | grep MASQ)
 
       if [[ -z "$RULES" ]] ; then
@@ -177,7 +175,7 @@ in rec {
       ];
     };
     defaultGateway = "192.168.50.1";
-    nameservers = [ "192.168.50.1" ];
+    nameservers = [ "127.0.0.1" ];
 
     firewall = {
       enable = true;

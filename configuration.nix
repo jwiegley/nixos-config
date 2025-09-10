@@ -16,7 +16,9 @@ let
 
       # if ! ${pkgs.iputils}/bin/ping -c1 -W5 -q 209.51.188.17; then
 
-      if router test \! -s /etc/resolv.conf ; then
+      RULES=$(router iptables -t nat -L -n | grep MASQ)
+
+      if [[ -z "$RULES" ]] ; then
           echo "Restoring Internet at $(date)... " >> /var/log/restore-internet.log
 
           cat <<EOF | router "cat > /etc/resolv.conf"
@@ -373,7 +375,38 @@ in rec {
       dh
       dig
       gitAndTools.git-lfs
+      snort
+      ethtool
     ];
+
+    etc."snort/snort.lua".text = ''
+      HOME_NET = '192.168.50.0/24'
+      -- EXTERNAL_NET = 'any'
+      EXTERNAL_NET = '!$HOME_NET'
+
+      -- Include default variables and configurations
+      include '${pkgs.snort}/etc/snort/snort_defaults.lua'
+
+      ips = {
+        -- Reference the default variables which will include your definitions
+        variables = default_variables,
+
+        -- use this to enable decoder and inspector alerts
+        --enable_builtin_rules = true,
+
+        -- use include for rules files; be sure to set your path
+        -- note that rules files can include other rules files
+        rules = [[
+            include /var/lib/snort/local.rules
+        ]]
+      }
+
+      alert_fast = {
+        file = true,
+        packet = false,
+        limit = 10,
+      }
+    '';
   };
 
   programs = {
@@ -494,6 +527,18 @@ in rec {
         Unit = "dynamic-dns-name-com.service";
       };
     };
+
+    services.snort = {
+      enable = true;
+      description = "Snort IDS Daemon";
+      after = [ "network.target" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.snort}/bin/snort -c /etc/snort/snort.lua -s 65535 -k none -l /var/log/snort -D -i enp4s0 -m 0x1b";
+        Type = "simple";
+        Restart = "on-failure";
+      };
+    };
   };
 
   services = rec {
@@ -510,6 +555,7 @@ in rec {
         --http-port=3030
         --redis=127.0.0.1:8085
         --http-prefix=/ntopng
+        --user=root
       '';
     };
 
@@ -697,6 +743,7 @@ in rec {
             script = "${lib.getExe systemctl-failed-script}";
           }
           { name = "sshd"; }
+          { name = "snort"; }
           { name = "restic";
             title = "Restic Snapshots";
             script = "${lib.getExe restic-snapshots}"; }

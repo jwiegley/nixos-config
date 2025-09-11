@@ -148,7 +148,12 @@ in rec {
 
   boot = {
     loader = {
-      systemd-boot.enable = true;
+      systemd-boot.enable = false;
+      grub = {
+        enable = true;
+        device = "nodev";
+        efiSupport = true;
+      };
       efi = {
         canTouchEfiVariables = true;
         efiSysMountPoint = "/boot";

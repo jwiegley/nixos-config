@@ -1,0 +1,40 @@
+diff --git a/MakeSname b/MakeSname
+index 3179b65..0175210 100755
+--- a/MakeSname
++++ b/MakeSname
+@@ -8,7 +8,7 @@
+ # Establish things we will look for
+ #
+ AFSFS=/usr/afsws/bin/fs
+-UNAME=/bin/uname
++UNAME=/run/current-system/sw/bin/uname
+ UNAMF=/usr/bin/uname
+ VERBOSE=0
+ 
+@@ -85,12 +85,12 @@ elif FileThere x $UNAMF; then
+ 
+   if FileThere d ../obj/$SYSNAME; then :
+   else
+-      /bin/mkdir -p ../obj/$SYSNAME
++      /run/current-system/sw/bin/mkdir -p ../obj/$SYSNAME
+   fi
+ 
+   if FileThere d ../bin/$SYSNAME; then :
+   else
+-      /bin/mkdir -p ../bin/$SYSNAME
++      /run/current-system/sw/bin/mkdir -p ../bin/$SYSNAME
+   fi
+ 
+   echo $SYSNAME
+diff --git a/src/Makefile b/src/Makefile
+index 88d17f6..d54b3ea 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -189,6 +189,6 @@ FreeBSD:
+        LIBS="$(BSDLIBS)"
+ 
+ Linux:
+-	@make makeLinux`/bin/uname -m` \
++	@make makeLinux`/run/current-system/sw/bin/uname -m` \
+        MD5HEADER=bbcp_MD5_openssl.h \
+        OBJMD5="$(OBJDIR)/bbcp_MD5_openssl.o"

@@ -1,6 +1,50 @@
 { config, lib, pkgs, ... }:
 
 let
+  bbcp = with pkgs; stdenv.mkDerivation rec {
+    name = "bbcp-${version}";
+    version = "64af8326";
+
+    src = fetchFromGitHub {
+      owner = "eeertekin";
+      repo = "bbcp";
+      rev = "64af83266da5ebb3fdc2f012ac7f5ce0230bc648";
+      sha256 = "03d6w9mqlp4s651x7y9kphqgydr48q188km718fi0z2yc9m3yl4w";
+      # date = 2016-05-02T14:04:09+03:00;
+    };
+
+    patchPhase = ''
+      substituteInPlace MakeSname --replace "/bin/uname" "${pkgs.coreutils}/bin/uname"
+      substituteInPlace MakeSname --replace "/bin/mkdir" "${pkgs.coreutils}/bin/mkdir"
+      substituteInPlace src/Makefile --replace "/bin/uname" "${pkgs.coreutils}/bin/uname"
+    '';
+
+    buildInputs = [
+      zlib
+      openssl
+      libnsl
+    ];
+
+    buildPhase = ''
+      cd src
+      make -j $NIX_BUILD_CORES
+      cd ..
+    '';
+
+    installPhase = ''
+      mkdir -p $out/bin
+      cp bin/amd64_linux/bbcp $out/bin
+    '';
+
+    meta = with lib; {
+      description = "Securely and quickly copy data from source to target.";
+      homepage = https://github.com/eeertekin/bbcp;
+      license = licenses.mit;
+      maintainers = with maintainers; [ jwiegley ];
+      platforms = platforms.unix;
+    };
+  };
+
   restore-internet = pkgs.writeShellApplication {
     name = "restore-internet";
     text = ''
@@ -373,6 +417,7 @@ in rec {
       linkdups
       dh
       gitAndTools.git-lfs
+      bbcp
       dig
       snort
       ethtool
@@ -539,6 +584,118 @@ in rec {
         ExecStart = "${pkgs.snort}/bin/snort -c /etc/snort/snort.lua -s 65535 -k none -l /var/log/snort -D -i enp4s0 -m 0x1b";
         Type = "simple";
         Restart = "on-failure";
+      };
+    };
+
+    services.update-containers = {
+      description = "Update and restart Podman containers";
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = let
+          updateScript = pkgs.writeShellScript "update-containers" ''
+            set -euo pipefail
+
+            export PATH=${pkgs.iptables}/bin:$PATH
+
+            # Function to log with timestamp
+            log() {
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+            }
+
+            log "Starting container update process"
+
+            # Get unique images from all containers
+            images=$(${pkgs.podman}/bin/podman ps -a --format='{{.Image}}' | sort -u)
+
+            if [ -z "$images" ]; then
+              log "No containers found"
+              exit 0
+            fi
+
+            # Track which images were updated
+            updated_images=""
+
+            # Pull each image and track updates
+            while IFS= read -r image; do
+              [ -z "$image" ] && continue
+
+              log "Checking image: $image"
+
+              # Capture the pull output to detect if image was updated
+              if output=$(${pkgs.podman}/bin/podman pull "$image" 2>&1); then
+                if echo "$output" | grep -q "Downloading\|Copying\|Getting image"; then
+                  log "Updated: $image"
+                  updated_images="$updated_images $image"
+                else
+                  log "Already up-to-date: $image"
+                fi
+              else
+                log "ERROR: Failed to pull $image"
+                # Continue with other images even if one fails
+              fi
+            done <<< "$images"
+
+            # Only restart containers with updated images
+            if [ -n "$updated_images" ]; then
+              log "Restarting containers with updated images..."
+
+              for image in $updated_images; do
+                # Find containers using this image
+                containers=$(${pkgs.podman}/bin/podman ps -a --filter "ancestor=$image" --format='{{.ID}}')
+
+                if [ -n "$containers" ]; then
+                  while IFS= read -r container; do
+                    [ -z "$container" ] && continue
+
+                    # Get container name for logging
+                    name=$(${pkgs.podman}/bin/podman ps -a --filter "id=$container" --format='{{.Names}}')
+
+                    if ${pkgs.podman}/bin/podman restart "$container" >/dev/null 2>&1; then
+                      log "Restarted container: $name ($container)"
+                    else
+                      log "ERROR: Failed to restart container: $name ($container)"
+                    fi
+                  done <<< "$containers"
+                fi
+              done
+            else
+              log "No updates found, skipping container restarts"
+            fi
+
+            log "Container update process completed"
+          '';
+        in "${updateScript}";
+
+        # Run as root or specify a user if needed
+        User = "root";
+
+        # Ensure proper cleanup on failure
+        RemainAfterExit = false;
+
+        # Resource limits
+        TimeoutStartSec = "10m";
+
+        # Logging
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+
+      # Dependencies
+      after = [ "network-online.target" "podman.service" ];
+      wants = [ "network-online.target" ];
+    };
+
+    # Optional: Create a timer for automatic updates
+    timers.update-containers = {
+      description = "Timer for updating Podman containers";
+      wantedBy = [ "timers.target" ];
+
+      timerConfig = {
+        # Run daily at 3 AM
+        OnCalendar = "daily";
+        RandomizedDelaySec = "30m";
+        Persistent = true;
       };
     };
   };

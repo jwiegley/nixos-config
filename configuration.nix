@@ -207,24 +207,16 @@ in rec {
   networking = {
     hostId = "671bf6f5";
     hostName = "vulcan";
-    domain = "localnet";
+    domain = "lan";
 
     hosts = {
       "127.0.0.2" = lib.mkForce [];
-      "192.168.50.182" = [ "vulcan.localnet" "vulcan" ];
+      "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
     };
 
     interfaces.enp4s0 = {
-      useDHCP = false;
-      ipv4.addresses = [
-        {
-          address = "192.168.50.182";
-          prefixLength = 24;
-        }
-      ];
+      useDHCP = true;
     };
-    defaultGateway = "192.168.50.1";
-    nameservers = [ "127.0.0.1" ];
 
     firewall = {
       enable = true;
@@ -245,7 +237,7 @@ in rec {
     };
 
     # jww (2025-08-31): If I use these firewall settings instead of the above,
-    # podman is unable to resolve the hostname "hera.localnet".
+    # podman is unable to resolve the hostname "hera.lan".
 
     # nftables = {
     #   enable = true;
@@ -802,7 +794,7 @@ in rec {
         ];
 
         "dns.vulcan" = {
-          serverAliases = [ "dns.vulcan.localnet" ];
+          serverAliases = [ "dns.vulcan.lan" ];
 
           locations."/" = {
             proxyPass = "http://127.0.0.1:5380";
@@ -815,7 +807,7 @@ in rec {
         };
 
         "vulcan" = {
-          serverAliases = [ "vulcan.localnet" ];
+          serverAliases = [ "vulcan.lan" ];
 
           # forceSSL = true;      # Optional, for HTTPS
           # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
@@ -827,6 +819,10 @@ in rec {
             add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
             add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
           '';
+
+          locations."/" = {
+            return = "301 http://vulcan.lan:8080";
+          };
 
           locations."/smokeping/" = {
             proxyPass = "http://127.0.0.1:8081/";

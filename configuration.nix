@@ -226,7 +226,7 @@ in rec {
         ++ [ 1790 ]             # nginx (chainweb-node P2P)
         ++ [ 2022 ]             # eternal-terminal
         ++ [ 5201 ]             # iperf3
-        ++ [ 5380 ]             # technitium
+        # ++ [ 5380 ]             # technitium
         ++ [ 5432 ]             # postgres
         ++ [ 8080 ]             # organizr
         ;
@@ -416,41 +416,41 @@ in rec {
       gitAndTools.git-lfs
       bbcp
       dig
-      snort
+      # snort
       ethtool
       traceroute
       iperf3
       nettools
     ];
 
-    etc."snort/snort.lua".text = ''
-      HOME_NET = '192.168.50.0/24'
-      -- EXTERNAL_NET = 'any'
-      EXTERNAL_NET = '!$HOME_NET'
+    # etc."snort/snort.lua".text = ''
+    #   HOME_NET = '192.168.50.0/24'
+    #   -- EXTERNAL_NET = 'any'
+    #   EXTERNAL_NET = '!$HOME_NET'
 
-      -- Include default variables and configurations
-      include '${pkgs.snort}/etc/snort/snort_defaults.lua'
+    #   -- Include default variables and configurations
+    #   include '${pkgs.snort}/etc/snort/snort_defaults.lua'
 
-      ips = {
-        -- Reference the default variables which will include your definitions
-        variables = default_variables,
+    #   ips = {
+    #     -- Reference the default variables which will include your definitions
+    #     variables = default_variables,
 
-        -- use this to enable decoder and inspector alerts
-        --enable_builtin_rules = true,
+    #     -- use this to enable decoder and inspector alerts
+    #     --enable_builtin_rules = true,
 
-        -- use include for rules files; be sure to set your path
-        -- note that rules files can include other rules files
-        rules = [[
-            include /var/lib/snort/local.rules
-        ]]
-      }
+    #     -- use include for rules files; be sure to set your path
+    #     -- note that rules files can include other rules files
+    #     rules = [[
+    #         include /var/lib/snort/local.rules
+    #     ]]
+    #   }
 
-      alert_fast = {
-        file = true,
-        packet = false,
-        limit = 10,
-      }
-    '';
+    #   alert_fast = {
+    #     file = true,
+    #     packet = false,
+    #     limit = 10,
+    #   }
+    # '';
   };
 
   programs = {
@@ -545,10 +545,10 @@ in rec {
       };
     };
 
-    services.technitium-dns-server.serviceConfig = {
-      WorkingDirectory = lib.mkForce null;
-      BindPaths = lib.mkForce null;
-    };
+    # services.technitium-dns-server.serviceConfig = {
+    #   WorkingDirectory = lib.mkForce null;
+    #   BindPaths = lib.mkForce null;
+    # };
 
     services.dynamic-dns-name-com = {
       description = "Dynamic DNS Updater for name.com";
@@ -572,17 +572,17 @@ in rec {
       };
     };
 
-    services.snort = {
-      enable = true;
-      description = "Snort IDS Daemon";
-      after = [ "network.target" ];
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        ExecStart = "${pkgs.snort}/bin/snort -c /etc/snort/snort.lua -s 65535 -k none -l /var/log/snort -D -i enp4s0 -m 0x1b";
-        Type = "simple";
-        Restart = "on-failure";
-      };
-    };
+    # services.snort = {
+    #   enable = true;
+    #   description = "Snort IDS Daemon";
+    #   after = [ "network.target" ];
+    #   wantedBy = [ "multi-user.target" ];
+    #   serviceConfig = {
+    #     ExecStart = "${pkgs.snort}/bin/snort -c /etc/snort/snort.lua -s 65535 -k none -l /var/log/snort -D -i enp4s0 -m 0x1b";
+    #     Type = "simple";
+    #     Restart = "on-failure";
+    #   };
+    # };
 
     services.update-containers = {
       description = "Update and restart Podman containers";
@@ -741,10 +741,10 @@ in rec {
       };
     };
 
-    technitium-dns-server = {
-      enable = true;
-      openFirewall = true;
-    };
+    # technitium-dns-server = {
+    #   enable = true;
+    #   openFirewall = true;
+    # };
 
     postfix = {
       enable = true;
@@ -909,7 +909,7 @@ in rec {
             script = "${lib.getExe systemctl-failed-script}";
           }
           { name = "sshd"; }
-          { name = "snort"; }
+          # { name = "snort"; }
           { name = "restic";
             title = "Restic Snapshots";
             script = "${lib.getExe restic-snapshots}"; }

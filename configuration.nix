@@ -126,6 +126,7 @@ in rec {
         ++ [ 2022 ]             # eternal-terminal
         ++ [ 5432 ]             # postgres
         ++ [ 8080 ]             # organizr
+        ++ [ 9090 ]             # wallabag
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
@@ -320,8 +321,8 @@ in rec {
         openssh
       ];
       serviceConfig = {
-        User = "johnw";
-        Group = "johnw";
+        User = "root";
+        Group = "root";
         ExecStart = "/home/johnw/bin/backup-chainweb";
       };
     };
@@ -1215,6 +1216,22 @@ in rec {
           };
           volumes = [
             "/var/lib/organizr:/config"
+          ];
+          extraOptions = [];
+        };
+
+        wallabag = {
+          autoStart = true;
+          image = "wallabag/wallabag:latest";
+          ports = [
+            "9090:80/tcp"
+          ];
+          environment = {
+            SYMFONY__ENV__DOMAIN_NAME = "http://vulcan.lan:9090";
+          };
+          volumes = [
+            "/var/lib/wallabag/data:/var/www/wallabag/data"
+            "/var/lib/wallabag/images:/var/www/wallabag/web/assets/images"
           ];
           extraOptions = [];
         };

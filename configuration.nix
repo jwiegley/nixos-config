@@ -127,16 +127,20 @@ in rec {
         ++ [ 5432 ]             # postgres
         ++ [ 5201 ]             # iperf
         ++ [ 8080 ]             # organizr
-        ++ [ 9090 ]             # wallabag
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
     };
   };
 
-  users = {
+  users = rec {
     groups = {
-      johnw = {};
+      johnw = {
+        gid = 990;
+      };
+      container-data = {
+        gid = 1010;
+      };
     };
     users =
       let keys = [
@@ -150,6 +154,12 @@ in rec {
       ]; in {
         root = {
           openssh.authorizedKeys = { inherit keys; };
+        };
+
+        container-data = {
+          isSystemUser = true;
+          uid = 1010;
+          group = "container-data";
         };
 
         johnw = {
@@ -275,6 +285,22 @@ in rec {
   };
 
   systemd = {
+    tmpfiles.rules = [
+      # Wallabag directories
+      "d /var/lib/wallabag 0755 container-data container-data -"
+      "d /var/lib/wallabag/data 0755 container-data container-data -"
+      "d /var/lib/wallabag/images 0755 container-data container-data -"
+
+      # Other container directories
+      "d /var/lib/silly-tavern 0755 container-data container-data -"
+      "d /var/lib/silly-tavern/config 0755 container-data container-data -"
+      "d /var/lib/silly-tavern/data 0755 container-data container-data -"
+      "d /var/lib/silly-tavern/plugins 0755 container-data container-data -"
+      "d /var/lib/silly-tavern/extensions 0755 container-data container-data -"
+
+      "d /var/lib/organizr 0755 container-data container-data -"
+    ];
+
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
       serviceConfig = {
@@ -559,6 +585,13 @@ in rec {
           };
           locations."/smokeping" = {
             return = "301 /smokeping/";
+          };
+
+          locations."/wallabag/" = {
+            proxyPass = "http://127.0.0.1:9090/";
+          };
+          locations."/wallabag" = {
+            return = "301 /wallabag/";
           };
 
           locations."/jellyfin/" = {
@@ -1214,6 +1247,8 @@ in rec {
             "8080:80/tcp"
           ];
           environment = {
+            PUID = "1010";
+            PGID = "1010";
           };
           volumes = [
             "/var/lib/organizr:/config"
@@ -1228,7 +1263,9 @@ in rec {
             "9090:80/tcp"
           ];
           environment = {
-            SYMFONY__ENV__DOMAIN_NAME = "http://vulcan.lan:9090";
+            PUID = "1010";
+            PGID = "1010";
+            SYMFONY__ENV__DOMAIN_NAME = "http://vulcan.lan/wallabag";
           };
           volumes = [
             "/var/lib/wallabag/data:/var/www/wallabag/data"

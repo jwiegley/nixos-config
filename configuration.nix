@@ -125,6 +125,7 @@ in rec {
         ++ [ 80 ]               # nginx
         ++ [ 2022 ]             # eternal-terminal
         ++ [ 5432 ]             # postgres
+        ++ [ 5201 ]             # iperf
         ++ [ 8080 ]             # organizr
         ++ [ 9090 ]             # wallabag
         ;

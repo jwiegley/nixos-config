@@ -125,8 +125,8 @@ in rec {
         ++ [ 80 ]               # nginx
         ++ [ 2022 ]             # eternal-terminal
         ++ [ 5432 ]             # postgres
-        ++ [ 5201 ]             # iperf
-        ++ [ 8080 ]             # organizr
+        # ++ [ 5201 ]             # iperf
+        # ++ [ 8080 ]             # organizr
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
@@ -559,7 +559,7 @@ in rec {
 
       virtualHosts = {
         smokeping.listen = [
-          { addr = "0.0.0.0"; port = 8081; }
+          { addr = "127.0.0.1"; port = 8081; }
         ];
 
         "vulcan" = {
@@ -575,10 +575,6 @@ in rec {
             add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
             add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
           '';
-
-          locations."/" = {
-            return = "301 http://vulcan.lan:8080";
-          };
 
           locations."/smokeping/" = {
             proxyPass = "http://127.0.0.1:8081/";
@@ -622,6 +618,10 @@ in rec {
           };
           locations."/litellm/litellm/ui/" = {
             return = "301 /litellm/ui/";
+          };
+
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8080/";
           };
         };
       };

@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 
 let
+  attrNameList = attrs:
+    builtins.concatStringsSep " " (builtins.attrNames attrs);
+
   restic-operations = backups: pkgs.writeShellApplication {
     name = "restic-operations";
     text = ''
@@ -31,9 +34,6 @@ let
       done
     '';
   };
-
-  attrNameList = attrs:
-    builtins.concatStringsSep " " (builtins.attrNames attrs);
 
 in rec {
   system.stateVersion = "25.05";
@@ -126,7 +126,6 @@ in rec {
         ++ [ 2022 ]             # eternal-terminal
         ++ [ 5432 ]             # postgres
         # ++ [ 5201 ]             # iperf
-        # ++ [ 8080 ]             # organizr
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
@@ -252,21 +251,22 @@ in rec {
       };
     in {
     systemPackages = with pkgs; [
-      mailutils
-      zfs-prune-snapshots
-      httm
       b3sum
-      haskellPackages.sizes
-      python3
-      linkdups
+      btop
       dh
-      gitAndTools.git-lfs
       dig
       ethtool
-      traceroute
+      gitAndTools.git-lfs
+      haskellPackages.sizes
+      httm
       iperf3
+      linkdups
+      mailutils
       nettools
+      python3
       socat
+      traceroute
+      zfs-prune-snapshots
     ];
   };
 
@@ -276,28 +276,29 @@ in rec {
     tmux.enable = true;
     vim.enable = true;
 
-    nix-ld = {
-      enable = true;
-      libraries = with pkgs; [
-        nodejs
-      ];
-    };
+    # nix-ld = {
+    #   enable = true;
+    #   libraries = with pkgs; [
+    #     nodejs
+    #   ];
+    # };
   };
 
   systemd = {
     tmpfiles.rules = [
-      # Wallabag directories
+      # Wallabag
       "d /var/lib/wallabag 0755 container-data container-data -"
       "d /var/lib/wallabag/data 0755 container-data container-data -"
       "d /var/lib/wallabag/images 0755 container-data container-data -"
 
-      # Other container directories
+      # SillyTavern
       "d /var/lib/silly-tavern 0755 container-data container-data -"
       "d /var/lib/silly-tavern/config 0755 container-data container-data -"
       "d /var/lib/silly-tavern/data 0755 container-data container-data -"
       "d /var/lib/silly-tavern/plugins 0755 container-data container-data -"
       "d /var/lib/silly-tavern/extensions 0755 container-data container-data -"
 
+      # Organizr
       "d /var/lib/organizr 0755 container-data container-data -"
     ];
 
@@ -495,9 +496,7 @@ in rec {
   services = rec {
     hardware.bolt.enable = true;
 
-    eternal-terminal = {
-      enable = true;
-    };
+    eternal-terminal.enable = true;
 
     redis.servers."litellm" = {
       enable = true;
@@ -525,6 +524,7 @@ in rec {
         main = {
           mynetworks = [
             "192.168.1.0/24"
+            "10.6.0.0/24"
             "127.0.0.0/8"
           ];
           relayhost = [ "[smtp.fastmail.com]:587" ];
@@ -635,6 +635,7 @@ in rec {
             ${lib.getExe (restic-operations services.restic.backups)} snapshots
           '';
         };
+
         zfs-snapshot-script = pkgs.writeShellApplication {
           name = "logwatch-zfs-snapshot";
           text = ''
@@ -645,10 +646,12 @@ in rec {
             done
           '';
         };
+
         zpool-script = pkgs.writeShellApplication {
           name = "logwatch-zpool";
           text = "/run/current-system/sw/bin/zpool status";
         };
+
         systemctl-failed-script = pkgs.writeShellApplication {
           name = "logwatch-systemctl-failed";
           text = "/run/current-system/sw/bin/systemctl --failed";
@@ -664,7 +667,6 @@ in rec {
             script = "${lib.getExe systemctl-failed-script}";
           }
           { name = "sshd"; }
-          # { name = "snort"; }
           { name = "restic";
             title = "Restic Snapshots";
             script = "${lib.getExe restic-snapshots}"; }
@@ -1081,12 +1083,10 @@ in rec {
             "*.vo"
             "*.vok"
             "*.vos"
-            ".MAlonzo"
             ".cabal"
+            ".cache"
             ".cargo"
             ".coq-native"
-            ".dist"
-            ".dist-newstyle"
             ".ghc"
             ".ghc.*"
             ".lia.cache"
@@ -1096,14 +1096,22 @@ in rec {
             ".nra.cache"
             ".slocdata"
             ".vagrant"
+            ".venv"
+            "MAlonzo"
+            "dist"
+            "dist-newstyle"
+            "node_modules"
             "result"
             "result-*"
+            "target"
           ];
         } //
         backup {
           path = "Home";
           exclude = [
+            ".cache"
             "Library/Application Support/Bookmap/Cache"
+            "Library/Application Support/CloudDocs"
             "Library/Application Support/FileProvider"
             "Library/Application Support/MobileSync"
             "Library/CloudStorage/GoogleDrive-copper2gold1@gmail.com"
@@ -1164,9 +1172,9 @@ in rec {
       authentication = pkgs.lib.mkOverride 10 ''
         local all all trust
         host all all 127.0.0.1/32 trust
-        host all all 192.168.50.0/24 md5
         host all all 10.88.0.0/16 trust
-        host all all 10.6.0.0/16 trust
+        host all all 192.168.1.0/24 md5
+        host all all 10.6.0.0/16 md5
         host all all ::1/128 md5
       '';
       initialScript = pkgs.writeText "init.sql" ''

@@ -129,7 +129,7 @@ in rec {
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
-      trustedInterfaces = lib.mkForce [];
+      trustedInterfaces = lib.mkForce [ "lo" ];
 
       logRefusedConnections = true;
       logRefusedPackets = true;
@@ -265,6 +265,7 @@ in rec {
       gitAndTools.git-lfs
       haskellPackages.sizes
       httm
+      killall
       lsof
       iperf3
       linkdups
@@ -580,11 +581,11 @@ in rec {
         };
 
         "jellyfin.vulcan.lan" = {
-          locations."/".return = "301 http://vulcan.lan/jellyfin/";
+          locations."/".proxyPass = "http://127.0.0.1:8096/";
         };
 
         "litellm.vulcan.lan" = {
-          locations."/".return = "301 http://vulcan.lan/litellm/";
+          locations."/".proxyPass = "http://127.0.0.1:4000/";
         };
 
         "organizr.vulcan.lan" = {
@@ -596,53 +597,7 @@ in rec {
           # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
           # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
 
-          extraConfig = ''
-            add_header 'Access-Control-Allow-Origin' '*';
-            add_header 'Access-Control-Allow-Credentials' 'true';
-            add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-            add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-          '';
-
-          locations."/smokeping/" = {
-            proxyPass = "http://127.0.0.1:8081/";
-          };
-          locations."/smokeping" = {
-            return = "301 /smokeping/";
-          };
-
-          locations."/jellyfin/" = {
-            proxyPass = "http://127.0.0.1:8096/jellyfin/";
-            proxyWebsockets = true;
-          };
-          locations."/jellyfin" = {
-            return = "301 /jellyfin/";
-          };
-
-          locations."/litellm/" = {
-            proxyPass = "http://127.0.0.1:4000/litellm/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # (Optional) Disable proxy buffering for better streaming
-              # response from models
-              proxy_buffering off;
-
-              # (Optional) Increase max request size for large attachments
-              # and long audio messages
-              client_max_body_size 20M;
-              proxy_read_timeout 2h;
-
-              sub_filter '="/litellm/litellm' '="/litellm';
-              sub_filter_once off;
-              sub_filter_types *;
-            '';
-          };
-          locations."/litellm/litellm/ui/" = {
-            return = "301 /litellm/ui/";
-          };
-
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:8080/";
-          };
+          locations."/".return = "301 http://organizr.vulcan.lan";
         };
       };
     };
@@ -1243,7 +1198,6 @@ in rec {
             "127.0.0.1:4000:4000/tcp"
           ];
           environment = {
-            SERVER_ROOT_PATH = "/litellm";
             LITELLM_MASTER_KEY = "sk-1234";
             DATABASE_URL =
               "postgresql://litellm:sk-1234@host.containers.internal:5432/litellm";

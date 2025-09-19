@@ -129,6 +129,12 @@ in rec {
         ;
       allowedUDPPorts = [];
       interfaces.podman0.allowedUDPPorts = [];
+      trustedInterfaces = lib.mkForce [];
+
+      logRefusedConnections = true;
+      logRefusedPackets = true;
+      logRefusedUnicastsOnly = true;
+      logReversePathDrops = true;
     };
   };
 
@@ -259,6 +265,7 @@ in rec {
       gitAndTools.git-lfs
       haskellPackages.sizes
       httm
+      lsof
       iperf3
       linkdups
       mailutils
@@ -558,13 +565,33 @@ in rec {
       '';
 
       virtualHosts = {
-        smokeping.listen = [
-          { addr = "127.0.0.1"; port = 8081; }
-        ];
+        "smokeping" = {
+          listen = [
+            { addr = "127.0.0.1"; port = 8081; }
+          ];
+        };
 
-        "vulcan" = {
-          serverAliases = [ "vulcan.lan" ];
+        "wallabag.vulcan.lan" = {
+          locations."/".proxyPass = "http://127.0.0.1:9090/";
+        };
 
+        "smokeping.vulcan.lan" = {
+          locations."/".proxyPass = "http://127.0.0.1:8081/";
+        };
+
+        "jellyfin.vulcan.lan" = {
+          locations."/".return = "301 http://vulcan.lan/jellyfin/";
+        };
+
+        "litellm.vulcan.lan" = {
+          locations."/".return = "301 http://vulcan.lan/litellm/";
+        };
+
+        "organizr.vulcan.lan" = {
+          locations."/".proxyPass = "http://127.0.0.1:8080/";
+        };
+
+        "vulcan.lan" = {
           # forceSSL = true;      # Optional, for HTTPS
           # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
           # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";
@@ -581,13 +608,6 @@ in rec {
           };
           locations."/smokeping" = {
             return = "301 /smokeping/";
-          };
-
-          locations."/wallabag/" = {
-            proxyPass = "http://127.0.0.1:9090/";
-          };
-          locations."/wallabag" = {
-            return = "301 /wallabag/";
           };
 
           locations."/jellyfin/" = {
@@ -613,7 +633,7 @@ in rec {
 
               sub_filter '="/litellm/litellm' '="/litellm';
               sub_filter_once off;
-              sub_filter_types text/css text/javascript application/javascript;
+              sub_filter_types *;
             '';
           };
           locations."/litellm/litellm/ui/" = {
@@ -1160,7 +1180,7 @@ in rec {
 
     postgresql = {
       enable = true;
-      ensureDatabases = [ "db" "litellm" ];
+      ensureDatabases = [ "db" "litellm" "wallabag" ];
       ensureUsers = [
         { name = "postgres"; }
       ];
@@ -1179,17 +1199,28 @@ in rec {
       '';
       initialScript = pkgs.writeText "init.sql" ''
         CREATE ROLE johnw WITH LOGIN PASSWORD 'password' CREATEDB;
-
         CREATE DATABASE db;
         GRANT ALL PRIVILEGES ON DATABASE db TO johnw;
+        \c db
+        GRANT ALL ON SCHEMA public TO johnw;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO johnw;
+        ALTER DATABASE db OWNER TO johnw;
 
         CREATE ROLE litellm WITH LOGIN PASSWORD 'sk-1234' CREATEDB;
-
         CREATE DATABASE litellm;
         GRANT ALL PRIVILEGES ON DATABASE litellm TO litellm;
         \c litellm
         GRANT ALL ON SCHEMA public TO litellm;
         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO litellm;
+        ALTER DATABASE litellm OWNER TO litellm;
+
+        CREATE ROLE wallabag WITH LOGIN PASSWORD 'bag-1234' CREATEDB;
+        CREATE DATABASE wallabag;
+        GRANT ALL PRIVILEGES ON DATABASE wallabag TO wallabag;
+        \c wallabag
+        GRANT ALL ON SCHEMA public TO wallabag;
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wallabag;
+        ALTER DATABASE wallabag OWNER TO wallabag;
       '';
     };
   };
@@ -1209,7 +1240,7 @@ in rec {
           autoStart = true;
           image = "ghcr.io/berriai/litellm-database:main-stable";
           ports = [
-            "4000:4000/tcp"
+            "127.0.0.1:4000:4000/tcp"
           ];
           environment = {
             SERVER_ROOT_PATH = "/litellm";
@@ -1233,7 +1264,7 @@ in rec {
           autoStart = true;
           image = "ghcr.io/sillytavern/sillytavern:latest";
           ports = [
-            "8083:8000/tcp"
+            "127.0.0.1:8083:8000/tcp"
           ];
           environment = {
             NODE_ENV = "production";
@@ -1252,7 +1283,7 @@ in rec {
           autoStart = true;
           image = "ghcr.io/organizr/organizr:latest";
           ports = [
-            "8080:80/tcp"
+            "127.0.0.1:8080:80/tcp"
           ];
           environment = {
             PUID = "1010";
@@ -1268,12 +1299,27 @@ in rec {
           autoStart = true;
           image = "wallabag/wallabag:latest";
           ports = [
-            "9090:80/tcp"
+            "127.0.0.1:9090:80/tcp"
           ];
           environment = {
             PUID = "1010";
             PGID = "1010";
-            SYMFONY__ENV__DOMAIN_NAME = "http://vulcan.lan/wallabag";
+            SYMFONY__ENV__DOMAIN_NAME = "http://wallabag.vulcan.lan";
+            POSTGRES_PASSWORD = "bag-1234";
+            POSTGRES_USER = "wallabag";
+            POPULATE_DATABASE = "False";
+            SYMFONY__ENV__DATABASE_DRIVER = "pdo_pgsql";
+            SYMFONY__ENV__DATABASE_HOST = "host.containers.internal";
+            SYMFONY__ENV__DATABASE_PORT = "5432";
+            SYMFONY__ENV__DATABASE_NAME = "wallabag";
+            SYMFONY__ENV__DATABASE_USER = "wallabag";
+            SYMFONY__ENV__DATABASE_PASSWORD = "bag-1234";
+            SYMFONY__ENV__MAILER_DSN = "smtp://host.containers.internal";
+            SYMFONY__ENV__FROM_EMAIL = "johnw@newartisans.com";
+            SYMFONY__ENV__SERVER_NAME = "Vulcan";
+            SYMFONY__ENV__REDIS_HOST = "host.containers.internal";
+            SYMFONY__ENV__FOSUSER_REGISTRATION = "True";
+            SYMFONY__ENV__FOSUSER_CONFIRMATION = "False";
           };
           volumes = [
             "/var/lib/wallabag/data:/var/www/wallabag/data"

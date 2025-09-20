@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "mcp__nixos__nixos_search"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

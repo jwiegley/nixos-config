@@ -10,8 +10,7 @@
     };
   };
 
-  outputs =
-    { nixpkgs, nixos-hardware, nixos-logwatch, ... }:
+  outputs = { nixpkgs, nixos-hardware, nixos-logwatch, ... }:
     let system = "x86_64-linux"; in {
       formatter.x86_64-linux =
         nixpkgs.legacyPackages.x86_64-linux.nixfmt-rfc-style;
@@ -20,9 +19,14 @@
         inherit system;
         modules = [
           nixos-logwatch.nixosModules.logwatch
-          ./configuration.nix
           nixos-hardware.nixosModules.apple-t2
+          ./hosts/vulcan
         ];
       };
     };
 }
+
+# system.activationScripts.consoleBlank = ''
+#   echo "Setting up console blanking..."
+#   ${pkgs.util-linux}/bin/setterm --blank 1 --powerdown 2 > /dev/tty1
+# '';

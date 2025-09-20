@@ -593,6 +593,8 @@ in rec {
         };
 
         "vulcan.lan" = {
+          serverAliases = [ "vulcan" ];
+
           # forceSSL = true;      # Optional, for HTTPS
           # sslCertificate = "/etc/ssl/certs/vulcan.local.crt";
           # sslCertificateKey = "/etc/ssl/private/vulcan.local.key";

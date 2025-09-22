@@ -16,4 +16,15 @@
     polkit.enable = true;
     sudo.wheelNeedsPassword = false;
   };
+
+  sops = {
+    defaultSopsFile = ../../secrets.yaml;
+    age = {
+      sshKeyPaths = [];
+    };
+    gnupg = {
+      home = "/root/.gnupg";
+      sshKeyPaths = [];
+    };
+  };
 }

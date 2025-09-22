@@ -94,5 +94,9 @@ in
     socat
     traceroute
     zfs-prune-snapshots
+    gnupg
+    pinentry
+    sops
+    ripgrep
   ];
 }

@@ -14,8 +14,8 @@ let
       inherit exclude;
       repository = "s3:s3.us-west-001.backblazeb2.com/jwiegley-${bucket}";
       initialize = true;
-      passwordFile = "/secrets/restic_password";
-      environmentFile = "/secrets/aws_keys";
+      passwordFile = "/run/secrets/restic-password";
+      environmentFile = "/run/secrets/aws-keys";
       timerConfig = {
         OnCalendar = "*-*-* 02:00:00";  # Daily at 2AM
         Persistent = true;
@@ -159,6 +159,11 @@ in
   # mkBackup { path = "Music"; }
   # mkBackup { path = "Pictures"; }
   # mkBackup { path = "kadena"; }
+
+  sops.secrets = {
+    aws-keys = {};
+    restic-password = {};
+  };
 
   services.restic.backups = lib.mkMerge [
     (mkBackup {

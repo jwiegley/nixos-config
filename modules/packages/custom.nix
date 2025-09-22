@@ -98,5 +98,6 @@ in
     pinentry
     sops
     ripgrep
+    gh
   ];
 }

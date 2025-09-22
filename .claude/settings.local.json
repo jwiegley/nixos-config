@@ -9,7 +9,13 @@
       "Bash(sudo journalctl:*)",
       "Read(//var/lib/private/step-ca/**)",
       "Bash(step ca health:*)",
-      "Bash(sudo systemctl cat:*)"
+      "Bash(sudo systemctl cat:*)",
+      "Bash(sudo step ca certificate:*)",
+      "Bash(sudo chown:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(openssl s_client:*)",
+      "Bash(openssl:*)",
+      "Bash(sudo step certificate create:*)"
     ],
     "deny": [],
     "ask": []

@@ -99,5 +99,7 @@ in
     sops
     ripgrep
     gh
+    openssl
+    claude-code
   ];
 }

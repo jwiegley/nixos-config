@@ -41,6 +41,31 @@ sudo nix-collect-garbage --delete-older-than 30d
 nix-store --optimise
 ```
 
+### Certificate Authority Management
+```bash
+# Check step-ca service status
+sudo systemctl status step-ca
+sudo journalctl -u step-ca -f  # Follow logs
+
+# Generate a new certificate
+step ca certificate "service.vulcan.local" service.crt service.key \
+  --ca-url https://localhost:8443 \
+  --root /var/lib/step-ca/certs/root_ca.crt
+
+# Renew a certificate
+step ca renew service.crt service.key \
+  --ca-url https://localhost:8443 \
+  --root /var/lib/step-ca/certs/root_ca.crt
+
+# List issued certificates
+step ca certificate list \
+  --ca-url https://localhost:8443 \
+  --root /var/lib/step-ca/certs/root_ca.crt
+
+# Export root CA certificate for client installation
+sudo cp /var/lib/step-ca/certs/root_ca.crt ~/vulcan-ca.crt
+```
+
 ## Architecture
 
 ### Core Structure
@@ -58,6 +83,7 @@ nix-store --optimise
 3. **Docker**: Container runtime with rootless support
 4. **Tailscale & Nebula**: VPN networking
 5. **Logwatch**: System log monitoring and reporting
+6. **Step-CA**: Private certificate authority for TLS and SSH certificates
 
 ### Important Configuration Details
 - **State Version**: 25.05 (DO NOT change unless migrating)

@@ -16,6 +16,7 @@
     ../../modules/users/default.nix
 
     # Services
+    ../../modules/services/certificates.nix
     ../../modules/services/databases.nix
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix

@@ -20,7 +20,11 @@
       "Bash(sudo cp:*)",
       "Bash(curl:*)",
       "WebFetch(domain:www.perplexity.ai)",
-      "Bash(nix-shell:*)"
+      "Bash(nix-shell:*)",
+      "Read(//var/lib/nginx-certs/**)",
+      "Bash(nslookup:*)",
+      "Bash(dig:*)",
+      "Bash(ip addr:*)"
     ],
     "deny": [],
     "ask": []

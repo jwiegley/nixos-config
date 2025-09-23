@@ -90,6 +90,21 @@ in
           locations."/".proxyPass = "http://127.0.0.1:9090/";
         };
 
+        "postgres.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/postgres.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/postgres.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:5050/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              proxy_set_header X-Script-Name "";
+              proxy_set_header Host $host;
+              proxy_redirect off;
+            '';
+          };
+        };
+
         "vulcan.lan" = {
           serverAliases = [ "vulcan" ];
           forceSSL = true;

@@ -18,6 +18,7 @@
     # Services
     ../../modules/services/certificates.nix
     ../../modules/services/databases.nix
+    ../../modules/services/pgadmin.nix
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/network-services.nix

@@ -57,37 +57,59 @@ in
 
         "jellyfin.vulcan.lan" = {
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
-          locations."/".proxyPass = "http://127.0.0.1:8096/";
+          sslCertificate = "/var/lib/nginx-certs/jellyfin.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/jellyfin.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8096/";
+            proxyWebsockets = true;
+          };
         };
 
         "litellm.vulcan.lan" = {
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
-          locations."/".proxyPass = "http://127.0.0.1:4000/";
+          sslCertificate = "/var/lib/nginx-certs/litellm.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/litellm.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:4000/";
+            proxyWebsockets = true;
+            extraConfig = ''
+              # (Optional) Disable proxy buffering for better streaming
+              # response from models
+              proxy_buffering off;
+
+              # (Optional) Increase max request size for large attachments
+              # and long audio messages
+              client_max_body_size 20M;
+              proxy_read_timeout 2h;
+            '';
+          };
         };
 
         "organizr.vulcan.lan" = {
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          sslCertificate = "/var/lib/nginx-certs/organizr.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/organizr.vulcan.lan.key";
           locations."/".proxyPass = "http://127.0.0.1:8080/";
         };
 
         "smokeping.vulcan.lan" = {
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
-          locations."/".proxyPass = "http://127.0.0.1:8081/";
+          sslCertificate = "/var/lib/nginx-certs/smokeping.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/smokeping.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8081/";
+            proxyWebsockets = true;
+          };
         };
 
         "wallabag.vulcan.lan" = {
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
-          locations."/".proxyPass = "http://127.0.0.1:9090/";
+          sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:9090/";
+            proxyWebsockets = true;
+          };
         };
 
         "postgres.vulcan.lan" = {
@@ -108,8 +130,8 @@ in
         "vulcan.lan" = {
           serverAliases = [ "vulcan" ];
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          sslCertificate = "/var/lib/nginx-certs/vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan.lan.key";
           locations."/".return = "301 https://organizr.vulcan.lan$request_uri";
         };
       };

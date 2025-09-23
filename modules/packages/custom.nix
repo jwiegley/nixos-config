@@ -101,5 +101,6 @@ in
     gh
     openssl
     claude-code
+    restic
   ];
 }

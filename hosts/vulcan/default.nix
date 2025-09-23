@@ -27,6 +27,7 @@
 
     # Containers
     ../../modules/containers/default.nix
+    ../../modules/containers/secure-nginx.nix
 
     # Storage
     ../../modules/storage/zfs.nix

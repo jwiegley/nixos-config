@@ -23,6 +23,7 @@
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/network-services.nix
+    ../../modules/services/postfix.nix
     ../../modules/services/dns.nix
 
     # Containers

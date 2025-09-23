@@ -6,6 +6,7 @@
     ./organizr.nix
     ./silly-tavern.nix
     ./wallabag.nix
+    ./secure-nginx.nix
   ];
 
   virtualisation.podman = {

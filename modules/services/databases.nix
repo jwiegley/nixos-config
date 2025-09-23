@@ -13,7 +13,20 @@
     postgresql = {
       enable = true;
       enableTCPIP = true;
-      settings.port = 5432;
+
+      settings = {
+        port = 5432;
+
+        # SSL/TLS configuration
+        ssl = true;
+        ssl_cert_file = "/var/lib/postgresql/certs/server.crt";  # Absolute path
+        ssl_key_file = "/var/lib/postgresql/certs/server.key";   # Absolute path
+        ssl_ca_file = "/var/lib/postgresql/certs/root_ca.crt";   # For client certificate validation
+        ssl_ciphers = "HIGH:MEDIUM:+3DES:!aNULL";
+        ssl_prefer_server_ciphers = true;
+        ssl_min_protocol_version = "TLSv1.2";
+        ssl_max_protocol_version = "TLSv1.3";
+      };
 
       ensureDatabases = [ "db" "litellm" "wallabag" ];
       ensureUsers = [
@@ -22,39 +35,53 @@
       # dataDir = "/var/lib/postgresql/16";
 
       authentication = lib.mkOverride 10 ''
-        local all all trust
-        host all all 127.0.0.1/32 trust
-        host all all 10.88.0.0/16 trust
-        host all all 192.168.1.0/24 md5
-        host all all 10.6.0.0/16 md5
-        host all all ::1/128 md5
+        # TYPE  DATABASE  USER  ADDRESS         METHOD
+
+        # Localhost connections - no SSL required
+        local   all       all                   trust
+        host    all       all   127.0.0.1/32    trust
+        host    all       all   ::1/128         trust
+
+        # Podman network - no SSL required
+        host    all       all   10.88.0.0/16    trust
+
+        # Local networks - SSL required with stronger authentication
+        hostssl all       all   192.168.1.0/24  scram-sha-256
+        hostssl all       all   10.6.0.0/16     scram-sha-256
       '';
+    };
+  };
 
-      initialScript = pkgs.writeText "init.sql" ''
-        CREATE ROLE johnw WITH LOGIN PASSWORD 'password' CREATEDB;
-        CREATE DATABASE db;
-        GRANT ALL PRIVILEGES ON DATABASE db TO johnw;
-        \c db
-        GRANT ALL ON SCHEMA public TO johnw;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO johnw;
-        ALTER DATABASE db OWNER TO johnw;
+  # PostgreSQL certificate management
+  systemd.services.postgresql-cert-init = {
+    description = "Initialize PostgreSQL SSL certificates";
+    wantedBy = [ "postgresql.service" ];
+    before = [ "postgresql.service" ];
+    after = [ "step-ca.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.bash}/bin/bash /etc/nixos/postgresql-cert-renew.sh";
+    };
+  };
 
-        CREATE ROLE litellm WITH LOGIN PASSWORD 'sk-1234' CREATEDB;
-        CREATE DATABASE litellm;
-        GRANT ALL PRIVILEGES ON DATABASE litellm TO litellm;
-        \c litellm
-        GRANT ALL ON SCHEMA public TO litellm;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO litellm;
-        ALTER DATABASE litellm OWNER TO litellm;
+  # Weekly certificate renewal timer
+  systemd.timers.postgresql-cert-renewal = {
+    description = "PostgreSQL certificate renewal timer";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "weekly";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+    };
+  };
 
-        CREATE ROLE wallabag WITH LOGIN PASSWORD 'bag-1234' CREATEDB;
-        CREATE DATABASE wallabag;
-        GRANT ALL PRIVILEGES ON DATABASE wallabag TO wallabag;
-        \c wallabag
-        GRANT ALL ON SCHEMA public TO wallabag;
-        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wallabag;
-        ALTER DATABASE wallabag OWNER TO wallabag;
-      '';
+  systemd.services.postgresql-cert-renewal = {
+    description = "Renew PostgreSQL SSL certificates";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash /etc/nixos/postgresql-cert-renew.sh";
+      ExecStartPost = "${pkgs.systemd}/bin/systemctl reload postgresql";
     };
   };
 }

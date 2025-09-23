@@ -7,8 +7,8 @@ set -euo pipefail
 
 # Configuration
 DOMAIN="postgresql.vulcan.lan"
-POSTGRES_VERSION="16"
-POSTGRES_DATA="/var/lib/postgresql/${POSTGRES_VERSION}"
+# Use a fixed certificate directory that's version-independent
+CERT_DIR="/var/lib/postgresql/certs"
 CA_ROOT="/var/lib/step-ca-state/certs/root_ca.crt"
 CERT_VALIDITY="720h"  # 30 days
 
@@ -20,7 +20,7 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}=== PostgreSQL Certificate Management ===${NC}"
 echo "Domain: $DOMAIN"
-echo "PostgreSQL data directory: $POSTGRES_DATA"
+echo "Certificate directory: $CERT_DIR"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -35,12 +35,10 @@ if ! systemctl is-active --quiet step-ca; then
     sleep 2
 fi
 
-# Ensure PostgreSQL data directory exists
-if [ ! -d "$POSTGRES_DATA" ]; then
-    echo -e "${RED}Error: PostgreSQL data directory not found: $POSTGRES_DATA${NC}"
-    echo "PostgreSQL may not be initialized yet."
-    exit 1
-fi
+# Ensure certificate directory exists
+mkdir -p "$CERT_DIR"
+chown postgres:postgres "$CERT_DIR"
+chmod 755 "$CERT_DIR"
 
 # Create temporary directory for certificate generation
 TEMP_DIR=$(mktemp -d)
@@ -99,12 +97,20 @@ echo -e "\n${YELLOW}Step 3: Signing certificate with step-ca...${NC}"
 # Check if intermediate CA exists and use it, otherwise use root CA
 if [ -f /var/lib/step-ca-state/certs/intermediate_ca.crt ] && [ -f /var/lib/step-ca-state/secrets/intermediate_ca_key ]; then
     echo "  Using intermediate CA for signing..."
+    # Get the password file for the intermediate CA
+    PASS_FILE="/run/secrets/step-ca-password"
+    if [ ! -f "$PASS_FILE" ]; then
+        echo -e "${RED}Error: Password file not found at $PASS_FILE${NC}"
+        exit 1
+    fi
+
     step certificate sign "$TEMP_DIR/server.csr" \
         /var/lib/step-ca-state/certs/intermediate_ca.crt \
         /var/lib/step-ca-state/secrets/intermediate_ca_key \
         --profile leaf \
         --not-after "$CERT_VALIDITY" \
         --bundle \
+        --password-file "$PASS_FILE" \
         > "$TEMP_DIR/server.crt" || {
         echo -e "${RED}Error: Failed to sign certificate${NC}"
         exit 1
@@ -119,31 +125,31 @@ echo "  ✓ Certificate signed (valid for $CERT_VALIDITY)"
 echo -e "\n${YELLOW}Step 4: Installing certificates...${NC}"
 
 # Backup existing certificates if they exist
-if [ -f "$POSTGRES_DATA/server.crt" ]; then
+if [ -f "$CERT_DIR/server.crt" ]; then
     echo "  Backing up existing certificates..."
-    cp "$POSTGRES_DATA/server.crt" "$POSTGRES_DATA/server.crt.bak.$(date +%Y%m%d-%H%M%S)"
-    [ -f "$POSTGRES_DATA/server.key" ] && cp "$POSTGRES_DATA/server.key" "$POSTGRES_DATA/server.key.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$CERT_DIR/server.crt" "$CERT_DIR/server.crt.bak.$(date +%Y%m%d-%H%M%S)"
+    [ -f "$CERT_DIR/server.key" ] && cp "$CERT_DIR/server.key" "$CERT_DIR/server.key.bak.$(date +%Y%m%d-%H%M%S)"
 fi
 
 # Install new certificate and key
-cp "$TEMP_DIR/server.crt" "$POSTGRES_DATA/server.crt"
-cp "$TEMP_DIR/server.key" "$POSTGRES_DATA/server.key"
+cp "$TEMP_DIR/server.crt" "$CERT_DIR/server.crt"
+cp "$TEMP_DIR/server.key" "$CERT_DIR/server.key"
 
 # Copy root CA certificate for client certificate validation
-cp "$CA_ROOT" "$POSTGRES_DATA/root_ca.crt"
+cp "$CA_ROOT" "$CERT_DIR/root_ca.crt"
 
 # Set proper ownership and permissions
-chown postgres:postgres "$POSTGRES_DATA/server.crt" "$POSTGRES_DATA/server.key" "$POSTGRES_DATA/root_ca.crt"
-chmod 644 "$POSTGRES_DATA/server.crt" "$POSTGRES_DATA/root_ca.crt"
-chmod 600 "$POSTGRES_DATA/server.key"
+chown postgres:postgres "$CERT_DIR/server.crt" "$CERT_DIR/server.key" "$CERT_DIR/root_ca.crt"
+chmod 644 "$CERT_DIR/server.crt" "$CERT_DIR/root_ca.crt"
+chmod 600 "$CERT_DIR/server.key"
 
-echo "  ✓ Certificates installed to $POSTGRES_DATA"
+echo "  ✓ Certificates installed to $CERT_DIR"
 
 echo -e "\n${YELLOW}Step 5: Verifying certificate...${NC}"
 
 # Verify certificate chain
 echo -n "  Certificate chain verification: "
-if openssl verify -CAfile "$CA_ROOT" "$POSTGRES_DATA/server.crt" 2>/dev/null | grep -q "OK"; then
+if openssl verify -CAfile "$CA_ROOT" "$CERT_DIR/server.crt" 2>/dev/null | grep -q "OK"; then
     echo -e "${GREEN}✓ VALID${NC}"
 else
     echo -e "${RED}✗ FAILED${NC}"
@@ -153,9 +159,9 @@ fi
 # Show certificate details
 echo ""
 echo "Certificate details:"
-openssl x509 -in "$POSTGRES_DATA/server.crt" -noout -subject | sed 's/^/  /'
-openssl x509 -in "$POSTGRES_DATA/server.crt" -noout -startdate | sed 's/^/  /'
-openssl x509 -in "$POSTGRES_DATA/server.crt" -noout -enddate | sed 's/^/  /'
+openssl x509 -in "$CERT_DIR/server.crt" -noout -subject | sed 's/^/  /'
+openssl x509 -in "$CERT_DIR/server.crt" -noout -startdate | sed 's/^/  /'
+openssl x509 -in "$CERT_DIR/server.crt" -noout -enddate | sed 's/^/  /'
 
 # Check if PostgreSQL is running and needs reload
 if systemctl is-active --quiet postgresql; then

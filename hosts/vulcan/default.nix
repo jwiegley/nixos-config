@@ -8,6 +8,7 @@
     # Core modules
     ../../modules/core/boot.nix
     ../../modules/core/networking.nix
+    ../../modules/core/firewall.nix
     ../../modules/core/nix.nix
     ../../modules/core/system.nix
     ../../modules/core/programs.nix

@@ -24,7 +24,8 @@
       "Read(//var/lib/nginx-certs/**)",
       "Bash(nslookup:*)",
       "Bash(dig:*)",
-      "Bash(ip addr:*)"
+      "Bash(ip addr:*)",
+      "Bash(sudo systemctl list-units:*)"
     ],
     "deny": [],
     "ask": []

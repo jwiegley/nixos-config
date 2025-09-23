@@ -8,6 +8,7 @@
       53     # technitium-dns-server
       80     # nginx (HTTP)
       443    # nginx (HTTPS)
+      853    # technitium-dns-server (DNS-over-TLS)
       2022   # eternal-terminal
       5432   # postgres
     ];

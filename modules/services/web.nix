@@ -127,6 +127,16 @@ in
           };
         };
 
+        "dns.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/dns.vulcan.lan.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/dns.vulcan.lan.key";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:5380/";
+            proxyWebsockets = true;
+          };
+        };
+
         "vulcan.lan" = {
           serverAliases = [ "vulcan" ];
           forceSSL = true;

@@ -67,6 +67,43 @@
   environment.systemPackages = with pkgs; [
     step-cli
     step-ca
+    (pkgs.writeScriptBin "step-ca-reset" ''
+      #!${pkgs.bash}/bin/bash
+      set -e
+      echo "This will completely reset the step-ca installation!"
+      echo "All certificates will be lost and need to be regenerated."
+      read -p "Are you sure? (yes/no): " -r
+      if [[ $REPLY == "yes" ]]; then
+        echo "Stopping step-ca service..."
+        sudo systemctl stop step-ca
+        echo "Removing CA state..."
+        sudo rm -rf /var/lib/step-ca-state/*
+        echo "Restarting step-ca-init service..."
+        sudo systemctl restart step-ca-init
+        echo "Starting step-ca service..."
+        sudo systemctl start step-ca
+        echo "Reset complete!"
+      else
+        echo "Cancelled"
+      fi
+    '')
+    (pkgs.writeScriptBin "step-ca-status" ''
+      #!${pkgs.bash}/bin/bash
+      echo "=== Step CA Status ==="
+      echo
+      echo "Service Status:"
+      systemctl status step-ca --no-pager | head -15
+      echo
+      echo "CA Files:"
+      if [ -d /var/lib/step-ca-state ]; then
+        ls -la /var/lib/step-ca-state/certs/ 2>/dev/null || echo "No certificates found"
+      else
+        echo "CA directory not found"
+      fi
+      echo
+      echo "Health Check:"
+      step ca health --ca-url https://localhost:8443 --root /var/lib/step-ca-state/certs/root_ca.crt 2>&1 || echo "Health check failed"
+    '')
   ];
 
   networking.firewall.allowedTCPPorts = lib.mkIf config.services.step-ca.enable [ 8443 ];
@@ -89,46 +126,87 @@
       Type = "oneshot";
       User = "step-ca";
       Group = "step-ca";
+      StateDirectory = "step-ca-state";
+      WorkingDirectory = "/var/lib/step-ca-state";
     };
-    path = [ pkgs.step-cli pkgs.step-ca pkgs.coreutils ];
+    path = [ pkgs.step-cli pkgs.step-ca pkgs.coreutils pkgs.openssl ];
     script = ''
+      set -euo pipefail
+
       CA_DIR="/var/lib/step-ca-state"
 
-      # Check if CA is already initialized
-      if [ ! -f "$CA_DIR/certs/root_ca.crt" ]; then
-        echo "Initializing Step CA for the first time..."
+      # Ensure proper directory structure exists
+      mkdir -p "$CA_DIR"/{certs,secrets,config,db,templates}
 
-        # Use the actual password from SOPS if available, else generate temporary
+      # Check multiple conditions to determine if CA is initialized
+      CA_INITIALIZED=false
+
+      if [ -f "$CA_DIR/certs/root_ca.crt" ] && \
+         [ -f "$CA_DIR/certs/intermediate_ca.crt" ] && \
+         [ -f "$CA_DIR/secrets/intermediate_ca_key" ] && \
+         [ -f "$CA_DIR/config/ca.json" ]; then
+        CA_INITIALIZED=true
+      fi
+
+      if [ "$CA_INITIALIZED" = "false" ]; then
+        echo "Initializing Step CA..."
+
+        # Check for password file
         if [ -f "${config.sops.secrets."step-ca-password".path}" ]; then
-          TEMP_PASSFILE="${config.sops.secrets."step-ca-password".path}"
+          PASSFILE="${config.sops.secrets."step-ca-password".path}"
+          echo "Using SOPS password file"
         else
-          # Generate a temporary password for initialization
-          TEMP_PASSWORD=$(${pkgs.openssl}/bin/openssl rand -base64 32)
-          TEMP_PASSFILE=$(mktemp)
-          chmod 644 $TEMP_PASSFILE
-          echo "$TEMP_PASSWORD" > $TEMP_PASSFILE
+          echo "ERROR: SOPS password file not found at ${config.sops.secrets."step-ca-password".path}"
+          echo "Cannot initialize CA without password"
+          exit 1
         fi
 
-        # Initialize the CA - we're already running as step-ca user
-        export STEPPATH=$CA_DIR
+        # Clean any partial initialization
+        rm -f "$CA_DIR/contexts.json" 2>/dev/null || true
+
+        # Initialize the CA
+        export STEPPATH="$CA_DIR"
+        export HOME="$CA_DIR"  # Ensure step doesn't write to wrong home
+
         step ca init \
           --name='Vulcan Certificate Authority' \
           --dns='vulcan,vulcan.lan,ca.vulcan.lan,localhost' \
           --address=':8443' \
           --provisioner='johnw@newartisans.com' \
-          --password-file=$TEMP_PASSFILE \
-          --provisioner-password-file=$TEMP_PASSFILE \
-          --deployment-type=standalone
+          --password-file="$PASSFILE" \
+          --provisioner-password-file="$PASSFILE" \
+          --deployment-type=standalone \
+          --no-db \
+          2>&1 | tee /tmp/step-ca-init.log || {
+            echo "Step CA init failed. Check /tmp/step-ca-init.log"
+            exit 1
+          }
 
-        # Clean up temporary password only if we created it
-        if [ ! -f "${config.sops.secrets."step-ca-password".path}" ] || [ "$TEMP_PASSFILE" != "${config.sops.secrets."step-ca-password".path}" ]; then
-          rm -f $TEMP_PASSFILE
+        # Verify initialization was successful
+        if [ -f "$CA_DIR/certs/root_ca.crt" ]; then
+          echo "Step CA initialization successful"
+          # Clean up contexts file that might interfere
+          rm -f "$CA_DIR/contexts.json" 2>/dev/null || true
+        else
+          echo "ERROR: CA initialization failed - root certificate not created"
+          exit 1
         fi
-
-        echo "Step CA initialization complete"
       else
-        echo "Step CA already initialized"
+        echo "Step CA already initialized - skipping"
+        # Ensure no stale contexts.json file
+        rm -f "$CA_DIR/contexts.json" 2>/dev/null || true
       fi
+
+      # Final verification
+      echo "Verifying CA state..."
+      for file in certs/root_ca.crt certs/intermediate_ca.crt secrets/intermediate_ca_key config/ca.json; do
+        if [ ! -f "$CA_DIR/$file" ]; then
+          echo "ERROR: Missing required file: $file"
+          exit 1
+        fi
+      done
+
+      echo "Step CA is ready"
     '';
   };
 }

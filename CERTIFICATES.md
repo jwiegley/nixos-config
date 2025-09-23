@@ -6,6 +6,23 @@ This document outlines how to manage certificates using Step CA on the vulcan ho
 
 Step CA is configured to provide a private certificate authority for issuing TLS and SSH certificates within the local network.
 
+## IMPORTANT: Nginx Wildcard Certificate
+
+The nginx service uses a wildcard certificate that must be renewed annually due to Apple/Safari certificate requirements.
+
+### Current Nginx Certificate
+- **Certificate Chain**: `/var/lib/nginx-certs/vulcan-fullchain.crt` (includes root + intermediate + leaf)
+- **Private Key**: `/var/lib/nginx-certs/vulcan-1year.key`
+- **Coverage**: `vulcan.lan`, `vulcan`, `*.vulcan.lan`
+- **Validity**: 365 days (Apple requires ≤398 days)
+- **Standards Compliant**: Includes all required X.509v3 extensions
+- **Browser Trust Setup**: See [BROWSER_TRUST.md](BROWSER_TRUST.md) for detailed instructions
+
+To check expiration:
+```bash
+nix-shell -p openssl --run "openssl x509 -in /var/lib/nginx-certs/vulcan-1year.crt -noout -dates"
+```
+
 ## Configuration
 
 The Step CA service is configured in `/etc/nixos/modules/services/certificates.nix` with:
@@ -40,6 +57,117 @@ The Step CA service is configured in `/etc/nixos/modules/services/certificates.n
 - CA password stored in SOPS at `step-ca-password`
 - Accessible by step-ca user/group only
 - Located at `/run/secrets/step-ca-password`
+
+## Nginx Certificate Renewal Process
+
+### When to Renew
+Renew the nginx wildcard certificate when it has 30 days or less remaining validity.
+
+### Standards-Compliant Renewal Steps
+
+1. **Create required configuration files**:
+```bash
+# Create OpenSSL config for CSR
+cat > /tmp/openssl-cert.conf << 'EOF'
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = vulcan.lan
+
+[v3_req]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth,clientAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = vulcan.lan
+DNS.2 = vulcan
+DNS.3 = *.vulcan.lan
+EOF
+
+# Create extensions file for signing
+cat > /tmp/cert-extensions.conf << 'EOF'
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth,clientAuth
+subjectAltName = DNS:vulcan.lan,DNS:vulcan,DNS:*.vulcan.lan
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+EOF
+```
+
+2. **Generate new private key and CSR**:
+```bash
+nix-shell -p openssl --run "openssl req -new -newkey rsa:2048 -nodes \
+  -keyout /tmp/vulcan-new.key \
+  -out /tmp/vulcan.csr \
+  -config /tmp/openssl-cert.conf"
+```
+
+3. **Sign the certificate with Step CA**:
+```bash
+# Sign for 365 days (Safari/Apple requirement)
+sudo cat /run/secrets/step-ca-password | \
+sudo nix-shell -p openssl --run "openssl x509 -req -in /tmp/vulcan.csr \
+  -CA /var/lib/step-ca-state/certs/intermediate_ca.crt \
+  -CAkey /var/lib/step-ca-state/secrets/intermediate_ca_key \
+  -CAcreateserial \
+  -out /tmp/vulcan-renewed.crt \
+  -days 365 \
+  -extfile /tmp/cert-extensions.conf \
+  -passin stdin"
+```
+
+4. **Backup and install new certificate**:
+```bash
+# Backup current certificates
+sudo cp /var/lib/nginx-certs/vulcan-1year.crt \
+  /var/lib/nginx-certs/vulcan-1year.crt.$(date +%Y%m%d)
+sudo cp /var/lib/nginx-certs/vulcan-1year.key \
+  /var/lib/nginx-certs/vulcan-1year.key.$(date +%Y%m%d)
+sudo cp /var/lib/nginx-certs/vulcan-fullchain.crt \
+  /var/lib/nginx-certs/vulcan-fullchain.crt.$(date +%Y%m%d)
+
+# Install new certificate and key
+sudo cp /tmp/vulcan-renewed.crt /var/lib/nginx-certs/vulcan-1year.crt
+sudo cp /tmp/vulcan-new.key /var/lib/nginx-certs/vulcan-1year.key
+
+# Create full certificate chain (IMPORTANT for Firefox/Safari)
+sudo cat /var/lib/nginx-certs/vulcan-1year.crt \
+  /var/lib/step-ca-state/certs/intermediate_ca.crt \
+  /var/lib/step-ca-state/certs/root_ca.crt \
+  > /tmp/vulcan-fullchain.crt
+sudo cp /tmp/vulcan-fullchain.crt /var/lib/nginx-certs/vulcan-fullchain.crt
+
+# Set proper ownership and permissions
+sudo chown nginx:nginx /var/lib/nginx-certs/vulcan-*
+sudo chmod 644 /var/lib/nginx-certs/*.crt
+sudo chmod 600 /var/lib/nginx-certs/*.key
+```
+
+5. **Test and reload nginx**:
+```bash
+# Test configuration
+sudo nginx -t
+
+# If test passes, reload nginx
+sudo systemctl reload nginx
+
+# Verify new certificate dates
+nix-shell -p openssl --run "openssl x509 -in /var/lib/nginx-certs/vulcan-1year.crt -noout -dates"
+```
+
+### Why Not Use step ca certificate Command?
+
+The `step ca certificate` command doesn't generate certificates with all required X.509v3 extensions that Safari/macOS requires for standards compliance, specifically:
+- Missing `basicConstraints = critical,CA:FALSE`
+- This causes "certificate is not standards compliant" errors in Safari
+
+The OpenSSL method ensures full control over certificate extensions.
 
 ## Basic Usage
 

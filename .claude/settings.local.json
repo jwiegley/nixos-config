@@ -15,7 +15,12 @@
       "Bash(sudo chmod:*)",
       "Bash(openssl s_client:*)",
       "Bash(openssl:*)",
-      "Bash(sudo step certificate create:*)"
+      "Bash(sudo step certificate create:*)",
+      "Bash(sudo nix-shell:*)",
+      "Bash(sudo cp:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:www.perplexity.ai)",
+      "Bash(nix-shell:*)"
     ],
     "deny": [],
     "ask": []

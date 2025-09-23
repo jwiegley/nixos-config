@@ -29,6 +29,8 @@ in
       enable = true;
       recommendedGzipSettings = true;
       recommendedProxySettings = true;
+      recommendedTlsSettings = true;
+      recommendedOptimisation = true;
       # logError = "/var/log/nginx/error.log debug";
 
       appendHttpConfig = ''
@@ -38,22 +40,62 @@ in
       '';
 
       virtualHosts = {
+        # HTTP to HTTPS redirect for all domains
+        "redirect-http" = {
+          serverName = "_";
+          listen = [
+            { addr = "0.0.0.0"; port = 80; }
+          ];
+          locations."/".return = "301 https://$host$request_uri";
+        };
+
         smokeping = {
           listen = [
             { addr = "127.0.0.1"; port = 8081; }
           ];
         };
 
-        "jellyfin.vulcan.lan".locations."/".proxyPass = "http://127.0.0.1:8096/";
-        "litellm.vulcan.lan".locations."/".proxyPass = "http://127.0.0.1:4000/";
-        "organizr.vulcan.lan".locations."/".proxyPass = "http://127.0.0.1:8080/";
-        "smokeping.vulcan.lan".locations."/".proxyPass = "http://127.0.0.1:8081/";
-        "wallabag.vulcan.lan".locations."/".proxyPass = "http://127.0.0.1:9090/";
+        "jellyfin.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".proxyPass = "http://127.0.0.1:8096/";
+        };
+
+        "litellm.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".proxyPass = "http://127.0.0.1:4000/";
+        };
+
+        "organizr.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".proxyPass = "http://127.0.0.1:8080/";
+        };
+
+        "smokeping.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".proxyPass = "http://127.0.0.1:8081/";
+        };
+
+        "wallabag.vulcan.lan" = {
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".proxyPass = "http://127.0.0.1:9090/";
+        };
 
         "vulcan.lan" = {
           serverAliases = [ "vulcan" ];
-
-          locations."/".return = "301 http://organizr.vulcan.lan";
+          forceSSL = true;
+          sslCertificate = "/var/lib/nginx-certs/vulcan-fullchain.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/vulcan-1year.key";
+          locations."/".return = "301 https://organizr.vulcan.lan$request_uri";
         };
       };
     };

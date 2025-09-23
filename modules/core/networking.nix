@@ -17,7 +17,8 @@
       enable = true;
       allowedTCPPorts = [
         25     # postfix
-        80     # nginx
+        80     # nginx (HTTP)
+        443    # nginx (HTTPS)
         2022   # eternal-terminal
         5432   # postgres
       ];

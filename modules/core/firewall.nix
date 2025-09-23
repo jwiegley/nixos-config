@@ -4,19 +4,15 @@
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-      25     # postfix
-      53     # technitium-dns-server
-      80     # nginx (HTTP)
       443    # nginx (HTTPS)
+      587    # postfix (submission - STARTTLS)
       853    # technitium-dns-server (DNS-over-TLS)
       2022   # eternal-terminal
       5432   # postgres
     ];
     allowedUDPPorts = [
-      53     # technitium-dns-server
     ];
     interfaces.podman0.allowedUDPPorts = [
-      53     # technitium-dns-server
     ];
     trustedInterfaces = lib.mkForce [ "lo" ];
 

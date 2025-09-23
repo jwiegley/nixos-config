@@ -62,6 +62,7 @@
     owner = "step-ca";
     group = "step-ca";
     mode = "0400";
+    restartUnits = [ "step-ca.service" ];
   };
 
   environment.systemPackages = with pkgs; [

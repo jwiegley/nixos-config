@@ -12,7 +12,8 @@
       "Bash(nslookup:*)",
       "Bash(dig:*)",
       "Bash(ip addr:*)",
-      "Bash(sudo systemctl list-units:*)"
+      "Bash(sudo systemctl list-units:*)",
+      "Bash(systemctl status:*)"
     ],
     "deny": [],
     "ask": []

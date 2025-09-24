@@ -101,6 +101,7 @@ in
     gh
     openssl
     claude-code
+    task-master-ai
     restic
   ];
 }

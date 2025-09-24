@@ -25,7 +25,7 @@ in
   virtualisation.oci-containers.containers.wallabag = {
     autoStart = true;
     image = "wallabag/wallabag:latest";
-    ports = [ "127.0.0.1:9090:80/tcp" ];
+    ports = [ "127.0.0.1:9091:80/tcp" ];
 
     # Non-secret environment variables
     environment = containerUser // {
@@ -68,7 +68,7 @@ in
     sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
     locations."/" = {
-      proxyPass = "http://127.0.0.1:9090/";
+      proxyPass = "http://127.0.0.1:9091/";
       proxyWebsockets = true;
     };
   };

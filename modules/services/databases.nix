@@ -2,14 +2,6 @@
 
 {
   services = {
-    redis.servers.litellm = {
-      enable = true;
-      port = 8085;
-      settings = {
-        aclfile = "/etc/redis/users.acl";
-      };
-    };
-
     postgresql = {
       enable = true;
       enableTCPIP = true;

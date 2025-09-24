@@ -14,8 +14,9 @@
     ];
     interfaces.podman0 = {
       allowedTCPPorts = [
-        4000 # litellm
         5432 # postgres
+        4000 # litellm
+        8085 # redis[litellm]
       ];
       allowedUDPPorts = [
       ];

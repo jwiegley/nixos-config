@@ -9,6 +9,14 @@
     restartUnits = [ "podman-litellm.service" ];
   };
 
+  services.redis.servers.litellm = {
+    enable = true;
+    port = 8085;
+    settings = {
+      aclfile = "/etc/redis/users.acl";
+    };
+  };
+
   virtualisation.oci-containers.containers.litellm = {
     autoStart = true;
     image = "ghcr.io/berriai/litellm-database:main-stable";

@@ -8,12 +8,12 @@
       enable = true;
       settings = {
         PasswordAuthentication = false;
-        PermitRootLogin = "yes";
+        PermitRootLogin = "no";
       };
     };
 
     fail2ban = {
-      enable = false;
+      enable = true;
       jails.sshd.settings = {
         enabled = true;
         maxretry = 10;        # Allow up to 10 failed attempts

@@ -12,8 +12,10 @@
   services.redis.servers.litellm = {
     enable = true;
     port = 8085;
+    bind = "10.88.0.1";
     settings = {
       aclfile = "/etc/redis/users.acl";
+      protected-mode = "no";
     };
   };
 

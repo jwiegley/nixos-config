@@ -18,6 +18,8 @@
 
     # User management
     ../../modules/users/default.nix
+    ../../modules/users/johnw.nix
+    ../../modules/users/assembly.nix
 
     # Services
     ../../modules/services/certificates.nix

@@ -23,6 +23,47 @@ let
 
   # Merge all backup service overrides
   backupServiceOverrides = lib.mkMerge (map mkBackupMonitoring backupNames);
+
+  # Define backup monitoring rules as a separate file
+  # Using double backslashes to properly escape dots in regex patterns
+  backupRulesFile = pkgs.writeText "backup-alerts.yml" ''
+    groups:
+      - name: backup_alerts
+        interval: 5m
+        rules:
+          # Alert when backup service fails
+          - alert: BackupServiceFailed
+            expr: |
+              systemd_unit_state{name=~"restic-backups-.*\\.service",state="failed"} == 1
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Backup service {{ $labels.name }} has failed"
+              description: "The backup service {{ $labels.name }} is in failed state and needs attention"
+
+          # Alert when backup hasn't run in 36 hours (should run daily)
+          - alert: BackupNotRunning
+            expr: |
+              time() - systemd_service_last_trigger_timestamp_seconds{unit=~"restic-backups-.*\\.timer"} > 129600
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Backup {{ $labels.unit }} hasn't run in over 36 hours"
+              description: "The backup {{ $labels.unit }} last ran {{ $value | humanizeDuration }} ago"
+
+          # Alert when backup timer is not active
+          - alert: BackupTimerInactive
+            expr: |
+              systemd_unit_state{name=~"restic-backups-.*\\.timer",state="active"} == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Backup timer {{ $labels.name }} is not active"
+              description: "The backup timer {{ $labels.name }} is not in active state"
+  '';
 in
 {
   # Merge all systemd services into one definition
@@ -102,47 +143,9 @@ in
     };
   };
 
-  # Add Prometheus alerts for backup monitoring
-  services.prometheus.rules = lib.mkAfter [
-    ''
-      groups:
-        - name: backup_alerts
-          interval: 5m
-          rules:
-            # Alert when backup service fails
-            - alert: BackupServiceFailed
-              expr: |
-                systemd_unit_state{name=~"restic-backups-.*\.service",state="failed"} == 1
-              for: 5m
-              labels:
-                severity: critical
-              annotations:
-                summary: "Backup service {{ $labels.name }} has failed"
-                description: "The backup service {{ $labels.name }} is in failed state and needs attention"
-
-            # Alert when backup hasn't run in 36 hours (should run daily)
-            - alert: BackupNotRunning
-              expr: |
-                time() - systemd_service_last_trigger_timestamp_seconds{unit=~"restic-backups-.*\.timer"} > 129600
-              for: 5m
-              labels:
-                severity: warning
-              annotations:
-                summary: "Backup {{ $labels.unit }} hasn't run in over 36 hours"
-                description: "The backup {{ $labels.unit }} last ran {{ $value | humanizeDuration }} ago"
-
-            # Alert when backup timer is not active
-            - alert: BackupTimerInactive
-              expr: |
-                systemd_unit_state{name=~"restic-backups-.*\.timer",state="active"} == 0
-              for: 5m
-              labels:
-                severity: warning
-              annotations:
-                summary: "Backup timer {{ $labels.name }} is not active"
-                description: "The backup timer {{ $labels.name }} is not in active state"
-    ''
-  ];
+  # Add backup monitoring rules as a separate file
+  # This avoids YAML structure conflicts with the main rules
+  services.prometheus.ruleFiles = [ backupRulesFile ];
 
   # Create state directory for alerts
   systemd.tmpfiles.rules = [

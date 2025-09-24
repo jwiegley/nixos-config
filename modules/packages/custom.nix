@@ -115,7 +115,6 @@ in
     dig
     ethtool
     gh
-    gitAndTools.git-lfs
     gnupg
     haskellPackages.sizes
     httm

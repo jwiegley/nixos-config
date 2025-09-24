@@ -22,6 +22,20 @@ in
       extraGroups = [ "wheel" ];
       openssh.authorizedKeys.keys = authorizedKeys;
       home = "/home/johnw";
+      shell = pkgs.zsh;
+      packages = with pkgs; [
+        eza
+        fd
+        fzf
+        parallel
+        rmtrash
+        starship
+        zsh
+        zsh-autosuggestions
+        zsh-syntax-highlighting
+        zsh-z
+        gitAndTools.git-lfs
+      ];
     };
   };
 }

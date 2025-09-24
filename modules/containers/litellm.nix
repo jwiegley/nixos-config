@@ -12,7 +12,10 @@
   virtualisation.oci-containers.containers.litellm = {
     autoStart = true;
     image = "ghcr.io/berriai/litellm-database:main-stable";
-    ports = [ "127.0.0.1:4000:4000/tcp" ];
+    ports = [
+      "127.0.0.1:4000:4000/tcp"
+      "10.88.0.1:4000:4000/tcp"
+    ];
 
     # Secret environment variables from SOPS
     environmentFiles = [

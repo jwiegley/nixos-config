@@ -24,4 +24,14 @@
       "/var/lib/silly-tavern/extensions:/home/node/app/public/scripts/extensions/third-party"
     ];
   };
+
+  services.nginx.virtualHosts."silly-tavern.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/silly-tavern.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/silly-tavern.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:8083/";
+      proxyWebsockets = true;
+    };
+  };
 }

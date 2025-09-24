@@ -10,7 +10,7 @@ DOMAIN="postgresql.vulcan.lan"
 # Use a fixed certificate directory that's version-independent
 CERT_DIR="/var/lib/postgresql/certs"
 CA_ROOT="/var/lib/step-ca-state/certs/root_ca.crt"
-CERT_VALIDITY="720h"  # 30 days
+CERT_VALIDITY="8760h"  # 1 year
 
 # Color output
 RED='\033[0;31m'

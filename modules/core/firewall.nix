@@ -12,8 +12,13 @@
     ];
     allowedUDPPorts = [
     ];
-    interfaces.podman0.allowedUDPPorts = [
-    ];
+    interfaces.podman0 = {
+      allowedTCPPorts = [
+        4000 # litellm
+      ];
+      allowedUDPPorts = [
+      ];
+    };
     trustedInterfaces = lib.mkForce [ "lo" ];
 
     logRefusedConnections = true;

@@ -12,6 +12,7 @@ NC='\033[0m' # No Color
 # Configuration
 NGINX_CERT_DIR="/var/lib/nginx-certs"
 STEP_CA_DIR="/var/lib/step-ca-state/certs"
+POSTGRESQL_CERT_DIR="/var/lib/postgresql/certs"
 WARNING_DAYS=30  # Warn if certificate expires within this many days
 CRITICAL_DAYS=7   # Critical if certificate expires within this many days
 
@@ -157,6 +158,45 @@ for cert_file in "$NGINX_CERT_DIR"/*.crt; do
     fi
 done
 
+# Check PostgreSQL certificates
+echo -e "${BLUE}=== PostgreSQL Service Certificates ===${NC}"
+echo ""
+
+if [[ -d "$POSTGRESQL_CERT_DIR" ]]; then
+    # Check server certificate
+    check_certificate "$POSTGRESQL_CERT_DIR/server.crt" "PostgreSQL Server" "PostgreSQL"
+
+    # Check for CRL if exists
+    if [[ -f "$POSTGRESQL_CERT_DIR/crl.pem" ]]; then
+        echo -e "${BLUE}Certificate Revocation List (CRL):${NC}"
+        # Check if CRL is valid
+        if openssl crl -in "$POSTGRESQL_CERT_DIR/crl.pem" -noout 2>/dev/null; then
+            crl_lastupdate=$(openssl crl -in "$POSTGRESQL_CERT_DIR/crl.pem" -noout -lastupdate 2>/dev/null | cut -d= -f2)
+            crl_nextupdate=$(openssl crl -in "$POSTGRESQL_CERT_DIR/crl.pem" -noout -nextupdate 2>/dev/null | cut -d= -f2)
+            echo "  Status: Valid"
+            echo "  Last Update: $crl_lastupdate"
+            echo "  Next Update: $crl_nextupdate"
+        else
+            echo -e "  Status: ${YELLOW}Invalid or unreadable CRL${NC}"
+        fi
+        echo ""
+    fi
+
+    # Check for client certificates if any exist
+    for cert_file in "$POSTGRESQL_CERT_DIR"/*.crt; do
+        if [[ -f "$cert_file" ]]; then
+            cert_name=$(basename "$cert_file" .crt)
+            # Skip server certificate and chain files
+            if [[ "$cert_name" != "server" && "$cert_name" != *"chain"* && "$cert_name" != *"ca"* ]]; then
+                check_certificate "$cert_file" "PostgreSQL Client: $cert_name" "PostgreSQL"
+            fi
+        fi
+    done
+else
+    echo -e "${YELLOW}PostgreSQL certificate directory not found at $POSTGRESQL_CERT_DIR${NC}"
+    echo ""
+fi
+
 # Check live endpoints (optional)
 echo -e "${BLUE}=== Live Endpoint Checks ===${NC}"
 echo ""
@@ -165,6 +205,33 @@ echo ""
 
 # Check step-ca endpoint
 check_tls_endpoint "localhost" "8443"
+
+# Check PostgreSQL endpoint (if running and accessible)
+echo -e "${BLUE}Checking PostgreSQL TLS endpoint${NC}"
+if systemctl is-active postgresql >/dev/null 2>&1; then
+    # PostgreSQL listens on multiple addresses, check the primary one
+    timeout 3 openssl s_client -connect "localhost:5432" -starttls postgres </dev/null 2>/dev/null | \
+        openssl x509 -noout -dates 2>/dev/null
+
+    if [[ $? -eq 0 ]]; then
+        echo -e "  ${GREEN}✓ PostgreSQL TLS connection successful${NC}"
+    else
+        # Try without STARTTLS for direct SSL connections
+        timeout 3 openssl s_client -connect "localhost:5432" </dev/null 2>/dev/null | \
+            openssl x509 -noout -dates 2>/dev/null
+
+        if [[ $? -eq 0 ]]; then
+            echo -e "  ${GREEN}✓ PostgreSQL TLS connection successful (direct SSL)${NC}"
+        else
+            echo -e "  ${YELLOW}⚠ Could not establish TLS connection to PostgreSQL${NC}"
+            echo "    Note: This might be normal if PostgreSQL requires client certificates"
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}⚠ PostgreSQL service is not running${NC}"
+fi
+echo ""
+
 
 # Check common service endpoints
 for domain in jellyfin.vulcan.lan litellm.vulcan.lan organizr.vulcan.lan postgres.vulcan.lan smokeping.vulcan.lan wallabag.vulcan.lan dns.vulcan.lan; do
@@ -188,7 +255,7 @@ critical_certs=0
 warning_certs=0
 ok_certs=0
 
-for cert_file in "$NGINX_CERT_DIR"/*.crt "$STEP_CA_DIR"/*.crt; do
+for cert_file in "$NGINX_CERT_DIR"/*.crt "$STEP_CA_DIR"/*.crt "$POSTGRESQL_CERT_DIR"/*.crt; do
     if [[ ! -f "$cert_file" ]]; then
         continue
     fi

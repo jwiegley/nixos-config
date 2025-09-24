@@ -13,6 +13,9 @@
     ../../modules/core/system.nix
     ../../modules/core/programs.nix
 
+    # Security modules
+    ../../modules/security/hardening.nix
+
     # User management
     ../../modules/users/default.nix
 
@@ -23,6 +26,7 @@
     ../../modules/services/pgadmin.nix
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix
+    ../../modules/services/prometheus-monitoring.nix
     ../../modules/services/network-services.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dns.nix

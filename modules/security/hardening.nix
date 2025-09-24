@@ -1,0 +1,39 @@
+{ config, lib, pkgs, ... }:
+
+{
+  security = {
+    # Audit framework
+    auditd.enable = true;
+    audit = {
+      enable = true;
+      rules = [
+        # Monitor authentication events
+        "-w /var/log/lastlog -p wa -k logins"
+        "-w /var/log/faillog -p wa -k logins"
+
+        # Monitor sudo usage
+        "-w /etc/sudoers -p wa -k sudoers"
+        "-w /etc/sudoers.d/ -p wa -k sudoers"
+
+        # Monitor SSH configuration
+        "-w /etc/ssh/sshd_config -p wa -k sshd_config"
+
+        # Monitor system calls
+        "-a always,exit -F arch=b64 -S execve -k exec"
+        "-a always,exit -F arch=b64 -S socket -S connect -k network"
+      ];
+    };
+
+    # AppArmor
+    apparmor = {
+      enable = true;
+      killUnconfinedConfinables = false; # Start permissive
+    };
+  };
+
+  system.activationScripts.sudoLogs = ''
+    mkdir -p /var/log
+    touch /var/log/sudo.log
+    chmod 600 /var/log/sudo.log
+  '';
+}

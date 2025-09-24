@@ -103,5 +103,6 @@ in
     claude-code
     task-master-ai
     restic
+    jq
   ];
 }

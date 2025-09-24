@@ -81,15 +81,19 @@ in
           script = lib.getExe systemctlFailedScript;
         }
         { name = "sshd"; }
-        {
-          name = "restic";
-          title = "Restic Snapshots";
-          script = lib.getExe resticSnapshots;
-        }
+        { name = "sudo"; }
+        { name = "fail2ban"; }
+        { name = "kernel"; }
+        { name = "audit"; }
         {
           name = "zpool";
           title = "ZFS Pool Status";
           script = lib.getExe zpoolScript;
+        }
+        {
+          name = "restic";
+          title = "Restic Snapshots";
+          script = lib.getExe resticSnapshots;
         }
         {
           name = "zfs-snapshot";

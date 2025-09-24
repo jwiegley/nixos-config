@@ -27,6 +27,7 @@
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/prometheus-monitoring.nix
+    ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dns.nix
@@ -37,6 +38,7 @@
     # Storage
     ../../modules/storage/zfs.nix
     ../../modules/storage/backups.nix
+    ../../modules/storage/backup-monitoring.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

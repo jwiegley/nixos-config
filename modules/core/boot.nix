@@ -17,6 +17,9 @@
 
     kernelParams = [
       "pcie_ports=native"  # instead of "pcie_ports=compat"
+      # ZFS ARC tuning for 64GB RAM system
+      "zfs.zfs_arc_max=34359738368"  # 32GB max (50% of RAM)
+      "zfs.zfs_arc_min=4294967296"   # 4GB min
     ];
 
     supportedFilesystems = [ "zfs" ];

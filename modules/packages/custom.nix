@@ -74,10 +74,41 @@ let
       maintainers = with lib.maintainers; [ jwiegley ];
     };
   };
+
+  # Workspace update script
+  workspace-update = pkgs.writeScriptBin "workspace-update" ''
+    #!${pkgs.bash}/bin/bash
+    set -euo pipefail
+
+    # Parse arguments
+    if [[ "''${1:-}" == "--passwords" ]]; then
+        source $2
+        shift 2
+    fi
+
+    # Note: The GitHub token should be managed more securely, e.g., via systemd credentials
+    # or environment files. For now, keeping as-is for compatibility.
+    export GITHUB_TOKEN=XXXX
+
+    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git update -t 1
+    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
+
+    if [[ "''${1:-}" == "--archive" ]]; then
+        shift 1
+        ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git archive --force
+    fi
+  '';
+
+  # Backup Chainweb script
+  backup-chainweb = pkgs.writeScriptBin "backup-chainweb" ''
+    #!${pkgs.bash}/bin/bash
+    exec ${pkgs.rsync}/bin/rsync -av --delete athena:/Volumes/studio/ChainState/kadena/chainweb-node/ /tank/Backups/Kadena/chainweb/
+  '';
 in
 {
   environment.systemPackages = with pkgs; [
     b3sum
+    backup-chainweb
     btop
     claude-code
     dh
@@ -103,6 +134,7 @@ in
     sops
     task-master-ai
     traceroute
+    workspace-update
     zfs-prune-snapshots
   ];
 }

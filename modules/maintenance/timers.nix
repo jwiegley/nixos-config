@@ -73,6 +73,36 @@ let
 
     log "Container update process completed"
   '';
+
+  # Script to update git workspace repositories
+  workspaceUpdateScript = pkgs.writeShellScript "workspace-update" ''
+    #!${pkgs.bash}/bin/bash
+    set -euo pipefail
+
+    # Parse arguments
+    if [[ "''${1:-}" == "--passwords" ]]; then
+        source $2
+        shift 2
+    fi
+
+    # Note: The GitHub token should be managed more securely, e.g., via systemd credentials
+    # or environment files. For now, keeping as-is for compatibility.
+    export GITHUB_TOKEN=XXXX
+
+    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git update -t 1
+    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
+
+    if [[ "''${1:-}" == "--archive" ]]; then
+        shift 1
+        ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git archive --force
+    fi
+  '';
+
+  # Script to backup Chainweb data
+  backupChainwebScript = pkgs.writeShellScript "backup-chainweb" ''
+    #!${pkgs.bash}/bin/bash
+    exec ${pkgs.rsync}/bin/rsync -av --delete athena:/Volumes/studio/ChainState/kadena/chainweb-node/ /tank/Backups/Kadena/chainweb/
+  '';
 in
 {
   systemd = {
@@ -87,7 +117,7 @@ in
       serviceConfig = {
         User = "johnw";
         Group = "johnw";
-        ExecStart = "/home/johnw/bin/workspace-update --archive";
+        ExecStart = "${workspaceUpdateScript} --archive";
       };
     };
 
@@ -109,7 +139,7 @@ in
       serviceConfig = {
         User = "root";
         Group = "root";
-        ExecStart = "/home/johnw/bin/backup-chainweb";
+        ExecStart = backupChainwebScript;
       };
     };
 

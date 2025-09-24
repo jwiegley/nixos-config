@@ -79,30 +79,30 @@ in
   environment.systemPackages = with pkgs; [
     b3sum
     btop
+    claude-code
     dh
     dig
     ethtool
+    gh
     gitAndTools.git-lfs
+    gnupg
     haskellPackages.sizes
     httm
-    lsof
     iperf3
+    jq
     linkdups
+    lsof
     mailutils
     nettools
+    openssl
+    pinentry
     python3
+    restic
+    ripgrep
     socat
+    sops
+    task-master-ai
     traceroute
     zfs-prune-snapshots
-    gnupg
-    pinentry
-    sops
-    ripgrep
-    gh
-    openssl
-    claude-code
-    task-master-ai
-    restic
-    jq
   ];
 }

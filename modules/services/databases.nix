@@ -6,6 +6,8 @@
       enable = true;
       enableTCPIP = true;
 
+      package = pkgs.postgresql.withPackages (p: [ p.pgvector ]);
+
       settings = {
         port = 5432;
 

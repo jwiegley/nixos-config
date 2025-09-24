@@ -90,12 +90,12 @@ let
     # or environment files. For now, keeping as-is for compatibility.
     export GITHUB_TOKEN=XXXX
 
-    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git update -t 1
-    ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
+    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
+    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
 
     if [[ "''${1:-}" == "--archive" ]]; then
         shift 1
-        ${pkgs.gitAndTools.git-workspace}/bin/git workspace --workspace /tank/Backups/Git archive --force
+        ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git archive --force
     fi
   '';
 

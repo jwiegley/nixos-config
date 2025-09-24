@@ -15,6 +15,7 @@
     interfaces.podman0 = {
       allowedTCPPorts = [
         4000 # litellm
+        5432 # postgres
       ];
       allowedUDPPorts = [
       ];

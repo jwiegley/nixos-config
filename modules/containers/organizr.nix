@@ -18,4 +18,11 @@ in
     environment = containerUser;
     volumes = [ "/var/lib/organizr:/config" ];
   };
+
+  services.nginx.virtualHosts."organizr.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/organizr.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/organizr.vulcan.lan.key";
+    locations."/".proxyPass = "http://127.0.0.1:8080/";
+  };
 }

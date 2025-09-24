@@ -1,22 +1,5 @@
 { config, lib, pkgs, ... }:
 
-let
-  # Helper function for common proxy redirect patterns
-  mkRedirect = baseUrl: path: {
-    locations."/".return = "301 ${baseUrl}${path}/";
-  };
-
-  # Helper for proxy pass with standard settings
-  mkProxyLocation = port: path: {
-    locations."${path}/" = {
-      proxyPass = "http://127.0.0.1:${toString port}${path}/";
-      proxyWebsockets = true;
-    };
-    locations."${path}" = {
-      return = "301 ${path}/";
-    };
-  };
-in
 {
   # ACME configuration for Let's Encrypt certificates
   security.acme = {
@@ -77,49 +60,12 @@ in
           };
         };
 
-        "litellm.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/litellm.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/litellm.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:4000/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # (Optional) Disable proxy buffering for better streaming
-              # response from models
-              proxy_buffering off;
-
-              # (Optional) Increase max request size for large attachments
-              # and long audio messages
-              client_max_body_size 20M;
-              proxy_read_timeout 2h;
-            '';
-          };
-        };
-
-        "organizr.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/organizr.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/organizr.vulcan.lan.key";
-          locations."/".proxyPass = "http://127.0.0.1:8080/";
-        };
-
         "smokeping.vulcan.lan" = {
           forceSSL = true;
           sslCertificate = "/var/lib/nginx-certs/smokeping.vulcan.lan.crt";
           sslCertificateKey = "/var/lib/nginx-certs/smokeping.vulcan.lan.key";
           locations."/" = {
             proxyPass = "http://127.0.0.1:8081/";
-            proxyWebsockets = true;
-          };
-        };
-
-        "wallabag.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:9090/";
             proxyWebsockets = true;
           };
         };

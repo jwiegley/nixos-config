@@ -34,4 +34,24 @@
     after = [ "sops-nix.service" "postgresql.service" ];
     wants = [ "sops-nix.service" ];
   };
+
+  services.nginx.virtualHosts."litellm.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/litellm.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/litellm.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:4000/";
+      proxyWebsockets = true;
+      extraConfig = ''
+        # (Optional) Disable proxy buffering for better streaming
+        # response from models
+        proxy_buffering off;
+
+        # (Optional) Increase max request size for large attachments
+        # and long audio messages
+        client_max_body_size 20M;
+        proxy_read_timeout 2h;
+      '';
+    };
+  };
 }

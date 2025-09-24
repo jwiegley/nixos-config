@@ -32,11 +32,13 @@
         password_encryption = "scram-sha-256";
       };
 
-      ensureDatabases = [ "db" "litellm" "wallabag" ];
+      ensureDatabases = [
+        "litellm"
+        "wallabag"
+      ];
       ensureUsers = [
         { name = "postgres"; }
       ];
-      # dataDir = "/var/lib/postgresql/16";
 
       authentication = lib.mkOverride 10 ''
         # TYPE  DATABASE  USER  ADDRESS         METHOD  OPTIONS

@@ -62,4 +62,14 @@ in
     after = [ "sops-nix.service" "postgresql.service" ];
     wants = [ "sops-nix.service" ];
   };
+
+  services.nginx.virtualHosts."wallabag.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:9090/";
+      proxyWebsockets = true;
+    };
+  };
 }

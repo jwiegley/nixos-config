@@ -66,37 +66,4 @@
       '';
     };
   };
-
-  # PostgreSQL certificate management
-  systemd.services.postgresql-cert-init = {
-    description = "Initialize PostgreSQL SSL certificates";
-    wantedBy = [ "postgresql.service" ];
-    before = [ "postgresql.service" ];
-    after = [ "step-ca.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash /etc/nixos/postgresql-cert-renew.sh";
-    };
-  };
-
-  # Weekly certificate renewal timer
-  systemd.timers.postgresql-cert-renewal = {
-    description = "PostgreSQL certificate renewal timer";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "weekly";
-      Persistent = true;
-      RandomizedDelaySec = "1h";
-    };
-  };
-
-  systemd.services.postgresql-cert-renewal = {
-    description = "Renew PostgreSQL SSL certificates";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.bash}/bin/bash /etc/nixos/postgresql-cert-renew.sh";
-      ExecStartPost = "${pkgs.systemd}/bin/systemctl reload postgresql";
-    };
-  };
 }

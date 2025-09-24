@@ -60,6 +60,12 @@ let
     name = "logwatch-systemctl-failed";
     text = "${pkgs.systemd}/bin/systemctl --failed";
   };
+
+  certificateValidationScript = pkgs.writeShellApplication {
+    name = "logwatch-certificate-validation";
+    runtimeInputs = with pkgs; [ bash openssl coreutils ];
+    text = "\"/etc/nixos/validate-certificates-concise.sh || true\"";
+  };
 in
 {
   services = {
@@ -89,6 +95,11 @@ in
           name = "zfs-snapshot";
           title = "ZFS Snapshots";
           script = lib.getExe zfsSnapshotScript;
+        }
+        {
+          name = "certificate-validation";
+          title = "Certificate Validation Report";
+          script = lib.getExe certificateValidationScript;
         }
       ];
     };

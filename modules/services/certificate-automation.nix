@@ -5,7 +5,7 @@ let
     name = "postgresql-cert-renewal";
     runtimeInputs = with pkgs; [ bash coreutils systemd ];
     text = ''
-      exec /etc/nixos/postgresql-cert-renew.sh
+      exec /etc/nixos/certs/postgresql-cert-renew.sh
     '';
   };
 
@@ -13,7 +13,7 @@ let
     name = "nginx-cert-renewal";
     runtimeInputs = with pkgs; [ bash coreutils systemd ];
     text = ''
-      exec /etc/nixos/renew-nginx-certs.sh
+      exec /etc/nixos/certs/renew-nginx-certs.sh
     '';
   };
 
@@ -21,7 +21,7 @@ let
     name = "postfix-cert-renewal";
     runtimeInputs = with pkgs; [ bash coreutils systemd ];
     text = ''
-      exec /etc/nixos/postfix-cert-renew.sh
+      exec /etc/nixos/certs/postfix-cert-renew.sh
     '';
   };
 
@@ -29,7 +29,7 @@ let
     name = "certificate-validation-concise";
     runtimeInputs = with pkgs; [ bash openssl coreutils gawk gnugrep ];
     text = ''
-      exec /etc/nixos/validate-certificates-concise.sh
+      exec /etc/nixos/certs/validate-certificates-concise.sh
     '';
   };
 in
@@ -131,14 +131,14 @@ in
   system.activationScripts.certificateScripts = lib.stringAfter [ "users" ] ''
     # Ensure certificate scripts are executable
     for script in postgresql-cert-renew.sh renew-nginx-certs.sh postfix-cert-renew.sh validate-certificates-concise.sh; do
-      if [ -f "/etc/nixos/$script" ]; then
-        chmod +x "/etc/nixos/$script"
+      if [ -f "/etc/nixos/certs/$script" ]; then
+        chmod +x "/etc/nixos/certs/$script"
       fi
     done
 
     # Ensure the general renewal script is also executable
-    if [ -f "/etc/nixos/renew-certificate.sh" ]; then
-      chmod +x "/etc/nixos/renew-certificate.sh"
+    if [ -f "/etc/nixos/certs/renew-certificate.sh" ]; then
+      chmod +x "/etc/nixos/certs/renew-certificate.sh"
     fi
   '';
 }

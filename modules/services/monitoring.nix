@@ -64,7 +64,7 @@ let
   certificateValidationScript = pkgs.writeShellApplication {
     name = "logwatch-certificate-validation";
     runtimeInputs = with pkgs; [ bash openssl coreutils ];
-    text = "\"/etc/nixos/validate-certificates-concise.sh || true\"";
+    text = "\"/etc/nixos/certs/validate-certificates-concise.sh || true\"";
   };
 in
 {

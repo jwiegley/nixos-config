@@ -54,6 +54,16 @@
       };
     };
 
+    # Mail services
+    postfix = {
+      serviceConfig = {
+        Restart = lib.mkDefault "on-failure";
+        RestartSec = "10s";
+        RestartSteps = 3;
+        RestartMaxDelaySec = "2min";
+      };
+    };
+
     # Container services
     podman-litellm = {
       serviceConfig = {
@@ -106,7 +116,7 @@
     serviceConfig = {
       Type = "oneshot";
       ExecStart = pkgs.writeShellScript "health-check" ''
-        CRITICAL_SERVICES="postgresql nginx step-ca prometheus"
+        CRITICAL_SERVICES="postgresql nginx step-ca prometheus dovecot postfix mbsync-assembly"
         FAILED_SERVICES=""
 
         for service in $CRITICAL_SERVICES; do

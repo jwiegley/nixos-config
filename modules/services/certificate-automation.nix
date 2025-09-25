@@ -25,6 +25,14 @@ let
     '';
   };
 
+  dovecotRenewalScript = pkgs.writeShellApplication {
+    name = "dovecot-cert-renewal";
+    runtimeInputs = with pkgs; [ bash coreutils systemd ];
+    text = ''
+      exec /etc/nixos/certs/dovecot-cert-renew.sh
+    '';
+  };
+
   certificateValidationScript = pkgs.writeShellApplication {
     name = "certificate-validation-concise";
     runtimeInputs = with pkgs; [ bash openssl coreutils gawk gnugrep ];
@@ -77,6 +85,20 @@ in
       wants = [ "step-ca.service" ];
     };
 
+    dovecot-cert-renewal = {
+      description = "Renew Dovecot IMAP server certificates";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe dovecotRenewalScript;
+        User = "root";
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+      path = with pkgs; [ openssl step-cli systemd ];
+      after = [ "step-ca.service" ];
+      wants = [ "step-ca.service" ];
+    };
+
     certificate-validation = {
       description = "Validate all certificates and report status";
       serviceConfig = {
@@ -118,6 +140,15 @@ in
       };
     };
 
+    dovecot-cert-renewal = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "*-*-01 04:30:00";  # First day of month at 4:30 AM
+        Persistent = true;
+        RandomizedDelaySec = "30min";
+      };
+    };
+
     certificate-validation = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
@@ -130,7 +161,7 @@ in
   # Ensure scripts are executable and available
   system.activationScripts.certificateScripts = lib.stringAfter [ "users" ] ''
     # Ensure certificate scripts are executable
-    for script in postgresql-cert-renew.sh renew-nginx-certs.sh postfix-cert-renew.sh validate-certificates-concise.sh; do
+    for script in postgresql-cert-renew.sh renew-nginx-certs.sh postfix-cert-renew.sh dovecot-cert-renew.sh validate-certificates-concise.sh; do
       if [ -f "/etc/nixos/certs/$script" ]; then
         chmod +x "/etc/nixos/certs/$script"
       fi

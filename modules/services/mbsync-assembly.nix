@@ -143,7 +143,11 @@
       PrivateTmp = true;
       ProtectSystem = "strict";
       ProtectHome = "read-only";
-      ReadWritePaths = [ "/var/lib/mbsync-assembly" "/var/log/mbsync-assembly" "/home/assembly/mdbox" ];
+      ReadWritePaths = [
+        "/var/lib/mbsync-assembly"
+        "/var/log/mbsync-assembly"
+        "/tank/Maildir/assembly"
+      ];
       NoNewPrivileges = true;
 
       # Resource limits

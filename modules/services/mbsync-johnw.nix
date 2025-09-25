@@ -148,7 +148,11 @@
       PrivateTmp = true;
       ProtectSystem = "strict";
       ProtectHome = "read-only";
-      ReadWritePaths = [ "/var/lib/mbsync-johnw" "/var/log/mbsync-johnw" "/home/johnw/mdbox" ];
+      ReadWritePaths = [
+        "/var/lib/mbsync-johnw"
+        "/var/log/mbsync-johnw"
+        "/tank/Maildir/johnw"
+      ];
       NoNewPrivileges = true;
 
       # Resource limits

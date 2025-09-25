@@ -59,13 +59,9 @@
 
   # mbsync service for johnw user
   systemd.services.mbsync-johnw = {
-    # Prevent service from running during nixos-rebuild switch
-    restartIfChanged = false;
-    stopIfChanged = false;
     description = "Mail synchronization for johnw user (Fastmail to Dovecot)";
-    after = [ "network-online.target" "dovecot2.service" ];
-    wants = [ "network-online.target" ];
-    requires = [ "dovecot2.service" ];
+    after = [ "network-online.target" "dovecot.service" ];
+    wants = [ "network-online.target" "dovecot.service" ];
 
     serviceConfig = {
       Type = "oneshot";

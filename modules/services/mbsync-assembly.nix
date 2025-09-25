@@ -54,13 +54,9 @@
 
   # mbsync service for assembly user
   systemd.services.mbsync-assembly = {
-    # Prevent service from running during nixos-rebuild switch
-    restartIfChanged = false;
-    stopIfChanged = false;
     description = "Mail synchronization for assembly user (Gmail to Dovecot)";
-    after = [ "network-online.target" "dovecot2.service" ];
-    wants = [ "network-online.target" ];
-    requires = [ "dovecot2.service" ];
+    after = [ "network-online.target" "dovecot.service" ];
+    wants = [ "network-online.target" "dovecot.service" ];
 
     serviceConfig = {
       Type = "oneshot";

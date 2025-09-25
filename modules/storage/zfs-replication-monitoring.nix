@@ -15,11 +15,6 @@ let
         # Add failure handling
         OnFailure = "zfs-replication-alert@%n.service";
       };
-      serviceConfig = {
-        # Add success/failure hooks for monitoring
-        ExecStartPost = "${pkgs.bash}/bin/bash -c 'echo \"$(date): Replication started\" >> /var/log/zfs-replication.log'";
-        ExecStopPost = "${pkgs.bash}/bin/bash -c 'if [ \"$SERVICE_RESULT\" = \"success\" ]; then echo \"$(date): Replication completed successfully\" >> /var/log/zfs-replication.log; else echo \"$(date): Replication failed with result $SERVICE_RESULT\" >> /var/log/zfs-replication.log; fi'";
-      };
     };
   };
 
@@ -96,7 +91,7 @@ let
   # Script to check replication status
   replicationStatusScript = pkgs.writeShellApplication {
     name = "check-zfs-replication";
-    runtimeInputs = with pkgs; [ zfs systemd jq ];
+    runtimeInputs = with pkgs; [ zfs systemd jq coreutils ];
     text = ''
       echo "=== ZFS Replication Status ==="
       echo ""
@@ -109,23 +104,27 @@ let
         STATUS=$(systemctl is-active "$service" 2>/dev/null || echo "unknown")
 
         # Get last run time from timer
-        TIMER_LAST_RUN=$(systemctl show -p LastTriggerUSec --value "$service.timer" 2>/dev/null || echo "never")
+        TIMER_LAST_RUN=$(systemctl show -p LastTriggerUSec --value "$service.timer" 2>/dev/null || echo "")
 
         # Get next run time from timer
-        TIMER_NEXT_RUN=$(systemctl show -p NextElapseUSecRealtime --value "$service.timer" 2>/dev/null || echo "never")
+        TIMER_NEXT_RUN=$(systemctl show -p NextElapseUSecRealtime --value "$service.timer" 2>/dev/null || echo "")
 
         # Get last exit status
         EXIT_STATUS=$(systemctl show -p ExecMainStatus --value "$service" 2>/dev/null || echo "unknown")
 
         echo "  Status: $STATUS"
-        if [ "$TIMER_LAST_RUN" != "never" ] && [ "$TIMER_LAST_RUN" != "n/a" ]; then
-          echo "  Last Run: $(date -d "@$((''${TIMER_LAST_RUN%000000}/1000000))" 2>/dev/null || echo "$TIMER_LAST_RUN")"
+
+        # Parse last run time
+        if [ -n "$TIMER_LAST_RUN" ] && [ "$TIMER_LAST_RUN" != "n/a" ] && [ "$TIMER_LAST_RUN" != "0" ]; then
+          # systemctl returns timestamps in a format we need to parse
+          echo "  Last Run: $TIMER_LAST_RUN"
         else
           echo "  Last Run: Never"
         fi
 
-        if [ "$TIMER_NEXT_RUN" != "never" ] && [ "$TIMER_NEXT_RUN" != "n/a" ] && [ "$TIMER_NEXT_RUN" != "" ]; then
-          echo "  Next Run: $(date -d "@$((''${TIMER_NEXT_RUN%000000}/1000000))" 2>/dev/null || echo "$TIMER_NEXT_RUN")"
+        # Parse next run time
+        if [ -n "$TIMER_NEXT_RUN" ] && [ "$TIMER_NEXT_RUN" != "n/a" ] && [ "$TIMER_NEXT_RUN" != "" ]; then
+          echo "  Next Run: $TIMER_NEXT_RUN"
         else
           echo "  Next Run: Not scheduled"
         fi
@@ -271,13 +270,35 @@ in
           Type = "oneshot";
           ExecStart = pkgs.writeShellScript "zfs-replication-manual" ''
             echo "Starting manual ZFS replication..."
+            echo "$(date): Manual replication triggered" >> /var/log/zfs-replication.log
             for service in ${lib.concatStringsSep " " syncoidServices}; do
               echo "Triggering $service..."
               ${pkgs.systemd}/bin/systemctl start "$service"
+              # Log the trigger
+              echo "$(date): Manually triggered $service" >> /var/log/zfs-replication.log
               # Wait a bit between services to avoid overwhelming the system
               sleep 2
             done
             echo "Manual replication triggered. Check status with: systemctl status syncoid-*"
+          '';
+        };
+      };
+
+      # Logging service that monitors syncoid completion
+      "zfs-replication-logger@" = {
+        description = "Log ZFS replication event for %i";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = pkgs.writeShellScript "zfs-replication-logger" ''
+            SERVICE_NAME="''${1:-$1}"
+            RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE_NAME")
+            TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+            if [ "$RESULT" = "success" ]; then
+              echo "$TIMESTAMP: $SERVICE_NAME completed successfully" >> /var/log/zfs-replication.log
+            else
+              echo "$TIMESTAMP: $SERVICE_NAME failed with result: $RESULT" >> /var/log/zfs-replication.log
+            fi
           '';
         };
       };

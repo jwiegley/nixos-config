@@ -16,8 +16,8 @@
 
         # Extra arguments for the replication
         extraArgs = [
-          "--no-sync-snap"        # Don't create a sync snapshot
           "--no-privilege-elevation"  # Run as root (configured in systemd)
+          "--force-delete"            # Allow deletion of snapshots on target that don't exist on source
         ];
       };
 
@@ -27,8 +27,8 @@
         target = "tank/Backups/rpool/nix";
 
         extraArgs = [
-          "--no-sync-snap"
           "--no-privilege-elevation"
+          "--force-delete"
         ];
       };
 
@@ -38,8 +38,8 @@
         target = "tank/Backups/rpool/root";
 
         extraArgs = [
-          "--no-sync-snap"
           "--no-privilege-elevation"
+          "--force-delete"
         ];
       };
     };

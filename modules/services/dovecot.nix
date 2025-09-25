@@ -155,6 +155,7 @@
       mail_fsync = optimized
       mail_nfs_storage = no
       mail_nfs_index = no
+      mmap_disable = yes
 
       # Lock timeout settings to prevent deadlocks
       mail_max_lock_timeout = 300s

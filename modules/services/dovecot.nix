@@ -128,7 +128,7 @@
       # Fall back to PAM for system users
       passdb {
         driver = pam
-        args = dovecot
+        args = dovecot2
       }
 
       # User database from passwd-file first

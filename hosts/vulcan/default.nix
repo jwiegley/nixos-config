@@ -31,6 +31,7 @@
     ../../modules/services/prometheus-monitoring.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
+    ../../modules/services/uptime-kuma.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
     ../../modules/services/mbsync-assembly.nix

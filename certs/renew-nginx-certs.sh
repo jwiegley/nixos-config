@@ -20,6 +20,7 @@ DOMAINS=(
     "smokeping.vulcan.lan"
     "wallabag.vulcan.lan"
     "dns.vulcan.lan"
+    "uptime.vulcan.lan"
 )
 
 # Check if the general renewal script exists

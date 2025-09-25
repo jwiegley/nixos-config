@@ -5,6 +5,9 @@
     # Hardware configuration
     ./hardware-configuration.nix
 
+    # Options
+    ../../modules/options
+
     # Core modules
     ../../modules/core/boot.nix
     ../../modules/core/networking.nix

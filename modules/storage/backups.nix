@@ -171,6 +171,16 @@ in
       exclude = [ "*.dtBase/Backup*" ];
     })
     (mkBackup {
+      path = "Databases";
+      exclude = [
+        "*.dtBase/Backup*"
+        "*.zim"
+        "slack*"
+        "Kadena"
+        "Assembly"
+      ];
+    })
+    (mkBackup {
       path = "src";
       exclude = sourceExcludes;
     })

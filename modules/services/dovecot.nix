@@ -156,6 +156,17 @@
       mail_nfs_storage = no
       mail_nfs_index = no
 
+      # Lock timeout settings to prevent deadlocks
+      mail_max_lock_timeout = 300s
+      lock_method = fcntl
+
+      # Index corruption prevention
+      mail_index_rewrite_min_log_bytes = 8k
+      mail_index_rewrite_max_log_bytes = 128k
+      mail_cache_purge_delete_percentage = 20
+      mail_cache_purge_continued_percentage = 200
+      mail_cache_purge_header_continue_count = 4
+
       # mdbox-specific settings
       plugin {
         # mdbox rotation size (10MB)
@@ -173,7 +184,6 @@
         separator = /
         prefix =
         inbox = yes
-
 
         # Gmail-compatible folder mapping
         mailbox "[Gmail]/Drafts" {

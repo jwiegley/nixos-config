@@ -47,6 +47,8 @@
 
     # Storage
     ../../modules/storage/zfs.nix
+    ../../modules/storage/zfs-replication.nix
+    ../../modules/storage/zfs-replication-monitoring.nix
     ../../modules/storage/backups.nix
     ../../modules/storage/backup-monitoring.nix
 

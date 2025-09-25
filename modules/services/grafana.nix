@@ -161,32 +161,16 @@
     sslCertificateKey = "/var/lib/nginx-certs/grafana.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://127.0.0.1:3000";
+      proxyPass = "http://127.0.0.1:3000/";
       proxyWebsockets = true;
 
       extraConfig = ''
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Grafana specific settings
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_hide_header X-Frame-Options;
-
         # Increase timeouts for Grafana
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
       '';
     };
-
-    extraConfig = ''
-      # Security headers
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header X-XSS-Protection "1; mode=block" always;
-      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    '';
   };
 
   # Certificate generation script service
@@ -245,10 +229,6 @@
     after = [ "prometheus.service" ];
     wants = [ "prometheus.service" ];
   };
-
-  # Open firewall for HTTPS access to Grafana (via nginx)
-  # Port 3000 remains closed as it's only accessible via localhost
-  networking.firewall.allowedTCPPorts = [ 443 ];
 
   # Add monitoring check script
   environment.systemPackages = with pkgs; [

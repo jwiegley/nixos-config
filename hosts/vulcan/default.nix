@@ -29,6 +29,7 @@
     ../../modules/services/web.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/prometheus-monitoring.nix
+    ../../modules/services/alertmanager.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/uptime-kuma.nix

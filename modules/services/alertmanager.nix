@@ -1,0 +1,168 @@
+{ config, lib, pkgs, ... }:
+
+{
+  services.prometheus.alertmanager = {
+    enable = true;
+    port = 9093;
+    listenAddress = "127.0.0.1";
+
+    configuration = {
+      global = {
+        # Email configuration using local postfix
+        smtp_from = "alertmanager@vulcan.lan";
+        smtp_smarthost = "localhost:25";
+        smtp_require_tls = false;
+      };
+
+      # Route configuration
+      route = {
+        receiver = "default-receiver";
+        group_by = [ "alertname" "cluster" "service" ];
+        group_wait = "10s";
+        group_interval = "10m";
+        repeat_interval = "1h";
+
+        # Special routing for critical alerts
+        routes = [
+          {
+            match = {
+              severity = "critical";
+            };
+            receiver = "critical-receiver";
+            repeat_interval = "15m";
+          }
+          {
+            # Route ZFS replication alerts
+            match = {
+              component = "zfs_replication";
+            };
+            receiver = "replication-receiver";
+            group_wait = "30s";
+            repeat_interval = "4h";
+          }
+        ];
+      };
+
+      # Receivers configuration
+      receivers = [
+        {
+          name = "default-receiver";
+          email_configs = [
+            {
+              to = "johnw@newartisans.com";
+              headers = {
+                Subject = "[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }} on vulcan";
+              };
+              text = ''
+                {{ range .Alerts }}
+                Alert: {{ .Labels.alertname }}
+                Severity: {{ .Labels.severity }}
+                Summary: {{ .Annotations.summary }}
+                Description: {{ .Annotations.description }}
+
+                Labels:
+                {{ range .Labels.SortedPairs }}  - {{ .Name }}: {{ .Value }}
+                {{ end }}
+
+                Source: {{ .GeneratorURL }}
+                {{ end }}
+              '';
+            }
+          ];
+        }
+        {
+          name = "critical-receiver";
+          email_configs = [
+            {
+              to = "johnw@newartisans.com";
+              headers = {
+                Subject = "[CRITICAL] {{ .GroupLabels.alertname }} - IMMEDIATE ACTION REQUIRED";
+                Priority = "1";
+                X-Priority = "1";
+              };
+              text = ''
+                CRITICAL ALERT - IMMEDIATE ACTION REQUIRED
+
+                {{ range .Alerts }}
+                Alert: {{ .Labels.alertname }}
+                Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+                Summary: {{ .Annotations.summary }}
+                Description: {{ .Annotations.description }}
+
+                Labels:
+                {{ range .Labels.SortedPairs }}  - {{ .Name }}: {{ .Value }}
+                {{ end }}
+
+                View in Prometheus: {{ .GeneratorURL }}
+                {{ end }}
+              '';
+            }
+          ];
+        }
+        {
+          name = "replication-receiver";
+          email_configs = [
+            {
+              to = "johnw@newartisans.com";
+              headers = {
+                Subject = "[ZFS Replication] {{ .GroupLabels.alertname }}";
+              };
+              text = ''
+                ZFS REPLICATION ALERT
+
+                {{ range .Alerts }}
+                Alert: {{ .Labels.alertname }}
+                Status: {{ .Status }}
+                Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+
+                {{ .Annotations.summary }}
+
+                Details:
+                {{ .Annotations.description }}
+
+                Affected Service: {{ .Labels.name }}
+
+                To investigate:
+                - Check service status: systemctl status {{ .Labels.name }}
+                - View logs: journalctl -u {{ .Labels.name }} -n 100
+                - Run manual check: check-zfs-replication
+                {{ end }}
+              '';
+            }
+          ];
+        }
+      ];
+
+      # Inhibit rules to prevent alert storms
+      inhibit_rules = [
+        {
+          source_match = {
+            severity = "critical";
+          };
+          target_match = {
+            severity = "warning";
+          };
+          equal = [ "alertname" "instance" ];
+        }
+      ];
+    };
+  };
+
+  # Configure Prometheus to use alertmanager
+  services.prometheus.alertmanagers = [
+    {
+      scheme = "http";
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.alertmanager.port}" ];
+        }
+      ];
+    }
+  ];
+
+  # Ensure alertmanager starts after network
+  systemd.services.alertmanager = {
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+  };
+}

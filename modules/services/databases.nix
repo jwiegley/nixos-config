@@ -32,6 +32,9 @@
       ];
       ensureUsers = [
         { name = "postgres"; }
+        { name = "johnw"; }
+        { name = "litellm"; }
+        { name = "wallabag"; }
       ];
 
       authentication = lib.mkOverride 10 ''

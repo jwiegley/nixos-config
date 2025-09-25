@@ -13,7 +13,9 @@
       "Bash(dig:*)",
       "Bash(ip addr:*)",
       "Bash(sudo systemctl list-units:*)",
-      "Bash(systemctl status:*)"
+      "Bash(systemctl status:*)",
+      "WebFetch(domain:github.com)",
+      "mcp__perplexity__perplexity_search_web"
     ],
     "deny": [],
     "ask": []

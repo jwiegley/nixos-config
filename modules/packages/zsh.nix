@@ -44,7 +44,7 @@
       setopt ALWAYS_TO_END
 
       # Initialize z for directory jumping
-      . ${pkgs.zsh-z}/share/z.sh
+      . ${pkgs.zsh-z}/share/zsh-z/zsh-z.plugin.zsh
     '';
 
     # Interactive shell configuration

@@ -40,9 +40,10 @@
     containers.litellm = {
       containerConfig = {
         image = "ghcr.io/berriai/litellm-database:main-stable";
-        # Only bind to localhost initially, not 10.88.0.1
+        # Bind to both localhost and podman gateway for container access
         publishPorts = [
           "127.0.0.1:4000:4000/tcp"
+          "10.88.0.1:4000:4000/tcp"
         ];
         environmentFiles = [ config.sops.secrets."litellm-secrets".path ];
         volumes = [ "/etc/litellm/config.yaml:/app/config.yaml:ro" ];
@@ -89,8 +90,8 @@
           AUTO_UPDATE = "false";
         };
         volumes = [
-          "/var/lib/sillytavern/config:/home/node/app/config:Z"
-          "/var/lib/sillytavern/data:/home/node/app/data:Z"
+          "/var/lib/silly-tavern/config:/home/node/app/config:Z"
+          "/var/lib/silly-tavern/data:/home/node/app/data:Z"
         ];
         networks = [ "podman" ];
       };
@@ -162,10 +163,6 @@
         proxyPass = "http://127.0.0.1:8080/";
         proxyWebsockets = true;
         extraConfig = ''
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
           proxy_buffering off;
         '';
       };
@@ -179,10 +176,6 @@
         proxyPass = "http://127.0.0.1:8083/";
         proxyWebsockets = true;
         extraConfig = ''
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
           proxy_buffering off;
           client_max_body_size 100M;
         '';
@@ -196,10 +189,6 @@
       locations."/" = {
         proxyPass = "http://127.0.0.1:9091/";
         extraConfig = ''
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
           proxy_read_timeout 1h;
           proxy_buffering off;
         '';
@@ -238,8 +227,8 @@
   # System packages for state directories
   systemd.tmpfiles.rules = [
     "d /var/lib/organizr 0755 1000 100 -"
-    "d /var/lib/sillytavern/config 0755 1000 100 -"
-    "d /var/lib/sillytavern/data 0755 1000 100 -"
+    "d /var/lib/silly-tavern/config 0755 1000 100 -"
+    "d /var/lib/silly-tavern/data 0755 1000 100 -"
     "d /var/lib/wallabag 0755 root root -"
     "d /etc/litellm 0755 root root -"
   ];

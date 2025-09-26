@@ -2,18 +2,10 @@
 
 {
   imports = [
-    ./litellm.nix
-    ./organizr.nix
-    ./silly-tavern.nix
-    ./wallabag.nix
+    # Use fixed quadlet configuration with proper network setup
+    ./quadlet.nix
+
+    # Keep secure-nginx as it may have other configurations
     ./secure-nginx.nix
   ];
-
-  virtualisation.podman = {
-    enable = true;
-    autoPrune = {
-      enable = true;
-      flags = [ "--all" ];
-    };
-  };
 }

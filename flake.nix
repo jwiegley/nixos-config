@@ -13,9 +13,11 @@
       url = "github:SFrijters/nixos-logwatch";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    quadlet-nix.url = "github:SEIAROTg/quadlet-nix";
   };
 
-  outputs = { nixpkgs, nixos-hardware, sops-nix, nixos-logwatch, ... }:
+  outputs = { nixpkgs, nixos-hardware, sops-nix, nixos-logwatch, quadlet-nix, ... }:
     let system = "x86_64-linux"; in {
       formatter.x86_64-linux =
         nixpkgs.legacyPackages.x86_64-linux.nixfmt-rfc-style;
@@ -26,6 +28,7 @@
           nixos-hardware.nixosModules.apple-t2
           nixos-logwatch.nixosModules.logwatch
           sops-nix.nixosModules.sops
+          quadlet-nix.nixosModules.quadlet
           ./hosts/vulcan
         ];
       };

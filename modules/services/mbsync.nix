@@ -63,7 +63,7 @@ in
       channels = ''
         # Gmail to Dovecot channel
         Channel gmail-all
-        Far :assembly-remote:[Gmail]/
+        Far :assembly-remote:
         Near :dovecot-local:
         Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred"
         Create Near

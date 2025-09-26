@@ -1,0 +1,57 @@
+groups:
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # Disk space alerts
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "{{ $labels.device }} on {{ $labels.instance }} has less than 10% free space"
+
+      - alert: DiskSpaceCritical
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.05
+        for: 1m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "{{ $labels.device }} on {{ $labels.instance }} has less than 5% free space"
+
+      # Memory alerts
+      - alert: MemoryPressure
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 90% on {{ $labels.instance }}"
+
+      # CPU alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage has been above 80% for 10 minutes"
+
+      # Systemd service alerts
+      - alert: SystemdServiceFailed
+        expr: node_systemd_unit_state{state="failed"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Systemd service failed on {{ $labels.instance }}"
+          description: "Service {{ $labels.name }} is in failed state"

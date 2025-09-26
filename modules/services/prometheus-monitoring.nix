@@ -1,5 +1,17 @@
 { config, lib, pkgs, ... }:
 
+let
+  # Alert rules directory
+  alertRulesDir = ../monitoring/alerts;
+
+  # Load all alert rules from YAML files
+  alertRuleFiles = builtins.map (file: "${alertRulesDir}/${file}") [
+    "system.yaml"
+    "database.yaml"
+    "storage.yaml"
+    "certificates.yaml"
+  ];
+in
 {
   # Phase 1: Basic monitoring foundation with node_exporter
 
@@ -33,14 +45,6 @@
         enable = true;
         port = 9187;
         runAsLocalSuperUser = true;
-
-        # settings = {
-        #   # Automatically discover databases
-        #   auto_discover_databases = true;
-
-        #   # Exclude template databases
-        #   exclude_databases = [ "template0" "template1" ];
-        # };
       };
 
       # Systemd exporter for service status
@@ -68,111 +72,11 @@
         };
       };
 
-      # Define alert rules
-      rules = [
-        ''
-          groups:
-            - name: system_alerts
-              interval: 30s
-              rules:
-                # Disk space alerts
-                - alert: DiskSpaceLow
-                  expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.1
-                  for: 5m
-                  labels:
-                    severity: warning
-                  annotations:
-                    summary: "Low disk space on {{ $labels.instance }}"
-                    description: "{{ $labels.device }} on {{ $labels.instance }} has less than 10% free space"
-
-                - alert: DiskSpaceCritical
-                  expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.05
-                  for: 1m
-                  labels:
-                    severity: critical
-                  annotations:
-                    summary: "Critical disk space on {{ $labels.instance }}"
-                    description: "{{ $labels.device }} on {{ $labels.instance }} has less than 5% free space"
-
-                # Memory alerts
-                - alert: MemoryPressure
-                  expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
-                  for: 5m
-                  labels:
-                    severity: warning
-                  annotations:
-                    summary: "High memory usage on {{ $labels.instance }}"
-                    description: "Memory usage is above 90% on {{ $labels.instance }}"
-
-                # CPU alerts
-                - alert: HighCPUUsage
-                  expr: 100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
-                  for: 10m
-                  labels:
-                    severity: warning
-                  annotations:
-                    summary: "High CPU usage on {{ $labels.instance }}"
-                    description: "CPU usage has been above 80% for 10 minutes"
-
-                # Service alerts
-                - alert: SystemdServiceFailed
-                  expr: node_systemd_unit_state{state="failed"} > 0
-                  for: 1m
-                  labels:
-                    severity: critical
-                  annotations:
-                    summary: "Systemd service failed on {{ $labels.instance }}"
-                    description: "Service {{ $labels.name }} is in failed state"
-
-                # PostgreSQL alerts
-                - alert: PostgreSQLDown
-                  expr: up{job="postgres"} == 0
-                  for: 1m
-                  labels:
-                    severity: critical
-                  annotations:
-                    summary: "PostgreSQL is down"
-                    description: "PostgreSQL exporter cannot connect to database"
-
-                - alert: PostgreSQLTooManyConnections
-                  expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
-                  for: 5m
-                  labels:
-                    severity: warning
-                  annotations:
-                    summary: "PostgreSQL has too many connections"
-                    description: "PostgreSQL instance has more than 80% of max connections in use"
-
-                # ZFS alerts
-                - alert: ZFSPoolDegraded
-                  expr: node_zfs_zpool_health{state!="online"} > 0
-                  for: 1m
-                  labels:
-                    severity: critical
-                  annotations:
-                    summary: "ZFS pool degraded on {{ $labels.instance }}"
-                    description: "ZFS pool {{ $labels.pool }} is in {{ $labels.state }} state"
-
-                # Certificate expiration alerts
-                - alert: CertificateExpiringSoon
-                  expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
-                  for: 1h
-                  labels:
-                    severity: warning
-                  annotations:
-                    summary: "SSL certificate expiring soon"
-                    description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days"
-
-                - alert: CertificateExpiringCritical
-                  expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 7
-                  for: 1h
-                  labels:
-                    severity: critical
-                  annotations:
-                    summary: "SSL certificate expiring very soon"
-                    description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days"
-        ''
-      ];
+      # Load alert rules from external YAML files
+      ruleFiles = alertRuleFiles ++ (lib.optional
+        (builtins.pathExists ../monitoring/alerts/custom.yaml)
+        ../monitoring/alerts/custom.yaml
+      );
 
       # Scrape configurations
       scrapeConfigs = [
@@ -195,6 +99,15 @@
           job_name = "systemd";
           static_configs = [{
             targets = [ "localhost:${toString config.services.prometheus.exporters.systemd.port}" ];
+          }];
+        }
+      ];
+
+      # Alertmanager configuration
+      alertmanagers = lib.mkIf (config.services.prometheus.alertmanager.enable or false) [
+        {
+          static_configs = [{
+            targets = [ "localhost:9093" ];
           }];
         }
       ];
@@ -224,6 +137,21 @@
       echo ""
       echo "=== Active Alerts ==="
       curl -s localhost:9090/api/v1/alerts | ${pkgs.jq}/bin/jq '.data.alerts[] | {alertname: .labels.alertname, state: .state}'
+    '')
+
+    (writeShellScriptBin "reload-prometheus" ''
+      echo "Reloading Prometheus configuration..."
+      ${pkgs.systemd}/bin/systemctl reload prometheus
+      echo "Prometheus configuration reloaded"
+    '')
+
+    (writeShellScriptBin "validate-alerts" ''
+      echo "Validating Prometheus alert rules..."
+      for file in ${toString alertRuleFiles}; do
+        echo "Checking $file..."
+        ${pkgs.prometheus}/bin/promtool check rules "$file" || exit 1
+      done
+      echo "All alert rules are valid"
     '')
   ];
 
@@ -258,5 +186,36 @@
         RestartSec = 5;
       };
     };
+  };
+
+  # Documentation
+  environment.etc."prometheus/README.md" = {
+    text = ''
+      # Prometheus Monitoring Configuration
+
+      ## Alert Rules
+      Alert rules are stored in `/etc/nixos/modules/monitoring/alerts/`:
+      - system.yaml: System-level alerts (CPU, memory, disk)
+      - database.yaml: Database-specific alerts
+      - storage.yaml: Storage and backup alerts
+      - certificates.yaml: Certificate expiration alerts
+      - custom.yaml: Custom site-specific alerts (optional)
+
+      ## Useful Commands
+      - `check-monitoring`: Check status of monitoring stack
+      - `validate-alerts`: Validate alert rule syntax
+      - `reload-prometheus`: Reload Prometheus configuration
+
+      ## Adding Custom Alerts
+      Create `/etc/nixos/modules/monitoring/alerts/custom.yaml` with your custom rules.
+      The file will be automatically loaded if it exists.
+
+      ## Metrics Endpoints
+      - Node Exporter: http://localhost:9100/metrics
+      - PostgreSQL Exporter: http://localhost:9187/metrics
+      - Systemd Exporter: http://localhost:9558/metrics
+      - Prometheus: http://localhost:9090
+    '';
+    mode = "0644";
   };
 }

@@ -1,0 +1,71 @@
+groups:
+  - name: storage_alerts
+    interval: 30s
+    rules:
+      # ZFS alerts
+      - alert: ZFSPoolDegraded
+        expr: node_zfs_zpool_health{state!="online"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool degraded on {{ $labels.instance }}"
+          description: "ZFS pool {{ $labels.pool }} is in {{ $labels.state }} state"
+
+      - alert: ZFSPoolCapacityHigh
+        expr: node_zfs_zpool_capacity > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool capacity high"
+          description: "ZFS pool {{ $labels.pool }} is at {{ $value }}% capacity"
+
+      - alert: ZFSPoolCapacityCritical
+        expr: node_zfs_zpool_capacity > 90
+        for: 1m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool capacity critical"
+          description: "ZFS pool {{ $labels.pool }} is at {{ $value }}% capacity"
+
+      - alert: ZFSSnapshotAgeTooOld
+        expr: (time() - node_zfs_snapshot_timestamp) > 86400
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS snapshot is too old"
+          description: "ZFS snapshot {{ $labels.snapshot }} is older than 24 hours"
+
+      # Backup alerts
+      - alert: BackupFailed
+        expr: restic_backup_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic backup failed"
+          description: "Backup job {{ $labels.job }} has failed"
+
+      - alert: BackupNotRunning
+        expr: (time() - restic_backup_timestamp) > 93600
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic backup hasn't run"
+          description: "Backup job {{ $labels.job }} hasn't run in over 26 hours"

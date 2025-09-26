@@ -1,0 +1,57 @@
+groups:
+  - name: certificate_alerts
+    interval: 1h
+    rules:
+      # Certificate expiration alerts
+      - alert: CertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          category: certificates
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days"
+
+      - alert: CertificateExpiringCritical
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 7
+        for: 1h
+        labels:
+          severity: critical
+          category: certificates
+        annotations:
+          summary: "SSL certificate expiring very soon"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days"
+
+      - alert: CertificateExpired
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 0
+        for: 1m
+        labels:
+          severity: critical
+          category: certificates
+        annotations:
+          summary: "SSL certificate has expired"
+          description: "Certificate for {{ $labels.instance }} has expired"
+
+      # Step-CA alerts
+      - alert: StepCADown
+        expr: up{job="step-ca"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: certificates
+          service: step-ca
+        annotations:
+          summary: "Step-CA certificate authority is down"
+          description: "Step-CA service is not responding"
+
+      - alert: StepCACertificateIssueFailed
+        expr: step_ca_certificate_issue_errors > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: certificates
+          service: step-ca
+        annotations:
+          summary: "Step-CA certificate issuance failed"
+          description: "Step-CA failed to issue {{ $value }} certificate(s)"

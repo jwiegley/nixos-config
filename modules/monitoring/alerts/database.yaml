@@ -1,0 +1,48 @@
+groups:
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL alerts
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL exporter cannot connect to database"
+
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "PostgreSQL instance has more than 80% of max connections in use"
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_blks_read[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL experiencing slow queries"
+          description: "High block read rate indicates potential slow queries"
+
+      - alert: PostgreSQLDeadlocks
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+          description: "Database {{ $labels.datname }} is experiencing deadlocks"

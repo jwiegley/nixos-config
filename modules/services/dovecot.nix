@@ -199,7 +199,6 @@
         mailbox "[Gmail]/Spam" {
           special_use = \Junk
         }
-        # Do not auto-create folders - let mbsync handle the structure
       }
     '';
   };
@@ -219,6 +218,38 @@
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
   ];
+
+  # Override dovecot service to require /tank/Maildir mount
+  systemd.services.dovecot = {
+    # Ensure dovecot only starts after the mail storage is mounted
+    after = [ "tank-Maildir.mount" ];
+    requires = [ "tank-Maildir.mount" ];
+
+    # Use RequiresMountsFor for more robust dependency handling
+    unitConfig = {
+      RequiresMountsFor = [ "/tank/Maildir" ];
+    };
+
+    # Pre-start check to verify mount and directories
+    preStart = ''
+      # Verify mount is actually available
+      if ! ${pkgs.util-linux}/bin/mountpoint -q /tank/Maildir; then
+        echo "ERROR: /tank/Maildir is not mounted"
+        exit 1
+      fi
+
+      # Verify user directories exist or create them
+      for user in johnw assembly; do
+        if [ ! -d "/tank/Maildir/$user" ]; then
+          echo "Creating mail directory for $user"
+          mkdir -p "/tank/Maildir/$user"
+          chown "$user:users" "/tank/Maildir/$user"
+        else
+          echo "Verified: /tank/Maildir/$user exists"
+        fi
+      done
+    '';
+  };
 
   # Generate DH parameters if they don't exist
   systemd.services.dovecot-dh-params = {

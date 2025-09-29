@@ -26,6 +26,12 @@
     unitConfig = {
       After = [ "sops-nix.service" "postgresql.service" "ensure-podman-network.service" "podman.service" ];
       Wants = [ "sops-nix.service" "ensure-podman-network.service" ];
+      Requires = [ "postgresql.service" ];
+      BindsTo = [ "postgresql.service" ];
+    };
+    serviceConfig = {
+      # Wait for PostgreSQL to be ready to accept connections
+      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 30";
     };
   };
 

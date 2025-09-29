@@ -1,0 +1,3 @@
+[submodule "chainweb-node-exporter"]
+	path = chainweb-node-exporter
+	url = git@github.com:jwiegley/chainweb-node-exporter

@@ -10,6 +10,7 @@ let
     "database.yaml"
     "storage.yaml"
     "certificates.yaml"
+    "chainweb.yaml"
   ];
 in
 {
@@ -100,6 +101,17 @@ in
           static_configs = [{
             targets = [ "localhost:${toString config.services.prometheus.exporters.systemd.port}" ];
           }];
+        }
+        {
+          job_name = "chainweb";
+          static_configs = [{
+            targets = [ "localhost:9101" ];
+            labels = {
+              alias = "kadena-chainweb";
+              blockchain = "kadena";
+            };
+          }];
+          scrape_interval = "30s";  # Scrape more frequently for blockchain metrics
         }
       ];
 
@@ -211,10 +223,11 @@ in
       The file will be automatically loaded if it exists.
 
       ## Metrics Endpoints
+      - Prometheus: http://localhost:9090
       - Node Exporter: http://localhost:9100/metrics
       - PostgreSQL Exporter: http://localhost:9187/metrics
       - Systemd Exporter: http://localhost:9558/metrics
-      - Prometheus: http://localhost:9090
+      - Chainweb: http://localhost:9101/metrics
     '';
     mode = "0644";
   };

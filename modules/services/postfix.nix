@@ -38,19 +38,19 @@
 
     settings.main = {
       mynetworks = [
-        "192.168.1.0/24"
-        "10.6.0.0/24"
-        "127.0.0.0/8"
+        "192.168.0.0/16"
+        "10.0.0.0/8"
+        "127.0.0.1/32"
+        "[::1]/128"
       ];
       relayhost = [ "[smtp.fastmail.com]:587" ];
-      smtp_use_tls = "yes";
+      smtp_tls_security_level = "encrypt";
       smtp_sasl_auth_enable = "yes";
       smtp_sasl_security_options = "";
       smtp_sasl_password_maps = "texthash:/run/secrets/postfix-secrets";
 
       # TLS certificate configuration
-      smtpd_tls_cert_file = "/var/lib/postfix-certs/smtp.vulcan.lan.crt";
-      smtpd_tls_key_file = "/var/lib/postfix-certs/smtp.vulcan.lan.key";
+      # Using modern smtpd_tls_chain_files instead of legacy cert/key files
       smtpd_tls_chain_files = [
         "/var/lib/postfix-certs/smtp.vulcan.lan.key"
         "/var/lib/postfix-certs/smtp.vulcan.lan.fullchain.crt"

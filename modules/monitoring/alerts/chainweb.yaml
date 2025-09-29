@@ -1,0 +1,50 @@
+groups:
+  - name: chainweb_alerts
+    interval: 30s
+    rules:
+      # Alert when block progression falls below threshold
+      - alert: ChainwebLowBlockProgression
+        # Calculate the rate of height increase over 15 minutes, then multiply by 900 seconds to get blocks per 15 minutes
+        expr: rate(kadena_cut_height[15m]) * 900 < 5
+        for: 2m  # Alert if condition persists for 2 minutes to avoid false positives
+        labels:
+          severity: critical
+          component: chainweb
+          blockchain: kadena
+        annotations:
+          summary: "Kadena blockchain block progression too slow"
+          description: "Kadena chainweb block progression is below 5 blocks per 15 minutes. Current rate: {{ $value | printf \"%.2f\" }} blocks/15min"
+
+      # Alert when the exporter fails to fetch data (height stays the same)
+      - alert: ChainwebExporterStalled
+        expr: changes(kadena_cut_height[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: chainweb
+          blockchain: kadena
+        annotations:
+          summary: "Chainweb exporter may be stalled"
+          description: "Kadena cut height has not changed for 5 minutes, which may indicate the exporter is not updating"
+
+      # Alert when chainweb exporter is down
+      - alert: ChainwebExporterDown
+        expr: up{job="chainweb"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: chainweb
+        annotations:
+          summary: "Chainweb exporter is down"
+          description: "Chainweb exporter has been down for more than 2 minutes"
+
+      # Alert on high API error rate
+      - alert: ChainwebHighAPIErrors
+        expr: rate(kadena_api_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: chainweb
+        annotations:
+          summary: "High Kadena API error rate"
+          description: "Chainweb exporter is experiencing high API error rate: {{ $value | printf \"%.2f\" }} errors/second"

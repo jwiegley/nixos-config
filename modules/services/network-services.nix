@@ -14,6 +14,10 @@
 
     fail2ban = {
       enable = true;
+      ignoreIP = [
+        "10.0.0.0/8"
+        "192.168.0.0/16"
+      ];
       jails.sshd.settings = {
         enabled = true;
         maxretry = 10;        # Allow up to 10 failed attempts

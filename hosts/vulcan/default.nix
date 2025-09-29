@@ -23,6 +23,8 @@
     ../../modules/users/default.nix
     ../../modules/users/johnw.nix
     ../../modules/users/assembly.nix
+    ../../modules/users/home-manager
+    ../../modules/users/home-manager/johnw.nix
 
     # Services
     ../../modules/services/certificates.nix

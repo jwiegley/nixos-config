@@ -23,19 +23,10 @@ in
       openssh.authorizedKeys.keys = authorizedKeys;
       home = "/home/johnw";
       shell = pkgs.zsh;
-      packages = with pkgs; [
-        eza
-        fd
-        fzf
-        parallel
-        rmtrash
-        starship
-        zsh
-        zsh-autosuggestions
-        zsh-syntax-highlighting
-        zsh-z
-        gitAndTools.git-lfs
-      ];
+      # Packages that need to be available during system boot or are not
+      # managed by home-manager are kept here. User-specific packages
+      # are now managed through home-manager configuration.
+      packages = with pkgs; [];
     };
   };
 }

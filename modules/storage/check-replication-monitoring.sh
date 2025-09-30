@@ -38,14 +38,6 @@ else
 fi
 
 echo ""
-echo "5. Checking Uptime Kuma..."
-if systemctl is-active --quiet uptime-kuma; then
-  echo "  ✓ Uptime Kuma is running"
-else
-  echo "  ✗ Uptime Kuma is not running"
-fi
-
-echo ""
 echo "To apply the new monitoring configuration, run:"
 echo "  sudo nixos-rebuild switch --flake .#vulcan"
 echo ""

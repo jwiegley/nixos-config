@@ -116,7 +116,7 @@
     serviceConfig = {
       Type = "oneshot";
       ExecStart = pkgs.writeShellScript "health-check" ''
-        CRITICAL_SERVICES="postgresql nginx step-ca prometheus dovecot postfix mbsync-assembly"
+        CRITICAL_SERVICES="postgresql nginx step-ca prometheus dovecot postfix"
         FAILED_SERVICES=""
 
         for service in $CRITICAL_SERVICES; do

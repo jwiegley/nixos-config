@@ -74,7 +74,16 @@
         # Connection limits
         service_count = 0
         process_min_avail = 3
-        vsz_limit = 512M
+        vsz_limit = 1024M
+      }
+
+      # IMAP service memory configuration
+      service imap {
+        # Increase memory limit to prevent OOM errors
+        vsz_limit = 1024M
+
+        # Process limits (optional, but recommended)
+        process_limit = 1024
       }
 
       service auth {

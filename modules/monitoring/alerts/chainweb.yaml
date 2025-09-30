@@ -27,16 +27,27 @@ groups:
           summary: "Chainweb exporter may be stalled"
           description: "Kadena cut height has not changed for 5 minutes, which may indicate the exporter is not updating"
 
+      # Alert when cut height is not increasing
+      - alert: ChainwebCutHeightStalled
+        expr: rate(kadena_cut_height[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: chainweb
+        annotations:
+          summary: "Chainweb cut height stalled on {{ $labels.instance }}"
+          description: "Chainweb node {{ $labels.instance }} cut height has not increased in the last 10 minutes. Current height: {{ $value }}"
+
       # Alert when chainweb exporter is down
       - alert: ChainwebExporterDown
-        expr: up{job="chainweb"} == 0
+        expr: up{job=~"chainweb_.*"} == 0
         for: 2m
         labels:
           severity: critical
           component: chainweb
         annotations:
-          summary: "Chainweb exporter is down"
-          description: "Chainweb exporter has been down for more than 2 minutes"
+          summary: "Chainweb exporter {{ $labels.instance }} is down"
+          description: "Chainweb node exporter {{ $labels.instance }} has been down for more than 2 minutes."
 
       # Alert on high API error rate
       - alert: ChainwebHighAPIErrors
@@ -46,5 +57,5 @@ groups:
           severity: warning
           component: chainweb
         annotations:
-          summary: "High Kadena API error rate"
-          description: "Chainweb exporter is experiencing high API error rate: {{ $value | printf \"%.2f\" }} errors/second"
+          summary: "High API error rate for Chainweb node {{ $labels.instance }}"
+          description: "Chainweb node {{ $labels.instance }} is experiencing high API error rate: {{ $value }} errors/second"

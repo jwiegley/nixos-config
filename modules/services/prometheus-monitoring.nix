@@ -102,18 +102,19 @@ in
             targets = [ "localhost:${toString config.services.prometheus.exporters.systemd.port}" ];
           }];
         }
-        {
-          job_name = "chainweb";
-          static_configs = [{
-            targets = [ "localhost:9101" ];
-            labels = {
-              alias = "kadena-chainweb";
-              blockchain = "kadena";
-            };
-          }];
-          scrape_interval = "30s";  # Scrape more frequently for blockchain metrics
-        }
-      ];
+        # Dynamically generate scrape configs for all chainweb nodes
+      ] ++ (lib.mapAttrsToList (name: nodeCfg: {
+        job_name = "chainweb_${name}";
+        static_configs = [{
+          targets = [ "localhost:${toString nodeCfg.port}" ];
+          labels = {
+            node = name;
+            blockchain = "kadena";
+            instance = name;
+          };
+        }];
+        scrape_interval = "30s";  # Scrape more frequently for blockchain metrics
+      }) (config.services.chainweb-exporters.nodes or {}));
 
       # Alertmanager configuration
       alertmanagers = lib.mkIf (config.services.prometheus.alertmanager.enable or false) [

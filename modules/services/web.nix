@@ -116,7 +116,7 @@
           forceSSL = true;
           sslCertificate = "/var/lib/nginx-certs/vulcan.lan.crt";
           sslCertificateKey = "/var/lib/nginx-certs/vulcan.lan.key";
-          locations."/".return = "301 https://organizr.vulcan.lan$request_uri";
+          locations."/".return = "301 https://homepage.vulcan.lan$request_uri";
         };
 
         # Internet-facing secure container with ACME

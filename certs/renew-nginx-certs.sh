@@ -13,10 +13,12 @@ CERT_DIR="/var/lib/nginx-certs"
 VALIDITY_DAYS=365
 
 DOMAINS=(
+    "homepage.vulcan.lan"
+    "grafana.vulcan.lan"
     "jellyfin.vulcan.lan"
     "litellm.vulcan.lan"
-    "organizr.vulcan.lan"
     "postgres.vulcan.lan"
+    "silly-tavern.vulcan.lan"
     "smokeping.vulcan.lan"
     "wallabag.vulcan.lan"
     "dns.vulcan.lan"

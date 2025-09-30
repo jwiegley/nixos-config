@@ -5,6 +5,7 @@
     enable = true;
     port = 9093;
     listenAddress = "127.0.0.1";
+    webExternalUrl = "https://alertmanager.vulcan.lan";
 
     configuration = {
       global = {
@@ -211,5 +212,17 @@
   systemd.services.alertmanager = {
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
+  };
+
+
+  # Keep the existing nginx configuration
+  services.nginx.virtualHosts."alertmanager.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/alertmanager.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/alertmanager.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://localhost:${toString config.services.prometheus.alertmanager.port}";
+      recommendedProxySettings = true;
+    };
   };
 }

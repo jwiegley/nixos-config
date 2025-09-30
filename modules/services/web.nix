@@ -166,4 +166,8 @@
       };
     };
   };
+
+  networking.firewall.allowedTCPPorts = [
+    443    # nginx (HTTPS)
+  ];
 }

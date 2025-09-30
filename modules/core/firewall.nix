@@ -4,7 +4,6 @@
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-      443    # nginx (HTTPS)
       587    # postfix (submission - STARTTLS)
       853    # technitium-dns-server (DNS-over-TLS)
       5432   # postgres

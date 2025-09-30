@@ -1,224 +1,212 @@
 { config, lib, pkgs, ... }:
 with lib;
 
-let
-  glanceConfig = {
-    server = {
-      host = "127.0.0.1";
-      port = 3050;
+{
+  # Enable the glance service using the NixOS module
+  services.glance = {
+    enable = true;
+
+    # Configure glance settings
+    settings = {
+      server = {
+        host = "127.0.0.1";
+        port = 3050;
+      };
+
+      theme = {
+        background-color = "240 21 15";
+        primary-color = "217 78 84";
+        positive-color = "115 54 76";
+        negative-color = "347 70 65";
+      };
+
+      pages = [
+        {
+          name = "Home";
+          columns = [
+            {
+              size = "small";
+              widgets = [
+                {
+                  type = "monitor";
+                  cache = "1m";
+                  title = "System";
+                  metrics = [
+                    {
+                      label = "CPU";
+                      query = "cpu";
+                    }
+                    {
+                      label = "Memory";
+                      query = "memory";
+                    }
+                    {
+                      label = "Disk /";
+                      query = "disk:/";
+                    }
+                  ];
+                }
+                {
+                  type = "weather";
+                  location = "Sacramento, US";
+                  units = "imperial";
+                  cache = "15m";
+                }
+                {
+                  type = "markets";
+                  markets = [
+                    {
+                      symbol = "SPY";
+                      name = "S&P 500";
+                    }
+                    {
+                      symbol = "COIN";
+                      name = "Coinbase";
+                    }
+                    {
+                      symbol = "AAPL";
+                      name = "Apple";
+                    }
+                  ];
+                  cache = "15m";
+                }
+              ];
+            }
+
+            {
+              size = "full";
+              widgets = [
+                # GitHub Notifications (using extension widget)
+                {
+                  type = "extension";
+                  title = "GitHub Inbox";
+                  subtitle = "jwiegley";
+                  url = "http://127.0.0.1:8082/github-notifications";
+                  cache = "5m";
+                  allow-potentially-dangerous-html = true;
+                }
+
+                # XDA-Developers RSS Feed
+                {
+                  type = "rss";
+                  title = "XDA-Developers";
+                  cache = "30m";
+                  limit = 15;
+                  collapse-after = 5;
+                  feeds = [
+                    {
+                      url = "https://www.xda-developers.com/feed/";
+                      title = "XDA Latest";
+                    }
+                  ];
+                }
+
+                # Google News Feed
+                {
+                  type = "rss";
+                  title = "Google News - John Wiegley";
+                  cache = "30m";
+                  limit = 10;
+                  collapse-after = 5;
+                  feeds = [
+                    {
+                      url = "https://news.google.com/rss/search?q=john+wiegley&hl=en-US&gl=US&ceid=US:en";
+                      title = "News";
+                    }
+                  ];
+                }
+
+                # Reddit New Posts
+                {
+                  type = "reddit";
+                  subreddit = "all";
+                  show-thumbnails = true;
+                  limit = 20;
+                  collapse-after = 8;
+                  sort-by = "new";
+                  cache = "10m";
+                }
+              ];
+            }
+
+            {
+              size = "small";
+              widgets = [
+                {
+                  type = "bookmarks";
+                  groups = [
+                    {
+                      title = "Services";
+                      color = "10 70 50";
+                      links = [
+                        {
+                          title = "Grafana";
+                          url = "https://grafana.vulcan.lan";
+                        }
+                        {
+                          title = "PostgreSQL";
+                          url = "https://postgres.vulcan.lan";
+                        }
+                        {
+                          title = "Alertmanager";
+                          url = "https://alertmanager.vulcan.lan";
+                        }
+                        {
+                          title = "Jellyfin";
+                          url = "https://jellyfin.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
+                      title = "Development";
+                      color = "200 50 50";
+                      links = [
+                        {
+                          title = "GitHub";
+                          url = "https://github.com/jwiegley";
+                        }
+                        {
+                          title = "NixOS Search";
+                          url = "https://search.nixos.org";
+                        }
+                        {
+                          title = "Reddit";
+                          url = "https://old.reddit.com";
+                        }
+                        {
+                          title = "XDA Forums";
+                          url = "https://forum.xda-developers.com";
+                        }
+                      ];
+                    }
+                  ];
+                }
+              ];
+            }
+          ];
+        }
+      ];
     };
-
-    theme = {
-      background-color = "240 21 15";
-      primary-color = "217 78 84";
-      positive-color = "115 54 76";
-      negative-color = "347 70 65";
-    };
-
-    pages = [
-      {
-        name = "Home";
-        columns = [
-          {
-            size = "small";
-            widgets = [
-              {
-                type = "monitor";
-                cache = "1m";
-                title = "System";
-                metrics = [
-                  {
-                    label = "CPU";
-                    query = "cpu";
-                  }
-                  {
-                    label = "Memory";
-                    query = "memory";
-                  }
-                  {
-                    label = "Disk /";
-                    query = "disk:/";
-                  }
-                ];
-              }
-              {
-                type = "weather";
-                location = "Sacramento, CA";
-                cache = "30m";
-              }
-            ];
-          }
-
-          {
-            size = "full";
-            widgets = [
-              # GitHub Notifications (using extension widget)
-              {
-                type = "extension";
-                title = "GitHub Inbox";
-                subtitle = "jwiegley";
-                url = "http://127.0.0.1:8082/github-notifications";
-                cache = "5m";
-                allow-potentially-dangerous-html = true;
-              }
-
-              # XDA-Developers RSS Feed
-              {
-                type = "rss";
-                title = "XDA-Developers";
-                cache = "30m";
-                limit = 15;
-                collapse-after = 5;
-                feeds = [
-                  {
-                    url = "https://www.xda-developers.com/feed/";
-                    title = "XDA Latest";
-                  }
-                ];
-              }
-
-              # Google News Feed
-              {
-                type = "rss";
-                title = "Google News - John Wiegley";
-                cache = "30m";
-                limit = 10;
-                collapse-after = 5;
-                feeds = [
-                  {
-                    url = "https://news.google.com/rss/search?q=john+wiegley&hl=en-US&gl=US&ceid=US:en";
-                    title = "News";
-                  }
-                ];
-              }
-
-              # Reddit New Posts
-              {
-                type = "reddit";
-                subreddit = "all";
-                show-thumbnails = true;
-                limit = 20;
-                collapse-after = 8;
-                sort-by = "new";
-                cache = "10m";
-              }
-            ];
-          }
-
-          {
-            size = "small";
-            widgets = [
-              {
-                type = "bookmarks";
-                groups = [
-                  {
-                    title = "Services";
-                    color = "10 70 50";
-                    links = [
-                      {
-                        title = "Grafana";
-                        url = "https://grafana.vulcan.lan";
-                      }
-                      {
-                        title = "PostgreSQL";
-                        url = "https://postgres.vulcan.lan";
-                      }
-                      {
-                        title = "Alertmanager";
-                        url = "https://alertmanager.vulcan.lan";
-                      }
-                      {
-                        title = "Jellyfin";
-                        url = "https://jellyfin.vulcan.lan";
-                      }
-                    ];
-                  }
-                  {
-                    title = "Development";
-                    color = "200 50 50";
-                    links = [
-                      {
-                        title = "GitHub";
-                        url = "https://github.com/jwiegley";
-                      }
-                      {
-                        title = "NixOS Search";
-                        url = "https://search.nixos.org";
-                      }
-                      {
-                        title = "Reddit";
-                        url = "https://old.reddit.com";
-                      }
-                      {
-                        title = "XDA Forums";
-                        url = "https://forum.xda-developers.com";
-                      }
-                    ];
-                  }
-                ];
-              }
-            ];
-          }
-        ];
-      }
-    ];
   };
 
-  glanceConfigFile = pkgs.writeText "glance.yaml" (pkgs.lib.generators.toYAML {} glanceConfig);
-
-in
-{
   # Import SOPS secrets (optional - will be added later)
   # Commented out until secrets are added to secrets.yaml
-  # sops.secrets = {
-  #   glance_github_token = {
-  #     mode = "0400";
-  #     owner = "glance";
-  #   };
-  #   glance_reddit_client_id = {
-  #     mode = "0400";
-  #     owner = "glance";
-  #   };
-  #   glance_reddit_client_secret = {
-  #     mode = "0400";
-  #     owner = "glance";
-  #   };
-  # };
-
-  # Create glance user and group
-  users.users.glance = {
-    isSystemUser = true;
-    group = "glance";
-    description = "Glance dashboard user";
-    home = "/var/lib/glance";
-    createHome = true;
-  };
-
-  users.groups.glance = {};
-
-  # Main Glance service
-  systemd.services.glance = {
-    description = "Glance Dashboard Service";
-    after = [ "network.target" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "simple";
-      User = "glance";
-      Group = "glance";
-      WorkingDirectory = "/var/lib/glance";
-      Restart = "always";
-      RestartSec = 5;
-
-      ExecStart = "${pkgs.glance}/bin/glance --config ${glanceConfigFile}";
-
-      # Security hardening
-      NoNewPrivileges = true;
-      PrivateTmp = true;
-      ProtectSystem = "strict";
-      ProtectHome = true;
-      ReadWritePaths = [ "/var/lib/glance" ];
+  sops.secrets = {
+    glance_github_token = {
+      sopsFile = ../../secrets.yaml;
+      mode = "0400";
+      owner = "glance";
+      group = "glance";
+      restartUnits = [ "glance.service" ];
     };
+    # glance_reddit_client_id = {
+    #   mode = "0400";
+    #   owner = "glance";
+    # };
+    # glance_reddit_client_secret = {
+    #   mode = "0400";
+    #   owner = "glance";
+    # };
   };
 
   # GitHub extension service
@@ -369,14 +357,7 @@ in
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:3050/";
-      proxyWebsockets = true;
-      extraConfig = ''
-        proxy_buffering off;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      '';
+      recommendedProxySettings = true;
     };
   };
 

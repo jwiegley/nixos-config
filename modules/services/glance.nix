@@ -380,6 +380,5 @@ in
     };
   };
 
-  # Open firewall for internal access
-  networking.firewall.allowedTCPPorts = [ 3050 ];
+  networking.firewall.interfaces."lo".allowedTCPPorts = [ 3050 ];
 }

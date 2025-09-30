@@ -42,11 +42,9 @@
   };
 
   # Configure firewall to allow container traffic on podman0 interface
-  networking.firewall = {
-    interfaces.podman0 = {
-      allowedTCPPorts = [ 4000 5432 8085 ];
-      allowedUDPPorts = [ 53 ];
-    };
+  networking.firewall.interfaces.podman0 = {
+    allowedTCPPorts = [ 4000 5432 8085 ];
+    allowedUDPPorts = [ 53 ];
   };
 
   # Add monitoring tools

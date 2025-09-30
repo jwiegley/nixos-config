@@ -65,4 +65,11 @@
       '';
     };
   };
+
+  networking.firewall = {
+    allowedTCPPorts =
+      lib.mkIf config.services.postgresql.enable [ 5432 ];
+    interfaces.podman0.allowedTCPPorts =
+      lib.mkIf config.services.postgresql.enable [ 5432 ];
+  };
 }

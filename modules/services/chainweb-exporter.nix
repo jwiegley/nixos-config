@@ -116,9 +116,7 @@ in
     systemd.services = listToAttrs (mapAttrsToList mkExporterService cfg.nodes);
 
     # Open firewall ports for all exporters (localhost only for now)
-    networking.firewall.interfaces."lo" = {
-      allowedTCPPorts = exporterPorts;
-    };
+    networking.firewall.interfaces."lo".allowedTCPPorts = exporterPorts;
 
     # Helper script to check all exporters
     environment.systemPackages = with pkgs; [

@@ -280,9 +280,6 @@
     '';
   };
 
-  # Open firewall ports
-  networking.firewall.allowedTCPPorts = [
-    # 143  # IMAP with STARTTLS
-    993  # IMAPS
-  ];
+  networking.firewall.allowedTCPPorts =
+    lib.mkIf config.services.dovecot2.enable [ 993 ];
 }

@@ -299,4 +299,7 @@ with lib;
       '';
     };
   };
+
+  networking.firewall.interfaces."lo".allowedTCPPorts =
+    lib.mkIf config.services.homepage-dashboard.enable [ 3005 ];
 }

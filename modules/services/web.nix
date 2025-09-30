@@ -167,7 +167,6 @@
     };
   };
 
-  networking.firewall.allowedTCPPorts = [
-    443    # nginx (HTTPS)
-  ];
+  networking.firewall.allowedTCPPorts =
+    lib.mkIf config.services.nginx.enable [ 443 ];
 }

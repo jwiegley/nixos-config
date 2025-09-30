@@ -66,4 +66,9 @@
   systemd.tmpfiles.rules = [
     "d /etc/litellm 0755 root root -"
   ];
+
+  networking.firewall.interfaces.podman0.allowedTCPPorts = [
+    4000 # litellm
+    8085 # redis[litellm]
+  ];
 }

@@ -70,4 +70,7 @@
       tls_preempt_cipherlist = "yes";
     };
   };
+
+  networking.firewall.allowedTCPPorts =
+    lib.mkIf config.services.postfix.enable [ 587 ];
 }

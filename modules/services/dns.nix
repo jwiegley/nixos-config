@@ -10,4 +10,7 @@
     enable = true;
     openFirewall = false;
   };
+
+  networking.firewall.allowedTCPPorts =
+    lib.mkIf config.services.technitium-dns-server.enable [ 853 ];
 }

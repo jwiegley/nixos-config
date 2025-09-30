@@ -107,7 +107,8 @@
     '')
   ];
 
-  networking.firewall.allowedTCPPorts = lib.mkIf config.services.step-ca.enable [ 8443 ];
+  networking.firewall.interfaces."lo".allowedTCPPorts =
+    lib.mkIf config.services.step-ca.enable [ 8443 ];
 
   # Override step-ca service to use correct directories
   systemd.services.step-ca = {

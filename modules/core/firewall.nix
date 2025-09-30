@@ -7,7 +7,6 @@
       443    # nginx (HTTPS)
       587    # postfix (submission - STARTTLS)
       853    # technitium-dns-server (DNS-over-TLS)
-      2022   # eternal-terminal
       5432   # postgres
     ];
     allowedUDPPorts = [

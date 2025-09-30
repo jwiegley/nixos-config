@@ -193,16 +193,6 @@ MONITORS = [
         "maxretries": 3,
         "tags": ["infrastructure", "critical"]
     },
-    {
-        "type": "port",
-        "name": "Eternal Terminal",
-        "hostname": "192.168.1.2",
-        "port": 2022,
-        "interval": 300,
-        "retryInterval": 60,
-        "maxretries": 3,
-        "tags": ["infrastructure"]
-    },
 
     # Container Services
     {

@@ -120,7 +120,6 @@ echo "  • Postfix Submission: 192.168.1.2:587"
 echo "  • Dovecot IMAP: 192.168.1.2:143"
 echo "  • Dovecot IMAPS: 192.168.1.2:993"
 echo "  • SSH: 192.168.1.2:22"
-echo "  • Eternal Terminal: 192.168.1.2:2022"
 echo "  • Prometheus: 127.0.0.1:9090"
 echo ""
 

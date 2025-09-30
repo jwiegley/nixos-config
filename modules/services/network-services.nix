@@ -2,8 +2,6 @@
 
 {
   services = {
-    eternal-terminal.enable = true;
-
     openssh = {
       enable = true;
       settings = {

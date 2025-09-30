@@ -82,12 +82,6 @@ with lib;
               href = "https://grafana.vulcan.lan";
               description = "Monitoring & Analytics";
               ping = "grafana.vulcan.lan";
-              widget = {
-                type = "grafana";
-                url = "http://127.0.0.1:3000";
-                username = "admin";
-                password = "{{HOMEPAGE_VAR_GRAFANA_PASSWORD}}";
-              };
             };
           }
           {
@@ -116,13 +110,6 @@ with lib;
               href = "https://jellyfin.vulcan.lan";
               description = "Media Server";
               ping = "jellyfin.vulcan.lan";
-              widget = {
-                type = "jellyfin";
-                url = "http://127.0.0.1:8096";
-                key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
-                enableBlocks = true;
-                enableNowPlaying = true;
-              };
             };
           }
           {
@@ -130,8 +117,7 @@ with lib;
               icon = "wallabag.png";
               href = "https://wallabag.vulcan.lan";
               description = "Read it Later Service";
-              server = "podman";
-              container = "wallabag";
+              ping = "wallabag.vulcan.lan";
             };
           }
           {
@@ -139,8 +125,7 @@ with lib;
               icon = "sillytavern.png";
               href = "https://silly-tavern.vulcan.lan";
               description = "AI Chat Interface";
-              server = "podman";
-              container = "silly-tavern";
+              ping = "silly-tavern.vulcan.lan";
             };
           }
         ];
@@ -172,8 +157,7 @@ with lib;
               icon = "openai.png";
               href = "https://litellm.vulcan.lan/ui";
               description = "LLM Proxy Service";
-              server = "podman";
-              container = "litellm";
+              ping = "litellm.vulcan.lan";
             };
           }
         ];
@@ -186,14 +170,8 @@ with lib;
         resources = {
           cpu = true;
           memory = true;
-          disk = "/";
+          # disk = "/";
           uptime = true;
-        };
-      }
-      {
-        search = {
-          provider = "google";
-          target = "_blank";
         };
       }
       {
@@ -207,17 +185,11 @@ with lib;
       }
       {
         openmeteo = {
-          latitude = 37.7749;
-          longitude = -122.4194;
+          latitude = 38.569626;
+          longitude = -121.388395;
           timezone = "America/Los_Angeles";
           units = "imperial";
           cache = 5;
-        };
-      }
-      {
-        docker = {
-          type = "docker";
-          url = "unix:///run/podman/podman.sock";
         };
       }
     ];
@@ -300,36 +272,6 @@ with lib;
         ];
       }
     ];
-
-    # Docker/Podman configuration for container integration
-    docker = {
-      podman = {
-        host = "unix:///run/podman/podman.sock";
-      };
-    };
-  };
-
-  # Create symlink from docker.sock to podman.sock for compatibility
-  systemd.tmpfiles.rules = [
-    "L /var/run/docker.sock - - - - /run/podman/podman.sock"
-  ];
-
-  # Ensure the service can access the Podman socket
-  systemd.services.homepage-dashboard = {
-    after = [ "podman.socket" ];
-    requires = [ "podman.socket" ];
-
-    serviceConfig = {
-      # Allow the service to access the Podman socket
-      SupplementaryGroups = [ "podman" ];
-      # Bind the Podman socket to be accessible by Homepage
-      # We need to use BindPaths for the socket to work properly
-      BindPaths = [
-        "/run/podman/podman.sock"
-      ];
-      # Relax some restrictions to allow socket access
-      PrivateUsers = mkForce false;
-    };
   };
 
   # Keep the existing nginx configuration

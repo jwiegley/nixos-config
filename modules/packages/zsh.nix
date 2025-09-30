@@ -119,10 +119,8 @@
       scp = "rsync -aP --inplace";
 
       # System commands
-      ls = "${pkgs.eza}/bin/eza --icons";
       ll = "${pkgs.eza}/bin/eza -la --icons";
       la = "${pkgs.eza}/bin/eza -a --icons";
-      find = "${pkgs.fd}/bin/fd";
       par = "parallel";
       proc = "ps axwwww | grep -i";
 

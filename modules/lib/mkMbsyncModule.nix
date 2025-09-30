@@ -12,7 +12,7 @@ let
       account = "dovecot";
       tunnel = "${pkgs.dovecot}/libexec/dovecot/imap -c /etc/dovecot/dovecot.conf";
       pathDelimiter = "/";
-      trash = "mail.trash";
+      trash = "Trash";
     },
     channels,
     timerInterval ? "15min",

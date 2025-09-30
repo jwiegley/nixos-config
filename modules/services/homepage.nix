@@ -1,4 +1,5 @@
 { config, lib, pkgs, ... }:
+with lib;
 
 {
   # Native Homepage Dashboard service configuration
@@ -129,7 +130,7 @@
               icon = "wallabag.png";
               href = "https://wallabag.vulcan.lan";
               description = "Read it Later Service";
-              server = "docker";
+              server = "podman";
               container = "wallabag";
             };
           }
@@ -138,7 +139,7 @@
               icon = "sillytavern.png";
               href = "https://silly-tavern.vulcan.lan";
               description = "AI Chat Interface";
-              server = "docker";
+              server = "podman";
               container = "silly-tavern";
             };
           }
@@ -171,7 +172,7 @@
               icon = "openai.png";
               href = "https://litellm.vulcan.lan/ui";
               description = "LLM Proxy Service";
-              server = "docker";
+              server = "podman";
               container = "litellm";
             };
           }
@@ -216,7 +217,7 @@
       {
         docker = {
           type = "docker";
-          url = "unix:///var/run/docker.sock";
+          url = "unix:///run/podman/podman.sock";
         };
       }
     ];
@@ -300,15 +301,34 @@
       }
     ];
 
-    # Docker configuration for container integration
-    docker = {};
+    # Docker/Podman configuration for container integration
+    docker = {
+      podman = {
+        host = "unix:///run/podman/podman.sock";
+      };
+    };
   };
+
+  # Create symlink from docker.sock to podman.sock for compatibility
+  systemd.tmpfiles.rules = [
+    "L /var/run/docker.sock - - - - /run/podman/podman.sock"
+  ];
 
   # Ensure the service can access the Podman socket
   systemd.services.homepage-dashboard = {
+    after = [ "podman.socket" ];
+    requires = [ "podman.socket" ];
+
     serviceConfig = {
+      # Allow the service to access the Podman socket
       SupplementaryGroups = [ "podman" ];
-      BindReadOnlyPaths = [ "/run/podman/podman.sock:/var/run/docker.sock" ];
+      # Bind the Podman socket to be accessible by Homepage
+      # We need to use BindPaths for the socket to work properly
+      BindPaths = [
+        "/run/podman/podman.sock"
+      ];
+      # Relax some restrictions to allow socket access
+      PrivateUsers = mkForce false;
     };
   };
 

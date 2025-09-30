@@ -77,11 +77,11 @@ with lib;
       {
         Infrastructure = [
           {
-            Grafana = {
-              icon = "grafana.png";
-              href = "https://grafana.vulcan.lan";
-              description = "Monitoring & Analytics";
-              ping = "grafana.vulcan.lan";
+            OPNsense = {
+              icon = "opnsense.png";
+              href = "https://192.168.1.1";
+              description = "OPNsense Firewall";
+              ping = "192.168.1.1";
             };
           }
           {
@@ -90,6 +90,14 @@ with lib;
               href = "https://dns.vulcan.lan";
               description = "Technitium DNS Server";
               ping = "dns.vulcan.lan";
+            };
+          }
+          {
+            Grafana = {
+              icon = "grafana.png";
+              href = "https://grafana.vulcan.lan";
+              description = "Monitoring & Analytics";
+              ping = "grafana.vulcan.lan";
             };
           }
           {
@@ -105,19 +113,19 @@ with lib;
       {
         "Media & Entertainment" = [
           {
-            Jellyfin = {
-              icon = "jellyfin.png";
-              href = "https://jellyfin.vulcan.lan";
-              description = "Media Server";
-              ping = "jellyfin.vulcan.lan";
-            };
-          }
-          {
             Wallabag = {
               icon = "wallabag.png";
               href = "https://wallabag.vulcan.lan";
               description = "Read it Later Service";
               ping = "wallabag.vulcan.lan";
+            };
+          }
+          {
+            Jellyfin = {
+              icon = "jellyfin.png";
+              href = "https://jellyfin.vulcan.lan";
+              description = "Media Server";
+              ping = "jellyfin.vulcan.lan";
             };
           }
           {

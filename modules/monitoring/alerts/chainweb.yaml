@@ -5,7 +5,7 @@ groups:
       # Alert when block progression falls below threshold
       - alert: ChainwebLowBlockProgression
         # Calculate the rate of height increase over 15 minutes, then multiply by 900 seconds to get blocks per 15 minutes
-        expr: rate(kadena_cut_height[15m]) * 900 < 5
+        expr: rate(kadena_cut_height[15m]) * 900 < 100
         for: 2m  # Alert if condition persists for 2 minutes to avoid false positives
         labels:
           severity: critical

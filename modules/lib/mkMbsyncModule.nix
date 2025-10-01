@@ -163,6 +163,9 @@ let
         Type = "oneshot";
         User = user;
         Group = group;
+        # Accept exit codes 0, 1, 2 as success since they represent health states (OK, WARNING, CRITICAL)
+        # Only actual script failures (exit codes > 2) will show as "failed" in systemd
+        SuccessExitStatus = "0 1 2";
         ExecStart = pkgs.writeShellScript "mbsync-${name}-health-check" ''
           set -euo pipefail
 
@@ -175,21 +178,29 @@ let
 
           if [ -z "$LAST_SYNC_TIMESTAMP" ]; then
             echo "WARNING: No sync metrics found for ${name}"
-            exit 1
+            exit 1  # Exit code 1 for warnings
           fi
 
           CURRENT_TIME=$(date +%s)
           SYNC_AGE=$((CURRENT_TIME - LAST_SYNC_TIMESTAMP))
-          MAX_AGE=$((60 * 60))  # 1 hour in seconds
+          WARNING_AGE=$((60 * 60))      # 1 hour in seconds
+          CRITICAL_AGE=$((4 * 60 * 60)) # 4 hours in seconds
 
-          if [ "$SYNC_AGE" -gt "$MAX_AGE" ]; then
-            echo "WARNING: Last successful sync was $((SYNC_AGE / 60)) minutes ago"
-            exit 1
+          if [ "$SYNC_AGE" -gt "$CRITICAL_AGE" ]; then
+            echo "CRITICAL: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over 4 hours)"
+            exit 2  # Exit code 2 for critical issues
+          elif [ "$SYNC_AGE" -gt "$WARNING_AGE" ]; then
+            echo "WARNING: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over 1 hour)"
+            exit 1  # Exit code 1 for warnings
           else
             echo "OK: Last sync was $((SYNC_AGE / 60)) minutes ago"
+            exit 0  # Exit code 0 for healthy state
           fi
         '';
       };
+
+      # Add required utilities to PATH
+      path = [ pkgs.coreutils pkgs.gnugrep pkgs.gawk ];
     };
 
     # Health check timer

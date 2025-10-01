@@ -361,5 +361,5 @@ with lib;
     };
   };
 
-  networking.firewall.interfaces."lo".allowedTCPPorts = [ 3050 ];
+  networking.firewall.interfaces."lo".allowedTCPPorts = [ 3050 8082 ];
 }

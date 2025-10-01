@@ -47,7 +47,7 @@
   services.redis.servers.litellm = {
     enable = true;
     port = 8085;
-    bind = "127.0.0.1";
+    bind = "10.88.0.1";
     settings = {
       protected-mode = "no";
     };

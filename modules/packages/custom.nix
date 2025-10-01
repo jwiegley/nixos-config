@@ -110,7 +110,6 @@ in
     b3sum
     backup-chainweb
     btop
-    claude-code
     dh
     dig
     ethtool

@@ -643,6 +643,7 @@
       gitAndTools.git-annex
       pass-git-helper
       global
+      claude-code
 
       # Text processing
       aspell

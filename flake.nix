@@ -20,9 +20,12 @@
     };
 
     quadlet-nix.url = "github:SEIAROTg/quadlet-nix";
+
+    claude-code-nix.url = "github:sadjow/claude-code-nix";
   };
 
-  outputs = { nixpkgs, nixos-hardware, home-manager, sops-nix, nixos-logwatch, quadlet-nix, ... }:
+  outputs = { nixpkgs, nixos-hardware, home-manager, sops-nix,
+              nixos-logwatch, quadlet-nix, claude-code-nix, ... }:
     let system = "x86_64-linux"; in {
       formatter.x86_64-linux =
         nixpkgs.legacyPackages.x86_64-linux.nixfmt-rfc-style;
@@ -34,6 +37,9 @@
           nixos-logwatch.nixosModules.logwatch
           sops-nix.nixosModules.sops
           quadlet-nix.nixosModules.quadlet
+          {
+            nixpkgs.overlays = [ claude-code-nix.overlays.default ];
+          }
           home-manager.nixosModules.home-manager
           ./hosts/vulcan
         ];

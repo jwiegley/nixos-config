@@ -113,7 +113,70 @@ in
             module = [ "icmp_ping" ];
           };
           static_configs = [{
-            targets = config.services.blackbox-monitoring.allHosts or [];
+            targets = [
+              "vulcan.lan"                        # 192.168.1.2
+              "hera.lan"                          # 192.168.1.4
+              "clio.lan"                          # 192.168.1.5
+
+              "asus-bq16-pro-ap.lan"              # 192.168.3.2
+              "asus-bq16-pro-node.lan"            # 192.168.3.3
+              "john-watch.lan"                    # 192.168.3.4
+              "hera-wifi.lan"                     # 192.168.3.6
+              "john-ipad.lan"                     # 192.168.3.7
+              "asus-rt-ax88u.lan"                 # 192.168.3.8
+              "clio-wifi.lan"                     # 192.168.3.9
+              "john-iphone.lan"                   # 192.168.3.10
+              "august-lock-front-door.lan"        # 192.168.3.12
+              "august-lock-garage-door.lan"       # 192.168.3.14
+              "2025-10-01 19:10:50lg-tv-wifi.lan" # 192.168.3.18
+              "pentair-intelliflo.lan"            # 192.168.3.23
+              "enphase-solar-inverter.lan"        # 192.168.3.26
+              "nasim-iphone.lan"                  # 192.168.3.27
+              "nasim-watch.lan"                   # 192.168.3.39
+              "nest-downstairs.lan"               # 192.168.3.57
+              "nasim-lenovo.lan"                  # 192.168.3.75
+              "nest-family-room.lan"              # 192.168.3.83
+              "ring-chime-office.lan"             # 192.168.3.88
+              "b-hyve-sprinkler.lan"              # 192.168.3.89
+              "miele-dishwasher.lan"              # 192.168.3.98
+              "myq-garage-door.lan"               # 192.168.3.99
+              "google-home-hub.lan"               # 192.168.3.106
+              "pentair-intellicenter.lan"         # 192.168.3.115
+              "adt-home-security.lan"             # 192.168.3.118
+              "tesla-wall-connector.lan"          # 192.168.3.119
+              "nest-upstairs.lan"                 # 192.168.3.161
+              "ring-chime-kitchen.lan"            # 192.168.3.163
+              "Bose-Portable-Home-Speaker.lan"    # 192.168.3.170
+              "august-lock-side-door.lan"         # 192.168.3.173
+              "hubspace-porch-light.lan"          # 192.168.3.178
+              "flume-water-meter.lan"             # 192.168.3.183
+              "ring-doorbell.lan"                 # 192.168.3.185
+              "dreamebot-vacuum.lan"              # 192.168.3.195
+              "traeger-grill.lan"                 # 192.168.3.196
+
+              "athena.lan"                        # 192.168.20.2
+
+              "TL-WPA8630.lan"                    # 192.168.30.49
+
+              "9.9.9.9"
+              "149.112.112.112"
+              "1.1.1.1"
+              "1.0.0.1"
+              "208.67.222.222"
+              "208.67.220.220"
+
+              "google.com"
+              "cloudflare.com"
+              "amazon.com"
+              "github.com"
+
+              "web.mit.edu"
+              "www.indiana.edu"
+              "www.berkeley.edu"
+              "ucsd.edu"
+              "twin-cities.umn.edu"
+              "osuosl.org"
+            ];
           }];
           relabel_configs = [
             {
@@ -152,7 +215,7 @@ in
           scrape_timeout = "10s";
         }
 
-        # HTTP/HTTPS monitoring for web services
+        # HTTP monitoring for web services
         {
           job_name = "blackbox_http";
           metrics_path = "/probe";
@@ -202,6 +265,17 @@ in
               "https://cloudflare.com"
               "https://prometheus.io"
               "https://grafana.com"
+
+              "https://homepage.vulcan.lan"
+              "https://glance.vulcan.lan"
+              "https://grafana.vulcan.lan"
+              "https://jellyfin.vulcan.lan"
+              "https://litellm.vulcan.lan"
+              "https://postgres.vulcan.lan"
+              "https://silly-tavern.vulcan.lan"
+              "https://smokeping.vulcan.lan"
+              "https://wallabag.vulcan.lan"
+              "https://dns.vulcan.lan"
             ];
           }];
           relabel_configs = [
@@ -235,9 +309,14 @@ in
           };
           static_configs = [{
             targets = [
-              "8.8.8.8"
+              "192.168.1.1"
+              "192.168.1.2"
+              "9.9.9.9"
+              "149.112.112.112"
               "1.1.1.1"
+              "1.0.0.1"
               "208.67.222.222"
+              "208.67.220.220"
             ];
           }];
           relabel_configs = [

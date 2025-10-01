@@ -309,6 +309,7 @@ with lib;
 
                           self.send_response(200)
                           self.send_header('Content-Type', 'text/html; charset=utf-8')
+                          self.send_header('Widget-Content-Type', 'html')
                           self.send_header('Access-Control-Allow-Origin', '*')
                           self.end_headers()
                           self.wfile.write(html.encode())
@@ -324,6 +325,7 @@ with lib;
 
                           self.send_response(200)
                           self.send_header('Content-Type', 'text/html')
+                          self.send_header('Widget-Content-Type', 'html')
                           self.send_header('Access-Control-Allow-Origin', '*')
                           self.end_headers()
                           self.wfile.write(html.encode())
@@ -331,6 +333,7 @@ with lib;
                       except Exception as e:
                           self.send_response(200)
                           self.send_header('Content-Type', 'text/html')
+                          self.send_header('Widget-Content-Type', 'html')
                           self.send_header('Access-Control-Allow-Origin', '*')
                           self.end_headers()
                           self.wfile.write(f'<p style="color: red;">Error: {e}</p>'.encode())

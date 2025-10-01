@@ -24,7 +24,6 @@ let
       "google.com"
       "cloudflare.com"
       "amazon.com"
-      "microsoft.com"
       "github.com"
     ];
 
@@ -325,8 +324,7 @@ in
 
     # Expose configuration for other modules to use
     services.blackbox-monitoring = {
-      hostGroups = hostGroups;
-      allHosts = allHosts;
+      inherit hostGroups allHosts;
     };
   };
 }

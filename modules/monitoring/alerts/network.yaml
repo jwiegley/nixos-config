@@ -1,0 +1,214 @@
+groups:
+  - name: network_connectivity
+    rules:
+      # Host unreachable - any probe that fails completely
+      - alert: HostUnreachable
+        expr: probe_success{job=~"blackbox_.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: network
+          service: connectivity
+        annotations:
+          summary: "Host {{ $labels.instance }} is unreachable"
+          description: "Host {{ $labels.instance }} has been unreachable for more than 2 minutes via {{ $labels.job }} probe."
+          runbook_url: "https://vulcan.local/runbooks/network/host-unreachable"
+
+      # High latency warning for ICMP probes
+      - alert: HighLatency
+        expr: probe_duration_seconds{job="blackbox_icmp"} > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: connectivity
+        annotations:
+          summary: "High latency to {{ $labels.instance }}"
+          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>100ms) for more than 5 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/high-latency"
+
+      # Critical latency for ICMP probes
+      - alert: CriticalLatency
+        expr: probe_duration_seconds{job="blackbox_icmp"} > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          category: network
+          service: connectivity
+        annotations:
+          summary: "Critical latency to {{ $labels.instance }}"
+          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>500ms) for more than 2 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/critical-latency"
+
+      # DNS server connectivity issues
+      - alert: DNSServerDown
+        expr: probe_success{job="blackbox_icmp",host_group="dns"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: network
+          service: dns
+        annotations:
+          summary: "DNS server {{ $labels.instance }} is down"
+          description: "DNS server {{ $labels.instance }} has been unreachable for more than 1 minute."
+          runbook_url: "https://vulcan.local/runbooks/network/dns-server-down"
+
+      # Local network connectivity issues
+      - alert: LocalNetworkIssue
+        expr: probe_success{job="blackbox_icmp",host_group="local"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: network
+          service: local
+        annotations:
+          summary: "Local network host {{ $labels.instance }} unreachable"
+          description: "Local network host {{ $labels.instance }} has been unreachable for more than 3 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/local-network-issue"
+
+      # Internet backbone connectivity issues
+      - alert: InternetConnectivityIssue
+        expr: probe_success{job="blackbox_icmp",host_group="backbone"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          category: network
+          service: internet
+        annotations:
+          summary: "Internet connectivity issue to {{ $labels.instance }}"
+          description: "Major internet service {{ $labels.instance }} has been unreachable for more than 30 seconds."
+          runbook_url: "https://vulcan.local/runbooks/network/internet-connectivity"
+
+      # HTTP/HTTPS service monitoring
+      - alert: WebServiceDown
+        expr: probe_success{job=~"blackbox_http.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: network
+          service: web
+        annotations:
+          summary: "Web service {{ $labels.instance }} is down"
+          description: "HTTP/HTTPS probe to {{ $labels.instance }} has been failing for more than 1 minute."
+          runbook_url: "https://vulcan.local/runbooks/network/web-service-down"
+
+      # SSL certificate expiry warning (from HTTPS probes)
+      - alert: SSLCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https"} - time() < 7 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          category: network
+          service: ssl
+        annotations:
+          summary: "SSL certificate for {{ $labels.instance }} expires soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+          runbook_url: "https://vulcan.local/runbooks/network/ssl-expiry"
+
+      # SSL certificate expiry critical
+      - alert: SSLCertificateExpiringCritical
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https"} - time() < 24 * 3600
+        for: 15m
+        labels:
+          severity: critical
+          category: network
+          service: ssl
+        annotations:
+          summary: "SSL certificate for {{ $labels.instance }} expires very soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+          runbook_url: "https://vulcan.local/runbooks/network/ssl-expiry"
+
+      # DNS query failures
+      - alert: DNSQueryFailure
+        expr: probe_success{job="blackbox_dns"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: network
+          service: dns
+        annotations:
+          summary: "DNS query failure for {{ $labels.instance }}"
+          description: "DNS queries to {{ $labels.instance }} have been failing for more than 2 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/dns-query-failure"
+
+  - name: network_performance
+    rules:
+      # High packet loss simulation (based on probe failures)
+      - alert: HighPacketLoss
+        expr: |
+          (
+            (rate(probe_success{job="blackbox_icmp"}[5m]) < 0.95) and
+            (rate(probe_success{job="blackbox_icmp"}[5m]) > 0)
+          )
+        for: 3m
+        labels:
+          severity: warning
+          category: network
+          service: connectivity
+        annotations:
+          summary: "High packet loss to {{ $labels.instance }}"
+          description: "Packet loss to {{ $labels.instance }} has success rate of {{ $value | printf \"%.3f\" }} (< 0.95) over the last 5 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/high-packet-loss"
+
+      # Network jitter detection (variation in latency)
+      - alert: HighNetworkJitter
+        expr: |
+          (
+            stddev_over_time(probe_duration_seconds{job="blackbox_icmp"}[10m]) > 0.05
+          ) and (
+            probe_success{job="blackbox_icmp"} == 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: performance
+        annotations:
+          summary: "High network jitter to {{ $labels.instance }}"
+          description: "Network jitter to {{ $labels.instance }} is {{ $value }}s (>50ms standard deviation) over the last 10 minutes."
+          runbook_url: "https://vulcan.local/runbooks/network/high-jitter"
+
+  - name: blackbox_exporter_health
+    rules:
+      # Blackbox exporter itself is down
+      - alert: BlackboxExporterDown
+        expr: up{job="prometheus",instance="localhost:9115"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: monitoring
+          service: blackbox_exporter
+        annotations:
+          summary: "Blackbox exporter is down"
+          description: "The blackbox exporter has been down for more than 1 minute."
+          runbook_url: "https://vulcan.local/runbooks/monitoring/blackbox-exporter-down"
+
+      # Too many probe targets failing
+      - alert: MassiveNetworkOutage
+        expr: |
+          (
+            count(probe_success{job="blackbox_icmp"} == 0) /
+            count(probe_success{job="blackbox_icmp"})
+          ) > 0.5
+        for: 1m
+        labels:
+          severity: critical
+          category: network
+          service: connectivity
+        annotations:
+          summary: "Massive network outage detected"
+          description: "More than 50% of monitored hosts are unreachable. This may indicate a local network or internet connectivity issue."
+          runbook_url: "https://vulcan.local/runbooks/network/massive-outage"
+
+      # Probe duration taking too long (potential blackbox exporter overload)
+      - alert: BlackboxProbeTimeout
+        expr: probe_duration_seconds{job=~"blackbox_.*"} > 10
+        for: 2m
+        labels:
+          severity: warning
+          category: monitoring
+          service: blackbox_exporter
+        annotations:
+          summary: "Blackbox probe timeout for {{ $labels.instance }}"
+          description: "Blackbox probe to {{ $labels.instance }} is taking {{ $value }}s (>10s), indicating potential exporter overload."
+          runbook_url: "https://vulcan.local/runbooks/monitoring/probe-timeout"

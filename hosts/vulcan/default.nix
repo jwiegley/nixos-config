@@ -35,6 +35,7 @@
     ../../modules/services/media.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/prometheus-monitoring.nix
+    ../../modules/services/blackbox-monitoring.nix
     ../../modules/services/alertmanager.nix
     ../../modules/services/chainweb-exporter.nix
     ../../modules/services/chainweb-config.nix

@@ -1,18 +1,18 @@
 { config, lib, pkgs, ... }:
 
-let
-  # Helper function to create an mbsync service configuration
+{
   mkMbsyncService = {
     name,
     user,
     group ? "users",
     secretName,
     remoteConfig,
+    trash ? "Trash",
     localConfig ? {
       account = "dovecot";
       tunnel = "${pkgs.dovecot}/libexec/dovecot/imap -c /etc/dovecot/dovecot.conf";
       pathDelimiter = "/";
-      trash = "Trash";
+      inherit trash;
     },
     channels,
     timerInterval ? "15min",
@@ -226,7 +226,4 @@ let
       mode = "0644";
     };
   };
-in
-{
-  inherit mkMbsyncService;
 }

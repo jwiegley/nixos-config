@@ -50,6 +50,7 @@ in
       user = "assembly";
       group = "assembly";
       secretName = "carmichael-imap-gmail-com";
+      trash = "[Gmail]/Trash";
 
       remoteConfig = ''
         Host imap.gmail.com
@@ -65,7 +66,7 @@ in
         Channel gmail-all
         Far :assembly-remote:
         Near :dovecot-local:
-        Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred"
+        Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred" !"[Gmail]/Trash"
         Create Near
         Remove Near
         Expunge Near
@@ -73,7 +74,7 @@ in
         SyncState /var/lib/mbsync-assembly/
       '';
 
-      timerInterval = "15min";
+      timerInterval = "1day";
 
       extraServiceConfig = {
         RemainAfterExit = true;

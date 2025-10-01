@@ -64,6 +64,11 @@ in
       # Only listen on localhost for now
       listenAddress = "127.0.0.1";
 
+      # Enable admin API for administrative operations
+      extraFlags = [
+        "--web.enable-admin-api"
+      ];
+
       # Global configuration
       globalConfig = {
         scrape_interval = "15s";
@@ -118,40 +123,31 @@ in
               "hera.lan"                          # 192.168.1.4
               "clio.lan"                          # 192.168.1.5
 
+              "adt-home-security.lan"             # 192.168.3.118
               "asus-bq16-pro-ap.lan"              # 192.168.3.2
               "asus-bq16-pro-node.lan"            # 192.168.3.3
-              "john-watch.lan"                    # 192.168.3.4
-              "hera-wifi.lan"                     # 192.168.3.6
-              "john-ipad.lan"                     # 192.168.3.7
               "asus-rt-ax88u.lan"                 # 192.168.3.8
-              "clio-wifi.lan"                     # 192.168.3.9
-              "john-iphone.lan"                   # 192.168.3.10
               "august-lock-front-door.lan"        # 192.168.3.12
               "august-lock-garage-door.lan"       # 192.168.3.14
-              "2025-10-01 19:10:50lg-tv-wifi.lan" # 192.168.3.18
-              "pentair-intelliflo.lan"            # 192.168.3.23
-              "enphase-solar-inverter.lan"        # 192.168.3.26
-              "nasim-iphone.lan"                  # 192.168.3.27
-              "nasim-watch.lan"                   # 192.168.3.39
-              "nest-downstairs.lan"               # 192.168.3.57
-              "nasim-lenovo.lan"                  # 192.168.3.75
-              "nest-family-room.lan"              # 192.168.3.83
-              "ring-chime-office.lan"             # 192.168.3.88
+              "august-lock-side-door.lan"         # 192.168.3.173
               "b-hyve-sprinkler.lan"              # 192.168.3.89
+              "dreamebot-vacuum.lan"              # 192.168.3.195
+              "enphase-solar-inverter.lan"        # 192.168.3.26
+              "flume-water-meter.lan"             # 192.168.3.183
+              "google-home-hub.lan"               # 192.168.3.106
+              "hera-wifi.lan"                     # 192.168.3.6
+              "hubspace-porch-light.lan"          # 192.168.3.178
               "miele-dishwasher.lan"              # 192.168.3.98
               "myq-garage-door.lan"               # 192.168.3.99
-              "google-home-hub.lan"               # 192.168.3.106
-              "pentair-intellicenter.lan"         # 192.168.3.115
-              "adt-home-security.lan"             # 192.168.3.118
-              "tesla-wall-connector.lan"          # 192.168.3.119
+              "nest-downstairs.lan"               # 192.168.3.57
+              "nest-family-room.lan"              # 192.168.3.83
               "nest-upstairs.lan"                 # 192.168.3.161
+              "pentair-intellicenter.lan"         # 192.168.3.115
+              "pentair-intelliflo.lan"            # 192.168.3.23
               "ring-chime-kitchen.lan"            # 192.168.3.163
-              "Bose-Portable-Home-Speaker.lan"    # 192.168.3.170
-              "august-lock-side-door.lan"         # 192.168.3.173
-              "hubspace-porch-light.lan"          # 192.168.3.178
-              "flume-water-meter.lan"             # 192.168.3.183
+              "ring-chime-office.lan"             # 192.168.3.88
               "ring-doorbell.lan"                 # 192.168.3.185
-              "dreamebot-vacuum.lan"              # 192.168.3.195
+              "tesla-wall-connector.lan"          # 192.168.3.119
               "traeger-grill.lan"                 # 192.168.3.196
 
               "athena.lan"                        # 192.168.20.2
@@ -171,7 +167,6 @@ in
               "github.com"
 
               "web.mit.edu"
-              "www.indiana.edu"
               "www.berkeley.edu"
               "ucsd.edu"
               "twin-cities.umn.edu"
@@ -251,7 +246,7 @@ in
           scrape_timeout = "15s";
         }
 
-        # HTTPS monitoring for secure web services
+        # HTTPS monitoring for public web services
         {
           job_name = "blackbox_https";
           metrics_path = "/probe";
@@ -265,13 +260,46 @@ in
               "https://cloudflare.com"
               "https://prometheus.io"
               "https://grafana.com"
+            ];
+          }];
+          relabel_configs = [
+            {
+              source_labels = [ "__address__" ];
+              target_label = "__param_target";
+            }
+            {
+              source_labels = [ "__param_target" ];
+              target_label = "instance";
+            }
+            {
+              target_label = "__address__";
+              replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+            }
+            {
+              target_label = "probe_type";
+              replacement = "https";
+            }
+          ];
+          scrape_interval = "60s";
+          scrape_timeout = "15s";
+        }
 
+        # HTTPS monitoring for local services with step-ca certificates
+        {
+          job_name = "blackbox_https_local";
+          metrics_path = "/probe";
+          params = {
+            module = [ "https_2xx_local" ];
+          };
+          static_configs = [{
+            targets = [
               "https://homepage.vulcan.lan"
               "https://glance.vulcan.lan"
               "https://grafana.vulcan.lan"
               "https://jellyfin.vulcan.lan"
               "https://litellm.vulcan.lan"
               "https://postgres.vulcan.lan"
+              "https://prometheus.vulcan.lan"
               "https://silly-tavern.vulcan.lan"
               "https://smokeping.vulcan.lan"
               "https://wallabag.vulcan.lan"
@@ -293,7 +321,7 @@ in
             }
             {
               target_label = "probe_type";
-              replacement = "https";
+              replacement = "https_local";
             }
           ];
           scrape_interval = "60s";
@@ -485,5 +513,16 @@ in
       - Chainweb: http://localhost:9101/metrics
     '';
     mode = "0644";
+  };
+
+  # Nginx reverse proxy configuration for Prometheus UI
+  services.nginx.virtualHosts."prometheus.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/prometheus.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/prometheus.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:${toString config.services.prometheus.port}";
+      recommendedProxySettings = true;
+    };
   };
 }

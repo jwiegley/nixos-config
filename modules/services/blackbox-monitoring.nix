@@ -81,6 +81,20 @@ let
           tls_config:
             insecure_skip_verify: false
 
+      https_2xx_local:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: []
+          method: GET
+          preferred_ip_protocol: "ip4"
+          follow_redirects: true
+          fail_if_ssl: false
+          tls_config:
+            insecure_skip_verify: false
+            ca_file: /etc/ssl/certs/step-ca/root_ca.crt
+
       dns_query:
         prober: dns
         timeout: 5s
@@ -141,10 +155,31 @@ in
       };
     };
 
+    # Service to copy step-ca root certificate to accessible location
+    systemd.services.setup-blackbox-ca = {
+      description = "Copy step-ca root certificate for blackbox exporter";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "prometheus-blackbox-exporter.service" ];
+      after = [ "step-ca.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        # Copy root CA certificate to /etc/ssl/certs where it's accessible
+        if [ -f /var/lib/step-ca/certs/root_ca.crt ]; then
+          ${pkgs.coreutils}/bin/mkdir -p /etc/ssl/certs/step-ca
+          ${pkgs.coreutils}/bin/cp /var/lib/step-ca/certs/root_ca.crt /etc/ssl/certs/step-ca/root_ca.crt
+          ${pkgs.coreutils}/bin/chmod 644 /etc/ssl/certs/step-ca/root_ca.crt
+          echo "Copied step-ca root certificate to /etc/ssl/certs/step-ca/ for blackbox exporter"
+        fi
+      '';
+    };
+
     # Ensure blackbox exporter runs with appropriate capabilities for ICMP
     systemd.services.prometheus-blackbox-exporter = {
-      wants = [ "network-online.target" ];
-      after = [ "network-online.target" ];
+      wants = [ "network-online.target" "setup-blackbox-ca.service" ];
+      after = [ "network-online.target" "setup-blackbox-ca.service" ];
       startLimitIntervalSec = 0;
 
       serviceConfig = {
@@ -159,6 +194,10 @@ in
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectControlGroups = true;
+
+        # Allow reading the step-ca root certificate from /etc/ssl/certs
+        # (Note: /etc is already readable, but being explicit doesn't hurt)
+        BindReadOnlyPaths = [ "/etc/ssl/certs/step-ca/root_ca.crt" ];
 
         # Restart configuration
         Restart = "always";

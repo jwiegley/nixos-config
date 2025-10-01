@@ -93,14 +93,6 @@ with lib;
             };
           }
           {
-            Grafana = {
-              icon = "grafana.png";
-              href = "https://grafana.vulcan.lan";
-              description = "Monitoring & Analytics";
-              ping = "grafana.vulcan.lan";
-            };
-          }
-          {
             "PostgreSQL Admin" = {
               icon = "postgres.png";
               href = "https://postgres.vulcan.lan";
@@ -141,11 +133,19 @@ with lib;
       {
         Monitoring = [
           {
-            Smokeping = {
-              icon = "smokeping.png";
-              href = "https://smokeping.vulcan.lan";
-              description = "Network Latency Monitoring";
-              ping = "smokeping.vulcan.lan";
+            Grafana = {
+              icon = "grafana.png";
+              href = "https://grafana.vulcan.lan";
+              description = "Monitoring & Analytics";
+              ping = "grafana.vulcan.lan";
+            };
+          }
+          {
+            Prometheus = {
+              icon = "prometheus.png";
+              href = "https://prometheus.vulcan.lan";
+              description = "Metrics & Time Series Database";
+              ping = "prometheus.vulcan.lan";
             };
           }
           {
@@ -154,6 +154,14 @@ with lib;
               href = "https://alertmanager.vulcan.lan";
               description = "Alert Management";
               ping = "alertmanager.vulcan.lan";
+            };
+          }
+          {
+            Smokeping = {
+              icon = "smokeping.png";
+              href = "https://smokeping.vulcan.lan";
+              description = "Network Latency Monitoring";
+              ping = "smokeping.vulcan.lan";
             };
           }
         ];

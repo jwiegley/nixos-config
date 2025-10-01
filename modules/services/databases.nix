@@ -66,6 +66,21 @@
     };
   };
 
+  services.nginx.virtualHosts."postgres.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/postgres.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/postgres.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:5050/";
+      proxyWebsockets = true;
+      extraConfig = ''
+        proxy_set_header X-Script-Name "";
+        proxy_set_header Host $host;
+        proxy_redirect off;
+      '';
+    };
+  };
+
   networking.firewall = {
     allowedTCPPorts =
       lib.mkIf config.services.postgresql.enable [ 5432 ];

@@ -32,6 +32,7 @@
     ../../modules/services/databases.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/web.nix
+    ../../modules/services/media.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/prometheus-monitoring.nix
     ../../modules/services/alertmanager.nix

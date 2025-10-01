@@ -370,4 +370,25 @@ in
       '';
     };
   };
+
+  services.nginx.virtualHosts = {
+    smokeping = {
+      listen = [
+        { addr = "127.0.0.1"; port = 8081; }
+      ];
+    };
+
+    "smokeping.vulcan.lan" = {
+      forceSSL = true;
+      sslCertificate = "/var/lib/nginx-certs/smokeping.vulcan.lan.crt";
+      sslCertificateKey = "/var/lib/nginx-certs/smokeping.vulcan.lan.key";
+      locations."/" = {
+        proxyPass = "http://127.0.0.1:8081/";
+        proxyWebsockets = true;
+      };
+    };
+  };
+
+  networking.firewall.interfaces."lo".allowedTCPPorts =
+    lib.mkIf config.services.smokeping.enable [ 8081 ];
 }

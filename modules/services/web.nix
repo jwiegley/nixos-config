@@ -14,12 +14,6 @@
   };
 
   services = {
-    jellyfin = {
-      enable = true;
-      dataDir = "/var/lib/jellyfin";
-      user = "johnw";
-    };
-
     nginx = {
       enable = true;
       recommendedGzipSettings = true;
@@ -42,73 +36,6 @@
             { addr = "0.0.0.0"; port = 80; }
           ];
           locations."/".return = "301 https://$host$request_uri";
-        };
-
-        smokeping = {
-          listen = [
-            { addr = "127.0.0.1"; port = 8081; }
-          ];
-        };
-
-        "jellyfin.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/jellyfin.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/jellyfin.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:8096/";
-            proxyWebsockets = true;
-          };
-        };
-
-        "smokeping.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/smokeping.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/smokeping.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:8081/";
-            proxyWebsockets = true;
-          };
-        };
-
-        "postgres.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/postgres.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/postgres.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:5050/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header X-Script-Name "";
-              proxy_set_header Host $host;
-              proxy_redirect off;
-            '';
-          };
-        };
-
-        "dns.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/dns.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/dns.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:5380/";
-            proxyWebsockets = true;
-          };
-        };
-
-        "uptime.vulcan.lan" = {
-          forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/uptime.vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/uptime.vulcan.lan.key";
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:3001/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_set_header Host $host;
-            '';
-          };
         };
 
         "vulcan.lan" = {

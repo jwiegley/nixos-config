@@ -82,7 +82,7 @@ in
         }
         { name = "sshd"; }
         { name = "sudo"; }
-        { name = "fail2ban"; }
+        # { name = "fail2ban"; }
         { name = "kernel"; }
         { name = "audit"; }
         {

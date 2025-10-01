@@ -158,6 +158,7 @@ let
     # Health check service
     systemd.services."mbsync-${name}-health-check" = {
       description = "Health check for mbsync-${name}";
+      wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       serviceConfig = {
         Type = "oneshot";

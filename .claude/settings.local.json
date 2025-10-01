@@ -17,7 +17,9 @@
       "WebFetch(domain:github.com)",
       "mcp__perplexity__perplexity_search_web",
       "Bash(curl:*)",
-      "Bash(systemctl list-units:*)"
+      "Bash(systemctl list-units:*)",
+      "mcp__nixos__home_manager_search",
+      "mcp__nixos__home_manager_info"
     ],
     "deny": [],
     "ask": []

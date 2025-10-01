@@ -29,7 +29,6 @@
     home.sessionVariables = {
       ANTHROPIC_MODEL     = "opus";
       DISABLE_AUTOUPDATER = "1";
-      ASPELL_CONF         = "conf ${config.xdg.configHome}/aspell/config;";
       B2_ACCOUNT_INFO     = "${config.xdg.configHome}/backblaze-b2/account_info";
       CABAL_CONFIG        = "${config.xdg.configHome}/cabal/config";
       CARGO_HOME          = "${config.xdg.dataHome}/cargo";
@@ -171,7 +170,7 @@
     };
 
     programs.zsh = rec {
-      dotDir = ".config/zsh";
+      dotDir = "${config.xdg.configHome}/zsh";
 
       enable = true;
       enableCompletion = false;
@@ -491,148 +490,8 @@
       ];
     };
 
-    programs.ssh = {
-      enable = true;
-
-      matchBlocks =
-        let
-          withIdentity = attrs: attrs // {
-            identityFile   = "${home}/vulcan/id_vulcan";
-            identitiesOnly = true;
-          };
-
-          onHost = proxyJump: hostname: { inherit hostname; } //
-            lib.optionalAttrs (hostname != proxyJump) {
-              inherit proxyJump;
-            };
-        in rec {
-          # Hera
-          hera = withIdentity {
-            hostname = "hera.lan";
-            compression = false;
-          };
-
-          deimos  = withIdentity (onHost "hera" "192.168.221.128");
-          simon   = withIdentity (onHost "hera" "172.16.194.158");
-          minerva = withIdentity {
-            hostname = "192.168.199.128";
-            compression = false;
-          };
-
-          # Athena
-          athena = withIdentity {
-            hostname = "athena.lan";
-            compression = false;
-          };
-
-          phobos = withIdentity (onHost "athena" "phobos.lan");
-
-          # Clio
-          clio = withIdentity {
-            hostname = "clio.lan";
-            compression = false;
-          };
-
-          neso = withIdentity (onHost "clio" "192.168.100.130");
-
-          # Vulcan
-          vulcan = withIdentity {
-            hostname = "vulcan.lan";
-            compression = false;
-          };
-
-          tank = vulcan;
-
-          # Other servers
-          router = withIdentity {
-            hostname = "router.lan";
-            compression = false;
-          };
-
-          asus1 = {
-            hostname = "asus-bq16-pro-router.lan";
-            port = 2204;
-            user = "router";
-            compression = false;
-          };
-          asus2 = {
-            hostname = "asus-bq16-pro-node.lan";
-            port = 2204;
-            user = "router";
-            compression = false;
-          };
-
-          elpa = { hostname = "elpa.gnu.org"; user = "root"; };
-          savannah.hostname  = "git.sv.gnu.org";
-          fencepost.hostname = "fencepost.gnu.org";
-
-          savannah_gnu_org = withIdentity {
-            host = lib.concatStringsSep " " [
-              "git.savannah.gnu.org"
-              "git.sv.gnu.org"
-              "git.savannah.nongnu.org"
-              "git.sv.nongnu.org"
-            ];
-          };
-
-          haskell_org = {
-            host           = "*haskell.org";
-            user           = "root";
-            identityFile   = "${config.xdg.configHome}/ssh/id_haskell";
-            identitiesOnly = true;
-          };
-          mail.hostname = "mail.haskell.org";
-
-          hf = withIdentity {
-            host = "hf.co";
-            user = "git";
-          };
-
-          # Kadena
-          chainweb_com = {
-            host           = "*.chainweb.com";
-            user           = "chainweb";
-            identityFile   = "${config.xdg.configHome}/ssh/id_kadena";
-            identitiesOnly = true;
-            extraOptions   = {
-              StrictHostKeyChecking = "no";
-            };
-          };
-
-          defaults = {
-            host = "*";
-
-            controlPersist      = "1800";
-            controlPath         = "${tmpdir}/ssh-%u-%r@%h:%p";
-            controlMaster       = "auto";
-            userKnownHostsFile  = "${config.xdg.configHome}/ssh/known_hosts";
-            hashKnownHosts      = true;
-            serverAliveInterval = 60;
-            forwardAgent        = true;
-          };
-        };
-    };
-
-    # Services
-    services.gpg-agent = {
-      enable = true;
-      enableSshSupport = true;
-      defaultCacheTtl = 86400;
-      maxCacheTtl = 86400;
-    };
-
     # XDG configuration
-    xdg = {
-      enable = true;
-      configFile = {
-        "aspell/config".text = ''
-          local-data-dir ${pkgs.aspell}/lib/aspell
-          data-dir ${pkgs.aspellDicts.en}/lib/aspell
-          personal ${config.xdg.configHome}/aspell/en_US.personal
-          repl ${config.xdg.configHome}/aspell/en_US.repl
-        '';
-      };
-    };
+    xdg.enable = true;
 
     # News display
     news.display = "silent";
@@ -641,16 +500,8 @@
     home.packages = with pkgs; [
       # Development tools
       gitAndTools.git-annex
-      pass-git-helper
       global
       claude-code
-
-      # Text processing
-      aspell
-      aspellDicts.en
-
-      # System tools
-      graphviz
 
       # Shell enhancements
       zsh-z

@@ -193,6 +193,9 @@ in
     })
     (mkBackup {
       path = "Audio";
+      exclude = [
+        "Kadena"
+      ];
     })
     (mkBackup {
       path = "Video";

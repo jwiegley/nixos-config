@@ -14,7 +14,7 @@
       };
 
       mainnet01-local = {
-        apiUrl = "https://athena.lan:1848/chainweb/0.0/mainnet01/cut";
+        apiUrl = "http://athena.lan:1848/chainweb/0.0/mainnet01/cut";
         port = 9102;
       };
     };

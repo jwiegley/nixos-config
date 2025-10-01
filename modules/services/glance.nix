@@ -28,25 +28,6 @@ with lib;
               size = "small";
               widgets = [
                 {
-                  type = "monitor";
-                  cache = "1m";
-                  title = "System";
-                  metrics = [
-                    {
-                      label = "CPU";
-                      query = "cpu";
-                    }
-                    {
-                      label = "Memory";
-                      query = "memory";
-                    }
-                    {
-                      label = "Disk /";
-                      query = "disk:/";
-                    }
-                  ];
-                }
-                {
                   type = "weather";
                   location = "Sacramento, US";
                   units = "imperial";

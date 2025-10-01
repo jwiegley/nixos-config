@@ -279,30 +279,51 @@ with lib;
                               if not data:
                                   html += '<p style="color: green;">✓ No new notifications</p>'
                               else:
-                                  html += f'<p><strong>{len(data)} notification(s)</strong></p>'
+                                  html += f'<p><a href="https://github.com/notifications" target="_blank" style="color: inherit; text-decoration: none;"><strong>{len(data)} notification(s)</strong></a></p>'
                                   html += '<ul style="list-style-type: none; padding-left: 0;">'
                                   for notif in data[:10]:  # Limit to 10 notifications
                                       reason = notif.get('reason', ''').replace('_', ' ').title()
                                       repo = notif.get('repository', {}).get('name', 'Unknown')
+                                      repo_full = notif.get('repository', {}).get('full_name', ''')
                                       title = notif.get('subject', {}).get('title', 'No title')
+                                      subject_type = notif.get('subject', {}).get('type', ''')
                                       url = notif.get('subject', {}).get('url', ''')
+                                      latest_comment_url = notif.get('subject', {}).get('latest_comment_url', ''')
                                       unread = notif.get('unread', False)
 
-                                      # Convert API URL to web URL
+                                      # Build web URL from API URL or use latest comment URL as fallback
+                                      web_url = '''
                                       if url:
-                                          url = url.replace('api.github.com/repos', 'github.com')
-                                          url = url.replace('/pulls/', '/pull/')
-                                          url = url.replace('/issues/', '/issues/')
+                                          # Convert API URL to web URL
+                                          web_url = url.replace('https://api.github.com/repos/', 'https://github.com/')
+                                          if '/pulls/' in web_url:
+                                              web_url = web_url.replace('/pulls/', '/pull/')
+                                      elif latest_comment_url:
+                                          # Use latest comment URL as fallback
+                                          web_url = latest_comment_url.replace('https://api.github.com/repos/', 'https://github.com/')
 
-                                      # Format notification
+                                      # If still no URL, construct based on type and repository
+                                      if not web_url and repo_full:
+                                          if subject_type == 'Release':
+                                              web_url = f"https://github.com/{repo_full}/releases"
+                                          elif subject_type == 'RepositoryInvitation':
+                                              web_url = f"https://github.com/{repo_full}/invitations"
+                                          else:
+                                              # Default to notifications page filtered by repo
+                                              web_url = f"https://github.com/notifications?query=repo%3A{repo_full.replace('/', '%2F')}"
+
+                                      # Format notification - make entire item clickable
                                       unread_marker = '●' if unread else '○'
                                       html += f'<li style="margin-bottom: 8px;">'
-                                      html += f'{unread_marker} <strong>[{repo}]</strong> '
-                                      if url:
-                                          html += f'<a href="{url}" target="_blank" style="color: #4a9eff;">{title}</a>'
+                                      if web_url:
+                                          html += f'<a href="{web_url}" target="_blank" style="color: inherit; text-decoration: none; display: block;">'
+                                          html += f'{unread_marker} <strong>[{repo}]</strong> '
+                                          html += f'<span style="color: #4a9eff; text-decoration: underline;">{title}</span>'
+                                          html += f' <small style="color: #888;">({reason})</small>'
+                                          html += f'</a>'
                                       else:
-                                          html += title
-                                      html += f' <small style="color: #888;">({reason})</small>'
+                                          html += f'{unread_marker} <strong>[{repo}]</strong> {title}'
+                                          html += f' <small style="color: #888;">({reason})</small>'
                                       html += f'</li>'
                                   html += '</ul>'
                               html += '</div>'

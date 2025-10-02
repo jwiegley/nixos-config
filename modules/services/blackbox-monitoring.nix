@@ -306,18 +306,11 @@ in
     # Documentation
     environment.etc."blackbox-monitoring/README.md" = {
       text = ''
-        # Blackbox Monitoring Configuration (Complementing Smokeping)
+        # Blackbox Monitoring Configuration
 
         ## Overview
-        This module configures Prometheus blackbox_exporter for network monitoring,
-        working alongside existing Smokeping for comprehensive monitoring coverage.
-        Blackbox provides real-time Prometheus metrics while Smokeping provides
-        traditional latency trending and historical analysis.
-
-        ## Integration with Smokeping
-        - **Blackbox**: Real-time metrics, alerting, Grafana integration
-        - **Smokeping**: Historical trends, traditional RRD-based visualization
-        - **Complementary**: Both systems monitor similar hosts for comprehensive coverage
+        This module configures Prometheus blackbox_exporter for network monitoring.
+        Blackbox provides real-time Prometheus metrics for comprehensive monitoring coverage.
 
         ## Host Groups
         Hosts are organized into logical groups:

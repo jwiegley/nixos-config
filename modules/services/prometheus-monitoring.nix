@@ -341,7 +341,6 @@ in
               "https://postgres.vulcan.lan"
               "https://prometheus.vulcan.lan"
               "https://silly-tavern.vulcan.lan"
-              "https://smokeping.vulcan.lan"
               "https://wallabag.vulcan.lan"
               "https://dns.vulcan.lan"
             ];

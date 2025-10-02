@@ -39,7 +39,6 @@
           | ${pkgs.gnugrep}/bin/grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
           | ${pkgs.coreutils}/bin/head -n 1) || true
       ${pkgs.zfs}/bin/zpool import -a || true
-      ${pkgs.systemd}/bin/systemctl restart smokeping.service || true
     '';
   };
 }

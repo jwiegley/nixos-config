@@ -55,7 +55,7 @@ maintainable, and observable NixOS deployment.
 - **Databases**: PostgreSQL 16 with pgvector, SSL/TLS enabled
 - **Web Services**: nginx (NixOS container), Organizr, Wallabag, SillyTavern
   (Podman)
-- **Infrastructure**: Step-CA, Restic backups, SmokePing, Logwatch
+- **Infrastructure**: Step-CA, Restic backups, Logwatch
 - **Containers**: LiteLLM and multiple web apps via Podman
 - **Storage**: ZFS with monthly scrubs, Sanoid snapshots
 

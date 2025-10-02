@@ -21,7 +21,6 @@ DOMAINS=(
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "silly-tavern.vulcan.lan"
-    "smokeping.vulcan.lan"
     "wallabag.vulcan.lan"
     "dns.vulcan.lan"
 )

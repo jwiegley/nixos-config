@@ -234,7 +234,7 @@ echo ""
 
 
 # Check common service endpoints
-for domain in jellyfin.vulcan.lan litellm.vulcan.lan organizr.vulcan.lan postgres.vulcan.lan smokeping.vulcan.lan wallabag.vulcan.lan dns.vulcan.lan; do
+for domain in jellyfin.vulcan.lan litellm.vulcan.lan organizr.vulcan.lan postgres.vulcan.lan wallabag.vulcan.lan dns.vulcan.lan; do
     # Check if domain resolves
     if nslookup "$domain" >/dev/null 2>&1; then
         check_tls_endpoint "$domain" "443"

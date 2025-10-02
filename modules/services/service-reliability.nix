@@ -36,15 +36,6 @@
     };
 
     # Monitoring services
-    smokeping = {
-      serviceConfig = {
-        Restart = lib.mkDefault "on-failure";
-        RestartSec = "30s";
-        RestartSteps = 3;
-        RestartMaxDelaySec = "5min";
-      };
-    };
-
     prometheus = {
       serviceConfig = {
         Restart = lib.mkDefault "on-failure";

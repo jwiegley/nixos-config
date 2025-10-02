@@ -156,14 +156,6 @@ with lib;
               ping = "alertmanager.vulcan.lan";
             };
           }
-          {
-            Smokeping = {
-              icon = "smokeping.png";
-              href = "https://smokeping.vulcan.lan";
-              description = "Network Latency Monitoring";
-              ping = "smokeping.vulcan.lan";
-            };
-          }
         ];
       }
       {

@@ -163,6 +163,8 @@ in
   sops.secrets = {
     aws-keys = {};
     restic-password = {};
+    # Note: Restic metrics collection uses aws-keys and restic-password
+    # via the textfile collector approach (see prometheus-monitoring.nix)
   };
 
   services.restic.backups = lib.mkMerge [

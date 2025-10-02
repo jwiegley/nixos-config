@@ -142,6 +142,12 @@ in
             targets = [ "localhost:${toString config.services.prometheus.exporters.zfs.port}" ];
           }];
         }
+        {
+          job_name = "dovecot";
+          static_configs = [{
+            targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
+          }];
+        }
         # Blackbox exporter scrape configurations
       ] ++ (lib.optionals config.services.prometheus.exporters.blackbox.enable [
         # ICMP monitoring for all configured hosts
@@ -894,6 +900,7 @@ EOF
         - Includes textfile collector for custom metrics (restic, etc.)
       - PostgreSQL Exporter: http://localhost:9187/metrics
       - Systemd Exporter: http://localhost:9558/metrics
+      - Dovecot Exporter: http://localhost:9166/metrics
       - Postfix Exporter: http://localhost:9154/metrics
       - ZFS Exporter: http://localhost:9134/metrics
       - Blackbox Exporter: http://localhost:9115/metrics

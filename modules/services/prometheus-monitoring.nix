@@ -149,7 +149,7 @@ in
               "ring-chime-office.lan"             # 192.168.3.88
               "ring-doorbell.lan"                 # 192.168.3.185
               "tesla-wall-connector.lan"          # 192.168.3.119
-              "traeger-grill.lan"                 # 192.168.3.196
+              # "traeger-grill.lan"                 # 192.168.3.196
 
               "athena.lan"                        # 192.168.20.2
 

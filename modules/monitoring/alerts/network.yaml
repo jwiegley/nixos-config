@@ -143,7 +143,7 @@ groups:
       - alert: HighNetworkJitter
         expr: |
           (
-            stddev_over_time(probe_duration_seconds{job="blackbox_icmp"}[10m]) > 0.2
+            stddev_over_time(probe_duration_seconds{job="blackbox_icmp"}[10m]) > 0.5
           ) and (
             probe_success{job="blackbox_icmp"} == 1
           )
@@ -154,7 +154,7 @@ groups:
           service: performance
         annotations:
           summary: "High network jitter to {{ $labels.instance }}"
-          description: "Network jitter to {{ $labels.instance }} is {{ $value }}s (>50ms standard deviation) over the last 10 minutes."
+          description: "Network jitter to {{ $labels.instance }} is {{ $value }}s (>500ms standard deviation) over the last 10 minutes."
 
   - name: blackbox_exporter_health
     rules:

@@ -22,7 +22,7 @@
     enablePAM = true;
 
     # Mail location using mdbox (multi-dbox) format in user home directories
-    mailLocation = "maildir:/tank/Maildir/%u";
+    mailLocation = "maildir:/home/%u/Maildir";
 
     # SSL/TLS certificate paths (will be created by step-ca)
     sslServerCert = "/var/lib/dovecot-certs/imap.vulcan.lan.fullchain.crt";

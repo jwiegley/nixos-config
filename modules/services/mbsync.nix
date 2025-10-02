@@ -28,7 +28,7 @@ in
         Channel fastmail-all
         Far :johnw-remote:
         Near :dovecot-local:
-        Patterns *
+        Patterns * !Import !Import/*
         Create Near
         Remove None
         Expunge None

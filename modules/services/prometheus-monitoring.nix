@@ -167,9 +167,9 @@ in
               "asus-bq16-pro-ap.lan"              # 192.168.3.2
               "asus-bq16-pro-node.lan"            # 192.168.3.3
               "asus-rt-ax88u.lan"                 # 192.168.3.8
-              "august-lock-front-door.lan"        # 192.168.3.12
-              "august-lock-garage-door.lan"       # 192.168.3.14
-              "august-lock-side-door.lan"         # 192.168.3.173
+              # "august-lock-front-door.lan"        # 192.168.3.12
+              # "august-lock-garage-door.lan"       # 192.168.3.14
+              # "august-lock-side-door.lan"         # 192.168.3.173
               "b-hyve-sprinkler.lan"              # 192.168.3.89
               "dreamebot-vacuum.lan"              # 192.168.3.195
               "enphase-solar-inverter.lan"        # 192.168.3.26
@@ -186,7 +186,7 @@ in
               "pentair-intelliflo.lan"            # 192.168.3.23
               "ring-chime-kitchen.lan"            # 192.168.3.163
               "ring-chime-office.lan"             # 192.168.3.88
-              "ring-doorbell.lan"                 # 192.168.3.185
+              # "ring-doorbell.lan"                 # 192.168.3.185
               "tesla-wall-connector.lan"          # 192.168.3.119
               # "traeger-grill.lan"                 # 192.168.3.196
 

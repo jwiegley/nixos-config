@@ -1,0 +1,175 @@
+groups:
+  - name: systemd_service_health
+    interval: 30s
+    rules:
+      # Critical service failure - any service in failed state
+      - alert: SystemdServiceFailed
+        expr: systemd_unit_state{state="failed",type="service"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Systemd service {{ $labels.name }} has failed"
+          description: "Service {{ $labels.name }} is in failed state on {{ $labels.instance }}"
+
+      # Critical services that should always be running
+      - alert: CriticalServiceInactive
+        expr: |
+          systemd_unit_state{
+            name=~"(sshd|postgresql|nginx|prometheus|tailscaled|step-ca|docker)\\.service",
+            state="inactive",
+            type="service"
+          } == 1
+        for: 2m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Critical service {{ $labels.name }} is inactive"
+          description: "Critical service {{ $labels.name }} is not running on {{ $labels.instance }}"
+
+      # Service restart detection - high restart count
+      - alert: ServiceRestartingFrequently
+        expr: rate(systemd_unit_state{state="activating",type="service"}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Service {{ $labels.name }} is restarting frequently"
+          description: "Service {{ $labels.name }} has restarted multiple times in the last 15 minutes"
+
+      # Services in activating state for too long
+      - alert: ServiceStuckActivating
+        expr: systemd_unit_state{state="activating",type="service"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Service {{ $labels.name }} stuck in activating state"
+          description: "Service {{ $labels.name }} has been in activating state for more than 5 minutes on {{ $labels.instance }}"
+
+      # Services in deactivating state for too long
+      - alert: ServiceStuckDeactivating
+        expr: systemd_unit_state{state="deactivating",type="service"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Service {{ $labels.name }} stuck in deactivating state"
+          description: "Service {{ $labels.name }} has been in deactivating state for more than 5 minutes on {{ $labels.instance }}"
+
+      # Monitoring services specifically
+      - alert: MonitoringServiceDown
+        expr: |
+          systemd_unit_state{
+            name=~"prometheus.*\\.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Monitoring service {{ $labels.name }} is down"
+          description: "Monitoring service {{ $labels.name }} is not active on {{ $labels.instance }}"
+
+      # Backup services
+      - alert: BackupServiceFailed
+        expr: |
+          systemd_unit_state{
+            name=~"restic-backups-.*\\.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Backup service {{ $labels.name }} has failed"
+          description: "Backup service {{ $labels.name }} failed on {{ $labels.instance }}"
+
+      # Timer units not active (backup timers, etc.)
+      - alert: ImportantTimerInactive
+        expr: |
+          systemd_unit_state{
+            name=~"restic-backups-.*\\.timer",
+            state="active",
+            type="timer"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Important timer {{ $labels.name }} is not active"
+          description: "Timer {{ $labels.name }} should be active but is not on {{ $labels.instance }}"
+
+      # Socket units not listening
+      - alert: ImportantSocketNotListening
+        expr: |
+          systemd_unit_state{
+            name=~"(docker|step-ca)\\.socket",
+            state="listening",
+            type="socket"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Important socket {{ $labels.name }} is not listening"
+          description: "Socket {{ $labels.name }} should be listening but is not on {{ $labels.instance }}"
+
+      # Network services
+      - alert: NetworkServiceDown
+        expr: |
+          systemd_unit_state{
+            name=~"(NetworkManager|tailscaled|nebula@.*)\\.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Network service {{ $labels.name }} is down"
+          description: "Network service {{ $labels.name }} is not active on {{ $labels.instance }}"
+
+      # Database services
+      - alert: DatabaseServiceDown
+        expr: |
+          systemd_unit_state{
+            name=~"postgresql\\.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Database service {{ $labels.name }} is down"
+          description: "Database service {{ $labels.name }} is not active on {{ $labels.instance }}"
+
+      # Certificate authority service
+      - alert: CertificateAuthorityDown
+        expr: |
+          systemd_unit_state{
+            name="step-ca.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: systemd
+        annotations:
+          summary: "Certificate authority service is down"
+          description: "step-ca service is not active on {{ $labels.instance }}, TLS certificates cannot be issued or renewed"

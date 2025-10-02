@@ -44,14 +44,3 @@ groups:
         annotations:
           summary: "High CPU usage on {{ $labels.instance }}"
           description: "CPU usage has been above 80% for 10 minutes"
-
-      # Systemd service alerts
-      - alert: SystemdServiceFailed
-        expr: node_systemd_unit_state{state="failed"} > 0
-        for: 1m
-        labels:
-          severity: critical
-          category: system
-        annotations:
-          summary: "Systemd service failed on {{ $labels.instance }}"
-          description: "Service {{ $labels.name }} is in failed state"

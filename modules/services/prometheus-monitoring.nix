@@ -7,6 +7,7 @@ let
   # Load all alert rules from YAML files
   alertRuleFiles = builtins.map (file: "${alertRulesDir}/${file}") [
     "system.yaml"
+    "systemd.yaml"
     "database.yaml"
     "storage.yaml"
     "certificates.yaml"
@@ -123,7 +124,7 @@ in
               "hera.lan"                          # 192.168.1.4
               "clio.lan"                          # 192.168.1.5
 
-              "adt-home-security.lan"             # 192.168.3.118
+              # "adt-home-security.lan"             # 192.168.3.118
               "asus-bq16-pro-ap.lan"              # 192.168.3.2
               "asus-bq16-pro-node.lan"            # 192.168.3.3
               "asus-rt-ax88u.lan"                 # 192.168.3.8
@@ -139,9 +140,9 @@ in
               "hubspace-porch-light.lan"          # 192.168.3.178
               "miele-dishwasher.lan"              # 192.168.3.98
               "myq-garage-door.lan"               # 192.168.3.99
-              "nest-downstairs.lan"               # 192.168.3.57
-              "nest-family-room.lan"              # 192.168.3.83
-              "nest-upstairs.lan"                 # 192.168.3.161
+              # "nest-downstairs.lan"               # 192.168.3.57
+              # "nest-family-room.lan"              # 192.168.3.83
+              # "nest-upstairs.lan"                 # 192.168.3.161
               "pentair-intellicenter.lan"         # 192.168.3.115
               "pentair-intelliflo.lan"            # 192.168.3.23
               "ring-chime-kitchen.lan"            # 192.168.3.163
@@ -490,6 +491,7 @@ in
       ## Alert Rules
       Alert rules are stored in `/etc/nixos/modules/monitoring/alerts/`:
       - system.yaml: System-level alerts (CPU, memory, disk)
+      - systemd.yaml: Systemd service health and state alerts
       - database.yaml: Database-specific alerts
       - storage.yaml: Storage and backup alerts
       - certificates.yaml: Certificate expiration alerts

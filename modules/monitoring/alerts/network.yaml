@@ -23,7 +23,7 @@ groups:
           service: connectivity
         annotations:
           summary: "High latency to {{ $labels.instance }}"
-          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>100ms) for more than 5 minutes."
+          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>5s) for more than 5 minutes."
 
       # Critical latency for ICMP probes
       - alert: CriticalLatency
@@ -35,7 +35,7 @@ groups:
           service: connectivity
         annotations:
           summary: "Critical latency to {{ $labels.instance }}"
-          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>500ms) for more than 2 minutes."
+          description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>10s) for more than 2 minutes."
 
       # DNS server connectivity issues
       - alert: DNSServerDown

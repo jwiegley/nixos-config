@@ -13,7 +13,7 @@ groups:
           blockchain: kadena
         annotations:
           summary: "Kadena blockchain block progression too slow"
-          description: "Kadena chainweb block progression is below 5 blocks per 15 minutes. Current rate: {{ $value | printf \"%.2f\" }} blocks/15min"
+          description: "Kadena chainweb block progression is below 100 blocks per 15 minutes. Current rate: {{ $value | printf \"%.2f\" }} blocks/15min"
 
       # Alert when the exporter fails to fetch data (height stays the same)
       - alert: ChainwebExporterStalled

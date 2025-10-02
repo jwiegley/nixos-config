@@ -211,6 +211,15 @@ in
     (mkBackup {
       path = "Nasim";
     })
+    (mkBackup {
+      path = "Nextcloud";
+      exclude = [
+        "*/cache/*"
+        "*/appdata_*/preview/*"
+        "*/tmp/*"
+        "*/updater-*"
+      ];
+    })
   ];
 
   systemd = {

@@ -13,6 +13,7 @@ let
     "certificates.yaml"
     "chainweb.yaml"
     "network.yaml"
+    "nextcloud.yaml"
   ];
 in
 {
@@ -148,8 +149,15 @@ in
             targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
           }];
         }
+      ] ++ (lib.optionals config.services.prometheus.exporters.nextcloud.enable [
+        {
+          job_name = "nextcloud";
+          static_configs = [{
+            targets = [ "localhost:${toString config.services.prometheus.exporters.nextcloud.port}" ];
+          }];
+        }
+      ]) ++ (lib.optionals config.services.prometheus.exporters.blackbox.enable [
         # Blackbox exporter scrape configurations
-      ] ++ (lib.optionals config.services.prometheus.exporters.blackbox.enable [
         # ICMP monitoring for all configured hosts
         {
           job_name = "blackbox_icmp";

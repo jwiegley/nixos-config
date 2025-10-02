@@ -29,12 +29,17 @@
       ensureDatabases = [
         "litellm"
         "wallabag"
+        "nextcloud"
       ];
       ensureUsers = [
         { name = "postgres"; }
         { name = "johnw"; }
         { name = "litellm"; }
         { name = "wallabag"; }
+        {
+          name = "nextcloud";
+          ensureDBOwnership = true;
+        }
       ];
 
       authentication = lib.mkOverride 10 ''
@@ -79,6 +84,29 @@
         proxy_redirect off;
       '';
     };
+  };
+
+  # Set PostgreSQL password for nextcloud user
+  systemd.services.postgresql-nextcloud-setup = {
+    description = "Set PostgreSQL password for Nextcloud user";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    before = [ "nextcloud-setup.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Check if password is already set by trying to connect
+      if ! ${config.services.postgresql.package}/bin/psql -U nextcloud -d nextcloud -c "SELECT 1" 2>/dev/null; then
+        # Set the password from the SOPS secret file
+        ${config.services.postgresql.package}/bin/psql -c "ALTER USER nextcloud WITH PASSWORD '$(cat ${config.sops.secrets."nextcloud-db-password".path})'"
+      fi
+    '';
   };
 
   networking.firewall = {

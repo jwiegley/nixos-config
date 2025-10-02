@@ -50,6 +50,7 @@
     ../../modules/services/dns.nix
     ../../modules/services/homepage.nix
     ../../modules/services/glance.nix
+    ../../modules/services/nextcloud.nix
 
     # Containers
     ../../modules/containers/default.nix

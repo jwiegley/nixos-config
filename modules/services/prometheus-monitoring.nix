@@ -161,6 +161,18 @@ in
           }];
           scrape_interval = "30s";
         }
+        {
+          job_name = "opnsense";
+          static_configs = [{
+            targets = [ "localhost:9273" ];
+            labels = {
+              alias = "opnsense-router";
+              role = "gateway";
+              device_type = "router";
+            };
+          }];
+          scrape_interval = "30s";
+        }
       ] ++ (lib.optionals config.services.prometheus.exporters.nextcloud.enable [
         {
           job_name = "nextcloud";

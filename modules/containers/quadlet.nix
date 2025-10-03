@@ -4,6 +4,7 @@
   # Import all container service modules
   imports = [
     ./litellm-quadlet.nix
+    ./opnsense-exporter-quadlet.nix
     ./silly-tavern-quadlet.nix
     ./wallabag-quadlet.nix
   ];

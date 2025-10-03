@@ -66,6 +66,36 @@ step ca certificate list \
 sudo cp /var/lib/step-ca/certs/root_ca.crt ~/vulcan-ca.crt
 ```
 
+### Dovecot Full-Text Search (FTS) Management
+```bash
+# Index all mailboxes for a user (initial setup)
+doveadm index -u johnw '*'
+doveadm index -u assembly '*'
+
+# Index a specific mailbox
+doveadm index -u johnw INBOX
+
+# Optimize FTS indexes (reduce index size, improve performance)
+doveadm fts optimize -u johnw
+doveadm fts optimize -u assembly
+
+# Rescan mailbox and rebuild FTS index (if index is corrupted)
+doveadm fts rescan -u johnw
+doveadm index -u johnw '*'
+
+# Check Dovecot FTS configuration
+doveconf plugin | grep fts
+
+# Monitor FTS indexing activity in logs
+sudo journalctl -u dovecot2 -f | grep -i fts
+
+# Search from command line (test FTS functionality)
+doveadm search -u johnw body "search term"
+
+# Get mailbox statistics including FTS index size
+doveadm mailbox status -u johnw all '*'
+```
+
 ## Architecture
 
 ### Core Structure
@@ -84,6 +114,7 @@ sudo cp /var/lib/step-ca/certs/root_ca.crt ~/vulcan-ca.crt
 4. **Tailscale & Nebula**: VPN networking
 5. **Logwatch**: System log monitoring and reporting
 6. **Step-CA**: Private certificate authority for TLS and SSH certificates
+7. **Dovecot**: IMAP mail server with full-text search (FTS) via Xapian backend
 
 ### Important Configuration Details
 - **State Version**: 25.05 (DO NOT change unless migrating)

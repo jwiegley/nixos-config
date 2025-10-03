@@ -33,7 +33,8 @@
     group = "dovecot2";
 
     # Enable mail plugins globally for old_stats (required for Prometheus exporter)
-    mailPlugins.globally.enable = [ "old_stats" ];
+    # and FTS (full-text search) with Xapian-based Flatcurve backend
+    mailPlugins.globally.enable = [ "old_stats" "fts" "fts_flatcurve" ];
 
     # Extra configuration for advanced settings
     extraConfig = ''
@@ -55,7 +56,7 @@
 
       # Protocol-specific settings
       protocol imap {
-        mail_plugins = $mail_plugins old_stats
+        mail_plugins = $mail_plugins old_stats fts fts_flatcurve
         imap_idle_notify_interval = 2 mins
         imap_capability = +IDLE SORT THREAD=REFERENCES THREAD=REFS MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 LITERAL+ NOTIFY SPECIAL-USE
       }
@@ -177,7 +178,7 @@
       mail_cache_purge_continued_percentage = 200
       mail_cache_purge_header_continue_count = 4
 
-      # mdbox-specific settings
+      # mdbox-specific settings and FTS configuration
       plugin {
         # mdbox rotation size (10MB)
         mdbox_rotate_size = 10M
@@ -186,6 +187,14 @@
         # Old stats configuration for Prometheus exporter
         old_stats_refresh = 30 secs
         old_stats_track_cmds = yes
+
+        # Full-Text Search (FTS) with Flatcurve (Xapian-based)
+        fts = flatcurve
+        fts_autoindex = yes
+        fts_enforced = body
+        fts_languages = en
+        fts_tokenizers = generic email-address
+        fts_tokenizer_generic = algorithm=simple
       }
 
       # Mailbox configuration
@@ -221,11 +230,12 @@
     group = "dovecot-exporter";
   };
 
-  # Ensure certificate directory exists with proper permissions
+  # Ensure certificate and FTS index directories exist with proper permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
+    "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
   ];
 
   # Override dovecot service to require /tank/Maildir mount

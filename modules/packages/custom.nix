@@ -106,7 +106,7 @@ let
   '';
 in
 {
-  environment.systemPackages = with pkgs; [
+  environment.systemPackages = (with pkgs; [
     b3sum
     backup-chainweb
     btop
@@ -134,5 +134,7 @@ in
     traceroute
     workspace-update
     zfs-prune-snapshots
+  ]) ++ [
+    pkgs.dovecot-fts-flatcurve
   ];
 }

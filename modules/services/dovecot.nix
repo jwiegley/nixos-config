@@ -21,8 +21,8 @@
     # Enable PAM authentication for system users
     enablePAM = true;
 
-    # Mail location using mdbox (multi-dbox) format in user home directories
-    mailLocation = "maildir:/home/%u/Maildir";
+    # Mail location using Maildir format on ZFS storage
+    mailLocation = "maildir:/var/mail/%u";
 
     # SSL/TLS certificate paths (will be created by step-ca)
     sslServerCert = "/var/lib/dovecot-certs/imap.vulcan.lan.fullchain.crt";

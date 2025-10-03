@@ -129,7 +129,7 @@
           ReadWritePaths = [
             "/var/lib/mbsync-${name}"
             "/var/log/mbsync-${name}"
-            "/tank/Maildir/${name}"
+            "/var/mail/${name}"
           ];
           NoNewPrivileges = true;
 

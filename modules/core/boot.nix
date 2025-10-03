@@ -20,6 +20,7 @@
       # ZFS ARC tuning for 64GB RAM system
       "zfs.zfs_arc_max=34359738368"  # 32GB max (50% of RAM)
       "zfs.zfs_arc_min=4294967296"   # 4GB min
+      "consoleblank=300"  # Console blanking after 5 minutes
     ];
 
     supportedFilesystems = [ "zfs" ];

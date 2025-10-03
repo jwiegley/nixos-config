@@ -155,11 +155,11 @@ def get_arguments(args: Optional[List[str]] = None) -> Tuple[argparse.Namespace,
         help="Walk through the folders in reverse order",
     )
     parser.add_argument(
-        "-t", "--only-tag", dest="tag_name", 
+        "-t", "--only-tag", dest="tag_name",
         help="Tag duplicates with specified tag instead of deleting them"
     )
     parser.add_argument(
-        "-y", "--copy", dest="copy_mailbox", 
+        "-y", "--copy", dest="copy_mailbox",
         help="Copy messages to specified mailbox before deleting them from current location."
     )
     parser.add_argument('mailbox', nargs='*')
@@ -317,7 +317,7 @@ def get_matching_msgnums(server: imaplib.IMAP4, query: str, sent_before: Optiona
         query = f"{query} SENTBEFORE {sent_before}"
         print(f"Getting matching messages sent before {sent_before}")
     deleted_info = check_response(server.search(None, query))
-    if deleted_info and deleted_info[0]:   
+    if deleted_info and deleted_info[0]:
         # If neither None nor empty nor [None], then
         # the first item should be a list of msg ids
         resp = [int(n) for n in deleted_info[0].split()]
@@ -363,7 +363,7 @@ def get_msg_headers(server: imaplib.IMAP4, msg_ids: List[int]) -> List[Tuple[int
     """
     Get the dict of headers for each message in the list of provided IDs.
     Return a list of tuples:  [ (msgid, header_bytes), (msgid, header_bytes)... ]
-    The returned header_bytes can be parsed by 
+    The returned header_bytes can be parsed by
     """
     # Get the header info for each message
     message_ids_str = ",".join(map(str, msg_ids))
@@ -496,7 +496,7 @@ def process(options, mboxes: List[str]):
             numdeleted = len(get_deleted_msgnums(server, options.sent_before))
             print(f'{numdeleted or "No"} message(s) currently marked as deleted in {mbox}')
 
-            # Now get a list of the ones that aren't deleted. 
+            # Now get a list of the ones that aren't deleted.
             # That's what we'll actually use.
             msgnums = get_undeleted_msgnums(server, options.sent_before)
             print(f"{len(msgnums)} others in {mbox}")
@@ -534,7 +534,7 @@ def process(options, mboxes: List[str]):
                                     mbox, mnum, msg_ids[msg_id],
                                     options.dry_run and "would" or "will",
                                     "tagged as '%s'" % options.tag_name if options.tag_name else "marked as deleted",
-                                ) 
+                                )
                             )
                             if options.show or options.verbose:
                                 print(

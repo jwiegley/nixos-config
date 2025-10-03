@@ -3,16 +3,19 @@
 {
   # OPNsense Exporter container configuration
   #
-  # NOTE: Currently using insecure mode (OPNSENSE_EXPORTER_OPS_INSECURE = "true") as a workaround
+  # NOTE: Using an nginx proxy to transform API responses as a workaround
   # for a known issue with the gateway collector in v0.0.11:
   # - Issue: https://github.com/AthennaMind/opnsense-exporter/issues/70
   # - The gateway collector fails with "json: cannot unmarshal bool into Go struct field .rows.monitor_disable of type string"
-  # - PR #79 (https://github.com/AthennaMind/opnsense-exporter/pull/79) has a fix but is not yet merged
-  # - Once a new version with the fix is released, we should:
-  #   1. Update to the new version
-  #   2. Set OPNSENSE_EXPORTER_OPS_INSECURE back to "false"
-  #   3. Re-enable the volume mounts for CA certificates
-  #   4. Re-enable SSL_CERT_FILE environment variable
+  # - The proxy (opnsense-api-proxy.nix) transforms boolean monitor_disable to string
+  #
+  # TO REMOVE THIS WORKAROUND when a fixed version is released:
+  #   1. Remove opnsense-api-proxy.nix and its import from quadlet.nix
+  #   2. Change OPNSENSE_EXPORTER_OPS_API back to "192.168.1.1"
+  #   3. Change OPNSENSE_EXPORTER_OPS_PROTOCOL back to "https"
+  #   4. Set OPNSENSE_EXPORTER_OPS_INSECURE back to "false"
+  #   5. Re-enable the volume mounts for CA certificates
+  #   6. Re-enable SSL_CERT_FILE environment variable
   virtualisation.quadlet.containers.opnsense-exporter = {
     containerConfig = {
       image = "ghcr.io/athennamind/opnsense-exporter:latest";
@@ -23,9 +26,9 @@
       # Environment file containing OPNSENSE_EXPORTER_OPS_API_KEY and OPNSENSE_EXPORTER_OPS_API_SECRET
       environmentFiles = [ config.sops.secrets."opnsense-exporter-secrets".path ];
       environments = {
-        OPNSENSE_EXPORTER_OPS_PROTOCOL = "https";
-        OPNSENSE_EXPORTER_OPS_API = "192.168.1.1";
-        OPNSENSE_EXPORTER_OPS_INSECURE = "true";  # Set to true to skip TLS verification as a workaround
+        OPNSENSE_EXPORTER_OPS_PROTOCOL = "http";  # Proxy uses HTTP internally
+        OPNSENSE_EXPORTER_OPS_API = "10.88.0.1:8444";  # Point to nginx proxy on podman0 bridge
+        OPNSENSE_EXPORTER_OPS_INSECURE = "true";  # No TLS to proxy
         OPNSENSE_EXPORTER_INSTANCE_LABEL = "opnsense-router";
         # Disable SSL cert since we're using insecure mode
         # SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
@@ -41,8 +44,8 @@
       autoUpdate = "registry";
     };
     unitConfig = {
-      After = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" ];
-      Wants = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" ];
+      After = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "opnsense-api-transformer.service" ];
+      Wants = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "opnsense-api-transformer.service" ];
     };
     serviceConfig = {
       # Restart policy

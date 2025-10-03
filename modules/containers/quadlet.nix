@@ -4,6 +4,7 @@
   # Import all container service modules
   imports = [
     ./litellm-quadlet.nix
+    ./opnsense-api-transformer.nix  # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-exporter-quadlet.nix
     ./silly-tavern-quadlet.nix
     ./wallabag-quadlet.nix

@@ -17,8 +17,8 @@
     };
     "nextcloud-monitoring-password" = {
       sopsFile = ../../secrets.yaml;
-      owner = "nextcloud";
-      group = "nextcloud";
+      owner = "nextcloud-exporter";
+      group = "nextcloud-exporter";
       mode = "0400";
     };
   };

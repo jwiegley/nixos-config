@@ -40,6 +40,10 @@ with lib;
           style = "row";
           columns = 4;
         };
+        Productivity = {
+          style = "row";
+          columns = 3;
+        };
         "Media & Entertainment" = {
           style = "row";
           columns = 3;
@@ -98,6 +102,18 @@ with lib;
               href = "https://postgres.vulcan.lan";
               description = "pgAdmin Interface";
               ping = "postgres.vulcan.lan";
+            };
+          }
+        ];
+      }
+      {
+        Productivity = [
+          {
+            Nextcloud = {
+              icon = "nextcloud.png";
+              href = "https://nextcloud.vulcan.lan";
+              description = "File Sharing & Collaboration";
+              ping = "nextcloud.vulcan.lan";
             };
           }
         ];

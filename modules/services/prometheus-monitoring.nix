@@ -677,6 +677,7 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
       serviceConfig = {
         Restart = "always";
         RestartSec = 5;
@@ -687,6 +688,7 @@ in
       wants = [ "network-online.target" "postgresql.service" ];
       after = [ "network-online.target" "postgresql.service" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
       serviceConfig = {
         Restart = "always";
         RestartSec = 5;
@@ -697,6 +699,7 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
       serviceConfig = {
         Restart = "always";
         RestartSec = 5;
@@ -707,6 +710,7 @@ in
       wants = [ "network-online.target" "postfix.service" ];
       after = [ "network-online.target" "postfix.service" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
       serviceConfig = {
         Restart = "always";
         RestartSec = 5;
@@ -717,6 +721,7 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" "zfs.target" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
       serviceConfig = {
         Restart = "always";
         RestartSec = 5;

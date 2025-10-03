@@ -181,6 +181,7 @@ in
       wants = [ "network-online.target" "setup-blackbox-ca.service" ];
       after = [ "network-online.target" "setup-blackbox-ca.service" ];
       startLimitIntervalSec = 0;
+      startLimitBurst = 0;
 
       serviceConfig = {
         # Required for ICMP probes

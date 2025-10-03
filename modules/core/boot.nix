@@ -24,7 +24,7 @@
     ];
 
     supportedFilesystems = [ "zfs" ];
-    # zfs.extraPools = [ "tank" ];
+    zfs.extraPools = [ "tank" ];
 
     initrd.services.udev.rules = ''
       ACTION=="add|change", SUBSYSTEM=="thunderbolt", \

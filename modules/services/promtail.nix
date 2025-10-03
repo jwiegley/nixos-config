@@ -349,7 +349,7 @@
           ];
         }
 
-        # Jellyfin logs (if present)
+        # Jellyfin logs
         {
           job_name = "jellyfin";
           static_configs = [
@@ -376,13 +376,620 @@
             }
           ];
         }
+
+        # mbsync logs for mail synchronization
+        {
+          job_name = "mbsync";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "mbsync";
+                host = "vulcan";
+                user = "johnw";
+                __path__ = "/var/log/mbsync-johnw/*.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              multiline = {
+                firstline = ''^(\d{4}-\d{2}-\d{2}|\w+\s+\d+)'';
+                max_wait_time = "3s";
+              };
+            }
+            {
+              regex = {
+                expression = ''^(?P<message>.*)$'';
+              };
+            }
+          ];
+        }
+        {
+          job_name = "mbsync-assembly";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "mbsync";
+                host = "vulcan";
+                user = "assembly";
+                __path__ = "/var/log/mbsync-assembly/*.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              multiline = {
+                firstline = ''^(\d{4}-\d{2}-\d{2}|\w+\s+\d+)'';
+                max_wait_time = "3s";
+              };
+            }
+            {
+              regex = {
+                expression = ''^(?P<message>.*)$'';
+              };
+            }
+          ];
+        }
+
+        # ZFS replication logs
+        {
+          job_name = "zfs-replication";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "zfs-replication";
+                host = "vulcan";
+                __path__ = "/var/log/zfs-replication*.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              regex = {
+                expression = ''^(?P<timestamp>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})?[\s]*(?P<message>.*)$'';
+              };
+            }
+            {
+              timestamp = {
+                source = "timestamp";
+                format = "2006-01-02 15:04:05";
+                fallback_formats = [
+                  "RFC3339"
+                  "RFC3339Nano"
+                ];
+              };
+            }
+          ];
+        }
+
+        # Audit logs (separate from journal to allow specific handling)
+        {
+          job_name = "audit";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "audit";
+                host = "vulcan";
+                __path__ = "/var/log/audit/audit.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              regex = {
+                expression = ''^type=(?P<audit_type>\w+) msg=audit\((?P<timestamp>[^)]+)\):(?P<message>.*)$'';
+              };
+            }
+            {
+              labels = {
+                audit_type = "";
+              };
+            }
+            {
+              # Rate limit audit logs to prevent overwhelming Loki
+              limit = {
+                rate = 100;
+                burst = 200;
+                drop = true;
+              };
+            }
+          ];
+        }
+
+        # Backup failure logs
+        {
+          job_name = "backup-failures";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "backup-failures";
+                host = "vulcan";
+                __path__ = "/var/log/backup-failures.log";
+              };
+            }
+          ];
+        }
+
+        # sudo logs
+        {
+          job_name = "sudo";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "sudo";
+                host = "vulcan";
+                __path__ = "/var/log/sudo.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              regex = {
+                expression = ''^(?P<timestamp>\w+\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>\S+)\s+sudo:\s+(?P<user>\S+)\s+:\s+(?P<message>.*)$'';
+              };
+            }
+            {
+              labels = {
+                user = "";
+              };
+            }
+            {
+              timestamp = {
+                source = "timestamp";
+                format = "Jan 02 15:04:05";
+                location = "America/Los_Angeles";
+              };
+            }
+          ];
+        }
+
+        # Step-CA certificate authority logs from journal
+        {
+          job_name = "step-ca";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "step-ca";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "step-ca\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Technitium DNS Server logs from journal
+        {
+          job_name = "technitium-dns";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "technitium-dns";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "technitium-dns-server\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Grafana logs from journal
+        {
+          job_name = "grafana";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "grafana";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "grafana\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Prometheus and exporters logs from journal
+        {
+          job_name = "prometheus-stack";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "prometheus-stack";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "(prometheus.*\\.service|alertmanager\\.service)";
+              action = "keep";
+            }
+            {
+              # Extract service name for better categorization
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service";
+              regex = "(prometheus|alertmanager|.*-exporter).*";
+              replacement = "$1";
+            }
+          ];
+        }
+
+        # Loki logs from journal
+        {
+          job_name = "loki";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "loki";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "loki\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # PGAdmin logs from journal
+        {
+          job_name = "pgadmin";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "pgadmin";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "pgadmin\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Redis instances logs from journal
+        {
+          job_name = "redis";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "redis";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "redis-.*\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "instance";
+              regex = "redis-(.*)\\.service";
+              replacement = "$1";
+            }
+          ];
+        }
+
+        # Chainweb/Kadena node exporter logs from journal
+        {
+          job_name = "chainweb-exporters";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "chainweb-exporters";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "chainweb-node-exporter-.*\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "node";
+              regex = "chainweb-node-exporter-(.*)\\.service";
+              replacement = "$1";
+            }
+          ];
+        }
+
+        # Glance dashboard and GitHub extension logs from journal
+        {
+          job_name = "glance";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "glance";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "glance.*\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "component";
+              regex = "glance(-(.*))?.*";
+              replacement = "$2";
+            }
+          ];
+        }
+
+        # Homepage dashboard logs from journal
+        {
+          job_name = "homepage-dashboard";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "homepage-dashboard";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "homepage-dashboard\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Container logs for services running in Podman
+        {
+          job_name = "podman-containers";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "podman-containers";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "(silly-tavern|wallabag|litellm|opnsense-exporter|opnsense-api-transformer)\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "container";
+              regex = "(.*)\\.service";
+              replacement = "$1";
+            }
+            {
+              source_labels = [ "__journal__comm" ];
+              target_label = "process";
+            }
+          ];
+        }
+
+        # Secure nginx container logs from journal
+        {
+          job_name = "secure-nginx";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "secure-nginx";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "container@secure-nginx\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # ZFS Event Daemon logs from journal
+        {
+          job_name = "zfs-zed";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "zfs-zed";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "zfs-zed\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # Bolt thunderbolt daemon logs from journal
+        {
+          job_name = "bolt";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "bolt";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "bolt\\.service";
+              action = "keep";
+            }
+          ];
+        }
+
+        # System authentication logs from journal
+        {
+          job_name = "auth";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "auth";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "(sshd|polkit)\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal_priority" ];
+              target_label = "priority";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service";
+              regex = "(.*)\\.service";
+              replacement = "$1";
+            }
+          ];
+        }
+
+        # PHPFPM Nextcloud logs from journal
+        {
+          job_name = "phpfpm-nextcloud";
+          journal = {
+            json = true;
+            max_age = "5m";
+            labels = {
+              job = "phpfpm-nextcloud";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "phpfpm-nextcloud\\.service";
+              action = "keep";
+            }
+          ];
+        }
       ];
     };
   };
 
-  # Ensure Promtail user has access to journal
+  # Ensure Promtail user has access to journal and log files
   users.users.promtail = {
-    extraGroups = [ "systemd-journal" "nginx" "docker" ];
+    extraGroups = [
+      "systemd-journal"
+      "nginx"
+      "docker"
+      "jellyfin"  # For Jellyfin logs
+      "wheel"     # For audit logs
+    ];
   };
 
   # Create necessary directories

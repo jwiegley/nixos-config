@@ -91,93 +91,197 @@ let
   # Script to check replication status
   replicationStatusScript = pkgs.writeShellApplication {
     name = "check-zfs-replication";
-    runtimeInputs = with pkgs; [ zfs systemd jq coreutils ];
+    runtimeInputs = with pkgs; [ zfs systemd jq coreutils gnugrep gawk ];
     text = ''
       echo "=== ZFS Replication Status ==="
       echo ""
+
+      # Get timer information for all syncoid services at once
+      TIMER_INFO=$(systemctl list-timers 'syncoid-*' --no-pager --no-legend 2>/dev/null || true)
 
       # Check each syncoid service
       for service in ${lib.concatStringsSep " " syncoidServices}; do
         echo "Service: $service"
 
         # Get service status
-        STATUS=$(systemctl is-active "$service" 2>/dev/null || echo "unknown")
+        STATUS=$(systemctl is-active "$service" 2>/dev/null || echo "inactive")
 
-        # Get last run time from timer
-        TIMER_LAST_RUN=$(systemctl show -p LastTriggerUSec --value "$service.timer" 2>/dev/null || echo "")
+        # Get result of last run (success/failed)
+        RESULT=$(systemctl show -p Result --value "$service" 2>/dev/null || echo "unknown")
 
-        # Get next run time from timer
-        TIMER_NEXT_RUN=$(systemctl show -p NextElapseUSecRealtime --value "$service.timer" 2>/dev/null || echo "")
+        # Get exit code of last run
+        EXIT_CODE=$(systemctl show -p ExecMainStatus --value "$service" 2>/dev/null || echo "0")
 
-        # Get last exit status
-        EXIT_STATUS=$(systemctl show -p ExecMainStatus --value "$service" 2>/dev/null || echo "unknown")
+        # Extract timer info for this service
+        TIMER_LINE=$(echo "$TIMER_INFO" | grep "$service.timer" || true)
 
-        echo "  Status: $STATUS"
+        if [ -n "$TIMER_LINE" ]; then
+          # Extract NEXT and LAST columns from timer output
+          # Format: "NEXT (date time tz) LEFT LAST (date time tz) PASSED UNIT ACTIVATES"
+          NEXT=$(echo "$TIMER_LINE" | awk '{print $1, $2, $3}')
+          PASSED=$(echo "$TIMER_LINE" | awk '{
+            # Find "ago" and print what comes before it
+            for (i=1; i<=NF; i++) {
+              if ($i == "ago") {
+                print $(i-1), $i
+                break
+              }
+            }
+          }')
+          LAST_DATE=$(echo "$TIMER_LINE" | awk '{
+            # Find the date/time after LEFT column
+            for (i=1; i<=NF; i++) {
+              if ($i == "ago") {
+                # Print date and time (2-3 fields before "ago")
+                if ((i-3) > 0) {
+                  print $(i-3), $(i-2)
+                }
+                break
+              }
+            }
+          }')
 
-        # Parse last run time
-        if [ -n "$TIMER_LAST_RUN" ] && [ "$TIMER_LAST_RUN" != "n/a" ] && [ "$TIMER_LAST_RUN" != "0" ]; then
-          # systemctl returns timestamps in a format we need to parse
-          echo "  Last Run: $TIMER_LAST_RUN"
+          echo "  Status: $STATUS (result: $RESULT)"
+          if [ -n "$LAST_DATE" ]; then
+            echo "  Last Run: $LAST_DATE ($PASSED)"
+          else
+            echo "  Last Run: Unknown"
+          fi
+          echo "  Next Run: $NEXT"
         else
-          echo "  Last Run: Never"
+          echo "  Status: $STATUS"
+          echo "  Last Run: Unknown"
+          echo "  Next Run: Timer not found"
         fi
 
-        # Parse next run time
-        if [ -n "$TIMER_NEXT_RUN" ] && [ "$TIMER_NEXT_RUN" != "n/a" ] && [ "$TIMER_NEXT_RUN" != "" ]; then
-          echo "  Next Run: $TIMER_NEXT_RUN"
-        else
-          echo "  Next Run: Not scheduled"
+        # Show exit code only if non-zero
+        if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "unknown" ]; then
+          echo "  ⚠ Last Exit Code: $EXIT_CODE"
         fi
 
-        if [ "$EXIT_STATUS" != "0" ] && [ "$EXIT_STATUS" != "unknown" ]; then
-          echo "  ⚠ Last Exit Code: $EXIT_STATUS"
+        # Get the most recent journal entry about successful transfer
+        RECENT_SUCCESS=$(journalctl -u "$service.service" --since "48 hours ago" --no-pager -q 2>/dev/null | \
+          grep "INFO: Sending incremental" | tail -1 || true)
+
+        if [ -n "$RECENT_SUCCESS" ]; then
+          # Extract and show brief summary
+          SIZE_INFO=$(echo "$RECENT_SUCCESS" | grep -oP '\(~ \K[^)]+' || true)
+          if [ -n "$SIZE_INFO" ]; then
+            echo "  Last transfer: ~$SIZE_INFO"
+          fi
         fi
+
+        # Check for actual errors (not just cleanup warnings)
+        RECENT_ERRORS=$(journalctl -u "$service.service" --since "48 hours ago" --no-pager -q 2>/dev/null | \
+          grep -i "error\|critical\|cannot send" | grep -v "cannot destroy snapshots" | tail -1 || true)
+
+        if [ -n "$RECENT_ERRORS" ]; then
+          echo "  ⚠ Recent error: $(echo "$RECENT_ERRORS" | cut -c1-80)"
+        fi
+
         echo ""
       done
 
-      echo "=== ZFS Snapshot Differences ==="
+      echo "=== ZFS Syncoid Snapshot Status ==="
       for fs in home nix root; do
         echo ""
         echo "Checking rpool/$fs -> tank/Backups/rpool/$fs:"
 
-        # Get latest snapshot on source
-        SOURCE_SNAP=$(zfs list -H -t snapshot -o name -S creation "rpool/$fs" 2>/dev/null | head -1)
+        # Get latest SYNCOID snapshot on source (ignore autosnap)
+        SOURCE_SYNCOID=$(zfs list -H -t snapshot -o name -S creation "rpool/$fs" 2>/dev/null | \
+          grep "syncoid_vulcan_" | head -1 || true)
 
-        # Get latest snapshot on destination
-        DEST_SNAP=$(zfs list -H -t snapshot -o name -S creation "tank/Backups/rpool/$fs" 2>/dev/null | head -1)
+        # Get latest SYNCOID snapshot on destination
+        DEST_SYNCOID=$(zfs list -H -t snapshot -o name -S creation "tank/Backups/rpool/$fs" 2>/dev/null | \
+          grep "syncoid_vulcan_" | head -1 || true)
 
-        if [ -n "$SOURCE_SNAP" ]; then
-          SOURCE_SNAP_NAME="''${SOURCE_SNAP#*/}"
-          echo "  Source latest: $SOURCE_SNAP_NAME"
+        if [ -n "$SOURCE_SYNCOID" ]; then
+          SOURCE_SNAP_NAME="''${SOURCE_SYNCOID#*@}"
+          SOURCE_DATE=$(echo "$SOURCE_SNAP_NAME" | grep -oP '\d{4}-\d{2}-\d{2}' || echo "unknown")
+          echo "  Source latest syncoid: $SOURCE_DATE ($(echo "$SOURCE_SNAP_NAME" | cut -c1-40)...)"
         else
-          echo "  Source: No snapshots found"
+          echo "  ⚠ Source: No syncoid snapshots found"
         fi
 
-        if [ -n "$DEST_SNAP" ]; then
-          DEST_SNAP_NAME="''${DEST_SNAP#*/}"
-          echo "  Dest latest:   $DEST_SNAP_NAME"
+        if [ -n "$DEST_SYNCOID" ]; then
+          DEST_SNAP_NAME="''${DEST_SYNCOID#*@}"
+          DEST_DATE=$(echo "$DEST_SNAP_NAME" | grep -oP '\d{4}-\d{2}-\d{2}' || echo "unknown")
+          echo "  Dest latest syncoid:   $DEST_DATE ($(echo "$DEST_SNAP_NAME" | cut -c1-40)...)"
+        else
+          echo "  ⚠ Dest: No syncoid snapshots found"
+        fi
 
-          # Check if snapshots match (same snapshot name exists on both)
-          if [ -n "$SOURCE_SNAP" ]; then
-            SOURCE_BASE="''${SOURCE_SNAP_NAME#*@}"
-            DEST_BASE="''${DEST_SNAP_NAME#*@}"
-            if [ "$SOURCE_BASE" = "$DEST_BASE" ]; then
-              echo "  ✓ In sync"
+        # Check if they match
+        if [ -n "$SOURCE_SYNCOID" ] && [ -n "$DEST_SYNCOID" ]; then
+          if [ "$SOURCE_SNAP_NAME" = "$DEST_SYNCOID" ] || [ "$(basename "$SOURCE_SYNCOID")" = "$(basename "$DEST_SYNCOID")" ]; then
+            echo "  ✓ Fully synchronized"
+          elif [ "$SOURCE_DATE" = "$DEST_DATE" ]; then
+            echo "  ✓ Same date (likely in sync, minor time difference)"
+          else
+            DAYS_BEHIND=$(( ( $(date -d "$SOURCE_DATE" +%s) - $(date -d "$DEST_DATE" +%s) ) / 86400 ))
+            if [ "$DAYS_BEHIND" -gt 0 ]; then
+              echo "  ⚠ Destination is $DAYS_BEHIND day(s) behind"
             else
-              echo "  ⚠ Out of sync - replication needed"
+              echo "  ⚠ Snapshot mismatch (investigate)"
             fi
           fi
-        else
-          echo "  Dest: No snapshots found (initial replication needed)"
         fi
       done
 
       echo ""
-      echo "=== Recent Replication Log Entries ==="
-      if [ -f /var/log/zfs-replication.log ]; then
-        tail -10 /var/log/zfs-replication.log 2>/dev/null || echo "No recent entries"
-      else
-        echo "Log file not yet created"
+      echo "=== Recent Replication Activity (Last 48 Hours) ==="
+
+      # Get recent successful replications from journal
+      SUCCESS_COUNT=0
+      for service in ${lib.concatStringsSep " " syncoidServices}; do
+        SERVICE_SHORT="''${service#syncoid-rpool-}"
+
+        # Check for successful runs (strip any whitespace/newlines)
+        RUNS=$(journalctl -u "$service.service" --since "48 hours ago" --no-pager -q 2>/dev/null | \
+          grep -c "Deactivated successfully" 2>/dev/null || echo "0")
+        RUNS=$(echo "$RUNS" | tr -d '\n\r' | grep -oE '[0-9]+' || echo "0")
+
+        if [ "$RUNS" -gt 0 ] 2>/dev/null; then
+          SUCCESS_COUNT=$((SUCCESS_COUNT + RUNS))
+          LAST_SUCCESS=$(journalctl -u "$service.service" --since "48 hours ago" --no-pager -q 2>/dev/null | \
+            grep "Deactivated successfully" | tail -1 | awk '{print $1, $2, $3}' || echo "")
+          echo "  ✓ $SERVICE_SHORT: $RUNS successful run(s), last: $LAST_SUCCESS"
+        else
+          echo "  ⚠ $SERVICE_SHORT: No successful runs in last 48 hours"
+        fi
+      done
+
+      if [ "$SUCCESS_COUNT" -gt 0 ]; then
+        echo ""
+        echo "Total: $SUCCESS_COUNT successful replication(s) in last 48 hours"
+      fi
+
+      # Show any critical errors from journal (last 48 hours only)
+      echo ""
+      echo "=== Critical Issues (Last 48 Hours) ==="
+
+      HAS_CRITICAL=0
+      for service in ${lib.concatStringsSep " " syncoidServices}; do
+        # Look for real errors (excluding cleanup warnings)
+        CRITICAL=$(journalctl -u "$service.service" --since "48 hours ago" --no-pager -q 2>/dev/null | \
+          grep -i "error\|critical\|failed" | \
+          grep -v "cannot destroy snapshots" | \
+          grep -v "WARNING:.*zfs destroy" | \
+          grep -v "Deactivated successfully" | \
+          tail -3 || true)
+
+        if [ -n "$CRITICAL" ]; then
+          SERVICE_SHORT="''${service#syncoid-rpool-}"
+          echo "  ⚠ $SERVICE_SHORT:"
+          echo "$CRITICAL" | while IFS= read -r line; do
+            echo "    $(echo "$line" | cut -c1-100)"
+          done
+          HAS_CRITICAL=1
+        fi
+      done
+
+      if [ "$HAS_CRITICAL" -eq 0 ]; then
+        echo "  ✓ No critical issues detected"
       fi
     '';
   };

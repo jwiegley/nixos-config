@@ -27,13 +27,32 @@ check_certificate_status() {
         return 1
     fi
 
-    # Check if certificate is valid
-    openssl x509 -in "$cert_path" -noout -checkend 0 >/dev/null 2>&1
-    local is_valid=$?
+    # Check if certificate file is empty
+    if [[ ! -s "$cert_path" ]]; then
+        attention_required+=("✗ $cert_name: EMPTY FILE")
+        return 1
+    fi
 
-    # Calculate days until expiration
+    # Check if certificate is valid (protect against openssl failures)
+    if ! openssl x509 -in "$cert_path" -noout -checkend 0 >/dev/null 2>&1; then
+        local is_valid=1
+    else
+        local is_valid=0
+    fi
+
+    # Calculate days until expiration (protect against parsing failures)
     local end_date=$(openssl x509 -in "$cert_path" -noout -enddate 2>/dev/null | cut -d= -f2)
+    if [[ -z "$end_date" ]]; then
+        attention_required+=("✗ $cert_name: CORRUPTED OR INVALID")
+        return 1
+    fi
+
     local end_epoch=$(date -d "$end_date" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$end_date" +%s 2>/dev/null)
+    if [[ -z "$end_epoch" ]]; then
+        attention_required+=("✗ $cert_name: DATE PARSE ERROR")
+        return 1
+    fi
+
     local now_epoch=$(date +%s)
     local days_remaining=$(( (end_epoch - now_epoch) / 86400 ))
 

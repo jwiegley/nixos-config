@@ -42,7 +42,7 @@ groups:
 
       # Services in activating state for too long
       - alert: ServiceStuckActivating
-        expr: systemd_unit_state{state="activating",type="service"} == 1
+        expr: systemd_unit_state{state="activating",type="service",name!="restic-metrics.service"} == 1
         for: 5m
         labels:
           severity: warning

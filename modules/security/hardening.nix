@@ -19,8 +19,8 @@
         "-w /etc/ssh/sshd_config -p wa -k sshd_config"
 
         # Monitor system calls
-        "-a always,exit -F arch=b64 -S execve -k exec"
-        "-a always,exit -F arch=b64 -S socket -S connect -k network"
+        # "-a always,exit -F arch=b64 -S execve -k exec"
+        # "-a always,exit -F arch=b64 -S socket -S connect -k network"
       ];
     };
 

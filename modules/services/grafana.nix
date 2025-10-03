@@ -76,6 +76,30 @@
               httpMethod = "POST";
             };
           }
+          {
+            name = "Loki";
+            type = "loki";
+            access = "proxy";
+            url = "http://localhost:3100";
+            isDefault = false;
+            editable = false;
+            jsonData = {
+              maxLines = 1000;
+              derivedFields = [
+                {
+                  # Link from trace ID in logs to tempo traces (if using tempo)
+                  matcherRegex = "traceID=(\\w+)";
+                  name = "TraceID";
+                  url = "$${__value.raw}";
+                  datasourceUid = "";
+                }
+              ];
+              # Enable correlation with Prometheus metrics
+              alertmanager = {
+                implementation = "prometheus";
+              };
+            };
+          }
         ];
 
         # Clean up removed data sources
@@ -138,6 +162,22 @@
         ${pkgs.curl}/bin/curl -sSL \
           "https://grafana.com/api/dashboards/9628/revisions/latest/download" \
           -o "$DASHBOARD_DIR/postgresql.json" || true
+      fi
+
+      # Loki & Promtail Dashboard (ID: 10880) - comprehensive log analysis
+      if [ ! -f "$DASHBOARD_DIR/loki-promtail.json" ]; then
+        echo "Downloading Loki & Promtail dashboard..."
+        ${pkgs.curl}/bin/curl -sSL \
+          "https://grafana.com/api/dashboards/10880/revisions/latest/download" \
+          -o "$DASHBOARD_DIR/loki-promtail.json" || true
+      fi
+
+      # Logs / App Dashboard (ID: 13639) - application logs overview
+      if [ ! -f "$DASHBOARD_DIR/logs-app.json" ]; then
+        echo "Downloading Logs App dashboard..."
+        ${pkgs.curl}/bin/curl -sSL \
+          "https://grafana.com/api/dashboards/13639/revisions/latest/download" \
+          -o "$DASHBOARD_DIR/logs-app.json" || true
       fi
 
       # Copy ZFS Replication Dashboard

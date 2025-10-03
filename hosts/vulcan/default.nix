@@ -42,6 +42,8 @@
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/grafana.nix
+    ../../modules/services/loki.nix
+    ../../modules/services/promtail.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
     ../../modules/services/imapdedup.nix

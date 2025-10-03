@@ -293,7 +293,6 @@ in
             targets = [
               "http://google.com"
               "http://github.com"
-              "http://cloudflare.com"
             ];
           }];
           relabel_configs = [
@@ -329,9 +328,6 @@ in
             targets = [
               "https://google.com"
               "https://github.com"
-              "https://cloudflare.com"
-              "https://prometheus.io"
-              "https://grafana.com"
             ];
           }];
           relabel_configs = [

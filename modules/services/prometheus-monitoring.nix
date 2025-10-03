@@ -149,6 +149,18 @@ in
             targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
           }];
         }
+        {
+          job_name = "node_opnsense";
+          static_configs = [{
+            targets = [ "192.168.1.1:9100" ];
+            labels = {
+              alias = "opnsense-router";
+              role = "gateway";
+              device_type = "router";
+            };
+          }];
+          scrape_interval = "30s";
+        }
       ] ++ (lib.optionals config.services.prometheus.exporters.nextcloud.enable [
         {
           job_name = "nextcloud";

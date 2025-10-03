@@ -44,6 +44,7 @@
     ../../modules/services/grafana.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
+    ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
     ../../modules/services/mbsync-prometheus.nix
     ../../modules/services/mbsync-alerts.nix

@@ -205,10 +205,10 @@ in
               "b-hyve-sprinkler.lan"              # 192.168.3.89
               "dreamebot-vacuum.lan"              # 192.168.3.195
               "enphase-solar-inverter.lan"        # 192.168.3.26
-              "flume-water-meter.lan"             # 192.168.3.183
+              # "flume-water-meter.lan"             # 192.168.3.183
               "google-home-hub.lan"               # 192.168.3.106
               "hera-wifi.lan"                     # 192.168.3.6
-              "hubspace-porch-light.lan"          # 192.168.3.178
+              # "hubspace-porch-light.lan"          # 192.168.3.178
               "miele-dishwasher.lan"              # 192.168.3.98
               "myq-garage-door.lan"               # 192.168.3.99
               # "nest-downstairs.lan"               # 192.168.3.57
@@ -216,10 +216,10 @@ in
               # "nest-upstairs.lan"                 # 192.168.3.161
               "pentair-intellicenter.lan"         # 192.168.3.115
               "pentair-intelliflo.lan"            # 192.168.3.23
-              "ring-chime-kitchen.lan"            # 192.168.3.163
-              "ring-chime-office.lan"             # 192.168.3.88
+              # "ring-chime-kitchen.lan"            # 192.168.3.163
+              # "ring-chime-office.lan"             # 192.168.3.88
               # "ring-doorbell.lan"                 # 192.168.3.185
-              "tesla-wall-connector.lan"          # 192.168.3.119
+              # "tesla-wall-connector.lan"          # 192.168.3.119
               # "traeger-grill.lan"                 # 192.168.3.196
 
               "athena.lan"                        # 192.168.20.2

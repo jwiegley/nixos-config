@@ -18,6 +18,10 @@
         # Monitor SSH configuration
         "-w /etc/ssh/sshd_config -p wa -k sshd_config"
 
+        # Monitor Samba configuration and authentication
+        "-w /etc/samba/smb.conf -p wa -k samba_config"
+        "-w /var/lib/samba/ -p wa -k samba_auth"
+
         # Monitor system calls
         # "-a always,exit -F arch=b64 -S execve -k exec"
         # "-a always,exit -F arch=b64 -S socket -S connect -k network"

@@ -167,6 +167,190 @@ sudo mount -t cifs //vulcan.lan/johnw-documents /mnt/samba/documents -o username
 //vulcan.lan/johnw-documents /mnt/samba/documents cifs credentials=/home/user/.smbcredentials,uid=1000,gid=1000 0 0
 ```
 
+### Home Assistant IoT Management
+```bash
+# Check Home Assistant service status
+sudo systemctl status home-assistant
+sudo journalctl -u home-assistant -f  # Follow logs
+
+# Restart Home Assistant
+sudo systemctl restart home-assistant
+
+# View Home Assistant configuration
+cat /var/lib/hass/configuration.yaml
+
+# Check Home Assistant database
+sudo -u hass psql -d hass -c "SELECT COUNT(*) FROM states;"
+
+# Backup Home Assistant manually
+sudo restic-home-assistant backup
+
+# Check recent backups
+sudo restic-home-assistant snapshots | head -10
+
+# Restore Home Assistant from backup (if needed)
+# First, stop the service
+sudo systemctl stop home-assistant
+# Restore from latest snapshot
+sudo restic-home-assistant restore latest --target /tmp/hass-restore
+# Copy files back
+sudo rsync -av /tmp/hass-restore/var/lib/hass/ /var/lib/hass/
+# Fix permissions
+sudo chown -R hass:hass /var/lib/hass
+# Restart service
+sudo systemctl start home-assistant
+```
+
+### Home Assistant Web Access
+```bash
+# Local access (HTTPS via nginx reverse proxy)
+# URL: https://hass.vulcan.lan
+
+# The service runs on localhost:8123 but is accessed via nginx on port 443
+# Nginx handles SSL/TLS termination with step-ca certificates
+
+# Test direct access (for debugging)
+curl http://localhost:8123/api/
+
+# Check nginx configuration for Home Assistant
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### Home Assistant Initial Setup
+```bash
+# 1. After first NixOS rebuild, access Home Assistant at https://hass.vulcan.lan
+# 2. Complete the onboarding wizard (create admin account)
+# 3. Add Yale Home integration:
+#    - Go to Settings > Devices & Services
+#    - Click "Add Integration"
+#    - Search for "Yale Home" or "August"
+#    - Authenticate with your Yale/August account credentials
+# 4. Your 3 August 4th gen WiFi locks should be automatically discovered
+# 5. Configure lock entities and add to dashboards
+
+# Yale/August credentials are stored in SOPS secrets:
+# - home-assistant/yale-username
+# - home-assistant/yale-password
+
+# To update credentials, edit secrets.yaml with SOPS:
+# sops /etc/nixos/secrets.yaml
+# Then rebuild and restart Home Assistant
+```
+
+### Home Assistant Troubleshooting
+```bash
+# Check if Home Assistant is responding
+curl -f http://localhost:8123/api/ || echo "Home Assistant not responding"
+
+# View detailed logs with debug level
+sudo journalctl -u home-assistant --since "1 hour ago"
+
+# Check PostgreSQL connection
+sudo -u hass psql -d hass -c "\dt"
+
+# Verify Yale integration status
+sudo journalctl -u home-assistant | grep -i yale
+
+# Check nginx proxy status
+sudo systemctl status nginx
+sudo nginx -t
+
+# Verify step-ca certificate
+openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan < /dev/null 2>&1 | grep -A 5 "Certificate chain"
+
+# Check Home Assistant configuration validity
+# (requires hass CLI installed in Home Assistant environment)
+# sudo -u hass hass --script check_config -c /var/lib/hass
+```
+
+### IoT Device Integrations
+
+Home Assistant is configured with support for 16 different IoT device types. See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
+
+```bash
+# View the device integration guide
+cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md
+
+# Or view specific sections
+cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
+```
+
+**Built-in Integrations** (configured via NixOS):
+- ASUS WiFi routers (asuswrt)
+- Enphase Solar Inverter (enphase_envoy)
+- Tesla Wall Connector (tesla)
+- Flume water meter (flume)
+- Google Nest thermostats (nest)
+- Ring doorbell & chimes (ring)
+- MyQ garage door opener (myq)
+- Pentair IntelliCenter & IntelliFlo (screenlogic)
+- Miele dishwasher (miele)
+- Google Home Hub (cast)
+
+**Custom Integrations** (require HACS):
+- B-Hyve sprinkler control (sebr/bhyve-home-assistant)
+- Dreame robot vacuum (Tasshack/dreame-vacuum)
+- Hubspace porch light (jdeath/Hubspace-Homeassistant)
+- Traeger Ironwood grill (nocturnal11/homeassistant-traeger)
+
+**Installing HACS** (Home Assistant Community Store):
+```bash
+# Access Home Assistant terminal or SSH
+# Install HACS
+wget -O - https://get.hacs.xyz | bash -
+
+# Then restart Home Assistant
+sudo systemctl restart home-assistant
+
+# After restart, add HACS integration via UI:
+# Settings > Devices & Services > Add Integration > HACS
+# Authenticate with GitHub
+```
+
+**Adding Device Credentials to SOPS**:
+```bash
+# Edit encrypted secrets file
+sops /etc/nixos/secrets.yaml
+
+# Add credentials for each device (see HOME_ASSISTANT_DEVICES.md for full list)
+# Example entries:
+# asus-router-password: "router_password"
+# enphase-username: "enlighten_email"
+# ring-username: "ring_email"
+# etc.
+
+# After saving, rebuild NixOS
+sudo nixos-rebuild switch --flake '.#vulcan'
+```
+
+**Energy Dashboard Setup**:
+```bash
+# The following devices integrate with the Energy Dashboard:
+# - Enphase Envoy (solar production)
+# - Tesla Wall Connector (EV charging)
+# - Flume (water consumption - custom sensor)
+
+# Configure via Home Assistant UI:
+# Settings > Dashboards > Energy
+```
+
+### Managing August Locks
+```bash
+# August locks are managed entirely through the Home Assistant web UI
+# Access: https://hass.vulcan.lan
+
+# Common operations:
+# - Lock/Unlock: Use the lock entity controls in the UI
+# - Check battery: View battery sensor for each lock
+# - Activity log: Check lock history in the UI
+# - Automations: Create automations for lock events
+
+# The locks communicate with the August cloud service
+# They require internet connectivity to function
+# No local Bluetooth connection is used with 4th gen WiFi models
+```
+
 ## Architecture
 
 ### Core Structure
@@ -179,7 +363,7 @@ sudo mount -t cifs //vulcan.lan/johnw-documents /mnt/samba/documents -o username
 - **hardware-configuration.nix**: Hardware-specific configuration (generated by nixos-generate-config)
 
 ### Key Services Configured
-1. **Restic Backups**: Automated backup system with multiple filesets to rsync.net
+1. **Restic Backups**: Automated backup system with multiple filesets to Backblaze B2
 2. **PostgreSQL**: Database server with custom configuration
 3. **Docker**: Container runtime with rootless support
 4. **Tailscale & Nebula**: VPN networking
@@ -187,6 +371,7 @@ sudo mount -t cifs //vulcan.lan/johnw-documents /mnt/samba/documents -o username
 6. **Step-CA**: Private certificate authority for TLS and SSH certificates
 7. **Dovecot**: IMAP mail server with full-text search (FTS) via Xapian backend
 8. **Samba**: SMB/CIFS file sharing for ZFS tank datasets with SMB3.1.1 encryption
+9. **Home Assistant**: IoT home automation platform with 16 integrated device types including August locks, Enphase solar, Tesla charger, Ring doorbell, Nest thermostats, pool controls, and more
 
 ### Important Configuration Details
 - **State Version**: 25.05 (DO NOT change unless migrating)

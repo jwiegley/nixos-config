@@ -220,6 +220,20 @@ in
         "*/updater-*"
       ];
     })
+    (mkBackup {
+      name = "home-assistant";
+      path = "/var/lib/hass";
+      bucket = "home-assistant";
+      explicit = true;
+      exclude = [
+        "*.log"
+        "*.db-shm"
+        "*.db-wal"
+        "home-assistant.log.*"
+        "home-assistant_v2.db-shm"
+        "home-assistant_v2.db-wal"
+      ];
+    })
   ];
 
   systemd = {

@@ -42,6 +42,7 @@
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/samba.nix
+    ../../modules/services/home-assistant.nix
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix
     ../../modules/services/promtail.nix

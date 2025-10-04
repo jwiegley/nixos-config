@@ -1,0 +1,63 @@
+{ config, lib, pkgs, ... }:
+
+{
+  # Prometheus node exporter for system metrics
+  services.prometheus.exporters.node = {
+    enable = true;
+    port = 9100;
+
+    # Enable additional collectors
+    enabledCollectors = [
+      "systemd"
+      "processes"
+      "logind"
+      "textfile"
+    ];
+
+    # Disable collectors that might have security implications
+    disabledCollectors = [
+      "wifi"
+    ];
+
+    extraFlags = [
+      "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker)($|/)"
+      "--collector.netclass.ignored-devices=^(lo|podman[0-9]|br-|veth).*"
+      "--collector.textfile.directory=/var/lib/prometheus-node-exporter-textfiles"
+    ];
+  };
+
+  # Prometheus scrape configuration for node exporter
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "node";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.prometheus.exporters.node.port}" ];
+        labels = {
+          alias = "vulcan";
+        };
+      }];
+    }
+  ];
+
+  # Service hardening and reliability
+  systemd.services."prometheus-node-exporter" = {
+    wants = [ "network-online.target" ];
+    after = [ "network-online.target" ];
+    startLimitIntervalSec = 0;
+    startLimitBurst = 0;
+    serviceConfig = {
+      Restart = "always";
+      RestartSec = 5;
+    };
+  };
+
+  # Create directory for textfile collector
+  systemd.tmpfiles.rules = [
+    "d /var/lib/prometheus-node-exporter-textfiles 0755 root root -"
+  ];
+
+  # Firewall configuration
+  networking.firewall.interfaces."lo".allowedTCPPorts = [
+    config.services.prometheus.exporters.node.port
+  ];
+}

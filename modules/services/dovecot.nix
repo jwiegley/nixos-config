@@ -290,6 +290,16 @@
     '';
   };
 
+  # Prometheus scrape configuration for Dovecot exporter
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "dovecot";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
+      }];
+    }
+  ];
+
   networking.firewall.allowedTCPPorts =
     lib.mkIf config.services.dovecot2.enable [ 993 ];
 }

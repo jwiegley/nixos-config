@@ -384,7 +384,7 @@ in
             # "august-lock-side-door.lan"         # 192.168.3.173
             "b-hyve-sprinkler.lan"              # 192.168.3.89
             "dreamebot-vacuum.lan"              # 192.168.3.195
-            "enphase-solar-inverter.lan"        # 192.168.3.26
+            # "enphase-solar-inverter.lan"        # 192.168.3.26
             # "flume-water-meter.lan"             # 192.168.3.183
             "google-home-hub.lan"               # 192.168.3.106
             "hera-wifi.lan"                     # 192.168.3.6

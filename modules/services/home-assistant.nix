@@ -64,6 +64,7 @@
     # Use PostgreSQL for better performance
     extraPackages = ps: with ps; [
       psycopg2  # PostgreSQL adapter
+      grpcio    # Required for Google Nest integration
     ];
 
     # Components that don't require YAML configuration
@@ -139,7 +140,7 @@
         latitude = "!secret latitude";
         longitude = "!secret longitude";
         elevation = "!secret elevation";
-        unit_system = "metric";
+        unit_system = "us_customary";
         time_zone = "America/Los_Angeles";
         currency = "USD";
         country = "US";

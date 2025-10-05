@@ -316,6 +316,84 @@ sudo journalctl -u home-assistant | grep -i opnsense
 # Go to Settings > Devices & Services > OPNsense
 ```
 
+### Google Nest Integration
+```bash
+# The Google Nest integration uses the Smart Device Management (SDM) API
+# which requires a one-time $5 fee to Google for API access.
+
+# Prerequisites:
+# 1. Google Account with Nest devices
+# 2. $5 USD payment to Google for Device Access
+# 3. Google Cloud Project with OAuth credentials
+
+# Step 1: Create Device Access Project
+# Visit: https://console.nest.google.com/device-access/
+# - Pay the $5 one-time fee
+# - Create a new project
+# - Note your Project ID
+
+# Step 2: Create Google Cloud OAuth Credentials
+# Visit: https://console.cloud.google.com/
+# 1. Create a new project (or use existing)
+# 2. Enable the Smart Device Management API
+# 3. Configure OAuth Consent Screen:
+#    - User Type: External
+#    - App name: Home Assistant
+#    - User support email: your email
+#    - Developer contact: your email
+#    - IMPORTANT: Publish the app (set to "In Production")
+#      Do NOT leave in "Testing" mode or tokens expire after 7 days
+# 4. Create OAuth 2.0 Client ID:
+#    - Application type: Web application
+#    - Name: Home Assistant
+#    - Authorized redirect URIs: https://my.home-assistant.io/redirect/oauth
+#    - Note your Client ID and Client Secret
+
+# Step 3: Configure in Home Assistant
+# 1. Access Home Assistant: https://hass.vulcan.lan
+# 2. Go to Settings > Devices & Services
+# 3. Click "+ Add Integration"
+# 4. Search for "Nest"
+# 5. Enter your OAuth Client ID and Client Secret
+# 6. Enter your Project ID from Device Access Console
+# 7. Follow the OAuth flow to authorize Home Assistant
+# 8. Select which devices to allow access to
+
+# Managing Nest Devices:
+# - Add/remove devices: https://nestservices.google.com/partnerconnections
+# - After changing devices, reload the Nest integration in Home Assistant
+# - Settings > Devices & Services > Nest > ⋮ > Reload
+
+# Troubleshooting:
+# Check Home Assistant logs for Nest errors:
+sudo journalctl -u home-assistant | grep -i nest
+
+# Verify grpcio package is installed:
+sudo journalctl -u home-assistant --since "5 minutes ago" | grep grpc
+
+# Common issues:
+# - "Token expired after 7 days": OAuth consent screen is in Testing mode, publish to Production
+# - "No module named 'grpc'": grpcio package missing (already configured in this setup)
+# - "Invalid credentials": Check Client ID and Secret are correct
+# - "Project ID invalid": Verify Project ID from Device Access Console
+
+# Supported Devices:
+# - Nest Thermostats (all generations)
+# - Nest Temperature Sensors
+# - Nest Cameras (some models)
+# - Nest Doorbells (some models)
+# Note: Smoke/CO alarms and security systems are NOT supported by SDM API
+
+# Integration provides:
+# - Temperature control
+# - HVAC mode (heat, cool, heat-cool, off)
+# - Fan control
+# - Eco mode
+# - Temperature sensor data
+# - Camera streams (if supported)
+# - Doorbell events (if supported)
+```
+
 ### IoT Device Integrations
 
 Home Assistant is configured with support for 16 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.

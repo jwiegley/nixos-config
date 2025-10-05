@@ -104,6 +104,14 @@ with lib;
               ping = "postgres.vulcan.lan";
             };
           }
+          {
+            "Home Assistant" = {
+              icon = "home-assistant.png";
+              href = "https://hass.vulcan.lan";
+              description = "Home Automation & IoT Platform";
+              ping = "hass.vulcan.lan";
+            };
+          }
         ];
       }
       {

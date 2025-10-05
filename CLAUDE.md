@@ -264,9 +264,49 @@ openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan < /dev
 # sudo -u hass hass --script check_config -c /var/lib/hass
 ```
 
+### OPNsense Firewall Integration
+```bash
+# The OPNsense integration is configured via YAML (cannot be added via UI)
+# Credentials are automatically synced from SOPS to /var/lib/hass/secrets.yaml
+
+# Verify OPNsense integration status
+sudo journalctl -u home-assistant | grep -i opnsense
+
+# Check secrets sync service
+sudo systemctl status home-assistant-secrets-sync
+sudo journalctl -u home-assistant-secrets-sync
+
+# View synced secrets (requires root)
+sudo cat /var/lib/hass/secrets.yaml
+
+# Check OPNsense connectivity from Home Assistant host
+curl -k https://your-opnsense-url/api/diagnostics/interface/getInterfaceNames
+
+# View OPNsense entities in Home Assistant
+# Access: https://hass.vulcan.lan
+# The OPNsense integration will appear under Settings > Devices & Services
+
+# OPNsense credentials are stored in SOPS secrets:
+# - home-assistant/opnsense-url
+# - home-assistant/opnsense-api-key
+# - home-assistant/opnsense-api-secret
+
+# To update OPNsense credentials:
+# 1. Generate new API key/secret in OPNsense:
+#    System > Access > Users > Edit User > API Keys
+# 2. Edit secrets with SOPS:
+#    sops /etc/nixos/secrets.yaml
+# 3. Rebuild and restart (secrets will auto-sync before HA starts):
+#    sudo nixos-rebuild switch --flake '.#vulcan'
+
+# Manual secrets sync (if needed):
+sudo systemctl start home-assistant-secrets-sync
+sudo systemctl restart home-assistant
+```
+
 ### IoT Device Integrations
 
-Home Assistant is configured with support for 16 different IoT device types. See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
+Home Assistant is configured with support for 17 different IoT device types. See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
 
 ```bash
 # View the device integration guide
@@ -278,6 +318,7 @@ cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
 
 **Built-in Integrations** (configured via NixOS):
 - ASUS WiFi routers (asuswrt)
+- OPNsense firewall (opnsense)
 - Enphase Solar Inverter (enphase_envoy)
 - Tesla Wall Connector (tesla)
 - Flume water meter (flume)
@@ -315,9 +356,13 @@ sops /etc/nixos/secrets.yaml
 
 # Add credentials for each device (see HOME_ASSISTANT_DEVICES.md for full list)
 # Example entries:
-# asus-router-password: "router_password"
-# enphase-username: "enlighten_email"
-# ring-username: "ring_email"
+# home-assistant:
+#   asus-router-password: "router_password"
+#   opnsense-url: "https://192.168.1.1"
+#   opnsense-api-key: "your_api_key"
+#   opnsense-api-secret: "your_api_secret"
+#   enphase-username: "enlighten_email"
+#   ring-username: "ring_email"
 # etc.
 
 # After saving, rebuild NixOS

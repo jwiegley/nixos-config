@@ -18,6 +18,30 @@
     restartUnits = [ "home-assistant.service" ];
   };
 
+  sops.secrets."home-assistant/opnsense-url" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  sops.secrets."home-assistant/opnsense-api-key" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  sops.secrets."home-assistant/opnsense-api-secret" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
   # PostgreSQL database for Home Assistant recorder
   services.postgresql = {
     ensureDatabases = [ "hass" ];
@@ -64,6 +88,9 @@
       "zeroconf"
       "upnp"
 
+      # Performance
+      "isal"  # Fast compression for websockets
+
       # Mobile app support
       "mobile_app"
 
@@ -74,6 +101,7 @@
 
       # Network devices
       "asuswrt"              # ASUS WiFi routers
+      "opnsense"             # OPNsense firewall
 
       # Energy & Solar
       "enphase_envoy"        # Enphase Solar Inverter
@@ -182,6 +210,15 @@
         };
       };
 
+      # OPNsense firewall integration
+      # Configured via YAML (cannot be added via UI)
+      opnsense = {
+        url = "!secret opnsense_url";
+        api_key = "!secret opnsense_api_key";
+        api_secret = "!secret opnsense_api_secret";
+        verify_ssl = true;
+      };
+
       # Enable automation UI
       automation = "!include automations.yaml";
 
@@ -202,14 +239,23 @@
     after = [ "postgresql.service" "sops-install-secrets.service" ];
     wants = [ "postgresql.service" "sops-install-secrets.service" ];
 
-    # Inject Yale credentials as environment variables
+    # Inject Yale and OPNsense credentials as environment variables
     serviceConfig = {
       EnvironmentFile = [
         (pkgs.writeText "home-assistant-env" ''
           YALE_USERNAME_FILE=${config.sops.secrets."home-assistant/yale-username".path}
           YALE_PASSWORD_FILE=${config.sops.secrets."home-assistant/yale-password".path}
+          OPNSENSE_URL_FILE=${config.sops.secrets."home-assistant/opnsense-url".path}
+          OPNSENSE_API_KEY_FILE=${config.sops.secrets."home-assistant/opnsense-api-key".path}
+          OPNSENSE_API_SECRET_FILE=${config.sops.secrets."home-assistant/opnsense-api-secret".path}
         '')
       ];
+    };
+
+    # Configure Python to use system CA bundle (includes step-ca root CA)
+    environment = {
+      SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+      REQUESTS_CA_BUNDLE = "/etc/ssl/certs/ca-bundle.crt";
     };
   };
 

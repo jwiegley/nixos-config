@@ -266,47 +266,59 @@ openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan < /dev
 
 ### OPNsense Firewall Integration
 ```bash
-# The OPNsense integration is configured via YAML (cannot be added via UI)
-# Credentials are automatically synced from SOPS to /var/lib/hass/secrets.yaml
+# IMPORTANT: The built-in Home Assistant OPNsense integration has issues with
+# newer OPNsense versions (25.7+) that changed API endpoints from camelCase to snake_case.
+# Use the HACS custom component "travisghansen/hass-opnsense" instead.
 
-# Verify OPNsense integration status
+# Install HACS (if not already installed):
+# 1. Access Home Assistant terminal or SSH
+# 2. Download HACS:
+wget -O - https://get.hacs.xyz | bash -
+# 3. Restart Home Assistant:
+sudo systemctl restart home-assistant
+# 4. Add HACS integration via UI:
+#    Settings > Devices & Services > Add Integration > HACS
+#    Authenticate with GitHub
+
+# Install OPNsense Custom Component via HACS:
+# 1. In Home Assistant, go to HACS
+# 2. Click "+ Explore & Download Repositories"
+# 3. Search for "OPNsense"
+# 4. Select "OPNsense integration for Home Assistant" by travisghansen
+# 5. Click "Download"
+# 6. Restart Home Assistant
+# 7. Go to Settings > Devices & Services > Add Integration
+# 8. Search for "OPNsense" and add it via the UI
+# 9. Enter your OPNsense URL, API key, and API secret
+
+# OPNsense API credentials (stored in /var/lib/hass/secrets.yaml):
+# opnsense_url: "https://your-opnsense-ip"
+# opnsense_api_key: "your_api_key"
+# opnsense_api_secret: "your_api_secret"
+
+# Generate OPNsense API credentials:
+# 1. Log into OPNsense web interface
+# 2. Go to System > Access > Users
+# 3. Edit your user
+# 4. Scroll to "API keys" section
+# 5. Click "+" to create new API key
+# 6. Important: Assign "All Pages" privilege to the API user for full functionality
+# 7. Save the API key and secret (shown only once)
+
+# Test OPNsense API connectivity:
+curl -k -u "API_KEY:API_SECRET" https://192.168.1.1/api/diagnostics/interface/get_arp
+
+# Verify OPNsense integration status in Home Assistant:
 sudo journalctl -u home-assistant | grep -i opnsense
 
-# Check secrets sync service
-sudo systemctl status home-assistant-secrets-sync
-sudo journalctl -u home-assistant-secrets-sync
-
-# View synced secrets (requires root)
-sudo cat /var/lib/hass/secrets.yaml
-
-# Check OPNsense connectivity from Home Assistant host
-curl -k https://your-opnsense-url/api/diagnostics/interface/getInterfaceNames
-
-# View OPNsense entities in Home Assistant
+# View OPNsense entities in Home Assistant:
 # Access: https://hass.vulcan.lan
-# The OPNsense integration will appear under Settings > Devices & Services
-
-# OPNsense credentials are stored in SOPS secrets:
-# - home-assistant/opnsense-url
-# - home-assistant/opnsense-api-key
-# - home-assistant/opnsense-api-secret
-
-# To update OPNsense credentials:
-# 1. Generate new API key/secret in OPNsense:
-#    System > Access > Users > Edit User > API Keys
-# 2. Edit secrets with SOPS:
-#    sops /etc/nixos/secrets.yaml
-# 3. Rebuild and restart (secrets will auto-sync before HA starts):
-#    sudo nixos-rebuild switch --flake '.#vulcan'
-
-# Manual secrets sync (if needed):
-sudo systemctl start home-assistant-secrets-sync
-sudo systemctl restart home-assistant
+# Go to Settings > Devices & Services > OPNsense
 ```
 
 ### IoT Device Integrations
 
-Home Assistant is configured with support for 17 different IoT device types. See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
+Home Assistant is configured with support for 16 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
 
 ```bash
 # View the device integration guide
@@ -318,7 +330,6 @@ cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
 
 **Built-in Integrations** (configured via NixOS):
 - ASUS WiFi routers (asuswrt)
-- OPNsense firewall (opnsense)
 - Enphase Solar Inverter (enphase_envoy)
 - Tesla Wall Connector (tesla)
 - Flume water meter (flume)
@@ -330,6 +341,7 @@ cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
 - Google Home Hub (cast)
 
 **Custom Integrations** (require HACS):
+- OPNsense firewall (travisghansen/hass-opnsense)
 - B-Hyve sprinkler control (sebr/bhyve-home-assistant)
 - Dreame robot vacuum (Tasshack/dreame-vacuum)
 - Hubspace porch light (jdeath/Hubspace-Homeassistant)

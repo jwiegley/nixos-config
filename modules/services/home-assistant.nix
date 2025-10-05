@@ -101,7 +101,8 @@
 
       # Network devices
       "asuswrt"              # ASUS WiFi routers
-      "opnsense"             # OPNsense firewall
+      # OPNsense firewall - use HACS custom component instead
+      # Built-in integration has JSON parsing issues with newer OPNsense versions
 
       # Energy & Solar
       "enphase_envoy"        # Enphase Solar Inverter
@@ -211,13 +212,19 @@
       };
 
       # OPNsense firewall integration
-      # Configured via YAML (cannot be added via UI)
-      opnsense = {
-        url = "!secret opnsense_url";
-        api_key = "!secret opnsense_api_key";
-        api_secret = "!secret opnsense_api_secret";
-        verify_ssl = true;
-      };
+      # The built-in integration has issues with newer OPNsense versions (25.7+)
+      # Use the HACS custom component "travisghansen/hass-opnsense" instead:
+      # 1. Install HACS: https://hacs.xyz/docs/setup/download
+      # 2. Add custom repository in HACS: https://github.com/travisghansen/hass-opnsense
+      # 3. Install the integration via HACS
+      # 4. Configure via UI: Settings > Devices & Services > Add Integration > OPNsense
+      # Built-in YAML configuration disabled:
+      # opnsense = {
+      #   url = "!secret opnsense_url";
+      #   api_key = "!secret opnsense_api_key";
+      #   api_secret = "!secret opnsense_api_secret";
+      #   verify_ssl = true;
+      # };
 
       # Enable automation UI
       automation = "!include automations.yaml";

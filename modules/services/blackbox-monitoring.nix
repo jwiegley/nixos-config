@@ -541,7 +541,6 @@ in
         };
         static_configs = [{
           targets = [
-            "https://homepage.vulcan.lan"
             "https://glance.vulcan.lan"
             "https://grafana.vulcan.lan"
             "https://jellyfin.vulcan.lan"

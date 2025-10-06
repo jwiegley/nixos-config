@@ -790,30 +790,6 @@
           ];
         }
 
-        # Homepage dashboard logs from journal
-        {
-          job_name = "homepage-dashboard";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "homepage-dashboard";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "homepage-dashboard\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
         # Container logs for services running in Podman
         {
           job_name = "podman-containers";

@@ -61,7 +61,6 @@ This configuration follows a highly modular architecture, organizing system conf
   - Internal services use step-ca certificates
   - HTTP/2, HSTS, security headers
   - Automatic HTTP → HTTPS redirect
-- **Homepage**: Self-hosted dashboard (homepage.vulcan.lan)
 - **Glance**: Alternative dashboard with customizable widgets
 - **Nextcloud**: Self-hosted cloud storage and collaboration
 - **Wallabag**: Read-it-later service (containerized)

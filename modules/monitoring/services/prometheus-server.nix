@@ -12,6 +12,7 @@ let
     "storage.yaml"
     "certificates.yaml"
     "chainweb.yaml"
+    "dns.yaml"
     "network.yaml"
     "nextcloud.yaml"
   ];

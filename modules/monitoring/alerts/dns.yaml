@@ -1,0 +1,153 @@
+groups:
+  - name: dns_alerts
+    interval: 30s
+    rules:
+      # DNS Service Availability
+      - alert: TechnitiumDNSExporterDown
+        expr: up{job="technitium_dns"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: dns
+          component: dns
+        annotations:
+          summary: "Technitium DNS exporter is down on {{ $labels.instance }}"
+          description: "The Technitium DNS Prometheus exporter has been down for more than 1 minute. DNS metrics are not being collected."
+
+      - alert: TechnitiumDNSServiceDown
+        expr: absent(technitium_dns_stats_total_queries) or (time() - technitium_dns_stats_total_queries) > 300
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          component: dns
+        annotations:
+          summary: "Technitium DNS service appears to be down"
+          description: "No DNS query metrics have been reported for over 5 minutes, indicating the DNS service may be down or not responding."
+
+      # DNS Query Latency (Speed) Alerts
+      - alert: HighDNSQueryLatency
+        expr: rate(technitium_dns_stats_total_query_time_seconds[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "High DNS query latency detected"
+          description: "Average DNS query response time is over 100ms for the last 5 minutes. Current: {{ $value | humanizeDuration }}."
+
+      - alert: CriticalDNSQueryLatency
+        expr: rate(technitium_dns_stats_total_query_time_seconds[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          component: dns
+        annotations:
+          summary: "Critical DNS query latency detected"
+          description: "Average DNS query response time is over 500ms for the last 2 minutes. Current: {{ $value | humanizeDuration }}. This indicates serious DNS performance issues."
+
+      # DNS Query Rate Monitoring
+      - alert: DNSQueryRateSpike
+        expr: rate(technitium_dns_stats_total_queries[5m]) > 2 * avg_over_time(rate(technitium_dns_stats_total_queries[5m])[1h:5m])
+        for: 10m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Unusual spike in DNS query rate"
+          description: "DNS query rate is more than 2x the average over the last hour. This could indicate a DDoS attack or misconfiguration. Current rate: {{ $value | humanize }} queries/sec."
+
+      - alert: DNSQueryRateDrop
+        expr: rate(technitium_dns_stats_total_queries[5m]) < 0.1 * avg_over_time(rate(technitium_dns_stats_total_queries[5m])[1h:5m]) and avg_over_time(rate(technitium_dns_stats_total_queries[5m])[1h:5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Unusual drop in DNS query rate"
+          description: "DNS query rate has dropped to less than 10% of the average over the last hour. This could indicate network issues or client problems. Current rate: {{ $value | humanize }} queries/sec."
+
+      # DNS Failure Rate (Consistency) Alerts
+      - alert: HighDNSServerFailureRate
+        expr: rate(technitium_dns_stats_total_server_failure[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "High DNS SERVFAIL rate detected"
+          description: "More than 1% of DNS queries are returning SERVFAIL. This indicates problems with upstream resolvers or DNS configuration. Current rate: {{ $value | humanizePercentage }}."
+
+      - alert: CriticalDNSServerFailureRate
+        expr: rate(technitium_dns_stats_total_server_failure[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          component: dns
+        annotations:
+          summary: "Critical DNS SERVFAIL rate detected"
+          description: "More than 5% of DNS queries are returning SERVFAIL. Immediate investigation required. Current rate: {{ $value | humanizePercentage }}."
+
+      - alert: HighDNSRefusedRate
+        expr: rate(technitium_dns_stats_total_refused[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.02
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "High DNS REFUSED response rate"
+          description: "More than 2% of DNS queries are being refused. This could indicate ACL issues or security policy triggering. Current rate: {{ $value | humanizePercentage }}."
+
+      - alert: HighDNSNameErrorRate
+        expr: rate(technitium_dns_stats_total_name_error[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Unusually high NXDOMAIN rate detected"
+          description: "More than 15% of DNS queries are returning NXDOMAIN (non-existent domain). This could indicate misconfigurations, typos, or reconnaissance activity. Current rate: {{ $value | humanizePercentage }}."
+
+      # DNS Cache Performance (Consistency)
+      - alert: LowDNSCacheHitRate
+        expr: rate(technitium_dns_stats_total_cache_hit[5m]) / (rate(technitium_dns_stats_total_cache_hit[5m]) + rate(technitium_dns_stats_total_cache_miss[5m])) < 0.7
+        for: 15m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Low DNS cache hit rate"
+          description: "DNS cache hit rate is below 70% for the last 15 minutes. This reduces performance and increases load on upstream resolvers. Current rate: {{ $value | humanizePercentage }}."
+
+      # DNS Blocking Statistics (if using blocking)
+      - alert: HighDNSBlockRate
+        expr: rate(technitium_dns_stats_total_blocked[5m]) / rate(technitium_dns_stats_total_queries[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: info
+          category: dns
+          component: dns
+        annotations:
+          summary: "High DNS block rate detected"
+          description: "More than 50% of DNS queries are being blocked. This is informational but may indicate aggressive blocking or malware activity. Current rate: {{ $value | humanizePercentage }}."
+
+      # Upstream Resolver Issues
+      - alert: HighDNSRecursionFailureRate
+        expr: rate(technitium_dns_stats_total_recursive_queries[5m]) > 0 and (rate(technitium_dns_stats_total_server_failure[5m]) / rate(technitium_dns_stats_total_recursive_queries[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "High failure rate for recursive DNS queries"
+          description: "More than 10% of recursive queries (to upstream resolvers) are failing. Check upstream resolver connectivity and performance. Current failure rate: {{ $value | humanizePercentage }}."

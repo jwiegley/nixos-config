@@ -14,6 +14,7 @@
     ../monitoring/services/restic-metrics.nix
     ../monitoring/services/chainweb-exporters.nix
     ../monitoring/services/opnsense-monitoring.nix
+    ../monitoring/services/technitium-dns-monitoring.nix
     ../monitoring/services/monitoring-utils.nix
     ../monitoring/services/prometheus-nginx.nix
     ../monitoring/services/health-check-exporters.nix

@@ -7,6 +7,7 @@
     ./opnsense-api-transformer.nix  # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-exporter-quadlet.nix
     ./silly-tavern-quadlet.nix
+    ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix
   ];
 
@@ -45,7 +46,7 @@
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    allowedTCPPorts = [ 4000 5432 8085 ];
+    allowedTCPPorts = [ 4000 5380 5432 8085 ];  # Added 5380 for Technitium DNS
     allowedUDPPorts = [ 53 ];
   };
 

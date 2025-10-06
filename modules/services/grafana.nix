@@ -80,6 +80,7 @@
           {
             name = "Loki";
             type = "loki";
+            uid = "loki";  # Fixed UID for Loki datasource
             access = "proxy";
             url = "http://localhost:3100";
             isDefault = false;

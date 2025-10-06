@@ -95,53 +95,11 @@ in
         };
       };
 
-      # Daily backup status check
-      backup-status-check = {
-        description = "Daily backup status check";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = pkgs.writeShellScript "backup-status-check" ''
-            echo "=== Backup Status Check ===" | ${pkgs.systemd}/bin/systemd-cat -t backup-status
-
-            # Check each backup service
-            for service in ${lib.concatStringsSep " " (map (n: "restic-backups-${n}") backupNames)}; do
-              STATUS=$(${pkgs.systemd}/bin/systemctl is-active "$service" || echo "unknown")
-              LAST_RUN=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestamp --value "$service")
-
-              if [ "$STATUS" = "failed" ]; then
-                echo "❌ $service: FAILED (last attempt: $LAST_RUN)" | ${pkgs.systemd}/bin/systemd-cat -p err -t backup-status
-              elif [ -n "$LAST_RUN" ] && [ "$LAST_RUN" != "n/a" ]; then
-                echo "✓ $service: OK (last success: $LAST_RUN)" | ${pkgs.systemd}/bin/systemd-cat -t backup-status
-              else
-                echo "⚠ $service: Never run" | ${pkgs.systemd}/bin/systemd-cat -p warning -t backup-status
-              fi
-            done
-
-            # Check for any alert files
-            if [ -d /var/lib/backup-alerts ]; then
-              ALERTS=$(find /var/lib/backup-alerts -name "*.alert" -mtime -1 2>/dev/null | wc -l)
-              if [ "$ALERTS" -gt 0 ]; then
-                echo "⚠ $ALERTS backup failure(s) in the last 24 hours" | ${pkgs.systemd}/bin/systemd-cat -p warning -t backup-status
-              fi
-            fi
-          '';
-        };
-      };
     }
 
     # Apply backup service overrides
     backupServiceOverrides
   ];
-
-  # Timer for backup status check
-  systemd.timers.backup-status-check = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "daily";
-      OnBootSec = "10min";
-      Persistent = true;
-    };
-  };
 
   # Add backup monitoring rules as a separate file
   # This avoids YAML structure conflicts with the main rules

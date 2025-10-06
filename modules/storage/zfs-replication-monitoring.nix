@@ -330,42 +330,6 @@ in
         };
       };
 
-      # Daily ZFS replication status check
-      zfs-replication-status-check = {
-        description = "Daily ZFS replication status check";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = pkgs.writeShellScript "zfs-replication-status-check" ''
-            echo "=== ZFS Replication Status Check ===" | ${pkgs.systemd}/bin/systemd-cat -t zfs-replication-status
-
-            # Check each syncoid service
-            for service in ${lib.concatStringsSep " " syncoidServices}; do
-              STATUS=$(${pkgs.systemd}/bin/systemctl is-active "$service" || echo "unknown")
-              LAST_RUN=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestamp --value "$service")
-
-              if [ "$STATUS" = "failed" ]; then
-                echo "❌ $service: FAILED (last attempt: $LAST_RUN)" | ${pkgs.systemd}/bin/systemd-cat -p err -t zfs-replication-status
-              elif [ -n "$LAST_RUN" ] && [ "$LAST_RUN" != "n/a" ]; then
-                echo "✓ $service: OK (last success: $LAST_RUN)" | ${pkgs.systemd}/bin/systemd-cat -t zfs-replication-status
-              else
-                echo "⚠ $service: Never run" | ${pkgs.systemd}/bin/systemd-cat -p warning -t zfs-replication-status
-              fi
-            done
-
-            # Check for any alert files
-            if [ -d /var/lib/zfs-replication-alerts ]; then
-              ALERTS=$(find /var/lib/zfs-replication-alerts -name "*.alert" -mtime -1 2>/dev/null | wc -l)
-              if [ "$ALERTS" -gt 0 ]; then
-                echo "⚠ $ALERTS ZFS replication failure(s) in the last 24 hours" | ${pkgs.systemd}/bin/systemd-cat -p warning -t zfs-replication-status
-                find /var/lib/zfs-replication-alerts -name "*.alert" -mtime -1 -exec cat {} \; | ${pkgs.systemd}/bin/systemd-cat -p warning -t zfs-replication-status
-              fi
-            fi
-
-            # Log status to file for logwatch
-            ${lib.getExe replicationStatusScript} >> /var/log/zfs-replication-status.log 2>&1
-          '';
-        };
-      };
 
       # Manual replication trigger (useful for testing)
       zfs-replication-manual = {
@@ -412,15 +376,6 @@ in
     syncoidServiceOverrides
   ];
 
-  # Timer for daily replication status check (runs at 6am, 2 hours after replication)
-  systemd.timers.zfs-replication-status-check = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*-*-* 06:00:00";
-      OnBootSec = "15min";
-      Persistent = true;
-    };
-  };
 
   # Add ZFS replication monitoring rules to Prometheus
   services.prometheus.ruleFiles = [ replicationRulesFile ];

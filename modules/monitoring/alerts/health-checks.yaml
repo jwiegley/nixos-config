@@ -1,0 +1,148 @@
+groups:
+  - name: health_check_alerts
+    interval: 5m
+    rules:
+      # Critical Services Health Alerts
+      - alert: CriticalServiceDown
+        expr: critical_service_active == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: service_health
+        annotations:
+          summary: "Critical service {{ $labels.service }} is not running"
+          description: "The critical service {{ $labels.service }} is not active and has been down for more than 2 minutes"
+
+      - alert: CriticalServiceFailed
+        expr: critical_service_failed == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: service_health
+        annotations:
+          summary: "Critical service {{ $labels.service }} is in failed state"
+          description: "The critical service {{ $labels.service }} has entered a failed state and requires immediate attention"
+
+      # Backup Health Alerts
+      - alert: BackupServiceFailed
+        expr: backup_service_failed == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "Backup service {{ $labels.backup }} has failed"
+          description: "The backup service for {{ $labels.backup }} is in failed state and needs attention"
+
+      - alert: BackupNotRunRecently
+        expr: (time() - backup_last_run_timestamp_seconds) > 129600
+        for: 5m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup {{ $labels.backup }} hasn't run in over 36 hours"
+          description: "The backup {{ $labels.backup }} last ran {{ $value | humanizeDuration }} ago (expected daily)"
+
+      - alert: BackupLastRunFailed
+        expr: backup_last_run_success == 0 and backup_last_run_timestamp_seconds > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Last backup run for {{ $labels.backup }} failed"
+          description: "The most recent backup run for {{ $labels.backup }} was not successful"
+
+      - alert: BackupTimerInactive
+        expr: backup_timer_active == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup timer {{ $labels.backup }} is not active"
+          description: "The backup timer for {{ $labels.backup }} is not active, backups won't run automatically"
+
+      # ZFS Replication Alerts
+      - alert: ZFSReplicationServiceFailed
+        expr: zfs_replication_service_failed == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: zfs_replication
+        annotations:
+          summary: "ZFS replication for {{ $labels.dataset }} has failed"
+          description: "The ZFS replication service for dataset {{ $labels.dataset }} is in failed state"
+
+      - alert: ZFSReplicationNotRunRecently
+        expr: (time() - zfs_replication_last_run_timestamp_seconds) > 108000
+        for: 5m
+        labels:
+          severity: warning
+          component: zfs_replication
+        annotations:
+          summary: "ZFS replication for {{ $labels.dataset }} hasn't run in over 30 hours"
+          description: "The ZFS replication for {{ $labels.dataset }} last ran {{ $value | humanizeDuration }} ago (expected daily at 4am)"
+
+      - alert: ZFSReplicationLastRunFailed
+        expr: zfs_replication_last_run_success == 0 and zfs_replication_last_run_timestamp_seconds > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: zfs_replication
+        annotations:
+          summary: "Last ZFS replication for {{ $labels.dataset }} failed"
+          description: "The most recent ZFS replication run for {{ $labels.dataset }} was not successful"
+
+      - alert: ZFSReplicationTimerInactive
+        expr: zfs_replication_timer_active == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: zfs_replication
+        annotations:
+          summary: "ZFS replication timer for {{ $labels.dataset }} is not active"
+          description: "The replication timer for {{ $labels.dataset }} is not active, replication won't run automatically"
+
+      # Mbsync Health Alerts
+      - alert: MbsyncNotRunRecently
+        expr: (time() - mbsync_last_sync_timestamp_seconds) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          component: mail_sync
+        annotations:
+          summary: "Mail sync for {{ $labels.account }} hasn't run in over 1 hour"
+          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected every 15-30 minutes)"
+
+      - alert: MbsyncLastSyncFailed
+        expr: mbsync_last_sync_status == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: mail_sync
+        annotations:
+          summary: "Last mail sync for {{ $labels.account }} failed"
+          description: "The most recent mbsync run for {{ $labels.account }} failed with error code {{ $labels.last_error_code }}"
+
+      - alert: MbsyncRepeatedFailures
+        expr: mbsync_last_sync_status == 0 and (time() - mbsync_last_sync_timestamp_seconds) < 7200
+        for: 1h
+        labels:
+          severity: critical
+          component: mail_sync
+        annotations:
+          summary: "Mail sync for {{ $labels.account }} has been failing for over 1 hour"
+          description: "The mbsync service for {{ $labels.account }} has been in a failed state for an extended period and requires immediate attention"
+
+      # Critical Services Exporter Health
+      - alert: CriticalServicesExporterDown
+        expr: up{job="critical-services-health"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Critical services health exporter is down"
+          description: "The critical services health check exporter is not responding to Prometheus scrapes"

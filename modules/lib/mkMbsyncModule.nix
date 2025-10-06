@@ -97,10 +97,16 @@
             if ${pkgs.isync}/bin/mbsync -c "$CONFIG_FILE" -a -V 2>&1 | tee -a "$LOG_FILE"; then
               echo "[$(date)] Synchronization completed successfully" | tee -a "$LOG_FILE"
 
-              # Update metrics
-              echo "mbsync_${name}_last_sync_timestamp $(date +%s)" > /var/lib/mbsync-${name}/metrics.prom.tmp
-              echo "mbsync_${name}_last_sync_status 1" >> /var/lib/mbsync-${name}/metrics.prom.tmp
-              mv /var/lib/mbsync-${name}/metrics.prom.tmp /var/lib/mbsync-${name}/metrics.prom
+              # Update metrics for Prometheus textfile collector
+              METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/mbsync_${name}.prom"
+              echo "# HELP mbsync_last_sync_timestamp_seconds Timestamp of last successful sync" > "$METRICS_FILE.tmp"
+              echo "# TYPE mbsync_last_sync_timestamp_seconds gauge" >> "$METRICS_FILE.tmp"
+              echo "mbsync_last_sync_timestamp_seconds{account=\"${name}\"} $(date +%s)" >> "$METRICS_FILE.tmp"
+              echo "# HELP mbsync_last_sync_status Status of last sync (1 = success, 0 = failure)" >> "$METRICS_FILE.tmp"
+              echo "# TYPE mbsync_last_sync_status gauge" >> "$METRICS_FILE.tmp"
+              echo "mbsync_last_sync_status{account=\"${name}\"} 1" >> "$METRICS_FILE.tmp"
+              mv "$METRICS_FILE.tmp" "$METRICS_FILE"
+              chmod 644 "$METRICS_FILE"
 
               # Clean up old logs (keep last 10)
               ls -t /var/log/mbsync-${name}/mbsync-*.log | tail -n +11 | xargs -r rm
@@ -108,11 +114,19 @@
               EXIT_CODE=$?
               echo "[$(date)] Synchronization failed with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
 
-              # Update failure metrics
-              echo "mbsync_${name}_last_sync_timestamp $(date +%s)" > /var/lib/mbsync-${name}/metrics.prom.tmp
-              echo "mbsync_${name}_last_sync_status 0" >> /var/lib/mbsync-${name}/metrics.prom.tmp
-              echo "mbsync_${name}_last_error_code $EXIT_CODE" >> /var/lib/mbsync-${name}/metrics.prom.tmp
-              mv /var/lib/mbsync-${name}/metrics.prom.tmp /var/lib/mbsync-${name}/metrics.prom
+              # Update failure metrics for Prometheus textfile collector
+              METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/mbsync_${name}.prom"
+              echo "# HELP mbsync_last_sync_timestamp_seconds Timestamp of last sync attempt" > "$METRICS_FILE.tmp"
+              echo "# TYPE mbsync_last_sync_timestamp_seconds gauge" >> "$METRICS_FILE.tmp"
+              echo "mbsync_last_sync_timestamp_seconds{account=\"${name}\"} $(date +%s)" >> "$METRICS_FILE.tmp"
+              echo "# HELP mbsync_last_sync_status Status of last sync (1 = success, 0 = failure)" >> "$METRICS_FILE.tmp"
+              echo "# TYPE mbsync_last_sync_status gauge" >> "$METRICS_FILE.tmp"
+              echo "mbsync_last_sync_status{account=\"${name}\"} 0" >> "$METRICS_FILE.tmp"
+              echo "# HELP mbsync_last_error_code Exit code of last failed sync" >> "$METRICS_FILE.tmp"
+              echo "# TYPE mbsync_last_error_code gauge" >> "$METRICS_FILE.tmp"
+              echo "mbsync_last_error_code{account=\"${name}\"} $EXIT_CODE" >> "$METRICS_FILE.tmp"
+              mv "$METRICS_FILE.tmp" "$METRICS_FILE"
+              chmod 644 "$METRICS_FILE"
 
               exit $EXIT_CODE
             fi
@@ -170,11 +184,11 @@
         ExecStart = pkgs.writeShellScript "mbsync-${name}-health-check" ''
           set -euo pipefail
 
-          METRICS_FILE="/var/lib/mbsync-${name}/metrics.prom"
+          METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/mbsync_${name}.prom"
           LAST_SYNC_TIMESTAMP=""
 
           if [ -f "$METRICS_FILE" ]; then
-            LAST_SYNC_TIMESTAMP=$(grep "last_sync_timestamp" "$METRICS_FILE" | awk '{print $2}')
+            LAST_SYNC_TIMESTAMP=$(grep "mbsync_last_sync_timestamp_seconds" "$METRICS_FILE" | awk '{print $2}')
           fi
 
           if [ -z "$LAST_SYNC_TIMESTAMP" ]; then

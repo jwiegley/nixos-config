@@ -115,7 +115,7 @@ in
 
         mailLocation = mkOption {
           type = types.str;
-          default = "maildir:/tank/Maildir/%u";
+          default = "maildir:/var/mail/%u";
           description = "Mail storage location";
         };
       };

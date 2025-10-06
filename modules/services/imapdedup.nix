@@ -66,8 +66,8 @@ in
   # Systemd service to run imapdedup
   systemd.services.imapdedup = {
     description = "IMAP mailbox deduplication for johnw";
-    after = [ "dovecot2.service" "tank-Maildir.mount" ];
-    requires = [ "dovecot2.service" "tank-Maildir.mount" ];
+    after = [ "dovecot2.service" ];
+    requires = [ "dovecot2.service" ];
 
     serviceConfig = {
       Type = "oneshot";

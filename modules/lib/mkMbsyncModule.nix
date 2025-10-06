@@ -66,7 +66,7 @@
           Type = "oneshot";
           User = user;
           Group = group;
-          ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /tank/Maildir/${name}";
+          ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /var/mail/${name}";
           ExecStart = pkgs.writeShellScript "mbsync-${name}" ''
             set -euo pipefail
 

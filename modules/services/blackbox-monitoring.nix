@@ -546,7 +546,7 @@ in
             "https://jellyfin.vulcan.lan"
             "https://litellm.vulcan.lan"
             "https://postgres.vulcan.lan"
-            "https://prometheus.vulcan.lan"
+            # "https://prometheus.vulcan.lan"
             "https://silly-tavern.vulcan.lan"
             "https://wallabag.vulcan.lan"
             "https://dns.vulcan.lan"

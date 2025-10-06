@@ -17,5 +17,6 @@
     ../monitoring/services/monitoring-utils.nix
     ../monitoring/services/prometheus-nginx.nix
     ../monitoring/services/health-check-exporters.nix
+    ../monitoring/services/certificate-exporter.nix
   ];
 }

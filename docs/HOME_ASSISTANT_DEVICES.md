@@ -4,7 +4,7 @@ This document provides setup instructions for all IoT devices integrated with Ho
 
 ## Overview
 
-**Built-in Integrations (10)**: Configured via NixOS extraComponents
+**Built-in Integrations (11)**: Configured via NixOS extraComponents
 **Custom Integrations (4)**: Require HACS or manual installation
 
 ---
@@ -265,6 +265,62 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 # Use the Home Assistant Cast feature to display dashboards
 # Access via: https://hass.vulcan.lan/lovelace-cast/default
 ```
+
+---
+
+### 11. Withings Digital Scale (withings)
+
+**Component**: `withings`
+
+**Setup**:
+1. Create a Withings Developer Account at https://account.withings.com/partner/add_oauth2
+2. Create a new application:
+   - Application Name: "Home Assistant"
+   - Description: "Home Assistant Integration"
+   - Callback URL: `https://my.home-assistant.io/redirect/oauth`
+   - Logo: (optional)
+3. Note your Client ID and Consumer Secret
+4. In Home Assistant:
+   - Go to Settings > Devices & Services > Add Integration
+   - Search for "Withings"
+   - Enter your Client ID and Consumer Secret
+   - Follow the OAuth authentication flow
+5. Authorize Home Assistant to access your Withings data
+
+**Features**:
+- Weight measurements
+- Body composition (fat %, muscle %, water %)
+- Heart rate data
+- Blood pressure readings
+- Sleep tracking data
+- Activity data (steps, distance, calories)
+- Temperature measurements
+- SpO2 levels (if device supports)
+
+**Supported Devices**:
+- Body+ Smart Scale
+- Body Cardio
+- Body Comp
+- Blood Pressure Monitor
+- Sleep Analyzer
+- Thermo
+- Other Withings health products
+
+**Requirements**:
+- Withings account with device(s) registered
+- Withings Developer account (free)
+- Client ID and Consumer Secret from Withings Developer Portal
+- Internet connection (cloud-based integration)
+
+**Data Refresh**:
+- Data updates automatically when synced to Withings cloud
+- Sensors dynamically appear based on recent measurements
+- Historical data available via attributes
+
+**Privacy Note**:
+- Integration uses OAuth 2.0 for secure authentication
+- Only data you authorize is shared with Home Assistant
+- Data pulled from Withings cloud, not directly from devices
 
 ---
 

@@ -127,6 +127,9 @@
 
       # Casting & Display
       "cast"                 # Google Home Hub / Cast devices
+
+      # Health & Fitness
+      "withings"             # Withings digital scale and health devices
     ];
 
     # Home Assistant configuration (YAML format)

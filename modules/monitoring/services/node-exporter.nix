@@ -53,7 +53,7 @@
 
   # Create directory for textfile collector
   systemd.tmpfiles.rules = [
-    "d /var/lib/prometheus-node-exporter-textfiles 0755 root root -"
+    "d /var/lib/prometheus-node-exporter-textfiles 1777 root root -"
   ];
 
   # Firewall configuration

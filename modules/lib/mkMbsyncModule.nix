@@ -144,6 +144,7 @@
             "/var/lib/mbsync-${name}"
             "/var/log/mbsync-${name}"
             "/var/mail/${name}"
+            "/var/lib/prometheus-node-exporter-textfiles"
           ];
           NoNewPrivileges = true;
 

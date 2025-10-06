@@ -174,10 +174,10 @@ with lib;
                           title = "Grafana";
                           url = "https://grafana.vulcan.lan";
                         }
-                        {
-                          title = "Prometheus";
-                          url = "https://prometheus.vulcan.lan";
-                        }
+                        # {
+                        #   title = "Prometheus";
+                        #   url = "https://prometheus.vulcan.lan";
+                        # }
                         {
                           title = "Alertmanager";
                           url = "https://alertmanager.vulcan.lan";

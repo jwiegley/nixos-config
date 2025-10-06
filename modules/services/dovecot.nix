@@ -230,45 +230,15 @@
     group = "dovecot-exporter";
   };
 
-  # Ensure certificate and FTS index directories exist with proper permissions
+  # Ensure certificate, FTS index, and mail directories exist with proper permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
+    "d /var/mail/johnw 0700 johnw users -"
+    "d /var/mail/assembly 0700 assembly users -"
   ];
-
-  # Override dovecot service to require /tank/Maildir mount
-  systemd.services.dovecot = {
-    # Ensure dovecot only starts after the mail storage is mounted
-    after = [ "tank-Maildir.mount" ];
-    requires = [ "tank-Maildir.mount" ];
-
-    # Use RequiresMountsFor for more robust dependency handling
-    unitConfig = {
-      RequiresMountsFor = [ "/tank/Maildir" ];
-    };
-
-    # Pre-start check to verify mount and directories
-    preStart = ''
-      # Verify mount is actually available
-      if ! ${pkgs.util-linux}/bin/mountpoint -q /tank/Maildir; then
-        echo "ERROR: /tank/Maildir is not mounted"
-        exit 1
-      fi
-
-      # Verify user directories exist or create them
-      for user in johnw assembly; do
-        if [ ! -d "/tank/Maildir/$user" ]; then
-          echo "Creating mail directory for $user"
-          mkdir -p "/tank/Maildir/$user"
-          chown "$user:users" "/tank/Maildir/$user"
-        else
-          echo "Verified: /tank/Maildir/$user exists"
-        fi
-      done
-    '';
-  };
 
   # Generate DH parameters if they don't exist
   systemd.services.dovecot-dh-params = {

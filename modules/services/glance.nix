@@ -117,24 +117,80 @@ with lib;
                   type = "bookmarks";
                   groups = [
                     {
-                      title = "Services";
+                      title = "Infrastructure";
                       color = "10 70 50";
                       links = [
                         {
-                          title = "Grafana";
-                          url = "https://grafana.vulcan.lan";
+                          title = "OPNsense";
+                          url = "https://192.168.1.1";
+                        }
+                        {
+                          title = "DNS Management";
+                          url = "https://dns.vulcan.lan";
                         }
                         {
                           title = "PostgreSQL";
                           url = "https://postgres.vulcan.lan";
                         }
                         {
-                          title = "Alertmanager";
-                          url = "https://alertmanager.vulcan.lan";
+                          title = "Home Assistant";
+                          url = "https://hass.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
+                      title = "Productivity";
+                      color = "150 60 55";
+                      links = [
+                        {
+                          title = "Nextcloud";
+                          url = "https://nextcloud.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
+                      title = "Media";
+                      color = "280 50 60";
+                      links = [
+                        {
+                          title = "Wallabag";
+                          url = "https://wallabag.vulcan.lan";
                         }
                         {
                           title = "Jellyfin";
                           url = "https://jellyfin.vulcan.lan";
+                        }
+                        {
+                          title = "Silly Tavern";
+                          url = "https://silly-tavern.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
+                      title = "Monitoring";
+                      color = "30 65 55";
+                      links = [
+                        {
+                          title = "Grafana";
+                          url = "https://grafana.vulcan.lan";
+                        }
+                        {
+                          title = "Prometheus";
+                          url = "https://prometheus.vulcan.lan";
+                        }
+                        {
+                          title = "Alertmanager";
+                          url = "https://alertmanager.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
+                      title = "AI Services";
+                      color = "220 60 60";
+                      links = [
+                        {
+                          title = "LiteLLM";
+                          url = "https://litellm.vulcan.lan/ui";
                         }
                       ];
                     }

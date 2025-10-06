@@ -32,7 +32,7 @@ let
 # TYPE certificate_days_until_expiry gauge
 # HELP certificate_file_exists Whether the certificate file exists (1 = exists, 0 = missing)
 # TYPE certificate_file_exists gauge
-# HELP certificate_key_matches Whether the certificate key matches (1 = matches, 0 = mismatch or missing)
+# HELP certificate_key_matches Whether the certificate key matches (1 = matches, 0 = mismatch or missing, -1 = not checked)
 # TYPE certificate_key_matches gauge
 # HELP certificate_chain_valid Whether the certificate chain is valid (1 = valid, 0 = invalid, -1 = not checked)
 # TYPE certificate_chain_valid gauge
@@ -94,13 +94,19 @@ certificate_days_until_expiry{name="$cert_name",type="$cert_type",path="$cert_pa
 EOF
 
       # Check if key exists and matches
-      local key_path="''${cert_path%.crt}.key"
-      local key_matches=0
-      if [[ -f "$key_path" ]]; then
-        local cert_modulus=$(${pkgs.openssl}/bin/openssl x509 -in "$cert_path" -noout -modulus 2>/dev/null | ${pkgs.coreutils}/bin/md5sum | cut -d' ' -f1)
-        local key_modulus=$(${pkgs.openssl}/bin/openssl rsa -in "$key_path" -noout -modulus 2>/dev/null | ${pkgs.coreutils}/bin/md5sum | cut -d' ' -f1)
-        if [[ "$cert_modulus" == "$key_modulus" ]]; then
-          key_matches=1
+      local key_matches=-1  # -1 = not checked (default for CA certs)
+
+      # For CA certificates, skip key matching check since keys are stored separately
+      # in the secrets directory and are not used for TLS connections
+      if [[ "$cert_type" != "ca" ]]; then
+        local key_path="''${cert_path%.crt}.key"
+        key_matches=0  # 0 = not found or mismatch
+        if [[ -f "$key_path" ]]; then
+          local cert_modulus=$(${pkgs.openssl}/bin/openssl x509 -in "$cert_path" -noout -modulus 2>/dev/null | ${pkgs.coreutils}/bin/md5sum | cut -d' ' -f1)
+          local key_modulus=$(${pkgs.openssl}/bin/openssl rsa -in "$key_path" -noout -modulus 2>/dev/null | ${pkgs.coreutils}/bin/md5sum | cut -d' ' -f1)
+          if [[ "$cert_modulus" == "$key_modulus" ]]; then
+            key_matches=1
+          fi
         fi
       fi
       echo "certificate_key_matches{name=\"$cert_name\",type=\"$cert_type\",path=\"$cert_path\"} $key_matches" >> "$TEMP_FILE"

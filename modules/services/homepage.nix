@@ -3,8 +3,9 @@ with lib;
 
 {
   # Native Homepage Dashboard service configuration
+  # DISABLED: Replaced by Glance dashboard bookmarks
   services.homepage-dashboard = {
-    enable = true;
+    enable = false;
 
     # Use the same port as the container was using
     listenPort = 3005;
@@ -14,6 +15,17 @@ with lib;
 
     # Environment file for secrets
     environmentFile = "/var/lib/homepage-secrets.env";
+
+    # Custom CSS (placeholder for potential styling)
+    customCSS = ''
+      /* Custom styles can be added here if needed */
+    '';
+
+    # Custom JavaScript to force dark mode
+    customJS = ''
+      // Force dark mode on page load since theme API is broken
+      document.documentElement.classList.add('dark');
+    '';
 
     # Main dashboard settings
     settings = {
@@ -71,9 +83,10 @@ with lib;
       disableCollapse = false;
       hideVersion = false;
 
-      providers = {
-        openweathermap = "{{HOMEPAGE_VAR_WEATHER_API_KEY}}";
-      };
+      # Temporarily disabled to debug theme API
+      # providers = {
+      #   openweathermap = "{{HOMEPAGE_VAR_WEATHER_API_KEY}}";
+      # };
     };
 
     # Services configuration
@@ -306,24 +319,82 @@ with lib;
     ];
   };
 
-  # Keep the existing nginx configuration
-  services.nginx.virtualHosts."homepage.vulcan.lan" = {
-    forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/homepage.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/homepage.vulcan.lan.key";
-    locations."/" = {
-      proxyPass = "http://127.0.0.1:3005/";
-      proxyWebsockets = true;
-      extraConfig = ''
-        proxy_buffering off;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      '';
-    };
-  };
+  # Nginx configuration disabled - homepage-dashboard replaced by Glance
+  # services.nginx.virtualHosts."homepage.vulcan.lan" = {
+  #   forceSSL = true;
+  #   sslCertificate = "/var/lib/nginx-certs/homepage.vulcan.lan.crt";
+  #   sslCertificateKey = "/var/lib/nginx-certs/homepage.vulcan.lan.key";
+  #   locations."/" = {
+  #     proxyPass = "http://127.0.0.1:3005/";
+  #     proxyWebsockets = true;
+  #     extraConfig = ''
+  #       proxy_buffering off;
+  #       proxy_set_header Host $host;
+  #       proxy_set_header X-Real-IP $remote_addr;
+  #       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  #       proxy_set_header X-Forwarded-Proto $scheme;
+  #     '';
+  #   };
+  # };
 
-  networking.firewall.interfaces."lo".allowedTCPPorts =
-    lib.mkIf config.services.homepage-dashboard.enable [ 3005 ];
+  # networking.firewall.interfaces."lo".allowedTCPPorts =
+  #   lib.mkIf config.services.homepage-dashboard.enable [ 3005 ];
+
+  # # Fix for Next.js EROFS errors - use writable cache directory
+  # systemd.services.homepage-dashboard.environment = {
+  #   # Next.js cache directory - use systemd CacheDirectory
+  #   NEXT_CACHE_DIR = "/var/cache/homepage-dashboard";
+  #   # Also set TMPDIR as fallback for temporary file operations
+  #   TMPDIR = "/var/cache/homepage-dashboard/tmp";
+  # };
+
+  # # Override the entire preStart to avoid cache deletion and setup runtime directory
+  # systemd.services.homepage-dashboard.preStart = lib.mkForce ''
+  #   # Use the package path directly from the Nix store
+  #   HOMEPAGE_SHARE="${pkgs.homepage-dashboard}/share/homepage"
+
+  #   # Create writable runtime directory
+  #   RUNTIME_DIR=/var/lib/homepage-dashboard/runtime
+  #   mkdir -p "$RUNTIME_DIR"
+
+  #   # Copy .next directory if not already present or if package changed
+  #   if [ ! -f "$RUNTIME_DIR/.next-copied" ] || \
+  #      [ "$(cat "$RUNTIME_DIR/.next-copied" 2>/dev/null || true)" != "${pkgs.homepage-dashboard}" ]; then
+  #     echo "Copying .next directory from $HOMEPAGE_SHARE to $RUNTIME_DIR..."
+  #     rm -rf "$RUNTIME_DIR/.next"
+  #     cp -r "$HOMEPAGE_SHARE/.next" "$RUNTIME_DIR/"
+  #     chmod -R u+w "$RUNTIME_DIR/.next"
+  #     echo "${pkgs.homepage-dashboard}" > "$RUNTIME_DIR/.next-copied"
+
+  #     # Clear old cache when package changes to prevent stale ISR data
+  #     echo "Clearing old Next.js cache due to package update..."
+  #     rm -rf /var/cache/homepage-dashboard/.next
+  #     rm -rf /var/cache/homepage-dashboard/homepage
+  #     rm -rf /var/cache/homepage-dashboard/cache
+  #   fi
+
+  #   # Copy server.js (not symlink) so Next.js __dirname resolves to runtime dir
+  #   rm -f "$RUNTIME_DIR/server.js"
+  #   cp "$HOMEPAGE_SHARE/server.js" "$RUNTIME_DIR/server.js"
+  #   chmod u+w "$RUNTIME_DIR/server.js"
+
+  #   # Create symlinks to read-only resources
+  #   for item in public node_modules next-i18next.config.js package.json src; do
+  #     rm -rf "''${RUNTIME_DIR:?}/$item"
+  #     ln -sf "$HOMEPAGE_SHARE/$item" "$RUNTIME_DIR/$item"
+  #   done
+
+  #   # Ensure cache subdirectories exist (patch expects /var/cache/homepage-dashboard/homepage)
+  #   mkdir -p /var/cache/homepage-dashboard/tmp
+  #   mkdir -p /var/cache/homepage-dashboard/homepage/pages
+  #   mkdir -p /var/cache/homepage-dashboard/homepage/app
+  #   mkdir -p /var/cache/homepage-dashboard/cache/fetch-cache
+  #   chmod -R 755 /var/cache/homepage-dashboard
+  # '';
+
+  # # Override the ExecStart to run from the writable runtime directory
+  # systemd.services.homepage-dashboard.serviceConfig = {
+  #   ExecStart = lib.mkForce "${pkgs.nodejs}/bin/node /var/lib/homepage-dashboard/runtime/server.js";
+  #   WorkingDirectory = "/var/lib/homepage-dashboard/runtime";
+  # };
 }

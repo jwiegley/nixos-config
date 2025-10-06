@@ -139,56 +139,6 @@
     };
   };
 
-  # Certificate generation for Loki
-  systemd.services.loki-certificate = {
-    description = "Generate Loki TLS certificate";
-    wantedBy = [ "nginx.service" ];
-    before = [ "nginx.service" ];
-    after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "root";
-    };
-
-    script = ''
-      CERT_DIR="/var/lib/nginx-certs"
-      mkdir -p "$CERT_DIR"
-
-      CERT_FILE="$CERT_DIR/loki.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/loki.vulcan.lan.key"
-
-      # Check if certificate already exists and is valid
-      if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-        # Check if certificate is still valid for at least 30 days
-        if ${pkgs.openssl}/bin/openssl x509 -in "$CERT_FILE" -noout -checkend 2592000; then
-          echo "Certificate is still valid for more than 30 days"
-          exit 0
-        fi
-      fi
-
-      # Create self-signed certificate as fallback
-      echo "Creating self-signed certificate for loki.vulcan.lan"
-
-      ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
-        -keyout "$KEY_FILE" \
-        -out "$CERT_FILE" \
-        -days 365 \
-        -nodes \
-        -subj "/CN=loki.vulcan.lan" \
-        -addext "subjectAltName=DNS:loki.vulcan.lan"
-
-      # Set proper permissions
-      chmod 644 "$CERT_FILE"
-      chmod 600 "$KEY_FILE"
-      chown -R nginx:nginx "$CERT_DIR"
-
-      echo "Certificate generated successfully"
-    '';
-  };
-
   # Monitoring and health check script
   environment.systemPackages = with pkgs; [
     (writeShellScriptBin "check-loki" ''

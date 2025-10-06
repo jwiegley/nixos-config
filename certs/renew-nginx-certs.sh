@@ -18,6 +18,7 @@ DOMAINS=(
     "grafana.vulcan.lan"
     "jellyfin.vulcan.lan"
     "litellm.vulcan.lan"
+    "loki.vulcan.lan"
     "nextcloud.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"

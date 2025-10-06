@@ -165,26 +165,25 @@ EOF
       done
     }
 
-    # Simple HTTP server
-    while true; do
-      # Read HTTP request
-      REQUEST=$(head -n 1)
+    # Handle single HTTP request (socat fork spawns new instance per connection)
+    # Read HTTP request (use read instead of head to avoid buffering issues)
+    IFS= read -r REQUEST
 
-      # Consume headers
-      while IFS= read -r line; do
-        [ -z "$(echo "$line" | tr -d '\r\n')" ] && break
-      done
-
-      # Check if it's a GET request for /metrics
-      if echo "$REQUEST" | grep -q "^GET /metrics"; then
-        METRICS=$(generate_metrics)
-        http_response "200 OK" "text/plain; version=0.0.4" "$METRICS"
-      elif echo "$REQUEST" | grep -q "^GET /health"; then
-        http_response "200 OK" "text/plain" "OK"
-      else
-        http_response "404 Not Found" "text/plain" "Not Found"
-      fi
+    # Consume headers until we hit blank line
+    while IFS= read -r line; do
+      line=$(echo "$line" | tr -d '\r')
+      [ -z "$line" ] && break
     done
+
+    # Check if it's a GET request for /metrics
+    if echo "$REQUEST" | grep -q "^GET /metrics"; then
+      METRICS=$(generate_metrics)
+      http_response "200 OK" "text/plain; version=0.0.4" "$METRICS"
+    elif echo "$REQUEST" | grep -q "^GET /health"; then
+      http_response "200 OK" "text/plain" "OK"
+    else
+      http_response "404 Not Found" "text/plain" "Not Found"
+    fi
   '';
 
   # Script to generate ZFS replication status metrics

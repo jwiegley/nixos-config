@@ -199,7 +199,7 @@ groups:
           component: certificates
         annotations:
           summary: "Certificate key mismatch for {{ $labels.name }}"
-          description: "The private key for certificate {{ $labels.name }} ({{ $labels.type }}) does not match the certificate or is missing"
+          description: "The private key for certificate {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} does not match the certificate or is missing"
 
       - alert: CertificateChainInvalid
         expr: certificate_chain_valid == 0

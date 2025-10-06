@@ -66,7 +66,7 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl step-cli systemd ];
+      path = with pkgs; [ openssl step-cli systemd sudo sops ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };

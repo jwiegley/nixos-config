@@ -85,14 +85,14 @@ with lib;
                 # Google News Feed
                 {
                   type = "rss";
-                  title = "Google News - John Wiegley";
+                  title = "Google News - Top Stories";
                   cache = "30m";
                   limit = 10;
                   collapse-after = 5;
                   feeds = [
                     {
-                      url = "https://news.google.com/rss/search?q=john+wiegley&hl=en-US&gl=US&ceid=US:en";
-                      title = "News";
+                      url = "https://news.google.com/rss?hl=en&gl=US&ceid=US:en";
+                      title = "Top Stories";
                     }
                   ];
                 }
@@ -232,17 +232,15 @@ with lib;
     glance_github_token = {
       sopsFile = ../../secrets.yaml;
       mode = "0400";
-      owner = "glance";
-      group = "glance";
+      # owner/group removed to avoid chicken-and-egg problem with user creation
+      # The glance user is created by the service, but secrets are set up before service starts
       restartUnits = [ "glance.service" ];
     };
     # glance_reddit_client_id = {
     #   mode = "0400";
-    #   owner = "glance";
     # };
     # glance_reddit_client_secret = {
     #   mode = "0400";
-    #   owner = "glance";
     # };
   };
 

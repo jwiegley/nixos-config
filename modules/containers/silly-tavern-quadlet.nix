@@ -17,8 +17,7 @@
       networks = [ "podman" ];
     };
     unitConfig = {
-      After = [ "ensure-podman-network.service" "podman.service" ];
-      Wants = [ "ensure-podman-network.service" ];
+      After = [ "podman.service" ];
     };
   };
 

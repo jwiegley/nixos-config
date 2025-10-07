@@ -34,8 +34,8 @@
 
     unitConfig = {
       # Ensure dependencies are ready
-      After = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "technitium-dns-server.service" ];
-      Wants = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "technitium-dns-server.service" ];
+      After = [ "sops-nix.service" "network-online.target" "podman.service" "technitium-dns-server.service" ];
+      Wants = [ "sops-nix.service" "network-online.target" "technitium-dns-server.service" ];
     };
 
     serviceConfig = {

@@ -24,8 +24,8 @@
       networks = [ "podman" ];
     };
     unitConfig = {
-      After = [ "sops-nix.service" "postgresql.service" "ensure-podman-network.service" "podman.service" ];
-      Wants = [ "sops-nix.service" "ensure-podman-network.service" ];
+      After = [ "sops-nix.service" "postgresql.service" "podman.service" ];
+      Wants = [ "sops-nix.service" ];
       Requires = [ "postgresql.service" ];
       BindsTo = [ "postgresql.service" ];
     };

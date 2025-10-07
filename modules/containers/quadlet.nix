@@ -17,8 +17,8 @@
     enable = true;
     dockerCompat = true;
     defaultNetwork.settings = {
-      dns_enabled = false;  # Disable DNS to avoid conflict with Technitium DNS Server
-      # Ensure the default podman network is configured
+      dns_enabled = false;  # Disabled: conflicts with Technitium DNS on 0.0.0.0:53 (aardvark-dns can't bind to 10.88.0.1:53)
+      # Containers will use host's /etc/resolv.conf (192.168.1.2, 192.168.1.1) for DNS resolution
       subnets = [
         {
           subnet = "10.88.0.0/16";
@@ -32,18 +32,8 @@
     };
   };
 
-  # Create a systemd service to ensure podman network exists
-  systemd.services.ensure-podman-network = {
-    description = "Ensure Podman network exists";
-    after = [ "network.target" ];
-    before = [ "podman.service" ];
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.podman}/bin/podman network exists podman || ${pkgs.podman}/bin/podman network create --disable-dns --subnet 10.88.0.0/16 --gateway 10.88.0.1 podman'";
-    };
-  };
+  # Note: Podman network is automatically managed by NixOS via virtualisation.podman.defaultNetwork.settings
+  # No manual network creation needed - the defaultNetwork.settings above configures the "podman" network
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {

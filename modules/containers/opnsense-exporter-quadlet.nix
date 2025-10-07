@@ -44,8 +44,8 @@
       autoUpdate = "registry";
     };
     unitConfig = {
-      After = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "opnsense-api-transformer.service" ];
-      Wants = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" "opnsense-api-transformer.service" ];
+      After = [ "sops-nix.service" "network-online.target" "podman.service" "opnsense-api-transformer.service" ];
+      Wants = [ "sops-nix.service" "network-online.target" "opnsense-api-transformer.service" ];
     };
     serviceConfig = {
       # Restart policy

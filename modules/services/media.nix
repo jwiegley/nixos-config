@@ -6,7 +6,7 @@
       enable = true;
       dataDir = "/var/lib/jellyfin";
       user = "johnw";
-      openFirewall = true;
+      openFirewall = false;
     };
   };
 
@@ -17,6 +17,17 @@
     locations."/" = {
       proxyPass = "http://127.0.0.1:8096/";
       proxyWebsockets = true;
+      extraConfig = ''
+        proxy_set_header X-Forwarded-Protocol $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
+
+        # Disable buffering when the nginx proxy gets very resource heavy upon
+        # streaming
+        proxy_buffering off;
+      '';
     };
   };
+
+  networking.firewall.interfaces."lo".allowedTCPPorts =
+    lib.mkIf config.services.jellyfin.enable [ 8096 ];
 }

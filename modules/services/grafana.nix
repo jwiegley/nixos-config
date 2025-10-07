@@ -190,6 +190,14 @@
         fi
       fi
 
+      # Copy DNS Query Logs Dashboard
+      if [ ! -f "$DASHBOARD_DIR/dns-query-logs.json" ]; then
+        echo "Installing DNS Query Logs dashboard..."
+        if [ -f "/etc/nixos/modules/storage/dns-query-logs-dashboard.json" ]; then
+          cp /etc/nixos/modules/storage/dns-query-logs-dashboard.json "$DASHBOARD_DIR/dns-query-logs.json"
+        fi
+      fi
+
       # Technitium DNS Dashboard from GitHub
       # Note: The dashboard must be manually copied from the cloned repository
       # or downloaded directly using the correct path

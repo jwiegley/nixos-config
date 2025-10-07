@@ -965,6 +965,7 @@
       "docker"
       "jellyfin"  # For Jellyfin logs
       "wheel"     # For audit logs
+      "adm"       # For sudo logs
     ];
   };
 

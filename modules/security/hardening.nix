@@ -35,9 +35,13 @@
     };
   };
 
+  # Create adm group for log file access
+  users.groups.adm = {};
+
   system.activationScripts.sudoLogs = ''
     mkdir -p /var/log
     touch /var/log/sudo.log
-    chmod 600 /var/log/sudo.log
+    chown root:adm /var/log/sudo.log
+    chmod 640 /var/log/sudo.log
   '';
 }

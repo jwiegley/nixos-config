@@ -112,6 +112,7 @@ in
       ps.python-miio # Required for Dreame Vacuum integration
       ps.pybase64 # Required for Dreame Vacuum integration
       ps.paho-mqtt # Required for Dreame Vacuum integration
+      ps.aiomqtt # Required for Traeger WiFIRE integration
       ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
     ];
 

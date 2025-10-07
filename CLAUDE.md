@@ -458,7 +458,7 @@ sudo journalctl -u home-assistant | grep -i bmw
 
 ### IoT Device Integrations
 
-Home Assistant is configured with support for 17 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
+Home Assistant is configured with support for 19 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
 
 ```bash
 # View the device integration guide
@@ -478,8 +478,11 @@ cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
 - MyQ garage door opener (myq)
 - Pentair IntelliCenter & IntelliFlo (screenlogic)
 - Miele dishwasher (miele)
+- LG ThinQ smart appliances (lg_thinq)
 - Google Home Hub (cast)
+- Withings digital scale (withings)
 - BMW ConnectedDrive (bmw_connected_drive)
+- LG webOS Smart TV (webostv)
 
 **Custom Integrations** (require HACS):
 - OPNsense firewall (travisghansen/hass-opnsense)
@@ -547,6 +550,193 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 # The locks communicate with the August cloud service
 # They require internet connectivity to function
 # No local Bluetooth connection is used with 4th gen WiFi models
+```
+
+### LG webOS Smart TV Integration
+```bash
+# The LG webOS Smart TV integration provides local control of LG Smart TVs
+# running webOS 2.0 or later (2015+ models).
+
+# Prerequisites:
+# 1. LG Smart TV with webOS 2.0+ on your network
+# 2. TV powered on for initial pairing
+# 3. Network discovery (SSDP) enabled
+
+# Setup:
+# 1. Ensure TV is powered on and connected to network
+# 2. Access Home Assistant: https://hass.vulcan.lan
+# 3. Go to Settings > Devices & Services
+# 4. TV should auto-discover (look for "LG webOS Smart TV")
+# 5. If not discovered, manually add:
+#    - Click "+ Add Integration"
+#    - Search for "LG webOS Smart TV"
+#    - Enter TV IP address (find in TV Settings > Network)
+# 6. Accept pairing request on TV screen
+# 7. TV entity will appear as media_player.lg_webos_smart_tv
+
+# Wake on LAN Setup (optional):
+# To power on TV remotely:
+# 1. Connect TV via Ethernet (WiFi WoL is unreliable)
+# 2. On TV: Settings > General > Mobile TV On > Turn On Via WiFi/Ethernet
+# 3. Enable "LG Connect Apps"
+# 4. TV must support WoL (most 2015+ models do)
+
+# Features:
+# - Power on/off control (with WoL)
+# - Volume control and mute
+# - Media playback (play/pause/stop)
+# - Input source switching (HDMI1, HDMI2, etc.)
+# - Channel control
+# - App launching (Netflix, YouTube, etc.)
+# - Display notifications on TV screen
+# - Screenshot capability
+# - Media information display
+
+# Check webOS integration status:
+sudo journalctl -u home-assistant | grep -i webos
+
+# View TV entities in Home Assistant:
+# Access: https://hass.vulcan.lan
+# Go to Settings > Devices & Services > LG webOS Smart TV
+
+# Example automations:
+# Launch Netflix on TV
+# service: webostv.button
+# target:
+#   entity_id: media_player.lg_webos_smart_tv
+# data:
+#   button: NETFLIX
+
+# Display notification on TV
+# service: notify.lg_webos_tv
+# data:
+#   message: "Dinner is ready!"
+
+# Turn on TV at 7 AM
+# automation:
+#   trigger:
+#     platform: time
+#     at: "07:00:00"
+#   action:
+#     service: media_player.turn_on
+#     target:
+#       entity_id: media_player.lg_webos_smart_tv
+
+# Troubleshooting:
+# TV not discovered:
+# - Check TV and Home Assistant are on same network/VLAN
+# - Ensure multicast/SSDP is not blocked by firewall
+# - Verify TV is powered on (not in standby)
+
+# Pairing fails:
+# - TV must be on and not in screen saver mode
+# - Try manually adding with TV IP address
+# - Check TV firewall settings (if any)
+
+# Wake-on-LAN not working:
+# - Use Ethernet connection instead of WiFi
+# - Enable "LG Connect Apps" in TV settings
+# - Verify TV supports WoL (check TV manual)
+
+# Commands not responding:
+# - Verify TV is powered on
+# - Check network connectivity
+# - Re-pair integration via UI
+
+# Supported TV Models:
+# - LG Smart TVs with webOS 2.0+ (2015 and newer)
+# - webOS 3.0, 4.0, 5.0, 6.0, 22, 23 verified compatible
+# - Most LG OLED and NanoCell series
+```
+
+### LG ThinQ Smart Appliances Integration
+```bash
+# LG ThinQ supports a wide range of LG smart appliances using the official
+# LG ThinQ Connect API (requires Personal Access Token).
+
+# Prerequisites:
+# 1. LG ThinQ account with registered devices
+# 2. Personal Access Token (PAT) from https://connect-pat.lgthinq.com/
+# 3. Token added to SOPS secrets as lg-thinq-token
+
+# Generate Personal Access Token (PAT):
+# 1. Visit: https://connect-pat.lgthinq.com/
+# 2. Login with your LG ThinQ account
+# 3. Click "ADD NEW TOKEN"
+# 4. Enter a token name (e.g., "Home Assistant")
+# 5. Select ALL authorized scopes:
+#    - Permission to view all devices
+#    - Permission to view all device statuses
+#    - All device control rights
+#    - All device event subscription rights
+#    - All device push notification permissions
+#    - Permission to inquiry device energy consumption
+# 6. Click "CREATE TOKEN" and copy the token value
+
+# Add token to secrets:
+sops /etc/nixos/secrets.yaml
+# Add under home-assistant section:
+# lg-thinq-token: "your_personal_access_token_here"
+
+# Rebuild NixOS after adding token:
+sudo nixos-rebuild switch --flake '.#vulcan'
+
+# Add Integration in Home Assistant:
+# 1. Access: https://hass.vulcan.lan
+# 2. Go to Settings > Devices & Services > Add Integration
+# 3. Search for "LG ThinQ"
+# 4. Enter your PAT token value
+# 5. Select your region/country
+# 6. Choose devices to integrate
+
+# Check LG ThinQ integration status:
+sudo journalctl -u home-assistant | grep -i "lg_thinq"
+
+# View LG ThinQ entities:
+# Access: https://hass.vulcan.lan
+# Go to Settings > Devices & Services > LG ThinQ
+
+# Supported Device Categories:
+# - Laundry: Washers, dryers, stylers, washtowers
+# - Kitchen: Refrigerators, dishwashers, ovens, microwaves
+# - Climate: Air conditioners, air purifiers, dehumidifiers
+# - Cleaning: Robot vacuums, stick vacuums
+# - Other: Water heaters, wine cellars, system boilers
+
+# Energy consumption tracking:
+# LG ThinQ provides energy sensors for supported devices:
+# - Energy yesterday (Wh)
+# - Energy this month (Wh)
+# - Energy last month (Wh)
+# These integrate with Home Assistant's Energy Dashboard
+
+# Common Troubleshooting:
+# "Token not valid" error:
+# - Verify token at https://connect-pat.lgthinq.com/
+# - Check that all required scopes were selected during token creation
+# - Generate a new token if expired or corrupted
+
+# "Country not supported" error:
+# - Check which countries are authorized in your PAT
+# - Select the correct region when adding the integration
+
+# "API calls exceeded" error:
+# - LG limits API rate per token
+# - Wait some time before retrying
+# - Avoid reloading integration repeatedly
+
+# Device not appearing:
+# - Ensure device is registered in LG ThinQ mobile app first
+# - Check that device is online and connected to WiFi
+# - Reload the integration via UI: Settings > Devices & Services > LG ThinQ > Reload
+
+# Automation examples:
+# Create automations for device events like:
+# - Washer/dryer cycle completion notifications
+# - Refrigerator door left open alerts
+# - Dishwasher cycle complete announcements
+# - Air purifier filter replacement reminders
+# See HOME_ASSISTANT_DEVICES.md for YAML automation examples
 ```
 
 ## Architecture

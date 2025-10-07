@@ -4,7 +4,7 @@ This document provides setup instructions for all IoT devices integrated with Ho
 
 ## Overview
 
-**Built-in Integrations (11)**: Configured via NixOS extraComponents
+**Built-in Integrations (13)**: Configured via NixOS extraComponents
 **Custom Integrations (4)**: Require HACS or manual installation
 
 ---
@@ -241,7 +241,112 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 ---
 
-### 10. Google Home Hub (cast)
+### 10. LG ThinQ Smart Appliances (lg_thinq)
+
+**Component**: `lg_thinq`
+
+**Setup** (requires Personal Access Token):
+1. Create a Personal Access Token (PAT):
+   - Visit https://connect-pat.lgthinq.com/ (requires LG ThinQ account)
+   - Click **ADD NEW TOKEN**
+   - Enter a token name
+   - Select ALL authorized scopes:
+     - Permission to view all devices
+     - Permission to view all device statuses
+     - All device control rights
+     - All device event subscription rights
+     - All device push notification permissions
+     - Permission to inquiry device energy consumption
+   - Click **CREATE TOKEN**
+   - Copy the generated PAT token value
+
+2. Add the token to secrets:
+```bash
+sops /etc/nixos/secrets.yaml
+# Add under home-assistant section:
+# lg-thinq-token: "your_personal_access_token_here"
+```
+
+3. Rebuild NixOS configuration:
+```bash
+sudo nixos-rebuild switch --flake '.#vulcan'
+```
+
+4. Add integration in Home Assistant:
+   - Go to Settings > Devices & Services > Add Integration
+   - Search for "LG ThinQ"
+   - Enter your PAT token value
+   - Select your region/country
+   - Choose devices to integrate
+
+**Features**:
+- Full control of LG smart appliances
+- Real-time status monitoring
+- Energy consumption tracking (yesterday, this month, last month)
+- Device notifications and error events
+- Automation support for all device states
+
+**Supported Devices**:
+- **Laundry**: Washers, dryers, stylers, washtowers, washcombos
+- **Kitchen**: Refrigerators, dishwashers, ovens, microwaves, cooktops
+- **Cooking**: Range hoods, wine cellars, kimchi refrigerators
+- **Climate**: Air conditioners, air purifiers, dehumidifiers, humidifiers
+- **Cleaning**: Robot vacuums, stick vacuums
+- **Other**: Water heaters, system boilers, water purifiers, plant cultivators
+
+**Requirements**:
+- LG ThinQ account
+- LG smart appliances registered in LG ThinQ app
+- Personal Access Token (PAT) from https://connect-pat.lgthinq.com/
+- Internet connection (cloud-based integration)
+
+**Energy Dashboard**: Supports energy consumption sensors for compatible devices
+
+**Available Platforms**:
+- Binary Sensors (door open, remote start enabled, etc.)
+- Buttons (start/pause operations)
+- Climate (temperature control for HVAC)
+- Events (notifications, errors, completion alerts)
+- Fans (ceiling fans)
+- Numbers (timers, temperature setpoints, delays)
+- Selects (operating modes, speeds, cook modes)
+- Sensors (status, temperature, humidity, air quality, timers)
+- Switches (power, modes, features)
+- Vacuums (robot cleaner control)
+
+**Data Updates**:
+- Status changes: Real-time events (new models)
+- Status (legacy models): Every 5 minutes
+- Energy consumption: Daily (updated each morning with previous day's data)
+
+**Troubleshooting**:
+- **Token not valid**: Verify PAT at https://connect-pat.lgthinq.com/
+- **Country not supported**: Check PAT's valid countries, select correct region
+- **API calls exceeded**: Wait some time, LG limits API rate per token
+- **Device not appearing**: Ensure device is registered in LG ThinQ mobile app first
+
+**Automation Examples**:
+```yaml
+# Notification when washer cycle completes
+alias: Washer Complete Notification
+triggers:
+  - trigger: state
+    entity_id: event.washer_notification
+actions:
+  - condition: state
+    entity_id: event.washer_notification
+    attribute: event_type
+    state: washing_is_complete
+  - service: notify.mobile_app
+    data:
+      message: "Washer cycle is complete!"
+```
+
+**Note**: LG ThinQ uses the official LG ThinQ Connect API introduced in Home Assistant 2024.11+
+
+---
+
+### 11. Google Home Hub (cast)
 
 **Component**: `cast`
 
@@ -268,7 +373,7 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 ---
 
-### 11. Withings Digital Scale (withings)
+### 12. Withings Digital Scale (withings)
 
 **Component**: `withings`
 
@@ -324,6 +429,86 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 ---
 
+### 13. LG webOS Smart TV (webostv)
+
+**Component**: `webostv`
+
+**Setup**:
+1. Ensure your LG TV is powered on and connected to the network
+2. Go to Settings > Devices & Services
+3. LG webOS TV should auto-discover on your network
+4. If not auto-discovered, manually add:
+   - Click "Add Integration"
+   - Search for "LG webOS Smart TV"
+   - Enter TV IP address
+5. Accept the pairing request on your TV screen
+6. TV will be added to Home Assistant
+
+**Features**:
+- Power on/off control
+- Volume control
+- Media playback control
+- Input source switching
+- Channel control
+- App launching
+- Notifications on TV screen
+- Media information display
+- Screenshot capability
+
+**Requirements**:
+- LG Smart TV with webOS 2.0 or later
+- TV connected to same network as Home Assistant
+- TV powered on for initial pairing
+
+**Wake on LAN**:
+- To power on TV remotely, enable "LG Connect Apps" in TV settings
+- TV must be connected via Ethernet (WiFi Wake-on-LAN unreliable)
+- Settings path: General > Mobile TV On > Turn On Via WiFi (or Ethernet)
+
+**App Launching**:
+```yaml
+# Example automation to launch Netflix
+service: webostv.button
+target:
+  entity_id: media_player.lg_webos_smart_tv
+data:
+  button: NETFLIX
+```
+
+**Sending Notifications**:
+```yaml
+# Display notification on TV
+service: notify.lg_webos_tv
+data:
+  message: "Your message here"
+```
+
+**Supported Models**:
+- All LG TVs with webOS 2.0+ (2015 and newer)
+- Verified compatibility with webOS 3.0, 4.0, 5.0, 6.0, 22, 23
+
+**Network Discovery**:
+- Integration uses SSDP for auto-discovery
+- Ensure multicast is enabled on your network
+- mDNS/Zeroconf must be enabled in Home Assistant (already configured)
+
+**Troubleshooting**:
+- **TV not discovered**: Check TV and Home Assistant are on same network/VLAN
+- **Pairing fails**: Ensure TV is powered on and not in screen saver mode
+- **Wake-on-LAN not working**:
+  - Enable "LG Connect Apps" or "Mobile TV On" in TV settings
+  - Use Ethernet connection instead of WiFi
+  - Check if TV supports WoL (most 2015+ models do)
+- **Commands not working**: Verify TV is on and paired
+- **Connection lost**: Re-pair the integration via UI
+
+**Privacy Note**:
+- Integration communicates locally over your network
+- No cloud connection required
+- TV MAC address and IP stored in Home Assistant
+
+---
+
 ## Custom Integrations (via HACS)
 
 These integrations require manual installation through HACS (Home Assistant Community Store).
@@ -341,7 +526,7 @@ wget -O - https://get.hacs.xyz | bash -
 4. Search for "HACS"
 5. Follow authentication with GitHub
 
-### 11. B-Hyve Sprinkler Control
+### 14. B-Hyve Sprinkler Control
 
 **Repository**: `sebr/bhyve-home-assistant`
 **Installation**: Via HACS
@@ -369,7 +554,7 @@ wget -O - https://get.hacs.xyz | bash -
 
 ---
 
-### 12. Dreame Robot Vacuum
+### 15. Dreame Robot Vacuum
 
 **Repository**: `Tasshack/dreame-vacuum`
 **Installation**: Via HACS
@@ -405,7 +590,7 @@ wget -O - https://get.hacs.xyz | bash -
 
 ---
 
-### 13. Hubspace Devices (Porch Light)
+### 16. Hubspace Devices (Porch Light)
 
 **Repository**: `jdeath/Hubspace-Homeassistant`
 **Installation**: Via HACS
@@ -434,7 +619,7 @@ wget -O - https://get.hacs.xyz | bash -
 
 ---
 
-### 14. Traeger Ironwood Grill
+### 17. Traeger Ironwood Grill
 
 **Repository**: `nocturnal11/homeassistant-traeger`
 **Installation**: Manual or via HACS
@@ -500,6 +685,7 @@ myq-password: "your_myq_password"
 # Appliances
 miele-username: "your_miele_email"
 miele-password: "your_miele_password"
+lg-thinq-token: "your_lg_thinq_personal_access_token"
 
 # Custom integrations
 bhyve-username: "your_orbit_email"

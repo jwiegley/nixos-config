@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   hacs-frontend-pkg = pkgs.python3Packages.hacs-frontend;
@@ -63,13 +68,24 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
+  # LG ThinQ Personal Access Token (PAT)
+  sops.secrets."home-assistant/lg-thinq-token" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
   # PostgreSQL database for Home Assistant recorder
   services.postgresql = {
     ensureDatabases = [ "hass" ];
-    ensureUsers = [{
-      name = "hass";
-      ensureDBOwnership = true;
-    }];
+    ensureUsers = [
+      {
+        name = "hass";
+        ensureDBOwnership = true;
+      }
+    ];
 
     # Add peer authentication for hass user on local socket
     authentication = lib.mkAfter ''
@@ -84,15 +100,19 @@ in
 
     # Custom components installed via overlays
     customComponents = with pkgs.home-assistant-custom-components; [
-      hacs          # Home Assistant Community Store
+      hacs # Home Assistant Community Store
       intellicenter # Pentair IntelliCenter integration
     ];
 
     # Use PostgreSQL for better performance
-    extraPackages = ps: with ps; [
-      psycopg2        # PostgreSQL adapter
-      grpcio          # Required for Google Nest integration
-      aiogithubapi    # Required for HACS
+    extraPackages = ps: [
+      ps.psycopg2 # PostgreSQL adapter
+      ps.grpcio # Required for Google Nest integration
+      ps.aiogithubapi # Required for HACS
+      ps.python-miio # Required for Dreame Vacuum integration
+      ps.pybase64 # Required for Dreame Vacuum integration
+      ps.paho-mqtt # Required for Dreame Vacuum integration
+      ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
     ];
 
     # Components that don't require YAML configuration
@@ -118,7 +138,7 @@ in
       "upnp"
 
       # Performance
-      "isal"  # Fast compression for websockets
+      "isal" # Fast compression for websockets
 
       # Mobile app support
       "mobile_app"
@@ -129,44 +149,48 @@ in
       "scene"
 
       # Network devices
-      "asuswrt"              # ASUS WiFi routers
+      "asuswrt" # ASUS WiFi routers
       # OPNsense firewall - use HACS custom component instead
       # Built-in integration has JSON parsing issues with newer OPNsense versions
 
       # Energy & Solar
-      "enphase_envoy"        # Enphase Solar Inverter
+      "enphase_envoy" # Enphase Solar Inverter
       "tesla_wall_connector" # Tesla Wall Connector
 
       # Water monitoring
-      "flume"                # Flume water meter
+      "flume" # Flume water meter
 
       # Climate control
-      "nest"                 # Google Nest thermostats
+      "nest" # Google Nest thermostats
 
       # Security & Access
-      "ring"                 # Ring doorbell and chimes
-      "myq"                  # MyQ garage door opener
+      "ring" # Ring doorbell and chimes
+      "myq" # MyQ garage door opener
 
       # Pool & Spa
-      "screenlogic"          # Pentair IntelliCenter & IntelliFlo
+      "screenlogic" # Pentair IntelliCenter & IntelliFlo
 
       # Appliances
-      "miele"                # Miele dishwasher
+      "miele" # Miele dishwasher
+      "lg_thinq" # LG ThinQ smart appliances
 
       # Casting & Display
-      "cast"                 # Google Home Hub / Cast devices
+      "cast" # Google Home Hub / Cast devices
 
       # Health & Fitness
-      "withings"             # Withings digital scale and health devices
+      "withings" # Withings digital scale and health devices
 
       # Vehicles
-      "bmw_connected_drive"  # BMW ConnectedDrive vehicle integration
+      "bmw_connected_drive" # BMW ConnectedDrive vehicle integration
+
+      # Smart TVs
+      "webostv" # LG webOS Smart TV
     ];
 
     # Home Assistant configuration (YAML format)
     config = {
       # Default configuration enables several integrations
-      default_config = {};
+      default_config = { };
 
       # Basic settings
       homeassistant = {
@@ -198,7 +222,7 @@ in
         trusted_proxies = [
           "127.0.0.1"
           "::1"
-          "192.168.1.2"  # vulcan's IP
+          "192.168.1.2" # vulcan's IP
         ];
 
         # Disable direct HTTP access (use nginx proxy)
@@ -278,8 +302,14 @@ in
 
   # Ensure Home Assistant can access secrets
   systemd.services.home-assistant = {
-    after = [ "postgresql.service" "sops-install-secrets.service" ];
-    wants = [ "postgresql.service" "sops-install-secrets.service" ];
+    after = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
+    wants = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
 
     # Inject Yale and OPNsense credentials as environment variables
     serviceConfig = {

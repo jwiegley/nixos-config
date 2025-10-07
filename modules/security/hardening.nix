@@ -7,6 +7,10 @@
     audit = {
       enable = true;
       rules = [
+        # Rate limit audit messages to prevent log flooding and event loss
+        # 500 messages/second is reasonable for most systems
+        "-r 500"
+
         # Monitor authentication events
         "-w /var/log/lastlog -p wa -k logins"
         "-w /var/log/faillog -p wa -k logins"
@@ -18,9 +22,10 @@
         # Monitor SSH configuration
         "-w /etc/ssh/sshd_config -p wa -k sshd_config"
 
-        # Monitor Samba configuration and authentication
+        # Monitor Samba configuration
         "-w /etc/samba/smb.conf -p wa -k samba_config"
-        "-w /var/lib/samba/ -p wa -k samba_auth"
+        # Note: /var/lib/samba/ watch removed - too noisy during system activation
+        # (triggers on every smbpasswd operation). Consider more targeted rules if needed.
 
         # Monitor system calls
         # "-a always,exit -F arch=b64 -S execve -k exec"
@@ -44,4 +49,9 @@
     chown root:adm /var/log/sudo.log
     chmod 640 /var/log/sudo.log
   '';
+
+  # Create polkit rules directory to suppress harmless error messages
+  systemd.tmpfiles.rules = [
+    "d /run/polkit-1/rules.d 0755 root root -"
+  ];
 }

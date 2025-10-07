@@ -962,7 +962,7 @@
     extraGroups = [
       "systemd-journal"
       "nginx"
-      "docker"
+      "podman"    # For Podman/Docker socket access
       "jellyfin"  # For Jellyfin logs
       "wheel"     # For audit logs
       "adm"       # For sudo logs

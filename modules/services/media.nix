@@ -6,6 +6,7 @@
       enable = true;
       dataDir = "/var/lib/jellyfin";
       user = "johnw";
+      openFirewall = true;
     };
   };
 
@@ -18,7 +19,4 @@
       proxyWebsockets = true;
     };
   };
-
-  networking.firewall.interfaces."lo".allowedTCPPorts =
-    lib.mkIf config.services.jellyfin.enable [ 8096 ];
 }

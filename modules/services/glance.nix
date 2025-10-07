@@ -96,17 +96,6 @@ with lib;
                     }
                   ];
                 }
-
-                # Reddit New Posts
-                {
-                  type = "reddit";
-                  subreddit = "all";
-                  show-thumbnails = true;
-                  limit = 20;
-                  collapse-after = 8;
-                  sort-by = "new";
-                  cache = "10m";
-                }
               ];
             }
 
@@ -226,8 +215,7 @@ with lib;
     };
   };
 
-  # Import SOPS secrets (optional - will be added later)
-  # Commented out until secrets are added to secrets.yaml
+  # Import SOPS secrets
   sops.secrets = {
     glance_github_token = {
       sopsFile = ../../secrets.yaml;
@@ -236,12 +224,6 @@ with lib;
       # The glance user is created by the service, but secrets are set up before service starts
       restartUnits = [ "glance.service" ];
     };
-    # glance_reddit_client_id = {
-    #   mode = "0400";
-    # };
-    # glance_reddit_client_secret = {
-    #   mode = "0400";
-    # };
   };
 
   # GitHub extension service

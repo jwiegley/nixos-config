@@ -180,6 +180,10 @@ with lib;
                           title = "Alertmanager";
                           url = "https://alertmanager.vulcan.lan";
                         }
+                        {
+                          title = "OpenSpeedTest";
+                          url = "https://speedtest.vulcan.lan";
+                        }
                       ];
                     }
                     {

@@ -1,5 +1,9 @@
 { config, lib, pkgs, ... }:
 
+let
+  hacs-frontend-pkg = pkgs.python3Packages.hacs-frontend;
+in
+
 {
   # SOPS secrets for Yale/August account credentials
   sops.secrets."home-assistant/yale-username" = {
@@ -86,9 +90,9 @@
 
     # Use PostgreSQL for better performance
     extraPackages = ps: with ps; [
-      psycopg2      # PostgreSQL adapter
-      grpcio        # Required for Google Nest integration
-      aiogithubapi  # Required for HACS
+      psycopg2        # PostgreSQL adapter
+      grpcio          # Required for Google Nest integration
+      aiogithubapi    # Required for HACS
     ];
 
     # Components that don't require YAML configuration

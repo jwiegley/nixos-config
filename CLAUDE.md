@@ -394,9 +394,71 @@ sudo journalctl -u home-assistant --since "5 minutes ago" | grep grpc
 # - Doorbell events (if supported)
 ```
 
+### BMW ConnectedDrive Integration
+```bash
+# The BMW ConnectedDrive integration is a built-in integration that connects
+# your BMW vehicles to Home Assistant for remote monitoring and control.
+
+# Prerequisites:
+# 1. BMW vehicle with ConnectedDrive services active
+# 2. BMW ConnectedDrive account with registered vehicle
+# 3. Account credentials (username and password)
+
+# Configuration:
+# The integration is configured via the Home Assistant UI after adding credentials to SOPS.
+
+# Step 1: Add Credentials to SOPS
+# Edit the encrypted secrets file:
+sops /etc/nixos/secrets.yaml
+
+# Add these entries under the home-assistant section:
+# home-assistant:
+#   bmw-username: "your_bmw_email@example.com"
+#   bmw-password: "your_bmw_password"
+
+# Step 2: Rebuild NixOS configuration
+sudo nixos-rebuild switch --flake .#vulcan
+
+# Step 3: Add Integration in Home Assistant
+# 1. Access Home Assistant: https://hass.vulcan.lan
+# 2. Go to Settings > Devices & Services
+# 3. Click "+ Add Integration"
+# 4. Search for "BMW Connected Drive"
+# 5. Follow the authentication flow
+# 6. Your BMW vehicle(s) should be automatically discovered
+
+# Note: BMW requires periodic re-authentication which may include captcha solving
+# This is a security measure enforced by BMW's backend
+
+# Available Features:
+# - Vehicle location tracking
+# - Lock/unlock doors remotely
+# - Climate control (pre-conditioning)
+# - Charging status (for electric/hybrid vehicles)
+# - Battery level and range
+# - Fuel level and range (for combustion engines)
+# - Service status and vehicle health
+# - Remote horn and lights
+# - Send destinations to navigation
+
+# Troubleshooting:
+# Check Home Assistant logs for BMW errors:
+sudo journalctl -u home-assistant | grep -i bmw
+
+# Common issues:
+# - "Authentication failed": Check username and password in secrets.yaml
+# - "Captcha required": Complete captcha in the Home Assistant UI flow
+# - "Region not supported": BMW ConnectedDrive availability varies by region
+# - "Token expired": Re-authenticate via Settings > Devices & Services > BMW
+
+# Verify integration status:
+# Access: https://hass.vulcan.lan
+# Go to Settings > Devices & Services > BMW Connected Drive
+```
+
 ### IoT Device Integrations
 
-Home Assistant is configured with support for 16 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
+Home Assistant is configured with support for 17 different IoT device types (plus OPNsense via HACS). See `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md` for complete setup instructions.
 
 ```bash
 # View the device integration guide
@@ -417,6 +479,7 @@ cat /etc/nixos/docs/HOME_ASSISTANT_DEVICES.md | grep -A 20 "ASUS WiFi"
 - Pentair IntelliCenter & IntelliFlo (screenlogic)
 - Miele dishwasher (miele)
 - Google Home Hub (cast)
+- BMW ConnectedDrive (bmw_connected_drive)
 
 **Custom Integrations** (require HACS):
 - OPNsense firewall (travisghansen/hass-opnsense)
@@ -506,7 +569,7 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 6. **Step-CA**: Private certificate authority for TLS and SSH certificates
 7. **Dovecot**: IMAP mail server with full-text search (FTS) via Xapian backend
 8. **Samba**: SMB/CIFS file sharing for ZFS tank datasets with SMB3.1.1 encryption
-9. **Home Assistant**: IoT home automation platform with 16 integrated device types including August locks, Enphase solar, Tesla charger, Ring doorbell, Nest thermostats, pool controls, and more
+9. **Home Assistant**: IoT home automation platform with 17 integrated device types including August locks, BMW vehicles, Enphase solar, Tesla charger, Ring doorbell, Nest thermostats, pool controls, and more
 
 ### Important Configuration Details
 - **State Version**: 25.05 (DO NOT change unless migrating)

@@ -52,7 +52,10 @@
           sops-nix.nixosModules.sops
           quadlet-nix.nixosModules.quadlet
           {
-            nixpkgs.overlays = [ claude-code-nix.overlays.default ];
+            nixpkgs.overlays = [
+              claude-code-nix.overlays.default
+              (import ./overlays)
+            ];
           }
           home-manager.nixosModules.home-manager
           ./hosts/vulcan

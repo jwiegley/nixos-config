@@ -42,6 +42,23 @@
     restartUnits = [ "home-assistant.service" ];
   };
 
+  # BMW ConnectedDrive credentials
+  sops.secrets."home-assistant/bmw-username" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  sops.secrets."home-assistant/bmw-password" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
   # PostgreSQL database for Home Assistant recorder
   services.postgresql = {
     ensureDatabases = [ "hass" ];
@@ -61,10 +78,17 @@
   services.home-assistant = {
     enable = true;
 
+    # Custom components installed via overlays
+    customComponents = with pkgs.home-assistant-custom-components; [
+      hacs          # Home Assistant Community Store
+      intellicenter # Pentair IntelliCenter integration
+    ];
+
     # Use PostgreSQL for better performance
     extraPackages = ps: with ps; [
-      psycopg2  # PostgreSQL adapter
-      grpcio    # Required for Google Nest integration
+      psycopg2      # PostgreSQL adapter
+      grpcio        # Required for Google Nest integration
+      aiogithubapi  # Required for HACS
     ];
 
     # Components that don't require YAML configuration
@@ -130,6 +154,9 @@
 
       # Health & Fitness
       "withings"             # Withings digital scale and health devices
+
+      # Vehicles
+      "bmw_connected_drive"  # BMW ConnectedDrive vehicle integration
     ];
 
     # Home Assistant configuration (YAML format)

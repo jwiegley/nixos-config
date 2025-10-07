@@ -2,6 +2,15 @@
 with lib;
 
 {
+  # Create static glance user and group for both glance and glance-github-extension services
+  users.users.glance = {
+    isSystemUser = true;
+    group = "glance";
+    description = "Glance dashboard service user";
+  };
+
+  users.groups.glance = {};
+
   # Enable the glance service using the NixOS module
   services.glance = {
     enable = true;
@@ -220,9 +229,18 @@ with lib;
     glance_github_token = {
       sopsFile = ../../secrets.yaml;
       mode = "0400";
-      # owner/group removed to avoid chicken-and-egg problem with user creation
-      # The glance user is created by the service, but secrets are set up before service starts
-      restartUnits = [ "glance.service" ];
+      owner = "glance";
+      group = "glance";
+      restartUnits = [ "glance.service" "glance-github-extension.service" ];
+    };
+  };
+
+  # Override the main glance service to use our static user instead of DynamicUser
+  systemd.services.glance = {
+    serviceConfig = {
+      DynamicUser = lib.mkForce false;
+      User = "glance";
+      Group = "glance";
     };
   };
 

@@ -382,8 +382,8 @@ in
             # "august-lock-front-door.lan"        # 192.168.3.12
             # "august-lock-garage-door.lan"       # 192.168.3.14
             # "august-lock-side-door.lan"         # 192.168.3.173
-            "b-hyve-sprinkler.lan"              # 192.168.3.89
-            "dreamebot-vacuum.lan"              # 192.168.3.195
+            # "b-hyve-sprinkler.lan"              # 192.168.3.89
+            # "dreamebot-vacuum.lan"              # 192.168.3.195
             # "enphase-solar-inverter.lan"        # 192.168.3.26
             # "flume-water-meter.lan"             # 192.168.3.183
             "google-home-hub.lan"               # 192.168.3.106
@@ -395,7 +395,7 @@ in
             # "nest-family-room.lan"              # 192.168.3.83
             # "nest-upstairs.lan"                 # 192.168.3.161
             "pentair-intellicenter.lan"         # 192.168.3.115
-            "pentair-intelliflo.lan"            # 192.168.3.23
+            # "pentair-intelliflo.lan"            # 192.168.3.23
             # "ring-chime-kitchen.lan"            # 192.168.3.163
             # "ring-chime-office.lan"             # 192.168.3.88
             # "ring-doorbell.lan"                 # 192.168.3.185

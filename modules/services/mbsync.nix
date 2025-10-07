@@ -39,9 +39,9 @@ in
 
       timerInterval = "15min";
 
-      extraServiceConfig = {
-        RemainAfterExit = true;
-      };
+      # Don't use RemainAfterExit with OnUnitActiveSec timer
+      # The service needs to become inactive for the timer to schedule the next run
+      extraServiceConfig = {};
     })
 
     # Assembly configuration
@@ -76,9 +76,9 @@ in
 
       timerInterval = "1day";
 
-      extraServiceConfig = {
-        RemainAfterExit = true;
-      };
+      # Don't use RemainAfterExit with OnUnitActiveSec timer
+      # The service needs to become inactive for the timer to schedule the next run
+      extraServiceConfig = {};
     })
   ];
 

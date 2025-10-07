@@ -1,6 +1,16 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Increase D-Bus pending replies limit for systemd_exporter
+  services.dbus.packages = [
+    (pkgs.writeTextDir "share/dbus-1/system.d/systemd-exporter-limits.conf" ''
+      <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+      <busconfig>
+        <limit name="max_replies_per_connection">2048</limit>
+      </busconfig>
+    '')
+  ];
+
   services.hardware.bolt.enable = true;
 
   time.timeZone = "America/Los_Angeles";

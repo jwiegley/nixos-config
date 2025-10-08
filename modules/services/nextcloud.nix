@@ -11,9 +11,9 @@
     };
     "nextcloud-db-password" = {
       sopsFile = ../../secrets.yaml;
-      owner = "nextcloud";
+      owner = "postgres";
       group = "nextcloud";
-      mode = "0400";
+      mode = "0440";
     };
     "nextcloud-monitoring-password" = {
       sopsFile = ../../secrets.yaml;

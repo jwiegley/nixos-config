@@ -75,6 +75,6 @@
     };
   };
 
-  networking.firewall.interfaces."lo".allowedTCPPorts =
+  networking.firewall.allowedTCPPorts =
     lib.mkIf config.services.jellyfin.enable [ 8096 ];
 }

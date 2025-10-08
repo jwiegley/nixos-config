@@ -21,5 +21,6 @@
     ../monitoring/services/health-check-exporters.nix
     ../monitoring/services/certificate-exporter.nix
     ../monitoring/services/remote-nodes.nix
+    ../monitoring/services/home-assistant-exporter.nix
   ];
 }

@@ -77,6 +77,52 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
+  # Opower/SMUD credentials for energy usage data
+  sops.secrets."home-assistant/smud-username" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  sops.secrets."home-assistant/smud-password" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  # Google Assistant SDK credentials
+  sops.secrets."home-assistant/google-assistant-client-id" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  sops.secrets."home-assistant/google-assistant-client-secret" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
+  # Avahi service for mDNS/Bonjour discovery (required for HomeKit)
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true; # Enable NSS mDNS support for hostname resolution
+
+    publish = {
+      enable = true;
+      addresses = true;
+      workstation = true;
+    };
+  };
+
   # PostgreSQL database for Home Assistant recorder
   services.postgresql = {
     ensureDatabases = [ "hass" ];
@@ -129,6 +175,7 @@ in
 
       # Useful utilities
       "google_translate"
+      "google_assistant_sdk" # Google Assistant SDK for voice control and automation
       "radio_browser"
       "shopping_list"
 
@@ -166,7 +213,6 @@ in
 
       # Security & Access
       "ring" # Ring doorbell and chimes
-      "myq" # MyQ garage door opener
 
       # Pool & Spa
       "screenlogic" # Pentair IntelliCenter & IntelliFlo
@@ -186,6 +232,12 @@ in
 
       # Smart TVs
       "webostv" # LG webOS Smart TV
+
+      # HomeKit Bridge
+      "homekit" # Expose Home Assistant entities to Apple HomeKit/Siri
+
+      # Utility Data
+      "opower" # Energy usage from utility companies (SMUD)
     ];
 
     # Home Assistant configuration (YAML format)
@@ -294,6 +346,67 @@ in
 
       # Enable script UI
       script = "!include scripts.yaml";
+
+      # Prometheus exporter for metrics
+      # Exposes Home Assistant metrics at /api/prometheus
+      # Authentication required via long-lived access token
+      prometheus = {
+        # Add namespace prefix to all metrics
+        # namespace = "hass";
+
+        # Filter which entities to expose
+        # By default, all supported entities are exposed
+        filter = {
+          # Include all sensor and climate domains (temperature, humidity, etc.)
+          include_domains = [
+            "sensor"
+            "climate"
+            "binary_sensor"
+            "lock"
+            "switch"
+            "light"
+            "cover"
+            "fan"
+          ];
+
+          # Optionally exclude specific entity patterns
+          # exclude_entity_globs = [
+          #   "sensor.weather_*"
+          # ];
+        };
+      };
+
+      # HomeKit Bridge integration
+      # Exposes Home Assistant entities to Apple HomeKit for Siri control
+      homekit = {
+        # Name shown in Apple Home app
+        name = "Vulcan Home Bridge";
+
+        # Filter which entities to expose to HomeKit
+        # Maximum 150 accessories per bridge
+        filter = {
+          include_domains = [
+            "lock" # August/Yale locks
+            "climate" # Nest thermostats
+            "light" # Smart lights
+            "switch" # Smart switches
+            "cover" # Garage doors, blinds
+            "fan" # Fans
+            "sensor" # Temperature, humidity sensors
+            "binary_sensor" # Motion, door/window sensors
+          ];
+
+          # Exclude noisy or unnecessary entities
+          exclude_entity_globs = [
+            "sensor.weather_*"
+            "sensor.*_battery" # Battery sensors often clutter HomeKit
+            "binary_sensor.*_connectivity" # Connectivity sensors
+          ];
+        };
+
+        # Port for HomeKit accessory protocol (default: 21063)
+        # port = 21063;
+      };
     };
 
     # Allow configuration files to be writable from the UI
@@ -352,5 +465,12 @@ in
 
   # Open firewall for local network access only
   # Access via nginx reverse proxy on port 443 (HTTPS)
-  networking.firewall.interfaces."enp4s0".allowedTCPPorts = [ 8123 ];
+  networking.firewall.interfaces."enp4s0".allowedTCPPorts = [
+    8123 # Home Assistant web interface
+    21063 # HomeKit Bridge accessory protocol
+  ];
+
+  networking.firewall.interfaces."enp4s0".allowedUDPPorts = [
+    5353 # mDNS for HomeKit/Bonjour discovery
+  ];
 }

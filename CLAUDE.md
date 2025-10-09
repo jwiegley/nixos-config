@@ -571,6 +571,62 @@ sudo journalctl -u home-assistant | grep -i "extended_openai"
 cat /etc/nixos/docs/EXTENDED_OPENAI_CONVERSATION.md
 ```
 
+### ADT Alarm Control via Google Assistant SDK
+```bash
+# Control ADT alarm system through Google Assistant SDK integration
+# See /etc/nixos/docs/ADT_ALARM_CONTROL.md for complete documentation
+
+# Available operations:
+# - arm-stay: Arm alarm in stay mode (people home)
+# - arm-away: Arm alarm in away mode (everyone leaves)
+# - disarm: Disarm the alarm
+# - status: Check alarm status
+
+# Command-line control (requires HASS_TOKEN):
+/etc/nixos/scripts/adt-control.sh arm-stay
+/etc/nixos/scripts/adt-control.sh arm-away
+/etc/nixos/scripts/adt-control.sh disarm
+/etc/nixos/scripts/adt-control.sh status
+
+# Setup long-lived access token:
+# 1. Access Home Assistant: https://hass.vulcan.lan
+# 2. Click profile (bottom left) > Long-Lived Access Tokens
+# 3. Create token named "ADT Control Script"
+# 4. Export token: export HASS_TOKEN="your_token_here"
+
+# Or add to ~/.bashrc for persistence:
+echo 'export HASS_TOKEN="your_token_here"' >> ~/.bashrc
+source ~/.bashrc
+
+# Optional: Create command alias
+echo 'alias adt="/etc/nixos/scripts/adt-control.sh"' >> ~/.bashrc
+source ~/.bashrc
+
+# Then use:
+adt arm-away
+adt disarm
+adt status
+
+# Home Assistant Scripts (via UI):
+# Access: https://hass.vulcan.lan
+# Go to Settings > Automations & Scenes > Scripts
+# - script.adt_arm_stay
+# - script.adt_arm_away
+# - script.adt_disarm
+# - script.adt_status
+
+# Monitor Google Assistant commands:
+sudo journalctl -u home-assistant -f | grep -i google
+
+# Reload scripts after editing:
+# In Home Assistant UI: Developer Tools > YAML > Scripts > Reload
+# Or restart service:
+sudo systemctl restart home-assistant
+
+# View full documentation:
+cat /etc/nixos/docs/ADT_ALARM_CONTROL.md
+```
+
 ### Managing August Locks
 ```bash
 # August locks are managed entirely through the Home Assistant web UI

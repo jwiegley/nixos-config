@@ -111,6 +111,16 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
+  # OpenAI API key for Extended OpenAI Conversation integration
+  # Used for LLM-powered conversation and automation
+  sops.secrets."home-assistant/openai-api-key" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
   # Avahi service for mDNS/Bonjour discovery (required for HomeKit)
   services.avahi = {
     enable = true;
@@ -160,6 +170,8 @@ in
       ps.paho-mqtt # Required for Dreame Vacuum integration
       ps.aiomqtt # Required for Traeger WiFIRE integration
       ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
+      ps.openai # Required for Extended OpenAI Conversation custom component
+      ps.tiktoken # Required for Extended OpenAI Conversation (token counting)
     ];
 
     # Components that don't require YAML configuration

@@ -536,6 +536,41 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 # Settings > Dashboards > Energy
 ```
 
+### Extended OpenAI Conversation Integration
+```bash
+# Extended OpenAI Conversation provides LLM-powered conversation and automation
+# with support for OpenAI API and local models (Ollama, LocalAI, etc.)
+# See /etc/nixos/docs/EXTENDED_OPENAI_CONVERSATION.md for complete guide
+
+# Quick Start:
+# 1. Install via HACS: Settings > HACS > Integrations > Search "Extended OpenAI Conversation"
+# 2. Add API key to secrets (if using OpenAI):
+sops /etc/nixos/secrets.yaml
+# Add: home-assistant/openai-api-key: "sk-your-key-here"
+
+# 3. Rebuild NixOS to apply secret:
+sudo nixos-rebuild switch --flake .#vulcan
+
+# 4. Configure integration: Settings > Devices & Services > Add Integration > Extended OpenAI Conversation
+
+# For local Ollama server:
+# - Base URL: http://localhost:11434/v1
+# - API Key: ollama (can be any value)
+# - Model: llama3.2 (or your installed model)
+
+# Check available Ollama models:
+ollama list
+
+# Pull a new model:
+ollama pull llama3.2
+
+# Test OpenAI integration:
+sudo journalctl -u home-assistant | grep -i "extended_openai"
+
+# View detailed documentation:
+cat /etc/nixos/docs/EXTENDED_OPENAI_CONVERSATION.md
+```
+
 ### Managing August Locks
 ```bash
 # August locks are managed entirely through the Home Assistant web UI

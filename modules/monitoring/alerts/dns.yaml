@@ -52,7 +52,7 @@ groups:
 
       # DNS Query Rate Monitoring
       - alert: DNSQueryRateSpike
-        expr: sum(rate(technitium_dns_request_result_count[5m])) > 2 * avg_over_time(sum(rate(technitium_dns_request_result_count[5m]))[1h:5m])
+        expr: sum(rate(technitium_dns_request_result_count[5m])) > 10 * avg_over_time(sum(rate(technitium_dns_request_result_count[5m]))[1h:5m])
         for: 10m
         labels:
           severity: warning
@@ -60,7 +60,7 @@ groups:
           component: dns
         annotations:
           summary: "Unusual spike in DNS query rate"
-          description: "DNS query rate is more than 2x the average over the last hour. This could indicate a DDoS attack or misconfiguration. Current rate: {{ $value | humanize }} queries/sec."
+          description: "DNS query rate is more than 10x the average over the last hour. This could indicate a DDoS attack or misconfiguration. Current rate: {{ $value | humanize }} queries/sec."
 
       - alert: DNSQueryRateDrop
         expr: sum(rate(technitium_dns_request_result_count[5m])) < 0.1 * avg_over_time(sum(rate(technitium_dns_request_result_count[5m]))[1h:5m]) and avg_over_time(sum(rate(technitium_dns_request_result_count[5m]))[1h:5m]) > 1

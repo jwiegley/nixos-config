@@ -106,8 +106,9 @@ groups:
           description: "The replication timer for {{ $labels.dataset }} is not active, replication won't run automatically"
 
       # Mbsync Health Alerts
+      # Alert if johnw mbsync hasn't run in over 1 hour (runs every 15 minutes)
       - alert: MbsyncNotRunRecently
-        expr: (time() - mbsync_last_sync_timestamp_seconds) > 3600
+        expr: (time() - mbsync_last_sync_timestamp_seconds{account="johnw"}) > 3600
         for: 5m
         labels:
           severity: warning
@@ -115,6 +116,17 @@ groups:
         annotations:
           summary: "Mail sync for {{ $labels.account }} hasn't run in over 1 hour"
           description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected every 15-30 minutes)"
+
+      # Alert if assembly mbsync hasn't run in over 36 hours (runs daily)
+      - alert: MbsyncNotRunRecently
+        expr: (time() - mbsync_last_sync_timestamp_seconds{account="assembly"}) > 129600
+        for: 5m
+        labels:
+          severity: warning
+          component: mail_sync
+        annotations:
+          summary: "Mail sync for {{ $labels.account }} hasn't run in over 36 hours"
+          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected daily)"
 
       - alert: MbsyncLastSyncFailed
         expr: mbsync_last_sync_status == 0

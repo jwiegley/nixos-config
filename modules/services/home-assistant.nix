@@ -394,6 +394,10 @@ in
         # Name shown in Apple Home app
         name = "Vulcan Home Bridge";
 
+        # Advertise on the main network interface IP
+        # This ensures iPhone/iPad on the local network can connect
+        ip_address = "192.168.1.2";
+
         # Filter which entities to expose to HomeKit
         # Maximum 150 accessories per bridge
         filter = {

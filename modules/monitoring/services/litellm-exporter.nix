@@ -63,7 +63,7 @@ let
   exporterScript = pkgs.writeShellScript "litellm-exporter" ''
     set -euo pipefail
 
-    METRICS_DIR="/var/lib/node_exporter/textfile_collector"
+    METRICS_DIR="/var/lib/prometheus-node-exporter-textfiles"
     METRICS_FILE="$METRICS_DIR/litellm.prom"
     TEMP_FILE="$METRICS_DIR/litellm.prom.$$"
 
@@ -123,8 +123,6 @@ in
   systemd.services.litellm-exporter.serviceConfig.EnvironmentFile =
     lib.mkForce config.sops.secrets."litellm-secrets".path;
 
-  # Ensure node_exporter textfile directory exists
-  systemd.tmpfiles.rules = [
-    "d /var/lib/node_exporter/textfile_collector 0755 node-exporter node-exporter -"
-  ];
+  # Ensure prometheus-node-exporter textfile directory exists and is writable
+  # Directory is already created by node-exporter.nix with 1777 permissions
 }

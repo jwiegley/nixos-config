@@ -15,6 +15,7 @@ let
     "dns.yaml"
     "network.yaml"
     "nextcloud.yaml"
+    "litellm-availability.yaml"
   ];
 in
 {

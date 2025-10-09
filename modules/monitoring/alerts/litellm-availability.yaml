@@ -34,14 +34,14 @@ groups:
 
       - alert: LiteLLMExporterDown
         expr: up{job="node"} == 1 unless litellm_availability
-        for: 15m
+        for: 1h
         labels:
           severity: warning
           component: litellm-exporter
         annotations:
           summary: "LiteLLM Prometheus exporter is not producing metrics"
           description: |
-            The LiteLLM availability exporter has not updated metrics in 15 minutes.
+            The LiteLLM availability exporter has not updated metrics in 1 hour.
 
             Check exporter service: systemctl status litellm-exporter.service
             Check exporter timer: systemctl status litellm-exporter.timer

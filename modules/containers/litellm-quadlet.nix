@@ -14,6 +14,8 @@
       volumes = [ "/etc/litellm/config.yaml:/app/config.yaml:ro" ];
       exec = "--config /app/config.yaml";
       networks = [ "podman" ];
+      # Use host DNS via Podman gateway for .lan domain resolution
+      dns = [ "10.88.0.1" ];
     };
     unitConfig = {
       After = [ "sops-nix.service" "postgresql.service" "podman.service" ];

@@ -1,0 +1,15 @@
+# Home Assistant backup data (contains sensitive OAuth tokens and device pairings)
+home-assistant-backup/
+home-assistant-backup_*.tar.gz
+
+# SOPS age keys (already encrypted, but keep private)
+*.age
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Build outputs
+result
+result-*

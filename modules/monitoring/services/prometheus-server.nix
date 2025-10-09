@@ -16,6 +16,7 @@ let
     "network.yaml"
     "nextcloud.yaml"
     "litellm-availability.yaml"
+    "home-assistant.yaml"
   ];
 in
 {
@@ -75,6 +76,7 @@ in
       - database.yaml: Database-specific alerts
       - storage.yaml: Storage and backup alerts
       - certificates.yaml: Certificate expiration alerts
+      - home-assistant.yaml: Home Assistant IoT device alerts (security, safety, energy)
       - custom.yaml: Custom site-specific alerts (optional)
 
       ## Useful Commands

@@ -1,0 +1,314 @@
+groups:
+  - name: home_assistant_critical
+    rules:
+      # CRITICAL: Water leak detected - immediate alert
+      - alert: WaterLeakDetected
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.flume_sensor_sierra_oaks_leak_detected"} == 1
+        for: 0s
+        labels:
+          severity: critical
+          category: safety
+          device: flume_water_sensor
+        annotations:
+          summary: "WATER LEAK DETECTED"
+          description: "Flume water sensor has detected a leak. Immediate action required to prevent property damage."
+          action: "Check all water sources, shut off main if necessary"
+
+      # CRITICAL: High water flow - possible burst pipe
+      - alert: HighWaterFlowDetected
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.flume_sensor_sierra_oaks_high_flow"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          category: safety
+          device: flume_water_sensor
+        annotations:
+          summary: "High water flow detected - possible burst pipe"
+          description: "Abnormally high water flow detected for {{ $value }} minutes. This may indicate a burst pipe or major leak."
+          action: "Check for burst pipes, consider shutting off main water supply"
+
+      # CRITICAL: Door left unlocked
+      - alert: DoorLeftUnlocked
+        expr: homeassistant_lock_state{entity=~"lock.(front_door|garage|side_door)"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+          device: august_lock
+        annotations:
+          summary: "Door unlocked: {{ $labels.entity }}"
+          description: "{{ $labels.friendly_name }} has been unlocked for 5 minutes."
+          action: "Verify door should be unlocked, lock if unintended"
+
+      # CRITICAL: Door left open for extended period
+      - alert: DoorLeftOpenCritical
+        expr: homeassistant_binary_sensor_state{entity=~"binary_sensor.(front_door_door|garage_door|side_door_door)"} == 1
+        for: 30m
+        labels:
+          severity: critical
+          category: security
+          device: door_sensor
+        annotations:
+          summary: "CRITICAL: Door open for 30+ minutes"
+          description: "{{ $labels.friendly_name }} has been open for over 30 minutes."
+          action: "Close the door immediately to prevent security risk and energy loss"
+
+      # CRITICAL: Grill temperature dangerously high
+      - alert: GrillTemperatureDangerouslyHigh
+        expr: homeassistant_sensor_temperature_celsius{entity=~"sensor.kababchi_probe.*"} > 260
+        for: 15m
+        labels:
+          severity: critical
+          category: safety
+          device: traeger_grill
+        annotations:
+          summary: "Grill temperature critically high"
+          description: "Grill probe {{ $labels.entity }} shows {{ $value }}°C (>500°F) for 15+ minutes. Fire hazard!"
+          action: "Check grill immediately, reduce temperature or shut off"
+
+      # CRITICAL: Grill on but nobody home
+      - alert: GrillOnNobodyHome
+        expr: |
+          homeassistant_binary_sensor_state{entity="binary_sensor.everyone_away"} == 1
+          and
+          homeassistant_sensor_state{entity="sensor.fc0fe7dc2123_grill_state"} != 0
+        for: 10m
+        labels:
+          severity: critical
+          category: safety
+          device: traeger_grill
+        annotations:
+          summary: "Grill is on but nobody is home!"
+          description: "Traeger grill is running but everyone has left the house. Fire hazard!"
+          action: "Return home or contact neighbor to check grill and turn off if necessary"
+
+      # CRITICAL: Door unlocked when everyone away
+      - alert: DoorUnlockedEveryoneAway
+        expr: |
+          homeassistant_binary_sensor_state{entity="binary_sensor.everyone_away"} == 1
+          and
+          homeassistant_lock_state{entity=~"lock.(front_door|garage|side_door)"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+          device: august_lock
+        annotations:
+          summary: "Door unlocked but nobody home: {{ $labels.entity }}"
+          description: "{{ $labels.friendly_name }} is unlocked but everyone has left the house. Security risk!"
+          action: "Lock door remotely via Home Assistant or return home to secure"
+
+      # CRITICAL: Door left open when everyone away
+      - alert: DoorOpenEveryoneAway
+        expr: |
+          homeassistant_binary_sensor_state{entity="binary_sensor.everyone_away"} == 1
+          and
+          homeassistant_binary_sensor_state{entity=~"binary_sensor.(front_door_door|garage_door|side_door_door)"} == 1
+        for: 10m
+        labels:
+          severity: critical
+          category: security
+          device: door_sensor
+        annotations:
+          summary: "Door open but nobody home: {{ $labels.entity }}"
+          description: "{{ $labels.friendly_name }} is open but everyone has left the house. Security risk!"
+          action: "Return home to close door or contact neighbor for assistance"
+
+  - name: home_assistant_warning
+    rules:
+      # WARNING: Door left open
+      - alert: DoorLeftOpenWarning
+        expr: homeassistant_binary_sensor_state{entity=~"binary_sensor.(front_door_door|garage_door|side_door_door)"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          category: security
+          device: door_sensor
+        annotations:
+          summary: "Door open for 15+ minutes"
+          description: "{{ $labels.friendly_name }} has been open for over 15 minutes."
+          action: "Consider closing the door to save energy and maintain security"
+
+      # WARNING: Critical device battery low
+      - alert: CriticalDeviceBatteryLow
+        expr: homeassistant_sensor_battery_percent{entity=~"(lock|binary_sensor.flume).*"} < 20
+        for: 1h
+        labels:
+          severity: warning
+          category: maintenance
+          device: battery_powered
+        annotations:
+          summary: "Critical device battery low: {{ $labels.entity }}"
+          description: "{{ $labels.friendly_name }} battery is at {{ $value }}%. Replace soon to maintain security/safety."
+          action: "Replace battery in {{ $labels.friendly_name }}"
+
+      # WARNING: Critical device offline
+      - alert: CriticalDeviceOffline
+        expr: homeassistant_entity_available{domain=~"lock|climate",entity=~"(lock|climate).*"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          device: critical_device
+        annotations:
+          summary: "Critical device offline: {{ $labels.entity }}"
+          description: "{{ $labels.friendly_name }} has been unavailable for 10+ minutes."
+          action: "Check device connectivity and power status"
+
+      # WARNING: Water sensor offline
+      - alert: WaterSensorOffline
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.flume_sensor_sierra_oaks_connectivity"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          device: flume_water_sensor
+        annotations:
+          summary: "Flume water sensor offline"
+          description: "Flume water sensor has lost connectivity. Water leak detection is disabled!"
+          action: "Check Flume sensor power and network connection"
+
+      # WARNING: Water sensor battery low
+      - alert: WaterSensorBatteryLow
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.flume_sensor_sierra_oaks_battery"} == 1
+        for: 1h
+        labels:
+          severity: warning
+          category: maintenance
+          device: flume_water_sensor
+        annotations:
+          summary: "Flume water sensor battery low"
+          description: "Flume water sensor battery is low. Replace to maintain leak detection."
+          action: "Replace Flume sensor battery"
+
+      # WARNING: Dishwasher problem detected
+      - alert: DishwasherProblem
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.dishwasher_problem"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: appliance
+          device: miele_dishwasher
+        annotations:
+          summary: "Dishwasher problem detected"
+          description: "Miele dishwasher is reporting a problem state."
+          action: "Check dishwasher display for error code and resolve issue"
+
+      # WARNING: Grill left on for extended period
+      - alert: GrillLeftOnExtended
+        expr: homeassistant_sensor_state{entity="sensor.fc0fe7dc2123_grill_state"} != 0
+        for: 3h
+        labels:
+          severity: warning
+          category: safety
+          device: traeger_grill
+        annotations:
+          summary: "Grill has been on for 3+ hours"
+          description: "Traeger grill state: {{ $value }}. Running for over 3 hours."
+          action: "Check if grill is still needed, turn off if done cooking"
+
+      # WARNING: Solar production very low during daylight
+      - alert: SolarProductionLow
+        expr: |
+          (
+            homeassistant_sensor_energy_kwh{entity="sensor.envoy_202332010883_energy_production_today"} < 0.5
+            and
+            hour() >= 10 and hour() <= 15
+          )
+        for: 30m
+        labels:
+          severity: warning
+          category: energy
+          device: enphase_solar
+        annotations:
+          summary: "Solar production abnormally low"
+          description: "Solar production is {{ $value }} kWh during peak hours (10am-3pm). Possible system issue."
+          action: "Check Enphase app for inverter issues or panel shading"
+
+  - name: home_assistant_info
+    rules:
+      # INFO: HVAC running with door open
+      - alert: HVACRunningDoorOpen
+        expr: |
+          homeassistant_climate_action{entity=~"climate.(downstairs|family_room|upstairs)"} > 0
+          and on(job)
+          homeassistant_binary_sensor_state{entity=~"binary_sensor.(front_door_door|garage_door|side_door_door)"} == 1
+        for: 20m
+        labels:
+          severity: info
+          category: energy
+          device: nest_thermostat
+        annotations:
+          summary: "HVAC running with door open"
+          description: "{{ $labels.entity }} is active while a door is open. Energy waste detected."
+          action: "Close doors or adjust thermostat to save energy"
+
+      # INFO: iPhone battery low while away
+      - alert: iPhoneBatteryLowAway
+        expr: |
+          homeassistant_sensor_battery_percent{entity=~"sensor.(johns|nasims)_iphone.*battery_level"} < 10
+        for: 5m
+        labels:
+          severity: info
+          category: device
+          device: iphone
+        annotations:
+          summary: "iPhone battery critically low"
+          description: "{{ $labels.friendly_name }} battery at {{ $value }}%"
+          action: "Charge phone soon to maintain presence detection"
+
+      # INFO: Pool/Spa temperature deviation
+      - alert: PoolTemperatureDeviation
+        expr: |
+          abs(
+            homeassistant_sensor_temperature_celsius{entity="sensor.pool_last_temp"} -
+            homeassistant_sensor_temperature_celsius{entity="sensor.pool_desired_temp"}
+          ) > 3
+        for: 1h
+        labels:
+          severity: info
+          category: comfort
+          device: pentair_pool
+        annotations:
+          summary: "Pool temperature off target"
+          description: "Pool temperature is {{ $value }}°C away from desired temperature for over 1 hour."
+          action: "Check pool heater settings and operation"
+
+      # INFO: Grill clean alert
+      - alert: GrillNeedsCleaning
+        expr: homeassistant_sensor_state{entity="sensor.fc0fe7dc2123_grill_clean_alert"} == 1
+        for: 5m
+        labels:
+          severity: info
+          category: maintenance
+          device: traeger_grill
+        annotations:
+          summary: "Grill needs cleaning"
+          description: "Traeger grill is indicating it needs cleaning."
+          action: "Clean grill grates and grease trap when convenient"
+
+      # INFO: Dishwasher door left open
+      - alert: DishwasherDoorOpen
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.dishwasher_door"} == 1
+        for: 2h
+        labels:
+          severity: info
+          category: appliance
+          device: miele_dishwasher
+        annotations:
+          summary: "Dishwasher door open for 2+ hours"
+          description: "Dishwasher door has been open for over 2 hours."
+          action: "Close dishwasher door if done unloading"
+
+      # INFO: Freeze warning
+      - alert: FreezeWarning
+        expr: homeassistant_binary_sensor_state{entity="binary_sensor.freeze"} == 1
+        for: 10m
+        labels:
+          severity: info
+          category: weather
+          device: weather_sensor
+        annotations:
+          summary: "Freeze warning active"
+          description: "Freezing temperatures detected or forecasted."
+          action: "Protect outdoor pipes and plants from freeze damage"

@@ -43,6 +43,7 @@
     ../../modules/services/network-services.nix
     ../../modules/services/samba.nix
     ../../modules/services/home-assistant.nix
+    ../../modules/services/home-assistant-backup.nix
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix
     ../../modules/services/promtail.nix

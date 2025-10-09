@@ -359,6 +359,43 @@ in
       # Enable script UI
       script = "!include scripts.yaml";
 
+      # Template sensors for presence detection
+      # These combine person entity states to determine if anyone is home
+      template = [
+        {
+          binary_sensor = [
+            {
+              name = "Anyone Home";
+              unique_id = "anyone_home";
+              state = "{{ is_state('person.john_wiegley', 'home') or is_state('person.nasim_wiegley', 'home') }}";
+              device_class = "occupancy";
+              icon = "mdi:home-account";
+            }
+            {
+              name = "Everyone Away";
+              unique_id = "everyone_away";
+              state = "{{ is_state('person.john_wiegley', 'not_home') and is_state('person.nasim_wiegley', 'not_home') }}";
+              device_class = "occupancy";
+              icon = "mdi:home-off";
+            }
+            {
+              name = "John Home";
+              unique_id = "john_home";
+              state = "{{ is_state('person.john_wiegley', 'home') }}";
+              device_class = "occupancy";
+              icon = "mdi:account";
+            }
+            {
+              name = "Nasim Home";
+              unique_id = "nasim_home";
+              state = "{{ is_state('person.nasim_wiegley', 'home') }}";
+              device_class = "occupancy";
+              icon = "mdi:account";
+            }
+          ];
+        }
+      ];
+
       # Prometheus exporter for metrics
       # Exposes Home Assistant metrics at /api/prometheus
       # Authentication required via long-lived access token
@@ -379,6 +416,8 @@ in
             "light"
             "cover"
             "fan"
+            "person"
+            "device_tracker"
           ];
 
           # Optionally exclude specific entity patterns

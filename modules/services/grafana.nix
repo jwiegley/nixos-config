@@ -210,12 +210,10 @@
         echo "Dashboard download may have failed - manually copy from /tmp/technitium-dns-prometheus-exporter/grafana-dashboard.json if needed"
       fi
 
-      # Copy Home Assistant Security & Safety Dashboard
-      if [ ! -f "$DASHBOARD_DIR/home-assistant.json" ]; then
-        echo "Installing Home Assistant Security & Safety dashboard..."
-        if [ -f "/etc/nixos/modules/monitoring/dashboards/home-assistant.json" ]; then
-          cp /etc/nixos/modules/monitoring/dashboards/home-assistant.json "$DASHBOARD_DIR/home-assistant.json"
-        fi
+      # Copy Home Assistant Security & Safety Dashboard (always update)
+      echo "Installing Home Assistant Security & Safety dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/dashboards/home-assistant.json" ]; then
+        cp /etc/nixos/modules/monitoring/dashboards/home-assistant.json "$DASHBOARD_DIR/home-assistant.json"
       fi
 
       # Set proper ownership

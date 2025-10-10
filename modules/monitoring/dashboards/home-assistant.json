@@ -339,7 +339,7 @@
               }
             ]
           },
-          "unit": "celsius"
+          "unit": "fahrenheit"
         },
         "overrides": []
       },
@@ -373,7 +373,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "homeassistant_sensor_temperature_celsius{entity=~\"sensor.kababchi_probe.*\"}",
+          "expr": "homeassistant_sensor_temperature_celsius{entity=~\"sensor.kababchi_probe.*\"} * 9/5 + 32",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         }
@@ -434,7 +434,7 @@
               }
             ]
           },
-          "unit": "celsius"
+          "unit": "fahrenheit"
         },
         "overrides": []
       },
@@ -464,7 +464,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "homeassistant_climate_current_temperature_celsius",
+          "expr": "homeassistant_climate_current_temperature_celsius * 9/5 + 32",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         }

@@ -165,6 +165,8 @@ in
       ps.psycopg2 # PostgreSQL adapter
       ps.grpcio # Required for Google Nest integration
       ps.aiogithubapi # Required for HACS
+      ps.aiohomekit # Required for HomeKit Controller integration
+      ps.python-otbr-api # Required for HomeKit Controller Thread support
       ps.python-miio # Required for Dreame Vacuum integration
       ps.pybase64 # Required for Dreame Vacuum integration
       ps.paho-mqtt # Required for Dreame Vacuum integration
@@ -449,6 +451,8 @@ in
             "fan" # Fans
             "sensor" # Temperature, humidity sensors
             "binary_sensor" # Motion, door/window sensors
+            "script" # ADT security system scripts
+            "vacuum" # Dreame robot vacuum
           ];
 
           # Exclude noisy or unnecessary entities
@@ -456,6 +460,9 @@ in
             "sensor.weather_*"
             "sensor.*_battery" # Battery sensors often clutter HomeKit
             "binary_sensor.*_connectivity" # Connectivity sensors
+            "sensor.inverter_*" # Enphase solar inverter sensors (too many)
+            "sensor.*_probe_*" # Traeger grill probe sensors
+            "climate.slugify_*" # Traeger grill climate entities
           ];
         };
 

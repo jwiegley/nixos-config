@@ -453,6 +453,9 @@ in
             "binary_sensor" # Motion, door/window sensors
             "script" # ADT security system scripts
             "vacuum" # Dreame robot vacuum
+            "media_player" # LG webOS TV
+            "camera" # Ring doorbell cameras
+            "button" # Doorbell buttons, etc.
           ];
 
           # Exclude noisy or unnecessary entities
@@ -461,8 +464,8 @@ in
             "sensor.*_battery" # Battery sensors often clutter HomeKit
             "binary_sensor.*_connectivity" # Connectivity sensors
             "sensor.inverter_*" # Enphase solar inverter sensors (too many)
-            "sensor.*_probe_*" # Traeger grill probe sensors
-            "climate.slugify_*" # Traeger grill climate entities
+            # "sensor.*_probe_*" # Traeger grill probe sensors
+            # "climate.slugify_*" # Traeger grill climate entities
           ];
         };
 

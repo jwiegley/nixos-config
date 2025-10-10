@@ -7,6 +7,68 @@
 
 let
   hacs-frontend-pkg = pkgs.python3Packages.hacs-frontend;
+
+  # Custom Python packages for Hubspace integration
+  securelogging = pkgs.python3Packages.buildPythonPackage rec {
+    pname = "securelogging";
+    version = "1.0.1";
+    format = "wheel";
+
+    src = pkgs.fetchPypi {
+      inherit pname version format;
+      dist = "py3";
+      python = "py3";
+      sha256 = "sha256-0URfkqVVXZRwLuwH/yU+4XvWOrpb3T5q8ew/eynhpQw=";
+    };
+
+    doCheck = false; # Skip tests for simplicity
+  };
+
+  aioafero = pkgs.python3Packages.buildPythonPackage rec {
+    pname = "aioafero";
+    version = "6.0.1";
+    pyproject = true;
+
+    src = pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "1a66e3e4e9dae32295b136e5ca87536e73f5143c16dae8bbebe421f0e895e7ac";
+    };
+
+    build-system = with pkgs.python3Packages; [
+      hatchling
+    ];
+
+    dependencies = with pkgs.python3Packages; [
+      aiohttp
+      beautifulsoup4
+      securelogging
+    ];
+
+    doCheck = false; # Skip tests to avoid test dependencies
+  };
+
+  # Custom Python package for Bose integration
+  pybose = pkgs.python3Packages.buildPythonPackage rec {
+    pname = "pybose";
+    version = "2025.8.2";
+    pyproject = true;
+
+    src = pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "47c2a4c96b9c8ca59d0f275e6feaef30bb641b4c11c97d65d8c5f036d558f28a";
+    };
+
+    build-system = with pkgs.python3Packages; [
+      setuptools
+    ];
+
+    dependencies = with pkgs.python3Packages; [
+      zeroconf
+      websockets
+    ];
+
+    doCheck = false; # Skip tests to avoid test dependencies
+  };
 in
 
 {
@@ -174,6 +236,12 @@ in
       ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
       ps.openai # Required for Extended OpenAI Conversation custom component
       ps.tiktoken # Required for Extended OpenAI Conversation (token counting)
+      ps.aiofiles # Required for Hubspace integration
+      ps.packaging # Required for Hubspace integration
+      aioafero # Custom package for Hubspace integration
+      ps.pychromecast # Required for Bose integration
+      pybose # Custom package for Bose integration
+      ps.pyicloud # Required for Apple iCloud integration
     ];
 
     # Components that don't require YAML configuration
@@ -212,6 +280,7 @@ in
 
       # Network devices
       "asuswrt" # ASUS WiFi routers
+      "tplink" # TP-Link Smart Home (Kasa/Tapo devices)
       # OPNsense firewall - use HACS custom component instead
       # Built-in integration has JSON parsing issues with newer OPNsense versions
 
@@ -252,6 +321,10 @@ in
 
       # Utility Data
       "opower" # Energy usage from utility companies (SMUD)
+
+      # Weather
+      "accuweather" # AccuWeather weather forecasts
+      "nws" # National Weather Service (NOAA) weather forecasts
     ];
 
     # Home Assistant configuration (YAML format)
@@ -280,6 +353,10 @@ in
             type = "homeassistant";
           }
         ];
+
+        # Enable packages for modular configuration
+        # Allows loading additional config from /var/lib/hass/packages/*.yaml
+        packages = "!include_dir_named packages";
       };
 
       # HTTP configuration for reverse proxy
@@ -311,6 +388,12 @@ in
           ];
           entity_globs = [
             "sensor.weather_*"
+            # Enphase: Exclude individual inverter/panel sensors (keep aggregate sensors)
+            "sensor.inverter_*"
+            # Dreame Vacuum: Exclude per-room cleaning configuration entities
+            "select.*_room_*"
+            "sensor.*_room_*"
+            "switch.*_room_*"
           ];
         };
       };
@@ -332,8 +415,6 @@ in
         default = "info";
         logs = {
           "homeassistant.core" = "info";
-          "homeassistant.components.yale_home" = "debug";
-          "homeassistant.components.august" = "debug";
         };
       };
 
@@ -394,6 +475,20 @@ in
               device_class = "occupancy";
               icon = "mdi:account";
             }
+            {
+              name = "John Home Composite";
+              unique_id = "john_home_composite";
+              state = "{{ is_state('device_tracker.router_john_iphone', 'home') or is_state('device_tracker.john_iphone', 'home') }}";
+              device_class = "occupancy";
+              icon = "mdi:account-network";
+            }
+            {
+              name = "Nasim Home Composite";
+              unique_id = "nasim_home_composite";
+              state = "{{ is_state('device_tracker.router_iphone_lan', 'home') or is_state('device_tracker.nasim_iphone', 'home') }}";
+              device_class = "occupancy";
+              icon = "mdi:account-network";
+            }
           ];
         }
       ];
@@ -420,12 +515,23 @@ in
             "fan"
             "person"
             "device_tracker"
+            "media_player" # Bose speaker, LG webOS TV, etc.
+            "vacuum" # Dreame robot vacuum
+            "camera" # Ring doorbell cameras
+            "update" # Integration and device updates
+            "button" # Device buttons
           ];
 
-          # Optionally exclude specific entity patterns
-          # exclude_entity_globs = [
-          #   "sensor.weather_*"
-          # ];
+          # Exclude excessive/noisy entity patterns from Prometheus metrics
+          exclude_entity_globs = [
+            "sensor.weather_*"
+            # Enphase: Exclude individual inverter/panel sensors (keep aggregate sensors)
+            "sensor.inverter_*"
+            # Dreame Vacuum: Exclude per-room cleaning configuration entities
+            "select.*_room_*"
+            "sensor.*_room_*"
+            "switch.*_room_*"
+          ];
         };
       };
 

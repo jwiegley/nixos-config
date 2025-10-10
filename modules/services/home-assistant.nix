@@ -523,10 +523,10 @@ in
           ];
 
           # Exclude excessive/noisy entity patterns from Prometheus metrics
+          # Note: Enphase inverter sensors are excluded from recorder (HA UI)
+          # but included in Prometheus for individual panel monitoring
           exclude_entity_globs = [
             "sensor.weather_*"
-            # Enphase: Exclude individual inverter/panel sensors (keep aggregate sensors)
-            "sensor.inverter_*"
             # Dreame Vacuum: Exclude per-room cleaning configuration entities
             "select.*_room_*"
             "sensor.*_room_*"

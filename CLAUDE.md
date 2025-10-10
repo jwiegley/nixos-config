@@ -536,6 +536,144 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 # Settings > Dashboards > Energy
 ```
 
+### B-Hyve Sprinkler Rain Delay Automation
+```bash
+# Automatically enable rain delay on Orbit B-Hyve sprinklers based on weather forecast
+# Prevents unnecessary watering when rain is expected, conserving water
+# See /etc/nixos/docs/HOME_ASSISTANT_BHYVE_RAIN_DELAY.md for complete guide
+
+# Prerequisites:
+# 1. B-Hyve integration installed via HACS (sebr/bhyve-home-assistant)
+# 2. Weather integration configured (AccuWeather or NWS already enabled)
+# 3. B-Hyve sprinkler timer connected to Home Assistant
+
+# Quick Start:
+# 1. Install B-Hyve via HACS: Settings > HACS > Integrations > Search "Orbit B-Hyve"
+# 2. Configure B-Hyve: Settings > Devices & Services > Add Integration > Orbit B-Hyve
+# 3. Find your timer entity: Settings > Devices & Services > Orbit B-Hyve
+#    Example: switch.front_yard_timer_rain_delay
+
+# Automation approaches (choose one):
+# - Simple: Based on precipitation probability (recommended)
+# - Precise: Based on forecasted rainfall amount
+# - Smart: Checks existing delay before enabling new one
+# - Multi-zone: Enables delay on all zones simultaneously
+
+# View automation examples:
+cat /etc/nixos/config/home-assistant/bhyve-rain-delay-automation.yaml
+
+# View template sensors for weather data:
+cat /etc/nixos/config/home-assistant/bhyve-rain-delay-sensors.yaml
+
+# Complete setup guide:
+cat /etc/nixos/docs/HOME_ASSISTANT_BHYVE_RAIN_DELAY.md
+
+# Example: Simple automation
+# Triggers: Daily at 8 PM
+# Condition: Precipitation probability > 50%
+# Action: Enable 72-hour (3-day) rain delay
+# Result: Prevents watering before forecasted rain
+
+# Test rain delay service:
+# Go to Developer Tools > Services
+# Service: bhyve.enable_rain_delay
+# Target: switch.front_yard_timer_rain_delay
+# Data: hours: 72
+
+# Monitor rain delay status:
+# Via Home Assistant: Check switch state and attributes
+# Via B-Hyve app: View timer with rain delay indicator
+
+# Customize thresholds:
+# - Probability: 40-70% (default: 50%)
+# - Amount: 0.10-0.50 inches (default: 0.25")
+# - Duration: 24-120 hours (default: 72 hours / 3 days)
+```
+
+### NWS Rain Detection Sensors
+```bash
+# Extract rain and precipitation data from NWS weather.kmhr for automations
+# Based on: https://jeffreystone.net/2020/04/07/migrating-from-the-darksky-api-to-nws-weather-api/
+# Modernized for Home Assistant 2025 with weather.get_forecasts service
+# See /etc/nixos/docs/HOME_ASSISTANT_NWS_RAIN_DETECTION.md for complete guide
+
+# What you get:
+# - Current conditions: temperature, humidity, wind, visibility
+# - Rain probability sensors: current, tomorrow, tomorrow night
+# - Binary sensors: rain_detected, rain_expected_soon, rain_in_forecast
+# - Forecast sensors: detailed descriptions for next periods
+
+# NWS Weather Station: weather.kmhr (Mather Airport/Sacramento)
+# Updates: Every hour automatically via trigger-based templates
+
+# Quick Start:
+# 1. Copy sensor file to Home Assistant directory
+sudo cp /etc/nixos/config/home-assistant/nws-rain-sensors.yaml /var/lib/hass/
+sudo chown hass:hass /var/lib/hass/nws-rain-sensors.yaml
+
+# 2. Add to configuration.yaml
+sudo -u hass nano /var/lib/hass/configuration.yaml
+# Add: template: !include nws-rain-sensors.yaml
+
+# 3. Reload template entities (no restart needed)
+# Developer Tools > YAML > Template Entities > Reload Template Entities
+
+# 4. Verify sensors created
+# Developer Tools > States > Search for "nws_" and "rain_"
+
+# View sensor configuration:
+cat /etc/nixos/config/home-assistant/nws-rain-sensors.yaml
+
+# View automation examples:
+cat /etc/nixos/config/home-assistant/nws-rain-automations.yaml
+
+# Complete setup guide:
+cat /etc/nixos/docs/HOME_ASSISTANT_NWS_RAIN_DETECTION.md
+
+# Example sensors created:
+# - sensor.nws_current_rain_chance (0-100%)
+# - sensor.nws_rain_chance_tomorrow (0-100%)
+# - binary_sensor.rain_detected (on/off)
+# - binary_sensor.rain_expected_soon (on when >50%)
+# - sensor.nws_current_forecast (detailed text)
+# - sensor.nws_current_temperature (°F)
+
+# Example automation - notification when rain detected:
+# trigger:
+#   - platform: state
+#     entity_id: binary_sensor.rain_detected
+#     to: "on"
+# action:
+#   - service: notify.notify
+#     data:
+#       message: "Rain detected! Bring in the patio furniture."
+
+# Example automation - disable sprinklers if rain expected:
+# trigger:
+#   - platform: time
+#     at: "06:00:00"
+# condition:
+#   - condition: numeric_state
+#     entity_id: sensor.nws_rain_chance_tomorrow
+#     above: 50
+# action:
+#   - service: automation.turn_off
+#     target:
+#       entity_id: automation.water_lawn
+
+# Check sensor values:
+# Developer Tools > States > sensor.nws_current_rain_chance
+
+# Test weather forecast service:
+# Developer Tools > Services > weather.get_forecasts
+# Target: weather.kmhr
+# Data: type: twice_daily
+
+# Integration with B-Hyve:
+# Use sensor.nws_rain_chance_tomorrow in B-Hyve rain delay automations
+# instead of AccuWeather sensors for more granular local NWS data
+```
+
 ### Extended OpenAI Conversation Integration
 ```bash
 # Extended OpenAI Conversation provides LLM-powered conversation and automation

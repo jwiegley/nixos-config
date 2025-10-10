@@ -1,0 +1,99 @@
+# B-Hyve Rain Delay - Weather Sensors Template
+# This file creates template sensors for extracting precipitation forecast data
+# from weather integrations to automate B-Hyve sprinkler rain delays.
+#
+# To use: Add this to configuration.yaml:
+#   template: !include bhyve-rain-delay-sensors.yaml
+#
+# Or merge with existing template section in configuration.yaml
+
+# Template sensors for NWS precipitation forecast
+template:
+  - trigger:
+      - platform: time_pattern
+        hours: "/1"  # Update every hour
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: twice_daily
+        target:
+          entity_id: weather.YOUR_NWS_STATION  # Change to your NWS weather entity
+        response_variable: nws_forecast
+    sensor:
+      # Tomorrow's precipitation probability (daytime)
+      - name: "NWS Tomorrow Precipitation Probability"
+        unique_id: nws_tomorrow_precip_prob
+        unit_of_measurement: "%"
+        state: >
+          {% if nws_forecast['weather.YOUR_NWS_STATION'].forecast | length > 0 %}
+            {{ nws_forecast['weather.YOUR_NWS_STATION'].forecast[0].precipitation_probability | float(0) }}
+          {% else %}
+            0
+          {% endif %}
+        icon: mdi:weather-rainy
+
+      # Tomorrow's precipitation amount (if available)
+      - name: "NWS Tomorrow Precipitation Amount"
+        unique_id: nws_tomorrow_precip_amount
+        unit_of_measurement: "in"
+        state: >
+          {% if nws_forecast['weather.YOUR_NWS_STATION'].forecast | length > 0 %}
+            {% set precip = nws_forecast['weather.YOUR_NWS_STATION'].forecast[0].precipitation | float(0) %}
+            {{ (precip / 25.4) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+        icon: mdi:weather-pouring
+
+  # Alternative: AccuWeather-based sensors (simpler, if you have AccuWeather)
+  - trigger:
+      - platform: time_pattern
+        hours: "/1"
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: daily
+        target:
+          entity_id: weather.YOUR_LOCATION  # Change to your AccuWeather entity
+        response_variable: accuweather_forecast
+    sensor:
+      # Tomorrow's precipitation probability from AccuWeather
+      - name: "AccuWeather Tomorrow Precipitation Probability"
+        unique_id: accuweather_tomorrow_precip_prob
+        unit_of_measurement: "%"
+        state: >
+          {% if accuweather_forecast['weather.YOUR_LOCATION'].forecast | length > 1 %}
+            {{ accuweather_forecast['weather.YOUR_LOCATION'].forecast[1].precipitation_probability | float(0) }}
+          {% else %}
+            0
+          {% endif %}
+        icon: mdi:weather-rainy
+
+      # Tomorrow's precipitation amount from AccuWeather
+      - name: "AccuWeather Tomorrow Precipitation Amount"
+        unique_id: accuweather_tomorrow_precip_amount
+        unit_of_measurement: "in"
+        state: >
+          {% if accuweather_forecast['weather.YOUR_LOCATION'].forecast | length > 1 %}
+            {% set precip = accuweather_forecast['weather.YOUR_LOCATION'].forecast[1].precipitation | float(0) %}
+            {{ (precip / 25.4) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+        icon: mdi:weather-pouring
+
+      # Forecasted precipitation for next 3 days (total)
+      - name: "AccuWeather 3-Day Precipitation Total"
+        unique_id: accuweather_3day_precip_total
+        unit_of_measurement: "in"
+        state: >
+          {% set ns = namespace(total=0) %}
+          {% if accuweather_forecast['weather.YOUR_LOCATION'].forecast | length > 0 %}
+            {% for day in accuweather_forecast['weather.YOUR_LOCATION'].forecast[:3] %}
+              {% set ns.total = ns.total + (day.precipitation | float(0)) %}
+            {% endfor %}
+            {{ (ns.total / 25.4) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+        icon: mdi:weather-pouring

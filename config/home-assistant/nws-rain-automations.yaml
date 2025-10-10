@@ -1,0 +1,433 @@
+# NWS Rain Detection Automations
+# Based on sensors from nws-rain-sensors.yaml
+# These automations respond to rain conditions detected by NWS weather.kmhr
+#
+# To use: Copy desired automation entries to /var/lib/hass/automations.yaml
+# See /etc/nixos/docs/HOME_ASSISTANT_NWS_RAIN_DETECTION.md for full instructions
+
+automation:
+  # AUTOMATION 1: Notification when rain starts
+  - id: rain_detected_notification
+    alias: "Rain Detected - Send Notification"
+    description: "Send notification when rain is detected"
+
+    trigger:
+      # Trigger when weather condition changes to rainy
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    action:
+      - service: notify.notify
+        data:
+          title: "Weather Alert"
+          message: "Rain detected! Current condition: {{ states('weather.kmhr') }}"
+
+    mode: single
+
+  # AUTOMATION 2: Notification when high chance of rain
+  - id: rain_expected_notification
+    alias: "Rain Expected - Morning Notification"
+    description: "Notify in the morning if high chance of rain today"
+
+    trigger:
+      # Check at 7 AM daily
+      - platform: time
+        at: "07:00:00"
+
+    condition:
+      # Only notify if rain chance > 50%
+      - condition: numeric_state
+        entity_id: sensor.nws_current_rain_chance
+        above: 50
+
+    action:
+      - service: notify.notify
+        data:
+          title: "Weather Forecast"
+          message: >
+            {{ states('sensor.nws_current_rain_chance') }}% chance of rain today.
+            {{ states('sensor.nws_current_forecast') }}
+
+    mode: single
+
+  # AUTOMATION 3: Close smart covers/awnings when rain detected
+  - id: close_covers_rain
+    alias: "Rain Detected - Close Covers"
+    description: "Close outdoor covers when rain is detected"
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    action:
+      # CHANGE THIS: Replace with your actual cover entities
+      - service: cover.close_cover
+        target:
+          entity_id:
+            - cover.patio_awning
+            - cover.deck_umbrella
+
+      - service: notify.notify
+        data:
+          title: "Automated Action"
+          message: "Outdoor covers closed due to rain detection"
+
+    mode: single
+
+  # AUTOMATION 4: Turn off outdoor devices when raining
+  - id: outdoor_devices_off_rain
+    alias: "Rain Detected - Turn Off Outdoor Devices"
+    description: "Turn off outdoor switches/devices when rain detected"
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    condition:
+      # Only during daylight hours (optional)
+      - condition: sun
+        after: sunrise
+        before: sunset
+
+    action:
+      # CHANGE THIS: Replace with your actual outdoor device entities
+      - service: switch.turn_off
+        target:
+          entity_id:
+            - switch.patio_fan
+            - switch.outdoor_speakers
+
+      - service: notify.notify
+        data:
+          title: "Rain Protection"
+          message: "Outdoor devices turned off due to rain"
+
+    mode: single
+
+  # AUTOMATION 5: Reminder to bring in items before rain
+  - id: rain_expected_reminder
+    alias: "Rain Expected - Evening Reminder"
+    description: "Remind to bring in outdoor items if rain expected overnight"
+
+    trigger:
+      # Check at 8 PM daily
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      - condition: or
+        conditions:
+          # Rain expected in next period
+          - condition: numeric_state
+            entity_id: sensor.nws_current_rain_chance
+            above: 60
+          # Rain expected tomorrow
+          - condition: numeric_state
+            entity_id: sensor.nws_rain_chance_tomorrow
+            above: 60
+
+    action:
+      - service: notify.notify
+        data:
+          title: "Weather Reminder"
+          message: >
+            High chance of rain. Consider bringing in outdoor items.
+            Tonight: {{ states('sensor.nws_current_rain_chance') }}% chance
+            Tomorrow: {{ states('sensor.nws_rain_chance_tomorrow') }}% chance
+
+    mode: single
+
+  # AUTOMATION 6: Adjust thermostat when weather changes
+  - id: thermostat_adjust_rain
+    alias: "Rain Detected - Adjust Thermostat"
+    description: "Adjust HVAC settings when rain detected (cooler/more humid)"
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    condition:
+      # Only if someone is home
+      - condition: state
+        entity_id: binary_sensor.anyone_home
+        state: "on"
+
+    action:
+      # CHANGE THIS: Replace with your thermostat entity
+      # Adjust target temperature down slightly (rain cools things)
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.nest_thermostat
+        data:
+          temperature: >
+            {{ state_attr('climate.nest_thermostat', 'temperature') | float(72) - 1 }}
+
+    mode: single
+
+  # AUTOMATION 7: Cancel outdoor automation when rain expected
+  - id: disable_outdoor_automation_rain
+    alias: "Rain Expected - Disable Outdoor Automations"
+    description: "Disable outdoor automations when rain expected"
+
+    trigger:
+      # Check at 6 AM daily
+      - platform: time
+        at: "06:00:00"
+
+    condition:
+      # High chance of rain today or tomorrow
+      - condition: state
+        entity_id: binary_sensor.rain_expected_soon
+        state: "on"
+
+    action:
+      # CHANGE THIS: Replace with your outdoor automation entity IDs
+      - service: automation.turn_off
+        target:
+          entity_id:
+            - automation.water_lawn_morning
+            - automation.water_garden_evening
+
+      - service: notify.notify
+        data:
+          title: "Automation Disabled"
+          message: "Outdoor watering automations disabled due to rain forecast"
+
+    mode: single
+
+  # AUTOMATION 8: Re-enable outdoor automations when rain passes
+  - id: enable_outdoor_automation_clear
+    alias: "Rain Cleared - Re-enable Outdoor Automations"
+    description: "Re-enable outdoor automations when no rain expected"
+
+    trigger:
+      # Check at 10 PM daily
+      - platform: time
+        at: "22:00:00"
+
+    condition:
+      # Low chance of rain in forecast
+      - condition: state
+        entity_id: binary_sensor.rain_in_forecast
+        state: "off"
+
+    action:
+      # CHANGE THIS: Replace with your outdoor automation entity IDs
+      - service: automation.turn_on
+        target:
+          entity_id:
+            - automation.water_lawn_morning
+            - automation.water_garden_evening
+
+    mode: single
+
+  # AUTOMATION 9: Voice announcement when leaving home in rain
+  - id: rain_leaving_announcement
+    alias: "Rain Alert - Leaving Home"
+    description: "Announce rain when someone leaves home"
+
+    trigger:
+      # Trigger when anyone leaves
+      - platform: state
+        entity_id: binary_sensor.anyone_home
+        from: "on"
+        to: "off"
+
+    condition:
+      # Only if rain detected or expected soon
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: binary_sensor.rain_detected
+            state: "on"
+          - condition: state
+            entity_id: binary_sensor.rain_expected_soon
+            state: "on"
+
+    action:
+      # Play TTS announcement (requires media_player)
+      # CHANGE THIS: Replace with your media player entity
+      - service: tts.google_say
+        target:
+          entity_id: media_player.google_home
+        data:
+          message: >
+            Heads up! It's {{ 'currently raining' if is_state('binary_sensor.rain_detected', 'on') else 'expected to rain soon' }}.
+            Don't forget your umbrella!
+
+    mode: single
+
+  # AUTOMATION 10: Dashboard notification badge for rain
+  - id: rain_persistent_notification
+    alias: "Rain Expected - Dashboard Notification"
+    description: "Create persistent notification on dashboard when rain expected"
+
+    trigger:
+      # Check every morning at 6 AM
+      - platform: time
+        at: "06:00:00"
+
+    condition:
+      # Rain expected today or tomorrow
+      - condition: or
+        conditions:
+          - condition: numeric_state
+            entity_id: sensor.nws_current_rain_chance
+            above: 50
+          - condition: numeric_state
+            entity_id: sensor.nws_rain_chance_tomorrow
+            above: 50
+
+    action:
+      - service: persistent_notification.create
+        data:
+          notification_id: "rain_forecast"
+          title: "Rain Forecast"
+          message: >
+            Today: {{ states('sensor.nws_current_rain_chance') }}% chance of rain
+            Tomorrow: {{ states('sensor.nws_rain_chance_tomorrow') }}% chance of rain
+
+            {{ states('sensor.nws_current_forecast') }}
+
+    mode: single
+
+  # AUTOMATION 11: Clear rain notification when no longer expected
+  - id: rain_clear_notification
+    alias: "Rain Cleared - Clear Dashboard Notification"
+    description: "Remove rain notification when no longer expected"
+
+    trigger:
+      # Check every evening at 10 PM
+      - platform: time
+        at: "22:00:00"
+
+    condition:
+      # Low chance of rain
+      - condition: state
+        entity_id: binary_sensor.rain_in_forecast
+        state: "off"
+
+    action:
+      - service: persistent_notification.dismiss
+        data:
+          notification_id: "rain_forecast"
+
+    mode: single
+
+  # AUTOMATION 12: Log rain events for history
+  - id: rain_event_logger
+    alias: "Rain Event - Log to History"
+    description: "Log rain start and end times for historical tracking"
+
+    trigger:
+      # Log when rain starts
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+        id: rain_start
+      # Log when rain stops
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "on"
+        to: "off"
+        id: rain_stop
+
+    action:
+      - service: logbook.log
+        data:
+          name: "Rain Event"
+          message: >
+            {% if trigger.id == 'rain_start' %}
+              Rain started at {{ now().strftime('%I:%M %p') }}
+            {% else %}
+              Rain ended at {{ now().strftime('%I:%M %p') }}
+            {% endif %}
+          entity_id: binary_sensor.rain_detected
+
+    mode: queued
+
+  # AUTOMATION 13: Smart lighting adjustment for rainy weather
+  - id: lights_adjust_rain
+    alias: "Rain Detected - Increase Indoor Lighting"
+    description: "Brighten indoor lights when it gets dark due to rain"
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    condition:
+      - condition: and
+        conditions:
+          # During daylight hours
+          - condition: sun
+            after: sunrise
+            before: sunset
+          # Someone is home
+          - condition: state
+            entity_id: binary_sensor.anyone_home
+            state: "on"
+
+    action:
+      # CHANGE THIS: Replace with your light entities
+      - service: light.turn_on
+        target:
+          entity_id:
+            - light.living_room
+            - light.kitchen
+        data:
+          brightness_pct: 75
+
+    mode: single
+
+  # AUTOMATION 14: Window sensor integration
+  # Alert if windows are open when rain detected
+  - id: windows_open_rain_alert
+    alias: "Rain Detected - Windows Open Alert"
+    description: "Alert if any windows are open when rain is detected"
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.rain_detected
+        from: "off"
+        to: "on"
+
+    condition:
+      # Check if any windows are open
+      # CHANGE THIS: Replace with your actual window sensor entities
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: binary_sensor.bedroom_window
+            state: "on"
+          - condition: state
+            entity_id: binary_sensor.living_room_window
+            state: "on"
+
+    action:
+      - service: notify.notify
+        data:
+          title: "⚠️ Rain Alert"
+          message: >
+            Rain detected and windows are open!
+            {% if is_state('binary_sensor.bedroom_window', 'on') %}
+            - Bedroom window is open
+            {% endif %}
+            {% if is_state('binary_sensor.living_room_window', 'on') %}
+            - Living room window is open
+            {% endif %}
+          data:
+            priority: high
+            tag: "windows_open_rain"
+
+    mode: single

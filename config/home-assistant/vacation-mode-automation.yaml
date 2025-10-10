@@ -1,0 +1,94 @@
+# Home Assistant Vacation Mode Automation
+# This automation simulates presence by turning lights on/off at random times
+# when everyone is away from home.
+#
+# To use: Copy the automation entries below into your Home Assistant automations
+# See /etc/nixos/docs/HOME_ASSISTANT_VACATION_MODE.md for full instructions
+
+automation:
+  # Main vacation mode automation
+  - id: vacation_lights_random
+    alias: "Vacation Mode - Random Evening Lights"
+    description: "Turn lights on/off at random times when everyone is away"
+
+    trigger:
+      # Trigger at 5 PM every day
+      - platform: time
+        at: "17:00:00"
+
+    condition:
+      # Only run when everyone is away
+      - condition: state
+        entity_id: binary_sensor.everyone_away
+        state: "on"
+
+    action:
+      # Random delay 0-3 hours (0-10800 seconds)
+      # This means lights turn on somewhere between 5 PM and 8 PM
+      - delay: "{{ range(0, 10800) | random }}"
+
+      # Turn on the light/switch
+      # CHANGE THIS: Replace with your actual device entity_id
+      - service: switch.turn_on
+        target:
+          entity_id: switch.living_room_lamp
+
+      # Random duration 1-2 hours (3600-7200 seconds)
+      # Lights stay on for 60-120 minutes
+      - delay: "{{ range(3600, 7200) | random }}"
+
+      # Turn off the light
+      # CHANGE THIS: Replace with your actual device entity_id
+      - service: switch.turn_off
+        target:
+          entity_id: switch.living_room_lamp
+
+    mode: single
+
+  # Safety automation: turn off lights if someone comes home
+  - id: vacation_lights_disable_on_arrival
+    alias: "Vacation Mode - Disable on Arrival"
+    description: "Turn off vacation lights when someone arrives home"
+
+    trigger:
+      # Trigger when everyone_away changes from on to off
+      - platform: state
+        entity_id: binary_sensor.everyone_away
+        from: "on"
+        to: "off"
+
+    action:
+      # Turn off the light immediately
+      # CHANGE THIS: Replace with your actual device entity_id
+      - service: switch.turn_off
+        target:
+          entity_id: switch.living_room_lamp
+
+    mode: single
+
+  # Optional: Additional automation for different light/time
+  # Uncomment and customize for multiple lights at different times
+  # - id: vacation_lights_random_2
+  #   alias: "Vacation Mode - Random Late Evening Lights"
+  #   description: "Turn lights on/off at random late evening times when everyone is away"
+  #
+  #   trigger:
+  #     - platform: time
+  #       at: "20:00:00"  # 8 PM trigger
+  #
+  #   condition:
+  #     - condition: state
+  #       entity_id: binary_sensor.everyone_away
+  #       state: "on"
+  #
+  #   action:
+  #     - delay: "{{ range(0, 7200) | random }}"  # 0-2 hours
+  #     - service: switch.turn_on
+  #       target:
+  #         entity_id: switch.bedroom_lamp
+  #     - delay: "{{ range(1800, 5400) | random }}"  # 30-90 minutes
+  #     - service: switch.turn_off
+  #       target:
+  #         entity_id: switch.bedroom_lamp
+  #
+  #   mode: single

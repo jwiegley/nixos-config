@@ -1,0 +1,271 @@
+# NWS Rain Detection Sensors
+# Based on: https://jeffreystone.net/2020/04/07/migrating-from-the-darksky-api-to-nws-weather-api/
+# Adapted for Home Assistant 2025 with weather.kmhr station
+#
+# These sensors extract rain/precipitation data from the NWS weather entity
+# for use in automations and notifications.
+#
+# To use: Add this to configuration.yaml:
+#   template: !include nws-rain-sensors.yaml
+# Or merge with existing template section
+
+# Modern approach using trigger-based template sensors with weather.get_forecasts
+template:
+  # Current weather condition sensor
+  - sensor:
+      - name: "NWS Current Condition"
+        unique_id: nws_kmhr_current_condition
+        state: "{{ states('weather.kmhr') }}"
+        icon: >
+          {% set condition = states('weather.kmhr') %}
+          {% if condition == 'rainy' %}
+            mdi:weather-pouring
+          {% elif condition == 'cloudy' %}
+            mdi:weather-cloudy
+          {% elif condition == 'partlycloudy' %}
+            mdi:weather-partly-cloudy
+          {% elif condition == 'sunny' %}
+            mdi:weather-sunny
+          {% elif condition == 'clear-night' %}
+            mdi:weather-night
+          {% elif condition == 'snowy' %}
+            mdi:weather-snowy
+          {% elif condition == 'lightning-rainy' %}
+            mdi:weather-lightning-rainy
+          {% elif condition == 'fog' %}
+            mdi:weather-fog
+          {% else %}
+            mdi:weather-partly-cloudy
+          {% endif %}
+
+      # Current temperature
+      - name: "NWS Current Temperature"
+        unique_id: nws_kmhr_current_temperature
+        state: "{{ state_attr('weather.kmhr', 'temperature') }}"
+        unit_of_measurement: "°F"
+        device_class: temperature
+        state_class: measurement
+
+      # Current humidity
+      - name: "NWS Current Humidity"
+        unique_id: nws_kmhr_current_humidity
+        state: "{{ state_attr('weather.kmhr', 'humidity') }}"
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+
+      # Current wind speed
+      - name: "NWS Current Wind Speed"
+        unique_id: nws_kmhr_current_wind_speed
+        state: "{{ state_attr('weather.kmhr', 'wind_speed') }}"
+        unit_of_measurement: "mph"
+        device_class: wind_speed
+        state_class: measurement
+
+      # Current visibility
+      - name: "NWS Current Visibility"
+        unique_id: nws_kmhr_current_visibility
+        state: "{{ state_attr('weather.kmhr', 'visibility') }}"
+        unit_of_measurement: "mi"
+        device_class: distance
+        state_class: measurement
+
+  # Trigger-based template sensors for forecast data
+  # These update every hour and fetch forecast data from NWS
+  - trigger:
+      - platform: time_pattern
+        hours: "/1"  # Update every hour
+      - platform: homeassistant
+        event: start
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: twice_daily
+        target:
+          entity_id: weather.kmhr
+        response_variable: forecast_data
+    sensor:
+      # Current forecast (next period)
+      - name: "NWS Current Forecast"
+        unique_id: nws_kmhr_current_forecast
+        state: >
+          {% if forecast_data['weather.kmhr'].forecast | length > 0 %}
+            {{ forecast_data['weather.kmhr'].forecast[0].detailed_description }}
+          {% else %}
+            Unknown
+          {% endif %}
+        icon: mdi:weather-partly-cloudy
+
+      # Current rain chance (next period)
+      - name: "NWS Current Rain Chance"
+        unique_id: nws_kmhr_current_rain_chance
+        state: >
+          {% if forecast_data['weather.kmhr'].forecast | length > 0 %}
+            {{ forecast_data['weather.kmhr'].forecast[0].precipitation_probability | float(0) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "%"
+        icon: mdi:weather-rainy
+
+      # Daytime temperature (next daytime period)
+      - name: "NWS Daytime Temperature"
+        unique_id: nws_kmhr_daytime_temperature
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 0 %}
+            {% if forecasts[0].is_daytime == true %}
+              {{ forecasts[0].temperature }}
+            {% elif forecasts | length > 1 and forecasts[1].is_daytime == true %}
+              {{ forecasts[1].temperature }}
+            {% else %}
+              {{ state_attr('weather.kmhr', 'temperature') }}
+            {% endif %}
+          {% else %}
+            {{ state_attr('weather.kmhr', 'temperature') }}
+          {% endif %}
+        unit_of_measurement: "°F"
+        device_class: temperature
+
+      # Overnight low (next nighttime period)
+      - name: "NWS Overnight Low"
+        unique_id: nws_kmhr_overnight_low
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 0 %}
+            {% if forecasts[0].is_daytime == false %}
+              {{ forecasts[0].temperature }}
+            {% elif forecasts | length > 1 and forecasts[1].is_daytime == false %}
+              {{ forecasts[1].temperature }}
+            {% else %}
+              {{ state_attr('weather.kmhr', 'temperature') }}
+            {% endif %}
+          {% else %}
+            {{ state_attr('weather.kmhr', 'temperature') }}
+          {% endif %}
+        unit_of_measurement: "°F"
+        device_class: temperature
+
+      # Tomorrow's forecast (next daytime period after current)
+      - name: "NWS Forecast Tomorrow"
+        unique_id: nws_kmhr_forecast_tomorrow
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 1 %}
+            {% if forecasts[1].is_daytime == true %}
+              {{ forecasts[1].detailed_description }}
+            {% elif forecasts | length > 2 and forecasts[2].is_daytime == true %}
+              {{ forecasts[2].detailed_description }}
+            {% else %}
+              Not available
+            {% endif %}
+          {% else %}
+            Not available
+          {% endif %}
+        icon: mdi:calendar-today
+
+      # Tomorrow's rain chance
+      - name: "NWS Rain Chance Tomorrow"
+        unique_id: nws_kmhr_rain_chance_tomorrow
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 1 %}
+            {% if forecasts[1].is_daytime == true %}
+              {{ forecasts[1].precipitation_probability | float(0) }}
+            {% elif forecasts | length > 2 and forecasts[2].is_daytime == true %}
+              {{ forecasts[2].precipitation_probability | float(0) }}
+            {% else %}
+              0
+            {% endif %}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "%"
+        icon: mdi:weather-rainy
+
+      # Tomorrow night's forecast
+      - name: "NWS Forecast Tomorrow Night"
+        unique_id: nws_kmhr_forecast_tomorrow_night
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 2 %}
+            {% if forecasts[1].is_daytime == true and forecasts[2].is_daytime == false %}
+              {{ forecasts[2].detailed_description }}
+            {% elif forecasts | length > 3 and forecasts[2].is_daytime == true and forecasts[3].is_daytime == false %}
+              {{ forecasts[3].detailed_description }}
+            {% else %}
+              Not available
+            {% endif %}
+          {% else %}
+            Not available
+          {% endif %}
+        icon: mdi:weather-night
+
+      # Tomorrow night's rain chance
+      - name: "NWS Rain Chance Tomorrow Night"
+        unique_id: nws_kmhr_rain_chance_tomorrow_night
+        state: >
+          {% set forecasts = forecast_data['weather.kmhr'].forecast %}
+          {% if forecasts | length > 2 %}
+            {% if forecasts[1].is_daytime == true and forecasts[2].is_daytime == false %}
+              {{ forecasts[2].precipitation_probability | float(0) }}
+            {% elif forecasts | length > 3 and forecasts[2].is_daytime == true and forecasts[3].is_daytime == false %}
+              {{ forecasts[3].precipitation_probability | float(0) }}
+            {% else %}
+              0
+            {% endif %}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "%"
+        icon: mdi:weather-rainy
+
+  # Binary sensors for rain detection (easier to use in automations)
+  - binary_sensor:
+      # Is it currently raining?
+      - name: "Rain Detected"
+        unique_id: rain_detected_now
+        state: >
+          {{ states('weather.kmhr') in ['rainy', 'pouring', 'lightning-rainy'] }}
+        device_class: moisture
+        icon: >
+          {% if states('weather.kmhr') in ['rainy', 'pouring', 'lightning-rainy'] %}
+            mdi:weather-pouring
+          {% else %}
+            mdi:weather-sunny
+          {% endif %}
+
+      # High chance of rain soon (>50%)
+      - name: "Rain Expected Soon"
+        unique_id: rain_expected_soon
+        state: >
+          {{ states('sensor.nws_current_rain_chance') | float(0) > 50 }}
+        device_class: moisture
+        icon: >
+          {% if states('sensor.nws_current_rain_chance') | float(0) > 50 %}
+            mdi:weather-rainy
+          {% else %}
+            mdi:weather-partly-cloudy
+          {% endif %}
+
+      # High chance of rain tomorrow (>50%)
+      - name: "Rain Expected Tomorrow"
+        unique_id: rain_expected_tomorrow
+        state: >
+          {{ states('sensor.nws_rain_chance_tomorrow') | float(0) > 50 }}
+        device_class: moisture
+        icon: >
+          {% if states('sensor.nws_rain_chance_tomorrow') | float(0) > 50 %}
+            mdi:weather-rainy
+          {% else %}
+            mdi:calendar-today
+          {% endif %}
+
+      # Any rain in forecast (next 2 periods)
+      - name: "Rain in Forecast"
+        unique_id: rain_in_forecast
+        state: >
+          {{ states('sensor.nws_current_rain_chance') | float(0) > 30
+             or states('sensor.nws_rain_chance_tomorrow') | float(0) > 30 }}
+        device_class: moisture
+        icon: mdi:weather-partly-rainy

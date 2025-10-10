@@ -1,0 +1,269 @@
+# B-Hyve Rain Delay Automation
+# Automatically enables rain delay on B-Hyve sprinklers based on weather forecast
+#
+# To use: Copy automation entries to /var/lib/hass/automations.yaml
+# See /etc/nixos/docs/HOME_ASSISTANT_BHYVE_RAIN_DELAY.md for full instructions
+
+automation:
+  # APPROACH 1: Simple - Based on precipitation probability (recommended)
+  # Uses AccuWeather or NWS precipitation probability sensor
+  - id: bhyve_rain_delay_probability
+    alias: "B-Hyve Rain Delay - High Precipitation Probability"
+    description: "Enable 3-day rain delay when high chance of rain forecasted"
+
+    trigger:
+      # Check forecast daily at 8 PM (before typical sprinkler schedules)
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      # Only enable if precipitation probability is high
+      # CHANGE THIS: Replace with your actual precipitation sensor
+      - condition: numeric_state
+        entity_id: sensor.accuweather_tomorrow_precipitation_probability
+        above: 50  # 50% or higher chance of rain
+
+    action:
+      # Enable 3-day (72 hour) rain delay on B-Hyve timer
+      # CHANGE THIS: Replace with your actual B-Hyve timer entity
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id: switch.front_yard_timer_rain_delay
+        data:
+          hours: 72
+
+      # Optional: Send notification
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Enabled"
+          message: >
+            Rain delay enabled for 3 days due to
+            {{ states('sensor.accuweather_tomorrow_precipitation_probability') }}%
+            chance of rain tomorrow.
+
+    mode: single
+
+  # APPROACH 2: Based on forecasted precipitation amount
+  # More precise - enables delay only if significant rain expected
+  - id: bhyve_rain_delay_amount
+    alias: "B-Hyve Rain Delay - Significant Precipitation Expected"
+    description: "Enable 3-day rain delay when significant rain amount forecasted"
+
+    trigger:
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      # Enable if more than 0.25 inches of rain expected
+      # CHANGE THIS: Replace with your actual precipitation amount sensor
+      - condition: numeric_state
+        entity_id: sensor.accuweather_tomorrow_precipitation_amount
+        above: 0.25  # inches
+
+    action:
+      # CHANGE THIS: Replace with your actual B-Hyve timer entity
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id: switch.front_yard_timer_rain_delay
+        data:
+          hours: 72
+
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Enabled"
+          message: >
+            Rain delay enabled for 3 days.
+            {{ states('sensor.accuweather_tomorrow_precipitation_amount') }} inches
+            of rain expected tomorrow.
+
+    mode: single
+
+  # APPROACH 3: Combined (probability AND amount)
+  # Most conservative - requires both high probability and significant amount
+  - id: bhyve_rain_delay_combined
+    alias: "B-Hyve Rain Delay - Combined Criteria"
+    description: "Enable 3-day rain delay with combined probability and amount check"
+
+    trigger:
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      # Both conditions must be true
+      - condition: and
+        conditions:
+          # High probability of rain
+          - condition: numeric_state
+            entity_id: sensor.accuweather_tomorrow_precipitation_probability
+            above: 50
+          # AND significant amount expected
+          - condition: numeric_state
+            entity_id: sensor.accuweather_tomorrow_precipitation_amount
+            above: 0.20
+
+    action:
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id: switch.front_yard_timer_rain_delay
+        data:
+          hours: 72
+
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Enabled"
+          message: >
+            Rain delay enabled for 3 days.
+            {{ states('sensor.accuweather_tomorrow_precipitation_probability') }}% chance,
+            {{ states('sensor.accuweather_tomorrow_precipitation_amount') }} inches expected.
+
+    mode: single
+
+  # APPROACH 4: Smart delay - check existing delay status
+  # Only enables new delay if current delay is expiring soon (< 24 hours)
+  - id: bhyve_rain_delay_smart
+    alias: "B-Hyve Rain Delay - Smart Extension"
+    description: "Enable or extend rain delay intelligently based on remaining time"
+
+    trigger:
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      - condition: numeric_state
+        entity_id: sensor.accuweather_tomorrow_precipitation_probability
+        above: 50
+
+    action:
+      # Check if rain delay is already active and has more than 24 hours left
+      - choose:
+          # If rain delay already active with > 24 hours remaining, do nothing
+          - conditions:
+              - condition: state
+                entity_id: switch.front_yard_timer_rain_delay
+                state: "on"
+              - condition: template
+                value_template: >
+                  {{ state_attr('switch.front_yard_timer_rain_delay', 'hours') | float(0) > 24 }}
+            sequence:
+              - service: notify.notify
+                data:
+                  title: "Sprinkler Rain Delay"
+                  message: "Rain delay already active with sufficient time remaining."
+        # Otherwise, enable new 3-day delay
+        default:
+          - service: bhyve.enable_rain_delay
+            target:
+              entity_id: switch.front_yard_timer_rain_delay
+            data:
+              hours: 72
+          - service: notify.notify
+            data:
+              title: "Sprinkler Rain Delay Enabled"
+              message: "3-day rain delay enabled due to forecasted rain."
+
+    mode: single
+
+  # APPROACH 5: Multi-day forecast check
+  # Enables delay if significant rain expected in next 3 days
+  - id: bhyve_rain_delay_3day
+    alias: "B-Hyve Rain Delay - 3-Day Forecast"
+    description: "Enable rain delay based on 3-day precipitation total"
+
+    trigger:
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      # Check if 3-day total precipitation exceeds threshold
+      - condition: numeric_state
+        entity_id: sensor.accuweather_3day_precip_total
+        above: 0.50  # 0.5 inches over 3 days
+
+    action:
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id: switch.front_yard_timer_rain_delay
+        data:
+          hours: 72
+
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Enabled"
+          message: >
+            Rain delay enabled.
+            {{ states('sensor.accuweather_3day_precip_total') }} inches
+            forecasted over next 3 days.
+
+    mode: single
+
+  # APPROACH 6: Multiple zones
+  # Enable rain delay on all B-Hyve zones
+  - id: bhyve_rain_delay_all_zones
+    alias: "B-Hyve Rain Delay - All Zones"
+    description: "Enable rain delay on all sprinkler zones"
+
+    trigger:
+      - platform: time
+        at: "20:00:00"
+
+    condition:
+      - condition: numeric_state
+        entity_id: sensor.accuweather_tomorrow_precipitation_probability
+        above: 50
+
+    action:
+      # Enable rain delay on multiple zones
+      # CHANGE THIS: Add/remove zones as needed
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id:
+            - switch.front_yard_timer_rain_delay
+            - switch.back_yard_timer_rain_delay
+            - switch.side_yard_timer_rain_delay
+        data:
+          hours: 72
+
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Enabled"
+          message: "Rain delay enabled on all zones for 3 days."
+
+    mode: single
+
+  # Optional: Disable rain delay when weather clears
+  # Removes delay early if forecast changes and no rain expected
+  - id: bhyve_rain_delay_cancel
+    alias: "B-Hyve Rain Delay - Cancel if Weather Clears"
+    description: "Cancel rain delay if weather forecast improves"
+
+    trigger:
+      # Check daily at noon
+      - platform: time
+        at: "12:00:00"
+
+    condition:
+      - condition: and
+        conditions:
+          # Rain delay is currently active
+          - condition: state
+            entity_id: switch.front_yard_timer_rain_delay
+            state: "on"
+          # Low chance of rain for next 3 days
+          - condition: numeric_state
+            entity_id: sensor.accuweather_3day_precip_total
+            below: 0.10
+
+    action:
+      # Disable rain delay (set to 0 hours)
+      - service: bhyve.enable_rain_delay
+        target:
+          entity_id: switch.front_yard_timer_rain_delay
+        data:
+          hours: 0
+
+      - service: notify.notify
+        data:
+          title: "Sprinkler Rain Delay Cancelled"
+          message: "Weather cleared. Rain delay cancelled, normal schedule resuming."
+
+    mode: single

@@ -14,7 +14,7 @@ This project uses SOPS (Secrets OPerationS) for secure secrets management with a
 
 ### How It Works
 
-- **secrets.yaml**: SOPS-encrypted secrets file - currently has conflicting .gitignore rules (excluded on line 7, but comment says SHOULD be tracked)
+- **secrets.yaml**: SOPS-encrypted secrets file - **tracked in git** (required for Nix flakes to build)
 - **.age keys**: Private decryption keys - **NEVER commit** (excluded via `*.age`)
 - Secrets are decrypted at system activation → `/run/secrets/`
 - Services access via systemd `LoadCredential` or direct file reads
@@ -364,11 +364,10 @@ sudo systemctl status postgresql
 ### Secrets and Version Control
 
 **Current State:**
-- `secrets.yaml`: SOPS-encrypted - **excluded from git** (`.gitignore` line 7)
-- `.age keys`: Private decryption keys - **NEVER commit**
-- Note: `.gitignore` comment (lines 10-11) says secrets.yaml "SHOULD be tracked" but exclusion rule contradicts this
+- `secrets.yaml`: SOPS-encrypted - **tracked in git** (required for Nix flakes)
+- `.age keys`: Private decryption keys - **NEVER commit** (excluded via `*.age` in `.gitignore`)
 
-**SOPS Best Practice:** Encrypted secrets.yaml is safe to commit, only `.age` keys must stay private.
+**SOPS Best Practice:** Encrypted secrets.yaml MUST be tracked in git for Nix flakes to build. Only the `.age` private keys must stay out of version control.
 
 See "SOPS Secrets Management" section for complete documentation.
 

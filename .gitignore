@@ -4,11 +4,10 @@ home-assistant-backup_*.tar.gz
 
 # SOPS age keys (keep private - these decrypt the secrets)
 *.age
-/secrets.yaml
 *.bak
 
-# Note: secrets.yaml is encrypted by SOPS and SHOULD be tracked in git
-# Only the .age private keys need to be kept out of version control
+# Note: secrets.yaml IS encrypted by SOPS and MUST be tracked in git
+# for Nix flakes to build. Only the .age private keys must stay private.
 
 # Temporary files
 *.tmp

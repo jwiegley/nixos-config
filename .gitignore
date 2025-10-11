@@ -4,6 +4,8 @@ home-assistant-backup_*.tar.gz
 
 # SOPS age keys (already encrypted, but keep private)
 *.age
+/secrets.yaml
+*.bak
 
 # Temporary files
 *.tmp

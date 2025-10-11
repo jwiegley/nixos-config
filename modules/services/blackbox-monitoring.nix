@@ -548,6 +548,7 @@ in
             "https://nocobase.vulcan.lan"
             "https://postgres.vulcan.lan"
             # "https://prometheus.vulcan.lan"
+            "https://ragflow.vulcan.lan"
             "https://silly-tavern.vulcan.lan"
             "https://wallabag.vulcan.lan"
             "https://dns.vulcan.lan"

@@ -21,11 +21,15 @@
       After = [ "sops-nix.service" "postgresql.service" "podman.service" ];
       Wants = [ "sops-nix.service" ];
       Requires = [ "postgresql.service" ];
-      BindsTo = [ "postgresql.service" ];
     };
     serviceConfig = {
       # Wait for PostgreSQL to be ready to accept connections
       ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 30";
+      # Enhanced restart behavior for resilience
+      Restart = "always";
+      RestartSec = "10s";
+      StartLimitIntervalSec = "300";
+      StartLimitBurst = "5";
     };
   };
 

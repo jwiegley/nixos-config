@@ -53,6 +53,8 @@
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
     ../../modules/services/nextcloud.nix
+    ../../modules/services/elasticsearch.nix
+    ../../modules/services/minio.nix
 
     # Containers
     ../../modules/containers/default.nix

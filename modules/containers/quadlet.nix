@@ -3,10 +3,13 @@
 {
   # Import all container service modules
   imports = [
+    ./elasticsearch-quadlet.nix
     ./litellm-quadlet.nix
+    ./nocobase-quadlet.nix
     ./opnsense-api-transformer.nix  # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
+    ./ragflow-quadlet.nix
     ./silly-tavern-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix

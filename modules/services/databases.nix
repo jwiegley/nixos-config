@@ -30,6 +30,8 @@
         "litellm"
         "wallabag"
         "nextcloud"
+        "ragflow"
+        "nocobase"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -38,6 +40,14 @@
         { name = "wallabag"; }
         {
           name = "nextcloud";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "ragflow";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "nocobase";
           ensureDBOwnership = true;
         }
       ];
@@ -107,6 +117,69 @@
         ${config.services.postgresql.package}/bin/psql -c "ALTER USER nextcloud WITH PASSWORD '$(cat ${config.sops.secrets."nextcloud-db-password".path})'"
       fi
     '';
+  };
+
+  # Set PostgreSQL password for ragflow user
+  systemd.services.postgresql-ragflow-setup = {
+    description = "Set PostgreSQL password for RAGFlow user";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    before = [ "ragflow.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Check if password is already set by trying to connect
+      if ! ${config.services.postgresql.package}/bin/psql -U ragflow -d ragflow -c "SELECT 1" 2>/dev/null; then
+        # Set the password from the SOPS secret file
+        ${config.services.postgresql.package}/bin/psql -c "ALTER USER ragflow WITH PASSWORD '$(cat ${config.sops.secrets."ragflow-db-password".path})'"
+      fi
+    '';
+  };
+
+  # Set PostgreSQL password for nocobase user
+  systemd.services.postgresql-nocobase-setup = {
+    description = "Set PostgreSQL password for NocoBase user";
+    after = [ "postgresql.service" "postgresql-setup.service" ];
+    wants = [ "postgresql.service" ];
+    requires = [ "postgresql-setup.service" ];
+    before = [ "nocobase.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Check if password is already set by trying to connect
+      if ! ${config.services.postgresql.package}/bin/psql -U nocobase -d nocobase -c "SELECT 1" 2>/dev/null; then
+        # Set the password from the SOPS secret file
+        ${config.services.postgresql.package}/bin/psql -c "ALTER USER nocobase WITH PASSWORD '$(cat ${config.sops.secrets."nocobase-db-password".path})'"
+      fi
+    '';
+  };
+
+  # SOPS secret for RAGFlow database password
+  sops.secrets."ragflow-db-password" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "postgres";
+    group = "postgres";
+    mode = "0400";
+  };
+
+  # SOPS secret for NocoBase database password
+  sops.secrets."nocobase-db-password" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "postgres";
+    group = "postgres";
+    mode = "0400";
   };
 
   networking.firewall = {

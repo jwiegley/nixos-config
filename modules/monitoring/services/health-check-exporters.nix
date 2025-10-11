@@ -289,7 +289,7 @@ in
       };
     };
 
-    # Critical services health exporter - HTTP server on port 9200
+    # Critical services health exporter - HTTP server on port 9221
     critical-services-exporter = {
       description = "Critical services health exporter for Prometheus";
       wantedBy = [ "multi-user.target" ];
@@ -297,7 +297,7 @@ in
       wants = [ "network-online.target" ];
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:9200,bind=127.0.0.1,reuseaddr,fork EXEC:${criticalServicesExporter}";
+        ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:9221,bind=127.0.0.1,reuseaddr,fork EXEC:${criticalServicesExporter}";
         Restart = "always";
         RestartSec = 5;
         User = "root";
@@ -329,14 +329,14 @@ in
   };
 
   # Open firewall for critical services exporter (localhost only)
-  networking.firewall.interfaces."lo".allowedTCPPorts = [ 9200 ];
+  networking.firewall.interfaces."lo".allowedTCPPorts = [ 9221 ];
 
   # Prometheus scrape configuration for critical services exporter
   services.prometheus.scrapeConfigs = [
     {
       job_name = "critical-services-health";
       static_configs = [{
-        targets = [ "localhost:9200" ];
+        targets = [ "localhost:9221" ];
       }];
       scrape_interval = "10s";  # Check every 10 seconds for quick detection
       scrape_timeout = "5s";

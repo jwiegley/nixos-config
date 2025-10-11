@@ -545,6 +545,7 @@ in
             "https://grafana.vulcan.lan"
             "https://jellyfin.vulcan.lan"
             "https://litellm.vulcan.lan"
+            "https://nocobase.vulcan.lan"
             "https://postgres.vulcan.lan"
             # "https://prometheus.vulcan.lan"
             "https://silly-tavern.vulcan.lan"

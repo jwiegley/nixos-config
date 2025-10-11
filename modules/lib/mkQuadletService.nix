@@ -90,6 +90,8 @@ in
             ++ lib.optional requiresPostgres "postgresql.service";
           Requires = lib.optional requiresPostgres "postgresql.service";
         }
+        # Add restart rate limiting to [Unit] section
+        common.restartPolicies.always.unit
         extraUnitConfig
       ];
 
@@ -98,8 +100,8 @@ in
           # Wait for PostgreSQL to be ready to accept connections
           ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 30";
         })
-        # Enhanced restart behavior for resilience
-        common.restartPolicies.always
+        # Add restart behavior to [Service] section
+        common.restartPolicies.always.service
         extraServiceConfig
       ];
     };

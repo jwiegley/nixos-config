@@ -9,27 +9,40 @@
   secretsPath = ../../secrets.yaml;
 
   # Common service restart policies for reliability
-  # Use these in systemd.services.*.serviceConfig
+  # Each policy contains both 'unit' and 'service' configurations
+  # unit: Settings for systemd [Unit] section (rate limiting)
+  # service: Settings for systemd [Service] section (restart behavior)
   restartPolicies = {
     # Standard restart policy for critical services
     always = {
-      Restart = "always";
-      RestartSec = "10s";
-      StartLimitIntervalSec = "300";
-      StartLimitBurst = "5";
+      unit = {
+        StartLimitIntervalSec = "300";
+        StartLimitBurst = "5";
+      };
+      service = {
+        Restart = "always";
+        RestartSec = "10s";
+      };
     };
 
     # Restart policy for services that should retry on failure
     onFailure = {
-      Restart = "on-failure";
-      RestartSec = "30s";
-      StartLimitIntervalSec = "600";
-      StartLimitBurst = "3";
+      unit = {
+        StartLimitIntervalSec = "600";
+        StartLimitBurst = "3";
+      };
+      service = {
+        Restart = "on-failure";
+        RestartSec = "30s";
+      };
     };
 
     # No automatic restart (for oneshot services)
     none = {
-      Restart = "no";
+      unit = {};
+      service = {
+        Restart = "no";
+      };
     };
   };
 

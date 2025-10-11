@@ -10,10 +10,11 @@ Import with: `common = import ../lib/common.nix { };`
 
 Provides:
 - `secretsPath` - Consistent path to `secrets.yaml` (use instead of `../../secrets.yaml`)
-- `restartPolicies` - Standard systemd restart configurations
-  - `restartPolicies.always` - Restart always with backoff
-  - `restartPolicies.onFailure` - Restart only on failure
-  - `restartPolicies.none` - No automatic restart
+- `restartPolicies` - Standard systemd restart configurations (each contains `unit` and `service` sections)
+  - `restartPolicies.always.unit` - Rate limiting for [Unit] section (StartLimitIntervalSec, StartLimitBurst)
+  - `restartPolicies.always.service` - Restart behavior for [Service] section (Restart, RestartSec)
+  - `restartPolicies.onFailure.{unit,service}` - Restart only on failure
+  - `restartPolicies.none.{unit,service}` - No automatic restart
 - `nginxSSLPaths hostname` - Standard step-ca certificate paths
 - `postgresDefaults` - Common PostgreSQL connection settings
 

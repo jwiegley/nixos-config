@@ -16,6 +16,16 @@
     rootCredentialsFile = "/run/minio/credentials";
   };
 
+  # Enhanced restart behavior for MinIO resilience
+  systemd.services.minio = {
+    serviceConfig = {
+      Restart = "always";
+      RestartSec = "10s";
+      StartLimitIntervalSec = "300";
+      StartLimitBurst = "5";
+    };
+  };
+
   # SOPS secrets for MinIO root credentials
   sops.secrets."minio-root-user" = {
     sopsFile = ../../secrets.yaml;

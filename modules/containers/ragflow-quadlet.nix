@@ -58,11 +58,6 @@
         "minio.service"
         "redis-ragflow.service"
       ];
-      BindsTo = [
-        "postgresql.service"
-        "elasticsearch.service"
-        "minio.service"
-      ];
     };
 
     serviceConfig = {
@@ -71,12 +66,17 @@
         # Wait for PostgreSQL
         "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -U ragflow -d ragflow -t 30"
         # Wait for Elasticsearch
-        "${pkgs.bash}/bin/bash -c 'until ${pkgs.curl}/bin/curl -s http://10.88.0.1:9200/_cluster/health > /dev/null 2>&1; do echo Waiting for Elasticsearch...; sleep 2; done'"
+        "${pkgs.bash}/bin/bash -c 'until ${pkgs.curl}/bin/curl -s http://10.88.0.1:9200/_cluster/health > /dev/null 2>&1; do echo Waiting for Elasticsearch...; ${pkgs.coreutils}/bin/sleep 2; done'"
         # Wait for MinIO
-        "${pkgs.bash}/bin/bash -c 'until ${pkgs.curl}/bin/curl -s http://10.88.0.1:9000/minio/health/live > /dev/null 2>&1; do echo Waiting for MinIO...; sleep 2; done'"
+        "${pkgs.bash}/bin/bash -c 'until ${pkgs.curl}/bin/curl -s http://10.88.0.1:9000/minio/health/live > /dev/null 2>&1; do echo Waiting for MinIO...; ${pkgs.coreutils}/bin/sleep 2; done'"
         # Wait for Redis
-        "${pkgs.bash}/bin/bash -c 'until ${pkgs.redis}/bin/redis-cli -h 10.88.0.1 -p 6379 ping > /dev/null 2>&1; do echo Waiting for Redis...; sleep 2; done'"
+        "${pkgs.bash}/bin/bash -c 'until ${pkgs.redis}/bin/redis-cli -h 10.88.0.1 -p 6379 ping > /dev/null 2>&1; do echo Waiting for Redis...; ${pkgs.coreutils}/bin/sleep 2; done'"
       ];
+      # Enhanced restart behavior for resilience
+      Restart = "always";
+      RestartSec = "10s";
+      StartLimitIntervalSec = "300";
+      StartLimitBurst = "5";
     };
   };
 

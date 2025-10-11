@@ -29,6 +29,9 @@
 
     serviceConfig = {
       Restart = "always";
+      RestartSec = "10s";
+      StartLimitIntervalSec = "300";
+      StartLimitBurst = "5";
       TimeoutStartSec = "300";
     };
   };

@@ -35,9 +35,6 @@
       Requires = [
         "postgresql.service"
       ];
-      BindsTo = [
-        "postgresql.service"
-      ];
     };
 
     serviceConfig = {
@@ -46,6 +43,11 @@
         # Wait for PostgreSQL
         "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -U nocobase -d nocobase -t 30"
       ];
+      # Enhanced restart behavior for resilience
+      Restart = "always";
+      RestartSec = "10s";
+      StartLimitIntervalSec = "300";
+      StartLimitBurst = "5";
     };
   };
 

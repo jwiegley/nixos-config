@@ -130,14 +130,14 @@ groups:
             (rate(probe_success{job="blackbox_icmp"}[5m]) < 0.95) and
             (rate(probe_success{job="blackbox_icmp"}[5m]) > 0)
           )
-        for: 3m
+        for: 8h
         labels:
           severity: warning
           category: network
           service: connectivity
         annotations:
           summary: "High packet loss to {{ $labels.instance }}"
-          description: "Packet loss to {{ $labels.instance }} has success rate of {{ $value | printf \"%.3f\" }} (< 0.95) over the last 5 minutes."
+          description: "Packet loss to {{ $labels.instance }} has success rate of {{ $value | printf \"%.3f\" }} (< 0.95) over the last 5 minutes, persisting for 8 hours."
 
       # Network jitter detection (variation in latency)
       - alert: HighNetworkJitter
@@ -147,14 +147,14 @@ groups:
           ) and (
             probe_success{job="blackbox_icmp"} == 1
           )
-        for: 5m
+        for: 8h
         labels:
           severity: warning
           category: network
           service: performance
         annotations:
           summary: "High network jitter to {{ $labels.instance }}"
-          description: "Network jitter to {{ $labels.instance }} is {{ $value }}s (>500ms standard deviation) over the last 10 minutes."
+          description: "Network jitter to {{ $labels.instance }} is {{ $value }}s (>500ms standard deviation) over the last 10 minutes, persisting for 8 hours."
 
   - name: blackbox_exporter_health
     rules:

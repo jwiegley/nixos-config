@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   dh = pkgs.stdenv.mkDerivation rec {
@@ -49,31 +54,36 @@ let
     };
   };
 
-  linkdups = with pkgs; stdenv.mkDerivation rec {
-    name = "linkdups-${version}";
-    version = "1.3";
+  linkdups =
+    with pkgs;
+    stdenv.mkDerivation rec {
+      name = "linkdups-${version}";
+      version = "1.3";
 
-    src = fetchFromGitHub {
-      owner = "jwiegley";
-      repo = "linkdups";
-      rev = "57bb79332d3b79418692d0c974acba83a4fd3fc9";
-      sha256 = "1d400vanbsrmfxf1w4na3r4k3nw18xnv05qcf4rkqajmnfrbzh3h";
+      src = fetchFromGitHub {
+        owner = "jwiegley";
+        repo = "linkdups";
+        rev = "57bb79332d3b79418692d0c974acba83a4fd3fc9";
+        sha256 = "1d400vanbsrmfxf1w4na3r4k3nw18xnv05qcf4rkqajmnfrbzh3h";
+      };
+
+      phases = [
+        "unpackPhase"
+        "installPhase"
+      ];
+
+      installPhase = ''
+        mkdir -p $out/bin
+        cp -p linkdups $out/bin
+      '';
+
+      meta = {
+        homepage = "https://github.com/jwiegley/linkdups";
+        description = "A tool for hard-linking duplicate files";
+        license = lib.licenses.mit;
+        maintainers = with lib.maintainers; [ jwiegley ];
+      };
     };
-
-    phases = [ "unpackPhase" "installPhase" ];
-
-    installPhase = ''
-      mkdir -p $out/bin
-      cp -p linkdups $out/bin
-    '';
-
-    meta = {
-      homepage = "https://github.com/jwiegley/linkdups";
-      description = "A tool for hard-linking duplicate files";
-      license = lib.licenses.mit;
-      maintainers = with lib.maintainers; [ jwiegley ];
-    };
-  };
 
   # Workspace update script
   workspace-update = pkgs.writeScriptBin "workspace-update" ''
@@ -86,9 +96,17 @@ let
         shift 2
     fi
 
-    # Note: The GitHub token should be managed more securely, e.g., via systemd credentials
-    # or environment files. For now, keeping as-is for compatibility.
-    export GITHUB_TOKEN=XXXX
+    # Read GitHub token from SOPS secret
+    # When run as a systemd service, the token is available via LoadCredential
+    # When run manually, read from the SOPS secret path directly
+    if [[ -n "''${CREDENTIALS_DIRECTORY:-}" ]]; then
+        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/github-token")
+    elif [[ -f "${config.sops.secrets."github-token".path}" ]]; then
+        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "${config.sops.secrets."github-token".path}")
+    else
+        echo "ERROR: GitHub token not found. Ensure SOPS secret 'github-token' is configured." >&2
+        exit 1
+    fi
 
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
@@ -106,35 +124,37 @@ let
   '';
 in
 {
-  environment.systemPackages = (with pkgs; [
-    b3sum
-    backup-chainweb
-    btop
-    dh
-    dig
-    ethtool
-    gh
-    gnupg
-    # haskellPackages.sizes
-    httm
-    iperf3
-    jq
-    linkdups
-    lsof
-    mailutils
-    nettools
-    openssl
-    pinentry
-    python3
-    restic
-    ripgrep
-    socat
-    sops
-    task-master-ai
-    traceroute
-    workspace-update
-    zfs-prune-snapshots
-  ]) ++ [
-    pkgs.dovecot-fts-flatcurve
-  ];
+  environment.systemPackages =
+    (with pkgs; [
+      b3sum
+      backup-chainweb
+      btop
+      dh
+      dig
+      ethtool
+      gh
+      gnupg
+      # haskellPackages.sizes
+      httm
+      iperf3
+      jq
+      linkdups
+      lsof
+      mailutils
+      nettools
+      openssl
+      pinentry
+      python3
+      restic
+      ripgrep
+      socat
+      sops
+      task-master-ai
+      traceroute
+      workspace-update
+      zfs-prune-snapshots
+    ])
+    ++ [
+      pkgs.dovecot-fts-flatcurve
+    ];
 }

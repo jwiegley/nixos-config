@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   updateContainersScript = pkgs.writeShellScript "update-containers" ''
@@ -85,9 +90,17 @@ let
         shift 2
     fi
 
-    # Note: The GitHub token should be managed more securely, e.g., via systemd credentials
-    # or environment files. For now, keeping as-is for compatibility.
-    export GITHUB_TOKEN=XXXX
+    # Read GitHub token from SOPS secret
+    # When run as a systemd service, the token is available via LoadCredential
+    # When run manually, read from the SOPS secret path directly
+    if [[ -n "''${CREDENTIALS_DIRECTORY:-}" ]]; then
+        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/github-token")
+    elif [[ -f "${config.sops.secrets."github-token".path}" ]]; then
+        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "${config.sops.secrets."github-token".path}")
+    else
+        echo "ERROR: GitHub token not found. Ensure SOPS secret 'github-token' is configured." >&2
+        exit 1
+    fi
 
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
@@ -105,6 +118,15 @@ let
   '';
 in
 {
+  # SOPS secret for GitHub token used by workspace update
+  sops.secrets."github-token" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "johnw";
+    group = "johnw";
+    mode = "0400";
+    restartUnits = [ "git-workspace-archive.service" ];
+  };
+
   systemd = {
     # Git workspace archive
     services.git-workspace-archive = {
@@ -114,10 +136,14 @@ in
         gitAndTools.git-workspace
         openssh
       ];
+      after = [ "sops-nix.service" ];
+      wants = [ "sops-nix.service" ];
       serviceConfig = {
         User = "johnw";
         Group = "johnw";
         ExecStart = "${workspaceUpdateScript} --archive";
+        # Load GitHub token as a systemd credential
+        LoadCredential = "github-token:${config.sops.secrets."github-token".path}";
       };
     };
 
@@ -163,7 +189,10 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      after = [ "network-online.target" "podman.service" ];
+      after = [
+        "network-online.target"
+        "podman.service"
+      ];
       wants = [ "network-online.target" ];
     };
 

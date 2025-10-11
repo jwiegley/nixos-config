@@ -1,44 +1,44 @@
 { config, lib, pkgs, ... }:
 
+let
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  inherit (mkQuadletLib) mkQuadletService;
+in
 {
-  # SillyTavern container configuration
-  virtualisation.quadlet.containers.silly-tavern = {
-    containerConfig = {
+  imports = [
+    (mkQuadletService {
+      name = "silly-tavern";
       image = "ghcr.io/sillytavern/sillytavern:latest";
+      port = 8083;
+      requiresPostgres = false;
+
       publishPorts = [ "127.0.0.1:8083:8000/tcp" ];
+
       environments = {
         USER_PASSWORD = "";
         AUTO_UPDATE = "false";
       };
+
       volumes = [
         "/var/lib/silly-tavern/config:/home/node/app/config:Z"
         "/var/lib/silly-tavern/data:/home/node/app/data:Z"
       ];
-      networks = [ "podman" ];
-    };
-    unitConfig = {
-      After = [ "podman.service" ];
-    };
-  };
 
-  # Nginx virtual host for SillyTavern
-  services.nginx.virtualHosts."silly-tavern.vulcan.lan" = {
-    forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/silly-tavern.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/silly-tavern.vulcan.lan.key";
-    locations."/" = {
-      proxyPass = "http://127.0.0.1:8083/";
-      proxyWebsockets = true;
-      extraConfig = ''
-        proxy_buffering off;
-        client_max_body_size 100M;
-      '';
-    };
-  };
+      nginxVirtualHost = {
+        enable = true;
+        proxyPass = "http://127.0.0.1:8083/";
+        proxyWebsockets = true;
+        extraConfig = ''
+          proxy_buffering off;
+          client_max_body_size 100M;
+        '';
+      };
 
-  # State directories for SillyTavern
-  systemd.tmpfiles.rules = [
-    "d /var/lib/silly-tavern/config 0755 1000 100 -"
-    "d /var/lib/silly-tavern/data 0755 1000 100 -"
+      # Custom tmpfiles with specific UID/GID for container user
+      tmpfilesRules = [
+        "d /var/lib/silly-tavern/config 0755 1000 100 -"
+        "d /var/lib/silly-tavern/data 0755 1000 100 -"
+      ];
+    })
   ];
 }

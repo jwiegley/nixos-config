@@ -1,10 +1,18 @@
 { config, lib, pkgs, ... }:
 
+let
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  inherit (mkQuadletLib) mkQuadletService;
+in
 {
   # Elasticsearch 8 container (RAGFlow requires ES 8+, NixOS only has ES 7)
-  virtualisation.quadlet.containers.elasticsearch = {
-    containerConfig = {
+
+  imports = [
+    (mkQuadletService {
+      name = "elasticsearch";
       image = "docker.io/elasticsearch:8.17.0";
+      port = 9200;
+      requiresPostgres = false;
 
       # Bind to both localhost and podman gateway
       publishPorts = [
@@ -19,27 +27,20 @@
         "/var/lib/elasticsearch:/usr/share/elasticsearch/data"
       ];
 
-      networks = [ "podman" ];
-    };
+      # No nginx virtual host (direct access)
+      nginxVirtualHost = null;
 
-    unitConfig = {
-      After = [ "podman.service" ];
-      Wants = [ "podman.service" ];
-    };
+      # Custom tmpfiles with specific UID for Elasticsearch
+      tmpfilesRules = [
+        "d /var/lib/elasticsearch 0750 1000 1000 -"  # ES runs as UID 1000 in container
+        "d /etc/elasticsearch 0755 root root -"
+      ];
 
-    serviceConfig = {
-      Restart = "always";
-      RestartSec = "10s";
-      StartLimitIntervalSec = "300";
-      StartLimitBurst = "5";
-      TimeoutStartSec = "300";
-    };
-  };
-
-  # State directory for Elasticsearch data
-  systemd.tmpfiles.rules = [
-    "d /var/lib/elasticsearch 0750 1000 1000 -"  # ES runs as UID 1000 in container
-    "d /etc/elasticsearch 0755 root root -"
+      # Longer startup timeout for Elasticsearch
+      extraServiceConfig = {
+        TimeoutStartSec = "300";
+      };
+    })
   ];
 
   # Create Elasticsearch environment file
@@ -55,6 +56,7 @@
   };
 
   # Firewall rules for podman network
-  networking.firewall.interfaces.podman0.allowedTCPPorts =
-    lib.mkIf true [ 9200 ];
+  networking.firewall.interfaces.podman0.allowedTCPPorts = [
+    9200
+  ];
 }

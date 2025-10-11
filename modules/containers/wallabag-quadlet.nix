@@ -1,12 +1,21 @@
 { config, lib, pkgs, ... }:
 
+let
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  inherit (mkQuadletLib) mkQuadletService;
+in
 {
-  # Wallabag container configuration
-  virtualisation.quadlet.containers.wallabag = {
-    containerConfig = {
+  imports = [
+    (mkQuadletService {
+      name = "wallabag";
       image = "docker.io/wallabag/wallabag:latest";
-      publishPorts = [ "127.0.0.1:9091:80/tcp" ];
-      environmentFiles = [ config.sops.secrets."wallabag-secrets".path ];
+      port = 9091;
+      requiresPostgres = true;
+
+      secrets = {
+        wallabagPassword = "wallabag-secrets";
+      };
+
       environments = {
         SYMFONY__ENV__DATABASE_DRIVER = "pdo_pgsql";
         SYMFONY__ENV__DATABASE_HOST = "10.88.0.1";  # Use Podman bridge IP directly
@@ -20,50 +29,17 @@
         SYMFONY__ENV__TWOFACTOR_AUTH = "false";
         POPULATE_DATABASE = "False";  # Database already exists, skip setup
       };
-      volumes = [ ];  # Wallabag manages its own data internally
-      networks = [ "podman" ];
-    };
-    unitConfig = {
-      After = [ "sops-nix.service" "postgresql.service" "podman.service" ];
-      Wants = [ "sops-nix.service" ];
-      Requires = [ "postgresql.service" ];
-    };
-    serviceConfig = {
-      # Wait for PostgreSQL to be ready to accept connections
-      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 30";
-      # Enhanced restart behavior for resilience
-      Restart = "always";
-      RestartSec = "10s";
-      StartLimitIntervalSec = "300";
-      StartLimitBurst = "5";
-    };
-  };
 
-  # Nginx virtual host for Wallabag
-  services.nginx.virtualHosts."wallabag.vulcan.lan" = {
-    forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
-    locations."/" = {
-      proxyPass = "http://127.0.0.1:9091/";
-      extraConfig = ''
-        proxy_read_timeout 1h;
-        proxy_buffering off;
-      '';
-    };
-  };
+      publishPorts = [ "127.0.0.1:9091:80/tcp" ];
 
-  # SOPS secret for Wallabag
-  sops.secrets."wallabag-secrets" = {
-    sopsFile = ../../secrets.yaml;
-    owner = "root";
-    group = "root";
-    mode = "0400";
-    restartUnits = [ "wallabag.service" ];
-  };
-
-  # State directory for Wallabag
-  systemd.tmpfiles.rules = [
-    "d /var/lib/wallabag 0755 root root -"
+      nginxVirtualHost = {
+        enable = true;
+        proxyPass = "http://127.0.0.1:9091/";
+        extraConfig = ''
+          proxy_read_timeout 1h;
+          proxy_buffering off;
+        '';
+      };
+    })
   ];
 }

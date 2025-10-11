@@ -1,6 +1,34 @@
 { config, lib, pkgs, ... }:
 
+let
+  # Import helper functions
+  common = import ../lib/common.nix { };
+  mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
+  inherit (mkPostgresLib) mkPostgresUserSetup;
+in
 {
+  imports = [
+    # Set up PostgreSQL passwords for database users
+    (mkPostgresUserSetup {
+      user = "nextcloud";
+      database = "nextcloud";
+      secretPath = config.sops.secrets."nextcloud-db-password".path;
+      dependentService = "nextcloud-setup.service";
+    })
+    (mkPostgresUserSetup {
+      user = "ragflow";
+      database = "ragflow";
+      secretPath = config.sops.secrets."ragflow-db-password".path;
+      dependentService = "ragflow.service";
+    })
+    (mkPostgresUserSetup {
+      user = "nocobase";
+      database = "nocobase";
+      secretPath = config.sops.secrets."nocobase-db-password".path;
+      dependentService = "nocobase.service";
+    })
+  ];
+
   services = {
     postgresql = {
       enable = true;
@@ -96,87 +124,16 @@
     };
   };
 
-  # Set PostgreSQL password for nextcloud user
-  systemd.services.postgresql-nextcloud-setup = {
-    description = "Set PostgreSQL password for Nextcloud user";
-    after = [ "postgresql.service" ];
-    wants = [ "postgresql.service" ];
-    before = [ "nextcloud-setup.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      User = "postgres";
-      RemainAfterExit = true;
-    };
-
-    script = ''
-      # Check if password is already set by trying to connect
-      if ! ${config.services.postgresql.package}/bin/psql -U nextcloud -d nextcloud -c "SELECT 1" 2>/dev/null; then
-        # Set the password from the SOPS secret file
-        ${config.services.postgresql.package}/bin/psql -c "ALTER USER nextcloud WITH PASSWORD '$(cat ${config.sops.secrets."nextcloud-db-password".path})'"
-      fi
-    '';
-  };
-
-  # Set PostgreSQL password for ragflow user
-  systemd.services.postgresql-ragflow-setup = {
-    description = "Set PostgreSQL password for RAGFlow user";
-    after = [ "postgresql.service" ];
-    wants = [ "postgresql.service" ];
-    before = [ "ragflow.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      User = "postgres";
-      RemainAfterExit = true;
-    };
-
-    script = ''
-      # Check if password is already set by trying to connect
-      if ! ${config.services.postgresql.package}/bin/psql -U ragflow -d ragflow -c "SELECT 1" 2>/dev/null; then
-        # Set the password from the SOPS secret file
-        ${config.services.postgresql.package}/bin/psql -c "ALTER USER ragflow WITH PASSWORD '$(cat ${config.sops.secrets."ragflow-db-password".path})'"
-      fi
-    '';
-  };
-
-  # Set PostgreSQL password for nocobase user
-  systemd.services.postgresql-nocobase-setup = {
-    description = "Set PostgreSQL password for NocoBase user";
-    after = [ "postgresql.service" "postgresql-setup.service" ];
-    wants = [ "postgresql.service" ];
-    requires = [ "postgresql-setup.service" ];
-    before = [ "nocobase.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      User = "postgres";
-      RemainAfterExit = true;
-    };
-
-    script = ''
-      # Check if password is already set by trying to connect
-      if ! ${config.services.postgresql.package}/bin/psql -U nocobase -d nocobase -c "SELECT 1" 2>/dev/null; then
-        # Set the password from the SOPS secret file
-        ${config.services.postgresql.package}/bin/psql -c "ALTER USER nocobase WITH PASSWORD '$(cat ${config.sops.secrets."nocobase-db-password".path})'"
-      fi
-    '';
-  };
-
-  # SOPS secret for RAGFlow database password
+  # SOPS secrets for database passwords
   sops.secrets."ragflow-db-password" = {
-    sopsFile = ../../secrets.yaml;
+    sopsFile = common.secretsPath;
     owner = "postgres";
     group = "postgres";
     mode = "0400";
   };
 
-  # SOPS secret for NocoBase database password
   sops.secrets."nocobase-db-password" = {
-    sopsFile = ../../secrets.yaml;
+    sopsFile = common.secretsPath;
     owner = "postgres";
     group = "postgres";
     mode = "0400";

@@ -1,5 +1,9 @@
 { config, lib, pkgs, ... }:
 
+let
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  inherit (mkQuadletLib) mkQuadletService;
+in
 {
   # OPNsense Exporter container configuration
   #
@@ -16,15 +20,23 @@
   #   4. Set OPNSENSE_EXPORTER_OPS_INSECURE back to "false"
   #   5. Re-enable the volume mounts for CA certificates
   #   6. Re-enable SSL_CERT_FILE environment variable
-  virtualisation.quadlet.containers.opnsense-exporter = {
-    containerConfig = {
+
+  imports = [
+    (mkQuadletService {
+      name = "opnsense-exporter";
       image = "ghcr.io/athennamind/opnsense-exporter:latest";
+      port = 9273;
+      requiresPostgres = false;
+
       # Bind to localhost for Prometheus scraping
       publishPorts = [
         "127.0.0.1:9273:8080/tcp"
       ];
-      # Environment file containing OPNSENSE_EXPORTER_OPS_API_KEY and OPNSENSE_EXPORTER_OPS_API_SECRET
-      environmentFiles = [ config.sops.secrets."opnsense-exporter-secrets".path ];
+
+      secrets = {
+        opnsenseApiKey = "opnsense-exporter-secrets";
+      };
+
       environments = {
         OPNSENSE_EXPORTER_OPS_PROTOCOL = "http";  # Proxy uses HTTP internally
         OPNSENSE_EXPORTER_OPS_API = "10.88.0.1:8444";  # Point to nginx proxy on podman0 bridge
@@ -33,35 +45,31 @@
         # Disable SSL cert since we're using insecure mode
         # SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       };
+
       # Volumes disabled since we're using insecure mode as a workaround for gateway collector issue
       # volumes = [
       #   "/var/lib/opnsense-exporter-ca.crt:/usr/local/share/ca-certificates/opnsense-ca.crt:ro"
       #   "/var/lib/opnsense-exporter-ca.crt:/etc/ssl/certs/ca-certificates.crt:ro"
       # ];
+
       # Command line arguments for the exporter
       exec = "--log.level=info --log.format=json --web.listen-address=:8080";
-      networks = [ "podman" ];
-      autoUpdate = "registry";
-    };
-    unitConfig = {
-      After = [ "sops-nix.service" "network-online.target" "podman.service" "opnsense-api-transformer.service" ];
-      Wants = [ "sops-nix.service" "network-online.target" "opnsense-api-transformer.service" ];
-    };
-    serviceConfig = {
-      # Restart policy
-      Restart = "always";
-      RestartSec = "10s";
-    };
-  };
 
-  # SOPS secret for OPNsense exporter credentials
-  sops.secrets."opnsense-exporter-secrets" = {
-    sopsFile = ../../secrets.yaml;
-    owner = "root";
-    group = "root";
-    mode = "0400";
-    restartUnits = [ "opnsense-exporter.service" ];
-  };
+      # No nginx virtual host for this exporter (Prometheus scrapes directly)
+      nginxVirtualHost = null;
+
+      # Wait for the API transformer
+      extraUnitConfig = {
+        After = [ "opnsense-api-transformer.service" ];
+        Wants = [ "opnsense-api-transformer.service" ];
+      };
+
+      # Enable auto-update
+      extraContainerConfig = {
+        autoUpdate = "registry";
+      };
+    })
+  ];
 
   # Open firewall port on podman0 interface for container access
   networking.firewall.interfaces = {

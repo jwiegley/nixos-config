@@ -1,53 +1,46 @@
 { config, lib, pkgs, ... }:
 
+let
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  inherit (mkQuadletLib) mkQuadletService;
+in
 {
-  # LiteLLM container configuration
-  virtualisation.quadlet.containers.litellm = {
-    containerConfig = {
+  imports = [
+    (mkQuadletService {
+      name = "litellm";
       image = "ghcr.io/berriai/litellm-database:main-stable";
+      port = 4000;
+      requiresPostgres = true;
+
       # Bind to both localhost and podman gateway for container access
       publishPorts = [
         "127.0.0.1:4000:4000/tcp"
         "10.88.0.1:4000:4000/tcp"
       ];
-      environmentFiles = [ config.sops.secrets."litellm-secrets".path ];
+
+      secrets = {
+        litellmApiKey = "litellm-secrets";
+      };
+
       volumes = [ "/etc/litellm/config.yaml:/app/config.yaml:ro" ];
       exec = "--config /app/config.yaml";
-      networks = [ "podman" ];
-      # Use host DNS via Podman gateway for .lan domain resolution
-      dns = [ "10.88.0.1" ];
-    };
-    unitConfig = {
-      After = [ "sops-nix.service" "postgresql.service" "podman.service" ];
-      Wants = [ "sops-nix.service" ];
-      Requires = [ "postgresql.service" ];
-    };
-    serviceConfig = {
-      # Wait for PostgreSQL to be ready to accept connections
-      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 30";
-      # Enhanced restart behavior for resilience
-      Restart = "always";
-      RestartSec = "10s";
-      StartLimitIntervalSec = "300";
-      StartLimitBurst = "5";
-    };
-  };
 
-  # Nginx virtual host for LiteLLM
-  services.nginx.virtualHosts."litellm.vulcan.lan" = {
-    forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/litellm.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/litellm.vulcan.lan.key";
-    locations."/" = {
-      proxyPass = "http://127.0.0.1:4000/";
-      proxyWebsockets = true;
-      extraConfig = ''
-        proxy_buffering off;
-        client_max_body_size 20M;
-        proxy_read_timeout 2h;
-      '';
-    };
-  };
+      nginxVirtualHost = {
+        enable = true;
+        proxyPass = "http://127.0.0.1:4000/";
+        proxyWebsockets = true;
+        extraConfig = ''
+          proxy_buffering off;
+          client_max_body_size 20M;
+          proxy_read_timeout 2h;
+        '';
+      };
+
+      tmpfilesRules = [
+        "d /etc/litellm 0755 root root -"
+      ];
+    })
+  ];
 
   # Redis server for litellm
   services.redis.servers.litellm = {
@@ -58,20 +51,6 @@
       protected-mode = "no";
     };
   };
-
-  # SOPS secret for LiteLLM
-  sops.secrets."litellm-secrets" = {
-    sopsFile = ../../secrets.yaml;
-    owner = "root";
-    group = "root";
-    mode = "0400";
-    restartUnits = [ "litellm.service" ];
-  };
-
-  # State directory for LiteLLM config
-  systemd.tmpfiles.rules = [
-    "d /etc/litellm 0755 root root -"
-  ];
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     4000 # litellm

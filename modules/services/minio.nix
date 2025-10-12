@@ -81,6 +81,10 @@ EOF
       Group = "minio";
     };
 
+    environment = {
+      HOME = "/var/lib/minio";
+    };
+
     path = [ pkgs.minio-client ];
 
     script = ''
@@ -116,6 +120,7 @@ EOF
   # Ensure data and runtime directories exist with correct permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/minio/data 0750 minio minio -"
-    "d /run/minio 0750 root root -"
+    "d /var/lib/minio/.mc 0750 minio minio -"
+    "d /run/minio 0750 minio minio -"
   ];
 }

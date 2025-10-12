@@ -987,6 +987,17 @@
     };
   };
 
+  # Prometheus scrape configuration for Promtail metrics
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "promtail";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.promtail.configuration.server.http_listen_port}" ];
+      }];
+      scrape_interval = "30s";
+    }
+  ];
+
   # Helper script to test Promtail configuration
   environment.systemPackages = with pkgs; [
     (writeShellScriptBin "check-promtail" ''

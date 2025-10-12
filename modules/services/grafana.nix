@@ -297,6 +297,17 @@
     wants = [ "prometheus.service" ];
   };
 
+  # Prometheus scrape configuration for Grafana metrics
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "grafana";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.grafana.settings.server.http_port}" ];
+      }];
+      scrape_interval = "30s";
+    }
+  ];
+
   # Add monitoring check script
   environment.systemPackages = with pkgs; [
     (writeShellScriptBin "check-grafana" ''

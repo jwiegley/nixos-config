@@ -478,16 +478,26 @@ in
             {
               name = "John Home Composite";
               unique_id = "john_home_composite";
-              state = "{{ is_state('device_tracker.router_john_iphone', 'home') or is_state('device_tracker.john_iphone', 'home') }}";
+              state = "{{ is_state('device_tracker.opnsense_john_iphone', 'home') or is_state('device_tracker.asus_john_iphone', 'home') }}";
               device_class = "occupancy";
               icon = "mdi:account-network";
+              attributes = {
+                sources = "device_tracker.router_john_iphone, device_tracker.asus_john_iphone";
+                opnsense_state = "{{ states('device_tracker.opnsense_john_iphone') }}";
+                asus_state = "{{ states('device_tracker.asus_john_iphone') }}";
+              };
             }
             {
               name = "Nasim Home Composite";
               unique_id = "nasim_home_composite";
-              state = "{{ is_state('device_tracker.router_iphone_lan', 'home') or is_state('device_tracker.nasim_iphone', 'home') }}";
+              state = "{{ is_state('device_tracker.opnsense_nasim_iphone', 'home') or is_state('device_tracker.asus_nasim_iphone', 'home') }}";
               device_class = "occupancy";
               icon = "mdi:account-network";
+              attributes = {
+                sources = "device_tracker.opnsense_nasim_iphone, device_tracker.asus_nasim_iphone";
+                opnsense_state = "{{ states('device_tracker.opnsense_nasim_iphone') }}";
+                asus_state = "{{ states('device_tracker.asus_nasim_iphone') }}";
+              };
             }
           ];
         }

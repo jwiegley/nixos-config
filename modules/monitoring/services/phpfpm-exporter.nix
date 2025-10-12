@@ -16,6 +16,10 @@
 
   # Configure the exporter to scrape Nextcloud PHP-FPM
   systemd.services.prometheus-php-fpm-exporter = {
+    # Ensure exporter starts after PHP-FPM is ready
+    after = [ "phpfpm-nextcloud.service" ];
+    wants = [ "phpfpm-nextcloud.service" ];
+
     serviceConfig = {
       # Add environment variables for PHP-FPM scraping
       Environment = [

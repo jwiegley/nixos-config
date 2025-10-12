@@ -18,6 +18,9 @@
     ../monitoring/services/dns-query-logs.nix
     ../monitoring/services/monitoring-utils.nix
     ../monitoring/services/prometheus-nginx.nix
+    ../monitoring/services/nginx-exporter.nix
+    ../monitoring/services/redis-exporter.nix
+    ../monitoring/services/phpfpm-exporter.nix
     ../monitoring/services/health-check-exporters.nix
     ../monitoring/services/certificate-exporter.nix
     ../monitoring/services/remote-nodes.nix

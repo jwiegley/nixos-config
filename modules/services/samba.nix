@@ -1,5 +1,67 @@
 { config, lib, pkgs, ... }:
 
+let
+  # List of ZFS filesystems to create Samba shares for
+  # Generated from: zfs list -t filesystem -H -o name,mountpoint | grep '^tank' | grep -v 'none\|legacy'
+  zfsFilesystems = [
+    { name = "tank"; mountpoint = "/tank"; }
+    { name = "tank/Audio"; mountpoint = "/tank/Audio"; }
+    { name = "tank/Backups"; mountpoint = "/tank/Backups"; }
+    { name = "tank/Backups/Assembly"; mountpoint = "/tank/Backups/Assembly"; }
+    { name = "tank/Backups/Assembly/Drive"; mountpoint = "/tank/Backups/Assembly/Drive"; }
+    { name = "tank/Backups/Git"; mountpoint = "/tank/Backups/Git"; }
+    { name = "tank/Backups/Images"; mountpoint = "/tank/Backups/Images"; }
+    { name = "tank/Backups/Kadena"; mountpoint = "/tank/Backups/Kadena"; }
+    { name = "tank/Backups/Kadena/Drive"; mountpoint = "/tank/Backups/Kadena/Drive"; }
+    { name = "tank/Backups/Kadena/Slack"; mountpoint = "/tank/Backups/Kadena/Slack"; }
+    { name = "tank/Backups/Kadena/chainweb"; mountpoint = "/tank/Backups/Kadena/chainweb"; }
+    { name = "tank/Backups/rpool"; mountpoint = "/tank/Backups/rpool"; }
+    { name = "tank/Backups/rpool/home"; mountpoint = "/tank/Backups/rpool/home"; }
+    { name = "tank/Backups/rpool/nix"; mountpoint = "/tank/Backups/rpool/nix"; }
+    { name = "tank/Backups/rpool/root"; mountpoint = "/tank/Backups/rpool/root"; }
+    { name = "tank/Databases"; mountpoint = "/tank/Databases"; }
+    { name = "tank/Desktop"; mountpoint = "/tank/Desktop"; }
+    { name = "tank/Documents"; mountpoint = "/tank/Documents"; }
+    { name = "tank/Downloads"; mountpoint = "/tank/Downloads"; }
+    { name = "tank/Home"; mountpoint = "/tank/Home"; }
+    { name = "tank/Machines"; mountpoint = "/tank/Machines"; }
+    { name = "tank/Media"; mountpoint = "/tank/Media"; }
+    { name = "tank/Models"; mountpoint = "/tank/Models"; }
+    { name = "tank/Models/HuggingFace"; mountpoint = "/tank/Models/HuggingFace"; }
+    { name = "tank/Models/Llama.cpp"; mountpoint = "/tank/Models/Llama.cpp"; }
+    { name = "tank/Movies"; mountpoint = "/tank/Movies"; }
+    { name = "tank/Music"; mountpoint = "/tank/Music"; }
+    { name = "tank/Nasim"; mountpoint = "/tank/Nasim"; }
+    { name = "tank/Nextcloud"; mountpoint = "/tank/Nextcloud"; }
+    { name = "tank/Photos"; mountpoint = "/tank/Photos"; }
+    { name = "tank/Pictures"; mountpoint = "/tank/Pictures"; }
+    { name = "tank/Video"; mountpoint = "/tank/Video"; }
+    { name = "tank/Video/Zoom"; mountpoint = "/tank/Video/Zoom"; }
+    { name = "tank/doc"; mountpoint = "/tank/doc"; }
+    { name = "tank/iCloud"; mountpoint = "/tank/iCloud"; }
+    { name = "tank/kadena"; mountpoint = "/tank/kadena"; }
+    { name = "tank/src"; mountpoint = "/tank/src"; }
+  ];
+
+  # Function to generate a Samba share name from ZFS dataset name
+  # Replaces "/" with "-" in the dataset name
+  mkShareName = name: builtins.replaceStrings ["/"] ["-"] name;
+
+  # Generate Samba share configurations for all ZFS filesystems
+  zfsShares = lib.listToAttrs (map (fs: {
+    name = mkShareName fs.name;
+    value = {
+      path = fs.mountpoint;
+      comment = "ZFS: ${fs.name}";
+      "valid users" = "johnw assembly";
+      "read only" = "no";
+      browseable = "yes";
+      "create mask" = "0664";
+      "directory mask" = "0775";
+    };
+  }) zfsFilesystems);
+
+in
 {
   # SOPS secrets for Samba user passwords
   sops.secrets."samba/johnw-password" = {
@@ -79,128 +141,7 @@
           "logging" = "systemd";
           "log level" = "1";
         };
-
-        # Private user shares for johnw
-        "johnw-documents" = {
-          path = "/tank/Documents";
-          comment = "johnw's Documents";
-          "valid users" = "johnw";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0644";
-          "directory mask" = "0755";
-          "force user" = "johnw";
-          "force group" = "johnw";
-        };
-
-        "johnw-downloads" = {
-          path = "/tank/Downloads";
-          comment = "johnw's Downloads";
-          "valid users" = "johnw";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0644";
-          "directory mask" = "0755";
-          "force user" = "johnw";
-          "force group" = "johnw";
-        };
-
-        "johnw-home" = {
-          path = "/tank/Home";
-          comment = "johnw's Home";
-          "valid users" = "johnw";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0644";
-          "directory mask" = "0755";
-          "force user" = "johnw";
-          "force group" = "johnw";
-        };
-
-        # Private user shares for assembly
-        "assembly-home" = {
-          path = "/home/assembly";
-          comment = "assembly's Home";
-          "valid users" = "assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0644";
-          "directory mask" = "0755";
-          "force user" = "assembly";
-          "force group" = "assembly";
-        };
-
-        # Shared media directories (accessible to both users)
-        "media" = {
-          path = "/tank/Media";
-          comment = "Media Files";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "photos" = {
-          path = "/tank/Photos";
-          comment = "Photo Collection";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "pictures" = {
-          path = "/tank/Pictures";
-          comment = "Pictures";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "music" = {
-          path = "/tank/Music";
-          comment = "Music Library";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "video" = {
-          path = "/tank/Video";
-          comment = "Video Files";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "audio" = {
-          path = "/tank/Audio";
-          comment = "Audio Files";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-
-        "movies" = {
-          path = "/tank/Movies";
-          comment = "Movie Collection";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
-        };
-      };
+      } // zfsShares;
     };
 
     # Web Services Dynamic Discovery (helps Windows 10+ discover the server)

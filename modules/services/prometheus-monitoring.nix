@@ -26,5 +26,6 @@
     ../monitoring/services/remote-nodes.nix
     ../monitoring/services/home-assistant-exporter.nix
     ../monitoring/services/litellm-exporter.nix
+    ../monitoring/services/minio-exporter.nix
   ];
 }

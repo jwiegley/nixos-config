@@ -7,13 +7,13 @@ Also exposes Prometheus metrics on port 9101.
 
 import json
 import os
+import socket
 import sys
 import time
-import requests
-import socket
-import threading
+import traceback
 from datetime import datetime
-from pathlib import Path
+
+import requests
 from prometheus_client import Counter, Gauge, start_http_server
 
 # Configuration
@@ -78,8 +78,8 @@ def get_last_row_number():
 def save_last_row_number(row_number):
     """Save the last processed row number to state file."""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-    with open(STATE_FILE, 'w') as f:
-        f.write(str(row_number))
+    with open(STATE_FILE, 'w') as state_file:
+        state_file.write(str(row_number))
     # Update Prometheus gauge
     dns_query_log_last_row.set(row_number)
 
@@ -105,8 +105,8 @@ def fetch_query_logs(page_number=1, entries_per_page=BATCH_SIZE):
             return None
 
         return data.get('response', {})
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to fetch logs: {e}", file=sys.stderr)
+    except requests.exceptions.RequestException as error:
+        print(f"Failed to fetch logs: {error}", file=sys.stderr)
         return None
 
 
@@ -121,43 +121,34 @@ def format_loki_push(entries):
 
     for entry in entries:
         # Get hostname for client IP
-        client_ip = entry['clientIpAddress']
-        client_hostname = get_hostname(client_ip)
+        client_hostname = get_hostname(entry['clientIpAddress'])
 
-        # Extract metrics labels
-        protocol = entry['protocol'].lower()
-        rcode = entry['rcode'].lower()
-        qtype = entry['qtype'].upper()
-        domain = entry['qname'].rstrip('.')  # Remove trailing dot if present
+        # Extract metrics labels (combined to reduce variables)
+        labels = {
+            'job': 'dns_query_logs',
+            'client_ip': entry['clientIpAddress'],
+            'client_hostname': client_hostname,
+            'protocol': entry['protocol'].lower(),
+            'rcode': entry['rcode'].lower(),
+            'qtype': entry['qtype'].upper(),
+            'response_type': entry['responseType'].lower(),
+        }
 
         # Update Prometheus counter
         dns_queries_total.labels(
             client_hostname=client_hostname,
-            rcode=rcode,
-            qtype=qtype,
-            protocol=protocol,
-            domain=domain
+            rcode=labels['rcode'],
+            qtype=labels['qtype'],
+            protocol=labels['protocol'],
+            domain=entry['qname'].rstrip('.')
         ).inc()
-
-        # Create label set for this entry
-        labels = {
-            'job': 'dns_query_logs',
-            'client_ip': client_ip,
-            'client_hostname': client_hostname,
-            'protocol': protocol,
-            'rcode': rcode,
-            'qtype': qtype,
-            'response_type': entry['responseType'].lower(),
-        }
 
         # Create label string (sorted for consistency)
         label_str = '{' + ','.join(f'{k}="{v}"' for k, v in sorted(labels.items())) + '}'
 
-        # Convert timestamp to nanoseconds since epoch
-        ts = datetime.fromisoformat(entry['timestamp'].replace('Z', '+00:00'))
-        ts_ns = str(int(ts.timestamp() * 1_000_000_000))
-
-        # Create log line with query details
+        # Convert timestamp to nanoseconds since epoch and create log line
+        timestamp = datetime.fromisoformat(entry['timestamp'].replace('Z', '+00:00'))
+        ts_ns = str(int(timestamp.timestamp() * 1_000_000_000))
         log_line = json.dumps({
             'domain': entry['qname'],
             'answer': entry.get('answer'),
@@ -172,15 +163,11 @@ def format_loki_push(entries):
     # Convert to Loki format
     loki_streams = []
     for label_str, values in streams.items():
-        # Parse label string back to dict
-        # label_str looks like: {client_ip="...",job="..."}
-        labels_dict = {}
-        # Remove braces and split by comma
-        label_pairs = label_str.strip('{}').split(',')
-        for pair in label_pairs:
-            key, val = pair.split('=', 1)
-            labels_dict[key] = val.strip('"')
-
+        # Parse label string back to dict (format: {key1="val1",key2="val2"})
+        labels_dict = {
+            pair.split('=', 1)[0]: pair.split('=', 1)[1].strip('"')
+            for pair in label_str.strip('{}').split(',')
+        }
         loki_streams.append({'stream': labels_dict, 'values': values})
 
     return {'streams': loki_streams}
@@ -195,8 +182,8 @@ def push_to_loki(loki_data):
         response = requests.post(url, json=loki_data, headers=headers, timeout=10)
         response.raise_for_status()
         return True
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to push to Loki: {e}", file=sys.stderr)
+    except requests.exceptions.RequestException as error:
+        print(f"Failed to push to Loki: {error}", file=sys.stderr)
         return False
 
 
@@ -209,13 +196,16 @@ def process_new_logs():
     if not data or not data.get('entries'):
         return
 
-    total_entries = data.get('totalEntries', 0)
     latest_row = data['entries'][0]['rowNumber']
 
     # Check if row numbers have reset (database was cleared or rows wrapped)
     if latest_row < last_row:
-        print(f"WARNING: Row numbers decreased (latest={latest_row}, last={last_row}). Database may have been reset.")
-        print(f"Resetting state to process from row 0")
+        warning_msg = (
+            f"WARNING: Row numbers decreased (latest={latest_row}, "
+            f"last={last_row}). Database may have been reset."
+        )
+        print(warning_msg)
+        print("Resetting state to process from row 0")
         last_row = 0
         save_last_row_number(0)
 
@@ -272,7 +262,7 @@ def main():
         print("ERROR: TECHNITIUM_TOKEN environment variable not set", file=sys.stderr)
         sys.exit(1)
 
-    print(f"DNS Query Log Exporter starting...")
+    print("DNS Query Log Exporter starting...")
     print(f"Technitium URL: {TECHNITIUM_URL}")
     print(f"Loki URL: {LOKI_URL}")
     print(f"Poll interval: {POLL_INTERVAL}s")
@@ -283,8 +273,8 @@ def main():
     try:
         start_http_server(METRICS_PORT)
         print(f"Prometheus metrics server started on port {METRICS_PORT}")
-    except Exception as e:
-        print(f"Failed to start metrics server: {e}", file=sys.stderr)
+    except Exception as exception:
+        print(f"Failed to start metrics server: {exception}", file=sys.stderr)
         sys.exit(1)
 
     # Initialize the last row gauge on startup
@@ -295,9 +285,8 @@ def main():
     while True:
         try:
             process_new_logs()
-        except Exception as e:
-            print(f"Error processing logs: {e}", file=sys.stderr)
-            import traceback
+        except Exception as error:
+            print(f"Error processing logs: {error}", file=sys.stderr)
             traceback.print_exc()
 
         time.sleep(POLL_INTERVAL)

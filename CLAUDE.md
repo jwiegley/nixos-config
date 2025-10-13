@@ -316,6 +316,52 @@ sudo -u postgres pg_dump nextcloud > nextcloud-backup.sql
 sudo systemctl status postgresql
 ```
 
+### PostgreSQL Backups
+
+**Automated daily backups** of all PostgreSQL databases run at 2:00 AM via systemd timer.
+
+```bash
+# Check backup service status
+sudo systemctl status postgresql-backup.service
+sudo systemctl status postgresql-backup.timer
+
+# View backup logs
+sudo journalctl -u postgresql-backup -f
+sudo journalctl -u postgresql-backup --since "1 day ago"
+
+# Trigger manual backup
+sudo systemctl start postgresql-backup.service
+
+# Check backup file
+ls -lh /tank/Backups/PostgreSQL/postgresql-backup.sql
+sudo -u postgres head -20 /tank/Backups/PostgreSQL/postgresql-backup.sql
+
+# Verify backup size and timestamp
+stat /tank/Backups/PostgreSQL/postgresql-backup.sql
+
+# Restore from backup (full cluster restore)
+sudo systemctl stop postgresql
+sudo -u postgres psql -f /tank/Backups/PostgreSQL/postgresql-backup.sql
+
+# Restore specific database only
+sudo -u postgres psql -d <database> -f /tank/Backups/PostgreSQL/postgresql-backup.sql
+```
+
+**Backup Details:**
+- **Location:** `/tank/Backups/PostgreSQL/postgresql-backup.sql`
+- **Method:** `pg_dumpall` (includes all databases, roles, tablespaces)
+- **Schedule:** Daily at 2:00 AM (persistent timer)
+- **Retention:** Single file (ZFS snapshots provide versioning)
+- **Permissions:** `postgres:postgres`, mode `640`
+- **Service:** `postgresql-backup.service` / `postgresql-backup.timer`
+- **Module:** `/etc/nixos/modules/services/postgresql-backup.nix`
+
+**Notes:**
+- Backup runs as `postgres` user with proper permissions
+- Timer uses `Persistent=true` to run missed backups after system boot
+- ZFS snapshots of `/tank/Backups` provide historical versions
+- Backup file overwrites previous backup (no rotation needed)
+
 ## Architecture
 
 ### Core Structure
@@ -326,7 +372,7 @@ sudo systemctl status postgresql
 
 ### Key Services
 1. **Restic Backups**: Automated backups to rsync.net (multiple filesets)
-2. **PostgreSQL**: Database server (Nextcloud, Home Assistant, Grafana)
+2. **PostgreSQL**: Database server (Nextcloud, Home Assistant, Grafana) with daily pg_dumpall backups
 3. **Docker/Podman**: Container runtime
 4. **Tailscale & Nebula**: VPN networking
 5. **Logwatch**: System log monitoring

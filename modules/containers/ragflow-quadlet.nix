@@ -40,6 +40,7 @@ in
         "/etc/ragflow/conf:/ragflow/conf"
         "/var/lib/ragflow:/ragflow/data"
         "/etc/ragflow/patches/db_models.py:/ragflow/api/db/db_models.py:ro"
+        "/etc/ragflow/patches/embedding_model.py:/ragflow/rag/llm/embedding_model.py:ro"
         "/etc/ragflow/nginx/ragflow.conf:/etc/nginx/sites-enabled/default:ro"
       ];
 

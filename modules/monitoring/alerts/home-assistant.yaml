@@ -30,14 +30,14 @@ groups:
       # CRITICAL: Door left unlocked
       - alert: DoorLeftUnlocked
         expr: homeassistant_lock_state{entity=~"lock.(front_door|garage|side_door)"} == 0
-        for: 5m
+        for: 30m
         labels:
           severity: critical
           category: security
           device: august_lock
         annotations:
           summary: "Door unlocked: {{ $labels.entity }}"
-          description: "{{ $labels.friendly_name }} has been unlocked for 5 minutes."
+          description: "{{ $labels.friendly_name }} has been unlocked for 30 minutes."
           action: "Verify door should be unlocked, lock if unintended"
 
       # CRITICAL: Door left open for extended period

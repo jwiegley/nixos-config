@@ -19,7 +19,6 @@ DOMAINS=(
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
     "nextcloud.vulcan.lan"
-    "nocobase.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "ragflow.vulcan.lan"

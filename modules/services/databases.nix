@@ -21,12 +21,6 @@ in
       secretPath = config.sops.secrets."ragflow-db-password".path;
       dependentService = "ragflow.service";
     })
-    (mkPostgresUserSetup {
-      user = "nocobase";
-      database = "nocobase";
-      secretPath = config.sops.secrets."nocobase-db-password".path;
-      dependentService = "nocobase.service";
-    })
   ];
 
   services = {
@@ -59,7 +53,6 @@ in
         "wallabag"
         "nextcloud"
         "ragflow"
-        "nocobase"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -72,10 +65,6 @@ in
         }
         {
           name = "ragflow";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "nocobase";
           ensureDBOwnership = true;
         }
       ];
@@ -126,13 +115,6 @@ in
 
   # SOPS secrets for database passwords
   sops.secrets."ragflow-db-password" = {
-    sopsFile = common.secretsPath;
-    owner = "postgres";
-    group = "postgres";
-    mode = "0400";
-  };
-
-  sops.secrets."nocobase-db-password" = {
     sopsFile = common.secretsPath;
     owner = "postgres";
     group = "postgres";

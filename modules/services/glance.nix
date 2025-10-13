@@ -144,6 +144,10 @@ with lib;
                           title = "Nextcloud";
                           url = "https://nextcloud.vulcan.lan";
                         }
+                        {
+                          title = "RAGFlow";
+                          url = "https://ragflow.vulcan.lan";
+                        }
                       ];
                     }
                     {

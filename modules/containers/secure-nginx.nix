@@ -1,7 +1,22 @@
 { config, lib, pkgs, ... }:
 
 {
-  # NixOS container for secure nginx serving internal HTTP
+  # Ensure ACME certificate directory exists on host
+  systemd.tmpfiles.rules = [
+    "d /var/lib/acme-container 0755 root root -"
+  ];
+
+  # Enable NAT for container to access internet
+  networking.nat = {
+    enable = true;
+    internalInterfaces = [ "ve-+" ];  # All container interfaces
+    externalInterface = "enp4s0";  # Replace with your internet-facing interface if different
+  };
+
+  # Open firewall ports on host for container access
+  networking.firewall.allowedTCPPorts = [ 18080 18443 ];
+
+  # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
 
     # Enable private network for isolation
@@ -9,11 +24,30 @@
     hostAddress = "10.233.1.1";
     localAddress = "10.233.1.2";
 
+    # Forward ports from host to container
+    forwardPorts = [
+      {
+        protocol = "tcp";
+        hostPort = 18080;
+        containerPort = 80;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18443;
+        containerPort = 443;
+      }
+    ];
+
     # Bind mount the web directory
     bindMounts = {
       "/var/www/home.newartisans.com" = {
         hostPath = "/var/www/home.newartisans.com";
         isReadOnly = true;
+      };
+      # Bind mount for ACME certificate storage
+      "/var/lib/acme" = {
+        hostPath = "/var/lib/acme-container";
+        isReadOnly = false;
       };
     };
 
@@ -29,17 +63,36 @@
       networking = {
         firewall = {
           enable = true;
-          # Only allow HTTP internally - TLS handled by host
-          allowedTCPPorts = [ 8080 ];
+          # Allow HTTP for ACME challenges and HTTPS for secure traffic
+          allowedTCPPorts = [ 80 443 ];
         };
-        # Use host's DNS
-        nameservers = [ "1.1.1.1" "8.8.8.8" ];
       };
 
       # Time zone (match host)
       time.timeZone = "America/Los_Angeles";
 
-      # Nginx configuration (HTTP only, no TLS)
+      # Force DNS to point to host (works around resolvconf issues in containers)
+      environment.etc."resolv.conf".text = lib.mkForce ''
+        nameserver 10.233.1.1
+        options edns0
+      '';
+
+      # ACME configuration for Let's Encrypt certificates
+      security.acme = {
+        acceptTerms = true;
+        defaults = {
+          email = "johnw@newartisans.com";
+          # Use production Let's Encrypt server for trusted certificates
+          server = "https://acme-v02.api.letsencrypt.org/directory";
+        };
+        # Individual certificate configuration
+        certs."home.newartisans.com" = {
+          # Don't block nginx startup on certificate fetch
+          postRun = "systemctl reload nginx.service || true";
+        };
+      };
+
+      # Nginx configuration with TLS/ACME
       services.nginx = {
         enable = true;
 
@@ -47,28 +100,36 @@
         recommendedGzipSettings = true;
         recommendedOptimisation = true;
         recommendedProxySettings = true;
-
-        # Security headers (will be passed through host proxy)
-        appendHttpConfig = ''
-          # Security headers
-          more_set_headers "X-Frame-Options: SAMEORIGIN";
-          more_set_headers "X-Content-Type-Options: nosniff";
-          more_set_headers "X-XSS-Protection: 1; mode=block";
-          more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
-          more_set_headers "X-Container: secure-nginx";
-        '';
+        recommendedTlsSettings = true;
 
         virtualHosts = {
-          # Main site - HTTP only, served internally
-          "default" = {
+          # Main site - HTTPS with ACME
+          "home.newartisans.com" = {
             default = true;
-            # Listen only on internal HTTP port
+            # Use addSSL instead of forceSSL to allow ACME challenges on HTTP
+            addSSL = true;
+            enableACME = true;
+
+            # Listen on standard ports (443 is forwarded from host:18443)
             listen = [
-              { addr = "0.0.0.0"; port = 8080; }
+              { addr = "0.0.0.0"; port = 443; ssl = true; }
+              { addr = "0.0.0.0"; port = 80; }
             ];
 
-            # Add security headers specific to this container
+            # Security headers for internet-facing service
             extraConfig = ''
+              # Strict Transport Security
+              add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+              # Additional security headers
+              add_header X-Content-Type-Options "nosniff" always;
+              add_header X-Frame-Options "SAMEORIGIN" always;
+              add_header X-XSS-Protection "1; mode=block" always;
+              add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+              # CSP Header
+              add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
               # Indicate this is served from the secure container
               add_header X-Served-By "secure-nginx-container" always;
             '';
@@ -83,10 +144,6 @@
 
                 # Try to serve file, then directory index, then 404
                 try_files $uri $uri/ =404;
-
-                # Security headers for downloads
-                add_header X-Content-Type-Options "nosniff" always;
-                add_header X-Download-Options "noopen" always;
               '';
             };
 
@@ -95,7 +152,7 @@
               extraConfig = ''
                 access_log off;
                 return 200 "healthy\n";
-                add_header Content-Type text/plain;
+                default_type text/plain;
               '';
             };
 
@@ -120,12 +177,17 @@
       };
       users.groups.nginx.gid = 60;
 
-      # Enable certificate renewal timer
-      systemd.timers."acme-renewal" = {
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnCalendar = "daily";
-          Persistent = true;
+      # Make ACME non-blocking for container startup
+      systemd.services."acme-order-renew-home.newartisans.com" = {
+        after = [ "nginx.service" "network-online.target" ];
+        wants = [ "network-online.target" ];
+        # Don't fail if ACME fails
+        unitConfig = {
+          FailureAction = "none";
+        };
+        serviceConfig = {
+          # Shorter timeout to avoid blocking container startup
+          TimeoutStartSec = "30s";
         };
       };
     };

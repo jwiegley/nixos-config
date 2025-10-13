@@ -245,7 +245,7 @@ sudo systemctl reload nginx
 
 **Weather & Automation:** AccuWeather, NWS (weather.kmhr), rain delay automations
 
-**AI Integration:** Extended OpenAI Conversation (supports OpenAI API and local Ollama)
+**AI Integration:** Extended OpenAI Conversation (OpenAI API)
 
 **ADT Alarm Control:** Via Google Assistant SDK - see `/etc/nixos/docs/ADT_ALARM_CONTROL.md`
 

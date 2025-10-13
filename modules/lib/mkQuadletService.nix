@@ -67,6 +67,9 @@ in
   {
     # Quadlet container configuration
     virtualisation.quadlet.containers.${name} = {
+      # Explicitly enable autoStart to ensure service starts on boot and after rebuild
+      autoStart = true;
+
       containerConfig = lib.mkMerge [
         {
           inherit image;
@@ -103,6 +106,15 @@ in
         # Add restart behavior to [Service] section
         common.restartPolicies.always.service
         extraServiceConfig
+      ];
+    };
+
+    # Ensure systemd restarts the service on configuration changes
+    systemd.services.${serviceName} = {
+      restartIfChanged = true;
+      restartTriggers = [
+        # Trigger restart when container config changes
+        config.virtualisation.quadlet.containers.${name}._configText
       ];
     };
 

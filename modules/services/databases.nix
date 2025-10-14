@@ -33,6 +33,9 @@ in
       settings = {
         port = 5432;
 
+        # Connection settings
+        max_connections = 200;  # Increased from default 100 to handle bulk operations
+
         # Network Security - Restrict to specific interfaces
         listen_addresses = lib.mkForce "localhost,192.168.1.2,10.88.0.1";
         ssl = true;

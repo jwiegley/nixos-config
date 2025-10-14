@@ -148,6 +148,14 @@ with lib;
                           title = "RAGFlow";
                           url = "https://ragflow.vulcan.lan";
                         }
+                        {
+                          title = "Paperless-ngx";
+                          url = "https://paperless.vulcan.lan";
+                        }
+                        {
+                          title = "Paperless-ai";
+                          url = "https://paperless-ai.vulcan.lan";
+                        }
                       ];
                     }
                     {

@@ -8,6 +8,7 @@
     ./opnsense-api-transformer.nix  # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
+    ./paperless-ai-quadlet.nix
     ./ragflow-quadlet.nix
     ./silly-tavern-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
@@ -39,7 +40,7 @@
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    allowedTCPPorts = [ 4000 5380 5432 8085 ];  # Added 5380 for Technitium DNS
+    allowedTCPPorts = [ 4000 5380 5432 8085 28981 ];  # 4000: litellm, 5380: Technitium DNS, 5432: PostgreSQL, 8085: Redis, 28981: paperless-ngx
     allowedUDPPorts = [ 53 ];
   };
 

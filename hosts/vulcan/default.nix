@@ -56,6 +56,7 @@
     ../../modules/services/nextcloud.nix
     ../../modules/services/elasticsearch.nix
     ../../modules/services/minio.nix
+    ../../modules/services/paperless.nix
 
     # Containers
     ../../modules/containers/default.nix

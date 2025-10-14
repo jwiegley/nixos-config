@@ -27,5 +27,7 @@
     ../monitoring/services/home-assistant-exporter.nix
     ../monitoring/services/litellm-exporter.nix
     ../monitoring/services/minio-exporter.nix
+    ../monitoring/services/paperless-exporter.nix
+    ../monitoring/services/paperless-ai-exporter.nix
   ];
 }

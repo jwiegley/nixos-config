@@ -172,11 +172,10 @@
       # Filename formatting (use double brackets for new format)
       PAPERLESS_FILENAME_FORMAT = "{{created_year}}/{{correspondent}}/{{title}}";
 
-      # Logging
-      PAPERLESS_LOGGING_DIR = "/tank/Paperless/logs";
-      PAPERLESS_LOGROTATE_MAX_SIZE = 10485760; # 10MB
-      PAPERLESS_LOGROTATE_MAX_BACKUPS = 5;
-      PAPERLESS_LOGGING_LEVEL = "DEBUG";  # Enable detailed logging for troubleshooting
+      # Logging - disable file logging to avoid concurrent file lock issues
+      # All logs go to systemd journald instead (viewable with journalctl)
+      PAPERLESS_LOGGING_DIR = "";  # Empty string disables file logging
+      PAPERLESS_LOGGING_LEVEL = "INFO";  # Use INFO level for normal operation
 
       # Email settings (using local postfix)
       PAPERLESS_EMAIL_HOST = "localhost";
@@ -229,7 +228,6 @@
     "d /tank/Paperless/data 0755 paperless paperless -"
     "d /tank/Paperless/media 0755 paperless paperless -"
     "d /tank/Paperless/consume 0777 paperless paperless -" # World-writable for easy document drop
-    "d /tank/Paperless/logs 0755 paperless paperless -"
   ];
 
   # Nginx reverse proxy configuration

@@ -19,9 +19,9 @@ let
     PROCESS_PREDEFINED_DOCUMENTS=no  # Process all documents, not just tagged ones
     # TAGS=pre-process  # Disabled - process all documents without tag filtering
 
-    # AI Processing Tags
-    ADD_AI_PROCESSED_TAG=yes
-    AI_PROCESSED_TAG_NAME=ai-processed
+    # AI Processing Tags - disabled to avoid cluttering documents
+    ADD_AI_PROCESSED_TAG=no
+    # AI_PROCESSED_TAG_NAME=ai-processed
 
     # Use existing document data for context
     USE_EXISTING_DATA=yes

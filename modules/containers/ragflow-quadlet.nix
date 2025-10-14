@@ -93,6 +93,14 @@ in
           # Wait for Redis
           "${pkgs.bash}/bin/bash -c 'until ${pkgs.redis}/bin/redis-cli -h 10.88.0.1 -p 6379 ping > /dev/null 2>&1; do echo Waiting for Redis...; ${pkgs.coreutils}/bin/sleep 2; done'"
         ];
+        # Increase systemd stop timeout to allow graceful shutdown during document processing
+        # RAGFlow needs time to finish OCR/embedding operations before shutting down
+        TimeoutStopSec = 120;
+        # Override podman stop with extended timeout (default 10s is too short)
+        # This allows RAGFlow to gracefully finish document processing before SIGKILL
+        ExecStop = lib.mkForce [
+          "${pkgs.podman}/bin/podman stop --time=90 --ignore ragflow"
+        ];
       };
     })
   ];

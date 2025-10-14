@@ -111,11 +111,15 @@ in
 
     # Ensure systemd restarts the service on configuration changes
     systemd.services.${serviceName} = {
+      # Restart service when configuration changes
       restartIfChanged = true;
       restartTriggers = [
         # Trigger restart when container config changes
         config.virtualisation.quadlet.containers.${name}._configText
       ];
+      # Ensure service starts on boot and after system activation
+      # This ensures stopped services are restarted during nixos-rebuild
+      wantedBy = [ "multi-user.target" ];
     };
 
     # SOPS secrets configuration

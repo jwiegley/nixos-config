@@ -54,6 +54,7 @@ in
     extraContainerConfig ? {}, # Additional quadlet container config
 
     tmpfilesRules ? [],  # Additional tmpfiles.d rules
+    createStateDir ? true,  # Whether to create default /var/lib/${name} directory
   }:
   let
     serviceName = "${name}.service";
@@ -153,8 +154,8 @@ in
     };
 
     # State directory
-    systemd.tmpfiles.rules = [
-      "d /var/lib/${name} 0755 root root -"
-    ] ++ tmpfilesRules;
+    systemd.tmpfiles.rules =
+      (lib.optional createStateDir "d /var/lib/${name} 0755 root root -")
+      ++ tmpfilesRules;
   };
 }

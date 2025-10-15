@@ -13,8 +13,8 @@ let
       --max-time 10 \
       --connect-timeout 5) || HTTP_CODE=0
 
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
-      # 401 is expected without auth, but means service is up
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "302" ]; then
+      # 401 is expected without auth, 302 is redirect - both mean service is up
       echo "paperless_up 1"
 
       # Try to get task queue stats (requires auth, so this might fail)

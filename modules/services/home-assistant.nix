@@ -627,6 +627,14 @@ in
     };
   };
 
+  # Fix ownership of Home Assistant state directory files
+  # This ensures backup files and other writable config files have correct ownership
+  # Fixes issue where UI-modified files are created as root:root instead of hass:hass
+  systemd.tmpfiles.rules = [
+    "d /var/lib/hass 0700 hass hass -"
+    "Z /var/lib/hass 0700 hass hass -"
+  ];
+
   # Home Assistant local access
   services.nginx.virtualHosts."hass.vulcan.lan" = {
     forceSSL = true;

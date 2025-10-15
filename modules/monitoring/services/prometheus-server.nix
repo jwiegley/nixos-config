@@ -17,6 +17,7 @@ let
     "nextcloud.yaml"
     "litellm-availability.yaml"
     "home-assistant.yaml"
+    "home-assistant-backup.yaml"
     "paperless.yaml"
     "paperless-ai.yaml"
   ];

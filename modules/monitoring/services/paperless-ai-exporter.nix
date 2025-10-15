@@ -13,8 +13,15 @@
 
     serviceConfig = {
       Type = "oneshot";
-      User = "prometheus";
-      Group = "prometheus";
+      User = "root";
+      Group = "root";
+
+      # Security hardening
+      PrivateTmp = true;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = "read-only";
+      ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];
     };
 
     script = let
@@ -54,6 +61,10 @@
         } > "$METRICS_FILE.tmp"
 
         mv "$METRICS_FILE.tmp" "$METRICS_FILE"
+
+        # Set proper permissions
+        chown node-exporter:node-exporter "$METRICS_FILE"
+        chmod 644 "$METRICS_FILE"
       '';
     in ''
       ${healthCheck}

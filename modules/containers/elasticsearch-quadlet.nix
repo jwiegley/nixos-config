@@ -13,6 +13,7 @@ in
       image = "docker.io/elasticsearch:8.17.0";
       port = 9200;
       requiresPostgres = false;
+      createStateDir = false;  # Custom ownership needed for ES container
 
       # Bind to both localhost and podman gateway
       publishPorts = [

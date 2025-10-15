@@ -136,6 +136,7 @@
       PAPERLESS_OCR_DESKEW = true;
       PAPERLESS_OCR_ROTATE_PAGES = true;
       PAPERLESS_OCR_ROTATE_PAGES_THRESHOLD = 12.0;
+      PAPERLESS_OCR_MAX_IMAGE_PIXELS = 1000000000; # 1 billion pixels (prevents DecompressionBombError)
       PAPERLESS_OCR_USER_ARGS = {
         optimize = 1;
         pdfa_image_compression = "lossless";
@@ -172,9 +173,10 @@
       # Filename formatting (use double brackets for new format)
       PAPERLESS_FILENAME_FORMAT = "{{created_year}}/{{correspondent}}/{{title}}";
 
-      # Logging - disable file logging to avoid concurrent file lock issues
-      # All logs go to systemd journald instead (viewable with journalctl)
-      PAPERLESS_LOGGING_DIR = "";  # Empty string disables file logging
+      # Logging - enable file logging for UI logs pane
+      # Logs also go to systemd journald (viewable with journalctl)
+      PAPERLESS_LOGROTATE_MAX_SIZE = "1024000";  # 1MB per log file
+      PAPERLESS_LOGROTATE_MAX_BACKUPS = "5";  # Keep 5 backup files
       PAPERLESS_LOGGING_LEVEL = "INFO";  # Use INFO level for normal operation
 
       # Email settings (using local postfix)

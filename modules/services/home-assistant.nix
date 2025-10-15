@@ -242,6 +242,7 @@ in
       ps.pychromecast # Required for Bose integration
       pybose # Custom package for Bose integration
       ps.pyicloud # Required for Apple iCloud integration
+      ps.webcolors # Required for Local LLMs (llama_conversation) custom component
     ];
 
     # Components that don't require YAML configuration

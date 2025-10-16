@@ -415,8 +415,8 @@ in
 
             "google.com"
             "cloudflare.com"
-            "amazon.com"
-            "github.com"
+            # "amazon.com"
+            # "github.com"
 
             "web.mit.edu"
             "www.berkeley.edu"
@@ -472,7 +472,7 @@ in
         static_configs = [{
           targets = [
             "http://google.com"
-            "http://github.com"
+            # "http://github.com"
           ];
         }];
         relabel_configs = [
@@ -507,7 +507,7 @@ in
         static_configs = [{
           targets = [
             "https://google.com"
-            "https://github.com"
+            # "https://github.com"
           ];
         }];
         relabel_configs = [
@@ -551,6 +551,9 @@ in
             "https://silly-tavern.vulcan.lan"
             "https://wallabag.vulcan.lan"
             "https://dns.vulcan.lan"
+            "https://paperless.vulcan.lan"
+            "https://paperless-ai.vulcan.lan"
+            "https://hass.vulcan.lan"
           ];
         }];
         relabel_configs = [

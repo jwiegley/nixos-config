@@ -28,6 +28,9 @@ in
     enable = true;
     port = 9090;
 
+    # Disable config check since token files may not exist at build time
+    checkConfig = false;
+
     # Only listen on localhost for now
     listenAddress = "127.0.0.1";
 

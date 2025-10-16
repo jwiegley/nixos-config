@@ -78,6 +78,22 @@
             };
           }
           {
+            name = "VictoriaMetrics";
+            type = "prometheus";
+            uid = "victoriametrics";  # Fixed UID for VictoriaMetrics datasource
+            access = "proxy";
+            url = "http://localhost:8428";
+            isDefault = false;
+            editable = false;
+            jsonData = {
+              timeInterval = "60s";
+              queryTimeout = "300s";
+              httpMethod = "POST";
+              # VictoriaMetrics-specific optimizations
+              customQueryParameters = "";
+            };
+          }
+          {
             name = "Loki";
             type = "loki";
             uid = "loki";  # Fixed UID for Loki datasource

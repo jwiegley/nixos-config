@@ -150,7 +150,7 @@
       # Document processing (increased for bulk upload handling)
       PAPERLESS_TASK_WORKERS = 8;  # Increased from 2 to handle bulk uploads better
       PAPERLESS_THREADS_PER_WORKER = 1;
-      PAPERLESS_WORKER_TIMEOUT = 3600; # 60 minutes for large documents
+      PAPERLESS_WORKER_TIMEOUT = 7200; # 120 minutes for large documents (80MB+ PDFs)
 
       # Consumption
       PAPERLESS_CONSUMER_POLLING = 60; # Check every 60 seconds

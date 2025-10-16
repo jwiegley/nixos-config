@@ -15,23 +15,23 @@ groups:
           description: "Home Assistant backup directory is empty. No backups are available for disaster recovery."
           action: "Check Home Assistant backup configuration and trigger a manual backup immediately"
 
-      # CRITICAL: Backup hasn't run in 25 hours
+      # CRITICAL: Backup hasn't run in 72 hours (3 days)
       - alert: HomeAssistantBackupNotRunning
-        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 25
-        for: 5m
+        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 72
+        for: 1h
         labels:
           severity: critical
           category: backup
           service: home_assistant
         annotations:
-          summary: "Home Assistant backup hasn't run in 25 hours"
+          summary: "Home Assistant backup hasn't run in 3 days"
           description: "Latest Home Assistant backup is {{ printf \"%.1f\" $value }} hours old. Automated backups may have failed."
           action: "Check Home Assistant logs for backup errors: journalctl -u home-assistant | grep -i backup"
 
-      # WARNING: Backup age exceeds 13 hours (missed one cycle)
+      # WARNING: Backup age exceeds 48 hours (2 days)
       - alert: HomeAssistantBackupOld
-        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 13
-        for: 10m
+        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 48
+        for: 1h
         labels:
           severity: warning
           category: backup

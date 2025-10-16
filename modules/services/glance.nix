@@ -163,6 +163,10 @@ with lib;
                       color = "280 50 60";
                       links = [
                         {
+                          title = "Fastmail";
+                          url = "https://app.fastmail.com/mail/Inbox/?u=d30140a0";
+                        }
+                        {
                           title = "Wallabag";
                           url = "https://wallabag.vulcan.lan";
                         }
@@ -184,10 +188,18 @@ with lib;
                           title = "Grafana";
                           url = "https://grafana.vulcan.lan";
                         }
-                        # {
-                        #   title = "Prometheus";
-                        #   url = "https://prometheus.vulcan.lan";
-                        # }
+                        {
+                          title = "Prometheus";
+                          url = "https://prometheus.vulcan.lan";
+                        }
+                        {
+                          title = "VictoriaMetrics";
+                          url = "https://victoriametrics.vulcan.lan/vmui";
+                        }
+                        {
+                          title = "Loki";
+                          url = "https://loki.vulcan.lan";
+                        }
                         {
                           title = "Alertmanager";
                           url = "https://alertmanager.vulcan.lan";
@@ -214,15 +226,19 @@ with lib;
                       links = [
                         {
                           title = "GitHub";
-                          url = "https://github.com/jwiegley";
-                        }
-                        {
-                          title = "NixOS Search";
-                          url = "https://search.nixos.org";
+                          url = "https://github.com/notifications?query=is%3Aunread";
                         }
                         {
                           title = "Reddit";
-                          url = "https://old.reddit.com";
+                          url = "https://old.reddit.com/new";
+                        }
+                        {
+                          title = "Google News";
+                          url = "https://news.google.com/foryou?hl=en-US&gl=US&ceid=US%3Aen";
+                        }
+                        {
+                          title = "Reddit";
+                          url = "https://old.reddit.com/new";
                         }
                         {
                           title = "XDA Forums";

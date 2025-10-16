@@ -47,6 +47,7 @@
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix
     ../../modules/services/promtail.nix
+    ../../modules/monitoring/services/victoriametrics.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
     ../../modules/services/imapdedup.nix

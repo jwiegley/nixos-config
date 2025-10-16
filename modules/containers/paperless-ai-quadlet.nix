@@ -12,7 +12,7 @@ let
     # AI Provider Configuration (using LiteLLM)
     AI_PROVIDER=custom
     CUSTOM_BASE_URL=https://litellm.vulcan.lan/v1
-    CUSTOM_MODEL=hera/Qwen3-235B-A22B-Thinking-2507
+    CUSTOM_MODEL=hera/gpt-oss-120b
 
     # Scanning Configuration
     SCAN_INTERVAL=*/30 * * * *

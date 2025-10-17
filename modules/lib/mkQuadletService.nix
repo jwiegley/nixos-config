@@ -57,7 +57,6 @@ in
     createStateDir ? true,  # Whether to create default /var/lib/${name} directory
   }:
   let
-    serviceName = "${name}.service";
     hostname = "${name}.vulcan.lan";
 
     # Build environment files list
@@ -110,18 +109,12 @@ in
       ];
     };
 
-    # Ensure systemd restarts the service on configuration changes
-    systemd.services.${serviceName} = {
-      # Restart service when configuration changes
-      restartIfChanged = true;
-      restartTriggers = [
-        # Trigger restart when container config changes
-        config.virtualisation.quadlet.containers.${name}._configText
-      ];
-      # Ensure service starts on boot and after system activation
-      # This ensures stopped services are restarted during nixos-rebuild
-      wantedBy = [ "multi-user.target" ];
-    };
+    # Note: Quadlet automatically manages the systemd service lifecycle.
+    # We don't need to directly configure systemd.services.${name} here because:
+    # 1. Quadlet generates the service unit from the .container file
+    # 2. autoStart = true in containerConfig ensures it starts on boot
+    # 3. Direct systemd.services configuration conflicts with quadlet-nix's overrideStrategy
+    # 4. restartTriggers would require mkForce to override the strategy, but that's fragile
 
     # SOPS secrets configuration
     sops.secrets = lib.mkMerge [
@@ -131,7 +124,7 @@ in
           owner = "root";
           group = "root";
           mode = "0400";
-          restartUnits = lib.optional secretsRestartUnits serviceName;
+          restartUnits = lib.optional secretsRestartUnits "${name}.service";
         }
       ) secrets)
     ];

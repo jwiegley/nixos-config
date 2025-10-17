@@ -212,6 +212,37 @@ in
         ensureDBOwnership = true;
       }
     ];
+
+    # Performance tuning for Home Assistant workload
+    settings = {
+      # Memory settings - tune for time-series data
+      shared_buffers = "256MB"; # Increased from 128MB default for better caching
+      effective_cache_size = "1GB"; # Hint to query planner about available cache
+      work_mem = "16MB"; # Increased for better sort/hash operations
+      maintenance_work_mem = "128MB"; # For VACUUM, CREATE INDEX, etc.
+
+      # WAL (Write-Ahead Logging) settings for better write performance
+      wal_buffers = "8MB";
+      max_wal_size = "1GB";
+      min_wal_size = "80MB";
+
+      # Checkpointing for write-heavy time-series workload
+      checkpoint_completion_target = "0.9"; # Spread out checkpoint I/O
+
+      # Autovacuum tuning for high-frequency inserts/deletes
+      autovacuum = "on";
+      autovacuum_max_workers = "2"; # Keep background maintenance active
+      autovacuum_naptime = "30s"; # Check for vacuum needs more frequently
+      autovacuum_vacuum_scale_factor = "0.05"; # Vacuum earlier (5% vs 20% default)
+      autovacuum_analyze_scale_factor = "0.025"; # Analyze earlier for better plans
+
+      # Planner cost constants - favor index scans for time-series queries
+      random_page_cost = "1.1"; # Lower for SSD/ZFS storage
+      effective_io_concurrency = "200"; # Higher for SSD
+
+      # Statistics for better query planning
+      default_statistics_target = "100"; # Better stats for time-series columns
+    };
   };
 
   # Set PostgreSQL password for hass user from SOPS secret
@@ -403,6 +434,32 @@ in
         auto_purge = true;
         purge_keep_days = 30;
         commit_interval = 5; # Reduced from 1 to improve performance
+
+        # Database optimization
+        auto_repack = true; # Automatically repack database to reclaim space and improve performance
+
+        # Statistics configuration - keep long-term hourly stats for important metrics
+        # Short-term stats are kept for 10 days, long-term stats indefinitely
+        exclude_statistics = {
+          entity_globs = [
+            # Exclude noisy sensors from statistics (same as recorder exclusions)
+            "sensor.weather_*"
+            "sensor.*_info"
+            "sensor.*_next_update"
+            "sensor.*_last_update"
+            "sensor.*_last_located"
+            "sensor.*_voltage"
+            "sensor.router_cpu_*"
+            "sensor.router_temp_*"
+            "sensor.router_system_load_*"
+            "sensor.*_frontmost_app"
+            "sensor.*_storage"
+
+            # Exclude binary sensors and non-numeric entities from statistics
+            "binary_sensor.*"
+            "device_tracker.*"
+          ];
+        };
 
         # Exclude noisy sensors to reduce database size and memory usage
         exclude = {

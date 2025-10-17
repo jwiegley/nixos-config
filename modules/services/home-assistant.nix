@@ -407,48 +407,132 @@ in
         # Exclude noisy sensors to reduce database size and memory usage
         exclude = {
           domains = [
-            "automation"
-            "updater"
+            "updater" # Don't record update checks
+            "button" # One-time actions, no history value
+            "event" # Temporary events, no history value
+            "update" # Update availability rarely changes
           ];
+
           entity_globs = [
             "sensor.weather_*"
+
             # Enphase: Exclude individual inverter/panel sensors (keep aggregate sensors)
             "sensor.inverter_*"
             "sensor.envoy_*_micro*" # Additional Enphase microinverter sensors
+
             # Dreame Vacuum: Exclude per-room cleaning configuration entities
             "select.*_room_*"
             "sensor.*_room_*"
             "switch.*_room_*"
-            # iCloud3: Exclude verbose event log to prevent size issues
+
+            # iCloud3: Exclude high-frequency diagnostic/status sensors
             "sensor.icloud3_event_log"
-            # Device trackers: Exclude high-frequency updates (keep in history only)
+            "sensor.*_info" # Device info updates constantly
+            "sensor.*_next_update" # Next update time changes constantly
+            "sensor.*_last_update" # Last update time changes constantly
+            "sensor.*_last_located" # Last location time changes constantly
+
+            # Device trackers: Exclude most network devices (keep person trackers only)
             "device_tracker.*_last_update_trigger"
+            "device_tracker.enphase_*" # Solar inverter network presence
+            "device_tracker.dreame_*" # Vacuum network presence
+            "device_tracker.espressif_*" # Generic ESP devices
+            "device_tracker.98_03_8e_*" # MAC address trackers (network devices)
+
+            # Smart plugs: Exclude high-frequency voltage sensors (keep power/current)
+            "sensor.*_voltage" # Voltage rarely changes, updates constantly
+
+            # OPNsense router: Exclude high-frequency monitoring sensors
+            "sensor.router_cpu_*" # CPU usage updates every few seconds
+            "sensor.router_temp_*" # Temperature sensors update constantly
+            "sensor.router_system_load_*" # System load updates constantly
+
+            # Mac Studio: Exclude constantly changing app/storage sensors
+            "sensor.*_frontmost_app" # Active app changes constantly
+            "sensor.*_storage" # Storage updates frequently
+
             # Battery sensors: Already tracked, but exclude some verbose ones
             "sensor.*_battery_temperature"
+
             # Network: Exclude high-frequency bandwidth sensors
             "sensor.*_throughput*"
             "sensor.*_bandwidth*"
           ];
-        };
-      };
 
-      # History
-      history = {
-        use_include_order = true;
-        include = {
-          domains = [
-            "lock"
-            "binary_sensor"
-            "sensor"
+          # Exclude internal Home Assistant events that bloat the database
+          event_types = [
+            "service_registered" # Internal service registration
+            "component_loaded" # Internal component loading
+            "entity_registry_updated" # UI entity registry changes
+            "panels_updated" # UI panel updates
+            "device_registry_updated" # Device registry changes (rarely useful)
           ];
         };
       };
 
-      # Logger
+      # History - controls what entities are shown in UI history
+      # This should generally match recorder exclusions for consistency
+      history = {
+        use_include_order = true;
+
+        # Include important domains for UI history
+        include = {
+          domains = [
+            "lock" # Door locks
+            "binary_sensor" # Motion, door/window sensors
+            "sensor" # Most sensors
+            "climate" # Thermostats
+            "light" # Lights
+            "switch" # Switches
+            "cover" # Garage doors, blinds
+            "fan" # Fans
+            "person" # Person presence
+            "device_tracker" # Location tracking (filtered below)
+            "media_player" # Media devices
+            "vacuum" # Vacuum cleaners
+            "camera" # Cameras
+            "weather" # Weather (aggregate only)
+          ];
+        };
+
+        # Exclude the same noisy entities as recorder for UI performance
+        exclude = {
+          entity_globs = [
+            # Same exclusions as recorder to keep UI responsive
+            "sensor.weather_*" # Weather detail sensors (keep weather.* entity)
+            "sensor.*_info" # High-frequency info sensors
+            "sensor.*_next_update"
+            "sensor.*_last_update"
+            "sensor.*_last_located"
+            "sensor.*_voltage" # Voltage sensors
+            "sensor.router_cpu_*" # Router monitoring
+            "sensor.router_temp_*"
+            "sensor.router_system_load_*"
+            "sensor.*_frontmost_app" # Mac Studio app tracking
+            "sensor.*_storage" # Storage sensors
+            "device_tracker.enphase_*" # Network device trackers
+            "device_tracker.dreame_*"
+            "device_tracker.espressif_*"
+            "device_tracker.98_03_8e_*" # MAC address trackers
+          ];
+        };
+      };
+
+      # Logger - reduce logging verbosity to minimize I/O and memory overhead
       logger = {
-        default = "info";
+        default = "warning"; # Changed from "info" to reduce log volume
         logs = {
-          "homeassistant.core" = "info";
+          # Keep core at warning level for important messages only
+          "homeassistant.core" = "warning";
+
+          # Suppress noisy integrations (keep at error level)
+          "homeassistant.components.recorder" = "error"; # Recorder internal operations
+          "homeassistant.components.websocket_api" = "error"; # WebSocket chatter
+          "homeassistant.components.http" = "error"; # HTTP request logging
+
+          # Keep important components at warning level for troubleshooting
+          "homeassistant.components.automation" = "warning";
+          "homeassistant.components.script" = "warning";
         };
       };
 

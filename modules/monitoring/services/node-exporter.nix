@@ -54,18 +54,10 @@
   # Fix permissions for prometheus-node-exporter-textfiles directory
   # The NixOS prometheus exporter creates this with restrictive permissions (0755)
   # We need world-writable (1777) so mbsync and other services can write metrics
-  # Using a oneshot service that runs after tmpfiles to ensure correct permissions
-  systemd.services.prometheus-textfiles-permissions = {
-    description = "Fix permissions for Prometheus textfiles directory";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "systemd-tmpfiles-setup.service" ];
-    before = [ "prometheus-node-exporter.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.coreutils}/bin/chmod 1777 /var/lib/prometheus-node-exporter-textfiles";
-    };
-  };
+  # Use 'z' directive to recursively set permissions on existing directory
+  systemd.tmpfiles.rules = [
+    "z /var/lib/prometheus-node-exporter-textfiles 1777 node-exporter node-exporter -"
+  ];
 
   # Firewall configuration
   networking.firewall.interfaces."lo".allowedTCPPorts = [

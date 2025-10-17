@@ -176,4 +176,10 @@
     ProtectControlGroups = true;
     RestrictRealtime = true;
   };
+
+  # Fix nextcloud-setup service to wait for PostgreSQL
+  systemd.services.nextcloud-setup = {
+    after = [ "postgresql.service" ];
+    requires = [ "postgresql.service" ];
+  };
 }

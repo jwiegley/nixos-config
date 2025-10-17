@@ -55,7 +55,6 @@
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
     ../../modules/services/nextcloud.nix
-    ../../modules/services/elasticsearch.nix
     ../../modules/services/minio.nix
     ../../modules/services/paperless.nix
     ../../modules/services/cockpit.nix

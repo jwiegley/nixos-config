@@ -14,7 +14,7 @@
   };
 
   # Open firewall ports on host for container access
-  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 ];
+  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
 
   # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
@@ -40,6 +40,11 @@
         protocol = "tcp";
         hostPort = 18873;
         containerPort = 873;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18874;
+        containerPort = 874;
       }
     ];
 
@@ -68,8 +73,8 @@
       networking = {
         firewall = {
           enable = true;
-          # Allow HTTP for ACME challenges, HTTPS for secure traffic, and rsync daemon
-          allowedTCPPorts = [ 80 443 873 ];
+          # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync daemon, and rsync-ssl proxy
+          allowedTCPPorts = [ 80 443 873 874 ];
         };
       };
 
@@ -172,6 +177,26 @@
             };
           };
         };
+
+        # Stream configuration for rsync-ssl proxy
+        streamConfig = ''
+          # rsync-ssl proxy: accepts SSL connections and forwards to local rsync daemon
+          server {
+            listen 874 ssl;
+
+            ssl_certificate /var/lib/acme/home.newartisans.com/cert.pem;
+            ssl_certificate_key /var/lib/acme/home.newartisans.com/key.pem;
+            ssl_trusted_certificate /var/lib/acme/home.newartisans.com/chain.pem;
+
+            ssl_protocols TLSv1.2 TLSv1.3;
+            ssl_ciphers HIGH:!aNULL:!MD5;
+            ssl_prefer_server_ciphers on;
+
+            proxy_pass 127.0.0.1:873;
+            proxy_connect_timeout 10s;
+            proxy_timeout 30m;
+          }
+        '';
       };
 
       # Ensure nginx user exists

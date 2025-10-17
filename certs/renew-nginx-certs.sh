@@ -15,10 +15,12 @@ VALIDITY_DAYS=365
 DOMAINS=(
     "glance.vulcan.lan"
     "grafana.vulcan.lan"
+    "hass.vulcan.lan"
     "jellyfin.vulcan.lan"
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
     "nextcloud.vulcan.lan"
+    "nodered.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "ragflow.vulcan.lan"

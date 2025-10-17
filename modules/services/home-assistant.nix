@@ -183,6 +183,14 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
+  # PostgreSQL password for Home Assistant recorder
+  sops.secrets."home-assistant/postgres-password" = {
+    sopsFile = ../../secrets.yaml;
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+  };
+
   # Avahi service for mDNS/Bonjour discovery (required for HomeKit)
   services.avahi = {
     enable = true;
@@ -204,11 +212,23 @@ in
         ensureDBOwnership = true;
       }
     ];
+  };
 
-    # Add peer authentication for hass user on local socket
-    authentication = lib.mkAfter ''
-      # Home Assistant local socket connection
-      local   hass      hass                        peer
+  # Set PostgreSQL password for hass user from SOPS secret
+  systemd.services.postgresql-hass-password = {
+    description = "Set PostgreSQL password for Home Assistant user";
+    after = [ "postgresql.service" "sops-install-secrets.service" ];
+    requires = [ "postgresql.service" "sops-install-secrets.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      # Read password (file is owned by hass, so we need to use runuser)
+      PASSWORD=$(${pkgs.util-linux}/bin/runuser -u hass -- cat ${config.sops.secrets."home-assistant/postgres-password".path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER hass WITH PASSWORD '$PASSWORD';"
     '';
   };
 
@@ -375,13 +395,16 @@ in
         server_port = 8123;
       };
 
-      # Recorder - using default SQLite for now (PostgreSQL connection issues)
+      # Recorder - using PostgreSQL for better performance and memory efficiency
       recorder = {
+        # Don't specify db_url here - it will be set via environment variable
+        # This allows us to inject the SOPS-managed password securely
+
         auto_purge = true;
         purge_keep_days = 30;
-        commit_interval = 1;
+        commit_interval = 5; # Reduced from 1 to improve performance
 
-        # Exclude noisy sensors
+        # Exclude noisy sensors to reduce database size and memory usage
         exclude = {
           domains = [
             "automation"
@@ -391,10 +414,20 @@ in
             "sensor.weather_*"
             # Enphase: Exclude individual inverter/panel sensors (keep aggregate sensors)
             "sensor.inverter_*"
+            "sensor.envoy_*_micro*" # Additional Enphase microinverter sensors
             # Dreame Vacuum: Exclude per-room cleaning configuration entities
             "select.*_room_*"
             "sensor.*_room_*"
             "switch.*_room_*"
+            # iCloud3: Exclude verbose event log to prevent size issues
+            "sensor.icloud3_event_log"
+            # Device trackers: Exclude high-frequency updates (keep in history only)
+            "device_tracker.*_last_update_trigger"
+            # Battery sensors: Already tracked, but exclude some verbose ones
+            "sensor.*_battery_temperature"
+            # Network: Exclude high-frequency bandwidth sensors
+            "sensor.*_throughput*"
+            "sensor.*_bandwidth*"
           ];
         };
       };
@@ -600,14 +633,56 @@ in
   systemd.services.home-assistant = {
     after = [
       "postgresql.service"
+      "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
     wants = [
       "postgresql.service"
+      "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
 
-    # Inject Yale and OPNsense credentials as environment variables
+    # Generate secrets.yaml and inject database URL into configuration.yaml
+    preStart = ''
+      # Generate secrets.yaml with location data and database URL
+      # Location coordinates for Sacramento, CA area
+      cat > /var/lib/hass/secrets.yaml << 'EOF'
+# Auto-generated secrets file - location data
+# Update with your actual coordinates if needed
+latitude: 38.5816
+longitude: -121.4944
+elevation: 30
+EOF
+
+      # Add PostgreSQL database URL if SOPS secret exists
+      if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ]; then
+        POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
+        echo "postgres_db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" >> /var/lib/hass/secrets.yaml
+      fi
+
+      chmod 600 /var/lib/hass/secrets.yaml
+
+      # Inject database URL directly into configuration.yaml
+      if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ] && [ -f /var/lib/hass/configuration.yaml ]; then
+        POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
+
+        # Remove any existing db_url line first
+        grep -v "^  db_url:" /var/lib/hass/configuration.yaml > /var/lib/hass/configuration.yaml.tmp || true
+
+        # Find the line number of "recorder:" and insert db_url after it
+        ${pkgs.gawk}/bin/awk -v db_url="  db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" \
+          '/^recorder:/ { print; print db_url; next } { print }' \
+          /var/lib/hass/configuration.yaml.tmp > /var/lib/hass/configuration.yaml.new
+
+        # Replace original file
+        mv /var/lib/hass/configuration.yaml.new /var/lib/hass/configuration.yaml
+        rm -f /var/lib/hass/configuration.yaml.tmp
+
+        chmod 600 /var/lib/hass/configuration.yaml
+      fi
+    '';
+
+    # Inject credentials as environment variables
     serviceConfig = {
       EnvironmentFile = [
         (pkgs.writeText "home-assistant-env" ''

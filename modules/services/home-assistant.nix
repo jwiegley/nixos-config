@@ -438,29 +438,6 @@ in
         # Database optimization
         auto_repack = true; # Automatically repack database to reclaim space and improve performance
 
-        # Statistics configuration - keep long-term hourly stats for important metrics
-        # Short-term stats are kept for 10 days, long-term stats indefinitely
-        exclude_statistics = {
-          entity_globs = [
-            # Exclude noisy sensors from statistics (same as recorder exclusions)
-            "sensor.weather_*"
-            "sensor.*_info"
-            "sensor.*_next_update"
-            "sensor.*_last_update"
-            "sensor.*_last_located"
-            "sensor.*_voltage"
-            "sensor.router_cpu_*"
-            "sensor.router_temp_*"
-            "sensor.router_system_load_*"
-            "sensor.*_frontmost_app"
-            "sensor.*_storage"
-
-            # Exclude binary sensors and non-numeric entities from statistics
-            "binary_sensor.*"
-            "device_tracker.*"
-          ];
-        };
-
         # Exclude noisy sensors to reduce database size and memory usage
         exclude = {
           domains = [
@@ -468,6 +445,29 @@ in
             "button" # One-time actions, no history value
             "event" # Temporary events, no history value
             "update" # Update availability rarely changes
+          ];
+
+          # Explicit entity exclusions for high-frequency entities
+          # These are entities that update very frequently and don't need history
+          entities = [
+            # iCloud3 high-frequency diagnostic sensors
+            "sensor.john_iphone_info"
+            "sensor.john_iphone_next_update"
+            "sensor.john_iphone_last_update"
+            "sensor.nasim_iphone_info"
+            "sensor.nasim_iphone_next_update"
+            "sensor.nasim_iphone_last_update"
+
+            # Mac Studio sensors
+            "sensor.johns_mac_studio_frontmost_app"
+            "sensor.clio_2_frontmost_app"
+
+            # Smart plug voltage sensors (keep power/current)
+            "sensor.smart_plug_tv_voltage"
+
+            # ASUS router device trackers (keep OPNsense trackers for person detection)
+            "device_tracker.asus_john_iphone"
+            "device_tracker.asus_nasim_iphone"
           ];
 
           entity_globs = [
@@ -554,6 +554,21 @@ in
 
         # Exclude the same noisy entities as recorder for UI performance
         exclude = {
+          # Explicit entity exclusions (same as recorder)
+          entities = [
+            "sensor.john_iphone_info"
+            "sensor.john_iphone_next_update"
+            "sensor.john_iphone_last_update"
+            "sensor.nasim_iphone_info"
+            "sensor.nasim_iphone_next_update"
+            "sensor.nasim_iphone_last_update"
+            "sensor.johns_mac_studio_frontmost_app"
+            "sensor.clio_2_frontmost_app"
+            "sensor.smart_plug_tv_voltage"
+            "device_tracker.asus_john_iphone"
+            "device_tracker.asus_nasim_iphone"
+          ];
+
           entity_globs = [
             # Same exclusions as recorder to keep UI responsive
             "sensor.weather_*" # Weather detail sensors (keep weather.* entity)
@@ -590,6 +605,11 @@ in
           # Keep important components at warning level for troubleshooting
           "homeassistant.components.automation" = "warning";
           "homeassistant.components.script" = "warning";
+
+          # Suppress integration-specific errors (Phase 4 optimization)
+          "homeassistant.components.miele" = "error"; # Miele ValueError with unavailable states
+          "kasa.smart.smartdevice" = "error"; # TP-Link Kasa session closed errors
+          "pubnub" = "error"; # Ring doorbell PubNub connector errors
         };
       };
 

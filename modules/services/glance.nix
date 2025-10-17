@@ -202,7 +202,7 @@ with lib;
                         }
                         {
                           title = "Loki";
-                          url = "https://loki.vulcan.lan";
+                          url = "https://grafana.vulcan.lan/explore";
                         }
                         {
                           title = "Alertmanager";

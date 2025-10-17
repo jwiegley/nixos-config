@@ -256,10 +256,9 @@
       - Listen address: 127.0.0.1:8428
 
       ## Authentication
-      VictoriaMetrics reuses the Home Assistant long-lived access token from:
-      /var/lib/prometheus-hass/token
-
-      The token is managed by SOPS and automatically loaded at service startup.
+      VictoriaMetrics uses the Home Assistant long-lived access token via systemd
+      LoadCredential. The token is securely loaded from SOPS secrets at service
+      startup and made available at: /run/credentials/victoriametrics.service/ha-token
 
       ## Useful Commands
 
@@ -311,15 +310,15 @@
       ## Troubleshooting
 
       ### Metrics not appearing
-      1. Check Home Assistant token is valid:
+      1. Verify SOPS secret exists:
          ```bash
-         cat /var/lib/prometheus-hass/token
+         sudo ls -la /run/secrets/prometheus/home-assistant-token
          ```
 
-      2. Test Home Assistant endpoint:
+      2. Test Home Assistant endpoint (requires root to read credential):
          ```bash
-         TOKEN=$(cat /var/lib/prometheus-hass/token)
-         curl -H "Authorization: Bearer $TOKEN" https://hass.vulcan.lan/api/prometheus
+         sudo systemctl show victoriametrics.service -p LoadCredential
+         # Token is securely loaded into service credentials directory
          ```
 
       3. Check VictoriaMetrics scrape targets:
@@ -333,15 +332,15 @@
          ```
 
       ### Service fails to start
-      1. Check if token file exists:
+      1. Check if SOPS secret is deployed:
          ```bash
-         ls -la /var/lib/prometheus-hass/token
+         sudo ls -la /run/secrets/prometheus/home-assistant-token
+         systemctl status sops-install-secrets.service
          ```
 
-      2. Verify permissions:
+      2. Verify LoadCredential is configured:
          ```bash
-         # VictoriaMetrics service should have access via SupplementaryGroups
-         systemctl show victoriametrics | grep SupplementaryGroups
+         systemctl show victoriametrics.service -p LoadCredential
          ```
 
       3. Rebuild configuration:

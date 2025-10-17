@@ -14,7 +14,7 @@
   };
 
   # Open firewall ports on host for container access
-  networking.firewall.allowedTCPPorts = [ 18080 18443 ];
+  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 ];
 
   # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
@@ -35,6 +35,11 @@
         protocol = "tcp";
         hostPort = 18443;
         containerPort = 443;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18873;
+        containerPort = 873;
       }
     ];
 
@@ -63,8 +68,8 @@
       networking = {
         firewall = {
           enable = true;
-          # Allow HTTP for ACME challenges and HTTPS for secure traffic
-          allowedTCPPorts = [ 80 443 ];
+          # Allow HTTP for ACME challenges, HTTPS for secure traffic, and rsync daemon
+          allowedTCPPorts = [ 80 443 873 ];
         };
       };
 
@@ -176,6 +181,30 @@
         uid = 60;
       };
       users.groups.nginx.gid = 60;
+
+      # Rsync daemon configuration for serving public files
+      services.rsyncd = {
+        enable = true;
+        socketActivated = true;
+        settings = {
+          globalSection = {
+            uid = "nginx";
+            gid = "nginx";
+            "use chroot" = true;
+            "max connections" = 10;
+            "log file" = "/var/log/rsyncd.log";
+            "transfer logging" = true;
+          };
+          sections = {
+            pub = {
+              path = "/var/www/home.newartisans.com/pub";
+              comment = "Public files for home.newartisans.com";
+              "read only" = true;
+              list = true;
+            };
+          };
+        };
+      };
 
       # Make ACME non-blocking for container startup
       systemd.services."acme-order-renew-home.newartisans.com" = {

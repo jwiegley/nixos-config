@@ -102,6 +102,20 @@ let
         exit 1
     fi
 
+    # Function to clean up stale git lock files (older than 1 hour)
+    cleanup_stale_locks() {
+        local workspace="/tank/Backups/Git"
+        echo "Cleaning up stale git lock files..."
+        ${pkgs.findutils}/bin/find "$workspace" -name "*.lock" -path "*/.git/*" -mmin +60 -delete 2>/dev/null || true
+    }
+
+    # Clean up any stale lock files from previous crashed runs
+    cleanup_stale_locks
+
+    # Run update and fetch with single thread to avoid concurrency issues
+    # These commands will still report "failures" for repos with multiple remotes
+    # where git's atomic ref updates encounter race conditions, but the repos
+    # are actually updated successfully - these are false-positive errors
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
     ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
 

@@ -138,6 +138,10 @@ with lib;
                           title = "Home Assistant";
                           url = "https://hass.vulcan.lan";
                         }
+                        {
+                          title = "Node-RED";
+                          url = "https://nodered.vulcan.lan";
+                        }
                       ];
                     }
                     {

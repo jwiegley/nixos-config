@@ -5,7 +5,6 @@
 
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
-      # inputs.nixpkgs.follows = "nixpkgs";
     };
 
     home-manager = {
@@ -25,7 +24,6 @@
 
     quadlet-nix = {
       url = "github:SEIAROTg/quadlet-nix";
-      # inputs.nixpkgs.follows = "nixpkgs";
     };
 
     claude-code-nix = {
@@ -63,8 +61,3 @@
       };
     };
 }
-
-# system.activationScripts.consoleBlank = ''
-#   echo "Setting up console blanking..."
-#   ${pkgs.util-linux}/bin/setterm --blank 1 --powerdown 2 > /dev/tty1
-# '';

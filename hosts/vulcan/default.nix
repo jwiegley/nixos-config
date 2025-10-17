@@ -58,6 +58,7 @@
     ../../modules/services/elasticsearch.nix
     ../../modules/services/minio.nix
     ../../modules/services/paperless.nix
+    ../../modules/services/cockpit.nix
 
     # Containers
     ../../modules/containers/default.nix

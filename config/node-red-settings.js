@@ -69,63 +69,31 @@ module.exports = {
     } : undefined,
 
     /**
-     * HTTP Node Authentication
+     * HTTP Node Middleware
      * Secures all HTTP endpoints created with HTTP In nodes
-     * Supports both Basic Auth and Bearer Token authentication
+     * Supports Bearer Token authentication
      *
      * Bearer Token Format: Authorization: Bearer <token>
-     * Basic Auth Format: Authorization: Basic <base64(username:password)>
      */
-    httpNodeAuth: function(user, pass) {
-        // Check if this is a bearer token authentication attempt
-        // Express's basic auth parser will put the token in the 'user' field
-        // and leave 'pass' empty when using Bearer auth
-        if (user && !pass) {
-            // Check if this matches any configured API token
-            const validToken = apiTokens.some(tokenEntry => {
-                return tokenEntry.token === user;
-            });
+    httpNodeMiddleware: function(req, res, next) {
+        const authHeader = req.headers.authorization;
+
+        // Check for Bearer token
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            const validToken = apiTokens.some(t => t.token === token);
 
             if (validToken) {
-                return Promise.resolve({ username: 'api-client', permissions: '*' });
+                return next();
             }
         }
 
-        // If not a valid bearer token, check basic auth
-        // Note: Basic auth credentials should also be checked against SOPS secrets
-        // For now, we only support bearer token authentication
-        // To add basic auth support, load additional secrets and compare here
-
-        return Promise.resolve(null);
+        // If no valid token, return 401
+        res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Valid bearer token required. Use: Authorization: Bearer <token>'
+        });
     },
-
-    /**
-     * HTTP Node Middleware (Alternative approach)
-     * This middleware runs before httpNodeAuth and can be used
-     * for more sophisticated authentication logic
-     *
-     * Uncomment to enable custom bearer token authentication
-     * that works alongside or instead of httpNodeAuth
-     */
-    // httpNodeMiddleware: function(req, res, next) {
-    //     const authHeader = req.headers.authorization;
-    //
-    //     // Check for Bearer token
-    //     if (authHeader && authHeader.startsWith('Bearer ')) {
-    //         const token = authHeader.substring(7);
-    //         const validToken = apiTokens.some(t => t.token === token);
-    //
-    //         if (validToken) {
-    //             return next();
-    //         }
-    //     }
-    //
-    //     // If no valid token, return 401
-    //     res.status(401).json({
-    //         error: 'Unauthorized',
-    //         message: 'Valid bearer token required'
-    //     });
-    // },
 
     /**
      * Editor UI Settings

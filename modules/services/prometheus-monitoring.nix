@@ -29,5 +29,6 @@
     ../monitoring/services/minio-exporter.nix
     ../monitoring/services/paperless-exporter.nix
     ../monitoring/services/paperless-ai-exporter.nix
+    ../monitoring/services/node-red-exporter.nix
   ];
 }

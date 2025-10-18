@@ -3,8 +3,11 @@
 {
   # Import all container service modules
   imports = [
+    ./adminer-quadlet.nix
     ./elasticsearch-quadlet.nix
     ./litellm-quadlet.nix
+    ./mssql-quadlet.nix
+    ./mssql-exporter-quadlet.nix
     ./opnsense-api-transformer.nix  # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
@@ -40,7 +43,7 @@
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    allowedTCPPorts = [ 4000 5380 5432 8085 28981 ];  # 4000: litellm, 5380: Technitium DNS, 5432: PostgreSQL, 8085: Redis, 28981: paperless-ngx
+    allowedTCPPorts = [ 1433 4000 5380 5432 8085 9182 28981 ];  # 1433: mssql, 4000: litellm, 5380: Technitium DNS, 5432: PostgreSQL, 8085: Redis, 9182: mssql-exporter, 28981: paperless-ngx
     allowedUDPPorts = [ 53 ];
   };
 

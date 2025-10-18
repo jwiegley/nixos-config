@@ -9,6 +9,7 @@ let
     "system.yaml"
     "systemd.yaml"
     "database.yaml"
+    "mssql.yaml"
     "storage.yaml"
     "certificates.yaml"
     "chainweb.yaml"

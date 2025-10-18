@@ -41,6 +41,7 @@ let
     { name = "tank/iCloud"; mountpoint = "/tank/iCloud"; }
     { name = "tank/kadena"; mountpoint = "/tank/kadena"; }
     { name = "tank/src"; mountpoint = "/tank/src"; }
+    { name = "tank/SQLServer"; mountpoint = "/tank/SQLServer"; }
   ];
 
   # Function to generate a Samba share name from ZFS dataset name

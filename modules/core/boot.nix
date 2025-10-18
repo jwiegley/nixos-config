@@ -31,14 +31,7 @@
       ATTR{authorized}="1"
     '';
 
-    postBootCommands = ''
-      ${pkgs.coreutils}/bin/sleep 60
-      echo 1 > /sys/bus/pci/rescan
-      ${pkgs.bolt}/bin/boltctl enroll --policy auto \
-        $(${pkgs.bolt}/bin/boltctl | ${pkgs.gnugrep}/bin/grep -A 2 "ThunderBay" \
-          | ${pkgs.gnugrep}/bin/grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
-          | ${pkgs.coreutils}/bin/head -n 1) || true
-      ${pkgs.zfs}/bin/zpool import -a || true
-    '';
+    # PCI rescan and ZFS import are now handled by systemd services
+    # See modules/storage/pci-rescan.nix for Thunderbolt device enumeration
   };
 }

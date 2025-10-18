@@ -124,6 +124,36 @@ in
     mode = "0400";
   };
 
+  # Optimize LiteLLM database with performance indexes
+  systemd.services.postgresql-litellm-optimize = {
+    description = "Create performance indexes for LiteLLM database";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d litellm -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      # Create index on api_key column for faster query performance
+      # This prevents slow sequential scans on the large LiteLLM_SpendLogs table
+      ${config.services.postgresql.package}/bin/psql -d litellm -c \
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "LiteLLM_SpendLogs_api_key_idx" ON "LiteLLM_SpendLogs" (api_key);'
+
+      # Update table statistics after index creation
+      ${config.services.postgresql.package}/bin/psql -d litellm -c \
+        'ANALYZE "LiteLLM_SpendLogs";'
+    '';
+  };
+
   networking.firewall = {
     allowedTCPPorts =
       lib.mkIf config.services.postgresql.enable [ 5432 ];

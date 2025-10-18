@@ -135,6 +135,10 @@ with lib;
                           url = "https://postgres.vulcan.lan";
                         }
                         {
+                          title = "SQL Server";
+                          url = "https://adminer.vulcan.lan";
+                        }
+                        {
                           title = "Home Assistant";
                           url = "https://hass.vulcan.lan";
                         }

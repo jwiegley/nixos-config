@@ -1,0 +1,87 @@
+groups:
+  - name: mssql
+    interval: 30s
+    rules:
+      # SQL Server availability
+      - alert: MSSQLServerDown
+        expr: up{job="mssql"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server is down"
+          description: "SQL Server on {{ $labels.instance }} has been down for more than 2 minutes."
+
+      # SQL Server connections
+      - alert: MSSQLHighConnections
+        expr: mssql_connections > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server has high number of connections"
+          description: "SQL Server on {{ $labels.instance }} has {{ $value }} connections, which may indicate a connection leak or high load."
+
+      # SQL Server deadlocks
+      - alert: MSSQLDeadlocks
+        expr: rate(mssql_deadlocks_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server is experiencing deadlocks"
+          description: "SQL Server on {{ $labels.instance }} has {{ $value }} deadlocks per second over the last 5 minutes."
+
+      # Database size growth
+      - alert: MSSQLDatabaseSizeGrowing
+        expr: rate(mssql_database_size_bytes[1h]) > 1073741824  # 1GB per hour
+        for: 2h
+        labels:
+          severity: warning
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server database growing rapidly"
+          description: "Database {{ $labels.database }} on {{ $labels.instance }} is growing at {{ $value | humanize }}B/s."
+
+      # Transaction log size
+      - alert: MSSQLTransactionLogFull
+        expr: (mssql_log_space_used_bytes / mssql_log_space_size_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server transaction log is nearly full"
+          description: "Transaction log for database {{ $labels.database }} on {{ $labels.instance }} is {{ $value | humanizePercentage }} full."
+
+      # SQL Server memory pressure
+      - alert: MSSQLMemoryPressure
+        expr: mssql_memory_available_bytes < 1073741824  # Less than 1GB available
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          service: mssql
+        annotations:
+          summary: "MS SQL Server is experiencing memory pressure"
+          description: "SQL Server on {{ $labels.instance }} has only {{ $value | humanize }}B of available memory."
+
+      # Exporter scrape failures
+      - alert: MSSQLExporterScrapeFailed
+        expr: up{job="mssql"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+          service: mssql-exporter
+        annotations:
+          summary: "MS SQL Server exporter is not responding"
+          description: "The MS SQL Server Prometheus exporter on {{ $labels.instance }} has failed to scrape metrics for more than 5 minutes."

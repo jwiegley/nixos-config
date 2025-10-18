@@ -27,6 +27,7 @@
     ../monitoring/services/home-assistant-backup-exporter.nix
     ../monitoring/services/litellm-exporter.nix
     ../monitoring/services/minio-exporter.nix
+    ../monitoring/services/mssql-exporter.nix
     ../monitoring/services/paperless-exporter.nix
     ../monitoring/services/paperless-ai-exporter.nix
     ../monitoring/services/node-red-exporter.nix

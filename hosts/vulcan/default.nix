@@ -64,6 +64,7 @@
     ../../modules/containers/default.nix
 
     # Storage
+    ../../modules/storage/pci-rescan.nix
     ../../modules/storage/zfs.nix
     ../../modules/storage/zfs-replication.nix
     ../../modules/storage/zfs-replication-monitoring.nix

@@ -164,7 +164,11 @@
   # Bind mount ZFS dataset to Nextcloud data directory
   fileSystems."/var/lib/nextcloud/data" = {
     device = "/tank/Nextcloud";
-    options = [ "bind" ];
+    options = [
+      "bind"
+      "x-systemd.requires=zfs-import-tank.service"
+      "x-systemd.after=zfs-import-tank.service"
+    ];
   };
 
   # Systemd hardening for PHP-FPM
@@ -177,9 +181,9 @@
     RestrictRealtime = true;
   };
 
-  # Fix nextcloud-setup service to wait for PostgreSQL
+  # Fix nextcloud-setup service to wait for PostgreSQL AND the nextcloud data mount
   systemd.services.nextcloud-setup = {
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
+    after = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
+    requires = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
   };
 }

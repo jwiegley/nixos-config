@@ -155,10 +155,12 @@
   };
 
   # Create required Nextcloud directories with proper ownership
+  # Include /var/lib/nextcloud/data so it exists even when tank isn't mounted
   systemd.tmpfiles.rules = [
     "d /var/lib/nextcloud/config 0750 nextcloud nextcloud -"
     "d /var/lib/nextcloud/store-apps 0750 nextcloud nextcloud -"
     "d /var/lib/nextcloud/apps 0750 nextcloud nextcloud -"
+    "d /var/lib/nextcloud/data 0750 nextcloud nextcloud -"
   ];
 
   # Bind mount ZFS dataset to Nextcloud data directory
@@ -166,7 +168,7 @@
     device = "/tank/Nextcloud";
     options = [
       "bind"
-      "x-systemd.requires=zfs-import-tank.service"
+      "nofail"  # Don't block boot/activation if mount fails
       "x-systemd.after=zfs-import-tank.service"
     ];
   };
@@ -182,8 +184,9 @@
   };
 
   # Fix nextcloud-setup service to wait for PostgreSQL AND the nextcloud data mount
+  # Note: We use 'after' but not 'requires' for the mount to allow activation without tank
   systemd.services.nextcloud-setup = {
     after = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
-    requires = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
+    requires = [ "postgresql.service" ];
   };
 }

@@ -65,6 +65,43 @@ in
         (map (secretName: config.sops.secrets."${secretName}".path) (lib.attrValues secrets)));
   in
   {
+    # VALIDATION: Prevent DNS configuration in extraContainerConfig
+    # This assertion will fail the build if someone tries to set DNS, catching
+    # the recurring bug at build time instead of runtime.
+    assertions = [
+      {
+        assertion = !(extraContainerConfig ? dns);
+        message = ''
+          ❌ CRITICAL ERROR: DNS configuration detected in mkQuadletService for ${name}!
+
+          You tried to set 'dns' in extraContainerConfig, which will break .lan domain resolution.
+          This is a RECURRING BUG that has occurred 5+ times.
+
+          REMOVE THIS:
+            extraContainerConfig = {
+              dns = [ ... ];  # ← DELETE THIS LINE
+            };
+
+          WHY THIS BREAKS:
+          - Setting explicit dns = [...] disables Podman's automatic DNS forwarding
+          - Containers can't resolve .lan domains (hera.lan, athena.lan, etc.)
+          - Results in "Temporary failure in name resolution" errors
+
+          WHAT TO DO:
+          - Remove the dns setting from extraContainerConfig
+          - Podman's defaults will automatically forward to host DNS
+          - See modules/lib/mkQuadletService.nix:82-119 for detailed explanation
+
+          If you absolutely need custom DNS (you probably don't):
+          1. Read the full documentation in mkQuadletService.nix first
+          2. Test with: podman exec ${name} nslookup hera.lan
+          3. Document WHY you're overriding the default
+
+          This assertion exists to prevent this bug from recurring.
+        '';
+      }
+    ];
+
     # Quadlet container configuration
     virtualisation.quadlet.containers.${name} = {
       # Explicitly enable autoStart to ensure service starts on boot and after rebuild
@@ -78,8 +115,45 @@ in
           environmentFiles = allEnvironmentFiles;
           volumes = volumes;
           networks = [ "podman" ];
-          # Use host DNS via Podman gateway for .lan domain resolution
-          dns = [ common.postgresDefaults.host ];
+
+          # ═══════════════════════════════════════════════════════════════════════
+          # ⚠️  CRITICAL: DO NOT SET dns = [...] IN THIS CONFIGURATION!  ⚠️
+          # ═══════════════════════════════════════════════════════════════════════
+          #
+          # This bug has occurred 5+ times. Read carefully before making ANY changes:
+          #
+          # ❌ WRONG (BREAKS .lan DOMAIN RESOLUTION):
+          #    dns = [ "10.88.0.1" ];  # ← PostgreSQL server, NOT a DNS server!
+          #    dns = [ common.postgresDefaults.host ];  # ← Same thing, still wrong!
+          #
+          # ✅ CORRECT (CURRENT CONFIGURATION):
+          #    (no dns setting at all - uses Podman defaults)
+          #
+          # WHY THIS KEEPS BREAKING:
+          # - Podman's default DNS automatically forwards to host DNS (/etc/resolv.conf)
+          # - Host DNS resolves .lan domains (192.168.1.2, 192.168.1.1)
+          # - Setting explicit dns = [...] DISABLES automatic forwarding
+          # - Containers then can't resolve hera.lan, athena.lan, etc.
+          #
+          # SYMPTOMS WHEN BROKEN:
+          # - "socket.gaierror: [Errno -3] Temporary failure in name resolution"
+          # - "ClientConnectorDNSError: Cannot connect to host *.lan"
+          # - litellm can't load models from hera.lan/athena.lan
+          #
+          # HOW PODMAN DEFAULT DNS WORKS:
+          # - Copies host's /etc/resolv.conf nameservers to container
+          # - May add 169.254.1.1 (aardvark-dns) for advanced features
+          # - Automatically adapts when host DNS changes
+          # - Perfect for .lan domain resolution
+          #
+          # IF YOU THINK YOU NEED TO SET DNS:
+          # 1. You probably don't - Podman's defaults work for 99% of cases
+          # 2. If you really need custom DNS, use extraContainerConfig in the
+          #    individual service file, NOT here in mkQuadletService
+          # 3. Test thoroughly with: podman exec <container> nslookup hera.lan
+          # 4. Document WHY you're overriding the default
+          #
+          # ═══════════════════════════════════════════════════════════════════════
         }
         (lib.optionalAttrs (exec != null) { inherit exec; })
         extraContainerConfig

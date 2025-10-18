@@ -2,8 +2,11 @@
 
 {
   # Ensure ACME certificate directory exists on host
+  # Also ensure /var/www/home.newartisans.com exists even when tank isn't mounted
+  # This allows the container to start (though it won't have content without tank)
   systemd.tmpfiles.rules = [
     "d /var/lib/acme-container 0755 root root -"
+    "d /var/www/home.newartisans.com 0755 root root -"
   ];
 
   # Enable NAT for container to access internet
@@ -17,9 +20,10 @@
   networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
 
   # Ensure container waits for ZFS mount of /var/www/home.newartisans.com (tank/Public)
+  # Note: We use 'after' but not 'requires' to allow activation without tank
+  # The container will fail to start if the mount isn't available, but won't block nixos-rebuild
   systemd.services."container@secure-nginx" = {
     after = [ "zfs-import-tank.service" "zfs.target" ];
-    requires = [ "zfs-import-tank.service" ];
   };
 
   # NixOS container for secure nginx with direct SSL/ACME

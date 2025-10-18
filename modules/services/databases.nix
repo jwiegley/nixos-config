@@ -154,6 +154,15 @@ in
     '';
   };
 
+  # CRITICAL FIX: PostgreSQL must wait for podman0 network before starting
+  # Problem: PostgreSQL starts at ~19s, but podman0 is created at ~50s
+  # Result: PostgreSQL fails to bind to 10.88.0.1 and only listens on localhost
+  # This causes litellm/wallabag/ragflow to fail their pg_isready health checks
+  systemd.services.postgresql = {
+    after = [ "sys-subsystem-net-devices-podman0.device" ];
+    requires = [ "sys-subsystem-net-devices-podman0.device" ];
+  };
+
   networking.firewall = {
     allowedTCPPorts =
       lib.mkIf config.services.postgresql.enable [ 5432 ];

@@ -26,18 +26,24 @@
     script = ''
       set -euo pipefail
 
+      # Wait for system to stabilize before PCI rescan
+      echo "Waiting for system stabilization..."
+      sleep 30
+
       echo "Rescanning PCI bus for Thunderbolt storage devices..."
       echo 1 > /sys/bus/pci/rescan
 
-      # Wait for devices to enumerate
-      sleep 5
+      # Wait for PCI devices to enumerate
+      echo "Waiting for device enumeration..."
+      sleep 15
 
       # Trigger udev to process new devices
       ${pkgs.systemd}/bin/udevadm trigger
-      ${pkgs.systemd}/bin/udevadm settle --timeout=15
+      ${pkgs.systemd}/bin/udevadm settle --timeout=20
 
       # Additional settling time for device initialization
-      sleep 3
+      echo "Waiting for device initialization..."
+      sleep 10
 
       # Enroll ThunderBay device with auto policy
       echo "Enrolling Thunderbolt devices..."
@@ -46,7 +52,11 @@
           | ${pkgs.gnugrep}/bin/grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
           | ${pkgs.coreutils}/bin/head -n 1) || true
 
-      echo "PCI rescan and Thunderbolt enrollment complete"
+      # Final wait to ensure devices are ready for ZFS import
+      echo "Final device ready check..."
+      sleep 10
+
+      echo "PCI rescan and Thunderbolt enrollment complete - devices should be ready"
     '';
   };
 

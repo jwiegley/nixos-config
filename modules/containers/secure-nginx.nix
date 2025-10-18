@@ -16,6 +16,12 @@
   # Open firewall ports on host for container access
   networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
 
+  # Ensure container waits for ZFS mount of /var/www/home.newartisans.com (tank/Public)
+  systemd.services."container@secure-nginx" = {
+    after = [ "zfs-import-tank.service" "zfs.target" ];
+    requires = [ "zfs-import-tank.service" ];
+  };
+
   # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
 

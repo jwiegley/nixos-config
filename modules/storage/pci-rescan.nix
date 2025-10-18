@@ -1,9 +1,20 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
-  # Create a dedicated PCI rescan service that runs before ZFS pool import
+  # Create a dedicated PCI rescan service that runs before ZFS pool import.
   # This is necessary for Thunderbolt storage devices that require PCI bus
   # enumeration before the devices appear to the system.
+  #
+  # Key ordering requirements:
+  # 1. Must run AFTER bolt.service is ready (for Thunderbolt authorization)
+  # 2. Must run AFTER basic system infrastructure (udev, dbus)
+  # 3. Must run BEFORE zfs-import-tank.service
+  # 4. Should allow system to stabilize to avoid race conditions
   systemd.services.thunderbolt-pci-rescan = {
     description = "PCI bus rescan for Thunderbolt storage devices";
 
@@ -12,11 +23,24 @@
     requiredBy = [ "zfs-import-tank.service" ];
     before = [ "zfs-import-tank.service" ];
 
-    # Ensure kernel modules are loaded first
-    after = [ "systemd-modules-load.service" ];
+    # Critical: Wait for the infrastructure needed for Thunderbolt authorization
+    # - systemd-udev-settle: All udev events processed
+    # - bolt.service: Thunderbolt daemon ready to authorize devices
+    # - basic.target: Ensures dbus, sockets, and other infrastructure is ready
+    after = [
+      "systemd-udev-settle.service"
+      "bolt.service"
+      "basic.target"
+    ];
 
-    # Don't create dependencies on basic.target or sysinit.target
-    unitConfig.DefaultDependencies = false;
+    # Ensure bolt daemon is running before we rescan
+    # This is critical because bolt must be ready to authorize devices
+    # when they appear on the PCI bus
+    requires = [ "bolt.service" ];
+
+    # Allow default dependencies (basic.target, sysinit.target)
+    # This ensures we run in the proper boot phase
+    unitConfig.DefaultDependencies = true;
 
     serviceConfig = {
       Type = "oneshot";
@@ -26,37 +50,58 @@
     script = ''
       set -euo pipefail
 
-      # Wait for system to stabilize before PCI rescan
-      echo "Waiting for system stabilization..."
-      sleep 30
+      echo "Starting Thunderbolt PCI rescan..."
 
+      # Verify bolt daemon is accessible via D-Bus
+      # This confirms the entire authorization stack is ready
+      if ! ${pkgs.bolt}/bin/boltctl list >/dev/null 2>&1; then
+        echo "WARNING: bolt daemon not responding, waiting 5s..."
+        sleep 5
+      fi
+
+      # Trigger PCI bus rescan to enumerate Thunderbolt devices
       echo "Rescanning PCI bus for Thunderbolt storage devices..."
       echo 1 > /sys/bus/pci/rescan
 
-      # Wait for PCI devices to enumerate
-      echo "Waiting for device enumeration..."
-      sleep 15
+      # Wait for devices to appear on the bus
+      echo "Waiting for device enumeration (10s)..."
+      sleep 10
 
-      # Trigger udev to process new devices
+      # Trigger udev to process new devices and wait for completion
+      echo "Triggering udev events..."
       ${pkgs.systemd}/bin/udevadm trigger
-      ${pkgs.systemd}/bin/udevadm settle --timeout=20
+      ${pkgs.systemd}/bin/udevadm settle --timeout=30
 
-      # Additional settling time for device initialization
-      echo "Waiting for device initialization..."
-      sleep 10
+      # Allow time for bolt to authorize devices via udev rules
+      echo "Waiting for Thunderbolt authorization (5s)..."
+      sleep 5
 
-      # Enroll ThunderBay device with auto policy
-      echo "Enrolling Thunderbolt devices..."
-      ${pkgs.bolt}/bin/boltctl enroll --policy auto \
-        $(${pkgs.bolt}/bin/boltctl | ${pkgs.gnugrep}/bin/grep -A 2 "ThunderBay" \
-          | ${pkgs.gnugrep}/bin/grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
-          | ${pkgs.coreutils}/bin/head -n 1) || true
+      # Explicitly enroll ThunderBay device with auto policy if not already enrolled
+      # The grep/head pipeline extracts the device UUID
+      echo "Ensuring Thunderbolt devices are enrolled..."
+      DEVICE_UUID=$(${pkgs.bolt}/bin/boltctl list | ${pkgs.gnugrep}/bin/grep -A 2 "ThunderBay" \
+        | ${pkgs.gnugrep}/bin/grep -o "[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}" \
+        | ${pkgs.coreutils}/bin/head -n 1 || true)
 
-      # Final wait to ensure devices are ready for ZFS import
-      echo "Final device ready check..."
-      sleep 10
+      if [ -n "$DEVICE_UUID" ]; then
+        ${pkgs.bolt}/bin/boltctl enroll --policy auto "$DEVICE_UUID" || true
+        echo "Enrolled device: $DEVICE_UUID"
+      else
+        echo "No ThunderBay device found to enroll"
+      fi
 
-      echo "PCI rescan and Thunderbolt enrollment complete - devices should be ready"
+      # Final settling time for storage devices to initialize
+      echo "Waiting for storage device initialization (5s)..."
+      sleep 5
+
+      # Verify devices are visible
+      if ${pkgs.systemd}/bin/udevadm info -q path /dev/disk/by-id/* 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q "thunderbolt"; then
+        echo "SUCCESS: Thunderbolt storage devices are now visible"
+      else
+        echo "WARNING: No Thunderbolt storage devices detected"
+      fi
+
+      echo "PCI rescan complete - devices ready for ZFS import"
     '';
   };
 

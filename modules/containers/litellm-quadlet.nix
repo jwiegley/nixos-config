@@ -52,6 +52,12 @@ in
     };
   };
 
+  # Ensure redis-litellm waits for podman network
+  systemd.services.redis-litellm = {
+    after = [ "sys-subsystem-net-devices-podman0.device" "podman.service" ];
+    bindsTo = [ "sys-subsystem-net-devices-podman0.device" ];
+  };
+
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     4000 # litellm
     8085 # redis[litellm]

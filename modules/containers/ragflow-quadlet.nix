@@ -17,6 +17,12 @@ in
     };
   };
 
+  # Ensure redis-ragflow waits for podman network
+  systemd.services.redis-ragflow = {
+    after = [ "sys-subsystem-net-devices-podman0.device" "podman.service" ];
+    bindsTo = [ "sys-subsystem-net-devices-podman0.device" ];
+  };
+
   # RAGFlow container configuration
   imports = [
     (mkQuadletService {

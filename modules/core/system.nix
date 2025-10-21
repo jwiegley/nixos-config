@@ -11,7 +11,7 @@
     '')
   ];
 
-  services.hardware.bolt.enable = true;
+  services.hardware.bolt.enable = false;
 
   time.timeZone = "America/Los_Angeles";
 

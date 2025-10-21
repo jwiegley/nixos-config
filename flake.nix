@@ -27,10 +27,6 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    firmware.url = "path:/etc/nixos/firmware";
-    sops_yaml.url = "path:/etc/nixos/.sops.yaml";
-    secrets_yaml.url = "path:/etc/nixos/secrets.yaml";
   };
 
   outputs = { nixpkgs,

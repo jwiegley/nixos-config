@@ -24,7 +24,9 @@
       "Bash(zfs list:*)",
       "mcp__memory-keeper__context_session_start",
       "mcp__memory-keeper__context_save",
-      "mcp__memory-keeper__context_checkpoint"
+      "mcp__memory-keeper__context_checkpoint",
+      "Skill(node-red)",
+      "Read(//home/johnw/.claude/skills/node-red/references/**)"
     ],
     "deny": [],
     "ask": []

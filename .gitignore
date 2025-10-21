@@ -1,6 +1,4 @@
-# Home Assistant backup data (contains sensitive OAuth tokens and device pairings)
-home-assistant-backup/
-home-assistant-backup_*.tar.gz
+/firmware
 
 # SOPS age keys (keep private - these decrypt the secrets)
 *.age

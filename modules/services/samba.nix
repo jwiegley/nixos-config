@@ -14,7 +14,6 @@ let
     { name = "tank/Backups/Kadena"; mountpoint = "/tank/Backups/Kadena"; }
     { name = "tank/Backups/Kadena/Drive"; mountpoint = "/tank/Backups/Kadena/Drive"; }
     { name = "tank/Backups/Kadena/Slack"; mountpoint = "/tank/Backups/Kadena/Slack"; }
-    { name = "tank/Backups/Kadena/chainweb"; mountpoint = "/tank/Backups/Kadena/chainweb"; }
     { name = "tank/Backups/rpool"; mountpoint = "/tank/Backups/rpool"; }
     { name = "tank/Backups/rpool/home"; mountpoint = "/tank/Backups/rpool/home"; }
     { name = "tank/Backups/rpool/nix"; mountpoint = "/tank/Backups/rpool/nix"; }

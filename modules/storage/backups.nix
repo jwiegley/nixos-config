@@ -101,7 +101,6 @@ let
   backupExcludes = [
     "Git"
     "Images"
-    "chainweb"
   ];
 
   attrNameList = attrs:

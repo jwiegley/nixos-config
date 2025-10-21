@@ -11,7 +11,6 @@ let
     "database.yaml"
     "storage.yaml"
     "certificates.yaml"
-    "chainweb.yaml"
     "network.yaml"
     "nextcloud.yaml"
   ];

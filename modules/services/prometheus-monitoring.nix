@@ -12,7 +12,6 @@
     ../monitoring/services/postfix-exporter.nix
     ../monitoring/services/zfs-exporter.nix
     ../monitoring/services/restic-metrics.nix
-    ../monitoring/services/chainweb-exporters.nix
     ../monitoring/services/opnsense-monitoring.nix
     ../monitoring/services/technitium-dns-monitoring.nix
     ../monitoring/services/dns-query-logs.nix

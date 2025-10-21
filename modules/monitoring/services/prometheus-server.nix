@@ -12,7 +12,6 @@ let
     "mssql.yaml"
     "storage.yaml"
     "certificates.yaml"
-    "chainweb.yaml"
     "dns.yaml"
     "network.yaml"
     "nextcloud.yaml"
@@ -105,7 +104,6 @@ in
       - Postfix Exporter: http://localhost:9154/metrics
       - ZFS Exporter: http://localhost:9134/metrics
       - Blackbox Exporter: http://localhost:9115/metrics
-      - Chainweb: http://localhost:9101/metrics
 
       ## Restic Monitoring
       Restic metrics are collected via textfile collector for all repositories:

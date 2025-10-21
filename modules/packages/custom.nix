@@ -116,18 +116,11 @@ let
         ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git archive --force
     fi
   '';
-
-  # Backup Chainweb script
-  backup-chainweb = pkgs.writeScriptBin "backup-chainweb" ''
-    #!${pkgs.bash}/bin/bash
-    exec ${pkgs.rsync}/bin/rsync -av --delete athena:/Volumes/studio/ChainState/kadena/chainweb-node/ /tank/Backups/Kadena/chainweb/
-  '';
 in
 {
   environment.systemPackages =
     (with pkgs; [
       b3sum
-      backup-chainweb
       btop
       dh
       dig

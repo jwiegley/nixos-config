@@ -124,12 +124,6 @@ let
         ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git archive --force
     fi
   '';
-
-  # Script to backup Chainweb data
-  backupChainwebScript = pkgs.writeShellScript "backup-chainweb" ''
-    #!${pkgs.bash}/bin/bash
-    exec ${pkgs.rsync}/bin/rsync -av --delete athena:/Volumes/studio/ChainState/kadena/chainweb-node/ /tank/Backups/Kadena/chainweb/
-  '';
 in
 {
   # SOPS secret for GitHub token used by workspace update
@@ -166,28 +160,6 @@ in
       timerConfig = {
         OnCalendar = "daily";
         Unit = "git-workspace-archive.service";
-      };
-    };
-
-    # Backup Chainweb
-    services.backup-chainweb = {
-      description = "Backup Chainweb databases";
-      path = with pkgs; [
-        rsync
-        openssh
-      ];
-      serviceConfig = {
-        User = "root";
-        Group = "root";
-        ExecStart = backupChainwebScript;
-      };
-    };
-
-    timers.backup-chainweb = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "daily";
-        Unit = "backup-chainweb.service";
       };
     };
 

@@ -278,7 +278,7 @@ sudo systemctl status alertmanager
 # URL: https://alertmanager.vulcan.lan
 ```
 
-**Monitored Systems:** Home Assistant entities, LiteLLM API usage, PostgreSQL, ZFS pools, network interfaces, system resources, Chainweb node.
+**Monitored Systems:** Home Assistant entities, LiteLLM API usage, PostgreSQL, ZFS pools, network interfaces, system resources.
 
 ### Container Management
 

@@ -17,7 +17,6 @@
       };
 
       "tank/Downloads".use_template = [ "active" ];
-      "tank/Backups/chainweb".use_template = [ "production" ];
     };
 
     templates = {

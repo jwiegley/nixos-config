@@ -93,7 +93,6 @@ This configuration follows a highly modular architecture, organizing system conf
   - Systemd exporter
   - Postfix exporter
   - ZFS exporter
-  - Chainweb blockchain exporter
   - Custom textfile collectors (restic, mbsync)
 - **Grafana**: Visualization dashboards
 - **Alertmanager**: Alert routing and notifications
@@ -144,7 +143,6 @@ All containers use Podman with Quadlet for systemd integration:
 - **DNS**: Technitium DNS Server
 - **Network Services**: Tailscale, Nebula VPN
 - **Media Services**: Configured media management
-- **Chainweb**: Kadena blockchain node monitoring
 
 ## 🖥️ Hardware & Platform
 
@@ -347,7 +345,6 @@ journalctl -u zfs-replication -f
 | Systemd | 9558 | Service status, failures, restarts |
 | Postfix | 9154 | Mail queue, delivery stats |
 | ZFS | 9134 | Pool health, dataset usage, I/O |
-| Chainweb | Custom | Blockchain node metrics |
 | Restic | Textfile | Backup status, snapshot counts |
 | mbsync | Textfile | Sync status, message counts |
 
@@ -360,7 +357,6 @@ Located in `modules/monitoring/alerts/`:
 - **database.yaml**: PostgreSQL connection and performance
 - **storage.yaml**: ZFS pool health, disk space
 - **certificates.yaml**: Certificate expiration warnings
-- **chainweb.yaml**: Blockchain node health
 - **network.yaml**: Network connectivity and performance
 - **nextcloud.yaml**: Nextcloud-specific alerts
 

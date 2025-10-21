@@ -730,36 +730,6 @@
           ];
         }
 
-        # Chainweb/Kadena node exporter logs from journal
-        {
-          job_name = "chainweb-exporters";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "chainweb-exporters";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "chainweb-node-exporter-.*\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "node";
-              regex = "chainweb-node-exporter-(.*)\\.service";
-              replacement = "$1";
-            }
-          ];
-        }
-
         # Glance dashboard and GitHub extension logs from journal
         {
           job_name = "glance";

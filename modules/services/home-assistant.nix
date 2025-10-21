@@ -269,7 +269,12 @@ in
 
     # Custom components installed via overlays
     customComponents = with pkgs.home-assistant-custom-components; [
-      hacs # Home Assistant Community Store
+      # HACS with manifest check disabled
+      # Fix for manifestCheckPhase error on aarch64 (Asahi)
+      # Issue: frontend manifest.json files are incorrectly validated as HA component manifests
+      (hacs.overrideAttrs (oldAttrs: {
+        doInstallCheck = false;
+      }))
       intellicenter # Pentair IntelliCenter integration
     ];
 

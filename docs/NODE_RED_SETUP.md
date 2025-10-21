@@ -182,7 +182,7 @@ However, for most use cases, you should configure the Home Assistant WebSocket n
 ## Firewall Configuration
 
 Node-RED is accessible:
-- **Direct HTTP**: http://vulcan.lan:1880 (local network only via enp4s0)
+- **Direct HTTP**: http://vulcan.lan:1880 (local network only via end0)
 - **HTTPS Proxy**: https://nodered.vulcan.lan (via nginx)
 
 ## Troubleshooting
@@ -269,7 +269,7 @@ Owned by the `node-red` user and group.
 
 1. **Token Security**: The Home Assistant token is encrypted with SOPS and only readable by the `node-red` user
 2. **SSL/TLS**: All communication uses SSL certificates from Step-CA
-3. **Network Access**: Direct access limited to local network interface (enp4s0)
+3. **Network Access**: Direct access limited to local network interface (end0)
 4. **User Isolation**: Node-RED runs as dedicated `node-red` user
 
 ## Integration Examples

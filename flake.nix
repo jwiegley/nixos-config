@@ -2,10 +2,7 @@
   inputs = {
     # nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    nixos-hardware = {
-      url = "github:NixOS/nixos-hardware";
-    };
+    nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon";
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -33,19 +30,20 @@
   };
 
   outputs = { nixpkgs,
-              nixos-hardware,
-              home-manager, sops-nix,
+              nixos-apple-silicon,
+              home-manager,
+              sops-nix,
               nixos-logwatch,
               quadlet-nix,
               claude-code-nix, ... }:
-    let system = "x86_64-linux"; in {
-      formatter.x86_64-linux =
-        nixpkgs.legacyPackages.x86_64-linux.nixfmt-rfc-style;
+    let system = "aarch64-linux"; in {
+      formatter.aarch64-linux =
+        nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
 
       nixosConfigurations.vulcan = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
-          nixos-hardware.nixosModules.apple-t2
+          nixos-apple-silicon.nixosModules.default
           nixos-logwatch.nixosModules.logwatch
           sops-nix.nixosModules.sops
           quadlet-nix.nixosModules.quadlet

@@ -891,12 +891,12 @@ EOF
 
   # Open firewall for local network access only
   # Access via nginx reverse proxy on port 443 (HTTPS)
-  networking.firewall.interfaces."enp4s0".allowedTCPPorts = [
+  networking.firewall.interfaces."end0".allowedTCPPorts = [
     8123 # Home Assistant web interface
     21063 # HomeKit Bridge accessory protocol
   ];
 
-  networking.firewall.interfaces."enp4s0".allowedUDPPorts = [
+  networking.firewall.interfaces."end0".allowedUDPPorts = [
     5353 # mDNS for HomeKit/Bonjour discovery
   ];
 }

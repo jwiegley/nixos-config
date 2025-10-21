@@ -13,7 +13,7 @@
   networking.nat = {
     enable = true;
     internalInterfaces = [ "ve-+" ];  # All container interfaces
-    externalInterface = "enp4s0";  # Replace with your internet-facing interface if different
+    externalInterface = "end0";  # Replace with your internet-facing interface if different
   };
 
   # Open firewall ports on host for container access

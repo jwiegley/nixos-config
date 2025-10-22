@@ -37,8 +37,6 @@ in
 
       # SQL Server doesn't have a web UI, so no nginx virtual host
       nginxVirtualHost = null;
-
-      createStateDir = false;  # Using ZFS dataset instead
     })
   ];
 

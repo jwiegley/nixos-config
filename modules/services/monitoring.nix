@@ -86,7 +86,13 @@ in
         { name = "sudo"; }
         # { name = "fail2ban"; }
         { name = "kernel"; }
-        { name = "audit"; }
+        # { name = "audit"; }
+        {
+          name = "certificate-validation";
+          title = "Certificate Validation Report";
+          script = lib.getExe certificateValidationScript;
+        }
+      ] ++ lib.optionals false [
         {
           name = "zpool";
           title = "ZFS Pool Status";
@@ -101,11 +107,6 @@ in
           name = "zfs-snapshot";
           title = "ZFS Snapshots";
           script = lib.getExe zfsSnapshotScript;
-        }
-        {
-          name = "certificate-validation";
-          title = "Certificate Validation Report";
-          script = lib.getExe certificateValidationScript;
         }
       ];
     };

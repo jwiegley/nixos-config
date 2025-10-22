@@ -280,7 +280,7 @@ in
     };
 
     # ZFS replication status exporter - runs daily at 6am
-    zfs-replication-status-exporter = {
+    zfs-replication-status-exporter = lib.mkIf false {
       description = "Generate ZFS replication status metrics for Prometheus";
       serviceConfig = {
         Type = "oneshot";

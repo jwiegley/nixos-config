@@ -30,8 +30,6 @@ in
       # SQL Server exporter doesn't need nginx (Prometheus scrapes directly)
       nginxVirtualHost = null;
 
-      createStateDir = false;
-
       extraUnitConfig = {
         After = [ "mssql.service" ];
         Wants = [ "mssql.service" ];

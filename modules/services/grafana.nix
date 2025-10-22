@@ -198,14 +198,6 @@
           -o "$DASHBOARD_DIR/logs-app.json" || true
       fi
 
-      # Copy ZFS Replication Dashboard
-      if [ ! -f "$DASHBOARD_DIR/zfs-replication.json" ]; then
-        echo "Installing ZFS Replication dashboard..."
-        if [ -f "/etc/nixos/modules/storage/zfs-replication-dashboard.json" ]; then
-          cp /etc/nixos/modules/storage/zfs-replication-dashboard.json "$DASHBOARD_DIR/zfs-replication.json"
-        fi
-      fi
-
       # Copy DNS Query Logs Dashboard
       if [ ! -f "$DASHBOARD_DIR/dns-query-logs.json" ]; then
         echo "Installing DNS Query Logs dashboard..."

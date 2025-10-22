@@ -31,8 +31,6 @@ in
           proxy_read_timeout 300s;
         '';
       };
-
-      createStateDir = false;
     })
   ];
 }

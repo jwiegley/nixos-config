@@ -237,7 +237,7 @@ in
       autovacuum_analyze_scale_factor = "0.025"; # Analyze earlier for better plans
 
       # Planner cost constants - favor index scans for time-series queries
-      random_page_cost = "1.1"; # Lower for SSD/ZFS storage
+      random_page_cost = "1.1"; # Lower for SSD storage
       effective_io_concurrency = "200"; # Higher for SSD
 
       # Statistics for better query planning

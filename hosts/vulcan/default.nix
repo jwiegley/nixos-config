@@ -39,7 +39,6 @@
     ../../modules/services/alertmanager.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
-    # ../../modules/services/samba.nix
     ../../modules/services/home-assistant.nix
     ../../modules/services/node-red.nix
     ../../modules/services/grafana.nix
@@ -52,22 +51,10 @@
     ../../modules/services/mbsync.nix
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
-    ../../modules/services/nextcloud.nix
-    # ../../modules/services/minio.nix
-    # ../../modules/services/paperless.nix
     ../../modules/services/cockpit.nix
 
     # Containers
     ../../modules/containers/default.nix
-
-    # jww (2025-10-21): ZFS pool tank not connected
-    # Storage
-    # ../../modules/storage/pci-rescan.nix
-    # ../../modules/storage/zfs.nix
-    # ../../modules/storage/zfs-replication.nix
-    # ../../modules/storage/zfs-replication-monitoring.nix
-    # ../../modules/storage/backups.nix
-    # ../../modules/storage/backup-monitoring.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix
@@ -75,6 +62,15 @@
     # Packages
     ../../modules/packages/custom.nix
     ../../modules/packages/zsh.nix
+  ] ++ lib.optionals false [
+    # Storage
+    ../../modules/storage/zfs.nix
+    ../../modules/storage/zfs-replication.nix
+    ../../modules/storage/zfs-replication-monitoring.nix
+    ../../modules/storage/backups.nix
+    ../../modules/storage/backup-monitoring.nix
+    ../../modules/services/nextcloud.nix
+    ../../modules/services/samba.nix
   ];
 
   # This option defines the first version of NixOS you have installed on this

@@ -54,7 +54,6 @@ in
     extraContainerConfig ? {}, # Additional quadlet container config
 
     tmpfilesRules ? [],  # Additional tmpfiles.d rules
-    createStateDir ? true,  # Whether to create default /var/lib/${name} directory
   }:
   let
     hostname = "${name}.vulcan.lan";
@@ -222,7 +221,7 @@ in
 
     # State directory
     systemd.tmpfiles.rules =
-      (lib.optional createStateDir "d /var/lib/${name} 0755 root root -")
+      "d /var/lib/${name} 0755 root root -"
       ++ tmpfilesRules;
   };
 }

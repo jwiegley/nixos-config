@@ -7,8 +7,9 @@
       efi.canTouchEfiVariables = false;
     };
 
-    supportedFilesystems = [ "zfs" ];
-    zfs.extraPools = [ "tank" ];
+    supportedFilesystems = lib.optionals false [ "zfs" ];
+    zfs.extraPools = lib.optionals false [ "tank" ];
+
     # Enable QEMU user-mode emulation for running amd64 containers on ARM64
     binfmt = {
       emulatedSystems = [ "x86_64-linux" ];

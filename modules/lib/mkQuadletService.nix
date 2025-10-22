@@ -83,7 +83,7 @@ in
 
           WHY THIS BREAKS:
           - Setting explicit dns = [...] disables Podman's automatic DNS forwarding
-          - Containers can't resolve .lan domains (hera.lan, athena.lan, etc.)
+          - Containers can't resolve .lan domains (hera.lan, etc.)
           - Results in "Temporary failure in name resolution" errors
 
           WHAT TO DO:
@@ -132,12 +132,12 @@ in
           # - Podman's default DNS automatically forwards to host DNS (/etc/resolv.conf)
           # - Host DNS resolves .lan domains (192.168.1.2, 192.168.1.1)
           # - Setting explicit dns = [...] DISABLES automatic forwarding
-          # - Containers then can't resolve hera.lan, athena.lan, etc.
+          # - Containers then can't resolve hera.lan, etc.
           #
           # SYMPTOMS WHEN BROKEN:
           # - "socket.gaierror: [Errno -3] Temporary failure in name resolution"
           # - "ClientConnectorDNSError: Cannot connect to host *.lan"
-          # - litellm can't load models from hera.lan/athena.lan
+          # - litellm can't load models from hera.lan
           #
           # HOW PODMAN DEFAULT DNS WORKS:
           # - Copies host's /etc/resolv.conf nameservers to container

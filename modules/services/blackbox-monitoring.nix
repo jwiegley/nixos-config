@@ -402,8 +402,6 @@ in
             # "tesla-wall-connector.lan"          # 192.168.3.119
             # "traeger-grill.lan"                 # 192.168.3.196
 
-            "athena.lan"                        # 192.168.20.2
-
             "TL-WPA8630.lan"                    # 192.168.30.49
 
             "9.9.9.9"

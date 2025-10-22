@@ -84,38 +84,6 @@ let
         maintainers = with lib.maintainers; [ jwiegley ];
       };
     };
-
-  # Workspace update script
-  workspace-update = pkgs.writeScriptBin "workspace-update" ''
-    #!${pkgs.bash}/bin/bash
-    set -euo pipefail
-
-    # Parse arguments
-    if [[ "''${1:-}" == "--passwords" ]]; then
-        source $2
-        shift 2
-    fi
-
-    # Read GitHub token from SOPS secret
-    # When run as a systemd service, the token is available via LoadCredential
-    # When run manually, read from the SOPS secret path directly
-    if [[ -n "''${CREDENTIALS_DIRECTORY:-}" ]]; then
-        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/github-token")
-    elif [[ -f "${config.sops.secrets."github-token".path}" ]]; then
-        export GITHUB_TOKEN=$(${pkgs.coreutils}/bin/cat "${config.sops.secrets."github-token".path}")
-    else
-        echo "ERROR: GitHub token not found. Ensure SOPS secret 'github-token' is configured." >&2
-        exit 1
-    fi
-
-    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
-    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
-
-    if [[ "''${1:-}" == "--archive" ]]; then
-        shift 1
-        ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git archive --force
-    fi
-  '';
 in
 {
   environment.systemPackages =
@@ -144,7 +112,6 @@ in
       sops
       task-master-ai
       traceroute
-      workspace-update
       zfs-prune-snapshots
     ])
     ++ [

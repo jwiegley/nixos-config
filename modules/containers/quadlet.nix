@@ -5,8 +5,8 @@
   imports = [
     ./adminer-quadlet.nix
     ./litellm-quadlet.nix
-    ./mssql-quadlet.nix
-    ./mssql-exporter-quadlet.nix
+    # ./mssql-quadlet.nix
+    # ./mssql-exporter-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix

@@ -556,7 +556,7 @@ in
             "https://dns.vulcan.lan"
             "https://hass.vulcan.lan"
             "https://adminer.vulcan.lan"
-            "https://mssql.vulcan.lan"
+            # "https://mssql.vulcan.lan"
             "https://nodered.vulcan.lan"
             "https://nextcloud.vulcan.lan"
           ];

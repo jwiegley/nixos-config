@@ -406,12 +406,19 @@ let
       check_command           check_podman_container!adminer
     }
 
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     MSSQL Container
-      check_command           check_podman_container!mssql
-    }
+    # define service {
+    #   use                     generic-service
+    #   host_name               vulcan
+    #   service_description     MSSQL Container
+    #   check_command           check_podman_container!mssql
+    # }
+
+    # define service {
+    #   use                     generic-service
+    #   host_name               vulcan
+    #   service_description     MSSQL Exporter Container
+    #   check_command           check_podman_container!mssql-exporter
+    # }
 
     define service {
       use                     generic-service
@@ -425,13 +432,6 @@ let
       host_name               vulcan
       service_description     OPNsense Exporter Container
       check_command           check_podman_container!opnsense-exporter
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     MSSQL Exporter Container
-      check_command           check_podman_container!mssql-exporter
     }
 
     ###############################################################################

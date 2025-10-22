@@ -221,7 +221,7 @@ in
 
     # State directory
     systemd.tmpfiles.rules =
-      "d /var/lib/${name} 0755 root root -"
+      [ "d /var/lib/${name} 0755 root root -" ]
       ++ tmpfilesRules;
   };
 }

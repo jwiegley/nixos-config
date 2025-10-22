@@ -520,6 +520,7 @@
       python3
       uv
       nodejs
+      vips                      # needed by fetch mcp server
     ];
   };
 }

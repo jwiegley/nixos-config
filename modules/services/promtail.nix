@@ -147,74 +147,8 @@
         }
 
         # PostgreSQL logs
-        {
-          job_name = "postgresql";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "postgresql";
-                host = "vulcan";
-                __path__ = "/var/log/postgresql/*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              multiline = {
-                firstline = ''^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})'';
-                max_wait_time = "3s";
-              };
-            }
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \w+) \[(?P<pid>\d+)\] (?P<level>\w+): (?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                level = "";
-              };
-            }
-          ];
-        }
 
         # Dovecot mail logs
-        {
-          job_name = "dovecot";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "dovecot";
-                host = "vulcan";
-                service = "mail";
-                __path__ = "/var/log/dovecot/*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\w+ \d+ \d{2}:\d{2}:\d{2}) (?P<service>\S+): (?P<level>\w+): (?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                service = "";
-                level = "";
-              };
-            }
-            {
-              timestamp = {
-                source = "timestamp";
-                format = "Jan 02 15:04:05";
-                # Adjust year since syslog format doesn't include it
-                location = "America/Los_Angeles";
-              };
-            }
-          ];
-        }
 
         # Postfix mail logs
         {
@@ -247,31 +181,6 @@
         }
 
         # Docker container logs (if Docker is enabled)
-        {
-          job_name = "docker";
-          docker_sd_configs = [
-            {
-              host = "unix:///var/run/docker.sock";
-              refresh_interval = "30s";
-            }
-          ];
-          relabel_configs = [
-            {
-              source_labels = [ "__meta_docker_container_name" ];
-              target_label = "container";
-              regex = "^/(.*)$";
-              replacement = "$1";
-            }
-            {
-              source_labels = [ "__meta_docker_container_label_com_docker_compose_service" ];
-              target_label = "service";
-            }
-            {
-              source_labels = [ "__meta_docker_container_label_com_docker_compose_project" ];
-              target_label = "project";
-            }
-          ];
-        }
 
         # Restic backup logs
         {
@@ -307,47 +216,6 @@
         }
 
         # Nextcloud logs (if present)
-        {
-          job_name = "nextcloud";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "nextcloud";
-                host = "vulcan";
-                __path__ = "/var/lib/nextcloud/data/nextcloud.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              json = {
-                expressions = {
-                  time = "time";
-                  level = "level";
-                  message = "message";
-                  app = "app";
-                  method = "method";
-                  url = "url";
-                  user = "user";
-                };
-              };
-            }
-            {
-              labels = {
-                level = "";
-                app = "";
-                user = "";
-              };
-            }
-            {
-              timestamp = {
-                source = "time";
-                format = "RFC3339";
-              };
-            }
-          ];
-        }
 
         # Jellyfin logs
         {
@@ -434,39 +302,6 @@
         }
 
         # Audit logs (separate from journal to allow specific handling)
-        {
-          job_name = "audit";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "audit";
-                host = "vulcan";
-                __path__ = "/var/log/audit/audit.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^type=(?P<audit_type>\w+) msg=audit\((?P<timestamp>[^)]+)\):(?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                audit_type = "";
-              };
-            }
-            {
-              # Rate limit audit logs to prevent overwhelming Loki
-              limit = {
-                rate = 100;
-                burst = 200;
-                drop = true;
-              };
-            }
-          ];
-        }
 
         # Backup failure logs
         {

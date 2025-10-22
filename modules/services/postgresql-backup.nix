@@ -1,8 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
-  backupDir = "/tank/Backups/PostgreSQL";
-  backupFile = "${backupDir}/postgresql-backup.sql";
+  backupDir = "/var/lib/postgresql-backup";
+  backupFile = "${backupDir}/postgresql-backup-$(date '+%Y-%m-%d').sql";
 
   postgresqlBackupScript = pkgs.writeShellScript "postgresql-backup" ''
     set -euo pipefail
@@ -30,9 +30,10 @@ let
       # Set permissions on backup file
       ${pkgs.coreutils}/bin/chown postgres:postgres "${backupFile}"
       ${pkgs.coreutils}/bin/chmod 640 "${backupFile}"
+      ${pkgs.xz}/bin/xz "${backupFile}"
 
       # Log backup size
-      size=$(${pkgs.coreutils}/bin/du -h "${backupFile}" | ${pkgs.coreutils}/bin/cut -f1)
+      size=$(${pkgs.coreutils}/bin/du -h "${backupFile}.xz" | ${pkgs.coreutils}/bin/cut -f1)
       log "Backup size: $size"
     else
       log "ERROR: Backup failed!"

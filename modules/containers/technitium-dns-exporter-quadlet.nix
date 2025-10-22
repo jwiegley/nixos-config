@@ -16,11 +16,40 @@ in
   #
   # GitHub: https://github.com/brioche-works/technitium-dns-prometheus-exporter
 
+  # Automatically build the container image if it doesn't exist
+  system.activationScripts.technitium-dns-exporter-image = {
+    text = ''
+      # Check if the container image exists
+      if ! ${pkgs.podman}/bin/podman image exists localhost/technitium-dns-exporter:latest; then
+        echo "Building technitium-dns-exporter container image..."
+
+        # Create temporary directory for build
+        BUILD_DIR=$(${pkgs.coreutils}/bin/mktemp -d)
+        cd "$BUILD_DIR"
+
+        # Clone the repository
+        ${pkgs.git}/bin/git clone https://github.com/brioche-works/technitium-dns-prometheus-exporter.git
+        cd technitium-dns-prometheus-exporter
+
+        # Build the container image
+        ${pkgs.podman}/bin/podman build -t localhost/technitium-dns-exporter:latest .
+
+        # Clean up
+        cd /
+        ${pkgs.coreutils}/bin/rm -rf "$BUILD_DIR"
+
+        echo "technitium-dns-exporter image built successfully"
+      else
+        echo "technitium-dns-exporter image already exists"
+      fi
+    '';
+    deps = [];
+  };
+
   imports = [
     (mkQuadletService {
       name = "technitium-dns-exporter";
-      # Use locally-built image (build instructions in setup doc)
-      # Image must be built with: cd /tmp && git clone https://github.com/brioche-works/technitium-dns-prometheus-exporter.git && cd technitium-dns-prometheus-exporter && sudo podman build -t localhost/technitium-dns-exporter:latest .
+      # Use locally-built image (auto-built at activation if missing)
       image = "localhost/technitium-dns-exporter:latest";
       port = 9274;
       requiresPostgres = false;

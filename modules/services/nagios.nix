@@ -144,14 +144,15 @@ let
         #!/usr/bin/env bash
         CONTAINER_NAME="$1"
 
-        # Check if container exists
-        if ! ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
+        # Check if container exists (use sudo to access root-level containers)
+        # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
+        if ! /run/wrappers/bin/sudo ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
           echo "CRITICAL: Container $CONTAINER_NAME does not exist"
           exit 2
         fi
 
-        # Get container status
-        STATUS=$(${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
+        # Get container status (use sudo to access root-level containers)
+        STATUS=$(/run/wrappers/bin/sudo ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
 
         if [ "$STATUS" = "running" ]; then
           echo "OK: Container $CONTAINER_NAME is running"
@@ -234,13 +235,6 @@ let
       host_name               vulcan
       service_description     Current Users
       check_command           check_local_users!20!50
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Swap Usage
-      check_command           check_local_swap!20!10
     }
 
     ###############################################################################
@@ -979,4 +973,13 @@ in
 
   # Allow Nagios exporter port on localhost
   networking.firewall.interfaces."lo".allowedTCPPorts = [ 9267 ];
+
+  # Grant nagios user sudo access to podman for container monitoring
+  security.sudo.extraRules = [{
+    users = [ "nagios" ];
+    commands = [{
+      command = "${pkgs.podman}/bin/podman";
+      options = [ "NOPASSWD" ];
+    }];
+  }];
 }

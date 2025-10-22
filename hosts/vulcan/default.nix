@@ -20,7 +20,6 @@
     ../../modules/security/hardening.nix
 
     # User management
-    ../../modules/users/default.nix
     ../../modules/users/johnw.nix
     ../../modules/users/assembly.nix
     ../../modules/users/home-manager
@@ -40,12 +39,12 @@
     ../../modules/services/alertmanager.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
-    ../../modules/services/samba.nix
+    # ../../modules/services/samba.nix
     ../../modules/services/home-assistant.nix
     ../../modules/services/node-red.nix
     ../../modules/services/grafana.nix
-    ../../modules/services/loki.nix
-    ../../modules/services/promtail.nix
+    # ../../modules/services/loki.nix
+    # ../../modules/services/promtail.nix
     ../../modules/monitoring/services/victoriametrics.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
@@ -54,20 +53,21 @@
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
     ../../modules/services/nextcloud.nix
-    ../../modules/services/minio.nix
-    ../../modules/services/paperless.nix
+    # ../../modules/services/minio.nix
+    # ../../modules/services/paperless.nix
     ../../modules/services/cockpit.nix
 
     # Containers
     ../../modules/containers/default.nix
 
+    # jww (2025-10-21): ZFS pool tank not connected
     # Storage
-    ../../modules/storage/pci-rescan.nix
-    ../../modules/storage/zfs.nix
-    ../../modules/storage/zfs-replication.nix
-    ../../modules/storage/zfs-replication-monitoring.nix
-    ../../modules/storage/backups.nix
-    ../../modules/storage/backup-monitoring.nix
+    # ../../modules/storage/pci-rescan.nix
+    # ../../modules/storage/zfs.nix
+    # ../../modules/storage/zfs-replication.nix
+    # ../../modules/storage/zfs-replication-monitoring.nix
+    # ../../modules/storage/backups.nix
+    # ../../modules/storage/backup-monitoring.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

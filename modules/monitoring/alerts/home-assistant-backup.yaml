@@ -56,7 +56,7 @@ groups:
 
       # WARNING: Backup size unusually large (potential issue)
       - alert: HomeAssistantBackupSizeTooLarge
-        expr: home_assistant_backup_size_bytes / 1048576 > 95
+        expr: home_assistant_backup_size_bytes / 1048576 > 150
         for: 5m
         labels:
           severity: warning

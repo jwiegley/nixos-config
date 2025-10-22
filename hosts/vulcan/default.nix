@@ -37,6 +37,7 @@
     ../../modules/services/prometheus-monitoring.nix
     ../../modules/services/blackbox-monitoring.nix
     ../../modules/services/alertmanager.nix
+    ../../modules/services/nagios.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/home-assistant.nix

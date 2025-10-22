@@ -293,7 +293,7 @@ let
       use                     generic-service
       host_name               vulcan
       service_description     Dovecot IMAP
-      check_command           check_systemd_service!dovecot2.service
+      check_command           check_systemd_service!dovecot.service
     }
 
     define service {
@@ -411,6 +411,34 @@ let
       host_name               vulcan
       service_description     OPNsense Exporter Container
       check_command           check_podman_container!opnsense-exporter
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Open SpeedTest Container
+      check_command           check_podman_container!speedtest
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Silly Tavern Container
+      check_command           check_podman_container!silly-tavern
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Technitium DNS Exporter Container
+      check_command           check_podman_container!technitium-dns-exporter
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Wallabag Container
+      check_command           check_podman_container!wallabag
     }
 
     ###############################################################################
@@ -874,6 +902,9 @@ in
 
   # Ensure nginx user is in nagios group for CGI command access
   users.users.nginx.extraGroups = [ "nagios" ];
+
+  # Ensure nagios user is in podman group for container monitoring
+  users.users.nagios.extraGroups = [ "podman" ];
 
   # Create command file directory with proper permissions
   systemd.services.nagios-rw-directory = {

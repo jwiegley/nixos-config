@@ -514,6 +514,12 @@
       zsh
       zsh-autosuggestions
       zsh-syntax-highlighting
+
+      gcc
+      gnumake
+      python3
+      uv
+      nodejs
     ];
   };
 }

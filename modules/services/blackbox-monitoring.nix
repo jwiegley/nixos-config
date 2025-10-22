@@ -541,23 +541,24 @@ in
         };
         static_configs = [{
           targets = [
-            "https://cockpit.vulcan.lan"
             "https://glance.vulcan.lan"
-            "https://grafana.vulcan.lan"
-            "https://jellyfin.vulcan.lan"
-            "https://litellm.vulcan.lan"
-            "https://postgres.vulcan.lan"
-            "https://prometheus.vulcan.lan"
-            "https://victoriametrics.vulcan.lan"
-            "https://alertmanager.vulcan.lan"
-            "https://speedtest.vulcan.lan"
-            "https://silly-tavern.vulcan.lan"
-            "https://wallabag.vulcan.lan"
+            "https://cockpit.vulcan.lan"
+            "https://192.168.1.1"
             "https://dns.vulcan.lan"
+            "https://postgres.vulcan.lan"
             "https://hass.vulcan.lan"
-            # "https://mssql.vulcan.lan"
             "https://nodered.vulcan.lan"
             "https://nextcloud.vulcan.lan"
+            "https://wallabag.vulcan.lan"
+            "https://jellyfin.vulcan.lan"
+            "https://silly-tavern.vulcan.lan"
+            "https://prometheus.vulcan.lan"
+            "https://victoriametrics.vulcan.lan"
+            "https://grafana.vulcan.lan"
+            "https://alertmanager.vulcan.lan"
+            "https://speedtest.vulcan.lan"
+            "https://litellm.vulcan.lan"
+            # "https://mssql.vulcan.lan"
           ];
         }];
         relabel_configs = [

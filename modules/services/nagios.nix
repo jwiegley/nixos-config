@@ -399,13 +399,6 @@ let
     # SERVICES - PODMAN CONTAINERS
     ###############################################################################
 
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Adminer Container
-      check_command           check_podman_container!adminer
-    }
-
     # define service {
     #   use                     generic-service
     #   host_name               vulcan

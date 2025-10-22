@@ -3,7 +3,6 @@
 {
   # Import all container service modules
   imports = [
-    ./adminer-quadlet.nix
     ./litellm-quadlet.nix
     ./mssql-quadlet.nix
     # ./mssql-exporter-quadlet.nix

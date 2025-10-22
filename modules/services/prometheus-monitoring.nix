@@ -19,16 +19,12 @@
     ../monitoring/services/prometheus-nginx.nix
     ../monitoring/services/nginx-exporter.nix
     ../monitoring/services/redis-exporter.nix
-    ../monitoring/services/phpfpm-exporter.nix
     ../monitoring/services/health-check-exporters.nix
     ../monitoring/services/certificate-exporter.nix
     ../monitoring/services/remote-nodes.nix
     ../monitoring/services/home-assistant-backup-exporter.nix
     ../monitoring/services/litellm-exporter.nix
-    ../monitoring/services/minio-exporter.nix
     ../monitoring/services/mssql-exporter.nix
-    ../monitoring/services/paperless-exporter.nix
-    ../monitoring/services/paperless-ai-exporter.nix
     ../monitoring/services/node-red-exporter.nix
   ];
 }

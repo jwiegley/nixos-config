@@ -2,8 +2,9 @@
 
 {
   # Ensure ACME certificate directory exists on host
-  # Also ensure /var/www/home.newartisans.com exists even when tank isn't mounted
-  # This allows the container to start (though it won't have content without tank)
+  # Also ensure /var/www/home.newartisans.com exists even when tank isn't
+  # mounted This allows the container to start (though it won't have content
+  # without tank)
   systemd.tmpfiles.rules = [
     "d /var/lib/acme-container 0755 root root -"
     "d /var/www/home.newartisans.com 0755 root root -"
@@ -13,18 +14,11 @@
   networking.nat = {
     enable = true;
     internalInterfaces = [ "ve-+" ];  # All container interfaces
-    externalInterface = "end0";  # Replace with your internet-facing interface if different
+    externalInterface = "end0";
   };
 
   # Open firewall ports on host for container access
   networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
-
-  # Ensure container waits for ZFS mount of /var/www/home.newartisans.com (tank/Public)
-  # Note: We use 'after' but not 'requires' to allow activation without tank
-  # The container will fail to start if the mount isn't available, but won't block nixos-rebuild
-  systemd.services."container@secure-nginx" = {
-    after = [ "zfs-import-tank.service" "zfs.target" ];
-  };
 
   # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
@@ -83,7 +77,8 @@
       networking = {
         firewall = {
           enable = true;
-          # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync daemon, and rsync-ssl proxy
+          # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync
+          # daemon, and rsync-ssl proxy
           allowedTCPPorts = [ 80 443 873 874 ];
         };
       };
@@ -91,7 +86,8 @@
       # Time zone (match host)
       time.timeZone = "America/Los_Angeles";
 
-      # Force DNS to point to host (works around resolvconf issues in containers)
+      # Force DNS to point to host (works around resolvconf issues in
+      # containers)
       environment.etc."resolv.conf".text = lib.mkForce ''
         nameserver 10.233.1.1
         options edns0
@@ -190,7 +186,8 @@
 
         # Stream configuration for rsync-ssl proxy
         streamConfig = ''
-          # rsync-ssl proxy: accepts SSL connections and forwards to local rsync daemon
+          # rsync-ssl proxy: accepts SSL connections and forwards to local
+          # rsync daemon
           server {
             listen 874 ssl;
 

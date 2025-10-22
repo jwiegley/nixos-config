@@ -65,14 +65,12 @@ in
 {
   # SOPS secrets for Samba user passwords
   sops.secrets."samba/johnw-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "root";
     group = "root";
     mode = "0400";
   };
 
   sops.secrets."samba/assembly-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "root";
     group = "root";
     mode = "0400";

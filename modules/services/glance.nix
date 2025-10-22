@@ -259,7 +259,6 @@ with lib;
   # Import SOPS secrets
   sops.secrets = {
     glance_github_token = {
-      sopsFile = ../../secrets.yaml;
       mode = "0400";
       owner = "glance";
       group = "glance";

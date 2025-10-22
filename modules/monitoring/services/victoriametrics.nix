@@ -7,7 +7,6 @@
 
   # SOPS secret for Home Assistant authentication token
   sops.secrets."prometheus/home-assistant-token" = {
-    sopsFile = ../../../secrets.yaml;
     owner = "prometheus";
     group = "prometheus";
     mode = "0440";

@@ -4,19 +4,16 @@
   # SOPS secrets for Nextcloud
   sops.secrets = {
     "nextcloud-admin-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "nextcloud";
       group = "nextcloud";
       mode = "0400";
     };
     "nextcloud-db-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "postgres";
       group = "nextcloud";
       mode = "0440";
     };
     "nextcloud-monitoring-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "nextcloud-exporter";
       group = "nextcloud-exporter";
       mode = "0400";

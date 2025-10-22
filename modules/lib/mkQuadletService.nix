@@ -1,7 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
-  common = import ./common.nix { };
+  common = import ./common.nix { inherit secrets; };
 in
 {
   # Creates a Podman quadlet container with common configuration patterns

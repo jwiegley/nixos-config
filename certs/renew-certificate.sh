@@ -148,7 +148,7 @@ CERT_PATH="${OUTPUT_DIR}/${CERT_FILE}"
 sudo mkdir -p "$OUTPUT_DIR"
 
 # Get CA password from SOPS
-CA_PASSWORD=$(sops -d /etc/nixos/secrets.yaml 2>/dev/null | grep "step-ca-password:" | cut -d' ' -f2)
+CA_PASSWORD=$(sops -d /etc/nixos/secrets/secrets.yaml 2>/dev/null | grep "step-ca-password:" | cut -d' ' -f2)
 
 if [ -z "$CA_PASSWORD" ]; then
     echo "ERROR: Cannot access CA password from SOPS"

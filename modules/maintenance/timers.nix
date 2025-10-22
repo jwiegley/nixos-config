@@ -128,7 +128,6 @@ in
 {
   # SOPS secret for GitHub token used by workspace update
   sops.secrets."github-token" = {
-    sopsFile = ../../secrets.yaml;
     owner = "johnw";
     group = "johnw";
     mode = "0400";

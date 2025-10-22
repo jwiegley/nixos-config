@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
   # Common helper functions
-  common = import ../lib/common.nix { };
+  common = import ../lib/common.nix { inherit secrets; };
 
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 {
   # Increase D-Bus pending replies limit for systemd_exporter
@@ -28,7 +28,7 @@
   };
 
   sops = {
-    defaultSopsFile = ../../secrets.yaml;
+    defaultSopsFile = secrets.outPath + "/secrets.yaml";
     age = {
       sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
       keyFile = "/var/lib/sops-nix/key.txt";

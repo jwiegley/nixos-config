@@ -185,7 +185,24 @@
         "nixos-logwatch": "nixos-logwatch",
         "nixpkgs": "nixpkgs_2",
         "quadlet-nix": "quadlet-nix",
+        "secrets": "secrets",
         "sops-nix": "sops-nix"
+      }
+    },
+    "secrets": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1761118485,
+        "narHash": "sha256-8ZpPDJy/02fMy+Y9DZZnub06cgViYBngSyqzIL6/AKI=",
+        "ref": "refs/heads/main",
+        "rev": "e9819fdf33196f34f13b398daed0c89d096e9360",
+        "revCount": 1,
+        "type": "git",
+        "url": "file:./secrets"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:./secrets"
       }
     },
     "sops-nix": {

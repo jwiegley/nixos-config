@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
   # Import helper functions
-  common = import ../lib/common.nix { };
+  common = import ../lib/common.nix { inherit secrets; };
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
   inherit (mkPostgresLib) mkPostgresUserSetup;
 in

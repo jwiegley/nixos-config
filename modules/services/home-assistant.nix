@@ -74,7 +74,6 @@ in
 {
   # SOPS secrets for Yale/August account credentials
   sops.secrets."home-assistant/yale-username" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -82,7 +81,6 @@ in
   };
 
   sops.secrets."home-assistant/yale-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -90,7 +88,6 @@ in
   };
 
   sops.secrets."home-assistant/opnsense-url" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -98,7 +95,6 @@ in
   };
 
   sops.secrets."home-assistant/opnsense-api-key" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -106,7 +102,6 @@ in
   };
 
   sops.secrets."home-assistant/opnsense-api-secret" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -115,7 +110,6 @@ in
 
   # BMW ConnectedDrive credentials
   sops.secrets."home-assistant/bmw-username" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -123,7 +117,6 @@ in
   };
 
   sops.secrets."home-assistant/bmw-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -132,7 +125,6 @@ in
 
   # LG ThinQ Personal Access Token (PAT)
   sops.secrets."home-assistant/lg-thinq-token" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -141,7 +133,6 @@ in
 
   # Opower/SMUD credentials for energy usage data
   sops.secrets."home-assistant/smud-username" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -149,7 +140,6 @@ in
   };
 
   sops.secrets."home-assistant/smud-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -158,7 +148,6 @@ in
 
   # Google Assistant SDK credentials
   sops.secrets."home-assistant/google-assistant-client-id" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -166,7 +155,6 @@ in
   };
 
   sops.secrets."home-assistant/google-assistant-client-secret" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -176,7 +164,6 @@ in
   # OpenAI API key for Extended OpenAI Conversation integration
   # Used for LLM-powered conversation and automation
   sops.secrets."home-assistant/openai-api-key" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";
@@ -185,7 +172,6 @@ in
 
   # PostgreSQL password for Home Assistant recorder
   sops.secrets."home-assistant/postgres-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "hass";
     group = "hass";
     mode = "0400";

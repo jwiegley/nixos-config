@@ -1,4 +1,5 @@
 /firmware
+/secrets
 
 # SOPS age keys (keep private - these decrypt the secrets)
 *.age

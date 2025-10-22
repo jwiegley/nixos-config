@@ -1,12 +1,11 @@
-{ ... }:
+{ secrets, ... }:
 
 {
   # Common paths and variables used across multiple modules
   # Import this in modules that need consistent path references
 
   # Path to the SOPS secrets file
-  # Use this instead of hardcoding ../../secrets.yaml or ../../../secrets.yaml
-  secretsPath = ../../secrets.yaml;
+  secretsPath = secrets.outPath + "/secrets.yaml";
 
   # Common service restart policies for reliability
   # Each policy contains both 'unit' and 'service' configurations

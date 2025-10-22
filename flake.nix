@@ -8,6 +8,10 @@
       url = "git+file:./firmware";
       flake = false;  # It's just data, not a flake
     };
+    secrets = {
+      url = "git+file:./secrets";
+      flake = false;  # It's just data, not a flake
+    };
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -37,6 +41,7 @@
   outputs = { nixpkgs,
               nixos-apple-silicon,
               firmware,
+              secrets,
               home-manager,
               sops-nix,
               nixos-logwatch,
@@ -49,7 +54,7 @@
       nixosConfigurations.vulcan = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
-          inherit system firmware;
+          inherit system firmware secrets;
         };
         modules = [
           nixos-apple-silicon.nixosModules.default

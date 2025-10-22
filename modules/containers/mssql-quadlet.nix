@@ -1,7 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
   inherit (mkQuadletLib) mkQuadletService;
 in
 {
@@ -47,9 +47,7 @@ in
   ];
 
   # SOPS secret for SA password
-  sops.secrets."mssql/sa-password" = {
-    sopsFile = ../../secrets.yaml;
-  };
+  sops.secrets."mssql/sa-password" = {};
 
   # Create environment file template from SOPS secret
   sops.templates."mssql-env" = {

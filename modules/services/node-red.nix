@@ -7,7 +7,6 @@
   # This token allows Node-RED to authenticate with Home Assistant's WebSocket API
   # Generate in HA: Settings > Profile > Long-Lived Access Tokens
   sops.secrets."home-assistant/node-red-token" = {
-    sopsFile = ../../secrets.yaml;
     owner = "node-red";
     group = "node-red";
     mode = "0400";
@@ -17,7 +16,6 @@
   # Node-RED admin authentication secrets
   # Admin username for Node-RED editor login
   sops.secrets."node-red/admin-username" = {
-    sopsFile = ../../secrets.yaml;
     owner = "node-red";
     group = "node-red";
     mode = "0400";
@@ -27,7 +25,6 @@
   # Bcrypt password hash for admin user
   # Generate with: /etc/nixos/scripts/node-red-hash-password.sh
   sops.secrets."node-red/admin-password-hash" = {
-    sopsFile = ../../secrets.yaml;
     owner = "node-red";
     group = "node-red";
     mode = "0400";
@@ -37,7 +34,6 @@
   # API bearer tokens for HTTP node authentication (JSON array)
   # Format: [{"token": "abc123", "description": "Service name"}, ...]
   sops.secrets."node-red/api-tokens" = {
-    sopsFile = ../../secrets.yaml;
     owner = "node-red";
     group = "node-red";
     mode = "0400";

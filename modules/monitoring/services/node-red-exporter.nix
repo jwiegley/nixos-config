@@ -8,7 +8,6 @@
   # SOPS secret for Prometheus to authenticate with Node-RED
   # This should be one of the tokens from node-red/api-tokens
   sops.secrets."prometheus/node-red-token" = {
-    sopsFile = ../../../secrets.yaml;
     owner = "prometheus";
     group = "prometheus";
     mode = "0400";
@@ -121,7 +120,7 @@
 
       1. Edit SOPS secrets:
          ```bash
-         sops /etc/nixos/secrets.yaml
+         sops /etc/nixos/secrets/secrets.yaml
          ```
 
       2. Add prometheus section with a Node-RED API token:

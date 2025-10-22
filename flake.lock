@@ -21,6 +21,22 @@
         "type": "github"
       }
     },
+    "firmware": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1761094879,
+        "narHash": "sha256-AnzEjBDxqN7DYujafXJip6GIgoCFj8iYHz3MoYnThWI=",
+        "ref": "refs/heads/main",
+        "rev": "22045d483a2dc8bcb20daebacdefa6836632506d",
+        "revCount": 1,
+        "type": "git",
+        "url": "file:./firmware"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:./firmware"
+      }
+    },
     "flake-compat": {
       "locked": {
         "lastModified": 1746162366,
@@ -163,6 +179,7 @@
     "root": {
       "inputs": {
         "claude-code-nix": "claude-code-nix",
+        "firmware": "firmware",
         "home-manager": "home-manager",
         "nixos-apple-silicon": "nixos-apple-silicon",
         "nixos-logwatch": "nixos-logwatch",

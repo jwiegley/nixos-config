@@ -4,6 +4,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon";
 
+    firmware = {
+      url = "git+file:./firmware";
+      flake = false;  # It's just data, not a flake
+    };
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -31,6 +36,7 @@
 
   outputs = { nixpkgs,
               nixos-apple-silicon,
+              firmware,
               home-manager,
               sops-nix,
               nixos-logwatch,
@@ -42,6 +48,9 @@
 
       nixosConfigurations.vulcan = nixpkgs.lib.nixosSystem {
         inherit system;
+        specialArgs = {
+          inherit system firmware;
+        };
         modules = [
           nixos-apple-silicon.nixosModules.default
           nixos-logwatch.nixosModules.logwatch

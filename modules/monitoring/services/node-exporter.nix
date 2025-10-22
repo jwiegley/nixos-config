@@ -55,7 +55,7 @@
   # The NixOS prometheus exporter creates this with restrictive permissions (0755)
   # We need world-writable (1777) so mbsync and other services can write metrics
   # Use 'z' directive to recursively set permissions on existing directory
-  # Note: Using prometheus user since node-exporter uses DynamicUser
+  # Note: Using prometheus user which is created by the prometheus service
   systemd.tmpfiles.rules = [
     "z /var/lib/prometheus-node-exporter-textfiles 1777 prometheus prometheus -"
   ];

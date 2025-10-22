@@ -197,6 +197,10 @@ with lib;
                           url = "https://grafana.vulcan.lan/explore";
                         }
                         {
+                          title = "Promtail";
+                          url = "https://promtail.vulcan.lan";
+                        }
+                        {
                           title = "Alertmanager";
                           url = "https://alertmanager.vulcan.lan";
                         }

@@ -43,8 +43,8 @@
     ../../modules/services/home-assistant.nix
     ../../modules/services/node-red.nix
     ../../modules/services/grafana.nix
-    # ../../modules/services/loki.nix
-    # ../../modules/services/promtail.nix
+    ../../modules/services/loki.nix
+    ../../modules/services/promtail.nix
     ../../modules/monitoring/services/victoriametrics.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix

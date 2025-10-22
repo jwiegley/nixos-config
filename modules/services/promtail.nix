@@ -925,6 +925,17 @@
     };
   };
 
+  # Nginx reverse proxy configuration for Promtail web UI
+  services.nginx.virtualHosts."promtail.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/promtail.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/promtail.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://localhost:${toString config.services.promtail.configuration.server.http_listen_port}";
+      recommendedProxySettings = true;
+    };
+  };
+
   # Prometheus scrape configuration for Promtail metrics
   services.prometheus.scrapeConfigs = [
     {

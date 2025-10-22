@@ -34,6 +34,7 @@ in
     # Enable admin API for administrative operations
     extraFlags = [
       "--web.enable-admin-api"
+      "--web.external-url=https://prometheus.vulcan.lan"
     ];
 
     # Global configuration

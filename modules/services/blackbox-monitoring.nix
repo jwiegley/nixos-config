@@ -556,7 +556,6 @@ in
             "https://alertmanager.vulcan.lan"
             "https://speedtest.vulcan.lan"
             "https://litellm.vulcan.lan"
-            # "https://mssql.vulcan.lan"
           ];
         }];
         relabel_configs = [

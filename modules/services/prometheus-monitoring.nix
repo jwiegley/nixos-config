@@ -22,7 +22,6 @@
     ../monitoring/services/remote-nodes.nix
     ../monitoring/services/home-assistant-backup-exporter.nix
     ../monitoring/services/litellm-exporter.nix
-    # ../monitoring/services/mssql-exporter.nix
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/phpfpm-exporter.nix
   ] ++ lib.optionals false [

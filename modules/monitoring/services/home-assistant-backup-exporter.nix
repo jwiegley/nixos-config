@@ -108,7 +108,7 @@ in
 
     timerConfig = {
       OnBootSec = "1min";
-      OnUnitActiveSec = "5min";
+      OnCalendar = "*:0/5";  # Every 5 minutes on the clock
       Persistent = true;
     };
   };

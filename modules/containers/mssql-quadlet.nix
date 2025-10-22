@@ -29,10 +29,10 @@ in
       environmentFiles = [ config.sops.templates."mssql-env".path ];
 
       volumes = [
-        "/tank/SQLServer/data:/var/opt/mssql/data:rw"
-        "/tank/SQLServer/log:/var/opt/mssql/log:rw"
-        "/tank/SQLServer/secrets:/var/opt/mssql/secrets:rw"
-        "/tank/SQLServer/backups:/var/opt/mssql/backups:rw"
+        "/var/lib/mssql/data:/var/opt/mssql/data:rw"
+        "/var/lib/mssql/log:/var/opt/mssql/log:rw"
+        "/var/lib/mssql/secrets:/var/opt/mssql/secrets:rw"
+        "/var/lib/mssql/backups:/var/opt/mssql/backups:rw"
       ];
 
       # SQL Server doesn't have a web UI, so no nginx virtual host

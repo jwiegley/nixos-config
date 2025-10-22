@@ -390,6 +390,59 @@ let
     }
 
     ###############################################################################
+    # SERVICES - CRITICAL APPLICATION SERVICES
+    ###############################################################################
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Technitium DNS Server
+      check_command           check_systemd_service!technitium-dns-server.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Node-RED
+      check_command           check_systemd_service!node-red.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Redis LiteLLM
+      check_command           check_systemd_service!redis-litellm.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Redis Nextcloud
+      check_command           check_systemd_service!redis-nextcloud.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Jellyfin
+      check_command           check_systemd_service!jellyfin.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Glance Dashboard
+      check_command           check_systemd_service!glance.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Cockpit Web Console
+      check_command           check_systemd_service!cockpit.service
+    }
+
+    ###############################################################################
     # SERVICES - PODMAN CONTAINERS
     ###############################################################################
 
@@ -433,6 +486,38 @@ let
       host_name               vulcan
       service_description     Wallabag Container
       check_command           check_podman_container!wallabag
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Secure Nginx Container
+      check_command           check_systemd_service!container@secure-nginx.service
+    }
+
+    ###############################################################################
+    # SERVICES - SELF-MONITORING
+    ###############################################################################
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Critical Services Exporter
+      check_command           check_systemd_service!critical-services-exporter.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Nagios Prometheus Exporter
+      check_command           check_systemd_service!nagios-prometheus-exporter.service
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     DNS Query Log Exporter
+      check_command           check_systemd_service!dns-query-log-exporter.service
     }
 
     ###############################################################################

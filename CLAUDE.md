@@ -70,7 +70,7 @@ script = ''
 '';
 ```
 
-**Managed Secrets:** GitHub tokens, Home Assistant credentials, MinIO, Google Assistant OAuth, OpenAI keys, SMUD utility account.
+**Managed Secrets:** GitHub tokens, Home Assistant credentials, Google Assistant OAuth, OpenAI keys, SMUD utility account.
 
 ## Commands
 

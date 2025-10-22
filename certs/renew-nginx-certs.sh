@@ -23,7 +23,6 @@ DOMAINS=(
     "nodered.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
-    "ragflow.vulcan.lan"
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
     "wallabag.vulcan.lan"

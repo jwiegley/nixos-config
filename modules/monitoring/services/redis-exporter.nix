@@ -2,7 +2,7 @@
 
 {
   # Redis exporter for multiple Redis instances
-  # Monitors: redis-litellm, redis-nextcloud, redis-ragflow
+  # Monitors: redis-litellm, redis-nextcloud
 
   services.prometheus.exporters.redis = {
     enable = true;
@@ -15,7 +15,6 @@
     extraFlags = [
       "-redis.addr=redis://10.88.0.1:8085"  # litellm
       "-redis.addr=unix:///run/redis-nextcloud/redis.sock"  # nextcloud
-      "-redis.addr=redis://10.88.0.1:6379"  # ragflow
     ];
   };
 
@@ -52,7 +51,6 @@
       echo "=== Redis Instances Monitored ==="
       echo "1. redis-litellm (10.88.0.1:8085)"
       echo "2. redis-nextcloud (unix socket)"
-      echo "3. redis-ragflow (10.88.0.1:6379)"
 
       echo ""
       echo "=== Exporter Metrics Sample ==="

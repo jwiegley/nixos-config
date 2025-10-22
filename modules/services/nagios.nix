@@ -416,22 +416,8 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Elasticsearch Container
-      check_command           check_podman_container!elasticsearch
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     LiteLLM Container
       check_command           check_podman_container!litellm
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Paperless-AI Container
-      check_command           check_podman_container!paperless-ai
     }
 
     define service {

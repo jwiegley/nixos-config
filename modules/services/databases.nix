@@ -15,12 +15,6 @@ in
       secretPath = config.sops.secrets."nextcloud-db-password".path;
       dependentService = "nextcloud-setup.service";
     })
-    (mkPostgresUserSetup {
-      user = "ragflow";
-      database = "ragflow";
-      secretPath = config.sops.secrets."ragflow-db-password".path;
-      dependentService = "ragflow.service";
-    })
   ];
 
   services = {
@@ -55,7 +49,6 @@ in
         "litellm"
         "wallabag"
         "nextcloud"
-        "ragflow"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -64,10 +57,6 @@ in
         { name = "wallabag"; }
         {
           name = "nextcloud";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "ragflow";
           ensureDBOwnership = true;
         }
       ];
@@ -116,14 +105,6 @@ in
     };
   };
 
-  # SOPS secrets for database passwords
-  sops.secrets."ragflow-db-password" = {
-    sopsFile = common.secretsPath;
-    owner = "postgres";
-    group = "postgres";
-    mode = "0400";
-  };
-
   # Optimize LiteLLM database with performance indexes
   systemd.services.postgresql-litellm-optimize = {
     description = "Create performance indexes for LiteLLM database";
@@ -157,7 +138,7 @@ in
   # CRITICAL FIX: PostgreSQL must wait for podman0 network before starting
   # Problem: PostgreSQL starts at ~19s, but podman0 is created at ~50s
   # Result: PostgreSQL fails to bind to 10.88.0.1 and only listens on localhost
-  # This causes litellm/wallabag/ragflow to fail their pg_isready health checks
+  # This causes litellm/wallabag to fail their pg_isready health checks
   systemd.services.postgresql = {
     after = [ "sys-subsystem-net-devices-podman0.device" ];
     requires = [ "sys-subsystem-net-devices-podman0.device" ];

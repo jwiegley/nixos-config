@@ -141,20 +141,6 @@ in
           "logging" = "systemd";
           "log level" = "1";
         };
-
-        # Paperless-ngx root directory share
-        tank-Paperless = {
-          path = "/tank/Paperless";
-          comment = "Paperless-ngx Directory - Navigate to consume/ for document uploads";
-          "valid users" = "johnw";
-          "read only" = "no";
-          browseable = "yes";
-          writeable = "yes";
-          "create mask" = "0666";  # Make files world-readable so paperless can process them
-          "directory mask" = "0777"; # Make directories world-accessible
-          "force user" = "paperless";  # Files created will be owned by paperless user
-          "force group" = "paperless";
-        };
       } // zfsShares;
     };
 

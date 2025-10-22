@@ -35,6 +35,12 @@ in
         "/var/lib/mssql/backups:/var/opt/mssql/backups:rw"
       ];
 
+      # Use QEMU emulation to run AMD64 container on ARM64
+      # MSSQL Server is only available for AMD64, requires emulation on ARM64
+      extraContainerConfig = {
+        podmanArgs = [ "--platform=linux/amd64" ];
+      };
+
       # SQL Server doesn't have a web UI, so no nginx virtual host
       nginxVirtualHost = null;
     })

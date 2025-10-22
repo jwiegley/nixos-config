@@ -21,8 +21,10 @@
     enable = true;
     dockerCompat = true;
     defaultNetwork.settings = {
-      dns_enabled = false;  # Disabled: conflicts with Technitium DNS on 0.0.0.0:53 (aardvark-dns can't bind to 10.88.0.1:53)
-      # Containers will use host's /etc/resolv.conf (192.168.1.2, 192.168.1.1) for DNS resolution
+      # Disabled: conflicts with Technitium DNS on 0.0.0.0:53
+      dns_enabled = false;
+      # Containers will use host's /etc/resolv.conf (192.168.1.2, 192.168.1.1)
+      # for DNS resolution
       subnets = [
         {
           subnet = "10.88.0.0/16";
@@ -36,12 +38,19 @@
     };
   };
 
-  # Note: Podman network is automatically managed by NixOS via virtualisation.podman.defaultNetwork.settings
-  # No manual network creation needed - the defaultNetwork.settings above configures the "podman" network
+  # Note: Podman network is automatically managed by NixOS via
+  # virtualisation.podman.defaultNetwork.settings No manual network creation
+  # needed - the defaultNetwork.settings above configures the "podman" network
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    allowedTCPPorts = [ 1433 4000 5380 5432 8085 9182 28981 ];  # 1433: mssql, 4000: litellm, 5380: Technitium DNS, 5432: PostgreSQL, 8085: Redis, 9182: mssql-exporter, 28981: paperless-ngx
+    # 1433: mssql
+    # 4000: litellm
+    # 5380: Technitium DNS
+    # 5432: PostgreSQL
+    # 8085: Redis
+    # 9182: mssql-exporter
+    allowedTCPPorts = [ 1433 4000 5380 5432 8085 9182 ];
     allowedUDPPorts = [ 53 ];
   };
 

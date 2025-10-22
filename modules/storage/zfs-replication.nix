@@ -2,7 +2,7 @@
 
 {
   services.syncoid = {
-    enable = true;
+    enable = false;
 
     # Run daily at 4:00 AM
     interval = "*-*-* 04:00:00";

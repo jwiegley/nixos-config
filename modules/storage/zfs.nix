@@ -5,11 +5,6 @@
     enable = true;
 
     datasets = {
-      # Snapshot individual filesystems for replication
-      "rpool/home".use_template = [ "active" ];
-      "rpool/nix".use_template = [ "active" ];
-      "rpool/root".use_template = [ "active" ];
-
       tank = {
         use_template = [ "archival" ];
         recursive = true;

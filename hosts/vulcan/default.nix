@@ -62,14 +62,14 @@
     # Packages
     ../../modules/packages/custom.nix
     ../../modules/packages/zsh.nix
+
+    # Storage
+    ../../modules/services/nextcloud.nix
   ] ++ lib.optionals false [
     # Storage
     ../../modules/storage/zfs.nix
-    ../../modules/storage/zfs-replication.nix
-    ../../modules/storage/zfs-replication-monitoring.nix
     ../../modules/storage/backups.nix
     ../../modules/storage/backup-monitoring.nix
-    ../../modules/services/nextcloud.nix
     ../../modules/services/samba.nix
   ];
 

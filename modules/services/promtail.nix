@@ -433,38 +433,6 @@
           ];
         }
 
-        # ZFS replication logs
-        {
-          job_name = "zfs-replication";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "zfs-replication";
-                host = "vulcan";
-                __path__ = "/var/log/zfs-replication*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})?[\s]*(?P<message>.*)$'';
-              };
-            }
-            {
-              timestamp = {
-                source = "timestamp";
-                format = "2006-01-02 15:04:05";
-                fallback_formats = [
-                  "RFC3339"
-                  "RFC3339Nano"
-                ];
-              };
-            }
-          ];
-        }
-
         # Audit logs (separate from journal to allow specific handling)
         {
           job_name = "audit";

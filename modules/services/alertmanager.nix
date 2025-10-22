@@ -32,15 +32,6 @@
             receiver = "critical-receiver";
             repeat_interval = "15m";
           }
-          {
-            # Route ZFS replication alerts
-            match = {
-              component = "zfs_replication";
-            };
-            receiver = "replication-receiver";
-            group_wait = "30s";
-            repeat_interval = "4h";
-          }
         ];
       };
 
@@ -95,38 +86,6 @@
                 {{ end }}
 
                 View in Prometheus: {{ .GeneratorURL }}
-                {{ end }}
-              '';
-            }
-          ];
-        }
-        {
-          name = "replication-receiver";
-          email_configs = [
-            {
-              to = "johnw@newartisans.com";
-              headers = {
-                Subject = "[ZFS Replication] {{ .GroupLabels.alertname }}";
-              };
-              text = ''
-                ZFS REPLICATION ALERT
-
-                {{ range .Alerts }}
-                Alert: {{ .Labels.alertname }}
-                Status: {{ .Status }}
-                Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
-
-                {{ .Annotations.summary }}
-
-                Details:
-                {{ .Annotations.description }}
-
-                Affected Service: {{ .Labels.name }}
-
-                To investigate:
-                - Check service status: systemctl status {{ .Labels.name }}
-                - View logs: journalctl -u {{ .Labels.name }} -n 100
-                - Run manual check: check-zfs-replication
                 {{ end }}
               '';
             }

@@ -164,7 +164,7 @@
   ];
 
   # Bind mount ZFS dataset to Nextcloud data directory
-  fileSystems."/var/lib/nextcloud/data" = {
+  fileSystems."/var/lib/nextcloud/data" = lib.mkIf false {
     device = "/tank/Nextcloud";
     options = [
       "bind"

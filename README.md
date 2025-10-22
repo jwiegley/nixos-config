@@ -10,7 +10,6 @@ A production-grade, modular NixOS configuration for self-hosted infrastructure r
 - **🔐 Security First**: SOPS-nix secrets management, private CA (step-ca), security hardening
 - **📧 Complete Mail Stack**: Postfix, Dovecot with FTS (Xapian), mbsync with Prometheus metrics
 - **🐳 Container Orchestration**: Podman/Quadlet-based containers with proper networking
-- **🔄 ZFS Replication**: Automated replication with monitoring and alerting
 - **🏠 Home-Manager Integration**: Declarative user environment management
 - **🍎 Apple T2 Support**: Hardware-specific optimizations for Apple Silicon compatibility
 
@@ -38,7 +37,7 @@ This configuration follows a highly modular architecture, organizing system conf
 |----------|---------|-------------|
 | **Core** | System fundamentals | Boot (GRUB/EFI), networking, firewall, Nix config, systemd tuning |
 | **Services** | Application services | Web (Nginx), mail, databases, monitoring, DNS |
-| **Storage** | Data management | ZFS configuration, snapshots, replication, backups |
+| **Storage** | Data management | ZFS configuration, snapshots, backups |
 | **Containers** | Containerized apps | Podman/Quadlet setup, container services |
 | **Security** | Security & secrets | Hardening, SOPS-nix, certificate management |
 | **Users** | User management | User configs, home-manager integration |
@@ -82,7 +81,6 @@ This configuration follows a highly modular architecture, organizing system conf
 - **pgAdmin**: Web-based database administration
 - **ZFS**: Enterprise-grade filesystem with:
   - Automated snapshots (hourly, daily, monthly)
-  - Replication to backup pools
   - ARC tuning for 64GB RAM system
 
 ### Monitoring Stack
@@ -132,11 +130,6 @@ All containers use Podman with Quadlet for systemd integration:
 - Retention: 7 daily, 5 weekly, 3 yearly
 - Monitoring via Prometheus textfile collector
 - Helper script: `restic-operations` (check, snapshots, prune, repair)
-
-**ZFS Replication**:
-- Automated replication to secondary pools
-- Monitoring and alerting for replication status
-- Metrics exported to Prometheus
 
 ### Additional Services
 
@@ -329,9 +322,6 @@ zfs list -t all
 
 # View recent snapshots per filesystem
 logwatch-zfs-snapshot
-
-# Check replication status
-journalctl -u zfs-replication -f
 ```
 
 ## 📊 Monitoring & Observability
@@ -414,7 +404,6 @@ Daily email reports include:
 │   │   └── ...
 │   ├── storage/                   # Storage and backups
 │   │   ├── zfs.nix
-│   │   ├── zfs-replication.nix
 │   │   ├── backups.nix
 │   │   └── backup-monitoring.nix
 │   ├── containers/                # Container services

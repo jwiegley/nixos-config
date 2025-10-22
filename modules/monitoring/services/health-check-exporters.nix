@@ -9,12 +9,28 @@ let
 
   # Critical services to monitor
   criticalServices = [
+    # Infrastructure
     "postgresql"
     "nginx"
     "step-ca"
-    "prometheus"
     "dovecot"
     "postfix"
+
+    # Monitoring Stack
+    "prometheus"
+    "alertmanager"
+    "grafana"
+    "loki"
+    "victoriametrics"
+
+    # Critical Application Services
+    "home-assistant"
+    "node-red"
+    "technitium-dns-server"
+
+    # Critical Dependencies
+    "redis-litellm"
+    "redis-nextcloud"
   ];
 
   # Script to generate backup status metrics

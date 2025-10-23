@@ -104,7 +104,7 @@ let
 
     # Function to clean up stale git lock files (older than 1 hour)
     cleanup_stale_locks() {
-        local workspace="/tank/Backups/Git"
+        local workspace="/var/lib/git-workspace-archive"
         echo "Cleaning up stale git lock files..."
         ${pkgs.findutils}/bin/find "$workspace" -name "*.lock" -path "*/.git/*" -mmin +60 -delete 2>/dev/null || true
     }
@@ -116,12 +116,12 @@ let
     # These commands will still report "failures" for repos with multiple remotes
     # where git's atomic ref updates encounter race conditions, but the repos
     # are actually updated successfully - these are false-positive errors
-    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git update -t 1
-    ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git fetch -t 1
+    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive update -t 1
+    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive fetch -t 1
 
     if [[ "''${1:-}" == "--archive" ]]; then
         shift 1
-        ${pkgs.git}/bin/git workspace --workspace /tank/Backups/Git archive --force
+        ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive archive --force
     fi
   '';
 in

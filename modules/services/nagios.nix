@@ -7,6 +7,162 @@ let
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";
 
+  # Helper function to generate systemd service checks
+  mkServiceCheck = serviceName: displayName: ''
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName}
+      check_command           check_systemd_service!${serviceName}
+    }
+  '';
+
+  # Helper function to generate timer checks (monitors both timer and associated service)
+  mkTimerCheck = timerName: displayName: ''
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName} (Timer)
+      check_command           check_systemd_service!${timerName}
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName} (Service)
+      check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service
+    }
+  '';
+
+  # Helper function to generate container checks
+  mkContainerCheck = containerName: displayName: ''
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName}
+      check_command           check_podman_container!${containerName}
+    }
+  '';
+
+  # Service categories for organized monitoring
+  # Critical Infrastructure Services
+  criticalServices = [
+    { name = "postgresql.service"; display = "PostgreSQL Database"; }
+    { name = "nginx.service"; display = "Nginx Web Server"; }
+    { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
+    { name = "postfix.service"; display = "Postfix Mail Server"; }
+    { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
+    { name = "smbd.service"; display = "Samba File Server"; }
+    { name = "nmbd.service"; display = "Samba NetBIOS Name Server"; }
+    { name = "samba-wsdd.service"; display = "Samba Web Service Discovery"; }
+    { name = "technitium-dns-server.service"; display = "Technitium DNS Server"; }
+  ];
+
+  # Monitoring Stack Services
+  monitoringServices = [
+    { name = "prometheus.service"; display = "Prometheus Metrics Server"; }
+    { name = "grafana.service"; display = "Grafana Dashboard"; }
+    { name = "loki.service"; display = "Loki Log Aggregation"; }
+    { name = "promtail.service"; display = "Promtail Log Collector"; }
+    { name = "alertmanager.service"; display = "Alertmanager"; }
+    { name = "victoriametrics.service"; display = "VictoriaMetrics"; }
+    { name = "nagios.service"; display = "Nagios Monitoring"; }
+    { name = "critical-services-exporter.service"; display = "Critical Services Exporter"; }
+    { name = "dns-query-log-exporter.service"; display = "DNS Query Log Exporter"; }
+  ];
+
+  # Home Automation Services
+  homeAutomationServices = [
+    { name = "home-assistant.service"; display = "Home Assistant"; }
+    { name = "node-red.service"; display = "Node-RED Automation"; }
+  ];
+
+  # Application Services
+  applicationServices = [
+    { name = "jellyfin.service"; display = "Jellyfin Media Server"; }
+    { name = "glance.service"; display = "Glance Dashboard"; }
+    { name = "glance-github-extension.service"; display = "Glance GitHub Extension"; }
+    { name = "cockpit.service"; display = "Cockpit Web Console"; }
+    { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
+    { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
+  ];
+
+  # Backup and Maintenance Timers
+  maintenanceTimers = [
+    { name = "git-workspace-archive.timer"; display = "Git Workspace Archive"; }
+    { name = "update-containers.timer"; display = "Container Updates"; }
+    { name = "postgresql-backup.timer"; display = "PostgreSQL Backup"; }
+    { name = "backup-status-exporter.timer"; display = "Backup Status Exporter"; }
+    { name = "certificate-exporter.timer"; display = "Certificate Exporter"; }
+    { name = "certificate-validation.timer"; display = "Certificate Validation"; }
+    { name = "logwatch.timer"; display = "Logwatch Log Analysis"; }
+    { name = "logrotate.timer"; display = "Log Rotation"; }
+    { name = "fstrim.timer"; display = "Filesystem Trim"; }
+    { name = "podman-prune.timer"; display = "Podman Cleanup"; }
+  ];
+
+  # Email Sync Timers
+  emailTimers = [
+    { name = "mbsync-johnw.timer"; display = "Email Sync (johnw)"; }
+    { name = "mbsync-assembly.timer"; display = "Email Sync (assembly)"; }
+    { name = "mbsync-johnw-health-check.timer"; display = "Email Sync Health Check (johnw)"; }
+    { name = "mbsync-assembly-health-check.timer"; display = "Email Sync Health Check (assembly)"; }
+    { name = "imapdedup.timer"; display = "IMAP Deduplication"; }
+  ];
+
+  # Certificate Renewal Timers
+  certRenewalTimers = [
+    { name = "dovecot-cert-renewal.timer"; display = "Dovecot Cert Renewal"; }
+    { name = "nginx-cert-renewal.timer"; display = "Nginx Cert Renewal"; }
+    { name = "postgresql-cert-renewal.timer"; display = "PostgreSQL Cert Renewal"; }
+    { name = "postfix-cert-renewal.timer"; display = "Postfix Cert Renewal"; }
+  ];
+
+  # Podman Containers
+  containers = [
+    { name = "litellm"; display = "LiteLLM API Proxy"; }
+    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; }
+    { name = "speedtest"; display = "Open SpeedTest"; }
+    { name = "silly-tavern"; display = "Silly Tavern"; }
+    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; }
+    { name = "wallabag"; display = "Wallabag Read-Later"; }
+  ];
+
+  # Container systemd services (for Quadlet-managed containers)
+  containerSystemdServices = [
+    { name = "container@secure-nginx.service"; display = "Secure Nginx Container"; }
+  ];
+
+  # Generate all service checks
+  allServiceChecks = lib.concatStrings [
+    # Critical Infrastructure
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) criticalServices)
+
+    # Monitoring Stack
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) monitoringServices)
+
+    # Home Automation
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) homeAutomationServices)
+
+    # Applications
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) applicationServices)
+
+    # Container Services
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) containerSystemdServices)
+
+    # Maintenance Timers
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) maintenanceTimers)
+
+    # Email Timers
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) emailTimers)
+
+    # Certificate Renewal Timers
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) certRenewalTimers)
+
+    # Podman Containers
+    (lib.concatMapStrings (c: mkContainerCheck c.name c.display) containers)
+  ];
+
   # Nagios object configuration
   nagiosObjectDefs = pkgs.writeText "nagios-objects.cfg" ''
     ###############################################################################
@@ -238,7 +394,7 @@ let
     }
 
     ###############################################################################
-    # SERVICES - CRITICAL SYSTEM SERVICES
+    # SERVICES - NETWORK CONNECTIVITY
     ###############################################################################
 
     define service {
@@ -251,22 +407,8 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     PostgreSQL Service
-      check_command           check_systemd_service!postgresql.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     PostgreSQL Connection
       check_command           check_tcp!5432
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Nginx Service
-      check_command           check_systemd_service!nginx.service
     }
 
     define service {
@@ -286,54 +428,8 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Dovecot IMAP
-      check_command           check_systemd_service!dovecot.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Postfix
-      check_command           check_systemd_service!postfix.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Step-CA
-      check_command           check_systemd_service!step-ca.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Samba
-      check_command           check_systemd_service!smbd.service
-    }
-
-    ###############################################################################
-    # SERVICES - MONITORING STACK
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Prometheus
-      check_command           check_systemd_service!prometheus.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     Prometheus Port
       check_command           check_tcp!9090
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Grafana
-      check_command           check_systemd_service!grafana.service
     }
 
     define service {
@@ -346,172 +442,16 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Loki
-      check_command           check_systemd_service!loki.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Promtail
-      check_command           check_systemd_service!promtail.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Alertmanager
-      check_command           check_systemd_service!alertmanager.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     VictoriaMetrics
-      check_command           check_systemd_service!victoriametrics.service
-    }
-
-    ###############################################################################
-    # SERVICES - HOME AUTOMATION
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Home Assistant
-      check_command           check_systemd_service!home-assistant.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     Home Assistant HTTP
       check_command           check_tcp!8123
     }
 
     ###############################################################################
-    # SERVICES - CRITICAL APPLICATION SERVICES
+    # AUTO-GENERATED SERVICE CHECKS
+    # Services, Timers, and Containers monitored via systemd/podman
     ###############################################################################
 
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Technitium DNS Server
-      check_command           check_systemd_service!technitium-dns-server.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Node-RED
-      check_command           check_systemd_service!node-red.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Redis LiteLLM
-      check_command           check_systemd_service!redis-litellm.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Redis Nextcloud
-      check_command           check_systemd_service!redis-nextcloud.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Jellyfin
-      check_command           check_systemd_service!jellyfin.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Glance Dashboard
-      check_command           check_systemd_service!glance.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Cockpit Web Console
-      check_command           check_systemd_service!cockpit.service
-    }
-
-    ###############################################################################
-    # SERVICES - PODMAN CONTAINERS
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     LiteLLM Container
-      check_command           check_podman_container!litellm
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     OPNsense Exporter Container
-      check_command           check_podman_container!opnsense-exporter
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Open SpeedTest Container
-      check_command           check_podman_container!speedtest
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Silly Tavern Container
-      check_command           check_podman_container!silly-tavern
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Technitium DNS Exporter Container
-      check_command           check_podman_container!technitium-dns-exporter
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Wallabag Container
-      check_command           check_podman_container!wallabag
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Secure Nginx Container
-      check_command           check_systemd_service!container@secure-nginx.service
-    }
-
-    ###############################################################################
-    # SERVICES - SELF-MONITORING
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Critical Services Exporter
-      check_command           check_systemd_service!critical-services-exporter.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     DNS Query Log Exporter
-      check_command           check_systemd_service!dns-query-log-exporter.service
-    }
+    ${allServiceChecks}
 
     ###############################################################################
     # SERVICE TEMPLATES

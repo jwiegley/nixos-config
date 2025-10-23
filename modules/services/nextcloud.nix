@@ -1,5 +1,9 @@
 { config, lib, pkgs, ... }:
 
+let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+in
 {
   # SOPS secrets for Nextcloud
   sops.secrets = {
@@ -161,13 +165,9 @@
   ];
 
   # Bind mount ZFS dataset to Nextcloud data directory
-  fileSystems."/var/lib/nextcloud/data" = lib.mkIf false {
+  fileSystems = bindTankPath {
+    path = "/var/lib/nextcloud/data";
     device = "/tank/Nextcloud";
-    options = [
-      "bind"
-      "nofail"  # Don't block boot/activation if mount fails
-      "x-systemd.after=zfs-import-tank.service"
-    ];
   };
 
   # Systemd hardening for PHP-FPM

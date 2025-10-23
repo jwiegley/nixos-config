@@ -509,13 +509,6 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Nagios Prometheus Exporter
-      check_command           check_systemd_service!nagios-prometheus-exporter.service
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     DNS Query Log Exporter
       check_command           check_systemd_service!dns-query-log-exporter.service
     }
@@ -871,106 +864,6 @@ in
     '';
   };
 
-  # Nagios Prometheus exporter for metrics integration
-  systemd.services.nagios-prometheus-exporter = {
-    description = "Nagios Prometheus Exporter";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "nagios.service" ];
-    wants = [ "nagios.service" ];
-
-    serviceConfig = {
-      Type = "simple";
-      User = "nagios";
-      Group = "nagios";
-      Restart = "always";
-      RestartSec = 10;
-
-      # Simple exporter that reads Nagios status data
-      ExecStart = let
-        exporterScript = pkgs.writeShellScript "nagios-exporter.sh" ''
-          #!/usr/bin/env bash
-
-          # Simple HTTP server that exports Nagios status as Prometheus metrics
-          PORT=9267
-
-          # Create named pipe for HTTP server
-          FIFO="/tmp/nagios-exporter-$$.fifo"
-          trap "rm -f $FIFO" EXIT
-          mkfifo $FIFO
-
-          echo "Nagios Prometheus Exporter listening on port $PORT"
-
-          while true; do
-            # Read HTTP request
-            cat $FIFO | ${pkgs.netcat}/bin/nc -l -p $PORT > >(
-              # Parse status.dat and generate Prometheus metrics
-              echo "HTTP/1.1 200 OK"
-              echo "Content-Type: text/plain"
-              echo ""
-
-              # Service status metrics
-              echo "# HELP nagios_service_status Current status of Nagios services (0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN)"
-              echo "# TYPE nagios_service_status gauge"
-
-              if [ -f /var/lib/nagios/status.dat ]; then
-                ${pkgs.gawk}/bin/awk '
-                  /servicestatus {/ { in_service=1; service=""; host=""; state="" }
-                  in_service && /host_name=/ { host=$0; gsub(/.*host_name=/, "", host) }
-                  in_service && /service_description=/ { service=$0; gsub(/.*service_description=/, "", service) }
-                  in_service && /current_state=/ { state=$0; gsub(/.*current_state=/, "", state) }
-                  in_service && /}/ {
-                    if (host && service && state != "") {
-                      print "nagios_service_status{host=\"" host "\",service=\"" service "\"} " state
-                    }
-                    in_service=0
-                  }
-                ' /var/lib/nagios/status.dat
-              fi
-
-              # Host status metrics
-              echo "# HELP nagios_host_status Current status of Nagios hosts (0=UP, 1=DOWN, 2=UNREACHABLE)"
-              echo "# TYPE nagios_host_status gauge"
-
-              if [ -f /var/lib/nagios/status.dat ]; then
-                ${pkgs.gawk}/bin/awk '
-                  /hoststatus {/ { in_host=1; host=""; state="" }
-                  in_host && /host_name=/ { host=$0; gsub(/.*host_name=/, "", host) }
-                  in_host && /current_state=/ { state=$0; gsub(/.*current_state=/, "", state) }
-                  in_host && /}/ {
-                    if (host && state != "") {
-                      print "nagios_host_status{host=\"" host "\"} " state
-                    }
-                    in_host=0
-                  }
-                ' /var/lib/nagios/status.dat
-              fi
-
-              # Nagios process metrics
-              echo "# HELP nagios_up Whether Nagios is running (1=up, 0=down)"
-              echo "# TYPE nagios_up gauge"
-              if systemctl is-active nagios.service > /dev/null 2>&1; then
-                echo "nagios_up 1"
-              else
-                echo "nagios_up 0"
-              fi
-
-            ) > $FIFO
-          done
-        '';
-      in "${exporterScript}";
-    };
-  };
-
-  # Add Nagios exporter to Prometheus scrape configs
-  services.prometheus.scrapeConfigs = [
-    {
-      job_name = "nagios";
-      static_configs = [{
-        targets = [ "localhost:9267" ];
-      }];
-      scrape_interval = "30s";
-    }
-  ];
 
   # Ensure Nagios starts after required services
   systemd.services.nagios = {
@@ -1056,8 +949,6 @@ in
     '')
   ];
 
-  # Allow Nagios exporter port on localhost
-  networking.firewall.interfaces."lo".allowedTCPPorts = [ 9267 ];
 
   # Grant nagios user sudo access to podman for container monitoring
   security.sudo.extraRules = [{

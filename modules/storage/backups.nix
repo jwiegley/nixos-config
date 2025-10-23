@@ -92,7 +92,6 @@ let
     "Cinema"
     "Finance"
     "Haskell"
-    "Kadena"
     "Racial Justice"
     "Zoom"
   ];
@@ -157,7 +156,6 @@ in
   # mkBackup { path = "Movies"; }
   # mkBackup { path = "Music"; }
   # mkBackup { path = "Pictures"; }
-  # mkBackup { path = "kadena"; }
 
   sops.secrets = {
     aws-keys = {};
@@ -177,7 +175,6 @@ in
         "*.dtBase/Backup*"
         "*.zim"
         "slack*"
-        "Kadena"
         "Assembly"
       ];
     })
@@ -194,9 +191,6 @@ in
     })
     (mkBackup {
       path = "Audio";
-      exclude = [
-        "Kadena"
-      ];
     })
     (mkBackup {
       path = "Video";

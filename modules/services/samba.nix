@@ -12,8 +12,6 @@ let
     { name = "tank/Backups/Git"; mountpoint = "/tank/Backups/Git"; }
     { name = "tank/Backups/Images"; mountpoint = "/tank/Backups/Images"; }
     { name = "tank/Backups/Kadena"; mountpoint = "/tank/Backups/Kadena"; }
-    { name = "tank/Backups/Kadena/Drive"; mountpoint = "/tank/Backups/Kadena/Drive"; }
-    { name = "tank/Backups/Kadena/Slack"; mountpoint = "/tank/Backups/Kadena/Slack"; }
     { name = "tank/Backups/rpool"; mountpoint = "/tank/Backups/rpool"; }
     { name = "tank/Backups/rpool/home"; mountpoint = "/tank/Backups/rpool/home"; }
     { name = "tank/Backups/rpool/nix"; mountpoint = "/tank/Backups/rpool/nix"; }
@@ -38,7 +36,6 @@ let
     { name = "tank/Video/Zoom"; mountpoint = "/tank/Video/Zoom"; }
     { name = "tank/doc"; mountpoint = "/tank/doc"; }
     { name = "tank/iCloud"; mountpoint = "/tank/iCloud"; }
-    { name = "tank/kadena"; mountpoint = "/tank/kadena"; }
     { name = "tank/src"; mountpoint = "/tank/src"; }
     { name = "tank/SQLServer"; mountpoint = "/tank/SQLServer"; }
   ];

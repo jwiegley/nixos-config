@@ -454,6 +454,11 @@ let
       command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
     }
 
+    define command {
+      command_name    check_homeassistant_integration_status
+      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -I -i $ARG2$
+    }
+
     ###############################################################################
     # HOSTS
     ###############################################################################
@@ -575,8 +580,10 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Home Assistant - All Integrations
-      check_command           check_homeassistant_integrations!hass.vulcan.lan!5!10
+      service_description     Home Assistant - Integration Status
+      check_command           check_homeassistant_integration_status!hass.vulcan.lan!august,nest,ring,enphase_envoy,bmw_connected_drive,flume,screenlogic,miele,lg_thinq,cast,withings,webostv,homekit,opower,accuweather,nws
+      check_interval          5
+      max_check_attempts      2
     }
 
     ###############################################################################

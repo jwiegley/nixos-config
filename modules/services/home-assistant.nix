@@ -161,15 +161,6 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
-  # OpenAI API key for Extended OpenAI Conversation integration
-  # Used for LLM-powered conversation and automation
-  sops.secrets."home-assistant/openai-api-key" = {
-    owner = "hass";
-    group = "hass";
-    mode = "0400";
-    restartUnits = [ "home-assistant.service" ];
-  };
-
   # PostgreSQL password for Home Assistant recorder
   sops.secrets."home-assistant/postgres-password" = {
     owner = "hass";
@@ -276,8 +267,6 @@ in
       ps.paho-mqtt # Required for Dreame Vacuum integration
       ps.aiomqtt # Required for Traeger WiFIRE integration
       ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
-      ps.openai # Required for Extended OpenAI Conversation custom component
-      ps.tiktoken # Required for Extended OpenAI Conversation (token counting)
       ps.aiofiles # Required for Hubspace integration
       ps.packaging # Required for Hubspace integration
       aioafero # Custom package for Hubspace integration

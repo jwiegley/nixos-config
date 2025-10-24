@@ -1,7 +1,30 @@
 { config, lib, pkgs, ... }:
 
+let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+in
 {
-  # NixOS container for secure nginx serving internal HTTP
+  # Ensure ACME certificate directory exists on host
+  # Also ensure /var/www/home.newartisans.com exists even when tank isn't
+  # mounted This allows the container to start (though it won't have content
+  # without tank)
+  systemd.tmpfiles.rules = [
+    "d /var/lib/acme-container 0755 root root -"
+    "d /var/www/home.newartisans.com 0755 root root -"
+  ];
+
+  # Enable NAT for container to access internet
+  networking.nat = {
+    enable = true;
+    internalInterfaces = [ "ve-+" ];  # All container interfaces
+    externalInterface = "end0";
+  };
+
+  # Open firewall ports on host for container access
+  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
+
+  # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
 
     # Enable private network for isolation
@@ -9,11 +32,40 @@
     hostAddress = "10.233.1.1";
     localAddress = "10.233.1.2";
 
-    # Bind mount the web directory
+    # Forward ports from host to container
+    forwardPorts = [
+      {
+        protocol = "tcp";
+        hostPort = 18080;
+        containerPort = 80;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18443;
+        containerPort = 443;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18873;
+        containerPort = 873;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 18874;
+        containerPort = 874;
+      }
+    ];
+
     bindMounts = {
+      # Bind mount the web directory
       "/var/www/home.newartisans.com" = {
         hostPath = "/var/www/home.newartisans.com";
         isReadOnly = true;
+      };
+      # Bind mount for ACME certificate storage
+      "/var/lib/acme" = {
+        hostPath = "/var/lib/acme-container";
+        isReadOnly = false;
       };
     };
 
@@ -25,21 +77,49 @@
       # Basic system configuration
       system.stateVersion = "25.05";
 
+      # Bind mount the web directory
+      fileSystems = bindTankPath {
+        path = "/var/www/home.newartisans.com";
+        device = "/tank/Public";
+        isReadOnly = true;
+      };
+
       # Networking configuration
       networking = {
         firewall = {
           enable = true;
-          # Only allow HTTP internally - TLS handled by host
-          allowedTCPPorts = [ 8080 ];
+          # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync
+          # daemon, and rsync-ssl proxy
+          allowedTCPPorts = [ 80 443 873 874 ];
         };
-        # Use host's DNS
-        nameservers = [ "1.1.1.1" "8.8.8.8" ];
       };
 
       # Time zone (match host)
       time.timeZone = "America/Los_Angeles";
 
-      # Nginx configuration (HTTP only, no TLS)
+      # Force DNS to point to host (works around resolvconf issues in
+      # containers)
+      environment.etc."resolv.conf".text = lib.mkForce ''
+        nameserver 10.233.1.1
+        options edns0
+      '';
+
+      # ACME configuration for Let's Encrypt certificates
+      security.acme = {
+        acceptTerms = true;
+        defaults = {
+          email = "johnw@newartisans.com";
+          # Use production Let's Encrypt server for trusted certificates
+          server = "https://acme-v02.api.letsencrypt.org/directory";
+        };
+        # Individual certificate configuration
+        certs."home.newartisans.com" = {
+          # Don't block nginx startup on certificate fetch
+          postRun = "systemctl reload nginx.service || true";
+        };
+      };
+
+      # Nginx configuration with TLS/ACME
       services.nginx = {
         enable = true;
 
@@ -47,69 +127,91 @@
         recommendedGzipSettings = true;
         recommendedOptimisation = true;
         recommendedProxySettings = true;
+        recommendedTlsSettings = true;
 
-        # Security headers (will be passed through host proxy)
-        appendHttpConfig = ''
-          # Security headers
-          more_set_headers "X-Frame-Options: SAMEORIGIN";
-          more_set_headers "X-Content-Type-Options: nosniff";
-          more_set_headers "X-XSS-Protection: 1; mode=block";
-          more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
-          more_set_headers "X-Container: secure-nginx";
-        '';
+        virtualHosts."home.newartisans.com" = {
+          default = true;
+          # Use addSSL instead of forceSSL to allow ACME challenges on HTTP
+          addSSL = true;
+          enableACME = true;
 
-        virtualHosts = {
-          # Main site - HTTP only, served internally
-          "default" = {
-            default = true;
-            # Listen only on internal HTTP port
-            listen = [
-              { addr = "0.0.0.0"; port = 8080; }
-            ];
+          # Listen on standard ports (443 is forwarded from host:18443)
+          listen = [
+            { addr = "0.0.0.0"; port = 443; ssl = true; }
+            { addr = "0.0.0.0"; port = 80; }
+          ];
 
-            # Add security headers specific to this container
+          # Security headers for internet-facing service
+          extraConfig = ''
+            # Strict Transport Security
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+            # Additional security headers
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+            # CSP Header
+            add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
+            # Indicate this is served from the secure container
+            add_header X-Served-By "secure-nginx-container" always;
+          '';
+
+          # Root location - serve files from bind mount
+          root = "/var/www/home.newartisans.com";
+
+          locations."/" = {
             extraConfig = ''
-              # Indicate this is served from the secure container
-              add_header X-Served-By "secure-nginx-container" always;
+              # Disable directory listing
+              autoindex off;
+
+              # Try to serve file, then directory index, then 404
+              try_files $uri $uri/ =404;
             '';
+          };
 
-            # Root location - serve files from bind mount
-            root = "/var/www/home.newartisans.com";
+          # Health check endpoint
+          locations."/health" = {
+            extraConfig = ''
+              access_log off;
+              return 200 "healthy\n";
+              default_type text/plain;
+            '';
+          };
 
-            locations."/" = {
-              extraConfig = ''
-                # Disable directory listing
-                autoindex off;
-
-                # Try to serve file, then directory index, then 404
-                try_files $uri $uri/ =404;
-
-                # Security headers for downloads
-                add_header X-Content-Type-Options "nosniff" always;
-                add_header X-Download-Options "noopen" always;
-              '';
-            };
-
-            # Health check endpoint
-            locations."/health" = {
-              extraConfig = ''
-                access_log off;
-                return 200 "healthy\n";
-                add_header Content-Type text/plain;
-              '';
-            };
-
-            # Status endpoint for monitoring
-            locations."/status" = {
-              extraConfig = ''
-                stub_status on;
-                access_log off;
-                allow 10.233.1.1;  # Allow host only
-                deny all;
-              '';
-            };
+          # Status endpoint for monitoring
+          locations."/status" = {
+            extraConfig = ''
+              stub_status on;
+              access_log off;
+              allow 10.233.1.1;  # Allow host only
+              deny all;
+            '';
           };
         };
+
+        # Stream configuration for rsync-ssl proxy
+        streamConfig = ''
+          # rsync-ssl proxy: accepts SSL connections and forwards to local
+          # rsync daemon
+          server {
+            listen 874 ssl;
+
+            ssl_certificate /var/lib/acme/home.newartisans.com/cert.pem;
+            ssl_certificate_key /var/lib/acme/home.newartisans.com/key.pem;
+            ssl_trusted_certificate /var/lib/acme/home.newartisans.com/chain.pem;
+
+            ssl_protocols TLSv1.2 TLSv1.3;
+            ssl_ciphers HIGH:!aNULL:!MD5;
+            ssl_prefer_server_ciphers on;
+
+            proxy_pass 127.0.0.1:873;
+            proxy_connect_timeout 10s;
+            proxy_timeout 30m;
+          }
+        '';
       };
 
       # Ensure nginx user exists
@@ -120,12 +222,50 @@
       };
       users.groups.nginx.gid = 60;
 
-      # Enable certificate renewal timer
-      systemd.timers."acme-renewal" = {
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnCalendar = "daily";
-          Persistent = true;
+      # Rsync daemon configuration for serving public files
+      services.rsyncd = {
+        enable = true;
+        socketActivated = true;
+        settings = {
+          globalSection = {
+            uid = "nginx";
+            gid = "nginx";
+            "use chroot" = true;
+            "max connections" = 10;
+            "log file" = "/var/log/rsyncd.log";
+            "transfer logging" = true;
+          };
+          sections = {
+            pub = {
+              path = "/var/www/home.newartisans.com/pub";
+              comment = "Public files for home.newartisans.com";
+              "read only" = true;
+              list = true;
+            };
+          };
+        };
+      };
+
+      systemd.services = {
+        nginx = {
+          after = [ "var-www-home.newartisans.com.mount" ];
+        };
+        rsyncd = {
+          after = [ "var-www-home.newartisans.com.mount" ];
+        };
+      };
+
+      # Make ACME non-blocking for container startup
+      systemd.services."acme-order-renew-home.newartisans.com" = {
+        after = [ "nginx.service" "network-online.target" ];
+        wants = [ "network-online.target" ];
+        # Don't fail if ACME fails
+        unitConfig = {
+          FailureAction = "none";
+        };
+        serviceConfig = {
+          # Shorter timeout to avoid blocking container startup
+          TimeoutStartSec = "30s";
         };
       };
     };

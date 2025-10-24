@@ -1,7 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
   inherit (mkQuadletLib) mkQuadletService;
 in
 {

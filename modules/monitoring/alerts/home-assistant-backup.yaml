@@ -1,0 +1,111 @@
+groups:
+  - name: home_assistant_backup
+    interval: 30s
+    rules:
+      # CRITICAL: No backups exist
+      - alert: HomeAssistantNoBackupsExist
+        expr: home_assistant_backup_count == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "No Home Assistant backups found"
+          description: "Home Assistant backup directory is empty. No backups are available for disaster recovery."
+          action: "Check Home Assistant backup configuration and trigger a manual backup immediately"
+
+      # CRITICAL: Backup hasn't run in 72 hours (3 days)
+      - alert: HomeAssistantBackupNotRunning
+        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 72
+        for: 1h
+        labels:
+          severity: critical
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup hasn't run in 3 days"
+          description: "Latest Home Assistant backup is {{ printf \"%.1f\" $value }} hours old. Automated backups may have failed."
+          action: "Check Home Assistant logs for backup errors: journalctl -u home-assistant | grep -i backup"
+
+      # WARNING: Backup age exceeds 48 hours (2 days)
+      - alert: HomeAssistantBackupOld
+        expr: (time() - home_assistant_backup_latest_timestamp) / 3600 > 48
+        for: 1h
+        labels:
+          severity: warning
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup is getting old"
+          description: "Latest Home Assistant backup is {{ printf \"%.1f\" $value }} hours old. May have missed last automated backup."
+          action: "Check Home Assistant backup schedule and verify backup automation is working"
+
+      # WARNING: Backup size too small (potential incomplete backup)
+      - alert: HomeAssistantBackupSizeTooSmall
+        expr: home_assistant_backup_size_bytes < 5000
+        for: 5m
+        labels:
+          severity: warning
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup size suspiciously small"
+          description: "Backup file {{ $labels.backup }} is only {{ $value }} bytes. This may indicate an incomplete or corrupted backup."
+          action: "Verify backup integrity and trigger a new backup if necessary"
+
+      # WARNING: Backup size unusually large (potential issue)
+      - alert: HomeAssistantBackupSizeTooLarge
+        expr: home_assistant_backup_size_bytes / 1048576 > 150
+        for: 5m
+        labels:
+          severity: warning
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup size unusually large"
+          description: "Backup file {{ $labels.backup }} is {{ printf \"%.1f\" $value }} MB. This is larger than expected."
+          action: "Investigate why backup size has grown significantly. May need to clean up old data or check for bloat."
+
+      # INFO: Total backup storage usage high
+      - alert: HomeAssistantBackupStorageHigh
+        expr: home_assistant_backup_total_size_bytes / 1048576 > 476
+        for: 30m
+        labels:
+          severity: info
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup storage usage high"
+          description: "Total backup storage is {{ printf \"%.1f\" $value }} MB. Consider cleaning up old backups."
+          action: "Review backup retention policy and delete old backups: ls -lh /var/lib/hass/backups/"
+
+      # INFO: Too many backups (retention not working)
+      - alert: HomeAssistantTooManyBackups
+        expr: home_assistant_backup_count > 10
+        for: 1h
+        labels:
+          severity: info
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Too many Home Assistant backups"
+          description: "{{ $value }} backup files exist. Consider implementing backup retention/cleanup."
+          action: "Clean up old backups to save disk space: find /var/lib/hass/backups -name '*.tar' -mtime +7 -delete"
+
+      # INFO: Backup size changed significantly
+      - alert: HomeAssistantBackupSizeChanged
+        expr: |
+          abs(
+            home_assistant_backup_size_bytes -
+            avg_over_time(home_assistant_backup_size_bytes[1d])
+          ) / avg_over_time(home_assistant_backup_size_bytes[1d]) > 0.5
+        for: 15m
+        labels:
+          severity: info
+          category: backup
+          service: home_assistant
+        annotations:
+          summary: "Home Assistant backup size changed significantly"
+          description: "Backup {{ $labels.backup }} size changed by >50% from average. Current: {{ $value }} bytes"
+          action: "Review recent Home Assistant configuration changes that may have affected backup size"

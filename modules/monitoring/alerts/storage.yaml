@@ -47,25 +47,47 @@ groups:
           summary: "ZFS snapshot is too old"
           description: "ZFS snapshot {{ $labels.snapshot }} is older than 24 hours"
 
-      # Backup alerts
-      - alert: BackupFailed
-        expr: restic_backup_success == 0
+      # Backup alerts - Restic repository checks
+      - alert: ResticCheckFailed
+        expr: restic_check_success{repository!=""} == 0
         for: 5m
         labels:
           severity: critical
           category: storage
           service: restic
         annotations:
-          summary: "Restic backup failed"
-          description: "Backup job {{ $labels.job }} has failed"
+          summary: "Restic repository check failed"
+          description: "Restic check for repository {{ $labels.repository }} has failed"
 
-      - alert: BackupNotRunning
-        expr: (time() - restic_backup_timestamp) > 93600
-        for: 5m
+      - alert: ResticNoRecentSnapshot
+        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 93600
+        for: 10m
         labels:
           severity: warning
           category: storage
           service: restic
         annotations:
-          summary: "Restic backup hasn't run"
-          description: "Backup job {{ $labels.job }} hasn't run in over 26 hours"
+          summary: "Restic repository has no recent snapshots"
+          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 26 hours (last: {{ $value | humanizeDuration }} ago)"
+
+      - alert: ResticNoSnapshots
+        expr: restic_snapshots_total{repository!=""} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic repository has no snapshots"
+          description: "Repository {{ $labels.repository }} has no snapshots at all"
+
+      - alert: ResticRepositorySizeGrowing
+        expr: rate(restic_repo_size_bytes{repository!=""}[24h]) > 10737418240
+        for: 1h
+        labels:
+          severity: info
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic repository growing rapidly"
+          description: "Repository {{ $labels.repository }} is growing by more than 10GB per day"

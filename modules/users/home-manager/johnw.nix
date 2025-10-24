@@ -514,6 +514,13 @@
       zsh
       zsh-autosuggestions
       zsh-syntax-highlighting
+
+      gcc
+      gnumake
+      python3
+      uv
+      nodejs
+      vips                      # needed by fetch mcp server
     ];
   };
 }

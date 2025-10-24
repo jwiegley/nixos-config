@@ -3,14 +3,13 @@
 let
   # Helper function to create a backup configuration
   mkBackup = {
-    path,
-    name ? path,
+    name,
+    path ? "/tank/${name}",
     bucket ? name,
-    explicit ? false,
     exclude ? []
   }: {
     "${name}" = {
-      paths = if explicit then [ path ] else [ "/tank/${path}" ];
+      paths = [ "${path}" ];
       inherit exclude;
       repository = "s3:s3.us-west-001.backblazeb2.com/jwiegley-${bucket}";
       initialize = true;
@@ -92,7 +91,6 @@ let
     "Cinema"
     "Finance"
     "Haskell"
-    "Kadena"
     "Racial Justice"
     "Zoom"
   ];
@@ -101,7 +99,6 @@ let
   backupExcludes = [
     "Git"
     "Images"
-    "chainweb"
   ];
 
   attrNameList = attrs:
@@ -158,7 +155,6 @@ in
   # mkBackup { path = "Movies"; }
   # mkBackup { path = "Music"; }
   # mkBackup { path = "Pictures"; }
-  # mkBackup { path = "kadena"; }
 
   sops.secrets = {
     aws-keys = {};
@@ -169,50 +165,28 @@ in
 
   services.restic.backups = lib.mkMerge [
     (mkBackup {
-      path = "doc";
-      exclude = [ "*.dtBase/Backup*" ];
+      name = "Audio";
     })
     (mkBackup {
-      path = "Databases";
-      exclude = [
-        "*.dtBase/Backup*"
-        "*.zim"
-        "slack*"
-        "Kadena"
-        "Assembly"
-      ];
-    })
-    (mkBackup {
-      path = "src";
-      exclude = sourceExcludes;
-    })
-    (mkBackup {
-      path = "Home";
-      exclude = homeExcludes;
-    })
-    (mkBackup {
-      path = "Photos";
-    })
-    (mkBackup {
-      path = "Audio";
-      exclude = [
-        "Kadena"
-      ];
-    })
-    (mkBackup {
-      path = "Video";
-      exclude = videoExcludes;
-    })
-    (mkBackup {
-      path = "Backups";
+      name = "Backups";
       bucket = "Backups-Misc";
       exclude = backupExcludes;
     })
     (mkBackup {
-      path = "Nasim";
+      name = "Databases";
+      exclude = [
+        "*.dtBase/Backup*"
+        "*.zim"
+        "slack*"
+        "Assembly"
+      ];
     })
     (mkBackup {
-      path = "Nextcloud";
+      name = "Home";
+      exclude = homeExcludes;
+    })
+    (mkBackup {
+      name = "Nextcloud";
       exclude = [
         "*/cache/*"
         "*/appdata_*/preview/*"
@@ -220,20 +194,61 @@ in
         "*/updater-*"
       ];
     })
+    (mkBackup {
+      name = "Photos";
+    })
+
+    (mkBackup {
+      name = "Video";
+      exclude = videoExcludes;
+    })
+    (mkBackup {
+      name = "doc";
+      exclude = [ "*.dtBase/Backup*" ];
+    })
+    (mkBackup {
+      name = "src";
+      exclude = sourceExcludes;
+    })
   ];
 
-  systemd = {
-    services.restic-check = {
-      description = "Run restic check on backup repository";
-      serviceConfig = {
-        ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
-        User = "root";
+  # Get list of all backup names to create service overrides
+  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
+  systemd.services = lib.mkMerge [
+    # Override each individual restic-backups-* service
+    (lib.mkMerge (map (name: {
+      "restic-backups-${name}" = {
+        after = [ "zfs.target" "zfs-import-tank.service" ];
+        wantedBy = [ "tank.mount" ];
+        unitConfig = {
+          RequiresMountsFor = [ "/tank" ];
+          ConditionPathIsMountPoint = "/tank";
+        };
       };
-    };
+    }) (builtins.attrNames config.services.restic.backups)))
 
-    timers.restic-check = {
+    # restic-check service
+    {
+      restic-check = {
+        description = "Run restic check on backup repository";
+        after = [ "zfs.target" "zfs-import-tank.service" ];
+        wantedBy = [ "tank.mount" ];
+        unitConfig = {
+          RequiresMountsFor = [ "/tank" ];
+          ConditionPathIsMountPoint = "/tank";
+        };
+        serviceConfig = {
+          ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
+          User = "root";
+        };
+      };
+    }
+  ];
+
+  systemd.timers = {
+    restic-check = {
       description = "Timer for restic check";
-      wantedBy = [ "timers.target" ];
+      wantedBy = [ "timers.target" "tank.mount" ];
       timerConfig = {
         OnCalendar = "weekly";
         Persistent = true;

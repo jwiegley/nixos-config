@@ -11,7 +11,7 @@
       "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
     };
 
-    interfaces.enp4s0.useDHCP = true;
+    interfaces.end0.useDHCP = true;
   };
 
   # Enable IP forwarding for container networking

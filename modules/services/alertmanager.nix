@@ -32,24 +32,6 @@
             receiver = "critical-receiver";
             repeat_interval = "15m";
           }
-          {
-            # Route ZFS replication alerts
-            match = {
-              component = "zfs_replication";
-            };
-            receiver = "replication-receiver";
-            group_wait = "30s";
-            repeat_interval = "4h";
-          }
-          {
-            # Route Chainweb blockchain alerts
-            match = {
-              component = "chainweb";
-            };
-            receiver = "chainweb-receiver";
-            group_wait = "30s";
-            repeat_interval = "15m";  # More frequent notifications for blockchain issues
-          }
         ];
       };
 
@@ -104,76 +86,6 @@
                 {{ end }}
 
                 View in Prometheus: {{ .GeneratorURL }}
-                {{ end }}
-              '';
-            }
-          ];
-        }
-        {
-          name = "replication-receiver";
-          email_configs = [
-            {
-              to = "johnw@newartisans.com";
-              headers = {
-                Subject = "[ZFS Replication] {{ .GroupLabels.alertname }}";
-              };
-              text = ''
-                ZFS REPLICATION ALERT
-
-                {{ range .Alerts }}
-                Alert: {{ .Labels.alertname }}
-                Status: {{ .Status }}
-                Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
-
-                {{ .Annotations.summary }}
-
-                Details:
-                {{ .Annotations.description }}
-
-                Affected Service: {{ .Labels.name }}
-
-                To investigate:
-                - Check service status: systemctl status {{ .Labels.name }}
-                - View logs: journalctl -u {{ .Labels.name }} -n 100
-                - Run manual check: check-zfs-replication
-                {{ end }}
-              '';
-            }
-          ];
-        }
-        {
-          name = "chainweb-receiver";
-          email_configs = [
-            {
-              to = "johnw@kadena.io";
-              headers = {
-                Subject = "[CHAINWEB ALERT] {{ .GroupLabels.alertname }}";
-                Priority = "1";  # High priority for blockchain alerts
-              };
-              text = ''
-                KADENA CHAINWEB ALERT
-
-                {{ range .Alerts }}
-                Alert: {{ .Labels.alertname }}
-                Severity: {{ .Labels.severity }}
-                Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
-
-                Summary: {{ .Annotations.summary }}
-
-                Details:
-                {{ .Annotations.description }}
-
-                Current Status: {{ .Status }}
-
-                Labels:
-                {{ range .Labels.SortedPairs }}  - {{ .Name }}: {{ .Value }}
-                {{ end }}
-
-                Actions to take:
-                - Check exporter status: systemctl status chainweb-node-exporter
-                - View exporter logs: journalctl -u chainweb-node-exporter -n 50
-                - Check current metrics: curl localhost:9101/metrics | grep kadena
-                - View in Prometheus: {{ .GeneratorURL }}
                 {{ end }}
               '';
             }

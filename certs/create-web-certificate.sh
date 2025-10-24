@@ -204,7 +204,7 @@ if echo "$VERIFY_OUTPUT" | grep -q "OK"; then
 else
     echo -e "${RED}✗ FAILED${NC}"
     echo -e "  ${RED}Error output:${NC}"
-    echo "$VERIFY_OUTPUT" | sed 's/^/    /'
+    echo "${VERIFY_OUTPUT//$'\n'/$'\n    '}" | sed '1s/^/    /'
     echo -e "${RED}  Warning: Certificate chain verification failed!${NC}"
 fi
 
@@ -241,13 +241,13 @@ echo "  Not After:  $ENDDATE"
 # Calculate days until expiry
 ENDDATE_EPOCH=$(date -d "$ENDDATE" +%s)
 NOW_EPOCH=$(date +%s)
-DAYS_LEFT=$(( ($ENDDATE_EPOCH - $NOW_EPOCH) / 86400 ))
+DAYS_LEFT=$(( (ENDDATE_EPOCH - NOW_EPOCH) / 86400 ))
 echo "  Days until expiry: $DAYS_LEFT"
 
 echo -e "\n${MAGENTA}Subject Alternative Names:${NC}"
-SANS=$(openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null | grep -v "X509v3 Subject Alternative Name:" | sed 's/^ *//')
+SANS=$(openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null | grep -v "X509v3 Subject Alternative Name:" | sed 's/^ *//;s/,/, /g')
 if [ -n "$SANS" ]; then
-    echo "$SANS" | sed 's/^/  /'
+    echo "  $SANS"
 else
     echo "  None"
 fi

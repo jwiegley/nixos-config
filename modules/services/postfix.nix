@@ -2,7 +2,6 @@
 
 {
   sops.secrets."postfix-secrets" = {
-    sopsFile = ../../secrets.yaml;
     owner = "root";
     group = "root";
     mode = "0400";

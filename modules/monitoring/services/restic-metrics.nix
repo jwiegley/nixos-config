@@ -3,10 +3,17 @@
 {
   # Restic metrics collection for multiple repositories
   # Systemd service to collect restic metrics
+  # Auto-start when tank mount becomes available
+  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services.restic-metrics = {
     description = "Collect Restic Repository Metrics";
-    wants = [ "network-online.target" ];
-    after = [ "network-online.target" ];
+    wants = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    wantedBy = [ "tank.mount" ];
+    unitConfig = {
+      RequiresMountsFor = [ "/tank" ];
+      ConditionPathIsMountPoint = "/tank";
+    };
 
     serviceConfig = {
       Type = "oneshot";
@@ -160,9 +167,10 @@ EOF
   };
 
   # Systemd timer to periodically collect restic metrics
+  # Auto-start when tank mount becomes available
   systemd.timers.restic-metrics = {
     description = "Timer for Restic Repository Metrics Collection";
-    wantedBy = [ "timers.target" ];
+    wantedBy = [ "timers.target" "tank.mount" ];
     timerConfig = {
       OnBootSec = "5min";       # Run 5 minutes after boot
       OnUnitActiveSec = "6h";   # Run every 6 hours

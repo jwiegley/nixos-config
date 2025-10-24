@@ -78,6 +78,22 @@
             };
           }
           {
+            name = "VictoriaMetrics";
+            type = "prometheus";
+            uid = "victoriametrics";  # Fixed UID for VictoriaMetrics datasource
+            access = "proxy";
+            url = "http://localhost:8428";
+            isDefault = false;
+            editable = false;
+            jsonData = {
+              timeInterval = "60s";
+              queryTimeout = "300s";
+              httpMethod = "POST";
+              # VictoriaMetrics-specific optimizations
+              customQueryParameters = "";
+            };
+          }
+          {
             name = "Loki";
             type = "loki";
             uid = "loki";  # Fixed UID for Loki datasource
@@ -180,14 +196,6 @@
         ${pkgs.curl}/bin/curl -sSL \
           "https://grafana.com/api/dashboards/13639/revisions/latest/download" \
           -o "$DASHBOARD_DIR/logs-app.json" || true
-      fi
-
-      # Copy ZFS Replication Dashboard
-      if [ ! -f "$DASHBOARD_DIR/zfs-replication.json" ]; then
-        echo "Installing ZFS Replication dashboard..."
-        if [ -f "/etc/nixos/modules/storage/zfs-replication-dashboard.json" ]; then
-          cp /etc/nixos/modules/storage/zfs-replication-dashboard.json "$DASHBOARD_DIR/zfs-replication.json"
-        fi
       fi
 
       # Copy DNS Query Logs Dashboard
@@ -296,6 +304,17 @@
     after = [ "prometheus.service" ];
     wants = [ "prometheus.service" ];
   };
+
+  # Prometheus scrape configuration for Grafana metrics
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "grafana";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.grafana.settings.server.http_port}" ];
+      }];
+      scrape_interval = "30s";
+    }
+  ];
 
   # Add monitoring check script
   environment.systemPackages = with pkgs; [

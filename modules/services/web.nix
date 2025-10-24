@@ -45,51 +45,6 @@
           sslCertificateKey = "/var/lib/nginx-certs/vulcan.lan.key";
           locations."/".return = "301 https://glance.vulcan.lan$request_uri";
         };
-
-        # Internet-facing secure container with ACME
-        "home.newartisans.com" = {
-          forceSSL = true;
-          enableACME = true;  # Let's Encrypt ACME certificates
-
-          # Security headers for internet-facing service
-          extraConfig = ''
-            # Strict Transport Security
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-
-            # Additional security headers
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header X-XSS-Protection "1; mode=block" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-            # CSP Header
-            add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
-          '';
-
-          locations."/" = {
-            proxyPass = "http://10.233.1.2:8080/";
-            proxyWebsockets = true;
-            extraConfig = ''
-              # Pass real IP to container
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              # Timeout settings for long-running connections
-              proxy_connect_timeout 60s;
-              proxy_send_timeout 60s;
-              proxy_read_timeout 60s;
-            '';
-          };
-
-          # Health check endpoint (proxied to container)
-          locations."/health" = {
-            proxyPass = "http://10.233.1.2:8080/health";
-            extraConfig = ''
-              access_log off;
-            '';
-          };
-        };
       };
     };
   };

@@ -79,7 +79,6 @@
   };
 
   sops.secrets."step-ca-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "step-ca";
     group = "step-ca";
     mode = "0400";

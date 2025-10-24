@@ -33,7 +33,7 @@ maintainable, and observable NixOS deployment.
 
 ### Technical Requirements
 
-- **Hardware**: Apple T2 x86_64-linux system with 64GB RAM
+- **Hardware**: Apple aarch64-linux system with 64GB RAM
 - **Storage**: ZFS with rpool (system) and tank (data) pools
 - **Backup**: Restic to Backblaze B2 (not rsync.net as incorrectly documented)
 - **Containers**: Podman (not Docker) for containerized services
@@ -52,7 +52,7 @@ maintainable, and observable NixOS deployment.
 
 ### Service Inventory
 
-- **Databases**: PostgreSQL 16 with pgvector, SSL/TLS enabled
+- **Databases**: PostgreSQL 17 with pgvector, SSL/TLS enabled
 - **Web Services**: nginx (NixOS container), Organizr, Wallabag, SillyTavern
   (Podman)
 - **Infrastructure**: Step-CA, Restic backups, Logwatch

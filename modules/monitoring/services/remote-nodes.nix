@@ -16,18 +16,5 @@
       scrape_interval = "30s";
       scrape_timeout = "10s";
     }
-    {
-      job_name = "darwin-athena";
-      static_configs = [{
-        targets = [ "athena.lan:9100" ];
-        labels = {
-          instance = "athena";
-          os = "darwin";
-          arch = "arm64";
-        };
-      }];
-      scrape_interval = "30s";
-      scrape_timeout = "10s";
-    }
   ];
 }

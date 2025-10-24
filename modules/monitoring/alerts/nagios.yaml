@@ -1,0 +1,105 @@
+groups:
+  - name: nagios_monitoring
+    interval: 30s
+    rules:
+      # Nagios service down
+      - alert: NagiosServiceDown
+        expr: nagios_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Nagios monitoring service is down"
+          description: "Nagios service is not running on {{ $labels.instance }}, monitoring capabilities are degraded"
+
+      # Nagios web interface unreachable
+      - alert: NagiosWebInterfaceUnreachable
+        expr: up{job="nagios"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios web interface/exporter is unreachable"
+          description: "Cannot scrape metrics from Nagios exporter on {{ $labels.instance }}"
+
+      # Too many services in critical state
+      - alert: NagiosTooManyServicesCritical
+        expr: count(nagios_service_status == 2) > 5
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Too many Nagios services in CRITICAL state"
+          description: "{{ $value }} services are in CRITICAL state, indicating widespread issues"
+
+      # Too many services in warning state
+      - alert: NagiosTooManyServicesWarning
+        expr: count(nagios_service_status == 1) > 10
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Too many Nagios services in WARNING state"
+          description: "{{ $value }} services are in WARNING state"
+
+      # Host down
+      - alert: NagiosHostDown
+        expr: nagios_host_status > 0
+        for: 3m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Nagios reports host {{ $labels.host }} is down"
+          description: "Host {{ $labels.host }} is in state {{ $value }} (1=DOWN, 2=UNREACHABLE)"
+
+      # Critical service in bad state
+      - alert: NagiosCriticalServiceFailed
+        expr: |
+          nagios_service_status{service=~"PostgreSQL.*|Nginx.*|Prometheus|Grafana|Home Assistant|SSH"} >= 2
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Critical service {{ $labels.service }} on {{ $labels.host }} has failed"
+          description: "Service {{ $labels.service }} is in CRITICAL or UNKNOWN state ({{ $value }})"
+
+      # Container monitoring failing
+      - alert: NagiosContainerCheckFailed
+        expr: |
+          nagios_service_status{service=~".*Container"} >= 2
+        for: 3m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Container {{ $labels.service }} on {{ $labels.host }} check failed"
+          description: "Container monitoring check for {{ $labels.service }} is in CRITICAL or UNKNOWN state"
+
+      # Monitoring stack degraded
+      - alert: NagiosMonitoringStackDegraded
+        expr: |
+          count(nagios_service_status{service=~"Prometheus|Grafana|Loki|Alertmanager|VictoriaMetrics"} >= 1) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Multiple monitoring stack components are degraded"
+          description: "{{ $value }} monitoring components are in WARNING or worse state"
+
+      # All services healthy (informational)
+      - alert: NagiosAllServicesHealthy
+        expr: count(nagios_service_status > 0) == 0
+        for: 1h
+        labels:
+          severity: info
+          category: monitoring
+        annotations:
+          summary: "All Nagios monitored services are healthy"
+          description: "All monitored services have been in OK state for over 1 hour"

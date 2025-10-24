@@ -21,7 +21,7 @@
     # Enable PAM authentication for system users
     enablePAM = true;
 
-    # Mail location using Maildir format on ZFS storage
+    # Mail location using Maildir format
     mailLocation = "maildir:/var/mail/%u";
 
     # SSL/TLS certificate paths (will be created by step-ca)

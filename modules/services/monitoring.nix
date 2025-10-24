@@ -86,16 +86,16 @@ in
         { name = "sudo"; }
         # { name = "fail2ban"; }
         { name = "kernel"; }
-        { name = "audit"; }
+        # { name = "audit"; }
+        {
+          name = "certificate-validation";
+          title = "Certificate Validation Report";
+          script = lib.getExe certificateValidationScript;
+        }
         {
           name = "zpool";
           title = "ZFS Pool Status";
           script = lib.getExe zpoolScript;
-        }
-        {
-          name = "restic";
-          title = "Restic Snapshots";
-          script = lib.getExe resticSnapshots;
         }
         {
           name = "zfs-snapshot";
@@ -103,9 +103,9 @@ in
           script = lib.getExe zfsSnapshotScript;
         }
         {
-          name = "certificate-validation";
-          title = "Certificate Validation Report";
-          script = lib.getExe certificateValidationScript;
+          name = "restic";
+          title = "Restic Snapshots";
+          script = lib.getExe resticSnapshots;
         }
       ];
     };

@@ -19,9 +19,16 @@
   ];
 
   # Service hardening and reliability
+  # Auto-start when tank mount becomes available
+  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services."prometheus-zfs-exporter" = {
     wants = [ "network-online.target" ];
-    after = [ "network-online.target" "zfs.target" ];
+    after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    wantedBy = [ "tank.mount" ];
+    unitConfig = {
+      RequiresMountsFor = [ "/tank" ];
+      ConditionPathIsMountPoint = "/tank";
+    };
     startLimitIntervalSec = 0;
     startLimitBurst = 0;
     serviceConfig = {

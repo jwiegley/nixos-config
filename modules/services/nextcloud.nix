@@ -1,22 +1,23 @@
 { config, lib, pkgs, ... }:
 
+let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+in
 {
   # SOPS secrets for Nextcloud
   sops.secrets = {
     "nextcloud-admin-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "nextcloud";
       group = "nextcloud";
       mode = "0400";
     };
     "nextcloud-db-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "postgres";
       group = "nextcloud";
       mode = "0440";
     };
     "nextcloud-monitoring-password" = {
-      sopsFile = ../../secrets.yaml;
       owner = "nextcloud-exporter";
       group = "nextcloud-exporter";
       mode = "0400";
@@ -26,7 +27,7 @@
   # Nextcloud service configuration
   services.nextcloud = {
     enable = true;
-    package = pkgs.nextcloud31;
+    package = pkgs.nextcloud32;
     hostName = "nextcloud.vulcan.lan";
     https = true;
 
@@ -155,16 +156,18 @@
   };
 
   # Create required Nextcloud directories with proper ownership
+  # Include /var/lib/nextcloud/data so it exists even when tank isn't mounted
   systemd.tmpfiles.rules = [
     "d /var/lib/nextcloud/config 0750 nextcloud nextcloud -"
     "d /var/lib/nextcloud/store-apps 0750 nextcloud nextcloud -"
     "d /var/lib/nextcloud/apps 0750 nextcloud nextcloud -"
+    "d /var/lib/nextcloud/data 0750 nextcloud nextcloud -"
   ];
 
   # Bind mount ZFS dataset to Nextcloud data directory
-  fileSystems."/var/lib/nextcloud/data" = {
+  fileSystems = bindTankPath {
+    path = "/var/lib/nextcloud/data";
     device = "/tank/Nextcloud";
-    options = [ "bind" ];
   };
 
   # Systemd hardening for PHP-FPM
@@ -175,5 +178,41 @@
     ProtectKernelTunables = true;
     ProtectControlGroups = true;
     RestrictRealtime = true;
+  };
+
+  # Fix nextcloud services to wait for PostgreSQL AND the nextcloud data mount
+  # Services will automatically start when the mount becomes available
+  # ConditionPathIsMountPoint checks /tank to ensure ZFS pool is mounted (not /var/lib/nextcloud/data,
+  # because the bind mount succeeds even when tank is unmounted, binding to empty dir on root fs)
+  systemd.services = {
+    nextcloud-setup = {
+      after = [ "postgresql.service"
+      "zfs.target" "zfs-import-tank.service"
+      "var-lib-nextcloud-data.mount" ];
+      requires = [ "postgresql.service" ];
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
+    nextcloud-update-db = {
+      after = [ "postgresql.service"
+      "zfs.target" "zfs-import-tank.service"
+      "var-lib-nextcloud-data.mount" ];
+      requires = [ "postgresql.service" ];
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
+    nextcloud-cron = {
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
   };
 }

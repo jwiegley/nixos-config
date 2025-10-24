@@ -1,7 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
   inherit (mkQuadletLib) mkQuadletService;
 in
 {
@@ -50,6 +50,12 @@ in
     settings = {
       protected-mode = "no";
     };
+  };
+
+  # Ensure redis-litellm waits for podman network
+  systemd.services.redis-litellm = {
+    after = [ "sys-subsystem-net-devices-podman0.device" "podman.service" ];
+    bindsTo = [ "sys-subsystem-net-devices-podman0.device" ];
   };
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [

@@ -11,12 +11,12 @@ let
     "database.yaml"
     "storage.yaml"
     "certificates.yaml"
-    "chainweb.yaml"
     "dns.yaml"
     "network.yaml"
     "nextcloud.yaml"
     "litellm-availability.yaml"
     "home-assistant.yaml"
+    "home-assistant-backup.yaml"
   ];
 in
 {
@@ -25,12 +25,16 @@ in
     enable = true;
     port = 9090;
 
+    # Disable config check since token files may not exist at build time
+    checkConfig = false;
+
     # Only listen on localhost for now
     listenAddress = "127.0.0.1";
 
     # Enable admin API for administrative operations
     extraFlags = [
       "--web.enable-admin-api"
+      "--web.external-url=https://prometheus.vulcan.lan"
     ];
 
     # Global configuration
@@ -50,7 +54,7 @@ in
     );
 
     # Alertmanager configuration
-    alertmanagers = lib.mkIf (config.services.prometheus.alertmanager.enable or false) [
+    alertmanagers = lib.mkIf config.services.prometheus.alertmanager.enable [
       {
         static_configs = [{
           targets = [ "localhost:9093" ];
@@ -98,7 +102,6 @@ in
       - Postfix Exporter: http://localhost:9154/metrics
       - ZFS Exporter: http://localhost:9134/metrics
       - Blackbox Exporter: http://localhost:9115/metrics
-      - Chainweb: http://localhost:9101/metrics
 
       ## Restic Monitoring
       Restic metrics are collected via textfile collector for all repositories:

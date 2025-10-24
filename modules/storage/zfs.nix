@@ -5,11 +5,6 @@
     enable = true;
 
     datasets = {
-      # Snapshot individual filesystems for replication
-      "rpool/home".use_template = [ "active" ];
-      "rpool/nix".use_template = [ "active" ];
-      "rpool/root".use_template = [ "active" ];
-
       tank = {
         use_template = [ "archival" ];
         recursive = true;
@@ -17,7 +12,6 @@
       };
 
       "tank/Downloads".use_template = [ "active" ];
-      "tank/Backups/chainweb".use_template = [ "production" ];
     };
 
     templates = {
@@ -57,6 +51,7 @@
   systemd = {
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
+      after = [ "zfs.target" "zfs-import-tank.service" ];
       serviceConfig = {
         Type = "oneshot";
         User = "root";

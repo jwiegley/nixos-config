@@ -2,10 +2,11 @@
 
 {
   security = {
+    # jww (2025-10-21): The auditor can be too noisy
     # Audit framework
-    auditd.enable = true;
+    auditd.enable = false;
     audit = {
-      enable = true;
+      enable = false;
       rules = [
         # Rate limit audit messages to prevent log flooding and event loss
         # 500 messages/second is reasonable for most systems
@@ -33,9 +34,10 @@
       ];
     };
 
+    # jww (2025-10-21): Not using AppArmor yet
     # AppArmor
     apparmor = {
-      enable = true;
+      enable = false;
       killUnconfinedConfinables = false; # Start permissive
     };
   };

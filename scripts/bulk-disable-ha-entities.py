@@ -14,7 +14,6 @@ import json
 import os
 import sys
 import re
-from typing import List
 
 try:
     import websockets
@@ -35,77 +34,145 @@ PATTERNS_TO_DISABLE = [
 ]
 
 
+async def authenticate(websocket, token: str) -> bool:
+    """Authenticate with Home Assistant WebSocket API."""
+    # Receive auth_required message
+    msg = await websocket.recv()
+    print(f"Connected: {json.loads(msg)['type']}")
+
+    # Send auth message
+    await websocket.send(json.dumps({
+        "type": "auth",
+        "access_token": token
+    }))
+
+    # Receive auth result
+    msg = await websocket.recv()
+    auth_result = json.loads(msg)
+    if auth_result["type"] != "auth_ok":
+        print(f"Authentication failed: {auth_result}")
+        return False
+    print("Authenticated successfully")
+    return True
+
+
+async def fetch_entity_registry(websocket):
+    """Fetch the entity registry from Home Assistant."""
+    # Request entity registry list
+    await websocket.send(json.dumps({
+        "id": 1,
+        "type": "config/entity_registry/list"
+    }))
+
+    # Receive entity list
+    msg = await websocket.recv()
+    response = json.loads(msg)
+
+    if not response.get("success"):
+        print(f"Failed to get entity list: {response}")
+        return None
+
+    return response["result"]
+
+
+def filter_entities_to_disable(entities):
+    """Filter entities that match patterns and are not already disabled."""
+    entities_to_disable = []
+    for entity in entities:
+        entity_id = entity["entity_id"]
+        disabled_by = entity.get("disabled_by")
+
+        # Check if entity matches any pattern
+        for pattern in PATTERNS_TO_DISABLE:
+            if re.match(pattern, entity_id):
+                # Only process if not already disabled
+                if not disabled_by:
+                    entities_to_disable.append(entity)
+                break
+
+    return entities_to_disable
+
+
+def group_entities_by_pattern(entities_to_disable):
+    """Group entities by their matching pattern for display."""
+    by_pattern = {}
+    for entity in entities_to_disable:
+        entity_id = entity["entity_id"]
+        for pattern in PATTERNS_TO_DISABLE:
+            if re.match(pattern, entity_id):
+                if pattern not in by_pattern:
+                    by_pattern[pattern] = []
+                by_pattern[pattern].append(entity_id)
+                break
+    return by_pattern
+
+
+def display_entities_summary(entities_to_disable):
+    """Display summary of entities to be disabled."""
+    print(f"\nFound {len(entities_to_disable)} entities to disable:")
+    print("-" * 80)
+
+    by_pattern = group_entities_by_pattern(entities_to_disable)
+    for pattern, entity_ids in by_pattern.items():
+        print(f"\nPattern: {pattern}")
+        print(f"  Count: {len(entity_ids)}")
+        print(f"  Examples: {', '.join(entity_ids)}")
+
+
+async def perform_entity_disable(websocket, entities_to_disable):
+    """Disable each entity via WebSocket API."""
+    print("\nDisabling entities...")
+    msg_id = 2
+    disabled_count = 0
+
+    for entity in entities_to_disable:
+        entity_id = entity["entity_id"]
+
+        # Send disable command
+        await websocket.send(json.dumps({
+            "id": msg_id,
+            "type": "config/entity_registry/update",
+            "entity_id": entity_id,
+            "disabled_by": "user"
+        }))
+
+        # Wait for response
+        msg = await websocket.recv()
+        result = json.loads(msg)
+
+        if result.get("success"):
+            disabled_count += 1
+            if disabled_count % 10 == 0:
+                print(f"  Disabled {disabled_count}/{len(entities_to_disable)}...")
+        else:
+            print(f"  Failed to disable {entity_id}: {result}")
+
+        msg_id += 1
+
+    print(f"\nSuccessfully disabled {disabled_count} entities!")
+    print("\nNote: You may need to reload integrations or restart Home Assistant")
+    print("for all changes to take effect.")
+
+
 async def disable_entities(token: str, dry_run: bool = False):
     """Connect to Home Assistant and disable matching entities."""
-
     async with websockets.connect(HA_URL) as websocket:
-        # Step 1: Receive auth_required message
-        msg = await websocket.recv()
-        print(f"Connected: {json.loads(msg)['type']}")
-
-        # Step 2: Send auth message
-        await websocket.send(json.dumps({
-            "type": "auth",
-            "access_token": token
-        }))
-
-        # Step 3: Receive auth result
-        msg = await websocket.recv()
-        auth_result = json.loads(msg)
-        if auth_result["type"] != "auth_ok":
-            print(f"Authentication failed: {auth_result}")
-            return
-        print("Authenticated successfully")
-
-        # Step 4: Request entity registry list
-        await websocket.send(json.dumps({
-            "id": 1,
-            "type": "config/entity_registry/list"
-        }))
-
-        # Step 5: Receive entity list
-        msg = await websocket.recv()
-        response = json.loads(msg)
-
-        if not response.get("success"):
-            print(f"Failed to get entity list: {response}")
+        # Step 1-3: Authenticate
+        if not await authenticate(websocket, token):
             return
 
-        entities = response["result"]
+        # Step 4-5: Fetch entity registry
+        entities = await fetch_entity_registry(websocket)
+        if entities is None:
+            return
+
         print(f"Total entities in registry: {len(entities)}")
 
         # Step 6: Filter entities matching our patterns
-        entities_to_disable = []
-        for entity in entities:
-            entity_id = entity["entity_id"]
-            disabled_by = entity.get("disabled_by")
+        entities_to_disable = filter_entities_to_disable(entities)
 
-            # Check if entity matches any pattern
-            for pattern in PATTERNS_TO_DISABLE:
-                if re.match(pattern, entity_id):
-                    # Only process if not already disabled
-                    if not disabled_by:
-                        entities_to_disable.append(entity)
-                    break
-
-        print(f"\nFound {len(entities_to_disable)} entities to disable:")
-        print("-" * 80)
-
-        # Group by pattern for display
-        by_pattern = {}
-        for entity in entities_to_disable:
-            entity_id = entity["entity_id"]
-            for pattern in PATTERNS_TO_DISABLE:
-                if re.match(pattern, entity_id):
-                    if pattern not in by_pattern:
-                        by_pattern[pattern] = []
-                    by_pattern[pattern].append(entity_id)
-                    break
-
-        for pattern, entity_ids in by_pattern.items():
-            print(f"\nPattern: {pattern}")
-            print(f"  Count: {len(entity_ids)}")
-            print(f"  Examples: {', '.join(entity_ids)}")
+        # Display summary
+        display_entities_summary(entities_to_disable)
 
         if dry_run:
             print("\n[DRY RUN] No entities were actually disabled.")
@@ -113,43 +180,13 @@ async def disable_entities(token: str, dry_run: bool = False):
 
         # Step 7: Confirm before proceeding
         print("\n" + "=" * 80)
-        response = input(f"Disable {len(entities_to_disable)} entities? [y/N]: ")
-        if response.lower() != 'y':
+        user_response = input(f"Disable {len(entities_to_disable)} entities? [y/N]: ")
+        if user_response.lower() != 'y':
             print("Cancelled.")
             return
 
         # Step 8: Disable each entity
-        print("\nDisabling entities...")
-        msg_id = 2
-        disabled_count = 0
-
-        for entity in entities_to_disable:
-            entity_id = entity["entity_id"]
-
-            # Send disable command
-            await websocket.send(json.dumps({
-                "id": msg_id,
-                "type": "config/entity_registry/update",
-                "entity_id": entity_id,
-                "disabled_by": "user"
-            }))
-
-            # Wait for response
-            msg = await websocket.recv()
-            result = json.loads(msg)
-
-            if result.get("success"):
-                disabled_count += 1
-                if disabled_count % 10 == 0:
-                    print(f"  Disabled {disabled_count}/{len(entities_to_disable)}...")
-            else:
-                print(f"  Failed to disable {entity_id}: {result}")
-
-            msg_id += 1
-
-        print(f"\nSuccessfully disabled {disabled_count} entities!")
-        print("\nNote: You may need to reload integrations or restart Home Assistant")
-        print("for all changes to take effect.")
+        await perform_entity_disable(websocket, entities_to_disable)
 
 
 def main():

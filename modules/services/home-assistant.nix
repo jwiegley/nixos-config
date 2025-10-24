@@ -108,38 +108,8 @@ in
     restartUnits = [ "home-assistant.service" ];
   };
 
-  # BMW ConnectedDrive credentials
-  sops.secrets."home-assistant/bmw-username" = {
-    owner = "hass";
-    group = "hass";
-    mode = "0400";
-    restartUnits = [ "home-assistant.service" ];
-  };
-
-  sops.secrets."home-assistant/bmw-password" = {
-    owner = "hass";
-    group = "hass";
-    mode = "0400";
-    restartUnits = [ "home-assistant.service" ];
-  };
-
   # LG ThinQ Personal Access Token (PAT)
   sops.secrets."home-assistant/lg-thinq-token" = {
-    owner = "hass";
-    group = "hass";
-    mode = "0400";
-    restartUnits = [ "home-assistant.service" ];
-  };
-
-  # Opower/SMUD credentials for energy usage data
-  sops.secrets."home-assistant/smud-username" = {
-    owner = "hass";
-    group = "hass";
-    mode = "0400";
-    restartUnits = [ "home-assistant.service" ];
-  };
-
-  sops.secrets."home-assistant/smud-password" = {
     owner = "hass";
     group = "hass";
     mode = "0400";

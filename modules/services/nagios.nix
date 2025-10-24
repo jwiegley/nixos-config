@@ -444,6 +444,16 @@ let
       command_line    ${pkgs.check_zfs}/bin/check_zfs -p $ARG1$
     }
 
+    define command {
+      command_name    check_homeassistant_integrations
+      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$
+    }
+
+    define command {
+      command_name    check_homeassistant_specific_integration
+      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
+    }
+
     ###############################################################################
     # HOSTS
     ###############################################################################
@@ -560,6 +570,13 @@ let
       host_name               vulcan
       service_description     Home Assistant HTTP
       check_command           check_tcp!8123
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Home Assistant - All Integrations
+      check_command           check_homeassistant_integrations!hass.vulcan.lan!5!10
     }
 
     ###############################################################################

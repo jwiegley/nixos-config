@@ -212,18 +212,43 @@ in
     })
   ];
 
-  systemd = {
-    services.restic-check = {
-      description = "Run restic check on backup repository";
-      serviceConfig = {
-        ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
-        User = "root";
+  # Get list of all backup names to create service overrides
+  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
+  systemd.services = lib.mkMerge [
+    # Override each individual restic-backups-* service
+    (lib.mkMerge (map (name: {
+      "restic-backups-${name}" = {
+        after = [ "zfs.target" "zfs-import-tank.service" ];
+        wantedBy = [ "tank.mount" ];
+        unitConfig = {
+          RequiresMountsFor = [ "/tank" ];
+          ConditionPathIsMountPoint = "/tank";
+        };
       };
-    };
+    }) (builtins.attrNames config.services.restic.backups)))
 
-    timers.restic-check = {
+    # restic-check service
+    {
+      restic-check = {
+        description = "Run restic check on backup repository";
+        after = [ "zfs.target" "zfs-import-tank.service" ];
+        wantedBy = [ "tank.mount" ];
+        unitConfig = {
+          RequiresMountsFor = [ "/tank" ];
+          ConditionPathIsMountPoint = "/tank";
+        };
+        serviceConfig = {
+          ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
+          User = "root";
+        };
+      };
+    }
+  ];
+
+  systemd.timers = {
+    restic-check = {
       description = "Timer for restic check";
-      wantedBy = [ "timers.target" ];
+      wantedBy = [ "timers.target" "tank.mount" ];
       timerConfig = {
         OnCalendar = "weekly";
         Persistent = true;

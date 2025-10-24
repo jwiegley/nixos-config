@@ -92,7 +92,6 @@ in
           title = "Certificate Validation Report";
           script = lib.getExe certificateValidationScript;
         }
-      ] ++ lib.optionals false [
         {
           name = "zpool";
           title = "ZFS Pool Status";

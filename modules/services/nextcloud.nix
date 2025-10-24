@@ -180,11 +180,39 @@ in
     RestrictRealtime = true;
   };
 
-  # Fix nextcloud-setup service to wait for PostgreSQL AND the nextcloud data
-  # mount Note: We use 'after' but not 'requires' for the mount to allow
-  # activation without tank
-  systemd.services.nextcloud-setup = {
-    after = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
-    requires = [ "postgresql.service" ];
+  # Fix nextcloud services to wait for PostgreSQL AND the nextcloud data mount
+  # Services will automatically start when the mount becomes available
+  # ConditionPathIsMountPoint checks /tank to ensure ZFS pool is mounted (not /var/lib/nextcloud/data,
+  # because the bind mount succeeds even when tank is unmounted, binding to empty dir on root fs)
+  systemd.services = {
+    nextcloud-setup = {
+      after = [ "postgresql.service"
+      "zfs.target" "zfs-import-tank.service"
+      "var-lib-nextcloud-data.mount" ];
+      requires = [ "postgresql.service" ];
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
+    nextcloud-update-db = {
+      after = [ "postgresql.service"
+      "zfs.target" "zfs-import-tank.service"
+      "var-lib-nextcloud-data.mount" ];
+      requires = [ "postgresql.service" ];
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
+    nextcloud-cron = {
+      wantedBy = [ "var-lib-nextcloud-data.mount" ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Nextcloud" ];
+        ConditionPathIsMountPoint = "/tank";
+      };
+    };
   };
 }

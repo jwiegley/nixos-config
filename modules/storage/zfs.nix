@@ -51,6 +51,7 @@
   systemd = {
     services.zpool-scrub = {
       description = "Scrub ZFS pool";
+      after = [ "zfs.target" "zfs-import-tank.service" ];
       serviceConfig = {
         Type = "oneshot";
         User = "root";

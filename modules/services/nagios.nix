@@ -17,6 +17,17 @@ let
     }
   '';
 
+  # Helper function for services that depend on mount points
+  # These services use ConditionPathIsMountPoint and need special monitoring
+  mkConditionalServiceCheck = serviceName: displayName: mountPoint: ''
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName}
+      check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}
+    }
+  '';
+
   # Helper function to generate timer checks (monitors both timer and associated service)
   mkTimerCheck = timerName: displayName: ''
     define service {
@@ -34,6 +45,23 @@ let
     }
   '';
 
+  # Helper function for timers whose services depend on mount points
+  mkConditionalTimerCheck = timerName: displayName: mountPoint: ''
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName} (Timer)
+      check_command           check_systemd_service!${timerName}
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     ${displayName} (Service)
+      check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}
+    }
+  '';
+
   # Helper function to generate container checks
   mkContainerCheck = containerName: displayName: ''
     define service {
@@ -45,17 +73,27 @@ let
   '';
 
   # Service categories for organized monitoring
-  # Critical Infrastructure Services
+  # Critical Infrastructure Services (no mount dependencies)
   criticalServices = [
     { name = "postgresql.service"; display = "PostgreSQL Database"; }
     { name = "nginx.service"; display = "Nginx Web Server"; }
     { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
     { name = "postfix.service"; display = "Postfix Mail Server"; }
     { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
-    { name = "smbd.service"; display = "Samba File Server"; }
-    { name = "nmbd.service"; display = "Samba NetBIOS Name Server"; }
     { name = "samba-wsdd.service"; display = "Samba Web Service Discovery"; }
     { name = "technitium-dns-server.service"; display = "Technitium DNS Server"; }
+  ];
+
+  # Critical Services that depend on /tank mount
+  tankDependentServices = [
+    { name = "nextcloud-setup.service"; display = "Nextcloud Setup"; mount = "/tank"; }
+    { name = "nextcloud-update-db.service"; display = "Nextcloud Database Update"; mount = "/tank"; }
+    { name = "nextcloud-cron.service"; display = "Nextcloud Cron"; mount = "/tank"; }
+    { name = "samba.service"; display = "Samba Service"; mount = "/tank"; }
+    { name = "samba-smbd.service"; display = "Samba SMB Daemon"; mount = "/tank"; }
+    { name = "samba-nmbd.service"; display = "Samba NetBIOS Name Server"; mount = "/tank"; }
+    { name = "samba-winbindd.service"; display = "Samba Winbind Daemon"; mount = "/tank"; }
+    { name = "prometheus-zfs-exporter.service"; display = "ZFS Metrics Exporter"; mount = "/tank"; }
   ];
 
   # Monitoring Stack Services
@@ -87,6 +125,19 @@ let
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
   ];
 
+  # Backup Services - Restic (all depend on /tank mount)
+  resticBackupServices = [
+    { name = "restic-backups-Audio.service"; display = "Restic Backup: Audio"; mount = "/tank"; }
+    { name = "restic-backups-Backups.service"; display = "Restic Backup: Backups"; mount = "/tank"; }
+    { name = "restic-backups-Databases.service"; display = "Restic Backup: Databases"; mount = "/tank"; }
+    { name = "restic-backups-doc.service"; display = "Restic Backup: doc"; mount = "/tank"; }
+    { name = "restic-backups-Home.service"; display = "Restic Backup: Home"; mount = "/tank"; }
+    { name = "restic-backups-Nextcloud.service"; display = "Restic Backup: Nextcloud"; mount = "/tank"; }
+    { name = "restic-backups-Photos.service"; display = "Restic Backup: Photos"; mount = "/tank"; }
+    { name = "restic-backups-src.service"; display = "Restic Backup: src"; mount = "/tank"; }
+    { name = "restic-backups-Video.service"; display = "Restic Backup: Video"; mount = "/tank"; }
+  ];
+
   # Backup and Maintenance Timers
   maintenanceTimers = [
     { name = "git-workspace-archive.timer"; display = "Git Workspace Archive"; }
@@ -99,6 +150,12 @@ let
     { name = "logrotate.timer"; display = "Log Rotation"; }
     { name = "fstrim.timer"; display = "Filesystem Trim"; }
     { name = "podman-prune.timer"; display = "Podman Cleanup"; }
+  ];
+
+  # Timers whose services depend on /tank mount
+  tankDependentTimers = [
+    { name = "restic-check.timer"; display = "Restic Repository Check"; mount = "/tank"; }
+    { name = "restic-metrics.timer"; display = "Restic Metrics Collection"; mount = "/tank"; }
   ];
 
   # Email Sync Timers
@@ -138,6 +195,9 @@ let
     # Critical Infrastructure
     (lib.concatMapStrings (s: mkServiceCheck s.name s.display) criticalServices)
 
+    # Tank-Dependent Services (use conditional check)
+    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount) tankDependentServices)
+
     # Monitoring Stack
     (lib.concatMapStrings (s: mkServiceCheck s.name s.display) monitoringServices)
 
@@ -147,11 +207,17 @@ let
     # Applications
     (lib.concatMapStrings (s: mkServiceCheck s.name s.display) applicationServices)
 
+    # Restic Backup Services (use conditional check)
+    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount) resticBackupServices)
+
     # Container Services
     (lib.concatMapStrings (s: mkServiceCheck s.name s.display) containerSystemdServices)
 
     # Maintenance Timers
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display) maintenanceTimers)
+
+    # Tank-Dependent Timers (use conditional check for services)
+    (lib.concatMapStrings (t: mkConditionalTimerCheck t.name t.display t.mount) tankDependentTimers)
 
     # Email Timers
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display) emailTimers)
@@ -287,6 +353,56 @@ let
     define command {
       command_name    check_systemd_service
       command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$
+    }
+
+    define command {
+      command_name    check_systemd_service_conditional
+      command_line    ${pkgs.writeShellScript "check_systemd_conditional.sh" ''
+        #!/usr/bin/env bash
+        SERVICE="$1"
+        MOUNTPOINT="$2"
+
+        # Check if mount point is actually mounted
+        if ${pkgs.util-linux}/bin/mountpoint -q "$MOUNTPOINT"; then
+          # Mount is available - service MUST be active or have succeeded
+          ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+          SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
+          RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
+          CONDITION_RESULT=$(${pkgs.systemd}/bin/systemctl show -p ConditionResult --value "$SERVICE")
+
+          # For oneshot services: inactive+dead with Result=success and ConditionResult=yes is OK
+          # For running services: active+running is OK
+          if [ "$ACTIVE_STATE" = "active" ] && [ "$RESULT" = "success" ]; then
+            echo "OK: $SERVICE is active (mount $MOUNTPOINT available)"
+            exit 0
+          elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ] && [ "$RESULT" = "success" ] && [ "$CONDITION_RESULT" = "yes" ]; then
+            echo "OK: $SERVICE completed successfully (mount $MOUNTPOINT available)"
+            exit 0
+          elif [ "$CONDITION_RESULT" = "no" ]; then
+            echo "CRITICAL: $SERVICE condition not met but $MOUNTPOINT IS mounted - service should be running"
+            exit 2
+          else
+            echo "CRITICAL: $SERVICE is $ACTIVE_STATE/$SUB_STATE with result $RESULT (mount $MOUNTPOINT available)"
+            exit 2
+          fi
+        else
+          # Mount not available - service being inactive is expected
+          # Note: ConditionResult may still show "yes" if it was evaluated when mount was available
+          # So we only check ActiveState, not ConditionResult
+          ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+
+          if [ "$ACTIVE_STATE" = "inactive" ]; then
+            echo "OK: $SERVICE inactive because $MOUNTPOINT not mounted (expected)"
+            exit 0
+          elif [ "$ACTIVE_STATE" = "failed" ]; then
+            echo "CRITICAL: $SERVICE is failed even though $MOUNTPOINT not mounted"
+            exit 2
+          else
+            echo "WARNING: $SERVICE is $ACTIVE_STATE but $MOUNTPOINT not mounted"
+            exit 1
+          fi
+        fi
+      ''} $ARG1$ $ARG2$
     }
 
     define command {

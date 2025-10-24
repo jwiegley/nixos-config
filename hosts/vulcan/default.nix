@@ -66,8 +66,6 @@
 
     # Storage
     ../../modules/services/nextcloud.nix
-  ] ++ lib.optionals false [
-    # Storage
     ../../modules/storage/zfs.nix
     ../../modules/storage/backups.nix
     ../../modules/storage/backup-monitoring.nix

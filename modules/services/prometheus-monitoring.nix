@@ -24,7 +24,6 @@
     ../monitoring/services/litellm-exporter.nix
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/phpfpm-exporter.nix
-  ] ++ lib.optionals false [
     ../monitoring/services/zfs-exporter.nix
     ../monitoring/services/restic-metrics.nix
   ];

@@ -39,6 +39,7 @@
     ../../modules/services/alertmanager.nix
     ../../modules/services/nagios.nix
     ../../modules/monitoring/homeassistant-nagios-check.nix
+    ../../modules/monitoring/nagios-daily-report.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/home-assistant.nix

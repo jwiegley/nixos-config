@@ -1038,4 +1038,12 @@ in
       options = [ "NOPASSWD" ];
     }];
   }];
+
+  # Enable daily email health reports
+  services.nagios-daily-report = {
+    enable = true;
+    toEmail = "jwiegley@gmail.com";
+    fromEmail = "jwiegley@gmail.com";
+    schedule = "08:00";  # Send daily at 8:00 AM
+  };
 }

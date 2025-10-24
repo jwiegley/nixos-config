@@ -11,6 +11,9 @@ let
   checkScriptWithToken = pkgs.writeScriptBin "check_homeassistant_integrations_wrapper" ''
     #!${pkgs.bash}/bin/bash
 
+    # Ensure curl and jq are in PATH
+    export PATH="${pkgs.curl}/bin:${pkgs.jq}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH"
+
     # Read token from SOPS secret
     if [ -f "${config.sops.secrets."monitoring/home-assistant-token".path}" ]; then
       TOKEN=$(cat ${config.sops.secrets."monitoring/home-assistant-token".path})
@@ -45,7 +48,7 @@ in
     after = [ "home-assistant.service" "sops-nix.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${checkScriptWithToken}/bin/check_homeassistant_integrations_wrapper -H 127.0.0.1:8123 -w 5 -c 10";
+      ExecStart = "${checkScriptWithToken}/bin/check_homeassistant_integrations_wrapper -H 127.0.0.1:8123 -I -i august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws";
       User = "nagios";
       Group = "nagios";
     };

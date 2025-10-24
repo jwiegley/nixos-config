@@ -224,6 +224,12 @@
         cp /etc/nixos/modules/monitoring/dashboards/home-assistant.json "$DASHBOARD_DIR/home-assistant.json"
       fi
 
+      # Copy Enhanced Systemd Services Dashboard (always update)
+      echo "Installing Enhanced Systemd Services dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/dashboards/systemd-services-enhanced.json" ]; then
+        cp /etc/nixos/modules/monitoring/dashboards/systemd-services-enhanced.json "$DASHBOARD_DIR/systemd-services-enhanced.json"
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

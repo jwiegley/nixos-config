@@ -145,16 +145,6 @@ with lib;
                       ];
                     }
                     {
-                      title = "Productivity";
-                      color = "150 60 55";
-                      links = [
-                        {
-                          title = "Nextcloud";
-                          url = "https://nextcloud.vulcan.lan";
-                        }
-                      ];
-                    }
-                    {
                       title = "Media";
                       color = "280 50 60";
                       links = [
@@ -169,6 +159,10 @@ with lib;
                         {
                           title = "Jellyfin";
                           url = "https://jellyfin.vulcan.lan";
+                        }
+                        {
+                          title = "Nextcloud";
+                          url = "https://nextcloud.vulcan.lan";
                         }
                         {
                           title = "Silly Tavern";

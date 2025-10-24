@@ -45,7 +45,7 @@ in
     after = [ "home-assistant.service" "sops-nix.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${checkScriptWithToken}/bin/check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s -w 5 -c 10";
+      ExecStart = "${checkScriptWithToken}/bin/check_homeassistant_integrations_wrapper -H 127.0.0.1:8123 -w 5 -c 10";
       User = "nagios";
       Group = "nagios";
     };

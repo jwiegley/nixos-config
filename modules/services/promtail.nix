@@ -147,74 +147,8 @@
         }
 
         # PostgreSQL logs
-        {
-          job_name = "postgresql";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "postgresql";
-                host = "vulcan";
-                __path__ = "/var/log/postgresql/*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              multiline = {
-                firstline = ''^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})'';
-                max_wait_time = "3s";
-              };
-            }
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \w+) \[(?P<pid>\d+)\] (?P<level>\w+): (?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                level = "";
-              };
-            }
-          ];
-        }
 
         # Dovecot mail logs
-        {
-          job_name = "dovecot";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "dovecot";
-                host = "vulcan";
-                service = "mail";
-                __path__ = "/var/log/dovecot/*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\w+ \d+ \d{2}:\d{2}:\d{2}) (?P<service>\S+): (?P<level>\w+): (?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                service = "";
-                level = "";
-              };
-            }
-            {
-              timestamp = {
-                source = "timestamp";
-                format = "Jan 02 15:04:05";
-                # Adjust year since syslog format doesn't include it
-                location = "America/Los_Angeles";
-              };
-            }
-          ];
-        }
 
         # Postfix mail logs
         {
@@ -247,31 +181,6 @@
         }
 
         # Docker container logs (if Docker is enabled)
-        {
-          job_name = "docker";
-          docker_sd_configs = [
-            {
-              host = "unix:///var/run/docker.sock";
-              refresh_interval = "30s";
-            }
-          ];
-          relabel_configs = [
-            {
-              source_labels = [ "__meta_docker_container_name" ];
-              target_label = "container";
-              regex = "^/(.*)$";
-              replacement = "$1";
-            }
-            {
-              source_labels = [ "__meta_docker_container_label_com_docker_compose_service" ];
-              target_label = "service";
-            }
-            {
-              source_labels = [ "__meta_docker_container_label_com_docker_compose_project" ];
-              target_label = "project";
-            }
-          ];
-        }
 
         # Restic backup logs
         {
@@ -307,47 +216,6 @@
         }
 
         # Nextcloud logs (if present)
-        {
-          job_name = "nextcloud";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "nextcloud";
-                host = "vulcan";
-                __path__ = "/var/lib/nextcloud/data/nextcloud.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              json = {
-                expressions = {
-                  time = "time";
-                  level = "level";
-                  message = "message";
-                  app = "app";
-                  method = "method";
-                  url = "url";
-                  user = "user";
-                };
-              };
-            }
-            {
-              labels = {
-                level = "";
-                app = "";
-                user = "";
-              };
-            }
-            {
-              timestamp = {
-                source = "time";
-                format = "RFC3339";
-              };
-            }
-          ];
-        }
 
         # Jellyfin logs
         {
@@ -433,72 +301,7 @@
           ];
         }
 
-        # ZFS replication logs
-        {
-          job_name = "zfs-replication";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "zfs-replication";
-                host = "vulcan";
-                __path__ = "/var/log/zfs-replication*.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^(?P<timestamp>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})?[\s]*(?P<message>.*)$'';
-              };
-            }
-            {
-              timestamp = {
-                source = "timestamp";
-                format = "2006-01-02 15:04:05";
-                fallback_formats = [
-                  "RFC3339"
-                  "RFC3339Nano"
-                ];
-              };
-            }
-          ];
-        }
-
         # Audit logs (separate from journal to allow specific handling)
-        {
-          job_name = "audit";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "audit";
-                host = "vulcan";
-                __path__ = "/var/log/audit/audit.log";
-              };
-            }
-          ];
-          pipeline_stages = [
-            {
-              regex = {
-                expression = ''^type=(?P<audit_type>\w+) msg=audit\((?P<timestamp>[^)]+)\):(?P<message>.*)$'';
-              };
-            }
-            {
-              labels = {
-                audit_type = "";
-              };
-            }
-            {
-              # Rate limit audit logs to prevent overwhelming Loki
-              limit = {
-                rate = 100;
-                burst = 200;
-                drop = true;
-              };
-            }
-          ];
-        }
 
         # Backup failure logs
         {
@@ -730,36 +533,6 @@
           ];
         }
 
-        # Chainweb/Kadena node exporter logs from journal
-        {
-          job_name = "chainweb-exporters";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "chainweb-exporters";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "chainweb-node-exporter-.*\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "node";
-              regex = "chainweb-node-exporter-(.*)\\.service";
-              replacement = "$1";
-            }
-          ];
-        }
-
         # Glance dashboard and GitHub extension logs from journal
         {
           job_name = "glance";
@@ -986,6 +759,28 @@
       RestartSec = "5s";
     };
   };
+
+  # Nginx reverse proxy configuration for Promtail web UI
+  services.nginx.virtualHosts."promtail.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/promtail.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/promtail.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://localhost:${toString config.services.promtail.configuration.server.http_listen_port}";
+      recommendedProxySettings = true;
+    };
+  };
+
+  # Prometheus scrape configuration for Promtail metrics
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "promtail";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.promtail.configuration.server.http_listen_port}" ];
+      }];
+      scrape_interval = "30s";
+    }
+  ];
 
   # Helper script to test Promtail configuration
   environment.systemPackages = with pkgs; [

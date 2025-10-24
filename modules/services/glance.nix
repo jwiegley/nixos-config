@@ -119,6 +119,10 @@ with lib;
                       color = "10 70 50";
                       links = [
                         {
+                          title = "Cockpit";
+                          url = "https://cockpit.vulcan.lan";
+                        }
+                        {
                           title = "OPNsense";
                           url = "https://192.168.1.1";
                         }
@@ -133,6 +137,10 @@ with lib;
                         {
                           title = "Home Assistant";
                           url = "https://hass.vulcan.lan";
+                        }
+                        {
+                          title = "Node-RED";
+                          url = "https://nodered.vulcan.lan";
                         }
                       ];
                     }
@@ -150,6 +158,10 @@ with lib;
                       title = "Media";
                       color = "280 50 60";
                       links = [
+                        {
+                          title = "Fastmail";
+                          url = "https://app.fastmail.com/mail/Inbox/?u=d30140a0";
+                        }
                         {
                           title = "Wallabag";
                           url = "https://wallabag.vulcan.lan";
@@ -172,13 +184,29 @@ with lib;
                           title = "Grafana";
                           url = "https://grafana.vulcan.lan";
                         }
-                        # {
-                        #   title = "Prometheus";
-                        #   url = "https://prometheus.vulcan.lan";
-                        # }
+                        {
+                          title = "Prometheus";
+                          url = "https://prometheus.vulcan.lan";
+                        }
+                        {
+                          title = "VictoriaMetrics";
+                          url = "https://victoriametrics.vulcan.lan/vmui";
+                        }
+                        {
+                          title = "Loki";
+                          url = "https://grafana.vulcan.lan/explore";
+                        }
+                        {
+                          title = "Promtail";
+                          url = "https://promtail.vulcan.lan";
+                        }
                         {
                           title = "Alertmanager";
                           url = "https://alertmanager.vulcan.lan";
+                        }
+                        {
+                          title = "Nagios";
+                          url = "https://nagios.vulcan.lan";
                         }
                         {
                           title = "OpenSpeedTest";
@@ -202,15 +230,19 @@ with lib;
                       links = [
                         {
                           title = "GitHub";
-                          url = "https://github.com/jwiegley";
-                        }
-                        {
-                          title = "NixOS Search";
-                          url = "https://search.nixos.org";
+                          url = "https://github.com/notifications?query=is%3Aunread";
                         }
                         {
                           title = "Reddit";
-                          url = "https://old.reddit.com";
+                          url = "https://old.reddit.com/new";
+                        }
+                        {
+                          title = "Google News";
+                          url = "https://news.google.com/foryou?hl=en-US&gl=US&ceid=US%3Aen";
+                        }
+                        {
+                          title = "Reddit";
+                          url = "https://old.reddit.com/new";
                         }
                         {
                           title = "XDA Forums";
@@ -231,7 +263,6 @@ with lib;
   # Import SOPS secrets
   sops.secrets = {
     glance_github_token = {
-      sopsFile = ../../secrets.yaml;
       mode = "0400";
       owner = "glance";
       group = "glance";

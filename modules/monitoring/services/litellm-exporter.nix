@@ -12,13 +12,13 @@ let
       exit 1
     fi
 
-    # Test query to athena/gpt-oss-20b
+    # Test query to hera/gpt-oss-120b
     RESPONSE=$(${pkgs.curl}/bin/curl -s -w "\n%{http_code}" -X POST \
       http://127.0.0.1:4000/v1/chat/completions \
       -H "x-api-key: $API_KEY" \
       -H "Content-Type: application/json" \
       -d '{
-        "model": "athena/gpt-oss-20b",
+        "model": "hera/gpt-oss-120b",
         "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
         "max_tokens": 10,
         "temperature": 0

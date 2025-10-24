@@ -2,19 +2,29 @@
   inputs = {
     # nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon";
 
-    nixos-hardware = {
-      url = "github:NixOS/nixos-hardware";
-      # inputs.nixpkgs.follows = "nixpkgs";
+    firmware = {
+      url = "git+file:./firmware";
+      flake = false;  # It's just data, not a flake
     };
 
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
+    secrets = {
+      url = "git+file:./secrets";
+      flake = false;  # It's just data, not a flake
     };
 
     sops-nix = {
       url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    quadlet-nix = {
+      url = "github:SEIAROTg/quadlet-nix";
+    };
+
+    home-manager = {
+      url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -23,48 +33,36 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    quadlet-nix = {
-      url = "github:SEIAROTg/quadlet-nix";
-      # inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     claude-code-nix = {
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { nixpkgs,
-              nixos-hardware,
-              home-manager, sops-nix,
-              nixos-logwatch,
-              quadlet-nix,
-              claude-code-nix, ... }:
-    let system = "x86_64-linux"; in {
-      formatter.x86_64-linux =
-        nixpkgs.legacyPackages.x86_64-linux.nixfmt-rfc-style;
+  outputs = inputs: let system = "aarch64-linux"; in {
+    formatter.aarch64-linux =
+      inputs.nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
 
-      nixosConfigurations.vulcan = nixpkgs.lib.nixosSystem {
+    nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      specialArgs = {
         inherit system;
-        modules = [
-          nixos-hardware.nixosModules.apple-t2
-          nixos-logwatch.nixosModules.logwatch
-          sops-nix.nixosModules.sops
-          quadlet-nix.nixosModules.quadlet
-          {
-            nixpkgs.overlays = [
-              claude-code-nix.overlays.default
-              (import ./overlays)
-            ];
-          }
-          home-manager.nixosModules.home-manager
-          ./hosts/vulcan
-        ];
+        inherit (inputs) firmware secrets;
       };
+      modules = [
+        inputs.nixos-apple-silicon.nixosModules.default
+        inputs.sops-nix.nixosModules.sops
+        inputs.quadlet-nix.nixosModules.quadlet
+        inputs.nixos-logwatch.nixosModules.logwatch
+        inputs.home-manager.nixosModules.home-manager
+        {
+          nixpkgs.overlays = [
+            inputs.claude-code-nix.overlays.default
+            (import ./overlays)
+          ];
+        }
+        ./hosts/vulcan
+      ];
     };
+  };
 }
-
-# system.activationScripts.consoleBlank = ''
-#   echo "Setting up console blanking..."
-#   ${pkgs.util-linux}/bin/setterm --blank 1 --powerdown 2 > /dev/tty1
-# '';

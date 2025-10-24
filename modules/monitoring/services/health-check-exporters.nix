@@ -9,19 +9,28 @@ let
 
   # Critical services to monitor
   criticalServices = [
+    # Infrastructure
     "postgresql"
     "nginx"
     "step-ca"
-    "prometheus"
     "dovecot"
     "postfix"
-  ];
 
-  # ZFS replication services to monitor
-  syncoidServices = [
-    "syncoid-rpool-home"
-    "syncoid-rpool-nix"
-    "syncoid-rpool-root"
+    # Monitoring Stack
+    "prometheus"
+    "alertmanager"
+    "grafana"
+    "loki"
+    "victoriametrics"
+
+    # Critical Application Services
+    "home-assistant"
+    "node-red"
+    "technitium-dns-server"
+
+    # Critical Dependencies
+    "redis-litellm"
+    "redis-nextcloud"
   ];
 
   # Script to generate backup status metrics
@@ -185,86 +194,6 @@ EOF
       http_response "404 Not Found" "text/plain" "Not Found"
     fi
   '';
-
-  # Script to generate ZFS replication status metrics
-  zfsReplicationExporter = pkgs.writeShellScript "zfs-replication-exporter" ''
-    set -euo pipefail
-
-    OUTPUT_FILE="${textfileDir}/zfs_replication_status.prom"
-    TEMP_FILE="$OUTPUT_FILE.$$"
-
-    # Write metrics header
-    cat > "$TEMP_FILE" <<'HEADER'
-# HELP zfs_replication_service_active Whether the ZFS replication service is active (1 = active, 0 = inactive)
-# TYPE zfs_replication_service_active gauge
-# HELP zfs_replication_service_failed Whether the ZFS replication service is in failed state (1 = failed, 0 = not failed)
-# TYPE zfs_replication_service_failed gauge
-# HELP zfs_replication_timer_active Whether the replication timer is active (1 = active, 0 = inactive)
-# TYPE zfs_replication_timer_active gauge
-# HELP zfs_replication_last_run_timestamp_seconds Timestamp of the last replication run
-# TYPE zfs_replication_last_run_timestamp_seconds gauge
-# HELP zfs_replication_last_run_success Whether the last replication run was successful (1 = success, 0 = failure)
-# TYPE zfs_replication_last_run_success gauge
-HEADER
-
-    # Check each syncoid service
-    for service in ${lib.concatStringsSep " " syncoidServices}; do
-      DATASET_NAME="''${service#syncoid-rpool-}"
-
-      # Check service state
-      if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service"; then
-        SERVICE_ACTIVE=1
-      else
-        SERVICE_ACTIVE=0
-      fi
-
-      # Check if service is failed
-      if ${pkgs.systemd}/bin/systemctl is-failed --quiet "$service"; then
-        SERVICE_FAILED=1
-      else
-        SERVICE_FAILED=0
-      fi
-
-      # Check timer state
-      if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service.timer"; then
-        TIMER_ACTIVE=1
-      else
-        TIMER_ACTIVE=0
-      fi
-
-      # Get last run timestamp
-      LAST_RUN_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestampMonotonic --value "$service" || echo "0")
-      if [ "$LAST_RUN_TS" = "0" ] || [ -z "$LAST_RUN_TS" ]; then
-        LAST_RUN_EPOCH=0
-      else
-        # Convert monotonic to epoch (approximate)
-        CURRENT_EPOCH=$(date +%s)
-        CURRENT_MONOTONIC=$(${pkgs.coreutils}/bin/cat /proc/uptime | ${pkgs.gawk}/bin/awk '{print int($1 * 1000000)}')
-        LAST_RUN_EPOCH=$(( CURRENT_EPOCH - (CURRENT_MONOTONIC - LAST_RUN_TS) / 1000000 ))
-      fi
-
-      # Get result of last run
-      RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$service" || echo "unknown")
-      if [ "$RESULT" = "success" ]; then
-        LAST_RUN_SUCCESS=1
-      else
-        LAST_RUN_SUCCESS=0
-      fi
-
-      # Write metrics
-      cat >> "$TEMP_FILE" <<EOF
-zfs_replication_service_active{dataset="$DATASET_NAME"} $SERVICE_ACTIVE
-zfs_replication_service_failed{dataset="$DATASET_NAME"} $SERVICE_FAILED
-zfs_replication_timer_active{dataset="$DATASET_NAME"} $TIMER_ACTIVE
-zfs_replication_last_run_timestamp_seconds{dataset="$DATASET_NAME"} $LAST_RUN_EPOCH
-zfs_replication_last_run_success{dataset="$DATASET_NAME"} $LAST_RUN_SUCCESS
-EOF
-    done
-
-    # Atomically replace the metrics file
-    ${pkgs.coreutils}/bin/mv "$TEMP_FILE" "$OUTPUT_FILE"
-    ${pkgs.coreutils}/bin/chmod 644 "$OUTPUT_FILE"
-  '';
 in
 {
   # Systemd services for textfile exporters
@@ -275,16 +204,6 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = backupStatusExporter;
-        User = "root";
-      };
-    };
-
-    # ZFS replication status exporter - runs daily at 6am
-    zfs-replication-status-exporter = {
-      description = "Generate ZFS replication status metrics for Prometheus";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = zfsReplicationExporter;
         User = "root";
       };
     };
@@ -313,16 +232,6 @@ in
       timerConfig = {
         OnCalendar = "*-*-* 04:00:00";
         OnBootSec = "10min";
-        Persistent = true;
-      };
-    };
-
-    zfs-replication-status-exporter = {
-      description = "Timer for ZFS replication status metrics exporter";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "*-*-* 06:00:00";
-        OnBootSec = "15min";
         Persistent = true;
       };
     };

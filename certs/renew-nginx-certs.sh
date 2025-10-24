@@ -13,20 +13,25 @@ CERT_DIR="/var/lib/nginx-certs"
 VALIDITY_DAYS=365
 
 DOMAINS=(
+    "alertmanager.vulcan.lan"
+    "cockpit.vulcan.lan"
+    "dns.vulcan.lan"
     "glance.vulcan.lan"
     "grafana.vulcan.lan"
+    "hass.vulcan.lan"
     "jellyfin.vulcan.lan"
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
+    "nagios.vulcan.lan"
     "nextcloud.vulcan.lan"
-    "nocobase.vulcan.lan"
+    "nodered.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
-    "ragflow.vulcan.lan"
+    "promtail.vulcan.lan"
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
+    "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"
-    "dns.vulcan.lan"
 )
 
 # Check if the general renewal script exists

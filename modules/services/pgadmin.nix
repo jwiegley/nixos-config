@@ -32,7 +32,6 @@
 
   # SOPS secret configuration for pgAdmin password
   sops.secrets."pgadmin-password" = {
-    sopsFile = ../../secrets.yaml;
     owner = "pgadmin";
     group = "pgadmin";
     mode = "0400";

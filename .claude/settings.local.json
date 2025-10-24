@@ -21,7 +21,12 @@
       "mcp__nixos__home_manager_search",
       "mcp__nixos__home_manager_info",
       "mcp__sequential-thinking__sequentialthinking",
-      "Bash(zfs list:*)"
+      "Bash(zfs list:*)",
+      "mcp__memory-keeper__context_session_start",
+      "mcp__memory-keeper__context_save",
+      "mcp__memory-keeper__context_checkpoint",
+      "Skill(node-red)",
+      "Read(//home/johnw/.claude/skills/node-red/references/**)"
     ],
     "deny": [],
     "ask": []

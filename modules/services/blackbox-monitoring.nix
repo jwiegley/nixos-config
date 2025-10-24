@@ -402,8 +402,6 @@ in
             # "tesla-wall-connector.lan"          # 192.168.3.119
             # "traeger-grill.lan"                 # 192.168.3.196
 
-            "athena.lan"                        # 192.168.20.2
-
             "TL-WPA8630.lan"                    # 192.168.30.49
 
             "9.9.9.9"
@@ -415,8 +413,8 @@ in
 
             "google.com"
             "cloudflare.com"
-            "amazon.com"
-            "github.com"
+            # "amazon.com"
+            # "github.com"
 
             "web.mit.edu"
             "www.berkeley.edu"
@@ -472,7 +470,7 @@ in
         static_configs = [{
           targets = [
             "http://google.com"
-            "http://github.com"
+            # "http://github.com"
           ];
         }];
         relabel_configs = [
@@ -507,7 +505,7 @@ in
         static_configs = [{
           targets = [
             "https://google.com"
-            "https://github.com"
+            # "https://github.com"
           ];
         }];
         relabel_configs = [
@@ -542,15 +540,22 @@ in
         static_configs = [{
           targets = [
             "https://glance.vulcan.lan"
-            "https://grafana.vulcan.lan"
-            "https://jellyfin.vulcan.lan"
-            "https://litellm.vulcan.lan"
-            "https://nocobase.vulcan.lan"
-            "https://postgres.vulcan.lan"
-            # "https://prometheus.vulcan.lan"
-            "https://silly-tavern.vulcan.lan"
-            "https://wallabag.vulcan.lan"
+            "https://cockpit.vulcan.lan"
+            "https://192.168.1.1"
             "https://dns.vulcan.lan"
+            "https://postgres.vulcan.lan"
+            "https://hass.vulcan.lan"
+            "https://nodered.vulcan.lan"
+            "https://nextcloud.vulcan.lan"
+            "https://wallabag.vulcan.lan"
+            "https://jellyfin.vulcan.lan"
+            "https://silly-tavern.vulcan.lan"
+            "https://prometheus.vulcan.lan"
+            "https://victoriametrics.vulcan.lan"
+            "https://grafana.vulcan.lan"
+            "https://alertmanager.vulcan.lan"
+            "https://speedtest.vulcan.lan"
+            "https://litellm.vulcan.lan"
           ];
         }];
         relabel_configs = [

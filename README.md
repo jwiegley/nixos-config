@@ -1,6 +1,6 @@
 # Vulcan - Production NixOS Configuration
 
-A production-grade, modular NixOS configuration for self-hosted infrastructure running on Apple T2 hardware. This configuration implements a comprehensive stack including web services, mail infrastructure, databases, monitoring, containerized applications, and multi-layer backup strategies.
+A production-grade, modular NixOS configuration for self-hosted infrastructure running on Apple hardware using Asahi Linux. This configuration implements a comprehensive stack including web services, mail infrastructure, databases, monitoring, containerized applications, and multi-layer backup strategies.
 
 ## 🚀 Key Features
 
@@ -10,9 +10,8 @@ A production-grade, modular NixOS configuration for self-hosted infrastructure r
 - **🔐 Security First**: SOPS-nix secrets management, private CA (step-ca), security hardening
 - **📧 Complete Mail Stack**: Postfix, Dovecot with FTS (Xapian), mbsync with Prometheus metrics
 - **🐳 Container Orchestration**: Podman/Quadlet-based containers with proper networking
-- **🔄 ZFS Replication**: Automated replication with monitoring and alerting
 - **🏠 Home-Manager Integration**: Declarative user environment management
-- **🍎 Apple T2 Support**: Hardware-specific optimizations for Apple Silicon compatibility
+- **🍎 Apple Silicon Support**: Hardware-specific optimizations for Apple Silicon compatibility
 
 ## 📋 Table of Contents
 
@@ -38,7 +37,7 @@ This configuration follows a highly modular architecture, organizing system conf
 |----------|---------|-------------|
 | **Core** | System fundamentals | Boot (GRUB/EFI), networking, firewall, Nix config, systemd tuning |
 | **Services** | Application services | Web (Nginx), mail, databases, monitoring, DNS |
-| **Storage** | Data management | ZFS configuration, snapshots, replication, backups |
+| **Storage** | Data management | ZFS configuration, snapshots, backups |
 | **Containers** | Containerized apps | Podman/Quadlet setup, container services |
 | **Security** | Security & secrets | Hardening, SOPS-nix, certificate management |
 | **Users** | User management | User configs, home-manager integration |
@@ -82,7 +81,6 @@ This configuration follows a highly modular architecture, organizing system conf
 - **pgAdmin**: Web-based database administration
 - **ZFS**: Enterprise-grade filesystem with:
   - Automated snapshots (hourly, daily, monthly)
-  - Replication to backup pools
   - ARC tuning for 64GB RAM system
 
 ### Monitoring Stack
@@ -93,7 +91,6 @@ This configuration follows a highly modular architecture, organizing system conf
   - Systemd exporter
   - Postfix exporter
   - ZFS exporter
-  - Chainweb blockchain exporter
   - Custom textfile collectors (restic, mbsync)
 - **Grafana**: Visualization dashboards
 - **Alertmanager**: Alert routing and notifications
@@ -134,44 +131,35 @@ All containers use Podman with Quadlet for systemd integration:
 - Monitoring via Prometheus textfile collector
 - Helper script: `restic-operations` (check, snapshots, prune, repair)
 
-**ZFS Replication**:
-- Automated replication to secondary pools
-- Monitoring and alerting for replication status
-- Metrics exported to Prometheus
-
 ### Additional Services
 
 - **DNS**: Technitium DNS Server
 - **Network Services**: Tailscale, Nebula VPN
 - **Media Services**: Configured media management
-- **Chainweb**: Kadena blockchain node monitoring
 
 ## 🖥️ Hardware & Platform
 
 ### System Specifications
 
-- **Platform**: Apple T2 Hardware (x86_64-linux)
+- **Platform**: Apple Hardware (aarch64-linux)
 - **RAM**: 64GB (ZFS ARC: 32GB max, 4GB min)
 - **Storage**: ZFS on multiple pools
   - `rpool`: System and home directories
   - `tank`: Data storage with replication
 - **Network**: NetworkManager with static hostname
-- **External Storage**: Thunderbolt device auto-enrollment
+- **External Storage**: USB-C device auto-enrollment
 
 ### Hardware Configuration
 
 - **Boot**: GRUB with EFI support
-- **Kernel Parameters**:
-  - `pcie_ports=native` for T2 compatibility
   - ZFS ARC tuning for 64GB RAM
-- **Thunderbolt**: Auto-enrollment for ThunderBay external storage
 - **Post-boot**: PCI rescan for device discovery
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. NixOS installed on Apple T2 hardware
+1. NixOS installed on Apple hardware
 2. Age/PGP keys for SOPS secrets decryption
 3. Access to Backblaze B2 for backups (optional)
 
@@ -331,9 +319,6 @@ zfs list -t all
 
 # View recent snapshots per filesystem
 logwatch-zfs-snapshot
-
-# Check replication status
-journalctl -u zfs-replication -f
 ```
 
 ## 📊 Monitoring & Observability
@@ -347,7 +332,6 @@ journalctl -u zfs-replication -f
 | Systemd | 9558 | Service status, failures, restarts |
 | Postfix | 9154 | Mail queue, delivery stats |
 | ZFS | 9134 | Pool health, dataset usage, I/O |
-| Chainweb | Custom | Blockchain node metrics |
 | Restic | Textfile | Backup status, snapshot counts |
 | mbsync | Textfile | Sync status, message counts |
 
@@ -360,7 +344,6 @@ Located in `modules/monitoring/alerts/`:
 - **database.yaml**: PostgreSQL connection and performance
 - **storage.yaml**: ZFS pool health, disk space
 - **certificates.yaml**: Certificate expiration warnings
-- **chainweb.yaml**: Blockchain node health
 - **network.yaml**: Network connectivity and performance
 - **nextcloud.yaml**: Nextcloud-specific alerts
 
@@ -418,7 +401,6 @@ Daily email reports include:
 │   │   └── ...
 │   ├── storage/                   # Storage and backups
 │   │   ├── zfs.nix
-│   │   ├── zfs-replication.nix
 │   │   ├── backups.nix
 │   │   └── backup-monitoring.nix
 │   ├── containers/                # Container services
@@ -585,7 +567,7 @@ Many services follow similar patterns:
 Current flake inputs:
 
 - `nixpkgs`: nixos-unstable channel
-- `nixos-hardware`: Apple T2 support
+- `nixos-apple-silicon`: Apple hardware support
 - `home-manager`: User environment management
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
@@ -701,4 +683,4 @@ This configuration is for personal use. Adapt and modify as needed for your own 
 
 ---
 
-**System**: Vulcan • **Platform**: Apple T2 (x86_64-linux) • **NixOS**: 25.05 (unstable)
+**System**: Vulcan • **Platform**: Apple M1 (aarch64-linux) • **NixOS**: 25.05 (unstable)

@@ -139,6 +139,17 @@
     };
   };
 
+  # Prometheus scrape configuration for Loki metrics
+  services.prometheus.scrapeConfigs = [
+    {
+      job_name = "loki";
+      static_configs = [{
+        targets = [ "localhost:${toString config.services.loki.configuration.server.http_listen_port}" ];
+      }];
+      scrape_interval = "15s";
+    }
+  ];
+
   # Monitoring and health check script
   environment.systemPackages = with pkgs; [
     (writeShellScriptBin "check-loki" ''

@@ -69,9 +69,17 @@ in
   # Merge all systemd services into one definition
   systemd.services = lib.mkMerge [
     # Alert service template
+    # Auto-start when tank mount becomes available
+    # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
     {
       "backup-alert@" = {
         description = "Backup failure alert for %i";
+        after = [ "zfs.target" "zfs-import-tank.service" ];
+        wantedBy = [ "tank.mount" ];
+        unitConfig = {
+          RequiresMountsFor = [ "/tank" ];
+          ConditionPathIsMountPoint = "/tank";
+        };
         serviceConfig = {
           Type = "oneshot";
           ExecStart = pkgs.writeShellScript "backup-alert" ''

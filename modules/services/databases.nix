@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secrets, ... }:
 
 let
   # Import helper functions
-  common = import ../lib/common.nix { };
+  common = import ../lib/common.nix { inherit secrets; };
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
   inherit (mkPostgresLib) mkPostgresUserSetup;
 in
@@ -15,18 +15,6 @@ in
       secretPath = config.sops.secrets."nextcloud-db-password".path;
       dependentService = "nextcloud-setup.service";
     })
-    (mkPostgresUserSetup {
-      user = "ragflow";
-      database = "ragflow";
-      secretPath = config.sops.secrets."ragflow-db-password".path;
-      dependentService = "ragflow.service";
-    })
-    (mkPostgresUserSetup {
-      user = "nocobase";
-      database = "nocobase";
-      secretPath = config.sops.secrets."nocobase-db-password".path;
-      dependentService = "nocobase.service";
-    })
   ];
 
   services = {
@@ -38,6 +26,9 @@ in
 
       settings = {
         port = 5432;
+
+        # Connection settings
+        max_connections = 200;  # Increased from default 100 to handle bulk operations
 
         # Network Security - Restrict to specific interfaces
         listen_addresses = lib.mkForce "localhost,192.168.1.2,10.88.0.1";
@@ -58,8 +49,6 @@ in
         "litellm"
         "wallabag"
         "nextcloud"
-        "ragflow"
-        "nocobase"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -68,14 +57,6 @@ in
         { name = "wallabag"; }
         {
           name = "nextcloud";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "ragflow";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "nocobase";
           ensureDBOwnership = true;
         }
       ];
@@ -124,19 +105,43 @@ in
     };
   };
 
-  # SOPS secrets for database passwords
-  sops.secrets."ragflow-db-password" = {
-    sopsFile = common.secretsPath;
-    owner = "postgres";
-    group = "postgres";
-    mode = "0400";
+  # Optimize LiteLLM database with performance indexes
+  systemd.services.postgresql-litellm-optimize = {
+    description = "Create performance indexes for LiteLLM database";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d litellm -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      # Create index on api_key column for faster query performance
+      # This prevents slow sequential scans on the large LiteLLM_SpendLogs table
+      ${config.services.postgresql.package}/bin/psql -d litellm -c \
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "LiteLLM_SpendLogs_api_key_idx" ON "LiteLLM_SpendLogs" (api_key);'
+
+      # Update table statistics after index creation
+      ${config.services.postgresql.package}/bin/psql -d litellm -c \
+        'ANALYZE "LiteLLM_SpendLogs";'
+    '';
   };
 
-  sops.secrets."nocobase-db-password" = {
-    sopsFile = common.secretsPath;
-    owner = "postgres";
-    group = "postgres";
-    mode = "0400";
+  # CRITICAL FIX: PostgreSQL must wait for podman0 network before starting
+  # Problem: PostgreSQL starts at ~19s, but podman0 is created at ~50s
+  # Result: PostgreSQL fails to bind to 10.88.0.1 and only listens on localhost
+  # This causes litellm/wallabag to fail their pg_isready health checks
+  systemd.services.postgresql = {
+    after = [ "sys-subsystem-net-devices-podman0.device" ];
+    requires = [ "sys-subsystem-net-devices-podman0.device" ];
   };
 
   networking.firewall = {

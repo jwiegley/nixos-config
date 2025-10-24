@@ -30,11 +30,11 @@
         "rev": "22045d483a2dc8bcb20daebacdefa6836632506d",
         "revCount": 1,
         "type": "git",
-        "url": "file:./firmware"
+        "url": "file:///etc/nixos/firmware"
       },
       "original": {
         "type": "git",
-        "url": "file:./firmware"
+        "url": "file:///etc/nixos/firmware"
       }
     },
     "flake-compat": {
@@ -192,17 +192,17 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1761326516,
-        "narHash": "sha256-wgHjmQqyftoBZmCS0+z7NA4QgnKfuLd1YXPqbW/gMtw=",
+        "lastModified": 1761333729,
+        "narHash": "sha256-DOPoBniIct7+tdTaADbnkWDvnsx1nmoWOfC95ICV+UI=",
         "ref": "refs/heads/main",
-        "rev": "169d3e4f3d54d2ad9b42cf8d8e171596a74e0c98",
-        "revCount": 4,
+        "rev": "1c7c1ca78ab34e36fd147e5957a7adf02f93d86c",
+        "revCount": 6,
         "type": "git",
-        "url": "file:./secrets"
+        "url": "file:///etc/nixos/secrets"
       },
       "original": {
         "type": "git",
-        "url": "file:./secrets"
+        "url": "file:///etc/nixos/secrets"
       }
     },
     "sops-nix": {

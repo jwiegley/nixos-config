@@ -3,15 +3,16 @@
 {
   bindTankPath = {
     path,
-    device
+    device,
+    isReadOnly ? false
   }: {
-    "${path}" = lib.mkIf false {
+    "${path}" = {
       inherit device;
       options = [
         "bind"
         "nofail"  # Don't block boot/activation if mount fails
         "x-systemd.after=zfs-import-tank.service"
-      ];
+      ] ++ lib.optional isReadOnly "ro";
     };
   };
 }

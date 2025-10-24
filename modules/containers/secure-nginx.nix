@@ -14,12 +14,6 @@ in
     "d /var/www/home.newartisans.com 0755 root root -"
   ];
 
-  # Bind mount ZFS dataset to secure-nginx directory
-  fileSystems = bindTankPath {
-    path = "/var/www/home.newartisans.com";
-    device = "/tank/Public";
-  };
-
   # Enable NAT for container to access internet
   networking.nat = {
     enable = true;
@@ -62,8 +56,8 @@ in
       }
     ];
 
-    # Bind mount the web directory
     bindMounts = {
+      # Bind mount the web directory
       "/var/www/home.newartisans.com" = {
         hostPath = "/var/www/home.newartisans.com";
         isReadOnly = true;
@@ -82,6 +76,13 @@ in
     config = { config, pkgs, lib, ... }: {
       # Basic system configuration
       system.stateVersion = "25.05";
+
+      # Bind mount the web directory
+      fileSystems = bindTankPath {
+        path = "/var/www/home.newartisans.com";
+        device = "/tank/Public";
+        isReadOnly = true;
+      };
 
       # Networking configuration
       networking = {
@@ -128,69 +129,66 @@ in
         recommendedProxySettings = true;
         recommendedTlsSettings = true;
 
-        virtualHosts = {
-          # Main site - HTTPS with ACME
-          "home.newartisans.com" = {
-            default = true;
-            # Use addSSL instead of forceSSL to allow ACME challenges on HTTP
-            addSSL = true;
-            enableACME = true;
+        virtualHosts."home.newartisans.com" = {
+          default = true;
+          # Use addSSL instead of forceSSL to allow ACME challenges on HTTP
+          addSSL = true;
+          enableACME = true;
 
-            # Listen on standard ports (443 is forwarded from host:18443)
-            listen = [
-              { addr = "0.0.0.0"; port = 443; ssl = true; }
-              { addr = "0.0.0.0"; port = 80; }
-            ];
+          # Listen on standard ports (443 is forwarded from host:18443)
+          listen = [
+            { addr = "0.0.0.0"; port = 443; ssl = true; }
+            { addr = "0.0.0.0"; port = 80; }
+          ];
 
-            # Security headers for internet-facing service
+          # Security headers for internet-facing service
+          extraConfig = ''
+            # Strict Transport Security
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+            # Additional security headers
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+            # CSP Header
+            add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
+            # Indicate this is served from the secure container
+            add_header X-Served-By "secure-nginx-container" always;
+          '';
+
+          # Root location - serve files from bind mount
+          root = "/var/www/home.newartisans.com";
+
+          locations."/" = {
             extraConfig = ''
-              # Strict Transport Security
-              add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+              # Disable directory listing
+              autoindex off;
 
-              # Additional security headers
-              add_header X-Content-Type-Options "nosniff" always;
-              add_header X-Frame-Options "SAMEORIGIN" always;
-              add_header X-XSS-Protection "1; mode=block" always;
-              add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-              # CSP Header
-              add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
-
-              # Indicate this is served from the secure container
-              add_header X-Served-By "secure-nginx-container" always;
+              # Try to serve file, then directory index, then 404
+              try_files $uri $uri/ =404;
             '';
+          };
 
-            # Root location - serve files from bind mount
-            root = "/var/www/home.newartisans.com";
+          # Health check endpoint
+          locations."/health" = {
+            extraConfig = ''
+              access_log off;
+              return 200 "healthy\n";
+              default_type text/plain;
+            '';
+          };
 
-            locations."/" = {
-              extraConfig = ''
-                # Disable directory listing
-                autoindex off;
-
-                # Try to serve file, then directory index, then 404
-                try_files $uri $uri/ =404;
-              '';
-            };
-
-            # Health check endpoint
-            locations."/health" = {
-              extraConfig = ''
-                access_log off;
-                return 200 "healthy\n";
-                default_type text/plain;
-              '';
-            };
-
-            # Status endpoint for monitoring
-            locations."/status" = {
-              extraConfig = ''
-                stub_status on;
-                access_log off;
-                allow 10.233.1.1;  # Allow host only
-                deny all;
-              '';
-            };
+          # Status endpoint for monitoring
+          locations."/status" = {
+            extraConfig = ''
+              stub_status on;
+              access_log off;
+              allow 10.233.1.1;  # Allow host only
+              deny all;
+            '';
           };
         };
 
@@ -245,6 +243,15 @@ in
               list = true;
             };
           };
+        };
+      };
+
+      systemd.services = {
+        nginx = {
+          after = [ "var-www-home.newartisans.com.mount" ];
+        };
+        rsyncd = {
+          after = [ "var-www-home.newartisans.com.mount" ];
         };
       };
 

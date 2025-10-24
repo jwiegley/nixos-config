@@ -180,8 +180,9 @@ in
     RestrictRealtime = true;
   };
 
-  # Fix nextcloud-setup service to wait for PostgreSQL AND the nextcloud data mount
-  # Note: We use 'after' but not 'requires' for the mount to allow activation without tank
+  # Fix nextcloud-setup service to wait for PostgreSQL AND the nextcloud data
+  # mount Note: We use 'after' but not 'requires' for the mount to allow
+  # activation without tank
   systemd.services.nextcloud-setup = {
     after = [ "postgresql.service" "var-lib-nextcloud-data.mount" ];
     requires = [ "postgresql.service" ];

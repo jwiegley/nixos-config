@@ -1,6 +1,6 @@
 # Vulcan - Production NixOS Configuration
 
-A production-grade, modular NixOS configuration for self-hosted infrastructure running on Apple T2 hardware. This configuration implements a comprehensive stack including web services, mail infrastructure, databases, monitoring, containerized applications, and multi-layer backup strategies.
+A production-grade, modular NixOS configuration for self-hosted infrastructure running on Apple hardware using Asahi Linux. This configuration implements a comprehensive stack including web services, mail infrastructure, databases, monitoring, containerized applications, and multi-layer backup strategies.
 
 ## 🚀 Key Features
 
@@ -11,7 +11,7 @@ A production-grade, modular NixOS configuration for self-hosted infrastructure r
 - **📧 Complete Mail Stack**: Postfix, Dovecot with FTS (Xapian), mbsync with Prometheus metrics
 - **🐳 Container Orchestration**: Podman/Quadlet-based containers with proper networking
 - **🏠 Home-Manager Integration**: Declarative user environment management
-- **🍎 Apple T2 Support**: Hardware-specific optimizations for Apple Silicon compatibility
+- **🍎 Apple Silicon Support**: Hardware-specific optimizations for Apple Silicon compatibility
 
 ## 📋 Table of Contents
 
@@ -141,28 +141,25 @@ All containers use Podman with Quadlet for systemd integration:
 
 ### System Specifications
 
-- **Platform**: Apple T2 Hardware (x86_64-linux)
+- **Platform**: Apple Hardware (aarch64-linux)
 - **RAM**: 64GB (ZFS ARC: 32GB max, 4GB min)
 - **Storage**: ZFS on multiple pools
   - `rpool`: System and home directories
   - `tank`: Data storage with replication
 - **Network**: NetworkManager with static hostname
-- **External Storage**: Thunderbolt device auto-enrollment
+- **External Storage**: USB-C device auto-enrollment
 
 ### Hardware Configuration
 
 - **Boot**: GRUB with EFI support
-- **Kernel Parameters**:
-  - `pcie_ports=native` for T2 compatibility
   - ZFS ARC tuning for 64GB RAM
-- **Thunderbolt**: Auto-enrollment for ThunderBay external storage
 - **Post-boot**: PCI rescan for device discovery
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. NixOS installed on Apple T2 hardware
+1. NixOS installed on Apple hardware
 2. Age/PGP keys for SOPS secrets decryption
 3. Access to Backblaze B2 for backups (optional)
 
@@ -570,7 +567,7 @@ Many services follow similar patterns:
 Current flake inputs:
 
 - `nixpkgs`: nixos-unstable channel
-- `nixos-hardware`: Apple T2 support
+- `nixos-apple-silicon`: Apple hardware support
 - `home-manager`: User environment management
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
@@ -686,4 +683,4 @@ This configuration is for personal use. Adapt and modify as needed for your own 
 
 ---
 
-**System**: Vulcan • **Platform**: Apple T2 (x86_64-linux) • **NixOS**: 25.05 (unstable)
+**System**: Vulcan • **Platform**: Apple M1 (aarch64-linux) • **NixOS**: 25.05 (unstable)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a NixOS configuration for the host "vulcan" - an x86_64 Linux system running on Apple T2 hardware. This configuration uses Nix flakes with nixos-hardware and nixos-logwatch modules.
+This is a NixOS configuration for the host "vulcan" - an x86_64 Linux system running on Apple hardware using Asahi Linux. This configuration uses Nix flakes with nixos-hardware and nixos-logwatch modules.
 
 **Key Services:** PostgreSQL, Restic backups, Docker, Tailscale/Nebula VPN, Step-CA, Dovecot IMAP, Samba, Home Assistant, Prometheus/Grafana monitoring.
 
@@ -386,7 +386,7 @@ sudo -u postgres psql -d <database> -f /tank/Backups/PostgreSQL/postgresql-backu
 ### System Details
 - **State Version**: 25.05 (DO NOT change)
 - **Boot**: systemd-boot with LUKS encryption
-- **Hardware**: Apple T2 (nixos-hardware module)
+- **Hardware**: Apple Silicon (nixos-apple-silicon module)
 - **Network**: NetworkManager, static hostname "vulcan"
 - **Time Zone**: America/Los_Angeles
 - **Primary User**: johnw (wheel group, sudo access)
@@ -401,7 +401,7 @@ sudo -u postgres psql -d <database> -f /tank/Backups/PostgreSQL/postgresql-backu
 
 ## Development Notes
 
-- System runs on Apple T2 hardware (nixos-hardware.nixosModules.apple-t2)
+- System runs on Apple hardware (nixos-apple-silicon.nixosModules.default)
 - PostgreSQL configured for production use
 - Restic backups to rsync.net with multiple filesets
 - Extensive package list (development tools, system utilities, user applications)
@@ -495,4 +495,4 @@ openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan
 
 **Secrets Location:** `/run/secrets/` (deployed at activation)
 
-**System State:** NixOS 25.05, unstable channel, Apple T2 hardware
+**System State:** NixOS 25.05, unstable channel, Apple hardware

@@ -1,5 +1,9 @@
 { config, lib, pkgs, ... }:
 
+let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+in
 {
   # Ensure ACME certificate directory exists on host
   # Also ensure /var/www/home.newartisans.com exists even when tank isn't
@@ -9,6 +13,12 @@
     "d /var/lib/acme-container 0755 root root -"
     "d /var/www/home.newartisans.com 0755 root root -"
   ];
+
+  # Bind mount ZFS dataset to secure-nginx directory
+  fileSystems = bindTankPath {
+    path = "/var/www/home.newartisans.com";
+    device = "/tank/Public";
+  };
 
   # Enable NAT for container to access internet
   networking.nat = {

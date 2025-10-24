@@ -99,14 +99,14 @@ in
           script = lib.getExe zpoolScript;
         }
         {
-          name = "restic";
-          title = "Restic Snapshots";
-          script = lib.getExe resticSnapshots;
-        }
-        {
           name = "zfs-snapshot";
           title = "ZFS Snapshots";
           script = lib.getExe zfsSnapshotScript;
+        }
+        {
+          name = "restic";
+          title = "Restic Snapshots";
+          script = lib.getExe resticSnapshots;
         }
       ];
     };

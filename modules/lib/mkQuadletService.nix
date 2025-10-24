@@ -203,7 +203,7 @@ in
     ];
 
     # Nginx virtual host (optional)
-    services.nginx.virtualHosts = lib.mkIf (nginxVirtualHost != null && nginxVirtualHost.enable or false) {
+    services.nginx.virtualHosts = lib.mkIf (nginxVirtualHost != null && nginxVirtualHost.enable) {
       ${hostname} = lib.mkMerge [
         {
           forceSSL = true;

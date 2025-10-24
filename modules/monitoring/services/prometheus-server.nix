@@ -54,7 +54,7 @@ in
     );
 
     # Alertmanager configuration
-    alertmanagers = lib.mkIf (config.services.prometheus.alertmanager.enable or false) [
+    alertmanagers = lib.mkIf config.services.prometheus.alertmanager.enable [
       {
         static_configs = [{
           targets = [ "localhost:9093" ];

@@ -27,4 +27,72 @@ in
     # Pentair IntelliCenter Integration
     intellicenter = final.callPackage ./intellicenter.nix { };
   };
+
+  llama-cpp = (prev.llama-cpp.override {
+    vulkanSupport = true;  # Compiled but buggy on Asahi - don't use -ngl flag
+    blasSupport = true;    # Enable BLAS for optimized CPU inference
+  }).overrideAttrs(attrs: rec {
+    version = "6721";
+    src = prev.fetchFromGitHub {
+      owner = "ggml-org";
+      repo = "llama.cpp";
+      tag = "b${version}";
+      hash = "sha256-saqnRL04KZSMAdoo1AuqoivmN4kG5Lfaxg4AYk24JJg=";
+    };
+  });
+
+  llama-swap =
+  let
+    version = "164";
+
+    src = prev.fetchFromGitHub {
+      owner = "mostlygeek";
+      repo = "llama-swap";
+      rev = "v${version}";
+      hash = "sha256-Br3CES4j78nev858qw+TeTSJ74kjKAErHFCMg9cAZSc=";
+    };
+
+    ui = with prev; buildNpmPackage (finalAttrs: {
+      pname = "llama-swap-ui";
+      inherit version src;
+
+      postPatch = ''
+        substituteInPlace vite.config.ts \
+        --replace '../proxy/ui_dist' '${placeholder "out"}/ui_dist'
+      '';
+
+      sourceRoot = "source/ui";
+
+      npmDepsHash = "sha256-F6izMZY4554M6PqPYjKcjNol3A6BZHHYA0CIcNrU5JA=";
+
+      postInstall = ''
+        rm -rf $out/lib
+      '';
+
+      meta = {
+        description = "llama-swap - UI";
+        license = lib.licenses.mit;
+        platforms = lib.platforms.unix;
+      };
+    });
+  in
+  with prev; llama-swap.overrideAttrs(attrs: rec {
+    inherit version src;
+    vendorHash = "sha256-5mmciFAGe8ZEIQvXejhYN+ocJL3wOVwevIieDuokhGU=";
+    preBuild = ''
+      cp -r ${ui}/ui_dist proxy/
+    '';
+    ldflags = [
+      "-X main.version=${version}"
+      "-X main.date=unknown"
+      "-X main.commit=v${version}"
+    ];
+    doCheck = false;
+    meta = {
+      description = "Model swapping for llama.cpp (or any local OpenAPI compatible server)";
+      license = lib.licenses.mit;
+      platforms = lib.platforms.unix;
+      mainProgram = "llama-swap";
+    };
+  });
 }

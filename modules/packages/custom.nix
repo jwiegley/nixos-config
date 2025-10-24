@@ -113,6 +113,8 @@ in
       task-master-ai
       traceroute
       zfs-prune-snapshots
+      llama-swap
+      llama-cpp
     ])
     ++ [
       pkgs.dovecot-fts-flatcurve

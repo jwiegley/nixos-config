@@ -130,16 +130,62 @@ git workspace --workspace /tank/Backups/Git archive --force
 sudo systemctl status step-ca
 sudo journalctl -u step-ca -f
 
-# Generate certificate
-step ca certificate "service.vulcan.local" service.crt service.key \
-  --ca-url https://localhost:8443 \
-  --root /var/lib/step-ca/certs/root_ca.crt
+# Generate certificate (RECOMMENDED METHOD - uses SOPS securely)
+# This script handles CA password decryption internally without revealing secrets
+sudo /etc/nixos/certs/renew-certificate.sh "service.vulcan.lan" \
+  -o "/var/lib/nginx-certs" \
+  -d 365 \
+  --owner "nginx:nginx" \
+  --cert-perms "644" \
+  --key-perms "600"
 
-# Renew certificate
+# Manual certificate generation (requires CA password)
+# Note: Step-CA runs on 127.0.0.1:8443, correct root path is:
+step ca certificate "service.vulcan.lan" service.crt service.key \
+  --ca-url https://127.0.0.1:8443 \
+  --root /var/lib/step-ca-state/certs/root_ca.crt \
+  --insecure  # May be needed for 127.0.0.1 without IP SAN
+
+# Renew certificate manually
 step ca renew service.crt service.key \
-  --ca-url https://localhost:8443 \
-  --root /var/lib/step-ca/certs/root_ca.crt
+  --ca-url https://127.0.0.1:8443 \
+  --root /var/lib/step-ca-state/certs/root_ca.crt
 ```
+
+**Certificate Generation Best Practices:**
+
+When adding new services that need SSL certificates, ALWAYS use the automated `renew-certificate.sh` script instead of manual `step ca certificate` commands. This ensures:
+
+- ✅ CA passwords remain encrypted in SOPS and are never exposed
+- ✅ Certificates are generated with consistent settings (validity, permissions)
+- ✅ Proper ownership and permissions are set automatically
+- ✅ No risk of accidentally revealing secrets in logs or terminal output
+
+**How the secure process works:**
+1. Script generates private key locally (no secrets needed)
+2. Script creates Certificate Signing Request (CSR)
+3. Script reads CA password from SOPS **internally** (never displayed)
+4. Script signs certificate using local CA key and password
+5. Only success/failure message is shown - no secrets exposed
+
+**Available script options:**
+```bash
+renew-certificate.sh <domain> [options]
+  -o, --output-dir DIR       Directory to save certificates (required)
+  -k, --key-file NAME        Key filename (default: <domain>.key)
+  -c, --cert-file NAME       Certificate filename (default: <domain>.crt)
+  -d, --days DAYS           Validity period in days (default: 365)
+  --owner USER:GROUP        File ownership (default: root:root)
+  --key-perms MODE          Key file permissions (default: 600)
+  --cert-perms MODE         Certificate file permissions (default: 644)
+  --organization ORG        Organization name (default: Vulcan LAN Services)
+```
+
+**Common certificate locations and owners:**
+- Nginx certificates: `/var/lib/nginx-certs/` (owner: `nginx:nginx`)
+- PostgreSQL certificates: `/var/lib/postgresql/` (owner: `postgres:postgres`)
+- Postfix certificates: `/etc/postfix/certs/` (owner: `root:root`)
+- Dovecot certificates: `/etc/dovecot/certs/` (owner: `root:root`)
 
 ### Dovecot Email (IMAP + FTS)
 

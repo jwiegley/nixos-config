@@ -5,12 +5,12 @@
     nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon";
 
     firmware = {
-      url = "git+file:./firmware";
+      url = "git+file:///etc/nixos/firmware";
       flake = false;  # It's just data, not a flake
     };
 
     secrets = {
-      url = "git+file:./secrets";
+      url = "git+file:///etc/nixos/secrets";
       flake = false;  # It's just data, not a flake
     };
 

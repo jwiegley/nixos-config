@@ -123,7 +123,6 @@ if [ "$INTEGRATION_ONLY_MODE" = true ]; then
     echo "CRITICAL - ${status_msg}"
     exit 2
   else
-    status_msg="${status_msg} (${loaded_integrations[*]})"
     echo "OK - ${status_msg}"
     exit 0
   fi

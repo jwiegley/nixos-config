@@ -249,8 +249,25 @@ sudo ls -la /run/secrets/monitoring/home-assistant-token
 # Should show: -r-------- 1 nagios nagios ...
 
 # Test as nagios user
-sudo -u nagios check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s
+sudo -u nagios check_homeassistant_integrations_wrapper -H 127.0.0.1:8123 -I -i august,nest,ring
 ```
+
+### "API unreachable" in Systemd/Nagios but Works Manually
+
+**Symptoms:**
+- Manual execution as nagios user succeeds
+- Systemd service or Nagios check fails with "API unreachable"
+
+**Cause:**
+Systemd services don't inherit the same PATH as interactive shells, so `curl`, `jq`, and other commands may not be found.
+
+**Solution:**
+The wrapper script explicitly sets PATH to include required binaries:
+```nix
+export PATH="${pkgs.curl}/bin:${pkgs.jq}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH"
+```
+
+This is already configured in the NixOS module. If you encounter this issue, verify the wrapper script includes the PATH export.
 
 ### High Unavailable Count
 

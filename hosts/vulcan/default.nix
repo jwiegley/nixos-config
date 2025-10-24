@@ -10,6 +10,7 @@
 
     # Core modules
     ../../modules/core/boot.nix
+    ../../modules/core/hardware.nix
     ../../modules/core/networking.nix
     ../../modules/core/firewall.nix
     ../../modules/core/nix.nix

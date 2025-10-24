@@ -3,14 +3,13 @@
 let
   # Helper function to create a backup configuration
   mkBackup = {
-    path,
-    name ? path,
+    name,
+    path ? "/tank/${name}",
     bucket ? name,
-    explicit ? false,
     exclude ? []
   }: {
     "${name}" = {
-      paths = if explicit then [ path ] else [ "/tank/${path}" ];
+      paths = [ "${path}" ];
       inherit exclude;
       repository = "s3:s3.us-west-001.backblazeb2.com/jwiegley-${bucket}";
       initialize = true;
@@ -166,11 +165,15 @@ in
 
   services.restic.backups = lib.mkMerge [
     (mkBackup {
-      path = "doc";
-      exclude = [ "*.dtBase/Backup*" ];
+      name = "Audio";
     })
     (mkBackup {
-      path = "Databases";
+      name = "Backups";
+      bucket = "Backups-Misc";
+      exclude = backupExcludes;
+    })
+    (mkBackup {
+      name = "Databases";
       exclude = [
         "*.dtBase/Backup*"
         "*.zim"
@@ -179,39 +182,33 @@ in
       ];
     })
     (mkBackup {
-      path = "src";
-      exclude = sourceExcludes;
-    })
-    (mkBackup {
-      path = "Home";
+      name = "Home";
       exclude = homeExcludes;
     })
     (mkBackup {
-      path = "Photos";
-    })
-    (mkBackup {
-      path = "Audio";
-    })
-    (mkBackup {
-      path = "Video";
-      exclude = videoExcludes;
-    })
-    (mkBackup {
-      path = "Backups";
-      bucket = "Backups-Misc";
-      exclude = backupExcludes;
-    })
-    (mkBackup {
-      path = "Nasim";
-    })
-    (mkBackup {
-      path = "Nextcloud";
+      name = "Nextcloud";
       exclude = [
         "*/cache/*"
         "*/appdata_*/preview/*"
         "*/tmp/*"
         "*/updater-*"
       ];
+    })
+    (mkBackup {
+      name = "Photos";
+    })
+
+    (mkBackup {
+      name = "Video";
+      exclude = videoExcludes;
+    })
+    (mkBackup {
+      name = "doc";
+      exclude = [ "*.dtBase/Backup*" ];
+    })
+    (mkBackup {
+      name = "src";
+      exclude = sourceExcludes;
     })
   ];
 

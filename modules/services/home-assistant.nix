@@ -678,48 +678,6 @@ in
         }
       ];
 
-      # Prometheus exporter for metrics
-      # Exposes Home Assistant metrics at /api/prometheus
-      # Authentication required via long-lived access token
-      prometheus = {
-        # Add namespace prefix to all metrics
-        # namespace = "hass";
-
-        # Filter which entities to expose
-        # By default, all supported entities are exposed
-        filter = {
-          # Include all sensor and climate domains (temperature, humidity, etc.)
-          include_domains = [
-            "sensor"
-            "climate"
-            "binary_sensor"
-            "lock"
-            "switch"
-            "light"
-            "cover"
-            "fan"
-            "person"
-            "device_tracker"
-            "media_player" # Bose speaker, LG webOS TV, etc.
-            "vacuum" # Dreame robot vacuum
-            "camera" # Ring doorbell cameras
-            "update" # Integration and device updates
-            "button" # Device buttons
-          ];
-
-          # Exclude excessive/noisy entity patterns from Prometheus metrics
-          # Note: Enphase inverter sensors are excluded from recorder (HA UI)
-          # but included in Prometheus for individual panel monitoring
-          exclude_entity_globs = [
-            "sensor.weather_*"
-            # Dreame Vacuum: Exclude per-room cleaning configuration entities
-            "select.*_room_*"
-            "sensor.*_room_*"
-            "switch.*_room_*"
-          ];
-        };
-      };
-
       # HomeKit Bridge integration
       # Exposes Home Assistant entities to Apple HomeKit for Siri control
       homekit = {

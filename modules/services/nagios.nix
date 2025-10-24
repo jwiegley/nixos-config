@@ -351,6 +351,36 @@ let
     }
 
     define command {
+      command_name    check_imap
+      command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$
+    }
+
+    define command {
+      command_name    check_imaps
+      command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$ -S
+    }
+
+    define command {
+      command_name    check_smtp
+      command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$
+    }
+
+    define command {
+      command_name    check_smtps
+      command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$ -S
+    }
+
+    define command {
+      command_name    check_dns
+      command_line    ${pkgs.monitoring-plugins}/bin/check_dns -H $ARG1$ -s $HOSTADDRESS$
+    }
+
+    define command {
+      command_name    check_ssl_cert
+      command_line    ${pkgs.checkSSLCert}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
+    }
+
+    define command {
       command_name    check_systemd_service
       command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$
     }
@@ -577,6 +607,200 @@ let
       check_command           check_tcp!8123
     }
 
+    ###############################################################################
+    # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
+    ###############################################################################
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     IMAP (Port 143)
+      check_command           check_imap!143
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     IMAPS (Port 993)
+      check_command           check_imaps!993
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SMTP (Port 587)
+      check_command           check_smtp!587
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     DNS Resolver
+      check_command           check_dns!vulcan.lan
+    }
+
+    ###############################################################################
+    # SERVICES - SSL CERTIFICATE CHECKS
+    ###############################################################################
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: alertmanager.vulcan.lan
+      check_command           check_ssl_cert!alertmanager.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: cockpit.vulcan.lan
+      check_command           check_ssl_cert!cockpit.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: dns.vulcan.lan
+      check_command           check_ssl_cert!dns.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: glance.vulcan.lan
+      check_command           check_ssl_cert!glance.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: grafana.vulcan.lan
+      check_command           check_ssl_cert!grafana.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: hass.vulcan.lan
+      check_command           check_ssl_cert!hass.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: jellyfin.vulcan.lan
+      check_command           check_ssl_cert!jellyfin.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: loki.vulcan.lan
+      check_command           check_ssl_cert!loki.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: nagios.vulcan.lan
+      check_command           check_ssl_cert!nagios.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: nextcloud.vulcan.lan
+      check_command           check_ssl_cert!nextcloud.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: nodered.vulcan.lan
+      check_command           check_ssl_cert!nodered.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: postgres.vulcan.lan
+      check_command           check_ssl_cert!postgres.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: promtail.vulcan.lan
+      check_command           check_ssl_cert!promtail.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: prometheus.vulcan.lan
+      check_command           check_ssl_cert!prometheus.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: homepage.vulcan.lan
+      check_command           check_ssl_cert!homepage.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: litellm.vulcan.lan
+      check_command           check_ssl_cert!litellm.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: llama-swap.vulcan.lan
+      check_command           check_ssl_cert!llama-swap.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: silly-tavern.vulcan.lan
+      check_command           check_ssl_cert!silly-tavern.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: speedtest.vulcan.lan
+      check_command           check_ssl_cert!speedtest.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: victoriametrics.vulcan.lan
+      check_command           check_ssl_cert!victoriametrics.vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: vulcan.lan
+      check_command           check_ssl_cert!vulcan.lan
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     SSL Cert: wallabag.vulcan.lan
+      check_command           check_ssl_cert!wallabag.vulcan.lan
+    }
+
+    ###############################################################################
+    # SERVICES - HOME ASSISTANT
+    ###############################################################################
+
     define service {
       use                     generic-service
       host_name               vulcan
@@ -718,6 +942,13 @@ in
       coreutils
       gnugrep
       gnused
+      file
+      curl
+      openssl
+      perl
+      bind.host  # for host command (DNS lookup)
+      inetutils  # for hostname
+      bc  # calculator for check_ssl_cert
     ];
 
     # Validate configuration at build time

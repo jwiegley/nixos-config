@@ -761,6 +761,15 @@ in
       use_large_installation_tweaks = "0";
       enable_environment_macros = "1";
 
+      # ARM64 race condition workaround
+      # Reduce to single worker process to avoid race conditions on ARM64 architecture
+      # The check_workers directive controls how many worker processes Nagios spawns
+      # Setting it to 1 eliminates inter-process race conditions that cause SEGV on ARM64
+      check_workers = "1";
+      max_concurrent_checks = "10";
+      check_result_reaper_frequency = "5";
+      max_check_result_reaper_time = "30";
+
       # External commands
       check_external_commands = "1";
       command_file = "/var/lib/nagios/rw/nagios.cmd";

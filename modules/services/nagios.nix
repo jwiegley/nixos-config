@@ -22,67 +22,67 @@ let
   nagiosCfgDir = "/var/lib/nagios";
 
   # Helper function to generate systemd service checks
-  mkServiceCheck = serviceName: displayName: ''
+  mkServiceCheck = serviceName: displayName: servicegroups: ''
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_systemd_service!${serviceName}
+      check_command           check_systemd_service!${serviceName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
   '';
 
   # Helper function for services that depend on mount points
   # These services use ConditionPathIsMountPoint and need special monitoring
-  mkConditionalServiceCheck = serviceName: displayName: mountPoint: ''
+  mkConditionalServiceCheck = serviceName: displayName: mountPoint: servicegroups: ''
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}
+      check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
   '';
 
   # Helper function to generate timer checks (monitors both timer and associated service)
-  mkTimerCheck = timerName: displayName: ''
+  mkTimerCheck = timerName: displayName: servicegroups: ''
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
-      check_command           check_systemd_service!${timerName}
+      check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
 
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName} (Service)
-      check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service
+      check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
   '';
 
   # Helper function for timers whose services depend on mount points
-  mkConditionalTimerCheck = timerName: displayName: mountPoint: ''
+  mkConditionalTimerCheck = timerName: displayName: mountPoint: servicegroups: ''
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
-      check_command           check_systemd_service!${timerName}
+      check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
 
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName} (Service)
-      check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}
+      check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
   '';
 
   # Helper function to generate container checks
-  mkContainerCheck = containerName: displayName: ''
+  mkContainerCheck = containerName: displayName: servicegroups: ''
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_podman_container!${containerName}
+      check_command           check_podman_container!${containerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
   '';
 
@@ -101,6 +101,7 @@ let
       host_name               ${hostname}
       service_description     PING
       check_command           check_ping!100.0,20%!500.0,60%
+      service_groups          network-hosts
     }
   '';
 
@@ -244,40 +245,40 @@ let
   # Generate all service checks
   allServiceChecks = lib.concatStrings [
     # Critical Infrastructure
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) criticalServices)
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "critical-infrastructure") criticalServices)
 
     # Tank-Dependent Services (use conditional check)
-    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount) tankDependentServices)
+    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "tank-dependent-services") tankDependentServices)
 
     # Monitoring Stack
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) monitoringServices)
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "monitoring-stack") monitoringServices)
 
     # Home Automation
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) homeAutomationServices)
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "home-automation") homeAutomationServices)
 
     # Applications
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) applicationServices)
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "application-services") applicationServices)
 
     # Restic Backup Services (use conditional check)
-    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount) resticBackupServices)
+    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "backup-services") resticBackupServices)
 
     # Container Services
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display) containerSystemdServices)
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "containers") containerSystemdServices)
 
     # Maintenance Timers
-    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) maintenanceTimers)
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display "maintenance-timers") maintenanceTimers)
 
     # Tank-Dependent Timers (use conditional check for services)
-    (lib.concatMapStrings (t: mkConditionalTimerCheck t.name t.display t.mount) tankDependentTimers)
+    (lib.concatMapStrings (t: mkConditionalTimerCheck t.name t.display t.mount "maintenance-timers") tankDependentTimers)
 
     # Email Timers
-    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) emailTimers)
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display "email-services") emailTimers)
 
     # Certificate Renewal Timers
-    (lib.concatMapStrings (t: mkTimerCheck t.name t.display) certRenewalTimers)
+    (lib.concatMapStrings (t: mkTimerCheck t.name t.display "certificate-renewal") certRenewalTimers)
 
     # Podman Containers
-    (lib.concatMapStrings (c: mkContainerCheck c.name c.display) containers)
+    (lib.concatMapStrings (c: mkContainerCheck c.name c.display "containers") containers)
   ];
 
   # Nagios object configuration
@@ -437,11 +438,6 @@ let
     }
 
     define command {
-      command_name    check_ssl_cert_8445
-      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 8445 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
-    }
-
-    define command {
       command_name    check_systemd_service
       command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$
     }
@@ -583,6 +579,90 @@ let
     }
 
     ###############################################################################
+    # SERVICE GROUPS
+    ###############################################################################
+
+    define servicegroup {
+      servicegroup_name  critical-infrastructure
+      alias              Critical Infrastructure Services
+    }
+
+    define servicegroup {
+      servicegroup_name  tank-dependent-services
+      alias              Services Requiring /tank Mount
+    }
+
+    define servicegroup {
+      servicegroup_name  monitoring-stack
+      alias              Monitoring and Observability Services
+    }
+
+    define servicegroup {
+      servicegroup_name  home-automation
+      alias              Home Automation Services
+    }
+
+    define servicegroup {
+      servicegroup_name  application-services
+      alias              Application Services
+    }
+
+    define servicegroup {
+      servicegroup_name  backup-services
+      alias              Backup Services
+    }
+
+    define servicegroup {
+      servicegroup_name  maintenance-timers
+      alias              Maintenance and Cleanup Timers
+    }
+
+    define servicegroup {
+      servicegroup_name  email-services
+      alias              Email Sync Services
+    }
+
+    define servicegroup {
+      servicegroup_name  certificate-renewal
+      alias              Certificate Renewal Timers
+    }
+
+    define servicegroup {
+      servicegroup_name  containers
+      alias              Container Services
+    }
+
+    define servicegroup {
+      servicegroup_name  system-resources
+      alias              System Resource Monitoring
+    }
+
+    define servicegroup {
+      servicegroup_name  network-connectivity
+      alias              Network Connectivity Checks
+    }
+
+    define servicegroup {
+      servicegroup_name  protocol-checks
+      alias              Protocol-Level Checks (IMAP, SMTP, DNS)
+    }
+
+    define servicegroup {
+      servicegroup_name  ssl-certificates
+      alias              SSL Certificate Monitoring
+    }
+
+    define servicegroup {
+      servicegroup_name  home-assistant-integrations
+      alias              Home Assistant Integration Monitoring
+    }
+
+    define servicegroup {
+      servicegroup_name  network-hosts
+      alias              Network Host Monitoring (PING)
+    }
+
+    ###############################################################################
     # SERVICES - SYSTEM RESOURCES
     ###############################################################################
 
@@ -591,6 +671,7 @@ let
       host_name               vulcan
       service_description     Root Partition
       check_command           check_local_disk!20%!10%!/
+      service_groups          system-resources
     }
 
     define service {
@@ -598,6 +679,7 @@ let
       host_name               vulcan
       service_description     Tank ZFS Pool
       check_command           check_zfs_pool!tank
+      service_groups          system-resources
     }
 
     define service {
@@ -605,6 +687,7 @@ let
       host_name               vulcan
       service_description     Current Load
       check_command           check_local_load!15.0,10.0,5.0!30.0,25.0,20.0
+      service_groups          system-resources
     }
 
     define service {
@@ -612,6 +695,7 @@ let
       host_name               vulcan
       service_description     Total Processes
       check_command           check_local_procs!250!400!RSZDT
+      service_groups          system-resources
     }
 
     define service {
@@ -619,6 +703,7 @@ let
       host_name               vulcan
       service_description     Current Users
       check_command           check_local_users!20!50
+      service_groups          system-resources
     }
 
     ###############################################################################
@@ -630,6 +715,7 @@ let
       host_name               vulcan
       service_description     SSH
       check_command           check_ssh
+      service_groups          network-connectivity
     }
 
     define service {
@@ -637,6 +723,7 @@ let
       host_name               vulcan
       service_description     PostgreSQL Connection
       check_command           check_tcp!5432
+      service_groups          network-connectivity
     }
 
     define service {
@@ -644,6 +731,7 @@ let
       host_name               vulcan
       service_description     Nginx HTTP
       check_command           check_tcp!80
+      service_groups          network-connectivity
     }
 
     define service {
@@ -651,6 +739,7 @@ let
       host_name               vulcan
       service_description     Nginx HTTPS
       check_command           check_tcp!443
+      service_groups          network-connectivity
     }
 
     define service {
@@ -658,6 +747,7 @@ let
       host_name               vulcan
       service_description     Prometheus Port
       check_command           check_tcp!9090
+      service_groups          network-connectivity
     }
 
     define service {
@@ -665,6 +755,7 @@ let
       host_name               vulcan
       service_description     Grafana Port
       check_command           check_tcp!3000
+      service_groups          network-connectivity
     }
 
     define service {
@@ -672,6 +763,7 @@ let
       host_name               vulcan
       service_description     Home Assistant HTTP
       check_command           check_tcp!8123
+      service_groups          network-connectivity
     }
 
     ###############################################################################
@@ -683,6 +775,7 @@ let
       host_name               vulcan
       service_description     IMAP (Port 143)
       check_command           check_imap!143
+      service_groups          protocol-checks
     }
 
     define service {
@@ -690,6 +783,7 @@ let
       host_name               vulcan
       service_description     IMAPS (Port 993)
       check_command           check_imaps!993
+      service_groups          protocol-checks
     }
 
     define service {
@@ -697,6 +791,7 @@ let
       host_name               vulcan
       service_description     SMTP (Port 587)
       check_command           check_smtp!587
+      service_groups          protocol-checks
     }
 
     define service {
@@ -704,6 +799,7 @@ let
       host_name               vulcan
       service_description     DNS Resolver
       check_command           check_dns!vulcan.lan
+      service_groups          protocol-checks
     }
 
     ###############################################################################
@@ -715,6 +811,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: alertmanager.vulcan.lan
       check_command           check_ssl_cert!alertmanager.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -722,6 +819,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: cockpit.vulcan.lan
       check_command           check_ssl_cert!cockpit.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -729,6 +827,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: dns.vulcan.lan
       check_command           check_ssl_cert!dns.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -736,6 +835,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: glance.vulcan.lan
       check_command           check_ssl_cert!glance.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -743,6 +843,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: grafana.vulcan.lan
       check_command           check_ssl_cert!grafana.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -750,6 +851,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: hass.vulcan.lan
       check_command           check_ssl_cert!hass.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -757,6 +859,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: jellyfin.vulcan.lan
       check_command           check_ssl_cert!jellyfin.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -764,6 +867,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: loki.vulcan.lan
       check_command           check_ssl_cert!loki.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -771,6 +875,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: nagios.vulcan.lan
       check_command           check_ssl_cert!nagios.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -778,6 +883,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: nextcloud.vulcan.lan
       check_command           check_ssl_cert!nextcloud.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -785,6 +891,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: nodered.vulcan.lan
       check_command           check_ssl_cert!nodered.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -792,6 +899,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: postgres.vulcan.lan
       check_command           check_ssl_cert!postgres.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -799,6 +907,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: promtail.vulcan.lan
       check_command           check_ssl_cert!promtail.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -806,6 +915,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: prometheus.vulcan.lan
       check_command           check_ssl_cert!prometheus.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -813,13 +923,15 @@ let
       host_name               vulcan
       service_description     SSL Cert: litellm.vulcan.lan
       check_command           check_ssl_cert!litellm.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
       use                     generic-service
       host_name               vulcan
       service_description     SSL Cert: llama-swap.vulcan.lan
-      check_command           check_ssl_cert_8445!llama-swap.vulcan.lan
+      check_command           check_ssl_cert!llama-swap.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -827,6 +939,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: silly-tavern.vulcan.lan
       check_command           check_ssl_cert!silly-tavern.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -834,6 +947,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: speedtest.vulcan.lan
       check_command           check_ssl_cert!speedtest.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -841,6 +955,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: victoriametrics.vulcan.lan
       check_command           check_ssl_cert!victoriametrics.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -848,6 +963,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: vulcan.lan
       check_command           check_ssl_cert!vulcan.lan
+      service_groups          ssl-certificates
     }
 
     define service {
@@ -855,6 +971,7 @@ let
       host_name               vulcan
       service_description     SSL Cert: wallabag.vulcan.lan
       check_command           check_ssl_cert!wallabag.vulcan.lan
+      service_groups          ssl-certificates
     }
 
     ###############################################################################
@@ -868,6 +985,7 @@ let
       check_command           check_homeassistant_integration_status!127.0.0.1:8123!august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws
       check_interval          5
       max_check_attempts      2
+      service_groups          home-assistant-integrations
     }
 
     ###############################################################################

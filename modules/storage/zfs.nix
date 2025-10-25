@@ -1,6 +1,22 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Enable ZFS support with 16K page size (Apple Silicon / Asahi Linux)
+  boot.supportedFilesystems = [ "zfs" ];
+
+  boot.zfs = {
+    forceImportAll = false;
+    forceImportRoot = false;
+  };
+
+  services.zfs = {
+    autoScrub = {
+      enable = true;
+      interval = "monthly";
+      pools = [ "tank" ];
+    };
+  };
+
   services.sanoid = {
     enable = true;
 
@@ -44,27 +60,6 @@
         yearly = 0;
         autosnap = true;
         autoprune = true;
-      };
-    };
-  };
-
-  systemd = {
-    services.zpool-scrub = {
-      description = "Scrub ZFS pool";
-      after = [ "zfs.target" "zfs-import-tank.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        User = "root";
-        Group = "root";
-        ExecStart = "${pkgs.zfs}/bin/zpool scrub rpool tank";
-      };
-    };
-
-    timers.zpool-scrub = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "monthly";
-        Unit = "zpool-scrub.service";
       };
     };
   };

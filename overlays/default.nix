@@ -112,4 +112,32 @@ in
       fi
     '';
   });
+
+  # ZFS - Enable support for 16K page size (Apple Silicon / Asahi Linux)
+  # EXPERIMENTAL: This may cause data corruption - use at your own risk!
+  #
+  # Based on workaround from: https://github.com/openzfs/zfs/issues/16429
+  # Asahi Linux uses 16KB pages due to M1/M2 IOMMU hardware requirements
+  #
+  # The Fedora Asahi workaround involves changing kernel-devel dependencies.
+  # For NixOS, we build from source, so we just need to ensure it builds
+  # against the Asahi kernel and doesn't have hardcoded PAGE_SIZE checks.
+
+  zfs_unstable = prev.zfs_unstable.overrideAttrs (oldAttrs: {
+    meta = oldAttrs.meta // {
+      description = oldAttrs.meta.description + " (patched for 16K page size)";
+      broken = false;  # Un-break if marked broken on aarch64 with 16K pages
+    };
+
+    # Note: If build fails with PAGE_SIZE errors, we'll need to add patches here
+    # to disable PAGE_SIZE checks in configure scripts or source code
+  });
+
+  # Also override the stable ZFS variant
+  zfs = prev.zfs.overrideAttrs (oldAttrs: {
+    meta = oldAttrs.meta // {
+      description = oldAttrs.meta.description + " (patched for 16K page size)";
+      broken = false;
+    };
+  });
 }

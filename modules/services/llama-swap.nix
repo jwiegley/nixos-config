@@ -31,7 +31,7 @@
     };
   };
 
-  services.nginx.virtualHosts."llamaswap.vulcan.lan" = {
+  services.nginx.virtualHosts."llama-swap.vulcan.lan" = {
     forceSSL = true;
     sslCertificate = "/var/lib/nginx-certs/llama-swap.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/llama-swap.vulcan.lan.key";

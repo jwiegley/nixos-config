@@ -1,4 +1,4 @@
-{ config, lib, pkgs, secrets, ... }:
+{ config, lib, pkgs, secrets, nagios, ... }:
 
 let
   # Common helper functions
@@ -85,6 +85,43 @@ let
       check_command           check_podman_container!${containerName}
     }
   '';
+
+  # Helper function to generate monitored host with ping check and optional parent
+  # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; }
+  mkMonitoredHost = { hostname, address, alias, parent ? null }: ''
+    define host {
+      use                     linux-server
+      host_name               ${hostname}
+      alias                   ${alias}
+      address                 ${address}${lib.optionalString (parent != null) "\n      parents                 ${parent}"}
+    }
+
+    define service {
+      use                     generic-service
+      host_name               ${hostname}
+      service_description     PING
+      check_command           check_ping!100.0,20%!500.0,60%
+    }
+  '';
+
+  # List of monitored hosts with parent relationships for network topology
+  # IMPORTANT: Host definitions are now stored in a separate private file: /etc/nixos/nagios-hosts.nix
+  # This file is excluded from version control (.gitignore) to keep network topology private
+  #
+  # The file should contain a Nix list with the following format:
+  # [
+  #   { hostname = "devicename"; address = "IP"; alias = "Description"; parent = "parent_hostname" or null; }
+  #   ...
+  # ]
+  #
+  # Network reachability: parent = null for top-level devices, parent = "hostname" for dependent devices
+  # This enables Nagios to distinguish between:
+  #   - DOWN: Host itself is unreachable (parent is UP)
+  #   - UNREACHABLE: Host is unreachable because parent/network path is down
+  #
+  # Import from absolute path (required for gitignored files in flakes)
+  # Falls back to empty list if file doesn't exist
+  monitoredHosts = import (nagios.outPath + "/hosts.nix");
 
   # Service categories for organized monitoring
   # Critical Infrastructure Services (no mount dependencies)
@@ -318,6 +355,11 @@ let
       command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w 3000.0,80% -c 5000.0,100% -p 5
     }
 
+    define command {
+      command_name    check_ping
+      command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w $ARG1$ -c $ARG2$
+    }
+
     # Service check commands
     define command {
       command_name    check_local_disk
@@ -523,6 +565,12 @@ let
       notification_period     24x7
       contact_groups          admins
     }
+
+    ###############################################################################
+    # MONITORED HOSTS (from monitoredHosts list)
+    ###############################################################################
+
+    ${lib.concatMapStrings mkMonitoredHost monitoredHosts}
 
     ###############################################################################
     # HOST GROUPS

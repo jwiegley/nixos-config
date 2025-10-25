@@ -14,6 +14,11 @@
       flake = false;  # It's just data, not a flake
     };
 
+    nagios = {
+      url = "git+file:///etc/nixos/nagios";
+      flake = false;  # It's just data, not a flake
+    };
+
     sops-nix = {
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -47,7 +52,7 @@
       inherit system;
       specialArgs = {
         inherit system;
-        inherit (inputs) firmware secrets;
+        inherit (inputs) firmware secrets nagios;
       };
       modules = [
         inputs.nixos-apple-silicon.nixosModules.default

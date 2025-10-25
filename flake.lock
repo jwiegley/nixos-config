@@ -90,6 +90,22 @@
         "type": "github"
       }
     },
+    "nagios": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1761363819,
+        "narHash": "sha256-E8paSaHppYjN7X1dB052axkAtYrgTdNZ2FXJ40LAsw8=",
+        "ref": "refs/heads/main",
+        "rev": "bd3fd2867e21991d84aedb2a617cfdfe5f35e34f",
+        "revCount": 1,
+        "type": "git",
+        "url": "file:///etc/nixos/nagios"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///etc/nixos/nagios"
+      }
+    },
     "nixos-apple-silicon": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -181,6 +197,7 @@
         "claude-code-nix": "claude-code-nix",
         "firmware": "firmware",
         "home-manager": "home-manager",
+        "nagios": "nagios",
         "nixos-apple-silicon": "nixos-apple-silicon",
         "nixos-logwatch": "nixos-logwatch",
         "nixpkgs": "nixpkgs_2",

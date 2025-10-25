@@ -203,6 +203,10 @@ with lib;
                           url = "https://nagios.vulcan.lan";
                         }
                         {
+                          title = "MRTG";
+                          url = "https://mrtg.vulcan.lan";
+                        }
+                        {
                           title = "OpenSpeedTest";
                           url = "https://speedtest.vulcan.lan";
                         }

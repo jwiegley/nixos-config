@@ -440,7 +440,7 @@ let
 
     define command {
       command_name    check_systemd_service
-      command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$
+      command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 90 -c 180
     }
 
     define command {
@@ -933,6 +933,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: llama-swap.vulcan.lan
       check_command           check_ssl_cert!llama-swap.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: mrtg.vulcan.lan
+      check_command           check_ssl_cert!mrtg.vulcan.lan
       service_groups          ssl-certificates
     }
 

@@ -153,3 +153,91 @@ groups:
         annotations:
           summary: "High failure rate for recursive DNS queries"
           description: "More than 10% of recursive queries (to upstream resolvers) are failing. Check upstream resolver connectivity and performance. Current failure rate: {{ $value | humanizePercentage }}."
+
+  # DNS Query Log Exporter Health Monitoring
+  - name: dns_query_exporter_health
+    interval: 30s
+    rules:
+      # Authentication failure monitoring
+      - alert: DnsQueryExporterAuthenticationFailures
+        expr: rate(authentication_failures_total{job="dns_query_logs"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter experiencing authentication failures"
+          description: "Authentication failures detected with Technitium DNS API. This usually indicates an invalid, expired, or inaccessible API token. Check secret file permissions and content."
+
+      # API error rate monitoring
+      - alert: DnsQueryExporterHighAPIErrorRate
+        expr: rate(api_errors_total{job="dns_query_logs"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter has high API error rate"
+          description: "Elevated API error rate detected ({{ $value | humanize }} errors/sec). Error types: {{ $labels.error_type }}. Check Technitium DNS API health and network connectivity."
+
+      # Stale data monitoring - no successful queries in last 5 minutes
+      - alert: DnsQueryExporterStaleData
+        expr: (time() - last_successful_query_timestamp{job="dns_query_logs"}) > 300
+        for: 2m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter has not successfully fetched data recently"
+          description: "No successful API queries in the last 5 minutes. Last successful fetch was {{ $value | humanizeDuration }} ago. Check service logs and API connectivity."
+
+      # Complete service failure - no metrics at all
+      - alert: DnsQueryExporterDown
+        expr: up{job="dns_query_logs"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter is down"
+          description: "The DNS Query Log Exporter service is not responding on the metrics endpoint. Check service status with 'systemctl status dns-query-log-exporter'."
+
+      # Consecutive failure tracking - will fail-fast at 3
+      - alert: DnsQueryExporterConsecutiveFailures
+        expr: consecutive_failures{job="dns_query_logs"} >= 2
+        for: 1m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter approaching fail-fast threshold"
+          description: "{{ $value }} consecutive failures detected. Service will exit after 3 consecutive failures. Investigate immediately to prevent service termination."
+
+      # Network-specific errors
+      - alert: DnsQueryExporterNetworkErrors
+        expr: rate(api_errors_total{job="dns_query_logs",error_type="network"}[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter experiencing network errors"
+          description: "Network errors connecting to Technitium DNS API ({{ $value | humanize }} errors/sec). Check network connectivity and Technitium DNS service health."
+
+      # Timeout-specific errors
+      - alert: DnsQueryExporterTimeouts
+        expr: rate(api_errors_total{job="dns_query_logs",error_type="timeout"}[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter experiencing API timeouts"
+          description: "API request timeouts detected ({{ $value | humanize }} timeouts/sec). Technitium DNS API may be overloaded or experiencing performance issues."

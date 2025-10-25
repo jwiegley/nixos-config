@@ -63,6 +63,15 @@ in
 
   users.groups.dns-query-exporter = {};
 
+  # SOPS secret configuration
+  # Override quadlet's root:root to allow both container (root) and service (dns-query-exporter) to read
+  sops.secrets."technitium-dns-exporter-env" = lib.mkForce {
+    owner = "dns-query-exporter";
+    group = "root";
+    mode = "0440";  # Owner and group can read
+    restartUnits = [ "dns-query-log-exporter.service" "technitium-dns-exporter.service" ];
+  };
+
   # Prometheus scrape configuration for DNS query log metrics
   # Exposes metrics on port 9275
   services.prometheus.scrapeConfigs = [

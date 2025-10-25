@@ -22,9 +22,10 @@ let
   nagiosCfgDir = "/var/lib/nagios";
 
   # Helper function to generate systemd service checks
-  mkServiceCheck = serviceName: displayName: servicegroups: ''
+  # Optional 4th parameter: template (defaults to "standard-service")
+  mkServiceCheck = serviceName: displayName: servicegroups: template: ''
     define service {
-      use                     generic-service
+      use                     ${template}
       host_name               vulcan
       service_description     ${displayName}
       check_command           check_systemd_service!${serviceName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
@@ -35,7 +36,7 @@ let
   # These services use ConditionPathIsMountPoint and need special monitoring
   mkConditionalServiceCheck = serviceName: displayName: mountPoint: servicegroups: ''
     define service {
-      use                     generic-service
+      use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
       check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
@@ -45,14 +46,14 @@ let
   # Helper function to generate timer checks (monitors both timer and associated service)
   mkTimerCheck = timerName: displayName: servicegroups: ''
     define service {
-      use                     generic-service
+      use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
       check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
 
     define service {
-      use                     generic-service
+      use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Service)
       check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
@@ -62,14 +63,14 @@ let
   # Helper function for timers whose services depend on mount points
   mkConditionalTimerCheck = timerName: displayName: mountPoint: servicegroups: ''
     define service {
-      use                     generic-service
+      use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
       check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
     }
 
     define service {
-      use                     generic-service
+      use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Service)
       check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
@@ -79,7 +80,7 @@ let
   # Helper function to generate container checks
   mkContainerCheck = containerName: displayName: servicegroups: ''
     define service {
-      use                     generic-service
+      use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
       check_command           check_podman_container!${containerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
@@ -244,40 +245,40 @@ let
 
   # Generate all service checks
   allServiceChecks = lib.concatStrings [
-    # Critical Infrastructure
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "critical-infrastructure") criticalServices)
+    # Critical Infrastructure - check every 2 minutes
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "critical-infrastructure" "critical-service") criticalServices)
 
     # Tank-Dependent Services (use conditional check)
     (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "tank-dependent-services") tankDependentServices)
 
-    # Monitoring Stack
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "monitoring-stack") monitoringServices)
+    # Monitoring Stack - check every 5 minutes
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "monitoring-stack" "standard-service") monitoringServices)
 
-    # Home Automation
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "home-automation") homeAutomationServices)
+    # Home Automation - check every 5 minutes
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "home-automation" "standard-service") homeAutomationServices)
 
-    # Applications
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "application-services") applicationServices)
+    # Applications - check every 5 minutes
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "application-services" "standard-service") applicationServices)
 
     # Restic Backup Services (use conditional check)
     (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "backup-services") resticBackupServices)
 
-    # Container Services
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "containers") containerSystemdServices)
+    # Container Services - check every 5 minutes
+    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "containers" "standard-service") containerSystemdServices)
 
-    # Maintenance Timers
+    # Maintenance Timers - check every 15 minutes (low priority)
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "maintenance-timers") maintenanceTimers)
 
     # Tank-Dependent Timers (use conditional check for services)
     (lib.concatMapStrings (t: mkConditionalTimerCheck t.name t.display t.mount "maintenance-timers") tankDependentTimers)
 
-    # Email Timers
+    # Email Timers - check every 15 minutes
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "email-services") emailTimers)
 
-    # Certificate Renewal Timers
+    # Certificate Renewal Timers - check every 15 minutes
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "certificate-renewal") certRenewalTimers)
 
-    # Podman Containers
+    # Podman Containers - check every 5 minutes
     (lib.concatMapStrings (c: mkContainerCheck c.name c.display "containers") containers)
   ];
 
@@ -804,10 +805,11 @@ let
 
     ###############################################################################
     # SERVICES - SSL CERTIFICATE CHECKS
+    # Using daily-service template (check once per day instead of every 10 minutes)
     ###############################################################################
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: alertmanager.vulcan.lan
       check_command           check_ssl_cert!alertmanager.vulcan.lan
@@ -815,7 +817,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: cockpit.vulcan.lan
       check_command           check_ssl_cert!cockpit.vulcan.lan
@@ -823,7 +825,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: dns.vulcan.lan
       check_command           check_ssl_cert!dns.vulcan.lan
@@ -831,7 +833,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: glance.vulcan.lan
       check_command           check_ssl_cert!glance.vulcan.lan
@@ -839,7 +841,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: grafana.vulcan.lan
       check_command           check_ssl_cert!grafana.vulcan.lan
@@ -847,7 +849,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: hass.vulcan.lan
       check_command           check_ssl_cert!hass.vulcan.lan
@@ -855,7 +857,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: jellyfin.vulcan.lan
       check_command           check_ssl_cert!jellyfin.vulcan.lan
@@ -863,7 +865,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: loki.vulcan.lan
       check_command           check_ssl_cert!loki.vulcan.lan
@@ -871,7 +873,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: nagios.vulcan.lan
       check_command           check_ssl_cert!nagios.vulcan.lan
@@ -879,7 +881,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: nextcloud.vulcan.lan
       check_command           check_ssl_cert!nextcloud.vulcan.lan
@@ -887,7 +889,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: nodered.vulcan.lan
       check_command           check_ssl_cert!nodered.vulcan.lan
@@ -895,7 +897,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: postgres.vulcan.lan
       check_command           check_ssl_cert!postgres.vulcan.lan
@@ -903,7 +905,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: promtail.vulcan.lan
       check_command           check_ssl_cert!promtail.vulcan.lan
@@ -911,7 +913,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: prometheus.vulcan.lan
       check_command           check_ssl_cert!prometheus.vulcan.lan
@@ -919,7 +921,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: litellm.vulcan.lan
       check_command           check_ssl_cert!litellm.vulcan.lan
@@ -927,7 +929,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: llama-swap.vulcan.lan
       check_command           check_ssl_cert!llama-swap.vulcan.lan
@@ -935,7 +937,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: silly-tavern.vulcan.lan
       check_command           check_ssl_cert!silly-tavern.vulcan.lan
@@ -943,7 +945,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: speedtest.vulcan.lan
       check_command           check_ssl_cert!speedtest.vulcan.lan
@@ -951,7 +953,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: victoriametrics.vulcan.lan
       check_command           check_ssl_cert!victoriametrics.vulcan.lan
@@ -959,7 +961,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: vulcan.lan
       check_command           check_ssl_cert!vulcan.lan
@@ -967,7 +969,7 @@ let
     }
 
     define service {
-      use                     generic-service
+      use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: wallabag.vulcan.lan
       check_command           check_ssl_cert!wallabag.vulcan.lan
@@ -1021,6 +1023,43 @@ let
       notification_options    w,u,c,r
       notification_interval   60
       notification_period     24x7
+      register                0
+    }
+
+    # Critical services - check every 2 minutes
+    define service {
+      use                     generic-service
+      name                    critical-service
+      check_interval          2
+      retry_interval          1
+      register                0
+    }
+
+    # Standard services - check every 5 minutes
+    define service {
+      use                     generic-service
+      name                    standard-service
+      check_interval          5
+      retry_interval          2
+      register                0
+    }
+
+    # Low priority services - check every 15 minutes
+    define service {
+      use                     generic-service
+      name                    low-priority-service
+      check_interval          15
+      retry_interval          5
+      register                0
+    }
+
+    # Daily checks - SSL certificates and similar
+    define service {
+      use                     generic-service
+      name                    daily-service
+      check_interval          1440
+      retry_interval          60
+      max_check_attempts      2
       register                0
     }
 
@@ -1168,17 +1207,23 @@ in
       accept_passive_host_checks = "1";
 
       # Performance tuning
-      use_large_installation_tweaks = "0";
-      enable_environment_macros = "1";
+      # Enable large installation optimizations for 280+ monitored services
+      use_large_installation_tweaks = "1";
+      # Disable environment macros to reduce CPU/memory overhead by 15-20%
+      # Macros are passed via command line instead
+      enable_environment_macros = "0";
 
       # ARM64 race condition workaround
       # Reduce to single worker process to avoid race conditions on ARM64 architecture
       # The check_workers directive controls how many worker processes Nagios spawns
       # Setting it to 1 eliminates inter-process race conditions that cause SEGV on ARM64
       check_workers = "1";
-      max_concurrent_checks = "10";
-      check_result_reaper_frequency = "5";
-      max_check_result_reaper_time = "30";
+      # Increase concurrent checks to maximize single worker throughput
+      max_concurrent_checks = "40";
+      # Optimize result processing frequency (seconds between reaper runs)
+      check_result_reaper_frequency = "10";
+      # Balanced processing time to avoid latency buildup
+      max_check_result_reaper_time = "15";
 
       # External commands
       check_external_commands = "1";
@@ -1404,6 +1449,22 @@ in
 
       echo "Command file directory created with proper permissions"
     '';
+  };
+
+  # Create tmpfs mounts for Nagios volatile data (performance optimization)
+  # This reduces disk I/O by keeping frequently-written files in RAM
+  systemd.tmpfiles.rules = [
+    # Spool directory for check results
+    "d /run/nagios 0755 nagios nagios -"
+    "d /run/nagios/spool 0755 nagios nagios -"
+    "d /run/nagios/spool/checkresults 0755 nagios nagios -"
+  ];
+
+  # Bind mount /run/nagios to /var/lib/nagios/spool for compatibility
+  fileSystems."/var/lib/nagios/spool" = {
+    device = "/run/nagios/spool";
+    fsType = "none";
+    options = [ "bind" ];
   };
 
   # Add monitoring check script

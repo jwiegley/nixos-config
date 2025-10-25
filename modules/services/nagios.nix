@@ -4,6 +4,20 @@ let
   # Common helper functions
   common = import ../lib/common.nix { inherit secrets; };
 
+  # Override checkSSLCert to use bind.host instead of bind
+  # The default package uses bind which doesn't include the 'host' command
+  # We can't use .override because the package doesn't expose bind as a parameter
+  # So we wrap it to add bind.host to the PATH
+  checkSSLCertFixed = pkgs.symlinkJoin {
+    name = "check_ssl_cert-fixed";
+    paths = [ pkgs.checkSSLCert ];
+    buildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/check_ssl_cert \
+        --prefix PATH : ${pkgs.bind.host}/bin
+    '';
+  };
+
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";
 
@@ -377,7 +391,12 @@ let
 
     define command {
       command_name    check_ssl_cert
-      command_line    ${pkgs.checkSSLCert}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
+      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
+    }
+
+    define command {
+      command_name    check_ssl_cert_8445
+      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 8445 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
     }
 
     define command {
@@ -744,13 +763,6 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     SSL Cert: homepage.vulcan.lan
-      check_command           check_ssl_cert!homepage.vulcan.lan
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
       service_description     SSL Cert: litellm.vulcan.lan
       check_command           check_ssl_cert!litellm.vulcan.lan
     }
@@ -759,7 +771,7 @@ let
       use                     generic-service
       host_name               vulcan
       service_description     SSL Cert: llama-swap.vulcan.lan
-      check_command           check_ssl_cert!llama-swap.vulcan.lan
+      check_command           check_ssl_cert_8445!llama-swap.vulcan.lan
     }
 
     define service {
@@ -949,6 +961,7 @@ in
       bind.host  # for host command (DNS lookup)
       inetutils  # for hostname
       bc  # calculator for check_ssl_cert
+      gawk  # required by check_ssl_cert for certificate parsing
     ];
 
     # Validate configuration at build time

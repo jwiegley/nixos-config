@@ -29,4 +29,11 @@ in
       packages = with pkgs; [];
     };
   };
+
+  # Fix home-manager service boot failure by ensuring nix-daemon is running
+  # before home-manager activation attempts to use it
+  systemd.services.home-manager-johnw = {
+    after = [ "nix-daemon.service" ];
+    wants = [ "nix-daemon.service" ];
+  };
 }

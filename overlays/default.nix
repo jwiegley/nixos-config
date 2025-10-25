@@ -95,4 +95,21 @@ in
       mainProgram = "llama-swap";
     };
   });
+
+  # Claude Code - Fix bundled ripgrep for 16K page size (Apple Silicon / Asahi Linux)
+  # The bundled ripgrep is compiled with jemalloc for 4K pages, which crashes on Asahi
+  # Replace with system ripgrep that's properly compiled for this platform
+  claude-code = prev.claude-code.overrideAttrs (oldAttrs: {
+    preFixup = (oldAttrs.preFixup or "") + ''
+      # Replace bundled arm64-linux ripgrep with system ripgrep
+      # This fixes crashes caused by jemalloc 4K/16K page size incompatibility
+      rg_path="$out/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-linux/rg"
+      if [ -f "$rg_path" ]; then
+        echo "Replacing bundled ripgrep with system ripgrep (16K page size compatible)"
+        chmod +w "$(dirname "$rg_path")"
+        rm -f "$rg_path"
+        ln -s ${final.ripgrep}/bin/rg "$rg_path"
+      fi
+    '';
+  });
 }

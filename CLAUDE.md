@@ -326,6 +326,88 @@ sudo systemctl status alertmanager
 
 **Monitored Systems:** Home Assistant entities, LiteLLM API usage, PostgreSQL, ZFS pools, network interfaces, system resources.
 
+### Nagios Network Monitoring
+
+Nagios monitors network devices and services with ping checks and SSL certificate validation.
+
+```bash
+# Web interface
+# URL: https://nagios.vulcan.lan
+
+# Service status
+sudo systemctl status nagios
+sudo journalctl -u nagios -f
+
+# Force check execution
+echo "[$(date +%s)] SCHEDULE_FORCED_SVC_CHECK;hostname;service_description;$(date +%s)" > /var/lib/nagios/nagios.cmd
+
+# View current status
+cat /var/lib/nagios/status.dat
+```
+
+**Monitored Hosts Configuration:**
+
+Host definitions are stored in a **private file** excluded from version control:
+- **File:** `/etc/nixos/nagios-hosts.nix`
+- **Status:** Excluded from git (in `.gitignore`)
+- **Purpose:** Keep network topology and device information private
+
+**Adding/Editing Monitored Hosts:**
+
+```bash
+# Edit the hosts file (requires sudo or ownership)
+vim /etc/nixos/nagios-hosts.nix
+
+# File format: Nix list with host attribute sets
+# [
+#   { hostname = "router"; address = "192.168.1.1"; alias = "Gateway Router"; parent = null; }
+#   { hostname = "switch"; address = "192.168.1.10"; alias = "Core Switch"; parent = "router"; }
+# ]
+
+# After editing, rebuild to apply changes
+sudo nixos-rebuild switch --flake '.#vulcan'
+```
+
+**Host Definition Format:**
+
+```nix
+{
+  hostname = "device-name";        # Unique identifier (no spaces)
+  address = "IP.address";          # IP address or FQDN
+  alias = "Human Readable Name";   # Display name in Nagios UI
+  parent = "parent-hostname";      # Parent device (or null for top-level)
+}
+```
+
+**Parent Relationships:**
+
+Parent devices define network topology for intelligent alerting:
+- **parent = null**: Top-level device (directly connected to vulcan)
+- **parent = "hostname"**: Device depends on parent for connectivity
+
+**Nagios Alert States:**
+- **DOWN**: Host is unreachable, but parent is UP (device failure)
+- **UNREACHABLE**: Host is unreachable because parent is DOWN (network path failure)
+
+This prevents alert storms when a core network device fails - child devices show as UNREACHABLE instead of DOWN.
+
+**Example Network Topology:**
+
+```
+vulcan (monitoring server)
+  └── router (parent = null)
+        ├── switch (parent = "router")
+        │     ├── desktop (parent = "switch")
+        │     └── printer (parent = "switch")
+        └── access-point (parent = "router")
+              ├── phone (parent = "access-point")
+              └── tablet (parent = "access-point")
+```
+
+**Monitored Services:**
+- **PING**: ICMP reachability checks for all hosts
+- **SSL Certificates**: HTTPS certificate expiration monitoring for web services
+
 ### Container Management
 
 ```bash

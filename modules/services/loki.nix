@@ -109,6 +109,10 @@
     "d /var/lib/loki/compactor 0755 loki loki -"
     "d /tmp/loki 0755 loki loki -"
     "d /tmp/loki/rules 0755 loki loki -"
+
+    # Deploy Loki alert rules (fake tenant for single-tenant mode)
+    "d /var/lib/loki/rules/fake 0755 loki loki -"
+    "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
   ];
 
   # Nginx reverse proxy configuration for Loki (optional external access)

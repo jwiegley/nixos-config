@@ -1,0 +1,81 @@
+groups:
+  - name: dns_query_exporter_health
+    interval: 1m
+    rules:
+      # Alert on repeated authentication failures in logs
+      - alert: DnsQueryExporterAuthFailures
+        expr: |
+          sum(count_over_time({job="dns_query_logs"} |= "API error" |= "Invalid token or session expired" [5m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter experiencing authentication failures"
+          description: "More than 10 authentication failures detected in the last 5 minutes. This indicates the API token is invalid, expired, or the service cannot read the secret file due to permission issues."
+
+      # Alert on permission denied errors
+      - alert: DnsQueryExporterPermissionDenied
+        expr: |
+          count_over_time({job="dns_query_logs"} |= "permission denied" [5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter has permission errors"
+          description: "Permission denied errors detected. Check file ownership and permissions on /run/secrets/technitium-dns-exporter-env"
+
+      # Alert on service startup failures
+      - alert: DnsQueryExporterStartupFailure
+        expr: |
+          count_over_time({job="dns_query_logs"} |= "ERROR:" |= "environment variable not set" [2m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter failed to start"
+          description: "Service failed to start due to missing environment variables. Check SOPS secrets configuration."
+
+      # Alert on consecutive failure exit
+      - alert: DnsQueryExporterFailFast
+        expr: |
+          count_over_time({job="dns_query_logs"} |= "CRITICAL:" |= "consecutive authentication failures" [5m]) > 0
+        for: 0m  # Alert immediately
+        labels:
+          severity: critical
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter exited due to consecutive failures"
+          description: "Service exited after 3 consecutive authentication failures. This indicates a persistent configuration issue that requires manual intervention."
+
+      # Alert on connection errors
+      - alert: DnsQueryExporterConnectionErrors
+        expr: |
+          sum(count_over_time({job="dns_query_logs"} |= "Connection error" [5m])) > 20
+        for: 3m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter experiencing connection errors"
+          description: "More than 20 connection errors to Technitium DNS API in the last 5 minutes. Check network connectivity and Technitium DNS Server health."
+
+      # Alert on Loki push failures
+      - alert: DnsQueryExporterLokiPushFailures
+        expr: |
+          sum(count_over_time({job="dns_query_logs"} |= "Failed to push to Loki" [10m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          category: dns
+          service: dns-query-log-exporter
+        annotations:
+          summary: "DNS Query Log Exporter cannot push logs to Loki"
+          description: "Multiple failures pushing logs to Loki. Check Loki service health and connectivity."

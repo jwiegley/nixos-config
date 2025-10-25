@@ -45,6 +45,32 @@ dns_query_log_last_row = Gauge(
     'Last row number processed from DNS query logs'
 )
 
+# Health monitoring metrics
+authentication_failures_total = Counter(
+    'authentication_failures_total',
+    'Total number of authentication failures with Technitium DNS API'
+)
+
+api_errors_total = Counter(
+    'api_errors_total',
+    'Total number of API errors by type',
+    ['error_type']  # auth, network, timeout, other
+)
+
+last_successful_query_timestamp = Gauge(
+    'last_successful_query_timestamp',
+    'Unix timestamp of the last successful query fetch from Technitium DNS API'
+)
+
+consecutive_failures = Gauge(
+    'consecutive_failures',
+    'Number of consecutive API failures (resets to 0 on success)'
+)
+
+# Fail-fast configuration
+MAX_CONSECUTIVE_FAILURES = 3
+current_consecutive_failures = 0
+
 
 def get_hostname(ip_address):
     """Get hostname for IP address via reverse DNS lookup."""
@@ -86,6 +112,8 @@ def save_last_row_number(row_number):
 
 def fetch_query_logs(page_number=1, entries_per_page=BATCH_SIZE):
     """Fetch query logs from Technitium DNS API."""
+    global current_consecutive_failures
+
     try:
         url = f"{TECHNITIUM_URL}/api/logs/query"
         params = {
@@ -101,12 +129,52 @@ def fetch_query_logs(page_number=1, entries_per_page=BATCH_SIZE):
         data = response.json()
 
         if data.get('status') != 'ok':
-            print(f"API error: {data.get('errorMessage', 'Unknown error')}", file=sys.stderr)
+            error_msg = data.get('errorMessage', 'Unknown error')
+            print(f"API error: {error_msg}", file=sys.stderr)
+
+            # Track authentication failures specifically
+            if 'token' in error_msg.lower() or 'session expired' in error_msg.lower() or 'invalid' in error_msg.lower():
+                authentication_failures_total.inc()
+                api_errors_total.labels(error_type='auth').inc()
+                current_consecutive_failures += 1
+                consecutive_failures.set(current_consecutive_failures)
+
+                # Fail-fast: exit after MAX_CONSECUTIVE_FAILURES
+                if current_consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    print(f"CRITICAL: {current_consecutive_failures} consecutive authentication failures. Exiting.", file=sys.stderr)
+                    print("This usually indicates a configuration issue (wrong token, expired token, or permission error).", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                api_errors_total.labels(error_type='other').inc()
+                current_consecutive_failures += 1
+                consecutive_failures.set(current_consecutive_failures)
+
             return None
 
+        # Success - reset consecutive failures and update timestamp
+        current_consecutive_failures = 0
+        consecutive_failures.set(0)
+        last_successful_query_timestamp.set(time.time())
+
         return data.get('response', {})
+
+    except requests.exceptions.Timeout as error:
+        print(f"Timeout fetching logs: {error}", file=sys.stderr)
+        api_errors_total.labels(error_type='timeout').inc()
+        current_consecutive_failures += 1
+        consecutive_failures.set(current_consecutive_failures)
+        return None
+    except requests.exceptions.ConnectionError as error:
+        print(f"Connection error fetching logs: {error}", file=sys.stderr)
+        api_errors_total.labels(error_type='network').inc()
+        current_consecutive_failures += 1
+        consecutive_failures.set(current_consecutive_failures)
+        return None
     except requests.exceptions.RequestException as error:
         print(f"Failed to fetch logs: {error}", file=sys.stderr)
+        api_errors_total.labels(error_type='other').inc()
+        current_consecutive_failures += 1
+        consecutive_failures.set(current_consecutive_failures)
         return None
 
 
@@ -256,11 +324,41 @@ def process_new_logs():
         print(f"Updated state to row {new_entries[-1]['rowNumber']}")
 
 
-def main():
-    """Main loop."""
+def validate_environment():
+    """Validate environment variables and file permissions on startup."""
+    # Check if token is set
     if not TECHNITIUM_TOKEN:
         print("ERROR: TECHNITIUM_TOKEN environment variable not set", file=sys.stderr)
+        print("This is usually loaded from the secret file via EnvironmentFile.", file=sys.stderr)
+        print("Check that /run/secrets/technitium-dns-exporter-env exists and is readable.", file=sys.stderr)
         sys.exit(1)
+
+    # Check if secret file exists and is readable (via environment variable file)
+    # The systemd EnvironmentFile directive loads this, but we can check the source
+    secret_file = '/run/secrets/technitium-dns-exporter-env'
+    if os.path.exists(secret_file):
+        try:
+            # Test if we can read the file
+            with open(secret_file, 'r') as f:
+                content = f.read()
+                if 'TECHNITIUM_API_DNS_TOKEN' not in content:
+                    print(f"WARNING: {secret_file} exists but doesn't contain TECHNITIUM_API_DNS_TOKEN", file=sys.stderr)
+        except PermissionError:
+            print(f"ERROR: Cannot read {secret_file} - permission denied", file=sys.stderr)
+            print("Check that the file has correct ownership and permissions.", file=sys.stderr)
+            print("Expected: owner=dns-query-exporter, group=root, mode=0440", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"WARNING: Could not validate secret file: {e}", file=sys.stderr)
+    else:
+        print(f"WARNING: Secret file {secret_file} not found", file=sys.stderr)
+        print("Token may be loaded from environment directly instead.", file=sys.stderr)
+
+
+def main():
+    """Main loop."""
+    # Validate environment before starting
+    validate_environment()
 
     print("DNS Query Log Exporter starting...")
     print(f"Technitium URL: {TECHNITIUM_URL}")
@@ -268,6 +366,7 @@ def main():
     print(f"Poll interval: {POLL_INTERVAL}s")
     print(f"State file: {STATE_FILE}")
     print(f"Metrics port: {METRICS_PORT}")
+    print(f"Fail-fast threshold: {MAX_CONSECUTIVE_FAILURES} consecutive failures")
 
     # Start Prometheus metrics HTTP server in a separate thread
     try:

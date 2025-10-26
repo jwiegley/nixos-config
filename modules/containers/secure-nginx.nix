@@ -14,6 +14,13 @@ in
     "d /var/www/home.newartisans.com 0755 root root -"
   ];
 
+  # Bind mount ZFS dataset to host directory (container will access via bindMount)
+  fileSystems = bindTankPath {
+    path = "/var/www/home.newartisans.com";
+    device = "/tank/Public";
+    isReadOnly = true;
+  };
+
   # Enable NAT for container to access internet
   networking.nat = {
     enable = true;
@@ -76,13 +83,6 @@ in
     config = { config, pkgs, lib, ... }: {
       # Basic system configuration
       system.stateVersion = "25.05";
-
-      # Bind mount the web directory
-      fileSystems = bindTankPath {
-        path = "/var/www/home.newartisans.com";
-        device = "/tank/Public";
-        isReadOnly = true;
-      };
 
       # Networking configuration
       networking = {

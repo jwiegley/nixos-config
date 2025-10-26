@@ -97,8 +97,13 @@ let
 
   # Backup excludes
   backupExcludes = [
+    "Assembly"
     "Git"
     "Images"
+    "Kadena"
+    "rpool"
+    "pair"
+    "scratch"
   ];
 
   attrNameList = attrs:

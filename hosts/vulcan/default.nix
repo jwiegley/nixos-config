@@ -76,6 +76,7 @@
     # Storage
     ../../modules/services/nextcloud.nix
     ../../modules/storage/zfs.nix
+    ../../modules/storage/hd-idle.nix
     ../../modules/storage/backups.nix
     ../../modules/storage/backup-monitoring.nix
     ../../modules/services/samba.nix

@@ -35,36 +35,6 @@
     }
   ];
 
-  # Helper script to check Node-RED metrics
-  environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-node-red-metrics" ''
-      echo "=== Node-RED Service Status ==="
-      systemctl is-active node-red && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Node-RED Metrics Endpoint ==="
-      if ${pkgs.curl}/bin/curl -s -f http://localhost:1880/metrics > /dev/null 2>&1; then
-        echo "Metrics endpoint: Accessible"
-      else
-        echo "Metrics endpoint: Not accessible"
-        echo "Note: If authentication is enabled, metrics endpoint may require authentication"
-      fi
-
-      echo ""
-      echo "=== Node-RED Metrics Sample ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:1880/metrics 2>/dev/null | head -20 || echo "Could not fetch metrics"
-
-      echo ""
-      echo "=== Node-RED Custom Metrics ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:1880/metrics 2>/dev/null | grep -v "^#" | grep "node_red" || echo "No node_red metrics found"
-
-      echo ""
-      echo "=== Prometheus Scrape Status ==="
-      echo "Check Prometheus targets: http://localhost:9090/targets"
-      echo "Search for job_name: node-red"
-    '')
-  ];
-
   # Documentation
   environment.etc."node-red/metrics-monitoring.md" = {
     text = ''

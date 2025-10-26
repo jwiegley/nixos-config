@@ -328,33 +328,4 @@
     }
   ];
 
-  # Add monitoring check script
-  environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-grafana" ''
-      echo "=== Grafana Status ==="
-      systemctl is-active grafana && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Local Connection Test ==="
-      ${pkgs.curl}/bin/curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:3000/api/health
-
-      echo ""
-      echo "=== HTTPS Access Test ==="
-      ${pkgs.curl}/bin/curl -ks -o /dev/null -w "HTTP Status: %{http_code}\n" https://grafana.vulcan.lan/api/health || \
-        echo "Note: HTTPS test requires valid DNS or /etc/hosts entry for grafana.vulcan.lan"
-
-      echo ""
-      echo "=== Data Sources ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:3000/api/datasources | ${pkgs.jq}/bin/jq -r '.[] | "\(.name): \(.type) - \(.url)"' 2>/dev/null || \
-        echo "Unable to query data sources (authentication may be required)"
-
-      echo ""
-      echo "=== Certificate Status ==="
-      if [ -f /var/lib/step-ca/certs/grafana.vulcan.lan.crt ]; then
-        ${pkgs.openssl}/bin/openssl x509 -in /var/lib/step-ca/certs/grafana.vulcan.lan.crt -noout -dates
-      else
-        echo "Certificate not yet generated"
-      fi
-    '')
-  ];
 }

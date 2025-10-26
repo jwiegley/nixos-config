@@ -208,79 +208,6 @@ in
 
     # Helper scripts for managing blackbox monitoring
     environment.systemPackages = with pkgs; [
-      (writeShellScriptBin "check-blackbox" ''
-        echo "=== Blackbox Exporter Status ==="
-        systemctl is-active prometheus-blackbox-exporter && echo "Service: Active" || echo "Service: Inactive"
-
-        echo ""
-        echo "=== Blackbox Configuration Test ==="
-        if ${pkgs.curl}/bin/curl -s http://localhost:9115/config >/dev/null 2>&1; then
-          echo "Configuration endpoint is responding"
-          echo "Available modules:"
-          ${pkgs.curl}/bin/curl -s http://localhost:9115/config | \
-            ${pkgs.gawk}/bin/awk '/^modules:/{next} /^[[:space:]]{4}[a-zA-Z_][a-zA-Z0-9_]*:$/{gsub(/^[[:space:]]*|:$/, "", $0); print "  " $0}'
-        else
-          echo "Configuration endpoint not responding"
-        fi
-
-        echo ""
-        echo "=== Sample ICMP Probe Test ==="
-        echo "Testing ping to 8.8.8.8..."
-        timeout 10 ${pkgs.curl}/bin/curl -s \
-          'http://localhost:9115/probe?module=icmp_ping&target=8.8.8.8' | \
-          grep -E '(probe_success|probe_duration_seconds)' || echo "Probe failed or timed out"
-
-        echo ""
-        echo "=== Available Probe Modules ==="
-        ${pkgs.curl}/bin/curl -s http://localhost:9115/config | \
-          ${pkgs.gnugrep}/bin/grep -A1 -E '^\s+[a-zA-Z_]+:$' | \
-          ${pkgs.gnugrep}/bin/grep -E '(prober:|^\s+[a-zA-Z_]+:$)' | \
-          ${pkgs.gawk}/bin/awk '
-            /^[[:space:]]*[a-zA-Z_]+:$/ {
-              gsub(/[[:space:]]*:$/, "", $1);
-              module = $1;
-            }
-            /prober:/ {
-              gsub(/[[:space:]]*prober:[[:space:]]*/, "", $0);
-              print "  " module ": " $0;
-            }'
-      '')
-
-      (writeShellScriptBin "test-blackbox-hosts" ''
-        echo "=== Testing Blackbox Monitoring for All Configured Hosts ==="
-
-        # Test a subset of hosts to avoid overwhelming output
-        TEST_HOSTS=(
-          "8.8.8.8"
-          "1.1.1.1"
-          "google.com"
-          "github.com"
-        )
-
-        for host in "''${TEST_HOSTS[@]}"; do
-          echo ""
-          echo "Testing: $host"
-          echo -n "  ICMP: "
-
-          # Test ICMP probe with timeout
-          if timeout 5 ${pkgs.curl}/bin/curl -s \
-            "http://localhost:9115/probe?module=icmp_ping&target=$host" | \
-            grep -q 'probe_success 1'; then
-            echo "✓ Success"
-          else
-            echo "✗ Failed"
-          fi
-        done
-
-        echo ""
-        echo "=== Host Group Summary ==="
-        echo "Local hosts: ${toString (lib.length hostGroups.local)}"
-        echo "DNS servers: ${toString (lib.length hostGroups.dns)}"
-        echo "Backbone hosts: ${toString (lib.length hostGroups.backbone)}"
-        echo "Remote hosts: ${toString (lib.length hostGroups.remote)}"
-        echo "Total hosts: ${toString (lib.length allHosts)}"
-      '')
-
       (writeShellScriptBin "blackbox-probe" ''
         # Usage: blackbox-probe <module> <target>
         # Example: blackbox-probe icmp_ping 8.8.8.8
@@ -331,8 +258,6 @@ in
         - **tcp_connect**: TCP port connectivity checks
 
         ## Useful Commands
-        - `check-blackbox`: Check blackbox exporter status and configuration
-        - `test-blackbox-hosts`: Test monitoring for sample hosts
         - `blackbox-probe <module> <target>`: Manually test a specific probe
 
         ## Configuration

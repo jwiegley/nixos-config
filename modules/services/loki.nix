@@ -154,30 +154,8 @@
     }
   ];
 
-  # Monitoring and health check script
+  # LogCLI tool for querying Loki from command line
   environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-loki" ''
-      echo "=== Loki Service Status ==="
-      systemctl is-active loki && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Loki API Health ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:3100/ready | ${pkgs.jq}/bin/jq . || echo "API not responding"
-
-      echo ""
-      echo "=== Loki Metrics ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:3100/metrics | head -20
-
-      echo ""
-      echo "=== Storage Usage ==="
-      du -sh /var/lib/loki/* 2>/dev/null | head -10
-
-      echo ""
-      echo "=== Recent Logs ==="
-      journalctl -u loki -n 10 --no-pager
-    '')
-
-    # LogCLI tool for querying Loki from command line
     (writeShellScriptBin "logcli-local" ''
       ${pkgs.grafana-loki}/bin/logcli \
         --addr="http://localhost:3100" \

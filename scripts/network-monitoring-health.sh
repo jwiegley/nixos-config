@@ -153,9 +153,6 @@ main() {
     echo "  - Blackbox Exporter: http://localhost:9115"
     echo ""
     echo "Useful commands:"
-    echo "  - check-monitoring: Basic monitoring status"
-    echo "  - check-blackbox: Blackbox exporter specific checks"
-    echo "  - test-blackbox-hosts: Test monitoring for configured hosts"
     echo "  - blackbox-probe <module> <target>: Manual probe testing"
 }
 

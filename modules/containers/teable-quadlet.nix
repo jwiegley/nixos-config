@@ -12,9 +12,10 @@ in
       port = 3001;
       requiresPostgres = true;
 
-      environmentFiles = [
-        "/run/secrets/teable-secrets"
-      ];
+      # SOPS secret containing all Teable environment variables
+      secrets = {
+        env = "teable-env";
+      };
 
       environments = {
         # PostgreSQL Configuration (minimal set matching official CE deployment)
@@ -33,7 +34,7 @@ in
       publishPorts = [ "127.0.0.1:3001:3000/tcp" ];
 
       volumes = [
-        "/tank/Services/teable:/app/.assets:rw"
+        "/var/lib/teable:/app/.assets:rw"
       ];
 
       nginxVirtualHost = {
@@ -50,56 +51,19 @@ in
       };
 
       tmpfilesRules = [
-        "d /tank/Services/teable 0755 root root -"
+        "d /var/lib/teable 0755 root root -"
       ];
     })
   ];
 
-
-  # SOPS secrets configuration
-  # PostgreSQL password for database authentication
-  sops.secrets = {
-    "teable-postgres-password" = {
-      mode = "0400";
-      owner = "postgres";
-      restartUnits = [ "podman-teable.service" "teable-secrets-generator.service" ];
-    };
+  # Additional SOPS secret for PostgreSQL user setup
+  # (teable-env is automatically declared by mkQuadletService)
+  sops.secrets."teable-postgres-password" = {
+    sopsFile = config.sops.defaultSopsFile;
+    mode = "0400";
+    owner = "postgres";
+    restartUnits = [ "postgresql-teable-setup.service" ];
   };
-
-  # Generate combined secrets environment file for container
-  systemd.services.teable-secrets-generator = {
-    description = "Generate Teable secrets environment file";
-    after = [ "sops-nix.service" ];
-    wants = [ "sops-nix.service" ];
-    wantedBy = [ "multi-user.target" ];
-    before = [ "podman-teable.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-
-    script = ''
-      # Read PostgreSQL password
-      POSTGRES_PASSWORD=$(cat ${config.sops.secrets."teable-postgres-password".path})
-
-      # URL-encode the password for PRISMA_DATABASE_URL
-      URL_ENCODED_PASSWORD=$(${pkgs.python3}/bin/python3 -c 'import urllib.parse; import sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$POSTGRES_PASSWORD")
-
-      # Generate secrets file (minimal set for Community Edition)
-      SECRETS_FILE="/run/secrets/teable-secrets"
-      mkdir -p "$(dirname "$SECRETS_FILE")"
-
-      cat > "$SECRETS_FILE" <<EOF
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-PRISMA_DATABASE_URL=postgresql://teable:$URL_ENCODED_PASSWORD@10.88.0.1:5432/teable
-EOF
-
-      chmod 400 "$SECRETS_FILE"
-    '';
-  };
-
-
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     3001  # teable

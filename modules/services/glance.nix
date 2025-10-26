@@ -213,22 +213,16 @@ with lib;
                       ];
                     }
                     {
-                      title = "AI Services";
-                      color = "220 60 60";
-                      links = [
-                        {
-                          title = "LiteLLM";
-                          url = "https://litellm.vulcan.lan/ui";
-                        }
-                      ];
-                    }
-                    {
                       title = "Productivity";
                       color = "150 60 55";
                       links = [
                         {
                           title = "Teable";
                           url = "https://teable.vulcan.lan";
+                        }
+                        {
+                          title = "LiteLLM";
+                          url = "https://litellm.vulcan.lan/ui";
                         }
                       ];
                     }

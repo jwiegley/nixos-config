@@ -105,6 +105,7 @@ in
       nettools
       openssl
       pinentry
+      pv
       python3
       restic
       ripgrep

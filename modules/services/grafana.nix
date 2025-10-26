@@ -230,6 +230,12 @@
         cp /etc/nixos/modules/monitoring/dashboards/systemd-services-enhanced.json "$DASHBOARD_DIR/systemd-services-enhanced.json"
       fi
 
+      # Copy Mac Studio Power Monitoring Dashboard (always update)
+      echo "Installing Mac Studio Power Monitoring dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/dashboards/mac-studio-power.json" ]; then
+        cp /etc/nixos/modules/monitoring/dashboards/mac-studio-power.json "$DASHBOARD_DIR/mac-studio-power.json"
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

@@ -30,7 +30,7 @@
           "Backups"
           "Databases"
           "Home"
-          "Nasim"
+          "Nextcloud"
           "Photos"
           "Video"
           "doc"

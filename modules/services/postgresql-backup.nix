@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 
 let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+
   backupDir = "/var/lib/postgresql-backup";
   backupFile = "${backupDir}/postgresql-backup-$(date '+%Y-%m-%d').sql";
 
@@ -93,4 +96,10 @@ in
       message = "PostgreSQL backup requires services.postgresql.enable = true";
     }
   ];
+
+  # Bind mount ZFS dataset to Nextcloud data directory
+  fileSystems = bindTankPath {
+    path = "/var/lib/postgresql-backup";
+    device = "/tank/Backups/PostgreSQL";
+  };
 }

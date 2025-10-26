@@ -234,6 +234,7 @@ let
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; }
     { name = "speedtest"; display = "Open SpeedTest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; }
+    { name = "teable"; display = "Teable Database Platform"; }
     { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; }
     { name = "wallabag"; display = "Wallabag Read-Later"; }
   ];

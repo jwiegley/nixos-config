@@ -223,6 +223,16 @@ with lib;
                       ];
                     }
                     {
+                      title = "Productivity";
+                      color = "150 60 55";
+                      links = [
+                        {
+                          title = "Teable";
+                          url = "https://teable.vulcan.lan";
+                        }
+                      ];
+                    }
+                    {
                       title = "Development";
                       color = "200 50 50";
                       links = [

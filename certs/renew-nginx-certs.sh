@@ -31,6 +31,7 @@ DOMAINS=(
     "promtail.vulcan.lan"
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
+    "teable.vulcan.lan"
     "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"
 )

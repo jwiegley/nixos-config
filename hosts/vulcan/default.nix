@@ -12,6 +12,8 @@
     ../../modules/core/boot.nix
     ../../modules/core/hardware.nix
     ../../modules/core/networking.nix
+    ../../modules/core/nm-ignore-dhcp-dns.nix
+    ../../modules/core/wifi.nix
     ../../modules/core/firewall.nix
     ../../modules/core/nix.nix
     ../../modules/core/system.nix

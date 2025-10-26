@@ -28,35 +28,6 @@
   # Install additional Cockpit packages
   environment.systemPackages = with pkgs; [
     cockpit
-
-    # Monitoring helper script
-    (writeShellScriptBin "check-cockpit" ''
-      echo "=== Cockpit Status ==="
-      systemctl is-active cockpit.socket && echo "Socket: Active" || echo "Socket: Inactive"
-      systemctl is-active cockpit && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Local Connection Test ==="
-      ${pkgs.curl}/bin/curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:9099/ || \
-        echo "Note: Service may not be started until first connection to socket"
-
-      echo ""
-      echo "=== HTTPS Access Test ==="
-      ${pkgs.curl}/bin/curl -ks -o /dev/null -w "HTTP Status: %{http_code}\n" https://cockpit.vulcan.lan/ || \
-        echo "Note: HTTPS test requires valid DNS or /etc/hosts entry for cockpit.vulcan.lan"
-
-      echo ""
-      echo "=== Certificate Status ==="
-      if [ -f /var/lib/nginx-certs/cockpit.vulcan.lan.crt ]; then
-        ${pkgs.openssl}/bin/openssl x509 -in /var/lib/nginx-certs/cockpit.vulcan.lan.crt -noout -dates
-      else
-        echo "Certificate not yet generated"
-      fi
-
-      echo ""
-      echo "=== Cockpit Configuration ==="
-      cat /etc/cockpit/cockpit.conf 2>/dev/null || echo "Configuration file not found"
-    '')
   ];
 
   # Enable cockpit.socket for socket activation

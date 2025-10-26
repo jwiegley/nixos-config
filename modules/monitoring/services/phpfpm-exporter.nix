@@ -57,29 +57,4 @@
     }
   ];
 
-  # Helper script to check PHP-FPM exporter
-  environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-phpfpm-exporter" ''
-      echo "=== PHP-FPM Exporter Status ==="
-      systemctl is-active prometheus-php-fpm-exporter && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Nextcloud PHP-FPM Pool Status ==="
-      echo "Socket: ${config.services.phpfpm.pools.nextcloud.socket}"
-
-      echo ""
-      echo "=== Direct PHP-FPM Status Check ==="
-      ${pkgs.curl}/bin/curl -s --unix-socket ${config.services.phpfpm.pools.nextcloud.socket} \
-        http://localhost/status | ${pkgs.jq}/bin/jq . 2>/dev/null || \
-        echo "Unable to query PHP-FPM directly"
-
-      echo ""
-      echo "=== Exporter Metrics Sample ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9253/metrics | grep -E "phpfpm_up|phpfpm_active_processes|phpfpm_accepted_connections" | head -15
-
-      echo ""
-      echo "=== Pool Statistics ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9253/metrics | grep -E "phpfpm_.*_processes"
-    '')
-  ];
 }

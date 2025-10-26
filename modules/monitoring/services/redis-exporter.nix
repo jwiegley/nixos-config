@@ -41,24 +41,4 @@
     }
   ];
 
-  # Helper script to check Redis exporter
-  environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-redis-exporter" ''
-      echo "=== Redis Exporter Status ==="
-      systemctl is-active prometheus-redis-exporter && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Redis Instances Monitored ==="
-      echo "1. redis-litellm (10.88.0.1:8085)"
-      echo "2. redis-nextcloud (unix socket)"
-
-      echo ""
-      echo "=== Exporter Metrics Sample ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9121/metrics | grep -E "redis_up|redis_connected_clients|redis_used_memory_bytes" | head -20
-
-      echo ""
-      echo "=== Redis Connection Status ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9121/metrics | grep "redis_up"
-    '')
-  ];
 }

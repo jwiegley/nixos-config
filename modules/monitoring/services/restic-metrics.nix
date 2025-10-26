@@ -1,23 +1,9 @@
 { config, lib, pkgs, ... }:
 
-{
-  # Restic metrics collection for multiple repositories
-  # Systemd service to collect restic metrics
-  # Auto-start when tank mount becomes available
-  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
-  systemd.services.restic-metrics = {
-    description = "Collect Restic Repository Metrics";
-    wants = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
-    after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
-    wantedBy = [ "tank.mount" ];
-    unitConfig = {
-      RequiresMountsFor = [ "/tank" ];
-      ConditionPathIsMountPoint = "/tank";
-    };
-
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.writeShellScript "collect-restic-metrics-inline" ''
+let
+  # Shared restic metrics collection script
+  # Used by both CLI tool and systemd service
+  resticMetricsScript = pkgs.writeShellScript "collect-restic-metrics" ''
         #!/usr/bin/env bash
         set -euo pipefail
 
@@ -158,7 +144,33 @@ EOF
         mv "$TEMP_FILE" "$OUTPUT_FILE"
         chmod 644 "$OUTPUT_FILE"
         echo "Restic metrics collection complete" >&2
-      ''}'";
+      '';
+in
+{
+  # Make CLI tool available for manual execution
+  environment.systemPackages = [
+    (pkgs.writeShellScriptBin "collect-restic-metrics" ''
+      exec ${resticMetricsScript}
+    '')
+  ];
+
+  # Restic metrics collection for multiple repositories
+  # Systemd service to collect restic metrics
+  # Auto-start when tank mount becomes available
+  # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
+  systemd.services.restic-metrics = {
+    description = "Collect Restic Repository Metrics";
+    wants = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    wantedBy = [ "tank.mount" ];
+    unitConfig = {
+      RequiresMountsFor = [ "/tank" ];
+      ConditionPathIsMountPoint = "/tank";
+    };
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${resticMetricsScript}";
       User = "root";
       Group = "root";
       # Increase timeout since checking multiple repositories can take time

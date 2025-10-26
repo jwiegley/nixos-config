@@ -185,36 +185,6 @@
 
   # Add helper scripts for VictoriaMetrics management
   environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-victoriametrics" ''
-      echo "=== VictoriaMetrics Status ==="
-      systemctl is-active victoriametrics && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Local Connection Test ==="
-      ${pkgs.curl}/bin/curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:8428/
-
-      echo ""
-      echo "=== HTTPS Access Test ==="
-      ${pkgs.curl}/bin/curl -ks -o /dev/null -w "HTTP Status: %{http_code}\n" https://victoriametrics.vulcan.lan/ || \
-        echo "Note: HTTPS test requires valid DNS or /etc/hosts entry"
-
-      echo ""
-      echo "=== Storage Stats ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:8428/api/v1/status/tsdb 2>/dev/null | ${pkgs.jq}/bin/jq '.' || \
-        echo "Unable to query storage stats"
-
-      echo ""
-      echo "=== Home Assistant Metrics Sample ==="
-      ${pkgs.curl}/bin/curl -s 'http://localhost:8428/api/v1/query?query=homeassistant_sensor_temperature_celsius' 2>/dev/null | \
-        ${pkgs.jq}/bin/jq '.data.result | length' 2>/dev/null || echo "No metrics found yet"
-
-      echo ""
-      echo "=== Scrape Targets ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:8428/api/v1/targets 2>/dev/null | \
-        ${pkgs.jq}/bin/jq '.data.activeTargets[] | {job: .labels.job, health: .health, lastScrape: .lastScrape}' || \
-        echo "Unable to query scrape targets"
-    '')
-
     (writeShellScriptBin "victoriametrics-query" ''
       if [ $# -eq 0 ]; then
         echo "Usage: victoriametrics-query <promql-query>"

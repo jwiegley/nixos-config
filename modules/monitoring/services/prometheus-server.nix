@@ -84,7 +84,6 @@ in
       - custom.yaml: Custom site-specific alerts (optional)
 
       ## Useful Commands
-      - `check-monitoring`: Check status of monitoring stack
       - `validate-alerts`: Validate alert rule syntax
       - `reload-prometheus`: Reload Prometheus configuration
 

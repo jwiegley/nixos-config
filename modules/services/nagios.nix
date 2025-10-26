@@ -1476,49 +1476,6 @@ in
     options = [ "bind" ];
   };
 
-  # Add monitoring check script
-  environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-nagios" ''
-      echo "=== Nagios Status ==="
-      systemctl is-active nagios && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Nagios Process Info ==="
-      systemctl status nagios --no-pager | head -20
-
-      echo ""
-      echo "=== Recent Nagios Logs ==="
-      tail -n 20 /var/log/nagios/nagios.log 2>/dev/null || echo "No logs available"
-
-      echo ""
-      echo "=== Web Interface Access ==="
-      ${pkgs.curl}/bin/curl -ks -o /dev/null -w "HTTP Status: %{http_code}\n" https://nagios.vulcan.lan/ || \
-        echo "Note: HTTPS test requires valid DNS or /etc/hosts entry for nagios.vulcan.lan"
-
-      echo ""
-      echo "=== Prometheus Metrics ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9267/metrics | head -20
-
-      echo ""
-      echo "=== Certificate Status ==="
-      if [ -f /var/lib/nginx-certs/nagios.vulcan.lan.crt ]; then
-        ${pkgs.openssl}/bin/openssl x509 -in /var/lib/nginx-certs/nagios.vulcan.lan.crt -noout -dates
-      else
-        echo "Certificate not yet generated"
-      fi
-
-      echo ""
-      echo "=== Current Service Status ==="
-      if [ -f /var/lib/nagios/status.dat ]; then
-        echo "Status file exists ($(wc -l < /var/lib/nagios/status.dat) lines)"
-        grep -c "servicestatus {" /var/lib/nagios/status.dat 2>/dev/null && echo " services monitored" || true
-      else
-        echo "Status file not found"
-      fi
-    '')
-  ];
-
-
   # Grant nagios user sudo access to podman for container monitoring
   # Note: ZFS monitoring uses --nosudo flag since /dev/zfs is world-readable/writable
   security.sudo.extraRules = [{

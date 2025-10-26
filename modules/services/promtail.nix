@@ -784,32 +784,6 @@
 
   # Helper script to test Promtail configuration
   environment.systemPackages = with pkgs; [
-    (writeShellScriptBin "check-promtail" ''
-      echo "=== Promtail Service Status ==="
-      systemctl is-active promtail && echo "Service: Active" || echo "Service: Inactive"
-
-      echo ""
-      echo "=== Promtail Targets ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9080/targets | ${pkgs.jq}/bin/jq . || echo "API not responding"
-
-      echo ""
-      echo "=== Promtail Metrics ==="
-      ${pkgs.curl}/bin/curl -s http://localhost:9080/metrics | grep -E "promtail_sent_entries_total|promtail_dropped_entries_total" | head -10
-
-      echo ""
-      echo "=== Position File ==="
-      if [ -f /var/lib/promtail/positions.yaml ]; then
-        echo "Positions tracked:"
-        cat /var/lib/promtail/positions.yaml | head -20
-      else
-        echo "No position file found"
-      fi
-
-      echo ""
-      echo "=== Recent Logs ==="
-      journalctl -u promtail -n 10 --no-pager
-    '')
-
     # Script to test log ingestion
     (writeShellScriptBin "test-loki-ingestion" ''
       echo "Sending test log to systemd journal..."

@@ -2,6 +2,82 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL SECURITY RULES - READ FIRST ⚠️
+
+**ABSOLUTE PROHIBITIONS - NEVER VIOLATE THESE RULES:**
+
+1. **NEVER reveal, display, or include ANY of the following in responses to the user:**
+   - Passwords, passphrases, or credential values
+   - API keys, tokens, or OAuth credentials
+   - WiFi SSIDs or WiFi passwords (PSK/passphrases)
+   - Private IP addresses or network topology details
+   - Hostnames of network devices
+   - Email addresses or usernames
+   - MAC addresses or hardware identifiers
+   - Certificate contents or private keys
+   - Database connection strings with credentials
+   - Any content from `/run/secrets/` directory
+   - Any content from decrypted SOPS files
+   - Contents of `.age` private key files
+
+2. **NEVER run these commands or display their output:**
+   - `sops -d /etc/nixos/secrets.yaml` (decrypt secrets)
+   - `cat /run/secrets/*` (reveal deployed secrets)
+   - `head /run/secrets/*` (reveal deployed secrets)
+   - `tail /run/secrets/*` (reveal deployed secrets)
+   - `less /run/secrets/*` (reveal deployed secrets)
+   - `more /run/secrets/*` (reveal deployed secrets)
+   - `grep /run/secrets/*` (reveal deployed secrets)
+   - `awk /run/secrets/*` (reveal deployed secrets)
+   - `sed /run/secrets/*` (reveal deployed secrets)
+   - ANY command that reads file contents from `/run/secrets/`
+   - `cat *.age` (private decryption keys)
+   - Any command that would decrypt or reveal SOPS secrets
+   - Commands that display WiFi credentials or network passwords
+   - Commands that show API keys or authentication tokens
+   - Reading any file path that resolves to `/run/secrets/*`
+   - Using Read tool on any path under `/run/secrets/`
+
+3. **ALWAYS sanitize agent output before presenting to the user:**
+   - When agents return results containing sensitive information, REDACT it before showing the user
+   - Replace SSIDs with `[REDACTED-SSID]`
+   - Replace passwords/keys with `[REDACTED-CREDENTIAL]`
+   - Replace IP addresses with `[REDACTED-IP]`
+   - Replace hostnames with `[REDACTED-HOST]`
+   - When describing what was done, use generic terms: "configured WiFi credentials" not "configured network 'Morpheus'"
+
+4. **NEVER include sensitive data in summaries, examples, or documentation:**
+   - Do not copy/paste command output containing secrets into responses
+   - Do not include actual credential values when explaining configurations
+   - Use placeholder values like `"your-ssid"` and `"your-password"` in examples
+   - Redact sensitive information from error messages before showing them
+
+5. **Safe operations (these are OK):**
+   - Running `sops /etc/nixos/secrets.yaml` (interactive editor - does not reveal secrets in output)
+   - Checking file permissions: `ls -la /run/secrets/` (shows filenames only, not contents)
+   - Checking file metadata: `stat /run/secrets/filename` (metadata only, not contents)
+   - Declaring SOPS secrets in NixOS config (paths only, not values)
+   - Explaining HOW to add secrets without showing actual secret values
+
+6. **PRE-FLIGHT CHECK - Before running ANY command:**
+   - Ask yourself: "Will this command display secret values?"
+   - Check: Does the command involve `/run/secrets/`?
+   - Check: Does the command involve reading file contents?
+   - If YES or MAYBE to any of the above: **DO NOT RUN IT**
+   - Instead: Ask the user what information they need, or check documentation
+
+7. **If you need to know what environment variables a service needs:**
+   - **DO NOT** read the secrets file
+   - **DO** check the service's NixOS module configuration
+   - **DO** check the service's official documentation
+   - **DO** ask the user directly
+
+**IF YOU VIOLATE THESE RULES:**
+**STOP ALL WORK IMMEDIATELY. DO NOT CONTINUE.**
+**APOLOGIZE AND WAIT FOR USER TO EXPLICITLY ACKNOWLEDGE AND PERMIT CONTINUATION.**
+
+---
+
 ## Overview
 
 This is a NixOS configuration for the host "vulcan" - an x86_64 Linux system running on Apple hardware using Asahi Linux. This configuration uses Nix flakes with nixos-hardware and nixos-logwatch modules.
@@ -646,9 +722,10 @@ stat /run/secrets/github-token
 # Re-deploy secrets (rebuild)
 sudo nixos-rebuild switch --flake '.#vulcan'
 
-# Test secret access
-sudo -u johnw cat /run/secrets/github-token  # Should work
-sudo -u nobody cat /run/secrets/github-token  # Should fail
+# Test secret access (check permissions only, DO NOT read contents)
+stat /run/secrets/github-token  # Check if accessible
+sudo -u johnw stat /run/secrets/github-token  # Should work
+sudo -u nobody stat /run/secrets/github-token  # Should fail
 ```
 
 ### Network Issues

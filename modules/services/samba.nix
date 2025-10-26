@@ -157,20 +157,16 @@ in
   # Ensure Samba services wait for ZFS mounts and auto-start when available
   # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services = {
-    samba = {
-      after = [ "zfs.target" "zfs-import-tank.service" ];
-      wantedBy = [ "tank.mount" ];
-      unitConfig = {
-        RequiresMountsFor = [ "/tank" ];
-        ConditionPathIsMountPoint = "/tank";
-      };
-    };
     samba-nmbd = {
       after = [ "zfs.target" "zfs-import-tank.service" ];
       wantedBy = [ "tank.mount" ];
       unitConfig = {
         RequiresMountsFor = [ "/tank" ];
         ConditionPathIsMountPoint = "/tank";
+      };
+      serviceConfig = {
+        RuntimeDirectory = "samba";
+        RuntimeDirectoryMode = "0755";
       };
     };
     samba-smbd = {
@@ -180,6 +176,10 @@ in
         RequiresMountsFor = [ "/tank" ];
         ConditionPathIsMountPoint = "/tank";
       };
+      serviceConfig = {
+        RuntimeDirectory = "samba";
+        RuntimeDirectoryMode = "0755";
+      };
     };
     samba-winbindd = {
       after = [ "zfs.target" "zfs-import-tank.service" ];
@@ -188,10 +188,21 @@ in
         RequiresMountsFor = [ "/tank" ];
         ConditionPathIsMountPoint = "/tank";
       };
+      serviceConfig = {
+        RuntimeDirectory = "samba";
+        RuntimeDirectoryMode = "0755";
+      };
     };
   };
 
   systemd.targets.samba = {
     wantedBy = [ "multi-user.target" ];
   };
+
+  # Ensure Samba state directories have correct permissions
+  systemd.tmpfiles.rules = [
+    "d /var/lib/samba 0755 root root -"
+    "d /var/log/samba 0755 root root -"
+    "d /var/log/samba/cores 0700 root root -"
+  ];
 }

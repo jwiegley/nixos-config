@@ -142,7 +142,6 @@ let
     { name = "nextcloud-setup.service"; display = "Nextcloud Setup"; mount = "/tank"; }
     { name = "nextcloud-update-db.service"; display = "Nextcloud Database Update"; mount = "/tank"; }
     { name = "nextcloud-cron.service"; display = "Nextcloud Cron"; mount = "/tank"; }
-    { name = "samba.service"; display = "Samba Service"; mount = "/tank"; }
     { name = "samba-smbd.service"; display = "Samba SMB Daemon"; mount = "/tank"; }
     { name = "samba-nmbd.service"; display = "Samba NetBIOS Name Server"; mount = "/tank"; }
     { name = "samba-winbindd.service"; display = "Samba Winbind Daemon"; mount = "/tank"; }

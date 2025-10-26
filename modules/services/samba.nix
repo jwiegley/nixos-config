@@ -133,6 +133,17 @@ in
           "logging" = "systemd";
           "log level" = "1";
         };
+
+        # Manual share for Teable storage
+        "tank-Services-teable" = {
+          path = "/tank/Services/teable";
+          comment = "Teable Database Platform Storage";
+          "valid users" = "johnw assembly";
+          "read only" = "no";
+          browseable = "yes";
+          "create mask" = "0664";
+          "directory mask" = "0775";
+        };
       } // zfsShares;
     };
 

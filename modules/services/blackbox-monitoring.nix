@@ -556,6 +556,7 @@ in
             "https://alertmanager.vulcan.lan"
             "https://speedtest.vulcan.lan"
             "https://litellm.vulcan.lan"
+            "https://teable.vulcan.lan"
           ];
         }];
         relabel_configs = [

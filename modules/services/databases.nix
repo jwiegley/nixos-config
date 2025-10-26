@@ -15,6 +15,12 @@ in
       secretPath = config.sops.secrets."nextcloud-db-password".path;
       dependentService = "nextcloud-setup.service";
     })
+    (mkPostgresUserSetup {
+      user = "teable";
+      database = "teable";
+      secretPath = config.sops.secrets."teable-postgres-password".path;
+      dependentService = "podman-teable.service";
+    })
   ];
 
   services = {
@@ -49,6 +55,7 @@ in
         "litellm"
         "wallabag"
         "nextcloud"
+        "teable"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -57,6 +64,10 @@ in
         { name = "wallabag"; }
         {
           name = "nextcloud";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "teable";
           ensureDBOwnership = true;
         }
       ];

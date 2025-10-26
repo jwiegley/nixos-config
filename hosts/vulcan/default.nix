@@ -62,6 +62,7 @@
 
     # Containers
     ../../modules/containers/default.nix
+    ../../modules/containers/teable-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

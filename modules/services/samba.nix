@@ -195,10 +195,6 @@ in
     };
   };
 
-  systemd.targets.samba = {
-    wantedBy = [ "multi-user.target" ];
-  };
-
   # Ensure Samba state directories have correct permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/samba 0755 root root -"

@@ -529,7 +529,7 @@ let
 
     define command {
       command_name    check_zfs_pool
-      command_line    ${pkgs.check_zfs}/bin/check_zfs -p $ARG1$
+      command_line    ${pkgs.check_zfs}/bin/check_zfs --nosudo $ARG1$
     }
 
     define command {
@@ -1068,6 +1068,7 @@ let
       check_interval          1440
       retry_interval          60
       max_check_attempts      2
+      notification_interval   1440
       register                0
     }
 
@@ -1519,6 +1520,7 @@ in
 
 
   # Grant nagios user sudo access to podman for container monitoring
+  # Note: ZFS monitoring uses --nosudo flag since /dev/zfs is world-readable/writable
   security.sudo.extraRules = [{
     users = [ "nagios" ];
     commands = [{

@@ -655,9 +655,11 @@ in
         # Name shown in Apple Home app
         name = "Vulcan Home Bridge";
 
-        # Listen on all network interfaces (0.0.0.0)
-        # This allows connections from both Ethernet (192.168.1.x) and WiFi (192.168.3.x)
-        # ip_address option removed to use default (all interfaces)
+        # Force HomeKit to bind completely to WiFi interface
+        # ip_address controls TCP binding, advertise_ip controls mDNS
+        # Both set to WiFi IP to ensure iPhone at 192.168.3.52 can discover bridge
+        ip_address = "192.168.3.16";
+        advertise_ip = "192.168.3.16";
 
         # Filter which entities to expose to HomeKit
         # Maximum 150 accessories per bridge

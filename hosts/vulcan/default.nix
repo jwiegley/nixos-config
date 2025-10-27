@@ -48,6 +48,7 @@
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/home-assistant.nix
+    ../../modules/services/home-assistant-metric-trick.nix
     ../../modules/services/node-red.nix
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix

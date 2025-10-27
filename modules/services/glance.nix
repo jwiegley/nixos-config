@@ -221,6 +221,10 @@ with lib;
                           url = "https://teable.vulcan.lan";
                         }
                         {
+                          title = "Metabase";
+                          url = "https://metabase.vulcan.lan";
+                        }
+                        {
                           title = "LiteLLM";
                           url = "https://litellm.vulcan.lan/ui";
                         }

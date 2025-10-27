@@ -1,0 +1,104 @@
+groups:
+  - name: metabase_service
+    interval: 60s
+    rules:
+      - alert: MetabaseServiceDown
+        expr: systemd_unit_state{name="metabase.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: metabase
+        annotations:
+          summary: "Metabase container service is down"
+          description: |
+            Metabase container has been down for {{ $value }} minutes.
+            Business intelligence dashboards are unavailable.
+
+            Check service status: systemctl status metabase.service
+            Check container: podman ps -a | grep metabase
+            View logs: journalctl -u metabase -f
+            Check podman logs: podman logs metabase
+
+      - alert: MetabaseHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://metabase.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: metabase
+        annotations:
+          summary: "Metabase HTTPS probe failed"
+          description: |
+            Metabase web interface at https://metabase.vulcan.lan is not responding.
+            Business intelligence platform is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://metabase.vulcan.lan
+            Check container: podman ps | grep metabase
+            Test local endpoint: curl -I http://127.0.0.1:3200
+
+      - alert: MetabaseSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://metabase.vulcan.lan"} > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: metabase
+        annotations:
+          summary: "Metabase is responding slowly"
+          description: |
+            Metabase response time is {{ $value }}s (threshold: 5s).
+            Dashboard loading may be degraded.
+
+            Check container resources: podman stats metabase
+            Check PostgreSQL: systemctl status postgresql
+            View database connections: sudo -u postgres psql -d metabase -c "SELECT COUNT(*) FROM pg_stat_activity;"
+            Check Java heap: podman logs metabase | grep -i "heap\|memory"
+
+      - alert: MetabaseContainerRestarts
+        expr: rate(systemd_unit_state{name="metabase.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: metabase
+        annotations:
+          summary: "Metabase container is restarting frequently"
+          description: |
+            Metabase container has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability.
+
+            View recent logs: journalctl -u metabase --since "15 minutes ago"
+            Check container logs: podman logs metabase --tail 100
+            Check for OOM: dmesg | grep -i "metabase\|oom"
+            Verify database connection: sudo -u postgres psql -d metabase -c "SELECT 1;"
+
+      - alert: MetabaseDatabaseConnectionFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://metabase.vulcan.lan"} == 0 and systemd_unit_state{name="metabase.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: metabase
+        annotations:
+          summary: "Metabase cannot connect to PostgreSQL backend"
+          description: |
+            Metabase container is running but web interface is down.
+            This likely indicates a PostgreSQL connection failure.
+
+            Check PostgreSQL: systemctl status postgresql
+            Check database exists: sudo -u postgres psql -l | grep metabase
+            Check container logs: podman logs metabase | grep -i "database\|postgres\|connection"
+            Verify credentials are loaded: podman exec metabase env | grep MB_DB
+
+      - alert: MetabaseHighMemoryUsage
+        expr: container_memory_usage_bytes{name="metabase"} / container_spec_memory_limit_bytes{name="metabase"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: metabase
+        annotations:
+          summary: "Metabase is using high memory"
+          description: |
+            Metabase memory usage is {{ $value | humanizePercentage }} of limit.
+            Java heap may need adjustment.
+
+            Check container stats: podman stats metabase
+            Review JAVA_OPTS: podman exec metabase env | grep JAVA_OPTS
+            Consider increasing memory limit or heap size

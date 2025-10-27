@@ -15,6 +15,7 @@ let
     "network.yaml"
     "nextcloud.yaml"
     "litellm-availability.yaml"
+    "metabase.yaml"
     "home-assistant.yaml"
     "home-assistant-backup.yaml"
   ];

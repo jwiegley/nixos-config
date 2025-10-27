@@ -254,6 +254,7 @@ in
       "analytics"
       "default_config"
       "met"
+      "mqtt"  # MQTT broker for HASS.Agent and other IoT devices
 
       # Yale/August lock integration
       "yale_home"

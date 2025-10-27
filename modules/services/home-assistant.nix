@@ -245,6 +245,7 @@ in
       ps.pyicloud # Required for Apple iCloud integration
       ps.pyatv # Required for Apple TV integration
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
+      ps.wakeonlan # Required for Wake on LAN integration
     ];
 
     # Components that don't require YAML configuration
@@ -280,6 +281,9 @@ in
       "automation"
       "script"
       "scene"
+
+      # Wake on LAN
+      "wake_on_lan"
 
       # Network devices
       "asuswrt" # ASUS WiFi routers

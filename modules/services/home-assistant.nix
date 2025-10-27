@@ -368,7 +368,8 @@ in
         trusted_proxies = [
           "127.0.0.1"
           "::1"
-          "192.168.1.2" # vulcan's IP
+          "192.168.1.2" # vulcan's Ethernet IP
+          "192.168.3.16" # vulcan's WiFi IP
         ];
 
         # Disable direct HTTP access (use nginx proxy)
@@ -799,12 +800,16 @@ EOF
 
   # Open firewall for local network access only
   # Access via nginx reverse proxy on port 443 (HTTPS)
-  networking.firewall.interfaces."end0".allowedTCPPorts = [
+  networking.firewall.interfaces."lo".allowedTCPPorts = [
     8123 # Home Assistant web interface
+  ];
+
+  # Open firewall for local network access
+  networking.firewall.allowedTCPPorts = [
     21063 # HomeKit Bridge accessory protocol
   ];
 
-  networking.firewall.interfaces."end0".allowedUDPPorts = [
+  networking.firewall.allowedUDPPorts = [
     5353 # mDNS for HomeKit/Bonjour discovery
   ];
 }

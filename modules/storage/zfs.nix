@@ -11,10 +11,10 @@
     };
   };
 
-  # Ensure zfs-mount waits for tank pool import to complete
+  # Ensure zfs-mount waits for pool imports to complete
   systemd.services.zfs-mount = {
-    after = [ "zfs-import-tank.service" ];
-    requires = [ "zfs-import-tank.service" ];
+    after = [ "zfs-import-tank.service" "zfs-import-gdrive.service" ];
+    requires = [ "zfs-import-tank.service" "zfs-import-gdrive.service" ];
   };
 
   services.zfs = {

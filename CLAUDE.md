@@ -37,6 +37,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Commands that show API keys or authentication tokens
    - Reading any file path that resolves to `/run/secrets/*`
    - Using Read tool on any path under `/run/secrets/`
+   - **`cat /var/lib/hass/.storage/core.config_entries`** (contains OAuth tokens!)
+   - **`cat /var/lib/hass/.storage/*`** (may contain credentials)
+   - **ANY Python/JSON parsing of `.storage/*` files** (reveals tokens)
+   - Commands that display `access_token`, `refresh_token`, or `api_key` fields
+   - Reading Home Assistant entity registry files with tokens
+   - Displaying output from integration config entries
+   - ANY command that would reveal OAuth credentials or API tokens from Home Assistant
 
 3. **ALWAYS sanitize agent output before presenting to the user:**
    - When agents return results containing sensitive information, REDACT it before showing the user
@@ -72,9 +79,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - **DO** check the service's official documentation
    - **DO** ask the user directly
 
+8. **HOME ASSISTANT DEBUGGING - SAFE METHODS ONLY:**
+   - **✅ SAFE:** Check logs with `journalctl -u home-assistant | grep <pattern>`
+   - **✅ SAFE:** Check entity states via API without authentication details
+   - **✅ SAFE:** Read entity_registry for entity IDs only (filter out any credential fields)
+   - **✅ SAFE:** Check service status: `systemctl status home-assistant`
+   - **✅ SAFE:** Verify config syntax in `/var/lib/hass/configuration.yaml`
+   - **❌ FORBIDDEN:** Reading `/var/lib/hass/.storage/core.config_entries`
+   - **❌ FORBIDDEN:** Parsing `.storage/*` files that contain OAuth/API tokens
+   - **❌ FORBIDDEN:** Displaying integration configuration with credentials
+   - **❌ FORBIDDEN:** Any command that would show `token`, `access_token`, `refresh_token`, `api_key`, `api_secret`, `password` fields
+   - **Instead of reading config_entries:** Check journalctl logs for errors, check entity states, verify network connectivity
+   - **If integration isn't working:** Check logs for errors, verify service is running, check firewall, ask user to reconfigure via UI
+
 **IF YOU VIOLATE THESE RULES:**
 **STOP ALL WORK IMMEDIATELY. DO NOT CONTINUE.**
 **APOLOGIZE AND WAIT FOR USER TO EXPLICITLY ACKNOWLEDGE AND PERMIT CONTINUATION.**
+
+---
+
+## 🔴 PAST VIOLATIONS - LEARN FROM THESE MISTAKES 🔴
+
+**DO NOT REPEAT THESE ERRORS:**
+
+1. **2025-10-27: Revealed Nest OAuth tokens**
+   - **What happened:** Ran `cat /var/lib/hass/.storage/core.config_entries | python3 -c ...` and displayed OAuth access_token, refresh_token, and Google Cloud project IDs
+   - **Why it was wrong:** The `.storage/` directory contains sensitive authentication credentials that should NEVER be displayed
+   - **What should have been done:** Check journalctl logs for Nest errors instead, or ask user to verify integration status in Home Assistant UI
+   - **Lesson:** NEVER read `.storage/*` files - they are credential stores, not config files
+
+2. **General pattern:** Attempting to diagnose integration issues by reading config/state files
+   - **Wrong approach:** Reading files that contain credentials
+   - **Right approach:** Use logs (`journalctl`), service status (`systemctl status`), and ask user to check UI
+
+**Remember:** When debugging fails and you're tempted to "just peek at the config," STOP and use logs/status instead.
 
 ---
 

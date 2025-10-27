@@ -11,6 +11,12 @@
     };
   };
 
+  # Ensure zfs-mount waits for tank pool import to complete
+  systemd.services.zfs-mount = {
+    after = [ "zfs-import-tank.service" ];
+    requires = [ "zfs-import-tank.service" ];
+  };
+
   services.zfs = {
     autoScrub = {
       enable = true;

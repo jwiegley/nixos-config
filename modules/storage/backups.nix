@@ -24,6 +24,10 @@ let
         "--keep-weekly 5"
         "--keep-yearly 3"
       ];
+      # Wait up to 5 minutes if repository is locked (prevents immediate failures)
+      extraBackupArgs = [ "--retry-lock=5m" ];
+      # Clean up any stale locks before starting backup
+      backupPrepareCommand = "restic unlock || true";
     };
   };
 

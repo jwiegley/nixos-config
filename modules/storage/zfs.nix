@@ -2,18 +2,20 @@
 
 {
   # Enable ZFS support with 16K page size (Apple Silicon / Asahi Linux)
-  boot.supportedFilesystems = [ "zfs" ];
-
-  boot.zfs = {
-    forceImportAll = false;
-    forceImportRoot = false;
+  boot = {
+    supportedFilesystems = [ "zfs" ];
+    zfs = {
+      forceImportAll = false;
+      forceImportRoot = false;
+      extraPools = [ "tank" "gdrive" ];
+    };
   };
 
   services.zfs = {
     autoScrub = {
       enable = true;
       interval = "monthly";
-      pools = [ "tank" ];
+      pools = [ "tank" "gdrive" ];
     };
   };
 
@@ -25,6 +27,11 @@
         use_template = [ "archival" ];
         recursive = true;
         process_children_only = true;
+      };
+
+      gdrive = {
+        use_template = [ "archival" ];
+        recursive = true;
       };
 
       "tank/Downloads".use_template = [ "active" ];

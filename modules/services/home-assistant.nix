@@ -692,12 +692,13 @@ in
           ];
 
           # To include specific sensors/binary_sensors, uncomment and add entities:
-          # include_entities = [
-          #   "sensor.upstairs_temperature"
-          #   "sensor.downstairs_temperature"
-          #   "binary_sensor.front_door"
-          #   "binary_sensor.motion_sensor_hallway"
-          # ];
+          include_entities = [
+            "sensor.upstairs_temperature"
+            "sensor.downstairs_temperature"
+            "sensor.family_room_temperature"
+            "binary_sensor.front_door"
+            # "binary_sensor.motion_sensor_hallway"
+          ];
         };
 
         # Port for HomeKit accessory protocol (default: 21063)

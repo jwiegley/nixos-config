@@ -75,6 +75,20 @@
     };
   };
 
+  # Node-RED nginx upstream with retry logic
+  # Prevents 502 errors during service restarts
+  services.nginx.upstreams."node-red" = {
+    servers = {
+      "127.0.0.1:1880" = {
+        max_fails = 0;
+      };
+    };
+    extraConfig = ''
+      keepalive 16;
+      keepalive_timeout 60s;
+    '';
+  };
+
   # Nginx reverse proxy for Node-RED
   # Provides HTTPS access at https://nodered.vulcan.lan
   services.nginx.virtualHosts."nodered.vulcan.lan" = {
@@ -83,9 +97,14 @@
     sslCertificateKey = "/var/lib/nginx-certs/nodered.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://127.0.0.1:1880/";
+      proxyPass = "http://node-red/";
       proxyWebsockets = true;
       extraConfig = ''
+        # Retry logic for temporary backend failures
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 10s;
+
         # Increase timeouts for websocket connections
         proxy_connect_timeout 1h;
         proxy_send_timeout 1h;

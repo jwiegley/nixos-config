@@ -788,6 +788,21 @@ EOF
     "Z /var/lib/hass 0700 hass hass -"
   ];
 
+  # Home Assistant nginx upstream with retry logic
+  # This prevents 502 errors during service restarts by retrying failed connections
+  services.nginx.upstreams."home-assistant" = {
+    servers = {
+      "127.0.0.1:8123" = {
+        max_fails = 0;  # Don't mark backend as failed during temporary unavailability
+      };
+    };
+    extraConfig = ''
+      # Keep alive connections to backend for better performance
+      keepalive 32;
+      keepalive_timeout 60s;
+    '';
+  };
+
   # Home Assistant local access
   services.nginx.virtualHosts."hass.vulcan.lan" = {
     forceSSL = true;
@@ -795,13 +810,23 @@ EOF
     sslCertificateKey = "/var/lib/nginx-certs/hass.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://127.0.0.1:8123/";
+      proxyPass = "http://home-assistant/";  # Use upstream instead of direct connection
       proxyWebsockets = true;
       extraConfig = ''
+        # Retry logic for temporary backend failures (service restarts)
+        # This prevents 502 errors when Home Assistant is restarting
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 10s;
+
         # Timeout settings for websockets
         proxy_connect_timeout 7d;
         proxy_send_timeout 7d;
         proxy_read_timeout 7d;
+
+        # Connection pooling (required for keepalive upstream)
+        # Note: proxy_http_version 1.1 is already set globally by nginx module
+        proxy_set_header Connection "";
       '';
     };
   };

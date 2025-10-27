@@ -242,6 +242,20 @@
     deps = [];
   };
 
+  # Grafana nginx upstream with retry logic
+  # Prevents 502 errors during service restarts
+  services.nginx.upstreams."grafana" = {
+    servers = {
+      "127.0.0.1:3000" = {
+        max_fails = 0;
+      };
+    };
+    extraConfig = ''
+      keepalive 16;
+      keepalive_timeout 60s;
+    '';
+  };
+
   # Nginx reverse proxy configuration
   services.nginx.virtualHosts."grafana.vulcan.lan" = {
     forceSSL = true;
@@ -249,9 +263,14 @@
     sslCertificateKey = "/var/lib/nginx-certs/grafana.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://127.0.0.1:3000/";
+      proxyPass = "http://grafana/";
       proxyWebsockets = true;
       extraConfig = ''
+        # Retry logic for temporary backend failures
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 10s;
+
         # Increase timeouts for Grafana
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;

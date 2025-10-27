@@ -127,14 +127,34 @@
   };
 
 
+  # Alertmanager nginx upstream with retry logic
+  # Prevents 502 errors during service restarts
+  services.nginx.upstreams."alertmanager" = {
+    servers = {
+      "127.0.0.1:${toString config.services.prometheus.alertmanager.port}" = {
+        max_fails = 0;
+      };
+    };
+    extraConfig = ''
+      keepalive 8;
+      keepalive_timeout 60s;
+    '';
+  };
+
   # Keep the existing nginx configuration
   services.nginx.virtualHosts."alertmanager.vulcan.lan" = {
     forceSSL = true;
     sslCertificate = "/var/lib/nginx-certs/alertmanager.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/alertmanager.vulcan.lan.key";
     locations."/" = {
-      proxyPass = "http://localhost:${toString config.services.prometheus.alertmanager.port}";
+      proxyPass = "http://alertmanager/";
       recommendedProxySettings = true;
+      extraConfig = ''
+        # Retry logic for temporary backend failures
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 10s;
+      '';
     };
   };
 }

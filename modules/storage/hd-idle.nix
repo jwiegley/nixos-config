@@ -50,7 +50,7 @@
 
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.hd-idle}/bin/hd-idle -i 600";
+      ExecStart = "${pkgs.hd-idle}/bin/hd-idle -a sdf -i 600";
       Restart = "on-failure";
       RestartSec = "10s";
 

@@ -655,9 +655,9 @@ in
         # Name shown in Apple Home app
         name = "Vulcan Home Bridge";
 
-        # Advertise on the main network interface IP
-        # This ensures iPhone/iPad on the local network can connect
-        ip_address = "192.168.1.2";
+        # Listen on all network interfaces (0.0.0.0)
+        # This allows connections from both Ethernet (192.168.1.x) and WiFi (192.168.3.x)
+        # ip_address option removed to use default (all interfaces)
 
         # Filter which entities to expose to HomeKit
         # Maximum 150 accessories per bridge
@@ -669,8 +669,8 @@ in
             "switch" # Smart switches
             "cover" # Garage doors, blinds
             "fan" # Fans
-            "sensor" # Temperature, humidity sensors
-            "binary_sensor" # Motion, door/window sensors
+            # Sensors removed - they clutter HomeKit and cause 100+ "Continue" prompts
+            # If you need specific sensors, use include_entities instead
             "script" # ADT security system scripts
             "vacuum" # Dreame robot vacuum
             "media_player" # LG webOS TV
@@ -687,6 +687,14 @@ in
             # "sensor.*_probe_*" # Traeger grill probe sensors
             # "climate.slugify_*" # Traeger grill climate entities
           ];
+
+          # To include specific sensors/binary_sensors, uncomment and add entities:
+          # include_entities = [
+          #   "sensor.upstairs_temperature"
+          #   "sensor.downstairs_temperature"
+          #   "binary_sensor.front_door"
+          #   "binary_sensor.motion_sensor_hallway"
+          # ];
         };
 
         # Port for HomeKit accessory protocol (default: 21063)

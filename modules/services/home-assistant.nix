@@ -243,6 +243,7 @@ in
       ps.pychromecast # Required for Bose integration
       pybose # Custom package for Bose integration
       ps.pyicloud # Required for Apple iCloud integration
+      ps.pyatv # Required for Apple TV integration
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
     ];
 

@@ -14,19 +14,15 @@
     mode = "0400";
   };
 
-  # Create environment files with proper variable names for NetworkManager
-  # The SOPS secrets contain just the values, but NetworkManager's environmentFiles
-  # expects VAR=value format, so we create wrapper files
-  environment.etc."NetworkManager/wifi-credentials.env" = {
-    mode = "0400";
-    text = "";  # Will be populated by systemd service
-  };
-
   # Systemd service to prepare WiFi credentials in environment file format
+  # Note: We do NOT use environment.etc here because it would overwrite the file
+  # on every activation with an empty file. The service creates and manages the file.
   systemd.services.prepare-wifi-credentials = {
     description = "Prepare WiFi credentials for NetworkManager";
     wantedBy = [ "multi-user.target" ];
-    before = [ "NetworkManager.service" ];
+    wants = [ "network-pre.target" ];
+    before = [ "NetworkManager.service" "NetworkManager-ensure-profiles.service" "network-pre.target" ];
+    after = [ "local-fs.target" ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -39,6 +35,9 @@
     };
 
     script = ''
+      # Ensure directory exists
+      mkdir -p /etc/NetworkManager
+
       # Create environment file with proper format for NetworkManager
       {
         echo "WIFI_SSID=$(cat "$CREDENTIALS_DIRECTORY/ssid")"

@@ -230,6 +230,7 @@ let
   # Podman Containers
   containers = [
     { name = "litellm"; display = "LiteLLM API Proxy"; }
+    { name = "metabase"; display = "Metabase BI Platform"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; }
     { name = "speedtest"; display = "Open SpeedTest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; }
@@ -933,6 +934,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: llama-swap.vulcan.lan
       check_command           check_ssl_cert!llama-swap.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: metabase.vulcan.lan
+      check_command           check_ssl_cert!metabase.vulcan.lan
       service_groups          ssl-certificates
     }
 

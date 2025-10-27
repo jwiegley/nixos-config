@@ -4,11 +4,13 @@
   # Import all container service modules
   imports = [
     ./litellm-quadlet.nix
+    ./metabase-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
     ./silly-tavern-quadlet.nix
+    ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix
   ];
@@ -35,6 +37,9 @@
     };
   };
 
+  # Enable auto-escaping for quadlet configurations
+  virtualisation.quadlet.autoEscape = true;
+
   # Note: Podman network is automatically managed by NixOS via
   # virtualisation.podman.defaultNetwork.settings No manual network creation
   # needed - the defaultNetwork.settings above configures the "podman" network
@@ -42,12 +47,14 @@
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
     # 1433: mssql
+    # 3001: teable
+    # 3200: metabase
     # 4000: litellm
     # 5380: Technitium DNS
     # 5432: PostgreSQL
     # 8085: Redis
     # 9182: mssql-exporter
-    allowedTCPPorts = [ 1433 4000 5380 5432 8085 9182 ];
+    allowedTCPPorts = [ 1433 3001 3200 4000 5380 5432 8085 9182 ];
     allowedUDPPorts = [ 53 ];
   };
 

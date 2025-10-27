@@ -112,6 +112,7 @@ in
       socat
       sops
       task-master-ai
+      tcpdump
       traceroute
       zfs-prune-snapshots
       llama-swap

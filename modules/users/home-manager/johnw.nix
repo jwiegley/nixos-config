@@ -500,6 +500,7 @@
     home.packages = with pkgs; [
       # Development tools
       gitAndTools.git-annex
+      gitAndTools.git-workspace
       global
       claude-code
 

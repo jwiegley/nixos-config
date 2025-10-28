@@ -4,37 +4,39 @@ let
   # List of ZFS filesystems to create Samba shares for
   # Generated from: zfs list -t filesystem -H -o name,mountpoint | grep '^tank' | grep -v 'none\|legacy'
   zfsFilesystems = [
-    { name = "tank";                        mountpoint = "/tank"; }
-    { name = "tank/Audio";                  mountpoint = "/tank/Audio"; }
-    { name = "tank/Backups";                mountpoint = "/tank/Backups"; }
-    { name = "tank/Backups/Assembly";       mountpoint = "/tank/Backups/Assembly"; }
-    { name = "tank/Backups/Assembly/Drive"; mountpoint = "/tank/Backups/Assembly/Drive"; }
-    { name = "tank/Backups/Git";            mountpoint = "/tank/Backups/Git"; }
-    { name = "tank/Backups/Images";         mountpoint = "/tank/Backups/Images"; }
-    { name = "tank/Backups/Kadena";         mountpoint = "/tank/Backups/Kadena"; }
-    { name = "tank/Backups/rpool";          mountpoint = "/tank/Backups/rpool"; }
-    { name = "tank/Backups/rpool/home";     mountpoint = "/tank/Backups/rpool/home"; }
-    { name = "tank/Backups/rpool/root";     mountpoint = "/tank/Backups/rpool/root"; }
-    { name = "tank/Databases";              mountpoint = "/tank/Databases"; }
-    { name = "tank/Desktop";                mountpoint = "/tank/Desktop"; }
-    { name = "tank/Documents";              mountpoint = "/tank/Documents"; }
-    { name = "tank/Downloads";              mountpoint = "/tank/Downloads"; }
-    { name = "tank/Home";                   mountpoint = "/tank/Home"; }
-    { name = "tank/Machines";               mountpoint = "/tank/Machines"; }
-    { name = "tank/Media";                  mountpoint = "/tank/Media"; }
-    { name = "tank/Models";                 mountpoint = "/tank/Models"; }
-    { name = "tank/Models/HuggingFace";     mountpoint = "/tank/Models/HuggingFace"; }
-    { name = "tank/Models/Llama.cpp";       mountpoint = "/tank/Models/Llama.cpp"; }
-    { name = "tank/Movies";                 mountpoint = "/tank/Movies"; }
-    { name = "tank/Music";                  mountpoint = "/tank/Music"; }
-    { name = "tank/Nextcloud";              mountpoint = "/tank/Nextcloud"; }
-    { name = "tank/Photos";                 mountpoint = "/tank/Photos"; }
-    { name = "tank/Pictures";               mountpoint = "/tank/Pictures"; }
-    { name = "tank/Video";                  mountpoint = "/tank/Video"; }
-    { name = "tank/Video/Zoom";             mountpoint = "/tank/Video/Zoom"; }
-    { name = "tank/doc";                    mountpoint = "/tank/doc"; }
-    { name = "tank/iCloud";                 mountpoint = "/tank/iCloud"; }
-    { name = "tank/src";                    mountpoint = "/tank/src"; }
+    { name = "tank";                         mountpoint = "/tank"; }
+    { name = "tank/Audio";                   mountpoint = "/tank/Audio"; }
+    { name = "tank/Backups";                 mountpoint = "/tank/Backups"; }
+    { name = "tank/Backups/Assembly";        mountpoint = "/tank/Backups/Assembly"; }
+    { name = "tank/Backups/Assembly/Drive";  mountpoint = "/tank/Backups/Assembly/Drive"; }
+    { name = "tank/Backups/Git";             mountpoint = "/tank/Backups/Git"; }
+    { name = "tank/Backups/Images";          mountpoint = "/tank/Backups/Images"; }
+    { name = "tank/Backups/Kadena";          mountpoint = "/tank/Backups/Kadena"; }
+    { name = "tank/Backups/Machines";        mountpoint = "/tank/Backups/Machines"; }
+    { name = "tank/Backups/Machines/Hera";   mountpoint = "/tank/Backups/Machines/Hera"; }
+    { name = "tank/Backups/Machines/Clio";   mountpoint = "/tank/Backups/Machines/Clio"; }
+    { name = "tank/Backups/Machines/Vulcan"; mountpoint = "/tank/Backups/Machines/Vulcan"; }
+    { name = "tank/Backups/Machines/Athena"; mountpoint = "/tank/Backups/Machines/Athena"; }
+    { name = "tank/Backups/Games";           mountpoint = "/tank/Backups/Games"; }
+    { name = "tank/Databases";               mountpoint = "/tank/Databases"; }
+    { name = "tank/Desktop";                 mountpoint = "/tank/Desktop"; }
+    { name = "tank/Documents";               mountpoint = "/tank/Documents"; }
+    { name = "tank/Downloads";               mountpoint = "/tank/Downloads"; }
+    { name = "tank/Home";                    mountpoint = "/tank/Home"; }
+    { name = "tank/Machines";                mountpoint = "/tank/Machines"; }
+    { name = "tank/Media";                   mountpoint = "/tank/Media"; }
+    { name = "tank/Models";                  mountpoint = "/tank/Models"; }
+    { name = "tank/Models/HuggingFace";      mountpoint = "/tank/Models/HuggingFace"; }
+    { name = "tank/Models/Llama.cpp";        mountpoint = "/tank/Models/Llama.cpp"; }
+    { name = "tank/Movies";                  mountpoint = "/tank/Movies"; }
+    { name = "tank/Music";                   mountpoint = "/tank/Music"; }
+    { name = "tank/Photos";                  mountpoint = "/tank/Photos"; }
+    { name = "tank/Pictures";                mountpoint = "/tank/Pictures"; }
+    { name = "tank/Video";                   mountpoint = "/tank/Video"; }
+    { name = "tank/Video/Zoom";              mountpoint = "/tank/Video/Zoom"; }
+    { name = "tank/doc";                     mountpoint = "/tank/doc"; }
+    { name = "tank/iCloud";                  mountpoint = "/tank/iCloud"; }
+    { name = "tank/src";                     mountpoint = "/tank/src"; }
   ];
 
   # Function to generate a Samba share name from ZFS dataset name
@@ -132,17 +134,6 @@ in
           # Logging
           "logging" = "systemd";
           "log level" = "1";
-        };
-
-        # Manual share for Teable storage
-        "tank-Services-teable" = {
-          path = "/tank/Services/teable";
-          comment = "Teable Database Platform Storage";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0664";
-          "directory mask" = "0775";
         };
       } // zfsShares;
     };

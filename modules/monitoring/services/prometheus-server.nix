@@ -18,6 +18,7 @@ let
     "metabase.yaml"
     "home-assistant.yaml"
     "home-assistant-backup.yaml"
+    "local-backup.yaml"
   ];
 in
 {

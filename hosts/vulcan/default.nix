@@ -33,6 +33,7 @@
     ../../modules/services/certificate-automation.nix
     ../../modules/services/databases.nix
     ../../modules/services/postgresql-backup.nix
+    ../../modules/services/local-backup.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/web.nix
     ../../modules/services/media.nix

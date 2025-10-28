@@ -483,6 +483,7 @@ in
             "https://litellm.vulcan.lan"
             "https://metabase.vulcan.lan"
             "https://teable.vulcan.lan"
+            "https://vanna.vulcan.lan"
           ];
         }];
         relabel_configs = [

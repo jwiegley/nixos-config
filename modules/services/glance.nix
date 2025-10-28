@@ -225,6 +225,10 @@ with lib;
                           url = "https://metabase.vulcan.lan";
                         }
                         {
+                          title = "Vanna.AI";
+                          url = "https://vanna.vulcan.lan";
+                        }
+                        {
                           title = "LiteLLM";
                           url = "https://litellm.vulcan.lan/ui";
                         }

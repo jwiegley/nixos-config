@@ -1,0 +1,105 @@
+groups:
+  - name: vanna_service
+    interval: 60s
+    rules:
+      - alert: VannaServiceDown
+        expr: systemd_unit_state{name="vanna.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: vanna
+        annotations:
+          summary: "Vanna.AI container service is down"
+          description: |
+            Vanna.AI container has been down for {{ $value }} minutes.
+            Text-to-SQL generation service is unavailable.
+
+            Check service status: systemctl status vanna.service
+            Check container: podman ps -a | grep vanna
+            View logs: journalctl -u vanna -f
+            Check podman logs: podman logs vanna
+
+      - alert: VannaHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://vanna.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: vanna
+        annotations:
+          summary: "Vanna.AI HTTPS probe failed"
+          description: |
+            Vanna.AI web interface at https://vanna.vulcan.lan is not responding.
+            Text-to-SQL query interface is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://vanna.vulcan.lan
+            Check container: podman ps | grep vanna
+            Test local endpoint: curl -I http://127.0.0.1:5000
+
+      - alert: VannaSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://vanna.vulcan.lan"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: vanna
+        annotations:
+          summary: "Vanna.AI is responding slowly"
+          description: |
+            Vanna.AI response time is {{ $value }}s (threshold: 10s).
+            SQL generation may be slow due to LLM latency.
+
+            Check container resources: podman stats vanna
+            Check LiteLLM: systemctl status litellm
+            View LiteLLM connection: curl -s http://10.88.0.1:4000/health
+            Check FAISS vector store size: du -sh /var/lib/vanna/faiss
+
+      - alert: VannaContainerRestarts
+        expr: rate(systemd_unit_state{name="vanna.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: vanna
+        annotations:
+          summary: "Vanna.AI container is restarting frequently"
+          description: |
+            Vanna.AI container has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability.
+
+            View recent logs: journalctl -u vanna --since "15 minutes ago"
+            Check container logs: podman logs vanna --tail 100
+            Check for OOM: dmesg | grep -i "vanna\|oom"
+            Verify LiteLLM connection: curl http://10.88.0.1:4000/health
+
+      - alert: VannaLLMConnectionFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://vanna.vulcan.lan"} == 0 and systemd_unit_state{name="vanna.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: vanna
+        annotations:
+          summary: "Vanna.AI cannot connect to LiteLLM backend"
+          description: |
+            Vanna.AI container is running but web interface is down.
+            This likely indicates a LiteLLM connection failure.
+
+            Check LiteLLM: systemctl status litellm
+            Test LiteLLM API: curl http://10.88.0.1:4000/health
+            Check container logs: podman logs vanna | grep -i "litellm\|openai\|connection"
+            Verify API key is loaded: podman exec vanna env | grep OPENAI_API
+
+      - alert: VannaHighMemoryUsage
+        expr: container_memory_usage_bytes{name="vanna"} / container_spec_memory_limit_bytes{name="vanna"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: vanna
+        annotations:
+          summary: "Vanna.AI is using high memory"
+          description: |
+            Vanna.AI memory usage is {{ $value | humanizePercentage }} of limit.
+            FAISS vector store or sentence-transformers models may be consuming memory.
+
+            Check container stats: podman stats vanna
+            Check FAISS index size: du -sh /var/lib/vanna/faiss
+            Review model size: podman exec vanna ls -lh /root/.cache/torch/sentence_transformers
+            Consider clearing FAISS cache or reducing embeddings

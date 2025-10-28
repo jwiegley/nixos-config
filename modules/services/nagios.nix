@@ -236,6 +236,7 @@ let
     { name = "silly-tavern"; display = "Silly Tavern"; }
     { name = "teable"; display = "Teable Database Platform"; }
     { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; }
+    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; }
     { name = "wallabag"; display = "Wallabag Read-Later"; }
   ];
 
@@ -974,6 +975,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: victoriametrics.vulcan.lan
       check_command           check_ssl_cert!victoriametrics.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: vanna.vulcan.lan
+      check_command           check_ssl_cert!vanna.vulcan.lan
       service_groups          ssl-certificates
     }
 

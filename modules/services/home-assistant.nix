@@ -439,6 +439,21 @@ in
             "sensor.*_room_*"
             "switch.*_room_*"
 
+            # Dreame Vacuum: Exclude cameras, maps, and non-essential sensors (battery optimization)
+            "camera.*dreame*" # All map cameras
+            "sensor.*dreame*map*" # Map-related sensors
+            "sensor.*dreame*_info" # Diagnostic info sensors
+            "sensor.*dreame*_last_clean*" # Cleaning history timestamps
+            "sensor.*dreame*_total_clean*" # Cumulative statistics
+            "sensor.*dreame*_cleaning_time*" # Time statistics
+            "sensor.*dreame*_cleaning_area*" # Area statistics
+            "sensor.*dreame*_main_brush*" # Consumable sensors (if not needed)
+            "sensor.*dreame*_side_brush*" # Consumable sensors (if not needed)
+            "sensor.*dreame*_filter*" # Consumable sensors (if not needed)
+            "sensor.*dreame*_sensor_dirty*" # Consumable sensors (if not needed)
+            "sensor.*dreame*_mop*" # Mop-related sensors (if not needed)
+            "binary_sensor.*dreame*_mop*" # Mop-related binary sensors
+
             # iCloud3: Exclude high-frequency diagnostic/status sensors
             "sensor.icloud3_event_log"
             "sensor.*_info" # Device info updates constantly
@@ -543,6 +558,22 @@ in
             "device_tracker.dreame_*"
             "device_tracker.espressif_*"
             "device_tracker.98_03_8e_*" # MAC address trackers
+
+            # Dreame Vacuum: Exclude cameras, maps, and non-essential sensors (battery optimization)
+            "camera.*dreame*" # All map cameras
+            "sensor.*dreame*map*" # Map-related sensors
+            "sensor.*dreame*_last_clean*" # Cleaning history timestamps
+            "sensor.*dreame*_total_clean*" # Cumulative statistics
+            "sensor.*dreame*_cleaning_time*" # Time statistics
+            "sensor.*dreame*_cleaning_area*" # Area statistics
+            "sensor.*dreame*_main_brush*" # Consumable sensors
+            "sensor.*dreame*_side_brush*" # Consumable sensors
+            "sensor.*dreame*_filter*" # Consumable sensors
+            "sensor.*dreame*_sensor_dirty*" # Consumable sensors
+            "sensor.*dreame*_mop*" # Mop-related sensors
+            "binary_sensor.*dreame*_mop*" # Mop-related binary sensors
+            "select.*dreame*_room_*" # Per-room configuration
+            "switch.*dreame*_room_*" # Per-room switches
           ];
         };
       };
@@ -680,7 +711,7 @@ in
             # Sensors removed - they clutter HomeKit and cause 100+ "Continue" prompts
             # If you need specific sensors, use include_entities instead
             "script" # ADT security system scripts
-            "vacuum" # Dreame robot vacuum
+            # "vacuum" # REMOVED: Dreame vacuum - excessive HomeKit polling causes battery drain
             "media_player" # LG webOS TV
             "camera" # Ring doorbell cameras
             "button" # Doorbell buttons, etc.
@@ -692,6 +723,8 @@ in
             "sensor.*_battery" # Battery sensors often clutter HomeKit
             "binary_sensor.*_connectivity" # Connectivity sensors
             "sensor.inverter_*" # Enphase solar inverter sensors (too many)
+            "camera.*dreame*" # Dreamebot map cameras - causes excessive polling/battery drain
+            "sensor.*dreame*map*" # Dreamebot map sensors
             # "sensor.*_probe_*" # Traeger grill probe sensors
             # "climate.slugify_*" # Traeger grill climate entities
           ];

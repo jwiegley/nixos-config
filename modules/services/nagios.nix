@@ -18,6 +18,78 @@ let
     '';
   };
 
+  # Check plugin for local backup age monitoring
+  checkBackupAge = pkgs.writeShellScript "check_backup_age.sh" ''
+    set -euo pipefail
+
+    # Configuration
+    BACKUP_NAME="''${1:-}"
+    THRESHOLD_SECONDS="''${2:-14400}"  # Default: 4 hours
+    BACKUP_BASE_DIR="/tank/Backups/vulcan"
+    TIMESTAMP_FILE="''${BACKUP_BASE_DIR}/.''${BACKUP_NAME}.latest"
+
+    # Nagios exit codes
+    STATE_OK=0
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+
+    # Check arguments
+    if [[ -z "$BACKUP_NAME" ]]; then
+      echo "UNKNOWN: Backup name not specified"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    if ! [[ "$THRESHOLD_SECONDS" =~ ^[0-9]+$ ]]; then
+      echo "UNKNOWN: Threshold must be a positive integer"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Check if /tank is mounted
+    if ! ${pkgs.util-linux}/bin/mountpoint -q /tank; then
+      echo "CRITICAL: /tank is not mounted - backups cannot be checked"
+      exit "$STATE_CRITICAL"
+    fi
+
+    # Check if timestamp file exists
+    if [[ ! -f "$TIMESTAMP_FILE" ]]; then
+      echo "CRITICAL: Backup timestamp file not found: $TIMESTAMP_FILE"
+      exit "$STATE_CRITICAL"
+    fi
+
+    # Get current time and file modification time
+    CURRENT_TIME=$(${pkgs.coreutils}/bin/date +%s)
+    FILE_TIME=$(${pkgs.coreutils}/bin/stat -c %Y "$TIMESTAMP_FILE" 2>/dev/null || echo 0)
+
+    if [[ "$FILE_TIME" -eq 0 ]]; then
+      echo "UNKNOWN: Unable to read timestamp from $TIMESTAMP_FILE"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Calculate age
+    AGE_SECONDS=$((CURRENT_TIME - FILE_TIME))
+    AGE_MINUTES=$((AGE_SECONDS / 60))
+    AGE_HOURS=$((AGE_SECONDS / 3600))
+
+    # Check against threshold
+    if [[ $AGE_SECONDS -gt $THRESHOLD_SECONDS ]]; then
+      THRESHOLD_HOURS=$((THRESHOLD_SECONDS / 3600))
+      if [[ $AGE_HOURS -ge 1 ]]; then
+        echo "CRITICAL: Backup '$BACKUP_NAME' is ''${AGE_HOURS}h ''${AGE_MINUTES}m old (threshold: ''${THRESHOLD_HOURS}h)"
+      else
+        echo "CRITICAL: Backup '$BACKUP_NAME' is ''${AGE_MINUTES}m old (threshold: $((THRESHOLD_SECONDS / 60))m)"
+      fi
+      exit "$STATE_CRITICAL"
+    fi
+
+    # All good
+    if [[ $AGE_HOURS -ge 1 ]]; then
+      echo "OK: Backup '$BACKUP_NAME' is ''${AGE_HOURS}h ''${AGE_MINUTES}m old"
+    else
+      echo "OK: Backup '$BACKUP_NAME' is ''${AGE_MINUTES}m old"
+    fi
+    exit "$STATE_OK"
+  '';
+
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";
 
@@ -549,6 +621,11 @@ let
       command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -I -i $ARG2$
     }
 
+    define command {
+      command_name    check_backup_age
+      command_line    ${checkBackupAge} $ARG1$ $ARG2$
+    }
+
     ###############################################################################
     # HOSTS
     ###############################################################################
@@ -613,6 +690,11 @@ let
     define servicegroup {
       servicegroup_name  backup-services
       alias              Backup Services
+    }
+
+    define servicegroup {
+      servicegroup_name  local-backups
+      alias              Local System Backups
     }
 
     define servicegroup {
@@ -1000,6 +1082,37 @@ let
       service_description     SSL Cert: wallabag.vulcan.lan
       check_command           check_ssl_cert!wallabag.vulcan.lan
       service_groups          ssl-certificates
+    }
+
+    ###############################################################################
+    # SERVICES - LOCAL BACKUPS
+    ###############################################################################
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Local Backup: /etc
+      check_command           check_backup_age!etc!14400
+      check_interval          15
+      service_groups          local-backups
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Local Backup: /home
+      check_command           check_backup_age!home!14400
+      check_interval          15
+      service_groups          local-backups
+    }
+
+    define service {
+      use                     generic-service
+      host_name               vulcan
+      service_description     Local Backup: /var/lib
+      check_command           check_backup_age!var-lib!14400
+      check_interval          15
+      service_groups          local-backups
     }
 
     ###############################################################################

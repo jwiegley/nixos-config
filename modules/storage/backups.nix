@@ -105,9 +105,9 @@ let
     "Git"
     "Images"
     "Kadena"
-    "rpool"
+    "Machines"
     "pair"
-    "scratch"
+    "rpool"
   ];
 
   attrNameList = attrs:

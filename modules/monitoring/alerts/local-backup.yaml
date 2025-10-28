@@ -1,0 +1,54 @@
+groups:
+  - name: local_backup_alerts
+    interval: 60s
+    rules:
+      # Alert when local backup hasn't run in 4 hours (14400 seconds)
+      - alert: LocalBackupStale
+        expr: (time() - local_backup_last_success_timestamp) > 14400
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: local-backup
+        annotations:
+          summary: "Local backup is stale on {{ $labels.host }}"
+          description: |
+            Local backup {{ $labels.backup }} ({{ $labels.source }} -> {{ $labels.destination }})
+            hasn't run successfully in over 4 hours.
+            Last successful backup: {{ $value | humanizeDuration }} ago.
+            This may indicate:
+            - The backup timer is not running
+            - The /tank filesystem is not mounted
+            - The rsync process is failing
+            Action: Check systemctl status local-backup.timer and journalctl -u local-backup
+
+      # Alert when local backup timestamp file is missing
+      - alert: LocalBackupMissing
+        expr: absent(local_backup_last_success_timestamp{backup="etc"}) or absent(local_backup_last_success_timestamp{backup="home"}) or absent(local_backup_last_success_timestamp{backup="var-lib"})
+        for: 10m
+        labels:
+          severity: critical
+          category: storage
+          service: local-backup
+        annotations:
+          summary: "Local backup metrics missing"
+          description: |
+            One or more local backup metrics are not being reported.
+            This indicates that backups may not be running at all.
+            Expected backups: etc, home, var-lib
+            Action: Check if local-backup.service has ever run successfully
+
+      # Warning when backup is getting old (2 hours)
+      - alert: LocalBackupAging
+        expr: (time() - local_backup_last_success_timestamp) > 7200
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: local-backup
+        annotations:
+          summary: "Local backup aging on {{ $labels.host }}"
+          description: |
+            Local backup {{ $labels.backup }} ({{ $labels.source }}) hasn't run in over 2 hours.
+            Last backup: {{ $value | humanizeDuration }} ago.
+            Normal interval is hourly. Check if the backup timer is functioning correctly.

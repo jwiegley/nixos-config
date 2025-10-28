@@ -9,6 +9,11 @@
     # Hard-code DNS servers to prevent DHCP from adding extras
     nameservers = [ "127.0.0.1" "192.168.1.1" ];
 
+    # Disable reverse path filtering in firewall
+    # Required for asymmetric routing between WiFi (192.168.3.x) and Ethernet
+    # (192.168.1.x) networks
+    # firewall.checkReversePath = false;
+
     hosts = {
       "127.0.0.2" = lib.mkForce [];
       "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
@@ -27,7 +32,8 @@
       insertNameservers = [ "127.0.0.1" "192.168.1.1" ];
     };
 
-    # Note: When NetworkManager is enabled, per-interface useDHCP is managed by NetworkManager
+    # Note: When NetworkManager is enabled, per-interface useDHCP is managed
+    # by NetworkManager
     # The Ethernet interface (end0) will be managed by NetworkManager
     # WiFi interface (wlp1s0f0) will also be managed by NetworkManager
   };
@@ -51,5 +57,13 @@
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
     "net.ipv4.conf.all.forwarding" = 1;
+
+    # Disable reverse path filtering to allow asymmetric routing
+    # This is needed because traffic from 192.168.3.x arrives on end0 (via
+    # router) but routing table shows 192.168.3.0/24 is reachable via wlp1s0f0
+    # "net.ipv4.conf.all.rp_filter" = 0;
+    # "net.ipv4.conf.default.rp_filter" = 0;
+    # "net.ipv4.conf.end0.rp_filter" = 0;
+    # "net.ipv4.conf.wlp1s0f0.rp_filter" = 0;
   };
 }

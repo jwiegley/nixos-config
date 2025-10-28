@@ -22,6 +22,7 @@ in {
       description = "Temporarily adjust routing metrics for Home Assistant WiFi binding";
       before = [ "home-assistant.service" ];
       after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
       # Ensure this service stops AFTER home-assistant stops
       requiredBy = [ "home-assistant.service" ];

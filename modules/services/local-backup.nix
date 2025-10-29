@@ -161,7 +161,8 @@ in
         NoNewPrivileges = true;
 
         # Timeout and logging
-        TimeoutStartSec = "1h";
+        # Increased from 1h to 2h to accommodate slow backups with many changed files
+        TimeoutStartSec = "2h";
         StandardOutput = "journal";
         StandardError = "journal";
       };

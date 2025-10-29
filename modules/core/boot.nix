@@ -20,8 +20,4 @@
       # containers
     };
   };
-
-  systemd.services.zfs-import-tank = {
-    after = [ "zfs.target" ];
-  };
 }

@@ -142,6 +142,9 @@ in
       description = "Local backup of system directories to /tank";
       after = [ "local-fs.target" ];
 
+      # Don't restart during nixos-rebuild switch - only run via timer
+      restartIfChanged = false;
+
       # Only run if /tank is mounted
       unitConfig = {
         ConditionPathIsMountPoint = "/tank";

@@ -16,7 +16,7 @@ set -euo pipefail
 # Configuration
 BACKUP_NAME="${1:-}"
 THRESHOLD_SECONDS="${2:-14400}"  # Default: 4 hours
-BACKUP_BASE_DIR="/tank/Backups/vulcan"
+BACKUP_BASE_DIR="/tank/Backups/Machines/Vulcan"
 TIMESTAMP_FILE="${BACKUP_BASE_DIR}/.${BACKUP_NAME}.latest"
 
 # Nagios exit codes

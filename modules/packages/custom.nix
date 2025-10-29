@@ -95,7 +95,7 @@ in
       ethtool
       gh
       gnupg
-      # haskellPackages.sizes
+      haskellPackages.sizes
       httm
       iperf3
       jq

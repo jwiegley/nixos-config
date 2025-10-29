@@ -3,8 +3,16 @@ let
   # Import the package definitions to capture paths at evaluation time
   hacsFrontendDef = import ./hacs-frontend.nix;
   miniRacerDef = import ./mini-racer.nix;
+
+  # Import Haskell overlay to fix broken packages
+  haskellOverlay = import ./haskell-sizes.nix;
+
+  # Apply Haskell overlay first to get patched haskellPackages
+  prevWithHaskell = prev // (haskellOverlay final prev);
 in
 {
+  # Inherit the patched haskellPackages from the Haskell overlay
+  inherit (prevWithHaskell) haskellPackages;
   # Extend Python package sets system-wide using pythonPackagesExtensions
   # This ensures all Python derivations (including Home Assistant's) get our custom packages
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [] ++ [

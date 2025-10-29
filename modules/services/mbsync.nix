@@ -29,10 +29,10 @@ in
         Far :johnw-remote:
         Near :dovecot-local:
         Patterns * !Import !Import/*
-        Create Near
+        Create Both
         Remove None
-        Expunge None
-        Sync Pull
+        Expunge Both
+        Sync Full
         SyncState /var/lib/mbsync-johnw/
         CopyArrivalDate yes
       '';

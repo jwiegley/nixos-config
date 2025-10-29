@@ -18,6 +18,8 @@ let
         # Exclude container overlay storage (ephemeral, causes rsync to hang)
         ".local/share/containers/storage/overlay/"
         ".local/share/docker/overlay2/"
+        # Exclude large data directories (backed up separately or not needed)
+        "johnw/node_modules/"        # Development dependencies - 784MB
       ];
     }
     {
@@ -111,9 +113,9 @@ let
         # Touch timestamp file to indicate successful backup
         ${pkgs.coreutils}/bin/touch "${backupBaseDir}/.${backup.name}.latest"
 
-        # Log backup size
-        size=$(${pkgs.coreutils}/bin/du -sh "${backupBaseDir}/${backup.name}" | ${pkgs.coreutils}/bin/cut -f1)
-        log "Backup size for ${backup.name}: $size"
+        # Skip size calculation for now (du is too slow on large directories)
+        # TODO: Consider using a faster method or caching size info
+        log "Completed backup for ${backup.name}"
       else
         log "ERROR: Failed to backup ${backup.name} (rsync exit code: $rc)"
         overall_success=false

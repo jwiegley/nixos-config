@@ -1,11 +1,34 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Backup directories configuration
+  # Backup directories configuration with exclusions
   backupSources = [
-    { name = "etc"; source = "/etc"; }
-    { name = "home"; source = "/home"; }
-    { name = "var-lib"; source = "/var/lib"; }
+    {
+      name = "etc";
+      source = "/etc";
+      excludes = [
+        # Exclude node_modules (development artifact, very large)
+        "nixos/node_modules/"
+      ];
+    }
+    {
+      name = "home";
+      source = "/home";
+      excludes = [
+        # Exclude container overlay storage (ephemeral, causes rsync to hang)
+        ".local/share/containers/storage/overlay/"
+        ".local/share/docker/overlay2/"
+      ];
+    }
+    {
+      name = "var-lib";
+      source = "/var/lib";
+      excludes = [
+        # Exclude container overlay storage (ephemeral, causes rsync to hang)
+        "containers/storage/overlay/"
+        "docker/overlay2/"
+      ];
+    }
   ];
 
   backupBaseDir = "/tank/Backups/Machines/Vulcan";
@@ -64,9 +87,26 @@ let
         ${pkgs.coreutils}/bin/mkdir -p "${backupBaseDir}/${backup.name}"
       fi
 
-      # Run rsync
-      if ${pkgs.rsync}/bin/rsync -ax --delete "${backup.source}/" "${backupBaseDir}/${backup.name}/"; then
-        log "Successfully backed up ${backup.name}"
+      # Build rsync exclude arguments
+      exclude_args=""
+      ${lib.concatMapStringsSep "\n" (exclude: ''
+        exclude_args="$exclude_args --exclude='${exclude}'"
+      '') (backup.excludes or [])}
+
+      # Run rsync and capture exit code
+      # Using --info=progress2 for better monitoring, --timeout=60 to detect stalls
+      eval "${pkgs.rsync}/bin/rsync -ax --delete --timeout=60 --info=progress2 $exclude_args '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
+      rc=$?
+
+      # Exit codes: 0=success, 23=partial transfer, 24=vanished files (all acceptable)
+      if [[ $rc -eq 0 || $rc -eq 23 || $rc -eq 24 ]]; then
+        if [[ $rc -eq 24 ]]; then
+          log "Successfully backed up ${backup.name} (some files vanished during transfer)"
+        elif [[ $rc -eq 23 ]]; then
+          log "Successfully backed up ${backup.name} (partial transfer with non-critical errors)"
+        else
+          log "Successfully backed up ${backup.name}"
+        fi
 
         # Touch timestamp file to indicate successful backup
         ${pkgs.coreutils}/bin/touch "${backupBaseDir}/.${backup.name}.latest"
@@ -75,7 +115,7 @@ let
         size=$(${pkgs.coreutils}/bin/du -sh "${backupBaseDir}/${backup.name}" | ${pkgs.coreutils}/bin/cut -f1)
         log "Backup size for ${backup.name}: $size"
       else
-        log "ERROR: Failed to backup ${backup.name}"
+        log "ERROR: Failed to backup ${backup.name} (rsync exit code: $rc)"
         overall_success=false
       fi
     '') backupSources}

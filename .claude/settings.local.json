@@ -26,7 +26,8 @@
       "mcp__memory-keeper__context_save",
       "mcp__memory-keeper__context_checkpoint",
       "Skill(node-red)",
-      "Read(//home/johnw/.claude/skills/node-red/references/**)"
+      "Read(//home/johnw/.claude/skills/node-red/references/**)",
+      "Skill(nixos)"
     ],
     "deny": [],
     "ask": []

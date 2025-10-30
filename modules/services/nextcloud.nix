@@ -100,10 +100,13 @@ in
 
       # Email configuration (using existing Postfix)
       mail_smtpmode = "smtp";
-      mail_smtphost = "localhost";
-      mail_smtpport = 25;
-      mail_from_address = "nextcloud";
+      smtpsecure = "ssl";
+      mail_sendmailmode = "smtp";
+      mail_from_address = "johnw";
       mail_domain = "newartisans.com";
+      mail_smtphost = "smtp.vulcan.lan";
+      mail_smtpport = 465;
+      mail_smtpauth = 0;
     };
   };
 

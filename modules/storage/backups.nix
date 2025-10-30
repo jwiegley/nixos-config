@@ -102,9 +102,9 @@ let
   # Backup excludes
   backupExcludes = [
     "Assembly"
+    "Contracts"
     "Git"
     "Images"
-    "Kadena"
     "Machines"
     "pair"
     "rpool"

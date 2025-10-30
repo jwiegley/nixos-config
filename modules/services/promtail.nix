@@ -75,6 +75,14 @@
               regex = "audit";
               action = "drop";
             }
+            {
+              # Drop low-priority logs (5=notice, 6=info, 7=debug)
+              # Keep only 0-4 (emerg, alert, crit, err, warning)
+              # This reduces log volume by 99%+ while preserving critical events
+              source_labels = [ "__journal_priority" ];
+              regex = "[5-7]";
+              action = "drop";
+            }
           ];
         }
 

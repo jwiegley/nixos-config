@@ -218,7 +218,7 @@
         good   = "${pkgs.git}/bin/git bisect good";
         bad    = "${pkgs.git}/bin/git bisect bad";
         par    = "${pkgs.parallel}/bin/parallel";
-        rm     = "${pkgs.rmtrash}/bin/rmtrash";
+        # rm     = "${pkgs.rmtrash}/bin/rmtrash";
         rX     = "${pkgs.coreutils}/bin/chmod -R ugo+rX";
         scp    = "${pkgs.rsync}/bin/rsync -aP --inplace";
         switch = "sudo nixos-rebuild switch --flake /etc/nixos#vulcan";

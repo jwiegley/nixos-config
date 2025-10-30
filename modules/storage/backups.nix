@@ -124,6 +124,8 @@ let
         echo "=== $fileset ==="
         case "$operation" in
           check)
+            # Unlock any stale locks before starting check operations
+            /run/current-system/sw/bin/restic-$fileset unlock || true
             /run/current-system/sw/bin/restic-$fileset \
               --retry-lock=1h check
             /run/current-system/sw/bin/restic-$fileset \

@@ -371,7 +371,7 @@ let
       alias                           Nagios Admin
       service_notification_period     24x7
       host_notification_period        24x7
-      service_notification_options    w,u,c,r
+      service_notification_options    u,c,r
       host_notification_options       d,u,r
       service_notification_commands   notify-service-by-email
       host_notification_commands      notify-host-by-email
@@ -1159,7 +1159,7 @@ let
       check_interval          10
       retry_interval          2
       contact_groups          admins
-      notification_options    w,u,c,r
+      notification_options    u,c,r
       notification_interval   60
       notification_period     24x7
       register                0

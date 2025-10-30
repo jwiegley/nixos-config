@@ -29,7 +29,6 @@ let
         dedup_mailboxes                             \
                                                     \
             list/ledger                             \
-            list/kadena                             \
             list/haskell                            \
             list/haskell/hackage-trustees           \
             list/haskell/infrastructure             \
@@ -48,7 +47,6 @@ let
             list/github                             \
                                                     \
             mail/quantum                            \
-            mail/kadena                             \
                                                     \
             INBOX                                   \
                                                     \

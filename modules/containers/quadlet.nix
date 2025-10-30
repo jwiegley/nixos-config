@@ -3,6 +3,7 @@
 {
   # Import all container service modules
   imports = [
+    ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
     ./metabase-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue

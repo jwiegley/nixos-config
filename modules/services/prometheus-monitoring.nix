@@ -26,5 +26,6 @@
     ../monitoring/services/phpfpm-exporter.nix
     ../monitoring/services/zfs-exporter.nix
     ../monitoring/services/restic-metrics.nix
+    ../monitoring/services/changedetection-exporter.nix
   ];
 }

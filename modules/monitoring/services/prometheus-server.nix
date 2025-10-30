@@ -19,6 +19,7 @@ let
     "home-assistant.yaml"
     "home-assistant-backup.yaml"
     "local-backup.yaml"
+    "changedetection.yaml"
   ];
 in
 {

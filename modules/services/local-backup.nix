@@ -30,7 +30,7 @@ let
       source = "/var/lib";
       excludes = [
         # Exclude container overlay storage (ephemeral, causes rsync to hang)
-        "containers/storage/overlay/"
+        "containers/"
         "docker/overlay2/"
       ];
     }

@@ -5,15 +5,26 @@
   systemd.services.llama-swap = {
     description = "LLaMA Swap Service";
     documentation = [ "https://github.com/mostlygeek/llama-swap" ];
-    after = [ "network.target" ];
+
+    # Ensure network is fully ready before starting
+    after = [ "network-online.target" "multi-user.target" ];
+    wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
+
+    # Only start if config file exists
+    unitConfig = {
+      ConditionPathExists = "/home/johnw/Models/llama-swap.yaml";
+    };
 
     serviceConfig = {
       Type = "simple";
       User = "johnw";
       Group = "users";
       Restart = "always";
-      RestartSec = "5s";
+
+      # Increase restart delay to reduce log spam if config is missing
+      RestartSec = "30s";
+      StartLimitBurst = 3;
 
       # Service command
       ExecStart = ''
@@ -30,6 +41,11 @@
       ReadWritePaths = [ "/home/johnw/Models" ];
     };
   };
+
+  # Ensure Models directory exists
+  systemd.tmpfiles.rules = [
+    "d /home/johnw/Models 0755 johnw users -"
+  ];
 
   services.nginx.virtualHosts."llama-swap.vulcan.lan" = {
     forceSSL = true;

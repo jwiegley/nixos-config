@@ -751,16 +751,20 @@ in
 
   # Ensure Home Assistant can access secrets
   systemd.services.home-assistant = {
+    # Ensure all required services are ready before starting
     after = [
+      "network-online.target"
       "postgresql.service"
       "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
     wants = [
+      "network-online.target"
       "postgresql.service"
       "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
+    # Note: metric-manager dependency is handled via home-assistant-metric-trick.nix
 
     # Generate secrets.yaml and inject database URL into configuration.yaml
     preStart = ''

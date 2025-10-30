@@ -65,4 +65,25 @@
     lazydocker
     podman-tui
   ];
+
+  # Ensure podman service starts early and creates network properly
+  systemd.services.podman = {
+    wantedBy = [ "multi-user.target" "network-online.target" ];
+    after = [ "network.target" ];
+    before = [ "redis-litellm.service" "litellm.service" ];
+
+    # Ensure podman network is created and interface is up
+    postStart = ''
+      # Check if podman network exists, create if not
+      if ! ${pkgs.podman}/bin/podman network exists podman 2>/dev/null; then
+        echo "Creating podman network..."
+        ${pkgs.podman}/bin/podman network create --subnet 10.88.0.0/16 podman || true
+      fi
+
+      # Ensure the bridge interface is up
+      if ${pkgs.iproute2}/bin/ip link show podman0 >/dev/null 2>&1; then
+        ${pkgs.iproute2}/bin/ip link set podman0 up || true
+      fi
+    '';
+  };
 }

@@ -16,8 +16,11 @@ let
       source = "/home";
       excludes = [
         # Exclude container overlay storage (ephemeral, causes rsync to hang)
-        ".local/share/containers/storage/overlay/"
-        ".local/share/docker/overlay2/"
+        "johnw/.local/share/containers/storage/overlay/"
+        "johnw/.local/share/docker/overlay2/"
+        "johnw/.local/share/Trash/"
+        "johnw/.cache/"
+        "johnw/.npm/"
         # Exclude large data directories (backed up separately or not needed)
         "johnw/node_modules/"        # Development dependencies - 784MB
       ];
@@ -97,7 +100,7 @@ let
 
       # Run rsync and capture exit code
       # Using --info=progress2 for better monitoring, --timeout=60 to detect stalls
-      eval "${pkgs.rsync}/bin/rsync -ax --delete --timeout=60 --info=progress2 $exclude_args '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
+      eval "${pkgs.rsync}/bin/rsync -aHx --delete --timeout=60 --info=progress2 $exclude_args '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
       rc=$?
 
       # Exit codes: 0=success, 23=partial transfer, 24=vanished files (all acceptable)

@@ -71,5 +71,5 @@
   };
 
   networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.postfix.enable [ 587 ];
+    lib.mkIf config.services.postfix.enable [ 465 587 ];
 }

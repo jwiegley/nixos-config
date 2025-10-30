@@ -113,7 +113,7 @@
       ga = "git-annex";
 
       # File operations with safety
-      rm = "${pkgs.rmtrash}/bin/rmtrash";
+      # rm = "${pkgs.rmtrash}/bin/rmtrash";
       wipe = "srm -vfr";
       rX = "chmod -R ugo+rX";
       scp = "rsync -aP --inplace";

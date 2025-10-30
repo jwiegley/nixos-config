@@ -6,6 +6,9 @@
 }:
 
 let
+  bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
+  inherit (bindTankLib) bindTankPath;
+
   updateContainersScript = pkgs.writeShellScript "update-containers" ''
     set -euo pipefail
 
@@ -132,6 +135,11 @@ in
     group = "johnw";
     mode = "0400";
     restartUnits = [ "git-workspace-archive.service" ];
+  };
+
+  fileSystems = bindTankPath {
+    path = "/var/lib/git-workspace-archive";
+    device = "/tank/Backups/Git";
   };
 
   systemd = {

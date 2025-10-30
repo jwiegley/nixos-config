@@ -16,7 +16,7 @@ LOG_FILE = Path(os.getenv("LOG_FILE", "/var/log/nagios/nagios.log"))
 SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "25"))
 FROM_EMAIL = os.getenv("FROM_EMAIL", "nagios@vulcan.lan")
-TO_EMAIL = os.getenv("TO_EMAIL", "jwiegley@gmail.com")
+TO_EMAIL = os.getenv("TO_EMAIL", "johnw@newartisans.com")
 
 def parse_status_file():
     """Parse Nagios status.dat file to get current service states."""

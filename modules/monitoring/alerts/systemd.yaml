@@ -41,16 +41,16 @@ groups:
           description: "Service {{ $labels.name }} has restarted multiple times in the last 15 minutes"
 
       # Services in activating state for too long
-      # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes)
+      # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes), local-backup (can take up to 10 minutes)
       - alert: ServiceStuckActivating
-        expr: systemd_unit_state{state="activating",type="service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service"} == 1
-        for: 5m
+        expr: systemd_unit_state{state="activating",type="service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service",name!="local-backup.service"} == 1
+        for: 15m
         labels:
           severity: warning
           category: systemd
         annotations:
           summary: "Service {{ $labels.name }} stuck in activating state"
-          description: "Service {{ $labels.name }} has been in activating state for more than 5 minutes on {{ $labels.instance }}"
+          description: "Service {{ $labels.name }} has been in activating state for more than 15 minutes on {{ $labels.instance }}"
 
       # Services in deactivating state for too long
       - alert: ServiceStuckDeactivating

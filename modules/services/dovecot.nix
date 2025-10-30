@@ -58,6 +58,7 @@
       protocol imap {
         mail_plugins = $mail_plugins old_stats fts fts_flatcurve
         imap_idle_notify_interval = 2 mins
+        mail_max_userip_connections = 50
         imap_capability = +IDLE SORT THREAD=REFERENCES THREAD=REFS MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 LITERAL+ NOTIFY SPECIAL-USE
       }
 

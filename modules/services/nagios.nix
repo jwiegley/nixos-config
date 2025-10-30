@@ -514,7 +514,7 @@ let
 
     define command {
       command_name    check_systemd_service
-      command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 90 -c 180
+      command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
     }
 
     define command {

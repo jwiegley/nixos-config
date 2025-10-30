@@ -52,10 +52,26 @@ in
     };
   };
 
-  # Ensure redis-litellm waits for podman network
+  # Ensure redis-litellm waits for podman network to be ready
   systemd.services.redis-litellm = {
-    after = [ "sys-subsystem-net-devices-podman0.device" "podman.service" ];
-    bindsTo = [ "sys-subsystem-net-devices-podman0.device" ];
+    after = [ "network-online.target" "podman.service" ];
+    wants = [ "network-online.target" ];
+    # Remove hard binding to podman0 device to prevent dependency failures
+
+    # Wait for podman network to be ready before starting
+    preStart = ''
+      # Wait for podman0 interface to be up (up to 30 seconds)
+      for i in {1..30}; do
+        if ${pkgs.iproute2}/bin/ip link show podman0 >/dev/null 2>&1; then
+          if ${pkgs.iproute2}/bin/ip addr show podman0 | ${pkgs.gnugrep}/bin/grep -q "10.88.0.1"; then
+            echo "Podman network is ready"
+            break
+          fi
+        fi
+        echo "Waiting for podman network to be ready... ($i/30)"
+        sleep 1
+      done
+    '';
   };
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [

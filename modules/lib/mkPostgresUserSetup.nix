@@ -27,7 +27,9 @@
   }: {
     systemd.services."postgresql-${user}-setup" = {
       description = "Set PostgreSQL password for ${user} user";
-      after = [ "postgresql.service" ];
+
+      # Ensure PostgreSQL is fully ready before attempting connection
+      after = [ "postgresql.service" "network.target" ];
       wants = [ "postgresql.service" ];
       before = lib.optional (dependentService != null) dependentService;
       wantedBy = [ "multi-user.target" ];
@@ -36,7 +38,22 @@
         Type = "oneshot";
         User = "postgres";
         RemainAfterExit = true;
+        # Don't fail if password is already set
+        SuccessExitStatus = "0 2";
       };
+
+      # Wait for PostgreSQL to be ready before attempting to set password
+      preStart = ''
+        # Wait for PostgreSQL to be ready (up to 30 seconds)
+        for i in {1..30}; do
+          if ${config.services.postgresql.package}/bin/pg_isready -U postgres >/dev/null 2>&1; then
+            echo "PostgreSQL is ready"
+            break
+          fi
+          echo "Waiting for PostgreSQL to be ready... ($i/30)"
+          sleep 1
+        done
+      '';
 
       script = ''
         # Check if password is already set by trying to connect

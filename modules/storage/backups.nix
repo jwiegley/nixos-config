@@ -233,6 +233,11 @@ in
           RequiresMountsFor = [ "/tank" ];
           ConditionPathIsMountPoint = "/tank";
         };
+        # Prevent restart during system reconfiguration if backup is running
+        # This avoids repository lock conflicts when nixos-rebuild runs during a backup
+        serviceConfig = {
+          X-RestartIfChanged = false;
+        };
       };
     }) (builtins.attrNames config.services.restic.backups)))
 

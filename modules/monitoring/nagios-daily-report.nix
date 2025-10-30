@@ -27,7 +27,7 @@ in
 
     toEmail = mkOption {
       type = types.str;
-      default = "jwiegley@gmail.com";
+      default = "johnw@newartisans.com";
       description = "Email address to send the daily report to";
     };
 

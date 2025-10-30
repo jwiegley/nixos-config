@@ -232,6 +232,10 @@ with lib;
                           title = "LiteLLM";
                           url = "https://litellm.vulcan.lan/ui";
                         }
+                        {
+                          title = "ChangeDetection";
+                          url = "https://changes.vulcan.lan";
+                        }
                       ];
                     }
                     {

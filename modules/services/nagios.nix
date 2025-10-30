@@ -247,6 +247,9 @@ let
     { name = "cockpit.service"; display = "Cockpit Web Console"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
+    { name = "changedetection-pod.service"; display = "ChangeDetection Pod"; }
+    { name = "changedetection-app-container.service"; display = "ChangeDetection Application"; }
+    { name = "changedetection-exporter-container.service"; display = "ChangeDetection Exporter"; }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)
@@ -897,6 +900,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: alertmanager.vulcan.lan
       check_command           check_ssl_cert!alertmanager.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: changes.vulcan.lan
+      check_command           check_ssl_cert!changes.vulcan.lan
       service_groups          ssl-certificates
     }
 

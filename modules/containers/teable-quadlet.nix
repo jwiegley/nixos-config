@@ -11,6 +11,7 @@ in
       image = "ghcr.io/teableio/teable-community:latest";
       port = 3001;
       requiresPostgres = true;
+      containerUser = "container-db";  # Run rootless as container-db user
 
       # Enable health checks
       healthCheck = {

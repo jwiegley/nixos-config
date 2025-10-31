@@ -6,10 +6,7 @@
     acceptTerms = true;
     defaults = {
       email = "johnw@newartisans.com";
-      # Use production Let's Encrypt server
       server = "https://acme-v02.api.letsencrypt.org/directory";
-      # For testing, use staging server:
-      # server = "https://acme-staging-v02.api.letsencrypt.org/directory";
     };
   };
 

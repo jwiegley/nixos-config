@@ -608,13 +608,6 @@ in
       # 2. Add custom repository in HACS: https://github.com/travisghansen/hass-opnsense
       # 3. Install the integration via HACS
       # 4. Configure via UI: Settings > Devices & Services > Add Integration > OPNsense
-      # Built-in YAML configuration disabled:
-      # opnsense = {
-      #   url = "!secret opnsense_url";
-      #   api_key = "!secret opnsense_api_key";
-      #   api_secret = "!secret opnsense_api_secret";
-      #   verify_ssl = true;
-      # };
 
       # Enable automation UI
       automation = "!include automations.yaml";

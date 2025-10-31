@@ -46,9 +46,9 @@ in
       };
 
       environments = {
-        OPNSENSE_EXPORTER_OPS_PROTOCOL = "http";  # Proxy uses HTTP internally
-        OPNSENSE_EXPORTER_OPS_API = "10.88.0.1:8444";  # Point to nginx proxy on podman0 bridge
-        OPNSENSE_EXPORTER_OPS_INSECURE = "true";  # No TLS to proxy
+        OPNSENSE_EXPORTER_OPS_PROTOCOL = "http";
+        OPNSENSE_EXPORTER_OPS_API = "10.88.0.1:8444";
+        OPNSENSE_EXPORTER_OPS_INSECURE = "true";
         OPNSENSE_EXPORTER_INSTANCE_LABEL = "opnsense-router";
         # Disable SSL cert since we're using insecure mode
         # SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";

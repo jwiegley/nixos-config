@@ -11,6 +11,7 @@ in
       image = "localhost/vanna:latest";
       port = 5000;
       requiresPostgres = false;  # Vanna connects to databases dynamically, no bootstrap needed
+      containerUser = "container-db";  # Run rootless as container-db user
 
       # Enable health checks using Python (Flask app)
       healthCheck = {
@@ -95,9 +96,9 @@ in
       };
 
       tmpfilesRules = [
-        "d /var/lib/vanna 0755 root root -"
-        "d /var/lib/vanna/faiss 0755 root root -"
-        "d /var/lib/vanna/cache 0755 root root -"
+        "d /var/lib/vanna 0755 container-db container-db -"
+        "d /var/lib/vanna/faiss 0755 container-db container-db -"
+        "d /var/lib/vanna/cache 0755 container-db container-db -"
       ];
     })
   ];

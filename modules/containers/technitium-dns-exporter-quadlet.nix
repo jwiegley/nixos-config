@@ -53,6 +53,7 @@ in
       image = "localhost/technitium-dns-exporter:latest";
       port = 9274;
       requiresPostgres = false;
+      containerUser = "container-monitor";  # Run rootless as container-monitor user
 
       # Enable health checks
       healthCheck = {

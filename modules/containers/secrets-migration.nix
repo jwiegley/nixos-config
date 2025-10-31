@@ -36,13 +36,14 @@
       };
 
       # Wallabag application secrets
-      "wallabag-secrets-container-db" = {
-        key = "wallabag-secrets";
-        owner = "container-db";
-        group = "container-db";
-        mode = "0400";
-        path = "/run/secrets-container-db/wallabag-secrets";
-      };
+      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
+      # "wallabag-secrets-container-db" = {
+      #   key = "wallabag-secrets";
+      #   owner = "container-db";
+      #   group = "container-db";
+      #   mode = "0400";
+      #   path = "/run/secrets-container-db/wallabag-secrets";
+      # };
 
       # Teable PostgreSQL password
       "teable-postgres-password-container-db" = {

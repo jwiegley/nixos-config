@@ -11,6 +11,7 @@ in
       image = "docker.io/wallabag/wallabag:latest";
       port = 9091;
       requiresPostgres = true;
+      containerUser = "container-db";  # Run rootless as container-db user
 
       # Enable health checks
       healthCheck = {

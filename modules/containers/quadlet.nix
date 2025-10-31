@@ -3,6 +3,7 @@
 {
   # Import all container service modules
   imports = [
+    ./budgetboard-quadlet.nix
     ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
     ./metabase-quadlet.nix
@@ -55,9 +56,10 @@
     # 5000: vanna
     # 5380: Technitium DNS
     # 5432: PostgreSQL
+    # 6253: budgetboard-client
     # 8085: Redis
     # 9182: mssql-exporter
-    allowedTCPPorts = [ 1433 3001 3200 4000 5000 5380 5432 8085 9182 ];
+    allowedTCPPorts = [ 1433 3001 3200 4000 5000 5380 5432 6253 8085 9182 ];
     allowedUDPPorts = [ 53 ];
   };
 

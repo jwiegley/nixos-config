@@ -21,6 +21,12 @@ in
       secretPath = config.sops.secrets."teable-postgres-password".path;
       dependentService = "podman-teable.service";
     })
+    (mkPostgresUserSetup {
+      user = "budgetboard";
+      database = "budgetboard";
+      secretPath = config.sops.secrets."budgetboard/database-password".path;
+      dependentService = "podman-budget-board-server.service";
+    })
   ];
 
   services = {
@@ -56,6 +62,7 @@ in
         "wallabag"
         "nextcloud"
         "teable"
+        "budgetboard"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -68,6 +75,10 @@ in
         }
         {
           name = "teable";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "budgetboard";
           ensureDBOwnership = true;
         }
       ];
@@ -146,13 +157,14 @@ in
     '';
   };
 
-  # CRITICAL FIX: PostgreSQL must wait for podman0 network before starting
-  # Problem: PostgreSQL starts at ~19s, but podman0 is created at ~50s
-  # Result: PostgreSQL fails to bind to 10.88.0.1 and only listens on localhost
-  # This causes litellm/wallabag to fail their pg_isready health checks
+  # CRITICAL FIX: PostgreSQL must wait for network devices before starting
+  # Problem: PostgreSQL starts before network interfaces are fully up
+  # Result: PostgreSQL fails to bind to configured addresses
+  # - podman0: PostgreSQL fails to bind to 10.88.0.1 (causes litellm/wallabag to fail pg_isready)
+  # - end0: PostgreSQL fails to bind to 192.168.1.2 (causes external postgres.vulcan.lan connections to fail)
   systemd.services.postgresql = {
-    after = [ "sys-subsystem-net-devices-podman0.device" ];
-    requires = [ "sys-subsystem-net-devices-podman0.device" ];
+    after = [ "sys-subsystem-net-devices-podman0.device" "sys-subsystem-net-devices-end0.device" ];
+    requires = [ "sys-subsystem-net-devices-podman0.device" "sys-subsystem-net-devices-end0.device" ];
   };
 
   networking.firewall = {

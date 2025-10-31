@@ -1,0 +1,127 @@
+groups:
+  - name: budgetboard_service
+    interval: 60s
+    rules:
+      - alert: BudgetBoardServerDown
+        expr: systemd_unit_state{name="budget-board-server-container.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard server container is down"
+          description: |
+            BudgetBoard server container has been down for {{ $value }} minutes.
+            Budget tracking backend service is unavailable.
+
+            Check service status: systemctl status budget-board-server-container.service
+            Check container: podman ps -a | grep budget-board-server
+            View logs: journalctl -u budget-board-server-container -f
+            Check podman logs: podman logs budget-board-server
+
+      - alert: BudgetBoardClientDown
+        expr: systemd_unit_state{name="budget-board-client-container.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard client container is down"
+          description: |
+            BudgetBoard client container has been down for {{ $value }} minutes.
+            Budget tracking web interface is unavailable.
+
+            Check service status: systemctl status budget-board-client-container.service
+            Check container: podman ps -a | grep budget-board-client
+            View logs: journalctl -u budget-board-client -f
+            Check podman logs: podman logs budget-board-client
+
+      - alert: BudgetBoardHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://budget.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard HTTPS probe failed"
+          description: |
+            BudgetBoard web interface at https://budget.vulcan.lan is not responding.
+            Budget tracking interface is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://budget.vulcan.lan
+            Check client container: podman ps | grep budget-board-client
+            Test local endpoint: curl -I http://127.0.0.1:6253
+            Check backend API: curl -I http://127.0.0.1:8080/api/health
+
+      - alert: BudgetBoardSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://budget.vulcan.lan"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard is responding slowly"
+          description: |
+            BudgetBoard response time is {{ $value }}s (threshold: 10s).
+            Web interface may be slow due to database operations.
+
+            Check container resources: podman stats budget-board-server
+            Check container resources: podman stats budget-board-client
+            View server logs: podman logs budget-board-server --tail 50
+            Check database connection: podman exec budget-board-server pg_isready -h 192.168.1.2
+
+      - alert: BudgetBoardContainerRestarts
+        expr: rate(systemd_unit_state{name=~"budget-board-(server|client)-container.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard containers are restarting frequently"
+          description: |
+            BudgetBoard containers have restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability.
+
+            View server logs: journalctl -u budget-board-server-container --since "15 minutes ago"
+            View client logs: journalctl -u budget-board-client-container --since "15 minutes ago"
+            Check server logs: podman logs budget-board-server --tail 100
+            Check client logs: podman logs budget-board-client --tail 100
+            Check for OOM: dmesg | grep -i "budget-board\|oom"
+            Check database connectivity: podman exec budget-board-server pg_isready -h 192.168.1.2
+
+      - alert: BudgetBoardPodDown
+        expr: systemd_unit_state{name="budget-board-pod.service",state="active"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard pod is down"
+          description: |
+            BudgetBoard Podman pod is not running.
+            Both server and client containers are affected.
+
+            Check pod status: podman pod ps | grep budget-board
+            Inspect pod: podman pod inspect budget-board
+            Restart pod: systemctl restart budget-board-pod.service
+            View pod logs: journalctl -u budget-board-pod.service -f
+
+      - alert: BudgetBoardDatabaseConnectionFailed
+        expr: systemd_unit_state{name="budget-board-server-container.service",state="active"} == 1 and probe_success{job="blackbox_https_local",instance="https://budget.vulcan.lan"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: budgetboard
+        annotations:
+          summary: "BudgetBoard cannot connect to PostgreSQL database"
+          description: |
+            BudgetBoard server is running but web interface is down.
+            This likely indicates database connectivity issues.
+
+            Check PostgreSQL status: systemctl status postgresql
+            Check database exists: sudo -u postgres psql -c "SELECT datname FROM pg_database WHERE datname='budgetboard';"
+            Check database user: sudo -u postgres psql -c "SELECT usename FROM pg_user WHERE usename='budgetboard';"
+            Test connection from host: psql -h 192.168.1.2 -U budgetboard -d budgetboard -c "SELECT 1"
+            Check server environment: podman exec budget-board-server env | grep POSTGRES
+            View server logs for DB errors: podman logs budget-board-server --tail 100 | grep -i "database\|postgres\|connection"

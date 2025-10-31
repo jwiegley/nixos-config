@@ -210,6 +210,10 @@ with lib;
                           title = "OpenSpeedTest";
                           url = "https://speedtest.vulcan.lan";
                         }
+                        {
+                          title = "ChangeDetection";
+                          url = "https://changes.vulcan.lan";
+                        }
                       ];
                     }
                     {
@@ -233,8 +237,8 @@ with lib;
                           url = "https://litellm.vulcan.lan/ui";
                         }
                         {
-                          title = "ChangeDetection";
-                          url = "https://changes.vulcan.lan";
+                          title = "BudgetBoard";
+                          url = "https://budget.vulcan.lan";
                         }
                       ];
                     }

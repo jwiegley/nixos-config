@@ -20,6 +20,7 @@ let
     "home-assistant-backup.yaml"
     "local-backup.yaml"
     "changedetection.yaml"
+    "budgetboard.yaml"
   ];
 in
 {

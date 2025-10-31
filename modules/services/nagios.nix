@@ -159,6 +159,16 @@ let
     }
   '';
 
+  # Helper function to generate rootless container checks (containers running as specific users)
+  mkRootlessContainerCheck = containerName: displayName: runAsUser: servicegroups: ''
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     ${displayName}
+      check_command           check_podman_container_rootless!${containerName}!${runAsUser}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+    }
+  '';
+
   # Helper function to generate monitored host with ping check and optional parent
   # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; }
   mkMonitoredHost = { hostname, address, alias, parent ? null }: ''
@@ -303,17 +313,19 @@ let
   ];
 
   # Podman Containers
+  # rootless containers (runAs set) run in user namespaces and require special checks
+  # root containers (no runAs) run in the root namespace via system services
   containers = [
-    { name = "litellm"; display = "LiteLLM API Proxy"; }
-    { name = "metabase"; display = "Metabase BI Platform"; }
-    { name = "nocobase"; display = "NocoBase No-Code Platform"; }
-    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; }
-    { name = "speedtest"; display = "Open SpeedTest"; }
-    { name = "silly-tavern"; display = "Silly Tavern"; }
-    { name = "teable"; display = "Teable Database Platform"; }
-    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; }
-    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; }
-    { name = "wallabag"; display = "Wallabag Read-Later"; }
+    { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "container-db"; }
+    { name = "metabase"; display = "Metabase BI Platform"; runAs = "container-db"; }
+    { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "container-db"; }
+    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "container-monitor"; }
+    { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-db"; }
+    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "container-db"; }
+    { name = "teable"; display = "Teable Database Platform"; runAs = "container-db"; }
+    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "container-monitor"; }
+    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; runAs = "container-db"; }
+    { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "container-db"; }
   ];
 
   # Container systemd services (for Quadlet-managed containers)
@@ -357,7 +369,13 @@ let
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "certificate-renewal") certRenewalTimers)
 
     # Podman Containers - check every 5 minutes
-    (lib.concatMapStrings (c: mkContainerCheck c.name c.display "containers") containers)
+    # Use appropriate check based on whether container is rootless (has runAs user)
+    (lib.concatMapStrings (c:
+      if c ? runAs then
+        mkRootlessContainerCheck c.name c.display c.runAs "containers"
+      else
+        mkContainerCheck c.name c.display "containers"
+    ) containers)
   ];
 
   # Nagios object configuration
@@ -603,6 +621,36 @@ let
           exit 1
         fi
       ''} $ARG1$
+    }
+
+    define command {
+      command_name    check_podman_container_rootless
+      command_line    ${pkgs.writeShellScript "check_podman_container_rootless.sh" ''
+        #!/usr/bin/env bash
+        CONTAINER_NAME="$1"
+        RUN_AS_USER="$2"
+
+        # Check if container exists (run as specific user to access user-namespaced containers)
+        # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
+        if ! /run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
+          echo "CRITICAL: Container $CONTAINER_NAME does not exist (user: $RUN_AS_USER)"
+          exit 2
+        fi
+
+        # Get container status (run as specific user)
+        STATUS=$(/run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
+
+        if [ "$STATUS" = "running" ]; then
+          echo "OK: Container $CONTAINER_NAME is running (user: $RUN_AS_USER)"
+          exit 0
+        elif [ "$STATUS" = "exited" ]; then
+          echo "CRITICAL: Container $CONTAINER_NAME has exited (user: $RUN_AS_USER)"
+          exit 2
+        else
+          echo "WARNING: Container $CONTAINER_NAME is in state: $STATUS (user: $RUN_AS_USER)"
+          exit 1
+        fi
+      ''} $ARG1$ $ARG2$
     }
 
     define command {
@@ -1649,13 +1697,34 @@ in
 
   # Grant nagios user sudo access to podman for container monitoring
   # Note: ZFS monitoring uses --nosudo flag since /dev/zfs is world-readable/writable
-  security.sudo.extraRules = [{
-    users = [ "nagios" ];
-    commands = [{
-      command = "${pkgs.podman}/bin/podman";
-      options = [ "NOPASSWD" ];
-    }];
-  }];
+  security.sudo.extraRules = [
+    # Allow nagios to run podman as root (for root-level containers)
+    {
+      users = [ "nagios" ];
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as container-db (for database-backed rootless containers)
+    {
+      users = [ "nagios" ];
+      runAs = "container-db";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as container-monitor (for monitoring rootless containers)
+    {
+      users = [ "nagios" ];
+      runAs = "container-monitor";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+  ];
 
   # Enable daily email health reports
   services.nagios-daily-report = {

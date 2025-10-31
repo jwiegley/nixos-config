@@ -84,10 +84,11 @@
     allowedUDPPorts = [ 53 ];
   };
 
-  # Add monitoring tools
+  # Add monitoring tools and rootless container dependencies
   environment.systemPackages = with pkgs; [
     lazydocker
     podman-tui
+    slirp4netns  # Required for rootless networking
   ];
 
   # Ensure podman service starts early and creates network properly

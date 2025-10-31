@@ -169,10 +169,17 @@ in
         {
           inherit image;
           publishPorts = publishPorts;
-          environments = environments;
+          # Rootless containers use localhost for database access
+          environments = environments // (lib.optionalAttrs (containerUser != null && requiresPostgres) {
+            POSTGRES_HOST = "127.0.0.1";
+          });
           environmentFiles = allEnvironmentFiles;
           volumes = volumes;
-          networks = [ "podman" ];
+          # Rootless containers use slirp4netns with allow_host_loopback
+          # This allows them to access services on the host's localhost
+          networks = if (containerUser != null)
+                     then [ "slirp4netns:allow_host_loopback=true" ]
+                     else [ "podman" ];
 
           # Health check configuration via podman args
           # NOTE: Disabled by default - quadlet-nix doesn't fully support health checks yet
@@ -250,7 +257,8 @@ in
       serviceConfig = lib.mkMerge [
         (lib.optionalAttrs requiresPostgres {
           # Wait for PostgreSQL to be ready to accept connections
-          ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 30";
+          # Rootless containers use localhost, root containers use podman gateway
+          ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${if containerUser != null then "127.0.0.1" else common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 30";
         })
         # Add restart behavior to [Service] section
         common.restartPolicies.always.service
@@ -263,6 +271,8 @@ in
         (lib.optionalAttrs (containerUser != null) {
           User = containerUser;
           Group = containerUser;
+          # Ensure rootless podman can find slirp4netns and other system binaries
+          Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
         })
         extraServiceConfig
       ];

@@ -65,7 +65,7 @@ in
       };
 
       tmpfilesRules = [
-        "d /var/lib/nocobase 0755 root root -"
+        "d /var/lib/nocobase 0755 container-db container-db -"
       ];
     })
   ];

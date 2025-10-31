@@ -12,6 +12,18 @@ in
       port = 13000;
       requiresPostgres = true;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "exec";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "90s";  # NocoBase needs time to initialize
+        retries = 3;
+        execCommand = "node -e \"require('http').get('http://localhost:80/', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\"";
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # Bind to both localhost and podman gateway for container access
       publishPorts = [
         "127.0.0.1:13000:80/tcp"

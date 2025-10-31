@@ -12,6 +12,19 @@ in
       port = 3001;
       requiresPostgres = true;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "http";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "60s";
+        retries = 3;
+        httpPath = "/";
+        httpPort = 3000;  # Internal container port
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # SOPS secret containing all Teable environment variables
       secrets = {
         env = "teable-env";

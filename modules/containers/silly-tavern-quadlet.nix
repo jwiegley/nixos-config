@@ -12,6 +12,18 @@ in
       port = 8083;
       requiresPostgres = false;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "exec";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "30s";
+        retries = 3;
+        execCommand = "wget --spider -q http://127.0.0.1:8000/ || exit 1";
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       publishPorts = [ "127.0.0.1:8083:8000/tcp" ];
 
       environments = {

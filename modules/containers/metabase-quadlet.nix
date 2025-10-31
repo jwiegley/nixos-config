@@ -12,6 +12,19 @@ in
       port = 3200;
       requiresPostgres = true;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "http";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "120s";  # Metabase takes time to initialize
+        retries = 3;
+        httpPath = "/api/health";
+        httpPort = 3000;  # Internal container port
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # SOPS secret containing Metabase environment variables
       # Includes MB_DB_PASS for PostgreSQL backend connection
       secrets = {

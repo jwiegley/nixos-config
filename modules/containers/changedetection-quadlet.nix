@@ -80,6 +80,14 @@ EOF
       image = "ghcr.io/dgtlmoon/changedetection.io:latest";
 
       # App listens on port 5000 within the pod
+
+      # Health check configuration
+      healthCmd = "CMD-SHELL curl -f http://localhost:5000/ || exit 1";
+      healthInterval = "30s";
+      healthTimeout = "10s";
+      healthStartPeriod = "45s";
+      healthRetries = 3;
+
       environments = {
         "PORT" = "5000";
         "BASE_URL" = "https://changes.vulcan.lan";
@@ -122,6 +130,13 @@ EOF
 
       # Exporter listens on port 9123 within the pod
       # Accesses main app via localhost:5000 (shared pod network)
+
+      # Health check configuration
+      healthCmd = "CMD-SHELL curl -f http://localhost:9123/metrics || exit 1";
+      healthInterval = "30s";
+      healthTimeout = "10s";
+      healthStartPeriod = "30s";
+      healthRetries = 3;
 
       # Configuration loaded from generated environment file
       environmentFiles = [ "/run/changedetection/exporter.env" ];

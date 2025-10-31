@@ -54,6 +54,18 @@ in
       port = 9274;
       requiresPostgres = false;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "exec";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "30s";
+        retries = 3;
+        execCommand = "wget --spider -q http://localhost:8080/metrics || exit 1";
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # Bind to localhost only for Prometheus scraping
       publishPorts = [
         "127.0.0.1:9274:8080/tcp"

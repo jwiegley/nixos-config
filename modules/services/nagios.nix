@@ -320,8 +320,8 @@ let
     { name = "metabase"; display = "Metabase BI Platform"; runAs = "container-db"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "container-db"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "container-monitor"; }
-    { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-db"; }
-    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "container-db"; }
+    { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-misc"; }
+    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "container-web"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "container-db"; }
     { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "container-monitor"; }
     { name = "vanna"; display = "Vanna.AI Text-to-SQL"; runAs = "container-db"; }
@@ -1719,6 +1719,24 @@ in
     {
       users = [ "nagios" ];
       runAs = "container-monitor";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as container-misc (for miscellaneous rootless containers)
+    {
+      users = [ "nagios" ];
+      runAs = "container-misc";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as container-web (for web application rootless containers)
+    {
+      users = [ "nagios" ];
+      runAs = "container-web";
       commands = [{
         command = "${pkgs.podman}/bin/podman";
         options = [ "NOPASSWD" ];

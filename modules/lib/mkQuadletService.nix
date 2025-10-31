@@ -12,6 +12,7 @@ in
   #     image = "docker.io/myapp:latest";
   #     port = 8080;
   #     requiresPostgres = true;
+  #     containerUser = "container-db";  # Optional: enables rootless operation
   #     secrets = { appPassword = "myapp-secrets"; };
   #     nginxVirtualHost = {
   #       enable = true;
@@ -24,7 +25,7 @@ in
   #
   # This generates:
   # - Quadlet container configuration
-  # - SOPS secrets
+  # - SOPS secrets (deployed to /run/secrets-<user>/ if containerUser is set)
   # - Nginx virtual host (optional)
   # - PostgreSQL dependency checks (optional)
   # - Standard restart policies
@@ -40,6 +41,7 @@ in
       "127.0.0.1:${toString port}:${toString port}/tcp"
     ],                 # Port mappings (default: localhost only)
     requiresPostgres ? false,  # Add PostgreSQL dependency and pg_isready check
+    containerUser ? null,  # Container user for rootless operation (e.g., "container-db")
     secrets ? {},      # SOPS secrets: { secretName = "sops-key-path"; }
     secretsRestartUnits ? true,  # Whether secrets should restart the service
     environments ? {}, # Environment variables
@@ -269,15 +271,20 @@ in
     # 4. restartTriggers would require mkForce to override the strategy, but that's fragile
 
     # SOPS secrets configuration
+    # When containerUser is set, secrets are deployed to /run/secrets-<user>/ with user ownership
+    # When containerUser is null, secrets use default /run/secrets/ path with root ownership
     sops.secrets = lib.mkMerge [
       (lib.mapAttrs' (secretName: sopsKey:
-        lib.nameValuePair sopsKey {
+        lib.nameValuePair sopsKey ({
           sopsFile = common.secretsPath;
-          owner = "root";
-          group = "root";
+          owner = if containerUser != null then containerUser else "root";
+          group = if containerUser != null then containerUser else "root";
           mode = "0400";
           restartUnits = lib.optional secretsRestartUnits "${name}.service";
-        }
+        } // lib.optionalAttrs (containerUser != null) {
+          # Deploy to user-specific directory for rootless containers
+          path = "/run/secrets-${containerUser}/${sopsKey}";
+        })
       ) secrets)
     ];
 

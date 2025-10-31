@@ -81,4 +81,15 @@
     "container-monitor"
     "container-misc"
   ];
+
+  # Create per-user SOPS secrets directories with proper ownership and permissions
+  # These directories are used for deploying user-specific secrets via SOPS
+  # Permissions: 0750 (owner: rwx, group: r-x, others: ---)
+  # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
+  systemd.tmpfiles.rules = [
+    "d /run/secrets-container-db 0750 container-db container-db - -"
+    "d /run/secrets-container-web 0750 container-web container-web - -"
+    "d /run/secrets-container-monitor 0750 container-monitor container-monitor - -"
+    "d /run/secrets-container-misc 0750 container-misc container-misc - -"
+  ];
 }

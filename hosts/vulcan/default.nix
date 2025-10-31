@@ -29,6 +29,9 @@
     ../../modules/users/home-manager
     ../../modules/users/home-manager/johnw.nix
 
+    # Test modules
+    ../../modules/test/sops-ownership-test.nix
+
     # Services
     ../../modules/services/certificates.nix
     ../../modules/services/certificate-automation.nix

@@ -35,16 +35,6 @@
         path = "/run/secrets-container-db/litellm-secrets";
       };
 
-      # Wallabag application secrets
-      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
-      # "wallabag-secrets-container-db" = {
-      #   key = "wallabag-secrets";
-      #   owner = "container-db";
-      #   group = "container-db";
-      #   mode = "0400";
-      #   path = "/run/secrets-container-db/wallabag-secrets";
-      # };
-
       # Teable PostgreSQL password
       "teable-postgres-password-container-db" = {
         key = "teable-postgres-password";
@@ -99,26 +89,7 @@
       };
 
       # === container-monitor secrets (monitoring services) ===
-
-      # Technitium DNS Exporter credentials
-      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
-      # "technitium-dns-exporter-env-container-monitor" = {
-      #   key = "technitium-dns-exporter-env";
-      #   owner = "container-monitor";
-      #   group = "container-monitor";
-      #   mode = "0400";
-      #   path = "/run/secrets-container-monitor/technitium-dns-exporter-env";
-      # };
-
-      # OPNsense Exporter credentials
-      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
-      # "opnsense-exporter-secrets-container-monitor" = {
-      #   key = "opnsense-exporter-secrets";
-      #   owner = "container-monitor";
-      #   group = "container-monitor";
-      #   mode = "0400";
-      #   path = "/run/secrets-container-monitor/opnsense-exporter-secrets";
-      # };
+      # (All secrets now managed by mkQuadletService with containerUser parameter)
 
       # === container-web secrets (web services) ===
 

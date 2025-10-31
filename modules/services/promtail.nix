@@ -25,17 +25,7 @@
           url = "http://localhost:3100/loki/api/v1/push";
           batchwait = "1s";
           batchsize = 1048576; # 1MB
-
-          # Tenant ID (not needed for single-tenant Loki)
-          # tenant_id = "default";
-
-          # Timeout and retry settings
           timeout = "10s";
-
-          # TLS configuration (not needed for localhost)
-          # tls_config = {
-          #   insecure_skip_verify = false;
-          # };
         }
       ];
 

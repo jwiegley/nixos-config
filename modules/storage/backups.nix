@@ -88,6 +88,11 @@ let
     "Library/Caches/GeoServices"
   ];
 
+  # Audio excludes
+  audioExcludes = [
+    "In Our Time"
+  ];
+
   # Video excludes
   videoExcludes = [
     "Bicycle"
@@ -177,6 +182,7 @@ in
   services.restic.backups = lib.mkMerge [
     (mkBackup {
       name = "Audio";
+      exclude = audioExcludes;
     })
     (mkBackup {
       name = "Backups";

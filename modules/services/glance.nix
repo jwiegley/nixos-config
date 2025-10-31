@@ -225,6 +225,10 @@ with lib;
                           url = "https://teable.vulcan.lan";
                         }
                         {
+                          title = "NocoBase";
+                          url = "https://nocobase.vulcan.lan";
+                        }
+                        {
                           title = "Metabase";
                           url = "https://metabase.vulcan.lan";
                         }

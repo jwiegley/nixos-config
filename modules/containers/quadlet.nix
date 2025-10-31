@@ -7,6 +7,7 @@
     ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
     ./metabase-quadlet.nix
+    ./nocobase-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix
@@ -59,7 +60,8 @@
     # 6253: budgetboard-client
     # 8085: Redis
     # 9182: mssql-exporter
-    allowedTCPPorts = [ 1433 3001 3200 4000 5000 5380 5432 6253 8085 9182 ];
+    # 13000: nocobase
+    allowedTCPPorts = [ 1433 3001 3200 4000 5000 5380 5432 6253 8085 9182 13000 ];
     allowedUDPPorts = [ 53 ];
   };
 

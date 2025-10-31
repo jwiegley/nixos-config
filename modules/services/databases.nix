@@ -27,6 +27,12 @@ in
       secretPath = config.sops.secrets."budgetboard/database-password".path;
       dependentService = "podman-budget-board-server.service";
     })
+    (mkPostgresUserSetup {
+      user = "nocobase";
+      database = "nocobase";
+      secretPath = config.sops.secrets."nocobase-db-password".path;
+      dependentService = "podman-nocobase.service";
+    })
   ];
 
   services = {
@@ -63,6 +69,7 @@ in
         "nextcloud"
         "teable"
         "budgetboard"
+        "nocobase"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -79,6 +86,10 @@ in
         }
         {
           name = "budgetboard";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "nocobase";
           ensureDBOwnership = true;
         }
       ];

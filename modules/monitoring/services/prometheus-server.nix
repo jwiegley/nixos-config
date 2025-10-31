@@ -16,6 +16,7 @@ let
     "nextcloud.yaml"
     "litellm-availability.yaml"
     "metabase.yaml"
+    "nocobase.yaml"
     "home-assistant.yaml"
     "home-assistant-backup.yaml"
     "local-backup.yaml"

@@ -11,6 +11,7 @@ in
       image = "ghcr.io/berriai/litellm-database:main-stable";
       port = 4000;
       requiresPostgres = true;
+      containerUser = "container-db";  # Run rootless as container-db user
 
       # Health check disabled - /health endpoint requires API authentication
       healthCheck = {
@@ -18,10 +19,9 @@ in
       };
       enableWatchdog = false;
 
-      # Bind to both localhost and podman gateway for container access
+      # Rootless container - bind to localhost only
       publishPorts = [
         "127.0.0.1:4000:4000/tcp"
-        "10.88.0.1:4000:4000/tcp"
       ];
 
       secrets = {
@@ -43,42 +43,22 @@ in
       };
 
       tmpfilesRules = [
-        "d /etc/litellm 0755 root root -"
+        "d /etc/litellm 0755 container-db container-db -"
       ];
     })
   ];
 
-  # Redis server for litellm
+  # Redis server for litellm (rootless container access via localhost)
   services.redis.servers.litellm = {
     enable = true;
     port = 8085;
-    bind = "10.88.0.1";
+    bind = "127.0.0.1";  # Rootless containers access via host.containers.internal → 127.0.0.1
     settings = {
-      protected-mode = "no";
+      protected-mode = "yes";  # Re-enable since only localhost
     };
   };
 
-  # Ensure redis-litellm waits for podman network to be ready
-  systemd.services.redis-litellm = {
-    after = [ "network-online.target" "podman.service" ];
-    wants = [ "network-online.target" ];
-    # Remove hard binding to podman0 device to prevent dependency failures
-
-    # Wait for podman network to be ready before starting
-    preStart = ''
-      # Wait for podman0 interface to be up (up to 30 seconds)
-      for i in {1..30}; do
-        if ${pkgs.iproute2}/bin/ip link show podman0 >/dev/null 2>&1; then
-          if ${pkgs.iproute2}/bin/ip addr show podman0 | ${pkgs.gnugrep}/bin/grep -q "10.88.0.1"; then
-            echo "Podman network is ready"
-            break
-          fi
-        fi
-        echo "Waiting for podman network to be ready... ($i/30)"
-        sleep 1
-      done
-    '';
-  };
+  # Redis binds to localhost only - no podman network dependency needed
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     4000 # litellm

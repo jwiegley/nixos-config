@@ -11,6 +11,7 @@ in
       image = "docker.io/openspeedtest/latest:latest";
       port = 3002;
       requiresPostgres = false;
+      containerUser = "container-misc";  # Run rootless as container-misc user
 
       publishPorts = [ "127.0.0.1:3002:3000/tcp" ];
 

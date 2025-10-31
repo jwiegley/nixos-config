@@ -13,6 +13,11 @@ in
       requiresPostgres = false;  # Vanna connects to databases dynamically, no bootstrap needed
       containerUser = "container-db";  # Run rootless as container-db user
 
+      # Never pull image - it's built locally and loaded into rootless user's store
+      extraContainerConfig = {
+        pull = "never";
+      };
+
       # Enable health checks using Python (Flask app)
       healthCheck = {
         enable = true;

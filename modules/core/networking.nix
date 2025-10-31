@@ -15,7 +15,7 @@
     # firewall.checkReversePath = false;
 
     hosts = {
-      "127.0.0.2" = lib.mkForce [];
+      "127.0.0.2" = [];
       "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
     };
 

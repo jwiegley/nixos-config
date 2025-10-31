@@ -9,13 +9,9 @@
     ../../modules/options
 
     # Core modules
-    ../../modules/core/boot.nix
-    ../../modules/core/hardware.nix
+    ../../modules/core/base.nix
     ../../modules/core/networking.nix
-    ../../modules/core/nm-ignore-dhcp-dns.nix
     ../../modules/core/wifi.nix
-    ../../modules/core/firewall.nix
-    ../../modules/core/nix.nix
     ../../modules/core/system.nix
     ../../modules/core/programs.nix
 
@@ -32,9 +28,6 @@
     ../../modules/users/home-manager/container-web.nix
     ../../modules/users/home-manager/container-monitor.nix
     ../../modules/users/home-manager/container-misc.nix
-
-    # Test modules
-    ../../modules/test/sops-ownership-test.nix
 
     # Services
     ../../modules/services/certificates.nix

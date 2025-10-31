@@ -1,43 +1,17 @@
 { config, lib, pkgs, ... }:
 
+let
+  # Read the root CA certificate from a separate file
+  rootCaCert = builtins.readFile ../../certs/vulcan-root-ca.crt;
+in
 {
   # Add step-ca root CA to system trust store
   # This allows system services (like Home Assistant) to trust certificates
   # signed by the local step-ca certificate authority
-  security.pki.certificates = [
-    ''
-      -----BEGIN CERTIFICATE-----
-      MIIB8DCCAZagAwIBAgIRALiwKWjq4Ooy1fXyoEM83rowCgYIKoZIzj0EAwIwVjEl
-      MCMGA1UEChMcVnVsY2FuIENlcnRpZmljYXRlIEF1dGhvcml0eTEtMCsGA1UEAxMk
-      VnVsY2FuIENlcnRpZmljYXRlIEF1dGhvcml0eSBSb290IENBMB4XDTI1MDkyMjIx
-      MTMwNloXDTM1MDkyMDIxMTMwNlowVjElMCMGA1UEChMcVnVsY2FuIENlcnRpZmlj
-      YXRlIEF1dGhvcml0eTEtMCsGA1UEAxMkVnVsY2FuIENlcnRpZmljYXRlIEF1dGhv
-      cml0eSBSb290IENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAET6E9AE40v3h/
-      1bMsspNWHO3riZ/LmVHqFGygt+LuXURbWDlmmWnabAkA/KbMoVlfYgD7nhhvwbQk
-      j4l8GCUKL6NFMEMwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEw
-      HQYDVR0OBBYEFOT42u7UMDrYl8aw9bUKGoYB4gB9MAoGCCqGSM49BAMCA0gAMEUC
-      IQDNoLb72lR2LG+hwibB5Ct2ApRHt5deqsbrlLsKMCtJsAIgFWJC/5p7Q7tdJtVi
-      jImZjCO8EkfmTAdU4DnupnhJtU8=
-      -----END CERTIFICATE-----
-    ''
-  ];
+  security.pki.certificates = [ rootCaCert ];
 
   # Make root CA available for Nagios SSL certificate checks
-  environment.etc."ssl/certs/vulcan-ca.crt".text = ''
-    -----BEGIN CERTIFICATE-----
-    MIIB8DCCAZagAwIBAgIRALiwKWjq4Ooy1fXyoEM83rowCgYIKoZIzj0EAwIwVjEl
-    MCMGA1UEChMcVnVsY2FuIENlcnRpZmljYXRlIEF1dGhvcml0eTEtMCsGA1UEAxMk
-    VnVsY2FuIENlcnRpZmljYXRlIEF1dGhvcml0eSBSb290IENBMB4XDTI1MDkyMjIx
-    MTMwNloXDTM1MDkyMDIxMTMwNlowVjElMCMGA1UEChMcVnVsY2FuIENlcnRpZmlj
-    YXRlIEF1dGhvcml0eTEtMCsGA1UEAxMkVnVsY2FuIENlcnRpZmljYXRlIEF1dGhv
-    cml0eSBSb290IENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAET6E9AE40v3h/
-    1bMsspNWHO3riZ/LmVHqFGygt+LuXURbWDlmmWnabAkA/KbMoVlfYgD7nhhvwbQk
-    j4l8GCUKL6NFMEMwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEw
-    HQYDVR0OBBYEFOT42u7UMDrYl8aw9bUKGoYB4gB9MAoGCCqGSM49BAMCA0gAMEUC
-    IQDNoLb72lR2LG+hwibB5Ct2ApRHt5deqsbrlLsKMCtJsAIgFWJC/5p7Q7tdJtVi
-    jImZjCO8EkfmTAdU4DnupnhJtU8=
-    -----END CERTIFICATE-----
-  '';
+  environment.etc."ssl/certs/vulcan-ca.crt".text = rootCaCert;
 
   services.step-ca = {
     enable = true;

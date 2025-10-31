@@ -12,6 +12,9 @@ in
       port = 4000;
       requiresPostgres = true;
 
+      # Disable health checks - not supported by quadlet-nix
+      healthCheck.enable = false;
+
       # Bind to both localhost and podman gateway for container access
       publishPorts = [
         "127.0.0.1:4000:4000/tcp"

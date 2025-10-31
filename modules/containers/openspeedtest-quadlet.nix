@@ -14,6 +14,10 @@ in
 
       publishPorts = [ "127.0.0.1:3002:3000/tcp" ];
 
+      # Disable health checks - not supported by quadlet-nix
+      healthCheck.enable = false;
+      enableWatchdog = false;
+
       nginxVirtualHost = {
         enable = true;
         proxyPass = "http://127.0.0.1:3002/";

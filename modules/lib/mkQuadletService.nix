@@ -49,6 +49,23 @@ in
 
     nginxVirtualHost ? null,  # { enable = true; proxyPass = "..."; extraConfig = "..."; }
 
+    # Health monitoring options
+    # NOTE: Health checks are disabled by default because quadlet-nix doesn't support
+    # the healthChecks option. If quadlet-nix adds support in the future, we can re-enable.
+    healthCheck ? {
+      enable = false;          # Disabled - not supported by quadlet-nix
+      type = "http";           # "http", "tcp", or "exec"
+      interval = "30s";        # How often to run health check
+      timeout = "10s";         # Health check timeout
+      startPeriod = "60s";     # Grace period for startup
+      retries = 3;             # Failures before unhealthy
+      httpPath = "/";          # HTTP path to check (for type = "http")
+      httpPort = null;         # HTTP port (defaults to 'port' parameter)
+      tcpPort = null;          # TCP port (for type = "tcp")
+      execCommand = null;      # Custom exec command (for type = "exec")
+    },
+    enableWatchdog ? false,    # Disabled - depends on health checks
+
     extraUnitConfig ? {},      # Additional systemd unit config
     extraServiceConfig ? {},   # Additional systemd service config
     extraContainerConfig ? {}, # Additional quadlet container config
@@ -62,6 +79,31 @@ in
     allEnvironmentFiles = environmentFiles ++
       (lib.optionals (secrets != {})
         (map (secretName: config.sops.secrets."${secretName}".path) (lib.attrValues secrets)));
+
+    # Build health check command based on type
+    healthCheckPort =
+      if healthCheck.httpPort != null then healthCheck.httpPort
+      else if healthCheck.tcpPort != null then healthCheck.tcpPort
+      else port;
+
+    healthCheckCmd =
+      if !healthCheck.enable then null
+      else if healthCheck.type == "http" then
+        "curl -f http://localhost:${toString healthCheckPort}${healthCheck.httpPath} || exit 1"
+      else if healthCheck.type == "tcp" then
+        "nc -z localhost ${toString healthCheckPort} || exit 1"
+      else if healthCheck.type == "exec" && healthCheck.execCommand != null then
+        healthCheck.execCommand
+      else null;
+
+    # Systemd watchdog interval (set to 2x health check interval for safety margin)
+    watchdogSec = if enableWatchdog && healthCheck.enable then
+      let
+        # Parse interval string (e.g., "30s" -> 30)
+        intervalNum = lib.toInt (lib.removeSuffix "s" healthCheck.interval);
+      in
+        "${toString (intervalNum * 2)}s"
+      else null;
   in
   {
     # VALIDATION: Prevent DNS configuration in extraContainerConfig
@@ -99,6 +141,21 @@ in
           This assertion exists to prevent this bug from recurring.
         '';
       }
+      {
+        assertion = !healthCheck.enable || healthCheckCmd != null;
+        message = ''
+          ❌ Health check configuration error for ${name}!
+
+          Health check is enabled but no valid health check command could be generated.
+
+          Current configuration:
+          - type: ${healthCheck.type}
+          - execCommand: ${if healthCheck.execCommand != null then "provided" else "null"}
+
+          For type="exec", you must provide execCommand.
+          For type="http" or type="tcp", ensure the port is correctly configured.
+        '';
+      }
     ];
 
     # Quadlet container configuration
@@ -114,6 +171,24 @@ in
           environmentFiles = allEnvironmentFiles;
           volumes = volumes;
           networks = [ "podman" ];
+
+          # Health check configuration via podman args
+          # NOTE: Disabled by default - quadlet-nix doesn't fully support health checks yet
+          podmanArgs = lib.optionals (healthCheck.enable && healthCheckCmd != null) [
+            "--health-cmd"
+            healthCheckCmd
+            "--health-interval"
+            healthCheck.interval
+            "--health-timeout"
+            healthCheck.timeout
+            "--health-start-period"
+            healthCheck.startPeriod
+            "--health-retries"
+            (toString healthCheck.retries)
+            # Use "healthy" sdnotify to make systemd aware of health status
+            "--sdnotify"
+            "healthy"
+          ];
 
           # ═══════════════════════════════════════════════════════════════════════
           # ⚠️  CRITICAL: DO NOT SET dns = [...] IN THIS CONFIGURATION!  ⚠️
@@ -178,6 +253,12 @@ in
         })
         # Add restart behavior to [Service] section
         common.restartPolicies.always.service
+        # Add systemd watchdog monitoring
+        (lib.optionalAttrs (watchdogSec != null) {
+          WatchdogSec = watchdogSec;
+          # Notify systemd of watchdog state
+          NotifyAccess = "all";
+        })
         extraServiceConfig
       ];
     };

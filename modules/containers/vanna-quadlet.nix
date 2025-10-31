@@ -48,7 +48,8 @@ in
 
         # OpenAI-compatible API configuration (using local LiteLLM)
         # LiteLLM acts as a proxy to local/self-hosted LLMs
-        OPENAI_API_BASE = "http://10.88.0.1:4000/v1";  # LiteLLM endpoint
+        # Both vanna and litellm run rootless - use localhost
+        OPENAI_API_BASE = "http://127.0.0.1:4000/v1";  # LiteLLM endpoint
         # OPENAI_API_KEY provided via SOPS secret (vanna-env)
         # This key is for LiteLLM authentication, not OpenAI
 

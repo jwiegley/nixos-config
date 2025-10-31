@@ -100,13 +100,14 @@
       # === container-monitor secrets (monitoring services) ===
 
       # Technitium DNS Exporter credentials
-      "technitium-dns-exporter-env-container-monitor" = {
-        key = "technitium-dns-exporter-env";
-        owner = "container-monitor";
-        group = "container-monitor";
-        mode = "0400";
-        path = "/run/secrets-container-monitor/technitium-dns-exporter-env";
-      };
+      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
+      # "technitium-dns-exporter-env-container-monitor" = {
+      #   key = "technitium-dns-exporter-env";
+      #   owner = "container-monitor";
+      #   group = "container-monitor";
+      #   mode = "0400";
+      #   path = "/run/secrets-container-monitor/technitium-dns-exporter-env";
+      # };
 
       # OPNsense Exporter credentials
       "opnsense-exporter-secrets-container-monitor" = {

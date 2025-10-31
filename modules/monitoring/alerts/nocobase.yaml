@@ -1,0 +1,125 @@
+groups:
+  - name: nocobase_service
+    interval: 60s
+    rules:
+      - alert: NocoBaseDown
+        expr: systemd_unit_state{name="nocobase.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: nocobase
+        annotations:
+          summary: "NocoBase container is down"
+          description: |
+            NocoBase container has been down for {{ $value }} minutes.
+            No-code development platform is unavailable.
+
+            Check service status: systemctl status nocobase.service
+            Check container: podman ps -a | grep nocobase
+            View logs: journalctl -u nocobase -f
+            Check podman logs: podman logs nocobase
+
+      - alert: NocoBaseHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://nocobase.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: nocobase
+        annotations:
+          summary: "NocoBase HTTPS probe failed"
+          description: |
+            NocoBase web interface at https://nocobase.vulcan.lan is not responding.
+            No-code platform is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://nocobase.vulcan.lan
+            Check container: podman ps | grep nocobase
+            Test local endpoint: curl -I http://127.0.0.1:13000
+            View container logs: podman logs nocobase --tail 50
+
+      - alert: NocoBaseSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://nocobase.vulcan.lan"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: nocobase
+        annotations:
+          summary: "NocoBase is responding slowly"
+          description: |
+            NocoBase response time is {{ $value }}s (threshold: 10s).
+            Web interface may be slow due to database operations or resource constraints.
+
+            Check container resources: podman stats nocobase
+            View logs: podman logs nocobase --tail 50
+            Check database connection: podman exec nocobase pg_isready -h 10.88.0.1 -U nocobase
+            Check PostgreSQL: systemctl status postgresql
+
+      - alert: NocoBaseContainerRestarts
+        expr: rate(systemd_unit_state{name="nocobase.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: nocobase
+        annotations:
+          summary: "NocoBase container is restarting frequently"
+          description: |
+            NocoBase container has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability or crashes.
+
+            View service logs: journalctl -u nocobase --since "15 minutes ago"
+            Check container logs: podman logs nocobase --tail 100
+            Check for OOM: dmesg | grep -i "nocobase\|oom"
+            Check database connectivity: podman exec nocobase pg_isready -h 10.88.0.1 -U nocobase
+            Check storage: df -h /var/lib/nocobase
+
+      - alert: NocoBaseDatabaseConnectionFailed
+        expr: systemd_unit_state{name="nocobase.service",state="active"} == 1 and probe_success{job="blackbox_https_local",instance="https://nocobase.vulcan.lan"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: nocobase
+        annotations:
+          summary: "NocoBase cannot connect to PostgreSQL database"
+          description: |
+            NocoBase container is running but web interface is down.
+            This likely indicates database connectivity issues.
+
+            Check PostgreSQL status: systemctl status postgresql
+            Check database exists: sudo -u postgres psql -c "SELECT datname FROM pg_database WHERE datname='nocobase';"
+            Check database user: sudo -u postgres psql -c "SELECT usename FROM pg_user WHERE usename='nocobase';"
+            Test connection from podman: podman exec nocobase pg_isready -h 10.88.0.1 -U nocobase -d nocobase
+            Check container environment: podman exec nocobase env | grep DB_
+            View logs for DB errors: podman logs nocobase --tail 100 | grep -i "database\|postgres\|connection"
+
+      - alert: NocoBaseStorageFull
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/var/lib/nocobase"} / node_filesystem_size_bytes{mountpoint="/var/lib/nocobase"})) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: nocobase
+        annotations:
+          summary: "NocoBase storage is nearly full"
+          description: |
+            NocoBase storage at /var/lib/nocobase is {{ $value | humanizePercentage }} full.
+            Application may fail if storage fills completely.
+
+            Check storage usage: du -sh /var/lib/nocobase/*
+            Check filesystem: df -h /var/lib/nocobase
+            Review uploaded files: ls -lh /var/lib/nocobase/
+            Consider cleanup or expansion if needed
+
+      - alert: NocoBaseSSLCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https_local",instance="https://nocobase.vulcan.lan"} - time() < 604800
+        for: 1h
+        labels:
+          severity: warning
+          component: nocobase
+        annotations:
+          summary: "NocoBase SSL certificate expiring soon"
+          description: |
+            SSL certificate for nocobase.vulcan.lan expires in {{ $value | humanizeDuration }}.
+            Certificate renewal required.
+
+            Check certificate: openssl s_client -connect nocobase.vulcan.lan:443 -servername nocobase.vulcan.lan < /dev/null 2>/dev/null | openssl x509 -noout -dates
+            Renew certificate: sudo /etc/nixos/certs/renew-certificate.sh nocobase.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner nginx:nginx
+            Reload nginx: sudo systemctl reload nginx

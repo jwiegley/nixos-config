@@ -28,6 +28,13 @@ in
       port = 9273;
       requiresPostgres = false;
 
+      # Health checks disabled - distroless container has no shell tools
+      # Container exports metrics on :8080/metrics which can be monitored by Prometheus
+      healthCheck = {
+        enable = false;
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # Bind to localhost for Prometheus scraping
       publishPorts = [
         "127.0.0.1:9273:8080/tcp"

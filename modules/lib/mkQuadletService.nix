@@ -82,8 +82,8 @@ in
 
     # Build health check command based on type
     healthCheckPort =
-      if healthCheck.httpPort != null then healthCheck.httpPort
-      else if healthCheck.tcpPort != null then healthCheck.tcpPort
+      if lib.hasAttr "httpPort" healthCheck && healthCheck.httpPort != null then healthCheck.httpPort
+      else if lib.hasAttr "tcpPort" healthCheck && healthCheck.tcpPort != null then healthCheck.tcpPort
       else port;
 
     healthCheckCmd =
@@ -185,9 +185,8 @@ in
             healthCheck.startPeriod
             "--health-retries"
             (toString healthCheck.retries)
-            # Use "healthy" sdnotify to make systemd aware of health status
-            "--sdnotify"
-            "healthy"
+            # Note: --sdnotify removed because containers don't support sd_notify protocol
+            # Health checks still work and status is visible in 'podman ps' output
           ];
 
           # ═══════════════════════════════════════════════════════════════════════
@@ -253,12 +252,11 @@ in
         })
         # Add restart behavior to [Service] section
         common.restartPolicies.always.service
-        # Add systemd watchdog monitoring
-        (lib.optionalAttrs (watchdogSec != null) {
-          WatchdogSec = watchdogSec;
-          # Notify systemd of watchdog state
-          NotifyAccess = "all";
-        })
+        # Watchdog disabled - requires --sdnotify which containers don't support
+        # (lib.optionalAttrs (watchdogSec != null) {
+        #   WatchdogSec = watchdogSec;
+        #   NotifyAccess = "all";
+        # })
         extraServiceConfig
       ];
     };

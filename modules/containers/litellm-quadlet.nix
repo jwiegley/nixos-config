@@ -12,8 +12,11 @@ in
       port = 4000;
       requiresPostgres = true;
 
-      # Disable health checks - not supported by quadlet-nix
-      healthCheck.enable = false;
+      # Health check disabled - /health endpoint requires API authentication
+      healthCheck = {
+        enable = false;
+      };
+      enableWatchdog = false;
 
       # Bind to both localhost and podman gateway for container access
       publishPorts = [

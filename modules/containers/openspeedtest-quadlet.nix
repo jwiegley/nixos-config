@@ -14,9 +14,18 @@ in
 
       publishPorts = [ "127.0.0.1:3002:3000/tcp" ];
 
-      # Disable health checks - not supported by quadlet-nix
-      healthCheck.enable = false;
-      enableWatchdog = false;
+      # Enable comprehensive health monitoring
+      healthCheck = {
+        enable = true;
+        type = "http";
+        interval = "30s";
+        timeout = "5s";
+        startPeriod = "30s";  # OpenSpeedTest starts quickly
+        retries = 3;
+        httpPath = "/";
+        httpPort = 3000;  # Internal container port
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
 
       nginxVirtualHost = {
         enable = true;

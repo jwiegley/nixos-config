@@ -12,6 +12,19 @@ in
       port = 9091;
       requiresPostgres = true;
 
+      # Enable health checks
+      healthCheck = {
+        enable = true;
+        type = "http";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "60s";
+        retries = 3;
+        httpPath = "/";
+        httpPort = 80;  # Internal container port
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       secrets = {
         wallabagPassword = "wallabag-secrets";
       };

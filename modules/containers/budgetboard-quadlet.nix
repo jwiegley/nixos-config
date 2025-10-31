@@ -71,6 +71,13 @@ in
       # Server listens on localhost:8080 within the pod
       # No port publishing needed - client accesses via pod's shared network
 
+      # Health check configuration
+      healthCmd = "CMD-SHELL curl -f http://localhost:8080/ || exit 1";
+      healthInterval = "30s";
+      healthTimeout = "10s";
+      healthStartPeriod = "60s";
+      healthRetries = 3;
+
       environments = {
         # Logging configuration
         "Logging__LogLevel__Default" = "Information";
@@ -128,6 +135,13 @@ in
       # NOTE: The official image has nginx config hardcoded to "budget-board-server:8080"
       # We override it with a custom config that uses "localhost:8080" instead
       # This works because containers in a pod share network namespace
+
+      # Health check configuration
+      healthCmd = "CMD-SHELL curl -f http://localhost:6253/ || exit 1";
+      healthInterval = "30s";
+      healthTimeout = "10s";
+      healthStartPeriod = "30s";
+      healthRetries = 3;
 
       environments = {
         # Client listening port

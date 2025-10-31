@@ -12,6 +12,18 @@ in
       port = 5000;
       requiresPostgres = false;  # Vanna connects to databases dynamically, no bootstrap needed
 
+      # Enable health checks using Python (Flask app)
+      healthCheck = {
+        enable = true;
+        type = "exec";
+        interval = "30s";
+        timeout = "10s";
+        startPeriod = "45s";
+        retries = 3;
+        execCommand = "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=5)\"";
+      };
+      enableWatchdog = false;  # Disabled - requires sdnotify
+
       # SOPS secret containing Vanna.AI environment variables
       # Includes:
       # - OPENAI_API_KEY: LiteLLM API key (for local LLM access)

@@ -28,6 +28,10 @@
     ../../modules/users/container-users.nix
     ../../modules/users/home-manager
     ../../modules/users/home-manager/johnw.nix
+    ../../modules/users/home-manager/container-db.nix
+    ../../modules/users/home-manager/container-web.nix
+    ../../modules/users/home-manager/container-monitor.nix
+    ../../modules/users/home-manager/container-misc.nix
 
     # Test modules
     ../../modules/test/sops-ownership-test.nix

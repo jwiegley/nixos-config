@@ -142,6 +142,10 @@ with lib;
                           title = "Node-RED";
                           url = "https://nodered.vulcan.lan";
                         }
+                        {
+                          title = "LiteLLM";
+                          url = "https://litellm.vulcan.lan/ui";
+                        }
                       ];
                     }
                     {
@@ -235,10 +239,6 @@ with lib;
                         {
                           title = "Vanna.AI";
                           url = "https://vanna.vulcan.lan";
-                        }
-                        {
-                          title = "LiteLLM";
-                          url = "https://litellm.vulcan.lan/ui";
                         }
                         {
                           title = "BudgetBoard";

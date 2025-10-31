@@ -36,7 +36,8 @@
   #     (all disks get 10min except sda which is disabled)
   #
   # CURRENT CONFIGURATION:
-  # Spin down all disks after 10 minutes of inactivity (600 seconds)
+  # Spin down ONLY sdf after 10 minutes of inactivity (600 seconds)
+  # All other disks (sda-sde) will NOT spin down (-i 0 sets global default to disabled)
   #
   # WARNING: Prometheus scrapes node_exporter and zfs-exporter every 15 seconds!
   # This will likely prevent drives from spinning down. See system activity report
@@ -50,7 +51,7 @@
 
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.hd-idle}/bin/hd-idle -a sdf -i 600";
+      ExecStart = "${pkgs.hd-idle}/bin/hd-idle -i 0 -a sdf -i 600";
       Restart = "on-failure";
       RestartSec = "10s";
 

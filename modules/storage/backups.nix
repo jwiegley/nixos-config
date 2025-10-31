@@ -27,7 +27,7 @@ let
       # Wait up to 5 minutes if repository is locked (prevents immediate failures)
       extraBackupArgs = [ "--retry-lock=5m" ];
       # Clean up any stale locks before starting backup
-      backupPrepareCommand = "restic unlock || true";
+      backupPrepareCommand = "${pkgs.restic}/bin/restic unlock || true";
     };
   };
 

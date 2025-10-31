@@ -19,6 +19,19 @@
     ./wallabag-quadlet.nix
   ];
 
+  # Enable container runtime support (required for rootless containers)
+  virtualisation.containers.enable = true;
+
+  # Configure container storage for rootless support
+  virtualisation.containers.storage.settings = {
+    storage = {
+      driver = "overlay";  # Using overlay for compatibility with ext4/zfs
+      runroot = "/run/containers/storage";
+      graphroot = "/var/lib/containers/storage";
+      options.overlay.mount_program = "${pkgs.fuse-overlayfs}/bin/fuse-overlayfs";
+    };
+  };
+
   # Enable Podman with dockerCompat and ensure network is configured
   virtualisation.podman = {
     enable = true;
@@ -40,6 +53,12 @@
       flags = [ "--all" ];
     };
   };
+
+  # Configure systemd user environment for rootless containers
+  # Required for rootless podman to access newuidmap and other tools
+  systemd.user.extraConfig = ''
+    DefaultEnvironment="PATH=/run/current-system/sw/bin:/run/wrappers/bin"
+  '';
 
   # Enable auto-escaping for quadlet configurations
   virtualisation.quadlet.autoEscape = true;

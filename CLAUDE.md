@@ -801,3 +801,7 @@ openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan
 **Secrets Location:** `/run/secrets/` (deployed at activation)
 
 **System State:** NixOS 25.05, unstable channel, Apple hardware
+
+## Task Master AI Instructions
+**Import Task Master's development workflow commands and guidelines, treat as if import is in the main CLAUDE.md file.**
+@./.taskmaster/CLAUDE.md

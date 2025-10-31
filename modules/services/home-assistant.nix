@@ -143,10 +143,17 @@ in
     enable = true;
     nssmdns4 = true; # Enable NSS mDNS support for hostname resolution
 
+    # Enable mDNS reflector to bridge HomeKit advertisements between networks
+    # This allows devices on WiFi (192.168.3.x) to discover HomeKit advertised on Ethernet (192.168.1.x)
+    reflector = true;
+
+    # Allow both Ethernet and WiFi interfaces for mDNS reflection
+    allowInterfaces = [ "end0" "wlp1s0f0" ];
+
     publish = {
       enable = true;
       addresses = true;
-      workstation = true;
+      workstation = false; # Disable to reduce mDNS noise
     };
   };
 
@@ -337,8 +344,28 @@ in
 
     # Home Assistant configuration (YAML format)
     config = {
-      # Default configuration enables several integrations
-      default_config = { };
+      # Default config integrations - manually listed to exclude zeroconf
+      # We use Avahi for mDNS instead to avoid conflicts with HomeKit advertising
+      assist_pipeline = { };
+      backup = { };
+      bluetooth = { };
+      cloud = { };
+      config = { };
+      conversation = { };
+      dhcp = { };
+      energy = { };
+      # history = { };  # Configured separately below
+      homeassistant_alerts = { };
+      image_upload = { };
+      logbook = { };
+      media_source = { };
+      mobile_app = { };
+      my = { };
+      ssdp = { };
+      sun = { };
+      usb = { };
+      webhook = { };
+      # zeroconf = { };  # DISABLED - using Avahi instead
 
       # Basic settings
       homeassistant = {

@@ -46,10 +46,13 @@
     # Disable stub listener to avoid conflict with Technitium DNS (0.0.0.0:53)
     # Point directly to Technitium on localhost and ignore DHCP-provided DNS
     # Route .lan domains specifically to Technitium for local name resolution
+    # Disable MulticastDNS to avoid conflict with Avahi (for HomeKit mDNS
+    # reflection)
     extraConfig = ''
       DNS=127.0.0.1 192.168.1.1
       Domains=~lan
       DNSStubListener=no
+      MulticastDNS=no
     '';
   };
 

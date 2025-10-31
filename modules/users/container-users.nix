@@ -82,6 +82,10 @@
     "container-misc"
   ];
 
+  # Grant full Nix daemon access to wheel group (admin users like johnw)
+  # This allows home-manager and other user tools to access the Nix store
+  nix.settings.trusted-users = [ "root" "@wheel" ];
+
   # Create per-user SOPS secrets directories with proper ownership and permissions
   # These directories are used for deploying user-specific secrets via SOPS
   # Permissions: 0750 (owner: rwx, group: r-x, others: ---)

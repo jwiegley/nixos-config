@@ -54,20 +54,27 @@ in
     '';
   };
 
-  # Create user for the service
+  # Create user and shared group for the service
   users.users.dns-query-exporter = {
     isSystemUser = true;
     group = "dns-query-exporter";
     description = "DNS Query Log Exporter service user";
+    # Add to technitium-readers group for shared secret access
+    extraGroups = [ "technitium-readers" ];
   };
 
   users.groups.dns-query-exporter = {};
 
+  # Shared group for Technitium DNS secret access
+  # Both dns-query-exporter and container-monitor need to read technitium-dns-exporter-env
+  users.groups.technitium-readers = {};
+
   # SOPS secret configuration
-  # Override quadlet's root:root to allow both container (root) and service (dns-query-exporter) to read
+  # Shared secret between dns-query-log-exporter and technitium-dns-exporter container
+  # Both services need API token to access Technitium DNS Server
   sops.secrets."technitium-dns-exporter-env" = lib.mkForce {
     owner = "dns-query-exporter";
-    group = "root";
+    group = "technitium-readers";  # Shared group for both services
     mode = "0440";  # Owner and group can read
     restartUnits = [ "dns-query-log-exporter.service" "technitium-dns-exporter.service" ];
   };

@@ -47,7 +47,7 @@
         shell = pkgs.bash;
         autoSubUidGidRange = true;
         linger = true;
-        extraGroups = [ "podman" ];
+        extraGroups = [ "podman" "technitium-readers" ];
         description = "Container user for monitoring services";
       };
 

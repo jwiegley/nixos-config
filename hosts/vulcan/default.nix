@@ -72,6 +72,7 @@
 
     # Containers
     ../../modules/containers/default.nix
+    ../../modules/containers/secrets-migration.nix
     ../../modules/containers/teable-quadlet.nix
 
     # Maintenance

@@ -27,6 +27,7 @@ in
       image = "ghcr.io/athennamind/opnsense-exporter:latest";
       port = 9273;
       requiresPostgres = false;
+      containerUser = "container-monitor";  # Run rootless as container-monitor user
 
       # Health checks disabled - distroless container has no shell tools
       # Container exports metrics on :8080/metrics which can be monitored by Prometheus

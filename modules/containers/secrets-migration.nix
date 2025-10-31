@@ -110,13 +110,14 @@
       # };
 
       # OPNsense Exporter credentials
-      "opnsense-exporter-secrets-container-monitor" = {
-        key = "opnsense-exporter-secrets";
-        owner = "container-monitor";
-        group = "container-monitor";
-        mode = "0400";
-        path = "/run/secrets-container-monitor/opnsense-exporter-secrets";
-      };
+      # NOTE: Removed - now managed by mkQuadletService with containerUser parameter
+      # "opnsense-exporter-secrets-container-monitor" = {
+      #   key = "opnsense-exporter-secrets";
+      #   owner = "container-monitor";
+      #   group = "container-monitor";
+      #   mode = "0400";
+      #   path = "/run/secrets-container-monitor/opnsense-exporter-secrets";
+      # };
 
       # === container-web secrets (web services) ===
 

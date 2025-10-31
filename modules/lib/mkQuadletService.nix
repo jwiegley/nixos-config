@@ -259,6 +259,11 @@ in
         #   WatchdogSec = watchdogSec;
         #   NotifyAccess = "all";
         # })
+        # Rootless operation: run container as specific user when containerUser is set
+        (lib.optionalAttrs (containerUser != null) {
+          User = containerUser;
+          Group = containerUser;
+        })
         extraServiceConfig
       ];
     };

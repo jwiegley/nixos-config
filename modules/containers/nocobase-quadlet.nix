@@ -11,6 +11,7 @@ in
       image = "docker.io/nocobase/nocobase:latest";
       port = 13000;
       requiresPostgres = true;
+      containerUser = "container-db";  # Run rootless as container-db user
 
       # Enable health checks
       healthCheck = {

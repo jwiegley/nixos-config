@@ -147,12 +147,20 @@ CERT_PATH="${OUTPUT_DIR}/${CERT_FILE}"
 # Create output directory if it doesn't exist
 sudo mkdir -p "$OUTPUT_DIR"
 
-# Get CA password from SOPS
-CA_PASSWORD=$(sops -d /etc/nixos/secrets/secrets.yaml 2>/dev/null | grep "step-ca-password:" | cut -d' ' -f2)
+# Get CA password from NixOS SOPS secret file
+# The secret is deployed by sops-nix to /run/secrets/step-ca-password
+CA_PASSWORD_FILE="/run/secrets/step-ca-password"
+
+if [ ! -f "$CA_PASSWORD_FILE" ]; then
+    echo "ERROR: CA password file not found at $CA_PASSWORD_FILE"
+    echo "Make sure the NixOS SOPS secret 'step-ca-password' is configured"
+    exit 1
+fi
+
+CA_PASSWORD=$(cat "$CA_PASSWORD_FILE")
 
 if [ -z "$CA_PASSWORD" ]; then
-    echo "ERROR: Cannot access CA password from SOPS"
-    echo "Make sure you have the correct SOPS keys configured"
+    echo "ERROR: CA password file is empty"
     exit 1
 fi
 

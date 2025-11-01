@@ -179,6 +179,7 @@ in
         User = "root";
         RemainAfterExit = false;
         TimeoutStartSec = "10m";
+        KillMode = "process";  # Only kill main script, not restarted containers
         StandardOutput = "journal";
         StandardError = "journal";
       };

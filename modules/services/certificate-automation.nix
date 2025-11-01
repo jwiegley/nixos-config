@@ -52,7 +52,7 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl step-cli systemd ];
+      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -66,7 +66,7 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl step-cli systemd sudo sops ];
+      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -80,7 +80,7 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl step-cli systemd ];
+      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -94,7 +94,7 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl step-cli systemd ];
+      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };

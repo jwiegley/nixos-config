@@ -48,8 +48,8 @@ in
         # Connection settings
         max_connections = 200;  # Increased from default 100 to handle bulk operations
 
-        # Network Security - Restrict to specific interfaces
-        listen_addresses = lib.mkForce "localhost,192.168.1.2,10.88.0.1";
+        # Network Security - Listen on all interfaces (auth rules control access)
+        listen_addresses = lib.mkForce "*";
         ssl = true;
         ssl_cert_file = "/var/lib/postgresql/certs/server.crt";
         ssl_key_file = "/var/lib/postgresql/certs/server.key";

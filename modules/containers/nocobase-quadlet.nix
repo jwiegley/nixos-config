@@ -65,7 +65,10 @@ in
       };
 
       tmpfilesRules = [
+        # Create directory with proper ownership
         "d /var/lib/nocobase 0755 container-db container-db -"
+        # Recursively fix ownership of existing files (Z = recursive ownership/mode fix)
+        "Z /var/lib/nocobase 0755 container-db container-db -"
       ];
     })
   ];

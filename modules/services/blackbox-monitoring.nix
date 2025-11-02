@@ -473,6 +473,7 @@ in
             "https://nodered.vulcan.lan"
             "https://nextcloud.vulcan.lan"
             "https://nocobase.vulcan.lan"
+            "https://ntopng.vulcan.lan"
             "https://wallabag.vulcan.lan"
             "https://jellyfin.vulcan.lan"
             "https://silly-tavern.vulcan.lan"

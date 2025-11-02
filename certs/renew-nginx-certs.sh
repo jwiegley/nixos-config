@@ -26,6 +26,7 @@ DOMAINS=(
     "nagios.vulcan.lan"
     "nextcloud.vulcan.lan"
     "nodered.vulcan.lan"
+    "ntopng.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "promtail.vulcan.lan"

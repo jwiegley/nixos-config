@@ -255,8 +255,10 @@ let
     { name = "glance.service"; display = "Glance Dashboard"; }
     { name = "glance-github-extension.service"; display = "Glance GitHub Extension"; }
     { name = "cockpit.service"; display = "Cockpit Web Console"; }
+    { name = "ntopng.service"; display = "ntopng Network Monitor"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
+    { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
     { name = "changedetection-pod.service"; display = "ChangeDetection Pod"; }
     { name = "changedetection-app-container.service"; display = "ChangeDetection Application"; }
     { name = "changedetection-exporter-container.service"; display = "ChangeDetection Exporter"; }
@@ -1037,6 +1039,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: nodered.vulcan.lan
       check_command           check_ssl_cert!nodered.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: ntopng.vulcan.lan
+      check_command           check_ssl_cert!ntopng.vulcan.lan
       service_groups          ssl-certificates
     }
 

@@ -1,0 +1,81 @@
+groups:
+  - name: ntopng_health
+    interval: 30s
+    rules:
+      # ntopng service health
+      - alert: NtopngServiceDown
+        expr: |
+          systemd_unit_state{
+            name="ntopng.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: network-monitoring
+        annotations:
+          summary: "ntopng network monitoring service is down"
+          description: "ntopng service is not active on {{ $labels.instance }}. Network traffic analysis is unavailable."
+
+      # Redis dependency for ntopng
+      - alert: NtopngRedisDown
+        expr: |
+          systemd_unit_state{
+            name="redis-ntopng.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: network-monitoring
+        annotations:
+          summary: "ntopng Redis cache service is down"
+          description: "redis-ntopng service is not active on {{ $labels.instance }}. ntopng caching is unavailable."
+
+      # Web interface availability
+      - alert: NtopngWebInterfaceDown
+        expr: probe_success{instance="https://ntopng.vulcan.lan"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: network-monitoring
+        annotations:
+          summary: "ntopng web interface is not responding"
+          description: "ntopng web interface at https://ntopng.vulcan.lan is not accessible. Check nginx and ntopng service status."
+
+      # SSL certificate expiration warning
+      - alert: NtopngCertificateExpiringSoon
+        expr: |
+          probe_ssl_earliest_cert_expiry{instance="https://ntopng.vulcan.lan"} - time() < 86400 * 15
+        for: 10m
+        labels:
+          severity: warning
+          category: network-monitoring
+        annotations:
+          summary: "ntopng SSL certificate expiring soon"
+          description: "SSL certificate for ntopng.vulcan.lan expires in less than 15 days"
+
+      # SSL certificate expiration critical
+      - alert: NtopngCertificateExpiringSoonCritical
+        expr: |
+          probe_ssl_earliest_cert_expiry{instance="https://ntopng.vulcan.lan"} - time() < 86400 * 7
+        for: 10m
+        labels:
+          severity: critical
+          category: network-monitoring
+        annotations:
+          summary: "ntopng SSL certificate expiring very soon"
+          description: "SSL certificate for ntopng.vulcan.lan expires in less than 7 days - IMMEDIATE ACTION REQUIRED"
+
+      # Web interface slow response
+      - alert: NtopngWebInterfaceSlow
+        expr: probe_http_duration_seconds{instance="https://ntopng.vulcan.lan"} > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: network-monitoring
+        annotations:
+          summary: "ntopng web interface responding slowly"
+          description: "ntopng web interface at https://ntopng.vulcan.lan is taking more than 5 seconds to respond"

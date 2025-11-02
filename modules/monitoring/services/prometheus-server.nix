@@ -14,6 +14,7 @@ let
     "dns.yaml"
     "network.yaml"
     "nextcloud.yaml"
+    "ntopng.yaml"
     "litellm-availability.yaml"
     "metabase.yaml"
     "nocobase.yaml"

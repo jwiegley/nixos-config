@@ -211,6 +211,10 @@ with lib;
                           url = "https://mrtg.vulcan.lan";
                         }
                         {
+                          title = "ntopng";
+                          url = "https://ntopng.vulcan.lan";
+                        }
+                        {
                           title = "OpenSpeedTest";
                           url = "https://speedtest.vulcan.lan";
                         }

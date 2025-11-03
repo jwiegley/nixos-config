@@ -38,9 +38,9 @@ groups:
             Expected backups: etc, home, var-lib
             Action: Check if local-backup.service has ever run successfully
 
-      # Warning when backup is getting old (2 hours)
+      # Warning when backup is getting old (2.5 hours)
       - alert: LocalBackupAging
-        expr: (time() - local_backup_last_success_timestamp) > 7200
+        expr: (time() - local_backup_last_success_timestamp) > 9000
         for: 5m
         labels:
           severity: warning
@@ -49,6 +49,6 @@ groups:
         annotations:
           summary: "Local backup aging on {{ $labels.host }}"
           description: |
-            Local backup {{ $labels.backup }} ({{ $labels.source }}) hasn't run in over 2 hours.
+            Local backup {{ $labels.backup }} ({{ $labels.source }}) hasn't run in over 2.5 hours.
             Last backup: {{ $value | humanizeDuration }} ago.
             Normal interval is hourly. Check if the backup timer is functioning correctly.

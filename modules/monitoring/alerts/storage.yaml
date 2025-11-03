@@ -60,7 +60,7 @@ groups:
           description: "Restic check for repository {{ $labels.repository }} has failed"
 
       - alert: ResticNoRecentSnapshot
-        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 93600
+        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 100800
         for: 10m
         labels:
           severity: warning
@@ -68,7 +68,7 @@ groups:
           service: restic
         annotations:
           summary: "Restic repository has no recent snapshots"
-          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 26 hours (last: {{ $value | humanizeDuration }} ago)"
+          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 28 hours (last: {{ $value | humanizeDuration }} ago)"
 
       - alert: ResticNoSnapshots
         expr: restic_snapshots_total{repository!=""} == 0

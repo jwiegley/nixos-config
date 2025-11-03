@@ -8,6 +8,9 @@
       forceImportAll = false;
       forceImportRoot = false;
       extraPools = [ "tank" "gdrive" ];
+      # Don't request encryption credentials during boot
+      # Encrypted datasets with canmount=noauto must be loaded manually
+      requestEncryptionCredentials = false;
     };
   };
 

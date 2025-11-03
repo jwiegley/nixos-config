@@ -21,7 +21,15 @@
   fileSystems."/boot" =
     { device = "/dev/disk/by-uuid/FFF4-1EFC";
       fsType = "vfat";
-      options = [ "fmask=0022" "dmask=0022" ];
+      # Add systemd options to handle NVMe device detection race condition
+      # on Apple Silicon hardware where boot device isn't always ready in time
+      options = [
+        "fmask=0022"
+        "dmask=0022"
+        "nofail"                        # Don't fail boot if mount fails
+        "x-systemd.device-timeout=30s"  # Wait up to 30s for device
+        "x-systemd.automount"           # Mount on first access
+      ];
     };
 
   swapDevices = [ ];

@@ -79,15 +79,13 @@ HEADER
         TIMER_ACTIVE=0
       fi
 
-      # Get last run timestamp
-      LAST_RUN_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestampMonotonic --value "$service" || echo "0")
-      if [ "$LAST_RUN_TS" = "0" ] || [ -z "$LAST_RUN_TS" ]; then
+      # Get last run timestamp (use real timestamp, not monotonic)
+      LAST_RUN_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestamp --value "$service" || echo "")
+      if [ -z "$LAST_RUN_TS" ] || [ "$LAST_RUN_TS" = "n/a" ]; then
         LAST_RUN_EPOCH=0
       else
-        # Convert monotonic to epoch (approximate)
-        CURRENT_EPOCH=$(date +%s)
-        CURRENT_MONOTONIC=$(${pkgs.coreutils}/bin/cat /proc/uptime | ${pkgs.gawk}/bin/awk '{print int($1 * 1000000)}')
-        LAST_RUN_EPOCH=$(( CURRENT_EPOCH - (CURRENT_MONOTONIC - LAST_RUN_TS) / 1000000 ))
+        # Convert systemd timestamp to epoch seconds
+        LAST_RUN_EPOCH=$(${pkgs.coreutils}/bin/date -d "$LAST_RUN_TS" +%s 2>/dev/null || echo "0")
       fi
 
       # Get result of last run

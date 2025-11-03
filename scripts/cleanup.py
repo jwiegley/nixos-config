@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# cleanup - Automated cleanup script using dirscan
+
+import os
+import re
+import sys
+import getopt
+import subprocess
+import random
+import logging as l
+
+from dirscan  import *
+from datetime import *
+from os.path  import *
+from stat     import *
+
+from fcntl import flock, LOCK_SH, LOCK_EX, LOCK_UN
+
+args   = None
+debug  = False
+status = False
+opts   = { 'dryrun': False, 'ages': False }
+
+lockfile = open('/tmp/cleanup.lock', 'wb')
+flock(lockfile, LOCK_EX)
+
+if len(sys.argv) > 1:
+    options, args = getopt(sys.argv[1:], 'nvuA', {})
+
+    for o, a in options:
+        if o in ('-v'):
+            debug = True
+            l.basicConfig(level = l.DEBUG,
+                          format = '[%(levelname)s] %(message)s')
+        elif o in ('-u'):
+            status = True
+            l.basicConfig(level = l.INFO, format = '%(message)s')
+        elif o in ('-n'):
+            opts['dryrun'] = True
+        elif o in ('-A'):
+            opts['ages'] = True
+
+if not args or "trash" in args:
+    if isdir('/home/johnw/.trash'):
+        DirScanner(directory        = '/home/johnw/.trash',
+                   days             = 28,
+                   mtime            = True,
+                   cacheAttrs       = True,
+                   maxSize          = '1%',
+                   sudo             = True,
+                   depth            = 0,
+                   minimalScan      = True,
+                   onEntryPastLimit = safeRemove,
+                   **opts).scanEntries()
+
+if not args or "backups" in args:
+    if exists('/tank/Backups/PostgreSQL'):
+        DirScanner(directory        = '/tank/Backups/PostgreSQL',
+                   days             = 28,
+                   mtime            = True,
+                   sudo             = True,
+                   depth            = 0,
+                   maxSize          = '10000000000',
+                   minimalScan      = True,
+                   onEntryPastLimit = safeRemove,
+                   **opts).scanEntries()
+
+    if exists('/tank/Backups/TechnitiumDNS'):
+        DirScanner(directory        = '/tank/Backups/TechnitiumDNS',
+                   days             = 28,
+                   mtime            = True,
+                   sudo             = True,
+                   depth            = 0,
+                   maxSize          = '10000000000',
+                   minimalScan      = True,
+                   onEntryPastLimit = safeRemove,
+                   **opts).scanEntries()
+
+    if exists('/tank/Nextcloud/johnw/files/OPNsense-Backup'):
+        DirScanner(directory        = '/tank/Nextcloud/johnw/files/OPNsense-Backup',
+                   days             = 28,
+                   mtime            = True,
+                   sudo             = True,
+                   depth            = 0,
+                   maxSize          = '10000000000',
+                   minimalScan      = True,
+                   onEntryPastLimit = safeRemove,
+                   **opts).scanEntries()
+
+flock(lockfile, LOCK_UN)
+os.remove('/tmp/cleanup.lock')
+
+sys.exit(0)
+
+# cleanup.py ends here

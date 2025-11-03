@@ -11,6 +11,8 @@ let
   prevWithHaskell = prev // (haskellOverlay final prev);
 in
 {
+  inherit (import ./dirscan.nix final prev) dirscan;
+
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
   # Extend Python package sets system-wide using pythonPackagesExtensions

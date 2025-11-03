@@ -92,6 +92,7 @@ in
       btop
       dh
       dig
+      dirscan
       ethtool
       gh
       gnupg

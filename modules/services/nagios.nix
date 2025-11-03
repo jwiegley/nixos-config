@@ -1693,9 +1693,11 @@ in
   ];
 
   # Ensure tmpfiles setup runs after ZFS mounts
+  # Use 'wants' instead of 'requires' to avoid blocking during configuration switches
+  # when ZFS mount units aren't available yet
   systemd.services.systemd-tmpfiles-resetup = {
     after = [ "tank-Backups.mount" ];
-    requires = [ "tank-Backups.mount" ];
+    wants = [ "tank-Backups.mount" ];
   };
 
   # Bind mount /run/nagios to /var/lib/nagios/spool for compatibility

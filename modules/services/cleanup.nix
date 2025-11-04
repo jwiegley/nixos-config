@@ -19,7 +19,7 @@ let
 
     # Add dirscan to Python path and run the cleanup script with verbose flag
     export PYTHONPATH="${pkgs.dirscan}/libexec''${PYTHONPATH:+:$PYTHONPATH}"
-    ${pkgs.python3}/bin/python3 /etc/nixos/scripts/cleanup.py
+    ${pkgs.python3}/bin/python3 /etc/nixos/scripts/cleanup.py -u
 
     log "Cleanup completed successfully"
   '';

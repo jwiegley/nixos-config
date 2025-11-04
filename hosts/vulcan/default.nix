@@ -37,6 +37,8 @@
     ../../modules/services/technitium-dns-backup.nix
     ../../modules/services/local-backup.nix
     ../../modules/services/cleanup.nix
+    ../../modules/services/dirscan-share.nix
+    ../../modules/services/dirscan-share-config.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/web.nix
     ../../modules/services/media.nix

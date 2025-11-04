@@ -135,6 +135,23 @@
         'fixed' => ['username'],  # Don't allow changing username
         'hide' => false,
       ];
+
+      # ManageSieve plugin configuration for Dovecot Sieve filters
+      $config['managesieve_host'] = 'localhost';
+      $config['managesieve_port'] = 4190;
+      $config['managesieve_usetls'] = false;  # Localhost connection, no TLS needed
+      $config['managesieve_auth_type'] = null;  # Use default IMAP auth
+      $config['managesieve_auth_cid'] = null;  # Use IMAP username
+      $config['managesieve_auth_pw'] = null;  # Use IMAP password
+      $config['managesieve_default'] = '/var/lib/dovecot/sieve/default.sieve';
+      $config['managesieve_script_name'] = 'roundcube';  # Default script name
+
+      // Sieve filter settings
+      $config['managesieve_kolab_master'] = false;
+      $config['managesieve_mbox_encoding'] = 'UTF-8';
+      $config['managesieve_replace_delimiter'] = ${"''"};
+      $config['managesieve_debug'] = false;
+      $config['managesieve_raw_editor'] = true;
     '';
   };
 

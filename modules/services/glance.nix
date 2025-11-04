@@ -207,10 +207,6 @@ with lib;
                           url = "https://nagios.vulcan.lan";
                         }
                         {
-                          title = "MRTG";
-                          url = "https://mrtg.vulcan.lan";
-                        }
-                        {
                           title = "ntopng";
                           url = "https://ntopng.vulcan.lan";
                         }

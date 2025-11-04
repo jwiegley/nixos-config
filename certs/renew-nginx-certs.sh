@@ -22,7 +22,6 @@ DOMAINS=(
     "jellyfin.vulcan.lan"
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
-    "mrtg.vulcan.lan"
     "nagios.vulcan.lan"
     "nextcloud.vulcan.lan"
     "nodered.vulcan.lan"

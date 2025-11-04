@@ -522,66 +522,6 @@ vulcan (monitoring server)
 - **PING**: ICMP reachability checks for all hosts
 - **SSL Certificates**: HTTPS certificate expiration monitoring for web services
 
-### MRTG Performance Graphing
-
-MRTG (Multi Router Traffic Grapher) provides visual trending of Nagios performance metrics over time.
-
-```bash
-# Web interface
-# URL: https://mrtg.vulcan.lan
-
-# Service status
-sudo systemctl status mrtg-nagios.service
-sudo systemctl status mrtg-nagios.timer
-
-# View service logs
-sudo journalctl -u mrtg-nagios -f
-
-# Manual data collection (runs automatically every 5 minutes)
-sudo systemctl start mrtg-nagios.service
-
-# Check generated graphs
-ls -lh /var/lib/mrtg-nagios/*.png
-```
-
-**Available Performance Graphs:**
-
-MRTG generates 13 different graphs tracking Nagios statistics:
-
-1. **nagios-a**: Service check latency and execution time (milliseconds)
-2. **nagios-b**: Service state change percentage (active vs passive)
-3. **nagios-c**: Host check latency and execution time (milliseconds)
-4. **nagios-d**: Host state change percentage (active vs passive)
-5. **nagios-e**: Active checks performed (hosts and services, last 5 min)
-6. **nagios-f**: Passive checks performed (hosts and services, last 5 min)
-7. **nagios-g**: Service problems (critical and unknown services)
-8. **nagios-i**: Active host checks (scheduled vs on-demand, last 5 min)
-9. **nagios-j**: Active service checks (scheduled vs on-demand, last 5 min)
-10. **nagios-k**: Passive checks (hosts and services, last 5 min)
-11. **nagios-l**: Cached checks (hosts and services, last 5 min)
-12. **nagios-m**: External commands processed (last 5 min)
-13. **nagios-n**: Host check execution (parallel vs serial, last 5 min)
-
-**Configuration:**
-
-- **Module**: `/etc/nixos/modules/monitoring/mrtg.nix`
-- **Config**: `/etc/nixos/modules/monitoring/mrtg-config.nix`
-- **Data Directory**: `/var/lib/mrtg-nagios/`
-- **Collection Interval**: 5 minutes (configurable)
-- **Data Source**: `nagiostats` binary from Nagios
-
-**Accessing Graphs:**
-
-All graphs are available via the web interface at `https://mrtg.vulcan.lan`. Individual graph files:
-- Daily graphs: `/var/lib/mrtg-nagios/nagios-{a-n}-day.png`
-- Weekly graphs: `/var/lib/mrtg-nagios/nagios-{a-n}-week.png`
-- Monthly graphs: `/var/lib/mrtg-nagios/nagios-{a-n}-month.png`
-- Yearly graphs: `/var/lib/mrtg-nagios/nagios-{a-n}-year.png`
-
-**Modern Alternative:**
-
-While MRTG works well for historical compatibility, consider using **Prometheus + Grafana** for more advanced metrics visualization. The existing Prometheus/Grafana stack can ingest Nagios performance data via exporters for richer dashboards with alerting.
-
 ### Container Management
 
 ```bash
@@ -792,9 +732,7 @@ openssl s_client -connect hass.vulcan.lan:443 -servername hass.vulcan.lan
 
 **Home Assistant:** https://hass.vulcan.lan (nginx reverse proxy to :8123)
 
-**Monitoring:** Grafana, Prometheus, Alertmanager, MRTG (*.vulcan.lan)
-
-**Nagios MRTG:** https://mrtg.vulcan.lan (performance graphs)
+**Monitoring:** Grafana, Prometheus, Alertmanager (*.vulcan.lan)
 
 **Backups:** Restic to rsync.net, automated via timers
 

@@ -29,6 +29,7 @@ DOMAINS=(
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "promtail.vulcan.lan"
+    "radicale.vulcan.lan"
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
     "teable.vulcan.lan"

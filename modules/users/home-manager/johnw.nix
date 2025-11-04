@@ -503,6 +503,7 @@
       gitAndTools.git-workspace
       global
       claude-code
+      apacheHttpd
 
       # Shell enhancements
       zsh-z

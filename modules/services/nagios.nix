@@ -214,6 +214,7 @@ let
     { name = "nginx.service"; display = "Nginx Web Server"; }
     { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
     { name = "postfix.service"; display = "Postfix Mail Server"; }
+    { name = "radicale.service"; display = "Radicale CalDAV/CardDAV Server"; }
     { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
     { name = "samba-wsdd.service"; display = "Samba Web Service Discovery"; }
     { name = "technitium-dns-server.service"; display = "Technitium DNS Server"; }

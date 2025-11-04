@@ -1,6 +1,11 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Add Dovecot Pigeonhole (Sieve) support
+  environment.systemPackages = with pkgs; [
+    dovecot_pigeonhole
+  ];
+
   # Create dovecot2 and mail groups for Dovecot
   users.groups.dovecot2 = {};
   users.groups.mail = {};
@@ -33,11 +38,15 @@
     group = "dovecot2";
 
     # Enable mail plugins globally for old_stats (required for Prometheus exporter)
-    # and FTS (full-text search) with Xapian-based Flatcurve backend
+    # FTS (full-text search) with Xapian-based Flatcurve backend
+    # Note: sieve is protocol-specific, not global - configured in LDA protocol below
     mailPlugins.globally.enable = [ "old_stats" "fts" "fts_flatcurve" ];
 
     # Extra configuration for advanced settings
     extraConfig = ''
+      # Enable ManageSieve protocol
+      protocols = $protocols sieve
+
       # SSL/TLS configuration
       ssl = required
       ssl_min_protocol = TLSv1.2
@@ -56,10 +65,15 @@
 
       # Protocol-specific settings
       protocol imap {
-        mail_plugins = $mail_plugins old_stats fts fts_flatcurve
+        mail_plugins = $mail_plugins old_stats fts fts_flatcurve imap_sieve
         imap_idle_notify_interval = 2 mins
         mail_max_userip_connections = 50
         imap_capability = +IDLE SORT THREAD=REFERENCES THREAD=REFS MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 LITERAL+ NOTIFY SPECIAL-USE
+      }
+
+      # LDA (Local Delivery Agent) protocol
+      protocol lda {
+        mail_plugins = $mail_plugins sieve
       }
 
       # Service configuration
@@ -129,6 +143,17 @@
         }
       }
 
+      # ManageSieve service for managing Sieve mail filtering scripts
+      service managesieve-login {
+        inet_listener sieve {
+          port = 4190
+        }
+      }
+
+      service managesieve {
+        process_limit = 1024
+      }
+
       # Authentication configuration
       # First try passwd-file for Dovecot-specific accounts
       passdb {
@@ -196,6 +221,28 @@
         fts_languages = en
         fts_tokenizers = generic email-address
         fts_tokenizer_generic = algorithm=simple
+
+        # Sieve mail filtering configuration
+        sieve = file:~/sieve;active=~/.dovecot.sieve
+        sieve_global_dir = /var/lib/dovecot/sieve/global/
+        sieve_default = /var/lib/dovecot/sieve/default.sieve
+        sieve_default_name = default
+
+        # Sieve extensions
+        sieve_extensions = +notify +imapflags +vacation-seconds +editheader
+        sieve_max_script_size = 1M
+        sieve_max_actions = 32
+        sieve_max_redirects = 4
+
+        # IMAP Sieve plugin for moving messages to Spam/Trash folders
+        imapsieve_mailbox1_name = Spam
+        imapsieve_mailbox1_causes = COPY
+        imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/global/report-spam.sieve
+
+        imapsieve_mailbox2_name = *
+        imapsieve_mailbox2_from = Spam
+        imapsieve_mailbox2_causes = COPY
+        imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/global/report-ham.sieve
       }
 
       # Mailbox configuration
@@ -231,14 +278,18 @@
     group = "dovecot-exporter";
   };
 
-  # Ensure certificate, FTS index, and mail directories exist with proper permissions
+  # Ensure certificate, FTS index, Sieve, and mail directories exist with proper permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
+    "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
+    "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
     "d /var/mail/johnw 0700 johnw users -"
+    "d /var/mail/johnw/sieve 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
+    "d /var/mail/assembly/sieve 0700 assembly users -"
   ];
 
   # Generate DH parameters if they don't exist
@@ -272,5 +323,5 @@
   ];
 
   networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.dovecot2.enable [ 993 ];
+    lib.mkIf config.services.dovecot2.enable [ 993 4190 ];
 }

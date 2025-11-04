@@ -49,8 +49,6 @@
     ../../modules/services/nagios.nix
     ../../modules/monitoring/homeassistant-nagios-check.nix
     ../../modules/monitoring/nagios-daily-report.nix
-    ../../modules/monitoring/mrtg.nix
-    ../../modules/monitoring/mrtg-config.nix
     ../../modules/monitoring/container-health-exporter.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix

@@ -35,6 +35,7 @@ DOMAINS=(
     "teable.vulcan.lan"
     "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"
+    "webmail.vulcan.lan"
 )
 
 # Check if the general renewal script exists

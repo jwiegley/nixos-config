@@ -40,6 +40,10 @@
         RemainAfterExit = true;
         # Don't fail if password is already set
         SuccessExitStatus = "0 2";
+        # Use systemd LoadCredential to securely load the secret
+        # This creates an isolated copy at $CREDENTIALS_DIRECTORY/db-password
+        # that the postgres user can read, regardless of the source file ownership
+        LoadCredential = "db-password:${secretPath}";
       };
 
       # Wait for PostgreSQL to be ready before attempting to set password
@@ -58,8 +62,9 @@
       script = ''
         # Check if password is already set by trying to connect
         if ! ${config.services.postgresql.package}/bin/psql -U ${user} -d ${database} -c "SELECT 1" 2>/dev/null; then
-          # Set the password from the SOPS secret file
-          ${config.services.postgresql.package}/bin/psql -c "ALTER USER ${user} WITH PASSWORD '$(cat ${secretPath})'"
+          # Set the password from the systemd credentials directory
+          # LoadCredential creates an isolated copy that this service can read
+          ${config.services.postgresql.package}/bin/psql -c "ALTER USER ${user} WITH PASSWORD '$(cat $CREDENTIALS_DIRECTORY/db-password)'"
         fi
       '';
     };

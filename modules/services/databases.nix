@@ -33,6 +33,12 @@ in
       secretPath = config.sops.secrets."nocobase-db-password".path;
       dependentService = "podman-nocobase.service";
     })
+    (mkPostgresUserSetup {
+      user = "roundcube";
+      database = "roundcube";
+      secretPath = config.sops.secrets."roundcube-db-password".path;
+      dependentService = "roundcube-setup.service";
+    })
   ];
 
   services = {
@@ -70,6 +76,7 @@ in
         "teable"
         "budgetboard"
         "nocobase"
+        "roundcube"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -90,6 +97,10 @@ in
         }
         {
           name = "nocobase";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "roundcube";
           ensureDBOwnership = true;
         }
       ];

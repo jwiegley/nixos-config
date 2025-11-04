@@ -157,6 +157,10 @@ with lib;
                       color = "280 50 60";
                       links = [
                         {
+                          title = "Webmail";
+                          url = "https://webmail.vulcan.lan";
+                        }
+                        {
                           title = "Fastmail";
                           url = "https://app.fastmail.com/mail/Inbox/?u=d30140a0";
                         }

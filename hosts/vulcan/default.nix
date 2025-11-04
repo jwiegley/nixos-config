@@ -63,6 +63,7 @@
     ../../modules/monitoring/services/victoriametrics.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
+    ../../modules/services/roundcube.nix
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
     ../../modules/services/radicale.nix

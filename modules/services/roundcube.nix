@@ -26,7 +26,7 @@
   # Roundcube webmail service
   services.roundcube = {
     enable = true;
-    package = pkgs.roundcube;
+    package = pkgs.roundcube.withPlugins (plugins: [ plugins.carddav ]);
     hostName = "webmail.vulcan.lan";
 
     # Disable automatic nginx configuration - we'll configure it manually
@@ -52,6 +52,7 @@
       "managesieve"
       "markasjunk"
       "newmail_notifier"
+      "carddav"
     ];
 
     # Spell checking dictionaries
@@ -121,6 +122,19 @@
 
       # Address book settings
       $config['autocomplete_addressbooks'] = ['sql'];
+
+      # CardDAV plugin configuration for Radicale
+      $config['carddav_presets']['Radicale'] = [
+        'name' => 'Radicale CardDAV',
+        'username' => '%u',  # Use Roundcube username
+        'password' => '%p',  # Use Roundcube password
+        'url' => 'https://radicale.vulcan.lan/%u/',
+        'active' => true,
+        'readonly' => false,
+        'refresh_time' => '01:00:00',  # Refresh every hour
+        'fixed' => ['username'],  # Don't allow changing username
+        'hide' => false,
+      ];
     '';
   };
 
@@ -141,7 +155,8 @@
     sslCertificateKey = "/var/lib/nginx-certs/webmail.vulcan.lan.key";
 
     # Serve Roundcube static files and proxy PHP to FastCGI
-    root = "${pkgs.roundcube}";
+    # Use the configured package which includes plugins
+    root = "${config.services.roundcube.package}";
 
     locations."/" = {
       index = "index.php";

@@ -15,6 +15,7 @@ let
     "step-ca"
     "dovecot"
     "postfix"
+    "radicale"
 
     # Monitoring Stack
     "prometheus"

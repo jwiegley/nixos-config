@@ -65,6 +65,7 @@
     ../../modules/services/dovecot.nix
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
+    ../../modules/services/radicale.nix
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
     ../../modules/services/cockpit.nix

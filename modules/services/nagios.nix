@@ -215,6 +215,7 @@ let
     { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
     { name = "postfix.service"; display = "Postfix Mail Server"; }
     { name = "radicale.service"; display = "Radicale CalDAV/CardDAV Server"; }
+    { name = "vdirsyncer-status.service"; display = "vdirsyncer Status Dashboard"; }
     { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
     { name = "samba-wsdd.service"; display = "Samba Web Service Discovery"; }
     { name = "technitium-dns-server.service"; display = "Technitium DNS Server"; }
@@ -305,6 +306,7 @@ let
     { name = "mbsync-johnw-health-check.timer"; display = "Email Sync Health Check (johnw)"; }
     { name = "mbsync-assembly-health-check.timer"; display = "Email Sync Health Check (assembly)"; }
     { name = "imapdedup.timer"; display = "IMAP Deduplication"; }
+    { name = "vdirsyncer.timer"; display = "Contact/Calendar Sync (vdirsyncer)"; }
   ];
 
   # Certificate Renewal Timers
@@ -1120,6 +1122,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: speedtest.vulcan.lan
       check_command           check_ssl_cert!speedtest.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: vdirsyncer.vulcan.lan
+      check_command           check_ssl_cert!vdirsyncer.vulcan.lan
       service_groups          ssl-certificates
     }
 

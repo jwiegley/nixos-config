@@ -39,6 +39,12 @@ in
       secretPath = config.sops.secrets."roundcube-db-password".path;
       dependentService = "roundcube-setup.service";
     })
+    (mkPostgresUserSetup {
+      user = "rspamd";
+      database = "rspamd";
+      secretPath = config.sops.secrets."rspamd-db-password".path;
+      dependentService = "rspamd.service";
+    })
   ];
 
   services = {

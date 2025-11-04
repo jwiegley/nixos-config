@@ -219,6 +219,10 @@ with lib;
                           url = "https://nagios.vulcan.lan";
                         }
                         {
+                          title = "Rspamd";
+                          url = "https://rspamd.vulcan.lan";
+                        }
+                        {
                           title = "ntopng";
                           url = "https://ntopng.vulcan.lan";
                         }

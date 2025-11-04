@@ -320,6 +320,11 @@ doveadm search -u johnw body "search term"
 
 # Check configuration
 doveconf plugin | grep fts
+
+# ManageSieve (remote Sieve script management)
+# Port 4190 is open for remote connections
+sieveshell johnw@vulcan.lan  # Manage scripts remotely
+# See /etc/nixos/docs/SIEVE_FILTERING.md for details
 ```
 
 ### Samba File Sharing

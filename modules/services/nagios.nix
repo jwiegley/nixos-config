@@ -214,6 +214,7 @@ let
     { name = "nginx.service"; display = "Nginx Web Server"; }
     { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
     { name = "postfix.service"; display = "Postfix Mail Server"; }
+    { name = "rspamd.service"; display = "Rspamd Spam Filter"; }
     { name = "radicale.service"; display = "Radicale CalDAV/CardDAV Server"; }
     { name = "vdirsyncer-status.service"; display = "vdirsyncer Status Dashboard"; }
     { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
@@ -306,6 +307,7 @@ let
     { name = "mbsync-johnw-health-check.timer"; display = "Email Sync Health Check (johnw)"; }
     { name = "mbsync-assembly-health-check.timer"; display = "Email Sync Health Check (assembly)"; }
     { name = "imapdedup.timer"; display = "IMAP Deduplication"; }
+    { name = "rspamd-scan-mailboxes.timer"; display = "Rspamd Mailbox Scanning"; }
     { name = "vdirsyncer.timer"; display = "Contact/Calendar Sync (vdirsyncer)"; }
   ];
 

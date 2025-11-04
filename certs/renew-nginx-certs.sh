@@ -33,6 +33,7 @@ DOMAINS=(
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
     "teable.vulcan.lan"
+    "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"
     "webmail.vulcan.lan"

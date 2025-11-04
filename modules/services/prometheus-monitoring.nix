@@ -22,6 +22,7 @@
     ../monitoring/services/litellm-exporter.nix
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/changedetection-exporter.nix
+    ../monitoring/services/vdirsyncer-exporter.nix
 
     # Infrastructure monitoring
     ../monitoring/services/certificate-exporter.nix

@@ -139,6 +139,10 @@ with lib;
                           url = "https://radicale.vulcan.lan";
                         }
                         {
+                          title = "vdirsyncer";
+                          url = "https://vdirsyncer.vulcan.lan";
+                        }
+                        {
                           title = "Home Assistant";
                           url = "https://hass.vulcan.lan";
                         }

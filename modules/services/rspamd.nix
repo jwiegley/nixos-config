@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Helper script to scan mailboxes with rspamc
+  # Helper script to scan mailboxes with rspamc and process training folders
   mailboxScannerScript = pkgs.writeShellScript "rspamd-scan-mailboxes" ''
     set -euo pipefail
 
@@ -10,83 +10,179 @@ let
     MAIL_ROOT="/var/mail"
     SPAM_THRESHOLD=6  # Rspamd score threshold for spam (matches "add header" action)
     RSPAMC="${pkgs.rspamd}/bin/rspamc"
-    MESSAGES_SCANNED=0
-    SPAM_MOVED=0
+    DOVEADM="${pkgs.dovecot}/bin/doveadm"
 
-    # Function to scan a single maildir directory
-    scan_maildir() {
-      local maildir=$1
-      local maildir_name=$2
+    # Counters
+    GOOD_SCANNED=0
+    GOOD_SPAM_MOVED=0
+    GOOD_HAM_DELIVERED=0
+    TRAIN_GOOD_LEARNED=0
+    TRAIN_GOOD_DELIVERED=0
+    TRAIN_SPAM_LEARNED=0
+    TRAIN_SPAM_MOVED=0
 
-      if [ ! -d "$maildir/new" ] && [ ! -d "$maildir/cur" ]; then
+    # Process .Good folder: scan with rspamd, move spam or deliver ham via sieve
+    process_good() {
+      local user=$1
+      local maildir="$MAIL_ROOT/$user/.Good"
+
+      if [ ! -d "$maildir" ]; then
         return
       fi
 
-      echo "Scanning: $maildir_name"
-      local dir_count=0
+      echo "Processing .Good for $user..."
 
-      # Scan messages in new/ and cur/ directories
+      # Process messages in new/ and cur/
       for dir in new cur; do
-        if [ -d "$maildir/$dir" ]; then
-          for msg in "$maildir/$dir"/*; do
-            # Skip if not a regular file or if it's a directory
-            [ -f "$msg" ] || continue
-
-            # Scan message with rspamc
-            result=$($RSPAMC --json < "$msg" 2>/dev/null || true)
-            MESSAGES_SCANNED=$((MESSAGES_SCANNED + 1))
-
-            # Extract score from JSON result
-            score=$(echo "$result" | ${pkgs.jq}/bin/jq -r '.default.score // 0' 2>/dev/null || echo "0")
-
-            # If score exceeds threshold, move to .Spam folder
-            if (( $(echo "$score > $SPAM_THRESHOLD" | ${pkgs.bc}/bin/bc -l) )); then
-              # Determine user from maildir path
-              user=$(echo "$maildir" | sed 's|^/var/mail/\([^/]*\).*|\1|')
-              spam_dir="$MAIL_ROOT/$user/.Spam/cur"
-              mkdir -p "$spam_dir"
-
-              # Move message to .Spam folder
-              mv "$msg" "$spam_dir/"
-              echo "  → SPAM (score: $score): $(basename "$msg")"
-              SPAM_MOVED=$((SPAM_MOVED + 1))
-              dir_count=$((dir_count + 1))
-            fi
-          done
+        if [ ! -d "$maildir/$dir" ]; then
+          continue
         fi
-      done
 
-      if [ $dir_count -eq 0 ]; then
-        echo "  No spam detected"
-      fi
+        for msg in "$maildir/$dir"/*; do
+          [ -f "$msg" ] || continue
+
+          # Scan with rspamd
+          result=$($RSPAMC --json < "$msg" 2>/dev/null || true)
+          score=$(echo "$result" | ${pkgs.jq}/bin/jq -r '.default.score // 0' 2>/dev/null || echo "0")
+
+          GOOD_SCANNED=$((GOOD_SCANNED + 1))
+
+          # Check if spam
+          if (( $(echo "$score > $SPAM_THRESHOLD" | ${pkgs.bc}/bin/bc -l) )); then
+            # Move to .Spam
+            spam_dir="$MAIL_ROOT/$user/.Spam/cur"
+            mkdir -p "$spam_dir"
+            mv "$msg" "$spam_dir/"
+            echo "  → SPAM (score: $score): $(basename "$msg")"
+            GOOD_SPAM_MOVED=$((GOOD_SPAM_MOVED + 1))
+          else
+            # Deliver ham through sieve filter
+            if [ -f "/var/lib/dovecot/sieve/users/$user/.dovecot.sieve" ]; then
+              if $DOVEADM sieve filter -u "$user" /var/lib/dovecot/sieve/users/$user/.dovecot.sieve < "$msg" 2>/dev/null; then
+                rm -f "$msg"
+                echo "  → HAM delivered via sieve: $(basename "$msg")"
+                GOOD_HAM_DELIVERED=$((GOOD_HAM_DELIVERED + 1))
+              else
+                echo "  ⚠ Sieve delivery failed, keeping in .Good: $(basename "$msg")"
+              fi
+            else
+              echo "  ⚠ No sieve script found for $user, keeping in .Good: $(basename "$msg")"
+            fi
+          fi
+        done
+      done
     }
 
-    # Scan mailboxes for each user
+    # Process .TrainGood folder: learn as ham, then deliver via sieve
+    process_train_good() {
+      local user=$1
+      local maildir="$MAIL_ROOT/$user/.TrainGood"
+
+      if [ ! -d "$maildir" ]; then
+        return
+      fi
+
+      echo "Processing .TrainGood for $user..."
+
+      for dir in new cur; do
+        if [ ! -d "$maildir/$dir" ]; then
+          continue
+        fi
+
+        for msg in "$maildir/$dir"/*; do
+          [ -f "$msg" ] || continue
+
+          # Learn as ham
+          if $RSPAMC learn_ham < "$msg" >/dev/null 2>&1; then
+            echo "  → Learned HAM: $(basename "$msg")"
+            TRAIN_GOOD_LEARNED=$((TRAIN_GOOD_LEARNED + 1))
+
+            # Deliver through sieve filter
+            if [ -f "/var/lib/dovecot/sieve/users/$user/.dovecot.sieve" ]; then
+              if $DOVEADM sieve filter -u "$user" /var/lib/dovecot/sieve/users/$user/.dovecot.sieve < "$msg" 2>/dev/null; then
+                rm -f "$msg"
+                echo "  → Delivered via sieve: $(basename "$msg")"
+                TRAIN_GOOD_DELIVERED=$((TRAIN_GOOD_DELIVERED + 1))
+              else
+                echo "  ⚠ Sieve delivery failed, removing from .TrainGood: $(basename "$msg")"
+                rm -f "$msg"
+              fi
+            else
+              echo "  ⚠ No sieve script found for $user, removing: $(basename "$msg")"
+              rm -f "$msg"
+            fi
+          else
+            echo "  ⚠ Failed to learn: $(basename "$msg")"
+          fi
+        done
+      done
+    }
+
+    # Process .TrainSpam folder: learn as spam, then move to .Spam (unread)
+    process_train_spam() {
+      local user=$1
+      local maildir="$MAIL_ROOT/$user/.TrainSpam"
+
+      if [ ! -d "$maildir" ]; then
+        return
+      fi
+
+      echo "Processing .TrainSpam for $user..."
+
+      spam_dest="$MAIL_ROOT/$user/.IsSpam/new"
+      mkdir -p "$spam_dest"
+
+      for dir in new cur; do
+        if [ ! -d "$maildir/$dir" ]; then
+          continue
+        fi
+
+        for msg in "$maildir/$dir"/*; do
+          [ -f "$msg" ] || continue
+
+          # Learn as spam
+          if $RSPAMC learn_spam < "$msg" >/dev/null 2>&1; then
+            echo "  → Learned SPAM: $(basename "$msg")"
+            TRAIN_SPAM_LEARNED=$((TRAIN_SPAM_LEARNED + 1))
+
+            # Move to .IsSpam/new (unread)
+            mv "$msg" "$spam_dest/"
+            echo "  → Moved to .IsSpam: $(basename "$msg")"
+            TRAIN_SPAM_MOVED=$((TRAIN_SPAM_MOVED + 1))
+          else
+            echo "  ⚠ Failed to learn: $(basename "$msg")"
+          fi
+        done
+      done
+    }
+
+    # Main processing loop
+    echo "=== Rspamd Mailbox Scanner ==="
+    echo ""
+
     for user in "''${USERS[@]}"; do
-      echo "Processing user: $user"
+      echo "User: $user"
       user_root="$MAIL_ROOT/$user"
 
-      # Check if user maildir exists
       if [ ! -d "$user_root" ]; then
         echo "  Maildir not found: $user_root"
+        echo ""
         continue
       fi
 
-      # # Scan root INBOX (flat maildir at /var/mail/user/)
-      # if [ -d "$user_root/cur" ] || [ -d "$user_root/new" ]; then
-      #   scan_maildir "$user_root" "$user/INBOX"
-      # fi
+      # Process all three mailboxes
+      process_good "$user"
+      process_train_good "$user"
+      process_train_spam "$user"
 
-      # Only scan the .Good folder (not all subfolders)
-      if [ -d "$user_root/.Good" ]; then
-        scan_maildir "$user_root/.Good" "$user/.Good"
-      fi
+      echo ""
     done
 
-    echo ""
-    echo "Mailbox scanning complete"
-    echo "Messages scanned: $MESSAGES_SCANNED"
-    echo "Spam messages moved: $SPAM_MOVED"
+    # Summary
+    echo "=== Summary ==="
+    echo ".Good: scanned=$GOOD_SCANNED, spam_moved=$GOOD_SPAM_MOVED, ham_delivered=$GOOD_HAM_DELIVERED"
+    echo ".TrainGood: learned=$TRAIN_GOOD_LEARNED, delivered=$TRAIN_GOOD_DELIVERED"
+    echo ".TrainSpam: learned=$TRAIN_SPAM_LEARNED, moved=$TRAIN_SPAM_MOVED"
   '';
 
   # Sieve script for learning spam (when moved to TrainSpam)
@@ -168,6 +264,10 @@ in
         # Secure web interface access from localhost
         secure_ip = "127.0.0.1";
         secure_ip = "::1";
+
+        # IMPORTANT: Use single controller worker for RRD support
+        # Multiple controller workers break RRD graphs
+        count = 1;
       '';
     };
 
@@ -176,6 +276,12 @@ in
       "redis.conf".text = ''
         # Redis backend configuration for Bayes classifier
         servers = "127.0.0.1:6381";
+      '';
+
+      "rrd.conf".text = ''
+        # RRD configuration for historical statistics and graphs
+        # Enable RRD for throughput page
+        rrd = "/var/lib/rspamd/rspamd.rrd";
       '';
 
       "statistic.conf".text = ''

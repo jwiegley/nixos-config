@@ -13,7 +13,7 @@
   systemd.services.container-health-exporter = {
     description = "Container Health Exporter for Prometheus";
     after = [ "network.target" "podman.service" ];
-    wantedBy = [ "multi-user.target" ];
+    # No wantedBy - service only runs via timer
 
     serviceConfig = {
       Type = "oneshot";

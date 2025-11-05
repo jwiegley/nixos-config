@@ -2,7 +2,47 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ CRITICAL SECURITY RULES - READ FIRST ⚠️
+## ⚠️ CRITICAL RULES - READ FIRST ⚠️
+
+**ABSOLUTE PROHIBITIONS - NEVER VIOLATE THESE RULES:**
+
+### DATA SAFETY - PREVENTING DATA LOSS
+
+**NEVER modify systemd tmpfiles.rules for user data directories without explicit approval:**
+
+1. **UNDERSTAND tmpfiles.rules directives before modifying:**
+   - `d` = Create directory and **DELETE ALL CONTENTS** on every systemd-tmpfiles run
+   - `D` = Create directory only if missing, **PRESERVE EXISTING CONTENTS**
+   - `e` = Adjust permissions/ownership only, never delete contents
+   - Modifying existing `d` rules can cause **IMMEDIATE IRREVERSIBLE DATA LOSS** on next rebuild
+
+2. **NEVER change tmpfiles.rules for these directories without backup confirmation:**
+   - `/var/mail/*` (email storage)
+   - `/var/lib/*/users/*` (user-specific application data)
+   - `/home/*` (user home directories)
+   - Any directory containing user data that isn't version-controlled or backed up elsewhere
+
+3. **BEFORE modifying tmpfiles.rules affecting user data:**
+   - **STOP and ask user:** "This directory may contain data. Do you have backups?"
+   - **Explain the risk:** "Changing this could delete directory contents on rebuild"
+   - **Wait for explicit approval** before proceeding
+   - **Suggest testing** on a non-critical directory first
+
+4. **If user reports data loss after a rebuild:**
+   - Check if tmpfiles.rules were modified in recent commits
+   - Check systemd-tmpfiles logs: `journalctl -u systemd-tmpfiles-setup`
+   - Look for `d` directives that should have been `D`
+
+**PAST DATA LOSS INCIDENT (2025-11-04):**
+- Changed tmpfiles rule for `/var/mail/johnw` from `d` to `D` to fix Sieve script preservation
+- Did not understand that `d` directive actively deletes contents on every rebuild
+- System had already been rebuilt with `d`, causing complete loss of user's mail directories
+- User lost local-only mailboxes with no backup - UNRECOVERABLE
+- **Lesson:** Always research systemd directives before modifying, always ask about backups first
+
+---
+
+### SECURITY - PROTECTING SENSITIVE INFORMATION
 
 **ABSOLUTE PROHIBITIONS - NEVER VIOLATE THESE RULES:**
 

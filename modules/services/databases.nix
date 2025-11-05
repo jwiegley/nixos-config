@@ -83,6 +83,7 @@ in
         "budgetboard"
         "nocobase"
         "roundcube"
+        "gitea"
       ];
       ensureUsers = [
         { name = "postgres"; }

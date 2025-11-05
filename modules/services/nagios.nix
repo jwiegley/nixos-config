@@ -1209,8 +1209,8 @@ let
     define service {
       use                     generic-service
       host_name               vulcan
-      service_description     Local Backup: /var/lib
-      check_command           check_backup_age!var-lib!14400
+      service_description     Local Backup: /var
+      check_command           check_backup_age!var!14400
       check_interval          15
       service_groups          local-backups
     }

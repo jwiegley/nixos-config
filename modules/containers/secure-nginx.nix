@@ -5,20 +5,60 @@ let
   inherit (bindTankLib) bindTankPath;
 in
 {
-  # Ensure ACME certificate directory exists on host
-  # Also ensure /var/www/home.newartisans.com exists even when tank isn't
-  # mounted This allows the container to start (though it won't have content
-  # without tank)
+  # Create password files for copyparty from SOPS secrets
+  systemd.services.copyparty-password-setup = {
+    description = "Create copyparty password files for container";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "container@secure-nginx.service" ];
+    after = [ "sops-nix.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      mkdir -p /var/lib/copyparty-passwords
+      chmod 755 /var/lib/copyparty-passwords
+
+      # Copy passwords from SOPS to password files
+      cat ${config.sops.secrets."copyparty/admin-password".path} > /var/lib/copyparty-passwords/admin
+      cat ${config.sops.secrets."copyparty/johnw-password".path} > /var/lib/copyparty-passwords/johnw
+      cat ${config.sops.secrets."copyparty/friend-password".path} > /var/lib/copyparty-passwords/friend
+
+      chmod 644 /var/lib/copyparty-passwords/admin
+      chmod 644 /var/lib/copyparty-passwords/johnw
+      chmod 644 /var/lib/copyparty-passwords/friend
+    '';
+  };
+
+  # SOPS secrets for creating password files
+  sops.secrets."copyparty/admin-password" = {
+    restartUnits = [ "copyparty-password-setup.service" ];
+  };
+  sops.secrets."copyparty/johnw-password" = {
+    restartUnits = [ "copyparty-password-setup.service" ];
+  };
+  sops.secrets."copyparty/friend-password" = {
+    restartUnits = [ "copyparty-password-setup.service" ];
+  };
+
+  # Ensure directories exist on host
   systemd.tmpfiles.rules = [
     "d /var/lib/acme-container 0755 root root -"
     "d /var/www/home.newartisans.com 0755 root root -"
+    "d /var/lib/copyparty-container 0755 root root -"
+    "d /var/lib/copyparty-container/.hist 0755 root root -"
+    "d /var/lib/copyparty-container/.th 0755 root root -"
+    "d /var/lib/copyparty-passwords 0755 root root -"
   ];
 
   # Bind mount ZFS dataset to host directory (container will access via bindMount)
+  # Changed from read-only to read-write to allow copyparty to manage uploads
   fileSystems = bindTankPath {
     path = "/var/www/home.newartisans.com";
     device = "/tank/Public";
-    isReadOnly = true;
+    isReadOnly = false;
   };
 
   # Enable NAT for container to access internet
@@ -64,15 +104,25 @@ in
     ];
 
     bindMounts = {
-      # Bind mount the web directory
+      # Bind mount the web directory (read-write for copyparty uploads)
       "/var/www/home.newartisans.com" = {
         hostPath = "/var/www/home.newartisans.com";
-        isReadOnly = true;
+        isReadOnly = false;
       };
       # Bind mount for ACME certificate storage
       "/var/lib/acme" = {
         hostPath = "/var/lib/acme-container";
         isReadOnly = false;
+      };
+      # Bind mount for copyparty state (history, thumbnails)
+      "/var/lib/copyparty" = {
+        hostPath = "/var/lib/copyparty-container";
+        isReadOnly = false;
+      };
+      # Bind mount password files for copyparty authentication
+      "/var/lib/copyparty-passwords" = {
+        hostPath = "/var/lib/copyparty-passwords";
+        isReadOnly = true;
       };
     };
 
@@ -81,6 +131,16 @@ in
 
     # Container configuration
     config = { config, pkgs, lib, ... }: {
+      # Import copyparty module
+      imports = [
+        ../../modules/services/copyparty.nix
+      ];
+
+      # Apply host overlays to container nixpkgs
+      nixpkgs.overlays = [
+        (import ../../overlays)
+      ];
+
       # Basic system configuration
       system.stateVersion = "25.05";
 
@@ -159,16 +219,30 @@ in
             add_header X-Served-By "secure-nginx-container" always;
           '';
 
-          # Root location - serve files from bind mount
-          root = "/var/www/home.newartisans.com";
-
+          # Reverse proxy to copyparty (replacing static file serving)
           locations."/" = {
+            proxyPass = "http://127.0.0.1:3923/";
             extraConfig = ''
-              # Disable directory listing
-              autoindex off;
+              # WebSocket support for real-time updates
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
 
-              # Try to serve file, then directory index, then 404
-              try_files $uri $uri/ =404;
+              # Large file upload support (up to 10GB)
+              client_max_body_size 10G;
+              proxy_request_buffering off;
+
+              # Proxy headers
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+
+              # Timeouts for large uploads
+              proxy_connect_timeout 300;
+              proxy_send_timeout 300;
+              proxy_read_timeout 300;
+              send_timeout 300;
             '';
           };
 
@@ -246,9 +320,29 @@ in
         };
       };
 
+      # Enable copyparty service with password files
+      services.copyparty = {
+        enable = true;
+        port = 3923;
+        domain = "home.newartisans.com";
+        shareDir = "/var/www/home.newartisans.com";
+
+        # Use password files instead of SOPS
+        passwordFiles = {
+          admin = "/var/lib/copyparty-passwords/admin";
+          johnw = "/var/lib/copyparty-passwords/johnw";
+          friend = "/var/lib/copyparty-passwords/friend";
+        };
+
+        extraConfig = ''
+          # Container serves from bind-mounted directory
+        '';
+      };
+
       systemd.services = {
         nginx = {
-          after = [ "var-www-home.newartisans.com.mount" ];
+          after = [ "var-www-home.newartisans.com.mount" "copyparty.service" ];
+          wants = [ "copyparty.service" ];
         };
         rsyncd = {
           after = [ "var-www-home.newartisans.com.mount" ];

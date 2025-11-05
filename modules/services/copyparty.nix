@@ -5,13 +5,24 @@ with lib;
 let
   cfg = config.services.copyparty;
   dataDir = "/var/lib/copyparty";
-  shareDir = "/tank/Public";  # Main share directory
+  shareDir = cfg.shareDir;  # Main share directory
 
-  # Script to generate config with passwords from secrets
-  configGenerator = pkgs.writeShellScript "copyparty-config-generator" ''
-    # Read passwords from SOPS secrets
-    ADMIN_PASS=$(cat ${config.sops.secrets."copyparty/admin-password".path})
-    JOHNW_PASS=$(cat ${config.sops.secrets."copyparty/johnw-password".path})
+  # Determine if using SOPS or password files
+  useSOPS = cfg.passwordFiles == null;
+
+  # Script to generate config with passwords from secrets or files
+  configGenerator = pkgs.writeShellScript "copyparty-config-generator" (
+    (if cfg.passwordFiles != null then ''
+      # Read passwords from password files
+      ADMIN_PASS=$(cat ${cfg.passwordFiles.admin})
+      JOHNW_PASS=$(cat ${cfg.passwordFiles.johnw})
+      FRIEND_PASS=$(cat ${cfg.passwordFiles.friend})
+    '' else ''
+      # Read passwords from SOPS secrets
+      ADMIN_PASS=$(cat ${config.sops.secrets."copyparty/admin-password".path})
+      JOHNW_PASS=$(cat ${config.sops.secrets."copyparty/johnw-password".path})
+      FRIEND_PASS=$(cat ${config.sops.secrets."copyparty/friend-password".path})
+    '') + ''
 
     # Generate configuration file
     cat > ${dataDir}/copyparty.conf <<EOF
@@ -28,21 +39,24 @@ let
       e2ts
       # Enable zeroconf/mDNS
       z
+      z-on: 192.168.0.0/16, 10.0.0.0/8
       # Generate QR codes for mobile access
       qr
       # Theme
       theme: 3
+      ups-when    # everyone can see upload times
+      ups-who: 1  # but only admins can see the list,
+                  # so ups-when doesn't take effect
 
     [accounts]
-      admin: $ADMIN_PASS
       johnw: $JOHNW_PASS
+      friend: $FRIEND_PASS
 
-    [/public]
-      ${shareDir}
+    [/pub]
+      ${shareDir}/pub
       accs:
         r: *
-        rw: admin, johnw
-        a: admin
+        rwmda: johnw
       flags:
         # Enable deduplication
         nodupe
@@ -51,9 +65,41 @@ let
         # Enable directory tags
         d2t
 
+    [/share]
+      ${shareDir}/share
+      accs:
+        g: *
+        rwmda: johnw
+      flags:
+        # Enable deduplication
+        nodupe
+        # Enable media indexing
+        e2d
+        # Enable directory tags
+        d2t
+
+    [/private]
+      ${shareDir}/private
+      accs:
+        g: friend
+        rwmda: johnw
+      flags:
+        # Enable deduplication
+        nodupe
+        # Enable media indexing
+        e2d
+        # Enable directory tags
+        d2t
+
+    [/upload]
+      ${shareDir}/upload
+      accs:
+        w: friend      # anyone can upload (but not browse)
+        rwmda: johnw   # admin can browse and manage
+
     ${cfg.extraConfig}
     EOF
-  '';
+  '');
 
   # Python environment with copyparty and optional dependencies
   copypartyEnv = pkgs.python3.withPackages (ps: with ps; [
@@ -71,6 +117,23 @@ in {
       type = types.port;
       default = 3923;
       description = "Port for copyparty to listen on (loopback only)";
+    };
+
+    shareDir = mkOption {
+      type = types.str;
+      default = "/tank/Public";
+      description = "Directory to share via copyparty";
+    };
+
+    passwordFiles = mkOption {
+      type = types.nullOr (types.attrsOf types.path);
+      default = null;
+      example = {
+        admin = "/run/secrets/admin-password";
+        johnw = "/run/secrets/johnw-password";
+        friend = "/run/secrets/friend-password";
+      };
+      description = "Paths to files containing passwords for each user. Alternative to SOPS secrets.";
     };
 
     accounts = mkOption {
@@ -101,20 +164,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    # SOPS secrets for authentication
-    sops.secrets."copyparty/admin-password" = {
-      owner = "copyparty";
-      group = "copyparty";
-      mode = "0440";  # Allow group read for Prometheus
-      restartUnits = [ "copyparty.service" "prometheus.service" ];
-    };
-
-    sops.secrets."copyparty/johnw-password" = {
-      owner = "copyparty";
-      group = "copyparty";
-      mode = "0400";
-      restartUnits = [ "copyparty.service" ];
-    };
 
     # Create copyparty user and group
     users.users.copyparty = {
@@ -176,49 +225,7 @@ in {
       };
     };
 
-    # Nginx reverse proxy
-    services.nginx.virtualHosts.${cfg.domain} = {
-      forceSSL = true;
-      sslCertificate = "/var/lib/nginx-certs/${cfg.domain}.crt";
-      sslCertificateKey = "/var/lib/nginx-certs/${cfg.domain}.key";
-
-      locations."/" = {
-        proxyPass = "http://127.0.0.1:${toString cfg.port}/";
-        recommendedProxySettings = true;
-        extraConfig = ''
-          # WebSocket support for real-time updates
-          proxy_http_version 1.1;
-          proxy_set_header Upgrade $http_upgrade;
-          proxy_set_header Connection "upgrade";
-
-          # Large file upload support
-          client_max_body_size 10G;
-          proxy_request_buffering off;
-        '';
-      };
-    };
-
     # Allow loopback traffic
     networking.firewall.interfaces."lo".allowedTCPPorts = [ cfg.port ];
-
-    # Prometheus metrics scraping with basic auth
-    services.prometheus.scrapeConfigs = mkIf config.services.prometheus.enable [
-      {
-        job_name = "copyparty";
-        static_configs = [{
-          targets = [ "127.0.0.1:${toString cfg.port}" ];
-          labels = {
-            instance = "vulcan";
-            service = "copyparty";
-          };
-        }];
-        metrics_path = "/.cpr/metrics";
-        scrape_interval = "30s";
-        basic_auth = {
-          username = "admin";
-          password_file = config.sops.secrets."copyparty/admin-password".path;
-        };
-      }
-    ];
   };
 }

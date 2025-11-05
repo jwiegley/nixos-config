@@ -77,8 +77,6 @@
     ../../modules/services/glance.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
-    ../../modules/services/copyparty.nix
-    ../../modules/services/copyparty-config.nix
 
     # Containers
     ../../modules/containers/default.nix

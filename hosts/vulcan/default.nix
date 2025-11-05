@@ -75,6 +75,8 @@
     ../../modules/services/vdirsyncer-alerts.nix
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
+    ../../modules/services/glances.nix
+    ../../modules/monitoring/services/glances-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
 

@@ -174,6 +174,10 @@
           -o "$DASHBOARD_DIR/node-exporter-11074.json" || true
       fi
 
+      # Note: Glances metrics can be viewed using Node Exporter dashboards above
+      # or directly via the Glances web UI at https://glances.vulcan.lan
+      # For custom Glances dashboard, panels can query glances_* metrics from Prometheus
+
       # PostgreSQL Database dashboard (ID: 9628)
       if [ ! -f "$DASHBOARD_DIR/postgresql.json" ]; then
         echo "Downloading PostgreSQL dashboard..."

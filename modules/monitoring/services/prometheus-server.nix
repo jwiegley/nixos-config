@@ -24,6 +24,7 @@ let
     "changedetection.yaml"
     "budgetboard.yaml"
     "copyparty.yaml"
+    "glances.yaml"
   ];
 in
 {

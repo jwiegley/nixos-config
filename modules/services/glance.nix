@@ -199,6 +199,10 @@ with lib;
                           url = "https://grafana.vulcan.lan";
                         }
                         {
+                          title = "Glances";
+                          url = "https://glances.vulcan.lan";
+                        }
+                        {
                           title = "Prometheus";
                           url = "https://prometheus.vulcan.lan";
                         }

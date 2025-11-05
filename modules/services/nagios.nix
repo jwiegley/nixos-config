@@ -979,8 +979,8 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
-      service_description     SSL Cert: copyparty.vulcan.lan
-      check_command           check_ssl_cert!copyparty.vulcan.lan
+      service_description     SSL Cert: home.newartisans.com
+      check_command           check_ssl_cert!home.newartisans.com
       service_groups          ssl-certificates
     }
 

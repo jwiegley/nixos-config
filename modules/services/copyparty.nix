@@ -27,8 +27,8 @@ let
     # Generate configuration file
     cat > ${dataDir}/copyparty.conf <<EOF
     [global]
-      # Listen on loopback only - nginx will handle external access
-      i: 127.0.0.1
+      # Listen on all interfaces for container port forwarding
+      i: 0.0.0.0
       # Port configuration
       p: ${toString cfg.port}
       # Reverse proxy configuration - required to detect real client IPs
@@ -69,6 +69,19 @@ let
       ${shareDir}/share
       accs:
         g: *
+        rwmda: johnw
+      flags:
+        # Enable deduplication
+        nodupe
+        # Enable media indexing
+        e2d
+        # Enable directory tags
+        d2t
+
+    [/files]
+      ${shareDir}/files
+      accs:
+        r: friend
         rwmda: johnw
       flags:
         # Enable deduplication

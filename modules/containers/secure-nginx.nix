@@ -69,7 +69,7 @@ in
   };
 
   # Open firewall ports on host for container access
-  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 ];
+  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 13923 ];
 
   # NixOS container for secure nginx with direct SSL/ACME
   containers.secure-nginx = {
@@ -100,6 +100,11 @@ in
         protocol = "tcp";
         hostPort = 18874;
         containerPort = 874;
+      }
+      {
+        protocol = "tcp";
+        hostPort = 13923;
+        containerPort = 3923;
       }
     ];
 
@@ -149,8 +154,8 @@ in
         firewall = {
           enable = true;
           # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync
-          # daemon, and rsync-ssl proxy
-          allowedTCPPorts = [ 80 443 873 874 ];
+          # daemon, rsync-ssl proxy, and copyparty metrics
+          allowedTCPPorts = [ 80 443 873 874 3923 ];
         };
       };
 

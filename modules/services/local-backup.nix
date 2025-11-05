@@ -26,12 +26,19 @@ let
       ];
     }
     {
-      name = "var-lib";
-      source = "/var/lib";
+      name = "var";
+      source = "/var";
       excludes = [
         # Exclude container overlay storage (ephemeral, causes rsync to hang)
-        "containers/"
-        "docker/overlay2/"
+        "lib/containers/"
+        "lib/docker/overlay2/"
+        # Exclude volatile runtime directories
+        "cache/"
+        "tmp/"
+        "run/"
+        "lock/"
+        # Exclude large log files (optional - keep if you want logs backed up)
+        # "log/"
       ];
     }
   ];

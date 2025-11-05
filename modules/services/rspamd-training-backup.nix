@@ -105,14 +105,14 @@ in
     };
   };
 
-  # Timer to run backup training every 30 minutes
+  # Timer to run backup training every 15 minutes
   systemd.timers.rspamd-training-backup = {
     description = "Timer for Rspamd backup training";
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
-      # Run every 30 minutes
-      OnUnitActiveSec = "30min";
+      # Run every 15 minutes
+      OnUnitActiveSec = "15min";
       OnBootSec = "10min";
       Persistent = true;
     };

@@ -184,7 +184,7 @@
       syslog_facility = mail
       auth_verbose = no
       auth_debug = no
-      mail_debug = yes
+      mail_debug = no
       verbose_ssl = no
 
       # Performance tuning
@@ -267,9 +267,13 @@
         sieve_plugins = sieve_imapsieve sieve_extprograms
         sieve_pipe_bin_dir = /usr/local/bin
 
-        # Sieve debug logging for troubleshooting IMAPSieve
-        sieve_trace_debug = yes
-        sieve_trace_addresses = yes
+        # Sieve debug logging (disabled - enable only for troubleshooting)
+        sieve_trace_debug = no
+        sieve_trace_addresses = no
+
+        # Disable compiled binary caching for global/shared scripts
+        # Users can't write to /var/lib/dovecot/sieve, so don't try to save .svbin files there
+        sieve_global_extensions = +vnd.dovecot.pipe +editheader +notify +imapflags
       }
 
       # Mailbox configuration
@@ -306,6 +310,7 @@
   };
 
   # Ensure certificate, FTS index, Sieve, and mail directories exist with proper permissions
+  # NOTE: Use 'D' (not 'd') for user directories to preserve existing files
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
@@ -314,15 +319,15 @@
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/users 0755 dovecot2 dovecot2 -"
-    "d /var/lib/dovecot/sieve/users/johnw 0700 johnw users -"
-    "d /var/lib/dovecot/sieve/users/assembly 0700 assembly users -"
-    "d /var/mail/johnw 0700 johnw users -"
-    "d /var/mail/assembly 0700 assembly users -"
+    "D /var/lib/dovecot/sieve/users/johnw 0700 johnw users -"
+    "D /var/lib/dovecot/sieve/users/assembly 0700 assembly users -"
+    "D /var/mail/johnw 0700 johnw users -"
+    "D /var/mail/assembly 0700 assembly users -"
   ];
 
-  # Migrate Sieve scripts from old location to new location
-  systemd.services.dovecot-sieve-migrate = {
-    description = "Migrate Dovecot Sieve scripts to new location";
+  # Pre-compile global Sieve scripts to avoid permission errors
+  systemd.services.dovecot-sieve-compile = {
+    description = "Pre-compile Dovecot global Sieve scripts";
     wantedBy = [ "dovecot2.service" ];
     after = [ "systemd-tmpfiles-setup.service" ];
     before = [ "dovecot2.service" ];
@@ -330,7 +335,33 @@
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = with pkgs; [ dovecot_pigeonhole util-linux coreutils ];
+    path = with pkgs; [ dovecot_pigeonhole ];
+    script = ''
+      # Pre-compile all global Sieve scripts so users don't need write permission
+      echo "Pre-compiling global Sieve scripts..."
+
+      for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
+        if [ -f "$script" ]; then
+          echo "  Compiling: $script"
+          sievec "$script" || echo "  Warning: Failed to compile $script"
+        fi
+      done
+
+      echo "Sieve compilation complete"
+    '';
+  };
+
+  # Migrate Sieve scripts from old location to new location
+  systemd.services.dovecot-sieve-migrate = {
+    description = "Migrate Dovecot Sieve scripts to new location";
+    wantedBy = [ "dovecot2.service" ];
+    after = [ "systemd-tmpfiles-setup.service" "dovecot-sieve-compile.service" ];
+    before = [ "dovecot2.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = with pkgs; [ dovecot_pigeonhole util-linux coreutils shadow ];
     script = ''
       # Ensure directories exist
       mkdir -p /var/lib/dovecot/sieve/users/johnw

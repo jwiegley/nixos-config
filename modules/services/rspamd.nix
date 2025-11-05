@@ -8,76 +8,85 @@ let
     # Configuration
     USERS=("johnw" "assembly")
     MAIL_ROOT="/var/mail"
-    SPAM_THRESHOLD=15  # Rspamd score threshold for spam
+    SPAM_THRESHOLD=6  # Rspamd score threshold for spam (matches "add header" action)
     RSPAMC="${pkgs.rspamd}/bin/rspamc"
+    MESSAGES_SCANNED=0
+    SPAM_MOVED=0
 
-    # Function to scan a single mailbox
-    scan_mailbox() {
-      local user=$1
-      local mailbox=$2
-      local maildir="$MAIL_ROOT/$user/$mailbox"
+    # Function to scan a single maildir directory
+    scan_maildir() {
+      local maildir=$1
+      local maildir_name=$2
 
       if [ ! -d "$maildir/new" ] && [ ! -d "$maildir/cur" ]; then
-        echo "Skipping non-existent mailbox: $maildir"
         return
       fi
 
-      echo "Scanning mailbox: $user/$mailbox"
+      echo "Scanning: $maildir_name"
+      local dir_count=0
 
       # Scan messages in new/ and cur/ directories
       for dir in new cur; do
         if [ -d "$maildir/$dir" ]; then
           for msg in "$maildir/$dir"/*; do
-            if [ -f "$msg" ]; then
-              # Scan message with rspamc
-              result=$($RSPAMC --json < "$msg" 2>/dev/null || true)
+            # Skip if not a regular file or if it's a directory
+            [ -f "$msg" ] || continue
 
-              # Extract score from JSON result
-              score=$(echo "$result" | ${pkgs.jq}/bin/jq -r '.default.score // 0' 2>/dev/null || echo "0")
+            # Scan message with rspamc
+            result=$($RSPAMC --json < "$msg" 2>/dev/null || true)
+            MESSAGES_SCANNED=$((MESSAGES_SCANNED + 1))
 
-              # If score exceeds threshold, move to Spam folder
-              if (( $(echo "$score > $SPAM_THRESHOLD" | ${pkgs.bc}/bin/bc -l) )); then
-                spam_dir="$MAIL_ROOT/$user/Spam/cur"
-                mkdir -p "$spam_dir"
+            # Extract score from JSON result
+            score=$(echo "$result" | ${pkgs.jq}/bin/jq -r '.default.score // 0' 2>/dev/null || echo "0")
 
-                # Move message to Spam folder
-                mv "$msg" "$spam_dir/"
-                echo "  Moved spam message (score: $score): $(basename "$msg")"
-              fi
+            # If score exceeds threshold, move to .Spam folder
+            if (( $(echo "$score > $SPAM_THRESHOLD" | ${pkgs.bc}/bin/bc -l) )); then
+              # Determine user from maildir path
+              user=$(echo "$maildir" | sed 's|^/var/mail/\([^/]*\).*|\1|')
+              spam_dir="$MAIL_ROOT/$user/.Spam/cur"
+              mkdir -p "$spam_dir"
+
+              # Move message to .Spam folder
+              mv "$msg" "$spam_dir/"
+              echo "  → SPAM (score: $score): $(basename "$msg")"
+              SPAM_MOVED=$((SPAM_MOVED + 1))
+              dir_count=$((dir_count + 1))
             fi
           done
         fi
       done
+
+      if [ $dir_count -eq 0 ]; then
+        echo "  No spam detected"
+      fi
     }
 
     # Scan mailboxes for each user
     for user in "''${USERS[@]}"; do
       echo "Processing user: $user"
+      user_root="$MAIL_ROOT/$user"
 
-      # Only scan INBOX for incoming mail
-      if [ -d "$MAIL_ROOT/$user/INBOX" ]; then
-        scan_mailbox "$user" "INBOX"
+      # Check if user maildir exists
+      if [ ! -d "$user_root" ]; then
+        echo "  Maildir not found: $user_root"
+        continue
       fi
 
-      # Scan mail/ and list/ subfolders if they exist
-      if [ -d "$MAIL_ROOT/$user/mail" ]; then
-        for subfolder in "$MAIL_ROOT/$user/mail"/*; do
-          if [ -d "$subfolder" ]; then
-            scan_mailbox "$user" "mail/$(basename "$subfolder")"
-          fi
-        done
-      fi
+      # # Scan root INBOX (flat maildir at /var/mail/user/)
+      # if [ -d "$user_root/cur" ] || [ -d "$user_root/new" ]; then
+      #   scan_maildir "$user_root" "$user/INBOX"
+      # fi
 
-      if [ -d "$MAIL_ROOT/$user/list" ]; then
-        for subfolder in "$MAIL_ROOT/$user/list"/*; do
-          if [ -d "$subfolder" ]; then
-            scan_mailbox "$user" "list/$(basename "$subfolder")"
-          fi
-        done
+      # Only scan the .Good folder (not all subfolders)
+      if [ -d "$user_root/.Good" ]; then
+        scan_maildir "$user_root/.Good" "$user/.Good"
       fi
     done
 
+    echo ""
     echo "Mailbox scanning complete"
+    echo "Messages scanned: $MESSAGES_SCANNED"
+    echo "Spam messages moved: $SPAM_MOVED"
   '';
 
   # Sieve script for learning spam (when moved to TrainSpam)
@@ -300,11 +309,14 @@ in
     "L+ /usr/local/bin/rspamd-learn-ham.sh - - - - ${learnHamShellScript}"
   ];
 
-  # Systemd service to scan mailboxes after mbsync
+  # Systemd service to scan mailboxes
   systemd.services.rspamd-scan-mailboxes = {
     description = "Scan mailboxes with Rspamd and move spam";
-    after = [ "mbsync-johnw.service" "rspamd.service" ];
+
+    # Ensure rspamd is running and mbsync is not active
+    after = [ "rspamd.service" ];
     wants = [ "rspamd.service" ];
+    conflicts = [ "mbsync-johnw.service" "mbsync-assembly.service" ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -314,16 +326,17 @@ in
     };
   };
 
-  # Timer to run mailbox scanner every 15 minutes
-  systemd.timers.rspamd-scan-mailboxes = {
-    description = "Timer for Rspamd mailbox scanning";
-    wantedBy = [ "timers.target" ];
+  # Path unit to trigger scanner when mbsync completes
+  systemd.paths.rspamd-scan-mailboxes = {
+    description = "Trigger Rspamd scan after mbsync updates mailbox";
+    wantedBy = [ "multi-user.target" ];
 
-    timerConfig = {
-      # Run 2 minutes after mbsync-johnw completes
-      OnUnitActiveSec = "15min";
-      OnBootSec = "5min";
-      Persistent = true;
+    pathConfig = {
+      # Watch for changes in .Good folder (where new mail arrives)
+      PathModified = "/var/mail/johnw/.Good";
+      # Delay to ensure mbsync has fully completed
+      TriggerLimitIntervalSec = "60s";
+      TriggerLimitBurst = 1;
     };
   };
 

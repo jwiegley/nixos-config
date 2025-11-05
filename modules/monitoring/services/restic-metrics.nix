@@ -162,7 +162,7 @@ in
     description = "Collect Restic Repository Metrics";
     wants = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
     after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
-    wantedBy = [ "tank.mount" ];
+    # No wantedBy - service only runs via timer
     unitConfig = {
       RequiresMountsFor = [ "/tank" ];
       ConditionPathIsMountPoint = "/tank";

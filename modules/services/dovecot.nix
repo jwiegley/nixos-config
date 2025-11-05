@@ -309,8 +309,8 @@
     group = "dovecot-exporter";
   };
 
-  # Ensure certificate, FTS index, Sieve, and mail directories exist with proper permissions
-  # NOTE: Use 'D' (not 'd') for user directories to preserve existing files
+  # Ensure certificate, FTS index, Sieve, and mail directories exist with
+  # proper permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
@@ -319,10 +319,10 @@
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/users 0755 dovecot2 dovecot2 -"
-    "D /var/lib/dovecot/sieve/users/johnw 0700 johnw users -"
-    "D /var/lib/dovecot/sieve/users/assembly 0700 assembly users -"
-    "D /var/mail/johnw 0700 johnw users -"
-    "D /var/mail/assembly 0700 assembly users -"
+    "d /var/lib/dovecot/sieve/users/johnw 0700 johnw users -"
+    "d /var/lib/dovecot/sieve/users/assembly 0700 assembly users -"
+    "d /var/mail/johnw 0700 johnw users -"
+    "d /var/mail/assembly 0700 assembly users -"
   ];
 
   # Pre-compile global Sieve scripts to avoid permission errors
@@ -337,7 +337,8 @@
     };
     path = with pkgs; [ dovecot_pigeonhole ];
     script = ''
-      # Pre-compile all global Sieve scripts so users don't need write permission
+      # Pre-compile all global Sieve scripts so users don't need write
+      # permission
       echo "Pre-compiling global Sieve scripts..."
 
       for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do

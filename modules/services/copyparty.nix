@@ -31,15 +31,15 @@ let
       i: 127.0.0.1
       # Port configuration
       p: ${toString cfg.port}
+      # Reverse proxy configuration - required to detect real client IPs
+      rproxy: -1
+      xff-hdr: x-forwarded-for
       # Enable Prometheus metrics
       stats
       # Enable media indexing and search
       e2dsa
       # Enable audio metadata
       e2ts
-      # Enable zeroconf/mDNS
-      z
-      z-on: 192.168.0.0/16, 10.0.0.0/8
       # Generate QR codes for mobile access
       qr
       # Theme

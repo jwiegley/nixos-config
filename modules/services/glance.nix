@@ -181,6 +181,10 @@ with lib;
                           url = "https://nextcloud.vulcan.lan";
                         }
                         {
+                          title = "Copyparty";
+                          url = "https://copyparty.vulcan.lan";
+                        }
+                        {
                           title = "Silly Tavern";
                           url = "https://silly-tavern.vulcan.lan";
                         }

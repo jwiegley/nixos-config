@@ -1,0 +1,90 @@
+groups:
+  - name: copyparty
+    interval: 30s
+    rules:
+      # Service availability
+      - alert: CopypartyDown
+        expr: up{job="copyparty"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: copyparty
+        annotations:
+          summary: "Copyparty file server is down"
+          description: "Copyparty service on {{ $labels.instance }} has been down for more than 5 minutes."
+          action: "Check service status with 'systemctl status copyparty' and review logs"
+
+      # Connection limits
+      - alert: CopypartyHighConnections
+        expr: cpp_connections > 50
+        for: 15m
+        labels:
+          severity: warning
+          service: copyparty
+        annotations:
+          summary: "High number of Copyparty connections"
+          description: "Copyparty has {{ $value }} active connections for more than 15 minutes."
+          action: "Monitor for abuse or consider increasing resource limits"
+
+      # Ban activity monitoring
+      - alert: CopypartyFrequentBans
+        expr: increase(cpp_bans[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: copyparty
+        annotations:
+          summary: "High rate of Copyparty bans"
+          description: "Copyparty has banned {{ $value }} IPs in the last hour."
+          action: "Review logs for potential abuse or attack patterns"
+
+      # Uptime tracking
+      - alert: CopypartyRecentRestart
+        expr: cpp_uptime_seconds < 300
+        for: 1m
+        labels:
+          severity: info
+          service: copyparty
+        annotations:
+          summary: "Copyparty recently restarted"
+          description: "Copyparty has been running for only {{ $value | humanizeDuration }}."
+          action: "Review logs if restart was unexpected"
+
+      # Volume availability
+      - alert: CopypartyVolumeUnavailable
+        expr: cpp_volumes == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: copyparty
+        annotations:
+          summary: "No Copyparty volumes available"
+          description: "Copyparty is not serving any volumes. Configuration or mount issue."
+          action: "Check /tank/Public mount and copyparty configuration"
+
+      # High memory usage (if approaching limit)
+      - alert: CopypartyHighMemory
+        expr: |
+          (
+            process_resident_memory_bytes{job="copyparty"} / 1073741824 > 1.5
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: copyparty
+        annotations:
+          summary: "Copyparty memory usage high"
+          description: "Copyparty is using {{ $value | humanize }}GB of memory (limit: 2GB)."
+          action: "Monitor for memory leaks or consider adjusting resource limits"
+
+      # Authentication failures (if metric exists)
+      - alert: CopypartyAuthFailures
+        expr: increase(cpp_auth_failures[15m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: copyparty
+        annotations:
+          summary: "High rate of Copyparty authentication failures"
+          description: "{{ $value }} authentication failures in the last 15 minutes."
+          action: "Review logs for potential brute force attacks"

@@ -236,6 +236,12 @@
         cp /etc/nixos/modules/monitoring/dashboards/mac-studio-power.json "$DASHBOARD_DIR/mac-studio-power.json"
       fi
 
+      # Copy Copyparty File Server Dashboard (always update)
+      echo "Installing Copyparty File Server dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/dashboards/copyparty.json" ]; then
+        cp /etc/nixos/modules/monitoring/dashboards/copyparty.json "$DASHBOARD_DIR/copyparty.json"
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

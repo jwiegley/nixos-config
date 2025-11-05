@@ -24,7 +24,7 @@ groups:
 
       # Alert when local backup timestamp file is missing
       - alert: LocalBackupMissing
-        expr: absent(local_backup_last_success_timestamp{backup="etc"}) or absent(local_backup_last_success_timestamp{backup="home"}) or absent(local_backup_last_success_timestamp{backup="var-lib"})
+        expr: absent(local_backup_last_success_timestamp{backup="etc"}) or absent(local_backup_last_success_timestamp{backup="home"}) or absent(local_backup_last_success_timestamp{backup="var"})
         for: 10m
         labels:
           severity: critical
@@ -35,7 +35,7 @@ groups:
           description: |
             One or more local backup metrics are not being reported.
             This indicates that backups may not be running at all.
-            Expected backups: etc, home, var-lib
+            Expected backups: etc, home, var
             Action: Check if local-backup.service has ever run successfully
 
       # Warning when backup is getting old (2.5 hours)

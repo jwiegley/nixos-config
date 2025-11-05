@@ -23,6 +23,7 @@ let
     "local-backup.yaml"
     "changedetection.yaml"
     "budgetboard.yaml"
+    "copyparty.yaml"
   ];
 in
 {

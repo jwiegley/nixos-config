@@ -3,6 +3,7 @@ let
   # Import the package definitions to capture paths at evaluation time
   hacsFrontendDef = import ./hacs-frontend.nix;
   miniRacerDef = import ./mini-racer.nix;
+  copypartyDef = import ./copyparty.nix;
 
   # Import Haskell overlay to fix broken packages
   haskellOverlay = import ./haskell-sizes.nix;
@@ -25,6 +26,9 @@ in
       # Mini-racer: V8 JavaScript engine for Python (required by Dreame Vacuum)
       # Use underscore to match Python package naming and avoid Nix identifier issues
       mini_racer = pyfinal.callPackage miniRacerDef { };
+
+      # Copyparty: Portable file server with media features
+      copyparty = pyfinal.callPackage copypartyDef { };
     })
   ];
 

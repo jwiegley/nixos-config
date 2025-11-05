@@ -259,6 +259,7 @@ let
     { name = "glance-github-extension.service"; display = "Glance GitHub Extension"; }
     { name = "cockpit.service"; display = "Cockpit Web Console"; }
     { name = "ntopng.service"; display = "ntopng Network Monitor"; }
+    { name = "copyparty.service"; display = "Copyparty File Server"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
     { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
@@ -972,6 +973,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: cockpit.vulcan.lan
       check_command           check_ssl_cert!cockpit.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: copyparty.vulcan.lan
+      check_command           check_ssl_cert!copyparty.vulcan.lan
       service_groups          ssl-certificates
     }
 

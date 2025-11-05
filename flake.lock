@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1762214602,
-        "narHash": "sha256-4v2+ndJ5QQGMGUiwGMdbkYvTF/KZVDhsSUr+9uGRyRg=",
+        "lastModified": 1762301015,
+        "narHash": "sha256-IzamQirtdUXRvdkMJZzLCIBboV26blsz5qJpzlBy4l0=",
         "owner": "sadjow",
         "repo": "claude-code-nix",
-        "rev": "605b512a9b96533b687c5ef475c1f5cb5088352d",
+        "rev": "445ccfe20384e5a5d71176e952cd2b00b62e75eb",
         "type": "github"
       },
       "original": {
@@ -209,11 +209,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1762294653,
-        "narHash": "sha256-JLFnNP8kbryhGLxGe0Nfk982Mm08xDP4SI7XZvLD2lI=",
+        "lastModified": 1762307562,
+        "narHash": "sha256-R+UAF8KmDjEvfwK7bcoiKFqC1Xasffr7+IbibIFooCs=",
         "ref": "refs/heads/main",
-        "rev": "0099a21e986ec6dd3e383371d0d1a037c2603df7",
-        "revCount": 34,
+        "rev": "e7f67fe8c04a838dea92c1b231aa0b27c764bdfa",
+        "revCount": 35,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

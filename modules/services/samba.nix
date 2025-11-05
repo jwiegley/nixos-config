@@ -33,6 +33,7 @@ let
     { name = "tank/Music";                    mountpoint = "/tank/Music"; }
     { name = "tank/Photos";                   mountpoint = "/tank/Photos"; }
     { name = "tank/Pictures";                 mountpoint = "/tank/Pictures"; }
+    { name = "tank/Public";                   mountpoint = "/tank/Public"; }
     { name = "tank/Video";                    mountpoint = "/tank/Video"; }
     { name = "tank/Video/Zoom";               mountpoint = "/tank/Video/Zoom"; }
     { name = "tank/doc";                      mountpoint = "/tank/doc"; }

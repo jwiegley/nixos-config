@@ -275,6 +275,10 @@ with lib;
                       color = "200 50 50";
                       links = [
                         {
+                          title = "Gitea";
+                          url = "https://gitea.vulcan.lan";
+                        }
+                        {
                           title = "GitHub";
                           url = "https://github.com/notifications?query=is%3Aunread";
                         }

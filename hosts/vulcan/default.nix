@@ -40,6 +40,7 @@
     ../../modules/services/dirscan-share.nix
     ../../modules/services/dirscan-share-config.nix
     ../../modules/services/pgadmin.nix
+    ../../modules/services/gitea.nix
     ../../modules/services/web.nix
     ../../modules/services/media.nix
     ../../modules/services/monitoring.nix

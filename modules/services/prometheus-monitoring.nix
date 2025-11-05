@@ -23,6 +23,7 @@
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/changedetection-exporter.nix
     ../monitoring/services/vdirsyncer-exporter.nix
+    ../monitoring/services/gitea-exporter.nix
 
     # Infrastructure monitoring
     ../monitoring/services/certificate-exporter.nix

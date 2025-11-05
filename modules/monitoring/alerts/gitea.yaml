@@ -1,0 +1,100 @@
+groups:
+  - name: gitea
+    interval: 30s
+    rules:
+      # Gitea service availability
+      - alert: GiteaDown
+        expr: up{job="gitea"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: gitea
+        annotations:
+          summary: "Gitea service is down"
+          description: "Gitea has been unavailable for more than 2 minutes on {{ $labels.instance }}"
+
+      # High HTTP error rate
+      - alert: GiteaHighHTTPErrorRate
+        expr: |
+          rate(http_requests_total{job="gitea",code=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea has high HTTP error rate"
+          description: "Gitea HTTP 5xx error rate is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      # Slow HTTP response times
+      - alert: GiteaSlowResponse
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="gitea"}[5m])
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea has slow HTTP response times"
+          description: "95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+
+      # High memory usage
+      - alert: GiteaHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="gitea"} > 2147483648
+        for: 10m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea memory usage is high"
+          description: "Gitea is using {{ $value | humanize1024 }}B of memory on {{ $labels.instance }}"
+
+      # Database connection issues
+      - alert: GiteaDatabaseConnectionIssues
+        expr: |
+          gitea_database_connection_errors_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: gitea
+        annotations:
+          summary: "Gitea has database connection errors"
+          description: "Gitea has {{ $value }} database connection errors on {{ $labels.instance }}"
+
+      # Repository access issues
+      - alert: GiteaRepositoryErrors
+        expr: |
+          rate(gitea_repository_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea has repository access errors"
+          description: "Gitea repository error rate is {{ $value }} per second on {{ $labels.instance }}"
+
+      # Git operations failing
+      - alert: GiteaGitOperationsFailing
+        expr: |
+          rate(gitea_git_operations_failed_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea Git operations are failing"
+          description: "Gitea Git operation failure rate is {{ $value }} per second on {{ $labels.instance }}"
+
+      # Excessive goroutines (potential resource leak)
+      - alert: GiteaHighGoroutineCount
+        expr: |
+          go_goroutines{job="gitea"} > 10000
+        for: 15m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea has excessive goroutines"
+          description: "Gitea has {{ $value }} goroutines running on {{ $labels.instance }}, possible resource leak"

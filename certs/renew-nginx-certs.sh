@@ -16,6 +16,7 @@ DOMAINS=(
     "alertmanager.vulcan.lan"
     "cockpit.vulcan.lan"
     "dns.vulcan.lan"
+    "gitea.vulcan.lan"
     "glance.vulcan.lan"
     "glances.vulcan.lan"
     "grafana.vulcan.lan"

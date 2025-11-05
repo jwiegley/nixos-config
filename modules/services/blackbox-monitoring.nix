@@ -480,6 +480,7 @@ in
             "https://prometheus.vulcan.lan"
             "https://victoriametrics.vulcan.lan"
             "https://grafana.vulcan.lan"
+            "https://glances.vulcan.lan"
             "https://alertmanager.vulcan.lan"
             "https://speedtest.vulcan.lan"
             "https://litellm.vulcan.lan"

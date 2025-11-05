@@ -18,6 +18,7 @@ DOMAINS=(
     "copyparty.vulcan.lan"
     "dns.vulcan.lan"
     "glance.vulcan.lan"
+    "glances.vulcan.lan"
     "grafana.vulcan.lan"
     "hass.vulcan.lan"
     "jellyfin.vulcan.lan"

@@ -182,7 +182,7 @@ with lib;
                         }
                         {
                           title = "Copyparty";
-                          url = "https://copyparty.vulcan.lan";
+                          url = "https://home.newartisans.com";
                         }
                         {
                           title = "Silly Tavern";

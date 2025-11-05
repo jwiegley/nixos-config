@@ -77,6 +77,7 @@
     ../../modules/services/glance.nix
     ../../modules/services/glances.nix
     ../../modules/monitoring/services/glances-exporter.nix
+    ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
 

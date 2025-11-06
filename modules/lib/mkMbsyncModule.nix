@@ -58,8 +58,10 @@
       description = "mbsync synchronization for ${name}";
       wants = [ "network-online.target" "dovecot.service" ];
       after = [ "network-online.target" "dovecot.service" ];
-      # Don't block nixos-rebuild if the service fails
-      unitConfig.X-StopOnReconfiguration = false;
+      # Don't auto-start during rebuild - only timer should trigger this
+      wantedBy = lib.mkForce [ ];
+      # Don't restart on config changes
+      restartIfChanged = false;
 
       serviceConfig = lib.mkMerge [
         {

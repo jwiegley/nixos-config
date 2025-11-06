@@ -28,7 +28,7 @@ in
         Channel fastmail-all
         Far :johnw-remote:
         Near :dovecot-local:
-        Patterns Good Spam TrainGood TrainSpam IsSpam NeedsRule INBOX Sent Trash mail/* list/*
+        Patterns Good INBOX Spam TrainGood TrainSpam IsSpam Sent mail/* list/*
         Create Both
         Remove None
         Expunge Both

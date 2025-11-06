@@ -350,6 +350,23 @@ with lib;
       DynamicUser = lib.mkForce false;
       User = "glance";
       Group = "glance";
+
+      # Security hardening
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      NoNewPrivileges = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictNamespaces = true;
+      LockPersonality = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      RemoveIPC = true;
+      PrivateMounts = true;
+      MemoryDenyWriteExecute = true;
     };
   };
 
@@ -367,6 +384,22 @@ with lib;
       Group = "glance";
       Restart = "always";
       RestartSec = 5;
+
+      # Security hardening
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      NoNewPrivileges = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictNamespaces = true;
+      LockPersonality = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      RemoveIPC = true;
+      PrivateMounts = true;
 
       ExecStart = let
         githubExtensionScript = pkgs.writeScript "glance-github-server.py" ''

@@ -51,6 +51,42 @@
     ];
   };
 
+  # Systemd service hardening
+  systemd.services.mosquitto = {
+    serviceConfig = {
+      # Security hardening
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      NoNewPrivileges = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictNamespaces = true;
+      LockPersonality = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      RemoveIPC = true;
+      PrivateMounts = true;
+
+      # System call filtering
+      SystemCallFilter = [ "@system-service" "~@privileged" "~@resources" ];
+      SystemCallErrorNumber = "EPERM";
+      SystemCallArchitectures = "native";
+
+      # Capabilities
+      CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
+      AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
+
+      # Resource limits
+      MemoryDenyWriteExecute = true;
+
+      # Writable directories (mosquitto needs to write state/logs)
+      ReadWritePaths = [ "/var/lib/mosquitto" ];
+    };
+  };
+
   # Open firewall for MQTT broker
   networking.firewall = {
     allowedTCPPorts = [

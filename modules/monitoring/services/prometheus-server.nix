@@ -30,6 +30,8 @@ let
     "windows-container.yaml"
     "paperless.yaml"
     "paperless-ai.yaml"
+    "email-services.yaml"
+    "application-services.yaml"
   ];
 in
 {

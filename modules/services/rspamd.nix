@@ -11,6 +11,8 @@ let
     SPAM_THRESHOLD=6  # Rspamd score threshold for spam (matches "add header" action)
     RSPAMC="${pkgs.rspamd}/bin/rspamc"
     DOVEADM="${pkgs.dovecot}/bin/doveadm"
+    SIEVE_FILTER="${pkgs.dovecot_pigeonhole}/bin/sieve-filter"
+    GETENT="/run/current-system/sw/bin/getent"
 
     # Counters
     GOOD_SCANNED=0
@@ -56,17 +58,13 @@ let
             echo "  → SPAM (score: $score): $(basename "$msg")"
             GOOD_SPAM_MOVED=$((GOOD_SPAM_MOVED + 1))
           else
-            # Deliver ham through sieve filter
-            if [ -f "/var/lib/dovecot/sieve/users/$user/.dovecot.sieve" ]; then
-              if $DOVEADM sieve filter -u "$user" /var/lib/dovecot/sieve/users/$user/.dovecot.sieve < "$msg" 2>/dev/null; then
-                rm -f "$msg"
-                echo "  → HAM delivered via sieve: $(basename "$msg")"
-                GOOD_HAM_DELIVERED=$((GOOD_HAM_DELIVERED + 1))
-              else
-                echo "  ⚠ Sieve delivery failed, keeping in .Good: $(basename "$msg")"
-              fi
+            # Deliver ham through sieve filter using dovecot-lda
+            if ${pkgs.dovecot}/libexec/dovecot/dovecot-lda -d "$user" < "$msg" 2>/dev/null; then
+              rm -f "$msg"
+              echo "  → HAM delivered via sieve: $(basename "$msg")"
+              GOOD_HAM_DELIVERED=$((GOOD_HAM_DELIVERED + 1))
             else
-              echo "  ⚠ No sieve script found for $user, keeping in .Good: $(basename "$msg")"
+              echo "  ⚠ Sieve delivery failed, keeping in .Good: $(basename "$msg")"
             fi
           fi
         done
@@ -97,18 +95,13 @@ let
             echo "  → Learned HAM: $(basename "$msg")"
             TRAIN_GOOD_LEARNED=$((TRAIN_GOOD_LEARNED + 1))
 
-            # Deliver through sieve filter
-            if [ -f "/var/lib/dovecot/sieve/users/$user/.dovecot.sieve" ]; then
-              if $DOVEADM sieve filter -u "$user" /var/lib/dovecot/sieve/users/$user/.dovecot.sieve < "$msg" 2>/dev/null; then
-                rm -f "$msg"
-                echo "  → Delivered via sieve: $(basename "$msg")"
-                TRAIN_GOOD_DELIVERED=$((TRAIN_GOOD_DELIVERED + 1))
-              else
-                echo "  ⚠ Sieve delivery failed, removing from .TrainGood: $(basename "$msg")"
-                rm -f "$msg"
-              fi
+            # Deliver through sieve filter using dovecot-lda
+            if ${pkgs.dovecot}/libexec/dovecot/dovecot-lda -d "$user" < "$msg" 2>/dev/null; then
+              rm -f "$msg"
+              echo "  → Delivered via sieve: $(basename "$msg")"
+              TRAIN_GOOD_DELIVERED=$((TRAIN_GOOD_DELIVERED + 1))
             else
-              echo "  ⚠ No sieve script found for $user, removing: $(basename "$msg")"
+              echo "  ⚠ Sieve delivery failed, removing from .TrainGood: $(basename "$msg")"
               rm -f "$msg"
             fi
           else
@@ -416,13 +409,13 @@ in
   ];
 
   # Systemd service to scan mailboxes
+  # Triggered by mbsync-johnw.service completion via OnSuccess hook
   systemd.services.rspamd-scan-mailboxes = {
     description = "Scan mailboxes with Rspamd and move spam";
 
-    # Ensure rspamd is running and mbsync is not active
-    after = [ "rspamd.service" ];
-    wants = [ "rspamd.service" ];
-    conflicts = [ "mbsync-johnw.service" "mbsync-assembly.service" ];
+    # Ensure rspamd and dovecot are running
+    after = [ "rspamd.service" "dovecot.service" ];
+    wants = [ "rspamd.service" "dovecot.service" ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -430,20 +423,14 @@ in
       User = "root";  # Need root to access /var/mail directories
       Group = "root";
     };
+
+    # Ensure dovecot_pigeonhole is in PATH for doveadm sieve commands
+    path = [ pkgs.dovecot_pigeonhole ];
   };
 
-  # Path unit to trigger scanner when mbsync completes
-  systemd.paths.rspamd-scan-mailboxes = {
-    description = "Trigger Rspamd scan after mbsync updates mailbox";
-    wantedBy = [ "multi-user.target" ];
-
-    pathConfig = {
-      # Watch for changes in .Good folder (where new mail arrives)
-      PathModified = "/var/mail/johnw/.Good";
-      # Delay to ensure mbsync has fully completed
-      TriggerLimitIntervalSec = "60s";
-      TriggerLimitBurst = 1;
-    };
+  # Hook into mbsync-johnw service to trigger scanning after sync
+  systemd.services.mbsync-johnw = {
+    onSuccess = [ "rspamd-scan-mailboxes.service" ];
   };
 
   # Nginx virtual host for Rspamd web UI

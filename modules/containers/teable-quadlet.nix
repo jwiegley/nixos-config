@@ -45,7 +45,7 @@ in
         TIMEZONE = "America/Los_Angeles";
       };
 
-      publishPorts = [ "127.0.0.1:3001:3000/tcp" ];
+      publishPorts = [ "127.0.0.1:3004:3000/tcp" ];  # Use 3004 (3000=Grafana, 3001=paperless-ai, 3002=openspeedtest, 3003=Gotenberg)
 
       volumes = [
         "/var/lib/teable:/app/.assets:rw"
@@ -53,7 +53,7 @@ in
 
       nginxVirtualHost = {
         enable = true;
-        proxyPass = "http://127.0.0.1:3001/";
+        proxyPass = "http://127.0.0.1:3004/";
         proxyWebsockets = true;
         extraConfig = ''
           proxy_buffering off;

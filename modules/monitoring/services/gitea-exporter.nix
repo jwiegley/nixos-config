@@ -3,14 +3,14 @@
 {
   # Gitea Prometheus metrics monitoring
   # Scrapes metrics from Gitea's built-in Prometheus exporter
-  # Metrics exposed at http://localhost:3000/metrics
+  # Metrics exposed at http://localhost:3005/metrics
 
   # Prometheus scrape configuration for Gitea
   services.prometheus.scrapeConfigs = [
     {
       job_name = "gitea";
       static_configs = [{
-        targets = [ "localhost:3003" ];
+        targets = [ "localhost:3005" ];
         labels = {
           service = "gitea";
           instance = "vulcan";
@@ -28,7 +28,7 @@
       # Gitea Prometheus Metrics Monitoring
 
       ## Overview
-      Gitea exposes Prometheus metrics at http://localhost:3000/metrics
+      Gitea exposes Prometheus metrics at http://localhost:3005/metrics
 
       ## Available Metrics
       Gitea provides various metrics including:
@@ -52,7 +52,7 @@
       ## Checking Metrics
       ```bash
       # View raw metrics
-      curl http://localhost:3000/metrics
+      curl http://localhost:3005/metrics
 
       # Check Prometheus scrape status
       curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="gitea")'
@@ -79,7 +79,7 @@
       - **Metrics not showing**: Check Gitea is running: `systemctl status gitea`
       - **Scrape failures**: Check Prometheus targets page for error messages: https://prometheus.vulcan.lan/targets
       - **Missing metrics**: Ensure `[metrics].ENABLED = true` in Gitea config
-      - **Connection refused**: Verify Gitea is listening on localhost:3000
+      - **Connection refused**: Verify Gitea is listening on localhost:3005
 
       ## Configuration
       Metrics are enabled in Gitea configuration at:

@@ -251,37 +251,27 @@ in
         sieve_max_actions = 32
         sieve_max_redirects = 4
 
-        # IMAP Sieve plugin for moving messages to Spam/Trash folders
-        imapsieve_mailbox1_name = Spam
-        imapsieve_mailbox1_causes = COPY
-        imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/global/report-spam.sieve
-
-        imapsieve_mailbox2_name = *
-        imapsieve_mailbox2_from = Spam
-        imapsieve_mailbox2_causes = COPY
-        imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/global/report-ham.sieve
-
         # Rspamd training: TrainSpam folder (learn spam, then move to IsSpam)
         # Note: COPY includes IMAP MOVE operations (destination side)
-        imapsieve_mailbox3_name = TrainSpam
-        imapsieve_mailbox3_causes = COPY APPEND
-        imapsieve_mailbox3_before = file:/var/lib/dovecot/sieve/rspamd/learn-spam.sieve
-        imapsieve_mailbox3_after = file:/var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve
+        imapsieve_mailbox1_name = TrainSpam
+        imapsieve_mailbox1_causes = COPY APPEND
+        imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/rspamd/learn-spam.sieve
+        imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve
 
         # Rspamd training: TrainGood folder (learn ham, then move to Good)
-        imapsieve_mailbox4_name = TrainGood
-        imapsieve_mailbox4_causes = COPY APPEND
-        imapsieve_mailbox4_before = file:/var/lib/dovecot/sieve/rspamd/learn-ham.sieve
-        imapsieve_mailbox4_after = file:/var/lib/dovecot/sieve/rspamd/move-to-good.sieve
+        imapsieve_mailbox2_name = TrainGood
+        imapsieve_mailbox2_causes = COPY APPEND
+        imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/rspamd/learn-ham.sieve
+        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/rspamd/move-to-good.sieve
 
         # Process Good folder: Apply user filtering rules to sort messages
-        imapsieve_mailbox5_name = Good
-        imapsieve_mailbox5_causes = COPY APPEND
-        imapsieve_mailbox5_before = file:/var/lib/dovecot/sieve/process-good.sieve
+        imapsieve_mailbox3_name = Good
+        imapsieve_mailbox3_causes = COPY APPEND
+        imapsieve_mailbox3_before = file:/var/lib/dovecot/sieve/process-good.sieve
 
         # Sieve pipe configuration
+        # Note: Using sieve_extprograms with direct Nix store paths, no bin_dir needed
         sieve_plugins = sieve_imapsieve sieve_extprograms
-        sieve_pipe_bin_dir = /usr/local/bin
 
         # Sieve debug logging (disabled - enable only for troubleshooting)
         sieve_trace_debug = no

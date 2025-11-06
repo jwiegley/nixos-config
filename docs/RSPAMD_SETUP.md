@@ -334,7 +334,6 @@ sudo journalctl -u dovecot2 -f
 
 # Verify Sieve scripts exist
 ls -la /var/lib/dovecot/sieve/rspamd/
-ls -la /usr/local/bin/rspamd-learn-*.sh
 
 # Test Sieve script compilation
 sievec /var/lib/dovecot/sieve/rspamd/learn-spam.sieve

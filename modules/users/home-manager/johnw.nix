@@ -75,7 +75,6 @@
     home.sessionPath = [
       "${home}/src/scripts"
       "${home}/.local/bin"
-      "/usr/local/bin"
     ];
 
     # Home files

@@ -178,32 +178,6 @@ let
     echo ".TrainSpam: learned=$TRAIN_SPAM_LEARNED, moved=$TRAIN_SPAM_MOVED"
   '';
 
-  # Sieve script for learning spam (when moved to TrainSpam)
-  learnSpamScript = pkgs.writeText "learn-spam.sieve" ''
-    require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
-
-    if environment :matches "imap.mailbox" "*" {
-      set "mailbox" "''${1}";
-    }
-
-    if string "''${mailbox}" "TrainSpam" {
-      pipe :copy "rspamd-learn-spam.sh";
-    }
-  '';
-
-  # Sieve script for learning ham (when moved to TrainGood)
-  learnHamScript = pkgs.writeText "learn-ham.sieve" ''
-    require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
-
-    if environment :matches "imap.mailbox" "*" {
-      set "mailbox" "''${1}";
-    }
-
-    if string "''${mailbox}" "TrainGood" {
-      pipe :copy "rspamd-learn-ham.sh";
-    }
-  '';
-
   # Shell script to call rspamc learn_spam
   learnSpamShellScript = pkgs.writeShellScript "rspamd-learn-spam.sh" ''
     exec ${pkgs.rspamd}/bin/rspamc learn_spam
@@ -212,6 +186,34 @@ let
   # Shell script to call rspamc learn_ham
   learnHamShellScript = pkgs.writeShellScript "rspamd-learn-ham.sh" ''
     exec ${pkgs.rspamd}/bin/rspamc learn_ham
+  '';
+
+  # Sieve script for learning spam (when moved to TrainSpam)
+  # Uses direct Nix store path - no indirection needed!
+  learnSpamScript = pkgs.writeText "learn-spam.sieve" ''
+    require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
+
+    if environment :matches "imap.mailbox" "*" {
+      set "mailbox" "''${1}";
+    }
+
+    if string "''${mailbox}" "TrainSpam" {
+      pipe :copy "${learnSpamShellScript}";
+    }
+  '';
+
+  # Sieve script for learning ham (when moved to TrainGood)
+  # Uses direct Nix store path - no indirection needed!
+  learnHamScript = pkgs.writeText "learn-ham.sieve" ''
+    require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
+
+    if environment :matches "imap.mailbox" "*" {
+      set "mailbox" "''${1}";
+    }
+
+    if string "''${mailbox}" "TrainGood" {
+      pipe :copy "${learnHamShellScript}";
+    }
   '';
 
   # Sieve script to move trained spam to IsSpam folder
@@ -398,14 +400,13 @@ in
   ];
 
   # Deploy Sieve scripts for spam/ham learning
+  # Note: Sieve scripts now use direct Nix store paths, no /usr/local/bin symlinks needed
   systemd.tmpfiles.rules = [
     "d /var/lib/dovecot/sieve/rspamd 0755 dovecot2 dovecot2 -"
     "L+ /var/lib/dovecot/sieve/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/move-to-good.sieve - - - - ${moveToGoodScript}"
-    "L+ /usr/local/bin/rspamd-learn-spam.sh - - - - ${learnSpamShellScript}"
-    "L+ /usr/local/bin/rspamd-learn-ham.sh - - - - ${learnHamShellScript}"
   ];
 
   # Systemd service to scan mailboxes

@@ -29,6 +29,8 @@
     ../monitoring/services/changedetection-exporter.nix
     ../monitoring/services/vdirsyncer-exporter.nix
     ../monitoring/services/gitea-exporter.nix
+    ../monitoring/services/paperless-exporter.nix
+    ../monitoring/services/paperless-ai-exporter.nix
 
     # Infrastructure monitoring
     ../monitoring/services/certificate-exporter.nix

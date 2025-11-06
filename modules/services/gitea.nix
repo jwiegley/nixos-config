@@ -67,7 +67,7 @@ in
         DOMAIN = "gitea.vulcan.lan";
         ROOT_URL = "https://gitea.vulcan.lan/";
         HTTP_ADDR = "127.0.0.1";
-        HTTP_PORT = 3003;
+        HTTP_PORT = 3005;  # Changed from 3003 (conflict with Gotenberg from Paperless)
         PROTOCOL = "http";
         DISABLE_SSH = false;
         SSH_PORT = 2222;
@@ -151,7 +151,7 @@ in
     sslCertificateKey = "/var/lib/nginx-certs/gitea.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://127.0.0.1:3003";
+      proxyPass = "http://127.0.0.1:3005";
       proxyWebsockets = true;
       extraConfig = ''
         # Increase timeouts for Git operations

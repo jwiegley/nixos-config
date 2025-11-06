@@ -84,12 +84,14 @@
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
     ../../modules/services/mindsdb.nix
+    ../../modules/services/paperless.nix
 
     # Containers
     ../../modules/containers/default.nix
     ../../modules/containers/secrets-migration.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix
+    ../../modules/containers/paperless-ai-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

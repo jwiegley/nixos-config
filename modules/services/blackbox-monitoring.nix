@@ -489,6 +489,8 @@ in
             "https://vanna.vulcan.lan"
             "https://budget.vulcan.lan"
             "https://changes.vulcan.lan"
+            "https://paperless.vulcan.lan"
+            "https://paperless-ai.vulcan.lan"
           ];
         }];
         relabel_configs = [

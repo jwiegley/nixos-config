@@ -48,15 +48,7 @@ let
                                                     \
             mail/quantum                            \
                                                     \
-            INBOX                                   \
-                                                    \
-            Archive                                 \
-            Trash                                   \
-            Spam                                    \
-            Sent                                    \
-            NeedsRule                               \
-            IsSpam                                  \
-            IsGood
+            INBOX
     fi
   '';
 in

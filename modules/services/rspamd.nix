@@ -222,12 +222,12 @@ let
     fileinto "IsSpam";
   '';
 
-  # Sieve script to move trained ham to IsGood folder
-  moveToIsGoodScript = pkgs.writeText "move-to-isgood.sieve" ''
+  # Sieve script to move trained ham to Good folder
+  moveToGoodScript = pkgs.writeText "move-to-good.sieve" ''
     require ["fileinto", "imap4flags"];
 
-    # Move all messages in TrainGood to IsGood after learning
-    fileinto "IsGood";
+    # Move all messages in TrainGood to Good after learning
+    fileinto "Good";
   '';
 in
 {
@@ -403,7 +403,7 @@ in
     "L+ /var/lib/dovecot/sieve/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
-    "L+ /var/lib/dovecot/sieve/rspamd/move-to-isgood.sieve - - - - ${moveToIsGoodScript}"
+    "L+ /var/lib/dovecot/sieve/rspamd/move-to-good.sieve - - - - ${moveToGoodScript}"
     "L+ /usr/local/bin/rspamd-learn-spam.sh - - - - ${learnSpamShellScript}"
     "L+ /usr/local/bin/rspamd-learn-ham.sh - - - - ${learnHamShellScript}"
   ];

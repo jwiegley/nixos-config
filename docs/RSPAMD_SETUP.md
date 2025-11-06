@@ -48,7 +48,7 @@ User Training Workflow:
          ↓
     Sieve: rspamc learn_ham
          ↓
-    Move to IsGood folder
+    Move to Good folder
 ```
 
 ### Redis Backend
@@ -202,7 +202,7 @@ ls -la /var/mail/johnw/Spam/cur/
 2. **Train Ham**:
    - Move a legitimate message to `TrainGood` folder
    - Sieve script should run `rspamc learn_ham`
-   - Message should be moved to `IsGood` folder
+   - Message should be moved to `Good` folder
 
 ### Test 5: Monitoring
 
@@ -274,7 +274,7 @@ Located in `/var/lib/dovecot/sieve/rspamd/`:
 - **learn-spam.sieve**: Triggered when message moved to TrainSpam
 - **learn-ham.sieve**: Triggered when message moved to TrainGood
 - **move-to-isspam.sieve**: Moves trained spam to IsSpam
-- **move-to-isgood.sieve**: Moves trained ham to IsGood
+- **move-to-good.sieve**: Moves trained ham to Good
 
 Shell scripts in `/usr/local/bin/`:
 
@@ -288,7 +288,7 @@ Shell scripts in `/usr/local/bin/`:
 Every 15 minutes, the `rspamd-scan-mailboxes.service` runs:
 
 1. Scans mailboxes for users: `johnw`, `assembly`
-2. Processes folders: INBOX, Sent, Drafts, NeedsRule, TrainGood, IsGood, mail/*, list/*
+2. Processes folders: INBOX, Sent, Drafts, NeedsRule, TrainGood, Good, mail/*, list/*
 3. Skips: Spam, TrainSpam, IsSpam (to avoid loops)
 4. For each message:
    - Calls `rspamc` to analyze
@@ -307,7 +307,7 @@ Users can improve spam detection by:
 2. **Report False Positives** (legitimate mail marked as spam):
    - Move message to `TrainGood` folder
    - Rspamd learns it as ham
-   - Message automatically moves to `IsGood`
+   - Message automatically moves to `Good`
 
 The Bayes classifier improves over time with user feedback.
 

@@ -92,7 +92,7 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 ### TrainSpam/TrainGood Folders
 
 **TrainSpam:** Learn as spam → Move to IsSpam
-**TrainGood:** Learn as ham → Move to IsGood
+**TrainGood:** Learn as ham → Move to Good
 
 These are used for training the Rspamd Bayes classifier.
 

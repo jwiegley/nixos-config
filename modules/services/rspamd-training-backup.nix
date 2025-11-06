@@ -59,10 +59,10 @@ let
         if [ -f "$msg" ]; then
           # Train as ham
           if $RSPAMC learn_ham < "$msg" >/dev/null 2>&1; then
-            # Move to IsGood folder
-            local isgood_dir="$MAIL_ROOT/$user/.IsGood/cur"
-            mkdir -p "$isgood_dir"
-            mv "$msg" "$isgood_dir/"
+            # Move to Good folder
+            local good_dir="$MAIL_ROOT/$user/.Good/cur"
+            mkdir -p "$good_dir"
+            mv "$msg" "$good_dir/"
             count=$((count + 1))
             HAM_TRAINED=$((HAM_TRAINED + 1))
           fi

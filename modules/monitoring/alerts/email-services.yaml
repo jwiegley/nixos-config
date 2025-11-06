@@ -1,0 +1,186 @@
+groups:
+  - name: email_service_alerts
+    interval: 60s
+    rules:
+      # Dovecot IMAP Server Alerts
+      - alert: DovecotDown
+        expr: up{job="dovecot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot IMAP server is down"
+          description: "Dovecot IMAP server has been unreachable for more than 2 minutes. Email access is unavailable."
+
+      - alert: DovecotHighConnectionCount
+        expr: dovecot_up_connections > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot has high connection count"
+          description: "Dovecot has {{ $value }} active connections (threshold: 100). May indicate connection leak or attack."
+
+      - alert: DovecotAuthenticationFailures
+        expr: rate(dovecot_auth_failures_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: email
+          service: dovecot
+        annotations:
+          summary: "High Dovecot authentication failure rate"
+          description: "Dovecot is experiencing {{ $value | humanize }} authentication failures per second over the last 5 minutes. Possible brute force attack."
+
+      # Postfix Mail Server Alerts
+      - alert: PostfixDown
+        expr: up{job="postfix"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix mail server is down"
+          description: "Postfix mail server exporter has been unreachable for more than 2 minutes. Mail delivery may be affected."
+
+      - alert: PostfixMailQueueHigh
+        expr: postfix_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix mail queue is growing"
+          description: "Postfix has {{ $value }} messages in queue (threshold: 100). Mail delivery may be delayed."
+
+      - alert: PostfixMailQueueCritical
+        expr: postfix_queue_size > 500
+        for: 5m
+        labels:
+          severity: critical
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix mail queue is critically high"
+          description: "Postfix has {{ $value }} messages in queue (threshold: 500). Immediate attention required."
+
+      - alert: PostfixBouncesHigh
+        expr: rate(postfix_bounces_total[15m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "High email bounce rate detected"
+          description: "Postfix is experiencing {{ $value | humanizePercentage }} bounce rate over the last 15 minutes."
+
+      - alert: PostfixDeferralsHigh
+        expr: rate(postfix_deferrals_total[15m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "High email deferral rate detected"
+          description: "Postfix is deferring {{ $value | humanizePercentage }} of outbound messages. Check connectivity to remote servers."
+
+      - alert: PostfixRejectsHigh
+        expr: rate(postfix_rejects_total[15m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "High email rejection rate"
+          description: "Postfix is rejecting {{ $value }} messages per second. Possible spam attack or misconfiguration."
+
+      # Rspamd Spam Filter Alerts
+      - alert: RspamdServiceDown
+        expr: |
+          systemd_unit_state{
+            name="rspamd.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: email
+          service: rspamd
+        annotations:
+          summary: "Rspamd spam filter service is down"
+          description: "Rspamd service is not active. Spam filtering is unavailable."
+
+      - alert: RspamdServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="rspamd.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: email
+          service: rspamd
+        annotations:
+          summary: "Rspamd service has failed"
+          description: "Rspamd service is in failed state. Check logs for errors."
+
+      # Roundcube Webmail Alerts
+      - alert: RoundcubeServiceDown
+        expr: |
+          systemd_unit_state{
+            name="phpfpm-roundcube.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: email
+          service: roundcube
+        annotations:
+          summary: "Roundcube webmail service is down"
+          description: "Roundcube PHP-FPM service is not active. Webmail access is unavailable."
+
+      - alert: RoundcubeServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="phpfpm-roundcube.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: warning
+          category: email
+          service: roundcube
+        annotations:
+          summary: "Roundcube service has failed"
+          description: "Roundcube PHP-FPM service is in failed state. Check logs for errors."
+
+      - alert: RoundcubeRedisDown
+        expr: |
+          systemd_unit_state{
+            name="redis-roundcube.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: email
+          service: roundcube
+        annotations:
+          summary: "Roundcube Redis cache is down"
+          description: "Redis cache for Roundcube is not active. Session handling may be degraded."

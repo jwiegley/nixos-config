@@ -1,0 +1,268 @@
+groups:
+  - name: application_service_alerts
+    interval: 60s
+    rules:
+      # Node-RED Automation Alerts
+      - alert: NodeRedDown
+        expr: up{job="node-red"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: automation
+          service: node-red
+        annotations:
+          summary: "Node-RED automation service is unreachable"
+          description: "Node-RED metrics endpoint has been unreachable for more than 3 minutes. Automation flows may not be running."
+
+      - alert: NodeRedServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="node-red.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: automation
+          service: node-red
+        annotations:
+          summary: "Node-RED service has failed"
+          description: "Node-RED systemd service is in failed state. Check logs for errors."
+
+      # vdirsyncer Contact/Calendar Sync Alerts
+      - alert: VdirsyncerSyncStale
+        expr: (time() - vdirsyncer_last_sync_timestamp) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          category: sync
+          service: vdirsyncer
+        annotations:
+          summary: "vdirsyncer hasn't synced in over 1 hour"
+          description: "Last sync was {{ $value | humanizeDuration }} ago (expected: every 15 minutes). Contacts/calendars may be out of sync."
+
+      - alert: VdirsyncerSyncUnhealthy
+        expr: vdirsyncer_sync_healthy == 0
+        for: 10m
+        labels:
+          severity: critical
+          category: sync
+          service: vdirsyncer
+        annotations:
+          summary: "vdirsyncer sync is unhealthy"
+          description: "vdirsyncer sync status is unhealthy. Check logs for sync errors between Radicale and Fastmail."
+
+      - alert: VdirsyncerServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="vdirsyncer.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: warning
+          category: sync
+          service: vdirsyncer
+        annotations:
+          summary: "vdirsyncer service has failed"
+          description: "vdirsyncer systemd service is in failed state. Last sync may have encountered errors."
+
+      - alert: VdirsyncerStatusDashboardDown
+        expr: |
+          systemd_unit_state{
+            name="vdirsyncer-status.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: sync
+          service: vdirsyncer
+        annotations:
+          summary: "vdirsyncer status dashboard is down"
+          description: "vdirsyncer status dashboard service is not active. Metrics and web UI unavailable."
+
+      # Mosquitto MQTT Broker Alerts
+      - alert: MosquittoServiceDown
+        expr: |
+          systemd_unit_state{
+            name="mosquitto.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: iot
+          service: mosquitto
+        annotations:
+          summary: "Mosquitto MQTT broker is down"
+          description: "Mosquitto service is not active. IoT device communication is unavailable."
+
+      - alert: MosquittoServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="mosquitto.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: iot
+          service: mosquitto
+        annotations:
+          summary: "Mosquitto service has failed"
+          description: "Mosquitto MQTT broker is in failed state. Check logs for errors."
+
+      # Samba File Sharing Alerts
+      - alert: SambaSMBDDown
+        expr: |
+          systemd_unit_state{
+            name="samba-smbd.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: fileserver
+          service: samba
+        annotations:
+          summary: "Samba SMB daemon is down"
+          description: "Samba SMB daemon is not active. File sharing is unavailable."
+
+      - alert: SambaNMBDDown
+        expr: |
+          systemd_unit_state{
+            name="samba-nmbd.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: fileserver
+          service: samba
+        annotations:
+          summary: "Samba NetBIOS daemon is down"
+          description: "Samba NetBIOS name server is not active. Network browsing may be affected."
+
+      - alert: SambaWinbindDown
+        expr: |
+          systemd_unit_state{
+            name="samba-winbindd.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: fileserver
+          service: samba
+        annotations:
+          summary: "Samba Winbind daemon is down"
+          description: "Samba Winbind daemon is not active. Domain integration may be affected."
+
+      # Radicale CalDAV/CardDAV Alerts
+      - alert: RadicaleServiceDown
+        expr: |
+          systemd_unit_state{
+            name="radicale.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: groupware
+          service: radicale
+        annotations:
+          summary: "Radicale CalDAV/CardDAV server is down"
+          description: "Radicale service is not active. Calendar and contact sync is unavailable."
+
+      - alert: RadicaleServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="radicale.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: groupware
+          service: radicale
+        annotations:
+          summary: "Radicale service has failed"
+          description: "Radicale CalDAV/CardDAV server is in failed state. Check logs for errors."
+
+      # Glance Dashboard Alerts
+      - alert: GlanceServiceDown
+        expr: |
+          systemd_unit_state{
+            name="glance.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: glance
+        annotations:
+          summary: "Glance dashboard service is down"
+          description: "Glance dashboard service is not active. Main dashboard is unavailable."
+
+      - alert: GlanceGitHubExtensionDown
+        expr: |
+          systemd_unit_state{
+            name="glance-github-extension.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: glance
+        annotations:
+          summary: "Glance GitHub extension is down"
+          description: "Glance GitHub extension service is not active. GitHub notifications widget unavailable."
+
+      # Glances System Monitoring Alerts
+      - alert: GlancesServiceDown
+        expr: |
+          systemd_unit_state{
+            name="glances.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: glances
+        annotations:
+          summary: "Glances system monitor is down"
+          description: "Glances service is not active. Real-time system monitoring unavailable."
+
+      # Cockpit Web Console Alerts
+      - alert: CockpitServiceDown
+        expr: |
+          systemd_unit_state{
+            name="cockpit.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: admin
+          service: cockpit
+        annotations:
+          summary: "Cockpit web console is down"
+          description: "Cockpit service is not active. Web-based system administration is unavailable."

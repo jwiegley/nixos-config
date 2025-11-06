@@ -169,6 +169,16 @@ let
     }
   '';
 
+  # Helper function for on-demand services (only alert on failures, not inactive state)
+  mkOnDemandServiceCheck = serviceName: displayName: servicegroups: ''
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     ${displayName}
+      check_command           check_systemd_service_ondemand!${serviceName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+    }
+  '';
+
   # Helper function to generate monitored host with ping check and optional parent
   # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; }
   mkMonitoredHost = { hostname, address, alias, parent ? null }: ''
@@ -346,6 +356,11 @@ let
     { name = "container@secure-nginx.service"; display = "Secure Nginx Container"; }
   ];
 
+  # On-demand services (manually started/stopped, only alert on failures)
+  onDemandServices = [
+    { name = "windows11.service"; display = "Windows 11 Container"; }
+  ];
+
   # Generate all service checks
   allServiceChecks = lib.concatStrings [
     # Critical Infrastructure - check every 2 minutes
@@ -368,6 +383,9 @@ let
 
     # Container Services - check every 5 minutes
     (lib.concatMapStrings (s: mkServiceCheck s.name s.display "containers" "standard-service") containerSystemdServices)
+
+    # On-Demand Services - only alert on failures
+    (lib.concatMapStrings (s: mkOnDemandServiceCheck s.name s.display "containers") onDemandServices)
 
     # Maintenance Timers - check every 15 minutes (low priority)
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "maintenance-timers") maintenanceTimers)
@@ -550,6 +568,48 @@ let
     define command {
       command_name    check_systemd_service
       command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
+    }
+
+    define command {
+      command_name    check_systemd_service_ondemand
+      command_line    ${pkgs.writeShellScript "check_systemd_ondemand.sh" ''
+        #!/usr/bin/env bash
+        SERVICE="$1"
+
+        # Get service state information
+        ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+        SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
+        RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
+
+        # For on-demand services:
+        # - inactive/dead is OK (manual stop)
+        # - active/running is OK (manual start)
+        # - failed is CRITICAL (unexpected failure)
+        # - activating is OK (starting up)
+        # - deactivating is OK (shutting down)
+
+        if [ "$ACTIVE_STATE" = "failed" ]; then
+          echo "CRITICAL: $SERVICE has failed - Result: $RESULT"
+          exit 2
+        elif [ "$ACTIVE_STATE" = "active" ]; then
+          echo "OK: $SERVICE is active and running"
+          exit 0
+        elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ]; then
+          if [ "$RESULT" = "success" ]; then
+            echo "OK: $SERVICE is inactive (manual stop or not started)"
+            exit 0
+          else
+            echo "WARNING: $SERVICE is inactive but last run result was: $RESULT"
+            exit 1
+          fi
+        elif [ "$ACTIVE_STATE" = "activating" ] || [ "$ACTIVE_STATE" = "deactivating" ]; then
+          echo "OK: $SERVICE is $ACTIVE_STATE"
+          exit 0
+        else
+          echo "WARNING: $SERVICE is in unexpected state: $ACTIVE_STATE/$SUB_STATE"
+          exit 1
+        fi
+      ''} $ARG1$
     }
 
     define command {
@@ -1226,6 +1286,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: budget.vulcan.lan
       check_command           check_ssl_cert!budget.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: windows.vulcan.lan
+      check_command           check_ssl_cert!windows.vulcan.lan
       service_groups          ssl-certificates
     }
 

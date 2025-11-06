@@ -51,6 +51,7 @@
     ../../modules/monitoring/homeassistant-nagios-check.nix
     ../../modules/monitoring/nagios-daily-report.nix
     ../../modules/monitoring/container-health-exporter.nix
+    ../../modules/monitoring/services/windows-exporter.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/ntopng.nix
@@ -88,6 +89,7 @@
     ../../modules/containers/default.nix
     ../../modules/containers/secrets-migration.nix
     ../../modules/containers/teable-quadlet.nix
+    ../../modules/containers/windows11-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

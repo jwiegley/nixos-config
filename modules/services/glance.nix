@@ -162,6 +162,10 @@ with lib;
                           title = "JupyterLab";
                           url = "https://jupyter.vulcan.lan";
                         }
+                        {
+                          title = "Windows 11";
+                          url = "https://windows.vulcan.lan";
+                        }
                       ];
                     }
                     {

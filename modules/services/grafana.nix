@@ -252,6 +252,12 @@
         cp /etc/nixos/modules/monitoring/dashboards/copyparty.json "$DASHBOARD_DIR/copyparty.json"
       fi
 
+      # Copy Windows Container Monitoring Dashboard (always update)
+      echo "Installing Windows Container Monitoring dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/dashboards/windows-container.json" ]; then
+        cp /etc/nixos/modules/monitoring/dashboards/windows-container.json "$DASHBOARD_DIR/windows-container.json"
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

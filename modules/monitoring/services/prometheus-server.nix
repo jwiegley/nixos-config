@@ -27,6 +27,7 @@ let
     "gitea.yaml"
     "mindsdb.yaml"
     "container-health.yaml"
+    "windows-container.yaml"
   ];
 in
 {

@@ -131,6 +131,13 @@
       # NixOS specific
       rebuild = "sudo nixos-rebuild switch --flake /etc/nixos#vulcan";
       nixedit = "sudo -E \$EDITOR /etc/nixos";
+
+      # Windows container management
+      windows-start = "sudo systemctl start windows11.service";
+      windows-stop = "sudo systemctl stop windows11.service";
+      windows-restart = "sudo systemctl restart windows11.service";
+      windows-status = "sudo systemctl status windows11.service";
+      windows-logs = "sudo journalctl -u windows11.service -f";
     };
   };
 

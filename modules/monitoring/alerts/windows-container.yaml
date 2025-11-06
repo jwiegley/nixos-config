@@ -1,0 +1,106 @@
+groups:
+  - name: windows_container
+    interval: 60s
+    rules:
+      # Alert when Windows systemd service has failed (not manual stop)
+      - alert: WindowsContainerServiceFailed
+        expr: node_systemd_unit_state{name="windows11.service",state="failed"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: windows
+        annotations:
+          summary: "Windows 11 container service has failed"
+          description: "The windows11.service systemd unit is in a failed state. This indicates an unexpected crash, not a manual stop."
+
+      # Alert when service is active but container isn't running (unexpected state)
+      - alert: WindowsContainerUnexpectedStop
+        expr: |
+          node_systemd_unit_state{name="windows11.service",state="active"} == 1
+          and
+          container_running{name="windows11"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: windows
+        annotations:
+          summary: "Windows 11 container stopped unexpectedly"
+          description: "The systemd service is active but the container is not running. The container may have crashed."
+
+      # Alert when Windows container is restarting frequently (only when service is active)
+      - alert: WindowsContainerRestarting
+        expr: |
+          rate(container_restart_count{name="windows11"}[10m]) > 0.05
+          and
+          node_systemd_unit_state{name="windows11.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: windows
+        annotations:
+          summary: "Windows 11 container is restarting frequently"
+          description: "The Windows 11 container has restarted {{ $value | humanize }} times in the last 10 minutes"
+
+      # Alert when web interface is down but service should be running
+      - alert: WindowsWebInterfaceDown
+        expr: |
+          probe_success{job="blackbox-https",instance="https://windows.vulcan.lan"} == 0
+          and
+          node_systemd_unit_state{name="windows11.service",state="active"} == 1
+        for: 3m
+        labels:
+          severity: critical
+          component: windows
+        annotations:
+          summary: "Windows web interface is not accessible"
+          description: "The Windows container web interface at https://windows.vulcan.lan has been unreachable for 3 minutes, but the service is running. Windows may be booting or experiencing issues."
+
+      # Alert when Windows web interface is slow (only when service is active)
+      - alert: WindowsWebInterfaceSlow
+        expr: |
+          probe_duration_seconds{job="blackbox-https",instance="https://windows.vulcan.lan"} > 5
+          and
+          node_systemd_unit_state{name="windows11.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: windows
+        annotations:
+          summary: "Windows web interface is responding slowly"
+          description: "The Windows container web interface is taking {{ $value | humanize }}s to respond (threshold: 5s)"
+
+      # Alert when Windows certificate is expiring soon
+      - alert: WindowsCertificateExpiringSoon
+        expr: certificate_days_until_expiry{name="windows.vulcan.lan",type="nginx"} < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: windows
+        annotations:
+          summary: "Windows container TLS certificate expiring soon"
+          description: "The TLS certificate for windows.vulcan.lan will expire in {{ $value }} days"
+
+      # Alert when Windows certificate has expired
+      - alert: WindowsCertificateExpired
+        expr: certificate_valid{name="windows.vulcan.lan",type="nginx"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: windows
+        annotations:
+          summary: "Windows container TLS certificate has expired"
+          description: "The TLS certificate for windows.vulcan.lan has expired"
+
+      # Alert when Windows RDP port is not listening (only when service is active)
+      - alert: WindowsRDPPortDown
+        expr: |
+          windows_rdp_port_open == 0
+          and
+          node_systemd_unit_state{name="windows11.service",state="active"} == 1
+        for: 3m
+        labels:
+          severity: warning
+          component: windows
+        annotations:
+          summary: "Windows RDP port is not listening"
+          description: "The Windows container RDP port (3389) has been unavailable for 3 minutes, but the service is running. Windows may be booting or experiencing issues."

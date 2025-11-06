@@ -1,5 +1,20 @@
 { config, lib, pkgs, ... }:
 
+let
+  # Sieve script to apply user's filtering rules when messages arrive in Good folder
+  processGoodScript = pkgs.writeText "process-good.sieve" ''
+    require ["include", "environment", "variables", "fileinto"];
+
+    # Get the current user from the environment
+    if environment :matches "imap.user" "*" {
+      set "username" "''${1}";
+    }
+
+    # Include the user's personal filtering script
+    # This applies their rules to messages that land in Good
+    include :personal "active";
+  '';
+in
 {
   # Add Dovecot Pigeonhole (Sieve) support
   environment.systemPackages = with pkgs; [
@@ -223,14 +238,15 @@
         fts_tokenizer_generic = algorithm=simple
 
         # Sieve mail filtering configuration
-        # Store user scripts outside mail directory to avoid mailbox listing conflicts
-        sieve = file:/var/lib/dovecot/sieve/users/%u
+        # User scripts in home directory (Dovecot best practice)
+        # Users can manage scripts via ManageSieve (port 4190)
+        sieve = file:~/sieve;active=~/.dovecot.sieve
         sieve_global_dir = /var/lib/dovecot/sieve/global/
         sieve_default = /var/lib/dovecot/sieve/default.sieve
         sieve_default_name = default
 
         # Sieve extensions
-        sieve_extensions = +notify +imapflags +vacation-seconds +editheader
+        sieve_extensions = +notify +imapflags +vacation-seconds +editheader +include
         sieve_max_script_size = 1M
         sieve_max_actions = 32
         sieve_max_redirects = 4
@@ -318,11 +334,9 @@
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
-    "d /var/lib/dovecot/sieve/users 0755 dovecot2 dovecot2 -"
-    "d /var/lib/dovecot/sieve/users/johnw 0700 johnw users -"
-    "d /var/lib/dovecot/sieve/users/assembly 0700 assembly users -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
+    "L+ /var/lib/dovecot/sieve/process-good.sieve - - - - ${processGoodScript}"
   ];
 
   # Pre-compile global Sieve scripts to avoid permission errors
@@ -352,75 +366,8 @@
     '';
   };
 
-  # Migrate Sieve scripts from old location to new location
-  systemd.services.dovecot-sieve-migrate = {
-    description = "Migrate Dovecot Sieve scripts to new location";
-    wantedBy = [ "dovecot2.service" ];
-    after = [ "systemd-tmpfiles-setup.service" "dovecot-sieve-compile.service" ];
-    before = [ "dovecot2.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    path = with pkgs; [ dovecot_pigeonhole util-linux coreutils shadow ];
-    script = ''
-      # Ensure directories exist
-      mkdir -p /var/lib/dovecot/sieve/users/johnw
-      mkdir -p /var/lib/dovecot/sieve/users/assembly
-      chown johnw:users /var/lib/dovecot/sieve/users/johnw
-      chown assembly:users /var/lib/dovecot/sieve/users/assembly
-      chmod 700 /var/lib/dovecot/sieve/users/johnw
-      chmod 700 /var/lib/dovecot/sieve/users/assembly
-
-      # Migrate johnw's scripts (from old sieve subdirectory)
-      if [ -f /var/mail/johnw/sieve/filters.sieve ] && [ ! -f /var/lib/dovecot/sieve/users/johnw/filters.sieve ]; then
-        echo "Migrating johnw's Sieve scripts..."
-        cp -a /var/mail/johnw/sieve/filters.sieve /var/lib/dovecot/sieve/users/johnw/filters.sieve
-        chown johnw:users /var/lib/dovecot/sieve/users/johnw/filters.sieve
-        chmod 600 /var/lib/dovecot/sieve/users/johnw/filters.sieve
-
-        # Create symlink for active script
-        ln -sf filters.sieve /var/lib/dovecot/sieve/users/johnw/.dovecot.sieve
-        chown -h johnw:users /var/lib/dovecot/sieve/users/johnw/.dovecot.sieve
-
-        # Compile the script
-        su -s /bin/sh johnw -c "sievec /var/lib/dovecot/sieve/users/johnw/filters.sieve"
-
-        # Remove old symlinks/files to prevent mailbox listing errors
-        rm -f /var/mail/johnw/.dovecot.sieve /var/mail/johnw/.dovecot.svbin
-      fi
-
-      # Ensure script exists and active symlink is correct
-      if [ -f /var/lib/dovecot/sieve/users/johnw/filters.sieve ]; then
-        # Create/update active symlink if needed
-        if [ ! -L /var/lib/dovecot/sieve/users/johnw/.dovecot.sieve ]; then
-          ln -sf filters.sieve /var/lib/dovecot/sieve/users/johnw/.dovecot.sieve
-          chown -h johnw:users /var/lib/dovecot/sieve/users/johnw/.dovecot.sieve
-        fi
-
-        # Keep script updated from source
-        if [ -f /var/mail/johnw/sieve/filters.sieve ] && [ /var/mail/johnw/sieve/filters.sieve -nt /var/lib/dovecot/sieve/users/johnw/filters.sieve ]; then
-          echo "Updating johnw's script from source..."
-          cp -a /var/mail/johnw/sieve/filters.sieve /var/lib/dovecot/sieve/users/johnw/filters.sieve
-          chown johnw:users /var/lib/dovecot/sieve/users/johnw/filters.sieve
-          chmod 600 /var/lib/dovecot/sieve/users/johnw/filters.sieve
-          su -s /bin/sh johnw -c "sievec /var/lib/dovecot/sieve/users/johnw/filters.sieve"
-        fi
-      fi
-
-      # Migrate assembly's scripts
-      if [ -f /var/mail/assembly/sieve/filters.sieve ] && [ ! -f /var/lib/dovecot/sieve/users/assembly/active.sieve ]; then
-        echo "Migrating assembly's Sieve scripts..."
-        cp -a /var/mail/assembly/sieve/filters.sieve /var/lib/dovecot/sieve/users/assembly/active.sieve
-        chown assembly:users /var/lib/dovecot/sieve/users/assembly/active.sieve
-        chmod 600 /var/lib/dovecot/sieve/users/assembly/active.sieve
-        su -s /bin/sh assembly -c "sievec /var/lib/dovecot/sieve/users/assembly/active.sieve"
-        rm -f /var/mail/assembly/.dovecot.sieve /var/mail/assembly/.dovecot.svbin
-      fi
-
-      echo "Sieve migration complete"
-    '';
-  };
+  # Note: dovecot-sieve-migrate service removed - user scripts now managed
+  # via ManageSieve protocol in ~/sieve directory per Dovecot best practices
 
   # Generate DH parameters if they don't exist
   systemd.services.dovecot-dh-params = {

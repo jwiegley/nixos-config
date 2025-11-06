@@ -1,0 +1,36 @@
+groups:
+- name: mindsdb_alerts
+  interval: 30s
+  rules:
+  # MindsDB Service Down
+  - alert: MindsDBServiceDown
+    expr: probe_success{service="mindsdb"} == 0
+    for: 2m
+    labels:
+      severity: critical
+      service: mindsdb
+    annotations:
+      summary: "MindsDB service is down"
+      description: "MindsDB HTTP endpoint has been unreachable for more than 2 minutes. Check 'systemctl status mindsdb' and 'journalctl -u mindsdb -n 50'"
+
+  # MindsDB Slow Response
+  - alert: MindsDBSlowResponse
+    expr: probe_duration_seconds{service="mindsdb"} > 5
+    for: 5m
+    labels:
+      severity: warning
+      service: mindsdb
+    annotations:
+      summary: "MindsDB is responding slowly"
+      description: "MindsDB response time has been above 5 seconds for more than 5 minutes"
+
+  # MindsDB HTTP Errors
+  - alert: MindsDBHTTPErrors
+    expr: probe_http_status_code{service="mindsdb"} >= 500
+    for: 3m
+    labels:
+      severity: warning
+      service: mindsdb
+    annotations:
+      summary: "MindsDB returning HTTP errors"
+      description: "MindsDB is returning HTTP 5xx errors"

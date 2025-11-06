@@ -269,6 +269,10 @@ with lib;
                           url = "https://vanna.vulcan.lan";
                         }
                         {
+                          title = "MindsDB";
+                          url = "https://mindsdb.vulcan.lan";
+                        }
+                        {
                           title = "BudgetBoard";
                           url = "https://budget.vulcan.lan";
                         }

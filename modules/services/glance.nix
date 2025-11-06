@@ -158,6 +158,10 @@ with lib;
                           title = "LiteLLM";
                           url = "https://litellm.vulcan.lan/ui";
                         }
+                        {
+                          title = "JupyterLab";
+                          url = "https://jupyter.vulcan.lan";
+                        }
                       ];
                     }
                     {

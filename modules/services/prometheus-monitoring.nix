@@ -25,6 +25,7 @@
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/n8n-exporter.nix
     ../monitoring/services/n8n-alerts.nix
+    ../monitoring/services/jupyterlab-alerts.nix
     ../monitoring/services/changedetection-exporter.nix
     ../monitoring/services/vdirsyncer-exporter.nix
     ../monitoring/services/gitea-exporter.nix

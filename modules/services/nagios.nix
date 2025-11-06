@@ -567,6 +567,11 @@ let
     }
 
     define command {
+      command_name    check_ssl_cert_external
+      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct
+    }
+
+    define command {
       command_name    check_systemd_service
       command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
     }
@@ -1046,7 +1051,7 @@ let
       use                     daily-service
       host_name               vulcan
       service_description     SSL Cert: home.newartisans.com
-      check_command           check_ssl_cert!home.newartisans.com
+      check_command           check_ssl_cert_external!home.newartisans.com
       service_groups          ssl-certificates
     }
 

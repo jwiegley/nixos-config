@@ -81,6 +81,7 @@
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
+    ../../modules/services/mindsdb.nix
 
     # Containers
     ../../modules/containers/default.nix

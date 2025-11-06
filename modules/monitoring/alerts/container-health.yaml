@@ -1,0 +1,39 @@
+groups:
+  - name: container_health
+    interval: 30s
+    rules:
+      - alert: ContainerUnhealthy
+        expr: container_health_status{name!=""} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} is unhealthy"
+          description: "Container {{ $labels.name }} has failed health checks for 2 minutes"
+
+      - alert: ContainerDown
+        expr: container_running{name!=""} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.name }} is not running"
+          description: "Container {{ $labels.name }} has been stopped for 1 minute"
+
+      - alert: ContainerRestarting
+        expr: rate(container_restart_count[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} has restarted {{ $value }} times in the last 5 minutes"
+
+      - alert: ContainerHealthCheckFailing
+        expr: container_health_status{name!=""} == 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} health check stuck in starting state"
+          description: "Container {{ $labels.name }} has been in 'starting' health state for 5 minutes"

@@ -330,6 +330,7 @@ let
   containers = [
     { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "container-db"; }
     { name = "metabase"; display = "Metabase BI Platform"; runAs = "container-db"; }
+    { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "container-db"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "container-db"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "container-monitor"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-misc"; }
@@ -1063,6 +1064,14 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
+      service_description     SSL Cert: jupyter.vulcan.lan
+      check_command           check_ssl_cert!jupyter.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
       service_description     SSL Cert: n8n.vulcan.lan
       check_command           check_ssl_cert!n8n.vulcan.lan
       service_groups          ssl-certificates
@@ -1137,6 +1146,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: metabase.vulcan.lan
       check_command           check_ssl_cert!metabase.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: mindsdb.vulcan.lan
+      check_command           check_ssl_cert!mindsdb.vulcan.lan
       service_groups          ssl-certificates
     }
 

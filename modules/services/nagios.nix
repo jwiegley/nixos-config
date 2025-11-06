@@ -261,8 +261,10 @@ let
     { name = "ntopng.service"; display = "ntopng Network Monitor"; }
     { name = "copyparty.service"; display = "Copyparty File Server"; }
     { name = "gitea.service"; display = "Gitea Git Server"; }
+    { name = "n8n.service"; display = "n8n Workflow Automation"; }
     { name = "redis-gitea.service"; display = "Redis (Gitea)"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
+    { name = "redis-n8n.service"; display = "Redis (n8n)"; }
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
     { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
     { name = "changedetection-pod.service"; display = "ChangeDetection Pod"; }
@@ -1055,6 +1057,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: nagios.vulcan.lan
       check_command           check_ssl_cert!nagios.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: n8n.vulcan.lan
+      check_command           check_ssl_cert!n8n.vulcan.lan
       service_groups          ssl-certificates
     }
 

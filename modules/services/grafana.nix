@@ -194,6 +194,12 @@
           -o "$DASHBOARD_DIR/loki-promtail.json" || true
       fi
 
+      # n8n Workflow Automation Dashboard (custom)
+      if [ ! -f "$DASHBOARD_DIR/n8n-metrics.json" ]; then
+        echo "Installing n8n Workflow Automation dashboard..."
+        ${pkgs.coreutils}/bin/cp /etc/nixos/grafana-dashboards/n8n-metrics.json "$DASHBOARD_DIR/n8n-metrics.json" || true
+      fi
+
       # Logs / App Dashboard (ID: 13639) - application logs overview
       if [ ! -f "$DASHBOARD_DIR/logs-app.json" ]; then
         echo "Downloading Logs App dashboard..."

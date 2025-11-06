@@ -151,6 +151,10 @@ with lib;
                           url = "https://nodered.vulcan.lan";
                         }
                         {
+                          title = "n8n";
+                          url = "https://n8n.vulcan.lan";
+                        }
+                        {
                           title = "LiteLLM";
                           url = "https://litellm.vulcan.lan/ui";
                         }

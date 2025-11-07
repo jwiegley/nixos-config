@@ -343,7 +343,7 @@ let
     { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "container-db"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "container-db"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "container-monitor"; }
-    { name = "paperless-ai"; display = "Paperless-AI Document Processing"; }
+    { name = "paperless-ai"; display = "Paperless-AI Document Processing"; runAs = "container-misc"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-misc"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "container-web"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "container-db"; }

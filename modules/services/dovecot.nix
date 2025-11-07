@@ -23,21 +23,12 @@ let
   '';
 
   # Sieve script for TrainGood folder processing (via imapsieve)
-  # Filters spam, then applies user's rules to re-file messages
+  # After learning ham, move message to INBOX and mark original as deleted
   processGoodScript = pkgs.writeText "process-good.sieve" ''
-    require ["fileinto", "include", "environment", "variables", "imap4flags"];
+    require ["fileinto", "imap4flags"];
 
-    # Message is not spam - apply user's personal filtering rules
-    # Get the current user from the environment (for imapsieve context)
-    if environment :matches "imap.user" "*" {
-      set "username" "''${1}";
-    }
-
-    # Include the user's personal filtering script
-    # Use :optional to avoid errors if script doesn't exist
-    include :optional :personal "active";
-
-    # If no personal filters match, delivers to INBOX
+    # Move message to INBOX (not spam)
+    fileinto "INBOX";
 
     # Mark the original message in TrainGood as deleted
     addflag "\\Deleted";
@@ -329,7 +320,7 @@ in
         imapsieve_mailbox2_name = TrainGood
         imapsieve_mailbox2_causes = COPY APPEND
         imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve
-        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/global/process-good.sieve
+        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/global/rspamd/process-good.sieve
 
         # Sieve pipe configuration
         # sieve_pipe_bin_dir is required for vnd.dovecot.pipe extension
@@ -337,9 +328,10 @@ in
         sieve_plugins = sieve_imapsieve sieve_extprograms
         sieve_pipe_bin_dir = /var/lib/dovecot/sieve-pipe-bin
 
-        # Sieve debug logging (enabled for troubleshooting LMTP mailbox visibility)
+        # Sieve debug logging (verbose mode for troubleshooting)
         sieve_trace_debug = yes
         sieve_trace_addresses = yes
+        sieve_trace_level = matching
 
         # Disable compiled binary caching for global/shared scripts
         # Users can't write to /var/lib/dovecot/sieve, so don't try to save .svbin files there
@@ -397,8 +389,8 @@ in
     # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
     "L+ /var/lib/dovecot/sieve/default.sieve - - - - ${defaultSieveScript}"
     # Deploy process-good.sieve for TrainGood folder processing via imapsieve
-    # Under global/ for sieve: URI access (allows user-writable binary caching)
-    "L+ /var/lib/dovecot/sieve/global/process-good.sieve - - - - ${processGoodScript}"
+    # In rspamd/ subdirectory alongside other imapsieve scripts (learn-ham, learn-spam, etc)
+    "L+ /var/lib/dovecot/sieve/global/rspamd/process-good.sieve - - - - ${processGoodScript}"
     # Create sieve-bin directory for compiled binaries from global scripts
     "d /home/johnw/sieve-bin 0700 johnw users -"
     "d /home/assembly/sieve-bin 0700 assembly users -"

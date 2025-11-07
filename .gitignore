@@ -2,6 +2,7 @@
 /secrets
 /nagios
 /Claude Conversations/
+__pycache__/
 
 # SOPS age keys (keep private - these decrypt the secrets)
 *.age

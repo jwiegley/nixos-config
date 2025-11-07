@@ -1,0 +1,81 @@
+~ ❯ sudo /etc/nixos/scripts/email-tester.py
+======================================================================
+EMAIL PIPELINE TESTER
+======================================================================
+User: johnw
+Started: 2025-11-07 12:50:29
+✓ IMAP password loaded
+
+======================================================================
+TEST 1: Normal Email Delivery
+======================================================================
+  → Sent via Postfix
+  ✓ Message in INBOX
+  ✓ Message not in Spam
+  ✓ Correctly marked as ham
+✓ PASSED
+
+======================================================================
+TEST 2.1: Spam Folder Accessibility
+======================================================================
+  ✓ Spam folder exists
+  → Created message in Spam (via IMAP)
+  ✓ Message in Spam
+  ✓ Spam folder is accessible
+✓ PASSED
+
+======================================================================
+TEST 2.2: Spam Detection and Delivery
+======================================================================
+  → Sent via Postfix
+  ✓ Rspamd processed message
+  ✓ Message in Spam
+  ✓ Message not in INBOX
+  ✓ Correctly marked as spam
+✓ PASSED
+
+======================================================================
+TEST 3: Train Ham (TrainGood Folder)
+======================================================================
+  → Sent via Postfix
+  ✓ Message in list/misc
+  ✓ Sieve filtered to list/misc
+  → Copied list/misc → TrainGood (via IMAP)
+  → Waiting 6s for IMAPSieve...
+  ✓ Rspamd learned ham
+  ✓ Message in list/misc
+  ✓ Message in list/misc (Sieve re-filtered)
+✓ PASSED
+
+======================================================================
+TEST 4: Train Spam (TrainSpam Folder)
+======================================================================
+  → Created message in INBOX (via IMAP)
+  → Copied INBOX → TrainSpam (via IMAP)
+  → Waiting 6s for IMAPSieve...
+  ✓ Rspamd learned spam
+  ✓ Message in IsSpam
+✓ PASSED
+
+======================================================================
+LOG VERIFICATION
+======================================================================
+✓ No unexpected errors in logs
+
+Cleaning up 5 test messages...
+  → All test messages already removed
+
+======================================================================
+TEST SUMMARY
+======================================================================
+  Normal Delivery: ✓ PASSED
+  Spam Folder Access: ✓ PASSED
+  Spam Detection: ✓ PASSED
+  Train Good (Ham): ✓ PASSED
+  Train Spam: ✓ PASSED
+  Log Verification: ✓ PASSED
+
+Overall: 6/6 tests passed
+Ended: 2025-11-07 12:51:36
+
+✓ SUCCESS: All tests passed!

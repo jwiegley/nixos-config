@@ -25,7 +25,7 @@ let
   # Sieve script for TrainGood folder processing (via imapsieve)
   # Filters spam, then applies user's rules to re-file messages
   processGoodScript = pkgs.writeText "process-good.sieve" ''
-    require ["fileinto", "include", "environment", "variables"];
+    require ["fileinto", "include", "environment", "variables", "imap4flags"];
 
     # Message is not spam - apply user's personal filtering rules
     # Get the current user from the environment (for imapsieve context)
@@ -38,6 +38,9 @@ let
     include :optional :personal "active";
 
     # If no personal filters match, delivers to INBOX
+
+    # Mark the original message in TrainGood as deleted
+    addflag "\\Deleted";
   '';
 in
 {
@@ -211,6 +214,10 @@ in
         process_limit = 1024
       }
 
+      service indexer-worker {
+        vsz_limit = 1024M
+      }
+
       # LMTP service for local mail delivery
       # Fetchmail will deliver to this UNIX socket to trigger imapsieve
       service lmtp {
@@ -250,7 +257,7 @@ in
       # Logging
       log_path = syslog
       syslog_facility = mail
-      auth_verbose = no
+      auth_verbose = yes
       auth_debug = no
       mail_debug = no
       verbose_ssl = no
@@ -298,9 +305,10 @@ in
         sieve_default = /var/lib/dovecot/sieve/default.sieve
         sieve_default_name = default
 
-        # Store compiled binaries for global imapsieve scripts in user's home directory
-        # This prevents permission errors when Dovecot tries to cache compiled binaries
-        # for global scripts referenced by imapsieve (process-good.sieve)
+        # Compiled binaries for global imapsieve scripts are pre-compiled by root
+        # during system activation and stored alongside the script sources.
+        # This prevents permission errors since users don't need write access.
+        # sieve_script_bin_path for user's personal scripts only
         sieve_script_bin_path = ~/sieve-bin
 
         # Sieve extensions
@@ -311,20 +319,23 @@ in
 
         # Rspamd training: TrainSpam folder (learn spam, then move to IsSpam)
         # Note: COPY includes IMAP MOVE operations (destination side)
+        # Scripts are symlinks to Nix store; binaries are pre-compiled with explicit output paths
         imapsieve_mailbox1_name = TrainSpam
         imapsieve_mailbox1_causes = COPY APPEND
-        imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/rspamd/learn-spam.sieve
-        imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve
+        imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve
+        imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/global/rspamd/move-to-isspam.sieve
 
         # Rspamd training: TrainGood folder (learn ham, then re-filter via Sieve)
         imapsieve_mailbox2_name = TrainGood
         imapsieve_mailbox2_causes = COPY APPEND
-        imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/rspamd/learn-ham.sieve
-        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/process-good.sieve
+        imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve
+        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/global/process-good.sieve
 
         # Sieve pipe configuration
-        # Note: Using sieve_extprograms with direct Nix store paths, no bin_dir needed
+        # sieve_pipe_bin_dir is required for vnd.dovecot.pipe extension
+        # Scripts must be in this directory for security reasons
         sieve_plugins = sieve_imapsieve sieve_extprograms
+        sieve_pipe_bin_dir = /var/lib/dovecot/sieve-pipe-bin
 
         # Sieve debug logging (enabled for troubleshooting LMTP mailbox visibility)
         sieve_trace_debug = yes
@@ -377,14 +388,17 @@ in
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
     # Sieve directory with restrictive permissions (read-only for non-dovecot users)
     # Scripts are pre-compiled during system activation, users don't need write access
+    # IMPORTANT: Create parent directories BEFORE rspamd.nix creates child symlinks
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
+    "d /var/lib/dovecot/sieve/global/rspamd 0755 dovecot2 dovecot2 -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
     # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
     "L+ /var/lib/dovecot/sieve/default.sieve - - - - ${defaultSieveScript}"
     # Deploy process-good.sieve for TrainGood folder processing via imapsieve
-    "L+ /var/lib/dovecot/sieve/process-good.sieve - - - - ${processGoodScript}"
+    # Under global/ for sieve: URI access (allows user-writable binary caching)
+    "L+ /var/lib/dovecot/sieve/global/process-good.sieve - - - - ${processGoodScript}"
     # Create sieve-bin directory for compiled binaries from global scripts
     "d /home/johnw/sieve-bin 0700 johnw users -"
     "d /home/assembly/sieve-bin 0700 assembly users -"
@@ -394,8 +408,11 @@ in
   systemd.services.dovecot-sieve-compile = {
     description = "Pre-compile Dovecot global Sieve scripts";
     wantedBy = [ "dovecot2.service" ];
-    after = [ "systemd-tmpfiles-setup.service" ];
+    after = [ "systemd-tmpfiles-setup.service" "systemd-tmpfiles-resetup.service" ];
     before = [ "dovecot2.service" ];
+    restartIfChanged = true;
+    # Restart whenever tmpfiles configuration changes (includes Sieve script paths)
+    restartTriggers = [ config.systemd.tmpfiles.rules ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -403,22 +420,22 @@ in
     path = with pkgs; [ dovecot_pigeonhole coreutils ];
     script = ''
       # Pre-compile all global Sieve scripts so users don't need write permission
-      # IMPORTANT: Touch .svbin files after compilation to ensure they have NEWER
-      # timestamps than .sieve sources. Dovecot considers binaries "outdated" if
-      # timestamps are identical or older, causing recompilation attempts that fail
-      # due to correct restrictive permissions.
+      # Scripts are symlinks to Nix store (read-only), so we must use explicit output paths
+      # IMPORTANT: Compiled binaries must have NEWER timestamps than sources, otherwise
+      # Dovecot considers them "outdated" and tries to recompile (causing permission errors)
       echo "Pre-compiling global Sieve scripts..."
 
-      for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
-        if [ -f "$script" ]; then
-          echo "  Compiling: $script"
-          if sievec "$script"; then
-            # Touch the compiled binary to ensure it has a newer timestamp
-            binary="''${script%.sieve}.svbin"
-            if [ -f "$binary" ]; then
-              touch "$binary"
-              echo "  ✓ Compiled and timestamp updated: $binary"
-            fi
+      for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/global/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
+        if [ -f "$script" ] || [ -L "$script" ]; then
+          binary="''${script%.sieve}.svbin"
+          echo "  Compiling: $script -> $binary"
+          # Use explicit output path because source is a symlink to read-only Nix store
+          if sievec "$script" "$binary"; then
+            # Touch the compiled binary to ensure it has a newer timestamp than source
+            touch "$binary"
+            # Make binary world-readable so all users can access it
+            chmod 644 "$binary"
+            echo "  ✓ Compiled: $binary"
           else
             echo "  ✗ Warning: Failed to compile $script"
           fi

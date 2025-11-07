@@ -139,7 +139,7 @@ in
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/fetchmail-good" "/run/dovecot2" ];
+      ReadWritePaths = [ "/var/log/fetchmail-good" "/run/dovecot2" "/var/lib/fetchmail" ];
 
       # Allow access to Dovecot LMTP socket
       SupplementaryGroups = [ "dovecot2" ];
@@ -180,7 +180,7 @@ in
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/fetchmail-spam" "/run/dovecot2" ];
+      ReadWritePaths = [ "/var/log/fetchmail-spam" "/run/dovecot2" "/var/lib/fetchmail" ];
 
       # Allow access to Dovecot LMTP socket
       SupplementaryGroups = [ "dovecot2" ];

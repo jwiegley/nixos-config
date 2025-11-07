@@ -12,7 +12,7 @@ let
   '';
 
   # Sieve script for learning spam (when moved to TrainSpam)
-  # Uses direct Nix store path - no indirection needed!
+  # References script by name from sieve_pipe_bin_dir
   learnSpamScript = pkgs.writeText "learn-spam.sieve" ''
     require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
 
@@ -21,12 +21,12 @@ let
     }
 
     if string "''${mailbox}" "TrainSpam" {
-      pipe :copy "${learnSpamShellScript}";
+      pipe :copy "rspamd-learn-spam.sh";
     }
   '';
 
   # Sieve script for learning ham (when moved to TrainGood)
-  # Uses direct Nix store path - no indirection needed!
+  # References script by name from sieve_pipe_bin_dir
   learnHamScript = pkgs.writeText "learn-ham.sieve" ''
     require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables", "fileinto"];
 
@@ -35,7 +35,7 @@ let
     }
 
     if string "''${mailbox}" "TrainGood" {
-      pipe :copy "${learnHamShellScript}";
+      pipe :copy "rspamd-learn-ham.sh";
     }
   '';
 
@@ -45,6 +45,9 @@ let
 
     # Move all messages in TrainSpam to IsSpam after learning
     fileinto "IsSpam";
+
+    # Mark the original message in TrainSpam as deleted
+    addflag "\\Deleted";
   '';
 
   # Note: moveToGoodScript removed - TrainGood now uses process-good.sieve directly
@@ -173,6 +176,16 @@ in
         }
       '';
 
+      "dkim_signing.conf".text = ''
+        # Disable DKIM signing for local/private domains
+        # DKIM is only useful for public internet domains
+        sign_local = false;
+
+        # Still allow signing for authenticated users with public domains
+        # but don't fail if key is missing
+        allow_hdrfrom_mismatch_sign_networks = false;
+      '';
+
       # Worker controller configuration for web UI
       "worker-controller.inc".text = ''
         # Enable web UI
@@ -233,14 +246,21 @@ in
     }
   ];
 
-  # Deploy Sieve scripts for spam/ham learning
-  # Note: Sieve scripts now use direct Nix store paths, no /usr/local/bin symlinks needed
+  # Deploy Sieve scripts and pipe executables for spam/ham learning
+  # Sieve scripts reference executables by name from sieve_pipe_bin_dir
+  # NOTE: Directory creation moved to dovecot.nix to ensure correct parent/child ordering
   systemd.tmpfiles.rules = [
-    "d /var/lib/dovecot/sieve/rspamd 0755 dovecot2 dovecot2 -"
-    "L+ /var/lib/dovecot/sieve/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
-    "L+ /var/lib/dovecot/sieve/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
-    "L+ /var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
+    # Sieve scripts symlinks (directory created in dovecot.nix)
+    "L+ /var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
+    "L+ /var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
+    "L+ /var/lib/dovecot/sieve/global/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
     # move-to-good.sieve removed - TrainGood now uses process-good.sieve directly
+
+    # Sieve pipe executables directory
+    # Dovecot requires pipe scripts to be in sieve_pipe_bin_dir for security
+    "d /var/lib/dovecot/sieve-pipe-bin 0755 dovecot2 dovecot2 -"
+    "L+ /var/lib/dovecot/sieve-pipe-bin/rspamd-learn-spam.sh - - - - ${learnSpamShellScript}"
+    "L+ /var/lib/dovecot/sieve-pipe-bin/rspamd-learn-ham.sh - - - - ${learnHamShellScript}"
   ];
 
   # Nginx virtual host for Rspamd web UI

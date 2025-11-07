@@ -13,7 +13,7 @@
 
     # Redirect system user mail to johnw
     # This prevents Dovecot UID errors for system users below first_valid_uid
-    localAliases = ''
+    extraAliases = ''
       root: johnw
       postmaster: johnw
       ntopng: johnw

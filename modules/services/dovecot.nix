@@ -486,9 +486,27 @@ in
   # client_limit=1500 requires fd limit >= 1500
   systemd.services.dovecot.serviceConfig.LimitNOFILE = 2048;
 
-  # Override preStart to NOT delete Sieve directories
-  # The NixOS dovecot module has a preStart that runs "rm -rf /var/lib/dovecot/sieve"
-  # This was breaking spam filtering by removing default.sieve on every restart
-  # We manage Sieve scripts via tmpfiles.rules and need them to persist
-  systemd.services.dovecot.preStart = lib.mkForce "";
+  # Override preStart to clean up and recreate Sieve directories properly
+  # The NixOS dovecot module deletes sieve dirs to clean stale binaries
+  # We use systemd-tmpfiles to recreate structure but filter harmless errors
+  systemd.services.dovecot.preStart = lib.mkForce ''
+    # Remove stale compiled binaries
+    rm -rf /var/lib/dovecot/sieve /var/lib/dovecot/imapsieve
+
+    # Recreate directory structure and symlinks via tmpfiles
+    # Filter out harmless specifier replacement errors for non-existent paths
+    ${pkgs.systemd}/bin/systemd-tmpfiles --create --prefix=/var/lib/dovecot/sieve 2>&1 | \
+      grep -v "Failed to replace specifiers" || true
+
+    # Recompile all Sieve scripts
+    for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/global/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
+      if [ -f "$script" ] || [ -L "$script" ]; then
+        binary="''${script%.sieve}.svbin"
+        # Suppress stats socket errors (dovecot not running yet during preStart)
+        ${pkgs.dovecot_pigeonhole}/bin/sievec "$script" "$binary" 2>&1 | \
+          grep -v "stats: open(/run/dovecot2/old-stats-mail) failed" || true
+        chmod 644 "$binary" && touch "$binary"
+      fi
+    done
+  '';
 }

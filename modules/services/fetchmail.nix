@@ -8,7 +8,8 @@ let
     set no bouncemail
     set no spambounce
     set properties ""
-    set logfile /var/log/fetchmail-good/fetchmail.log
+    # Since we use --nodetach for IDLE mode, we cannot use logfile
+    # set logfile /var/log/fetchmail-good/fetchmail.log
 
     # Fastmail IMAP account - Good folder only (IDLE mode)
     poll imap.fastmail.com protocol IMAP port 993
@@ -16,17 +17,18 @@ let
       password "PASSWORD_PLACEHOLDER"
       folder "Good"
 
-      # Deliver to local user via Dovecot LMTP socket
-      # LMTP will trigger Sieve filtering, which will file to INBOX or other folders
-      smtphost /var/run/dovecot2/lmtp
-      lmtp
+      # Deliver to local user via Postfix SMTP
+      # Postfix will scan with rspamd (spam filtering), then deliver via LMTP to Dovecot
+      # Dovecot's Sieve will check X-Spam headers and file messages appropriately
+      smtphost localhost
+      smtpname johnw
       is "johnw" here
 
       # Use IMAP IDLE for real-time notification
       idle
 
-      # Keep messages on server (fetchmail will mark as seen)
-      keep
+      # Do not keep messages on server
+      fetchall
 
       # Don't rewrite delivery addresses
       no rewrite
@@ -42,20 +44,20 @@ let
     set properties ""
     set logfile /var/log/fetchmail-spam/fetchmail.log
 
-    # Fastmail IMAP account - Spam folder only (polling every 5 minutes)
+    # Fastmail IMAP account - Spam folder only (polling every 15 minutes)
     poll imap.fastmail.com protocol IMAP port 993
       user "johnw@newartisans.com"
       password "PASSWORD_PLACEHOLDER"
       folder "Spam"
 
-      # Deliver to local Spam folder via Dovecot LMTP
-      # Note: We'll use Sieve to redirect to Spam folder based on folder name
+      # Deliver directly to Dovecot LMTP, bypassing Postfix/rspamd
+      # These are already confirmed spam from Fastmail, no need to re-scan
       smtphost /var/run/dovecot2/lmtp
       lmtp
       is "johnw" here
 
-      # Keep messages on server
-      keep
+      # Do not keep messages on server
+      fetchall
 
       # Don't rewrite delivery addresses
       no rewrite
@@ -88,6 +90,8 @@ in
     isSystemUser = true;
     group = "fetchmail";
     description = "Fetchmail daemon user";
+    home = "/var/lib/fetchmail";
+    createHome = true;
   };
   users.groups.fetchmail = {};
 
@@ -125,8 +129,10 @@ in
       # Use --pidfile to avoid conflicts between multiple instances
       ExecStart = "${pkgs.fetchmail}/bin/fetchmail --ssl --nodetach --pidfile /run/fetchmail-good/fetchmail.pid -f /run/fetchmail-good/fetchmailrc";
 
-      Restart = "on-failure";
-      RestartSec = "30s";
+      # Always restart - fetchmail exits after processing messages even in IDLE mode
+      # It will re-enter IDLE mode on restart
+      Restart = "always";
+      RestartSec = "5s";
 
       # Hardening
       PrivateTmp = true;
@@ -142,7 +148,7 @@ in
 
   # Fetchmail systemd service for Spam folder (daemon mode with polling)
   systemd.services.fetchmail-spam = {
-    description = "Fetchmail daemon for Spam folder (polling every 5 minutes)";
+    description = "Fetchmail daemon for Spam folder (polling every 15 minutes)";
     after = [ "network-online.target" "dovecot.service" ];
     wants = [ "network-online.target" ];
     requires = [ "dovecot.service" ];
@@ -162,7 +168,7 @@ in
 
       # Generate config with password from SOPS credential
       ExecStartPre = "${generateSpamConfig}";
-      # Use --ssl for daemon mode (polls every 5 minutes)
+      # Use --ssl for daemon mode (polls every 15 minutes)
       # Use --pidfile to avoid conflicts between multiple instances
       ExecStart = "${pkgs.fetchmail}/bin/fetchmail --ssl --pidfile /run/fetchmail-spam/fetchmail.pid -f /run/fetchmail-spam/fetchmailrc";
 

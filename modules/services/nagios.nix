@@ -429,7 +429,7 @@ let
       host_notification_options       d,u,r
       service_notification_commands   notify-service-by-email
       host_notification_commands      notify-host-by-email
-      email                           johnw@newartisans.com
+      email                           johnw@vulcan.lan
     }
 
     define contactgroup {
@@ -1892,8 +1892,8 @@ in
   # Enable daily email health reports
   services.nagios-daily-report = {
     enable = true;
-    toEmail = "johnw@newartisans.com";
-    fromEmail = "johnw@newartisans.com";
+    toEmail = "johnw@vulcan.lan";
+    fromEmail = "nagios@vulcan.lan";
     schedule = "08:00";  # Send daily at 8:00 AM
   };
 }

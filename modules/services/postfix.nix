@@ -11,6 +11,14 @@
   services.postfix = {
     enable = true;
 
+    # Redirect system user mail to johnw
+    # This prevents Dovecot UID errors for system users below first_valid_uid
+    localAliases = ''
+      root: johnw
+      postmaster: johnw
+      ntopng: johnw
+    '';
+
     # Enable submission services for encrypted mail submission
     enableSubmission = true;   # Port 587 with STARTTLS
     enableSubmissions = true;  # Port 465 with implicit TLS (recommended)
@@ -36,6 +44,10 @@
     };
 
     settings.main = {
+      myhostname = "vulcan.lan";
+      mydomain = "lan";
+      myorigin = "$myhostname";
+
       mynetworks = [
         "192.168.0.0/16"
         "10.0.0.0/8"
@@ -67,6 +79,18 @@
 
       # Additional security
       tls_preempt_cipherlist = "yes";
+
+      # Rspamd milter integration for spam filtering
+      # Rspamd will scan messages and add X-Spam headers
+      smtpd_milters = [ "inet:localhost:11332" ];
+      non_smtpd_milters = [ "inet:localhost:11332" ];
+      milter_protocol = "6";
+      milter_mail_macros = "i {mail_addr} {client_addr} {client_name} {auth_authen}";
+      milter_default_action = "accept";
+
+      # Deliver local mail to Dovecot LMTP
+      virtual_transport = "lmtp:unix:/var/run/dovecot2/lmtp";
+      mailbox_transport = "lmtp:unix:/var/run/dovecot2/lmtp";
     };
   };
 

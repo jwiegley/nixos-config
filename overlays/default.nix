@@ -8,14 +8,23 @@ let
   # Import Haskell overlay to fix broken packages
   haskellOverlay = import ./haskell-sizes.nix;
 
+  # Import check-systemd overlay to add reload-notify support
+  checkSystemdOverlay = import ./check-systemd.nix;
+
   # Apply Haskell overlay first to get patched haskellPackages
   prevWithHaskell = prev // (haskellOverlay final prev);
+
+  # Apply check-systemd overlay
+  prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
 in
 {
-  inherit (import ./dirscan.nix final prev) dirscan;
+  inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
+
+  # Inherit the patched check_systemd from the check-systemd overlay
+  inherit (prevWithCheckSystemd) check_systemd;
   # Extend Python package sets system-wide using pythonPackagesExtensions
   # This ensures all Python derivations (including Home Assistant's) get our custom packages
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [] ++ [

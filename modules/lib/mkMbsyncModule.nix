@@ -147,6 +147,7 @@
             "/var/log/mbsync-${name}"
             "/var/mail/${name}"
             "/var/lib/prometheus-node-exporter-textfiles"
+            "/var/lib/dovecot"  # Allow Dovecot IMAP tunnel to compile Sieve scripts
           ];
           NoNewPrivileges = true;
 

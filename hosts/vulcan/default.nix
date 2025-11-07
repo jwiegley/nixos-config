@@ -67,6 +67,7 @@
     ../../modules/monitoring/services/victoriametrics.nix
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
+    ../../modules/services/dovecot-imapsieve-monitor.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/rspamd-training-backup.nix

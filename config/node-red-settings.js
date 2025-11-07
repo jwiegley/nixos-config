@@ -74,8 +74,35 @@ module.exports = {
      * Supports Bearer Token authentication
      *
      * Bearer Token Format: Authorization: Bearer <token>
+     *
+     * Exceptions:
+     * - /metrics: Prometheus metrics endpoint (requires bearer token via Prometheus config)
      */
     httpNodeMiddleware: function(req, res, next) {
+        // Allow /metrics endpoint for Prometheus scraping
+        // Prometheus provides bearer token in its request
+        if (req.path === '/metrics') {
+            const authHeader = req.headers.authorization;
+
+            // Prometheus must provide a valid bearer token
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.substring(7);
+                const validToken = apiTokens.some(t => t.token === token);
+
+                if (validToken) {
+                    return next();
+                }
+            }
+
+            // If /metrics accessed without valid token, return 401
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Valid bearer token required for metrics endpoint'
+            });
+            return;
+        }
+
+        // For all other HTTP nodes, require bearer token
         const authHeader = req.headers.authorization;
 
         // Check for Bearer token

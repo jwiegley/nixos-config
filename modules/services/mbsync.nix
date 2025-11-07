@@ -25,10 +25,11 @@ in
 
       channels = ''
         # Sync all folders from Fastmail (pull only)
+        # Good and Spam folders are now handled by fetchmail via LMTP to trigger imapsieve
         Channel fastmail-all
         Far :johnw-remote:
         Near :dovecot-local:
-        Patterns Good INBOX Spam TrainGood TrainSpam IsSpam Sent mail/* list/*
+        Patterns INBOX Sent mail/* list/*
         Create Both
         Remove None
         Expunge Both

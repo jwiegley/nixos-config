@@ -67,8 +67,8 @@ in
 
     # Extra configuration for advanced settings
     extraConfig = ''
-      # Enable ManageSieve protocol
-      protocols = $protocols sieve
+      # Enable ManageSieve and LMTP protocols
+      protocols = $protocols sieve lmtp
 
       # SSL/TLS configuration
       ssl = required
@@ -96,6 +96,12 @@ in
 
       # LDA (Local Delivery Agent) protocol
       protocol lda {
+        mail_plugins = $mail_plugins sieve
+      }
+
+      # LMTP (Local Mail Transfer Protocol) for mail delivery
+      # Used by fetchmail to deliver mail and trigger imapsieve
+      protocol lmtp {
         mail_plugins = $mail_plugins sieve
       }
 
@@ -131,6 +137,9 @@ in
           user = dovecot2
           group = dovecot2
         }
+        # Increase client_limit to accommodate all protocol services
+        # Calculated: managesieve-login(100) + lmtp(1024) + imap-urlauth-login(100) + imap-login(100) = 1324
+        client_limit = 1500
       }
 
       # Old statistics service for Prometheus exporter compatibility
@@ -174,6 +183,17 @@ in
       }
 
       service managesieve {
+        process_limit = 1024
+      }
+
+      # LMTP service for local mail delivery
+      # Fetchmail will deliver to this UNIX socket to trigger imapsieve
+      service lmtp {
+        unix_listener lmtp {
+          mode = 0666
+          user = dovecot2
+          group = dovecot2
+        }
         process_limit = 1024
       }
 
@@ -421,4 +441,8 @@ in
 
   networking.firewall.allowedTCPPorts =
     lib.mkIf config.services.dovecot2.enable [ 993 4190 ];
+
+  # Increase file descriptor limit for Dovecot to accommodate auth client_limit
+  # client_limit=1500 requires fd limit >= 1500
+  systemd.services.dovecot.serviceConfig.LimitNOFILE = 2048;
 }

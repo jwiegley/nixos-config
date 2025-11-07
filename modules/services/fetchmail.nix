@@ -20,7 +20,7 @@ let
       # LMTP will trigger Sieve filtering, which will file to INBOX or other folders
       smtphost /var/run/dovecot2/lmtp
       lmtp
-      is "johnw@vulcan.lan" here
+      is "johnw" here
 
       # Use IMAP IDLE for real-time notification
       idle
@@ -32,16 +32,17 @@ let
       no rewrite
   '';
 
-  # Fetchmail configuration template for Spam folder (IDLE mode)
+  # Fetchmail configuration template for Spam folder (regular polling)
   # Delivers directly to local Spam folder
   fetchmailSpamTemplate = pkgs.writeText "fetchmailrc-spam-template" ''
     # Global settings
+    set daemon 900
     set no bouncemail
     set no spambounce
     set properties ""
     set logfile /var/log/fetchmail-spam/fetchmail.log
 
-    # Fastmail IMAP account - Spam folder only (IDLE mode)
+    # Fastmail IMAP account - Spam folder only (polling every 5 minutes)
     poll imap.fastmail.com protocol IMAP port 993
       user "johnw@newartisans.com"
       password "PASSWORD_PLACEHOLDER"
@@ -51,10 +52,7 @@ let
       # Note: We'll use Sieve to redirect to Spam folder based on folder name
       smtphost /var/run/dovecot2/lmtp
       lmtp
-      is "johnw+spam@vulcan.lan" here
-
-      # Use IMAP IDLE for real-time notification
-      idle
+      is "johnw" here
 
       # Keep messages on server
       keep
@@ -90,8 +88,6 @@ in
     isSystemUser = true;
     group = "fetchmail";
     description = "Fetchmail daemon user";
-    home = "/var/lib/fetchmail";
-    createHome = true;
   };
   users.groups.fetchmail = {};
 
@@ -137,23 +133,23 @@ in
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/fetchmail-good" "/run/dovecot2" "/var/lib/fetchmail" ];
+      ReadWritePaths = [ "/var/log/fetchmail-good" "/run/dovecot2" ];
 
       # Allow access to Dovecot LMTP socket
       SupplementaryGroups = [ "dovecot2" ];
     };
   };
 
-  # Fetchmail systemd service for Spam folder (IDLE mode)
+  # Fetchmail systemd service for Spam folder (daemon mode with polling)
   systemd.services.fetchmail-spam = {
-    description = "Fetchmail daemon for Spam folder (IDLE mode)";
+    description = "Fetchmail daemon for Spam folder (polling every 5 minutes)";
     after = [ "network-online.target" "dovecot.service" ];
     wants = [ "network-online.target" ];
     requires = [ "dovecot.service" ];
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
-      Type = "simple";  # IDLE mode runs in foreground
+      Type = "simple";  # Simple mode - fetchmail daemon doesn't fork cleanly for systemd
       User = "fetchmail";
       Group = "fetchmail";
 
@@ -166,9 +162,9 @@ in
 
       # Generate config with password from SOPS credential
       ExecStartPre = "${generateSpamConfig}";
-      # Use --ssl and --nodetach for IDLE mode (runs in foreground)
+      # Use --ssl for daemon mode (polls every 5 minutes)
       # Use --pidfile to avoid conflicts between multiple instances
-      ExecStart = "${pkgs.fetchmail}/bin/fetchmail --ssl --nodetach --pidfile /run/fetchmail-spam/fetchmail.pid -f /run/fetchmail-spam/fetchmailrc";
+      ExecStart = "${pkgs.fetchmail}/bin/fetchmail --ssl --pidfile /run/fetchmail-spam/fetchmail.pid -f /run/fetchmail-spam/fetchmailrc";
 
       Restart = "on-failure";
       RestartSec = "30s";
@@ -178,7 +174,7 @@ in
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/fetchmail-spam" "/run/dovecot2" "/var/lib/fetchmail" ];
+      ReadWritePaths = [ "/var/log/fetchmail-spam" "/run/dovecot2" ];
 
       # Allow access to Dovecot LMTP socket
       SupplementaryGroups = [ "dovecot2" ];

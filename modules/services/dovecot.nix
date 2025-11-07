@@ -81,6 +81,10 @@ in
       disable_plaintext_auth = yes
       auth_mechanisms = plain login
 
+      # Strip domain from usernames for system user authentication
+      # This allows LMTP delivery to "user@localhost" or "user@domain" to match system user "user"
+      auth_username_format = %Ln
+
       # Mail configuration
       mail_privileged_group = mail
       mail_access_groups = mail
@@ -306,9 +310,9 @@ in
         # Note: Using sieve_extprograms with direct Nix store paths, no bin_dir needed
         sieve_plugins = sieve_imapsieve sieve_extprograms
 
-        # Sieve debug logging (disabled - enable only for troubleshooting)
-        sieve_trace_debug = no
-        sieve_trace_addresses = no
+        # Sieve debug logging (enabled for troubleshooting LMTP mailbox visibility)
+        sieve_trace_debug = yes
+        sieve_trace_addresses = yes
 
         # Disable compiled binary caching for global/shared scripts
         # Users can't write to /var/lib/dovecot/sieve, so don't try to save .svbin files there

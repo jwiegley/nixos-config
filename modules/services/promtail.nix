@@ -350,6 +350,66 @@
           ];
         }
 
+        # Gitea logs
+        {
+          job_name = "gitea";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "gitea";
+                host = "vulcan";
+                __path__ = "/var/lib/gitea/log/gitea.log";
+              };
+            }
+          ];
+        }
+
+        # Fetchmail logs
+        {
+          job_name = "fetchmail";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "fetchmail";
+                host = "vulcan";
+                __path__ = "/var/log/fetchmail-*/fetchmail.log";
+              };
+            }
+          ];
+        }
+
+        # Nagios monitoring logs
+        {
+          job_name = "nagios";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "nagios";
+                host = "vulcan";
+                __path__ = "/var/log/nagios/nagios.log";
+              };
+            }
+          ];
+        }
+
+        # ZFS replication logs
+        {
+          job_name = "zfs-replication";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "zfs-replication";
+                host = "vulcan";
+                __path__ = "/var/log/zfs-replication*.log";
+              };
+            }
+          ];
+        }
+
         # Step-CA certificate authority logs from journal
         {
           job_name = "step-ca";
@@ -735,6 +795,7 @@
       "nginx"
       "podman"    # For Podman/Docker socket access
       "jellyfin"  # For Jellyfin logs
+      "gitea"     # For Gitea logs
       "wheel"     # For audit logs
       "adm"       # For sudo logs
     ];

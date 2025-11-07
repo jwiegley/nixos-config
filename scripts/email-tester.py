@@ -633,16 +633,17 @@ def test_train_good() -> bool:
 
         logger.info("  ✓ Rspamd learned ham")
 
-        # Verify message in list/misc (process-good.sieve should re-filter it)
-        # Newsletter messages should go to list/misc, not INBOX
+        # Verify message was re-filtered to list/misc (not INBOX)
+        # After ham learning, process-good.sieve should re-run user's active.sieve
+        # which filters newsletters to list/misc
         if not check_message_in_folder(message_id, 'list/misc', should_exist=True):
-            # Fallback: check INBOX (process-good.sieve may just move to INBOX)
-            if check_message_in_folder(message_id, 'INBOX', should_exist=True):
-                logger.info("  ⚠ Message in INBOX (process-good.sieve needs fix to re-filter)")
-            else:
-                raise TestError("Message not in list/misc or INBOX after training")
-        else:
-            logger.info("  ✓ Message in list/misc (Sieve re-filtered)")
+            raise TestError("Message not re-filtered to list/misc (should not be in INBOX)")
+
+        logger.info("  ✓ Message re-filtered to list/misc")
+
+        # Verify message is NOT in INBOX (should be in list/misc)
+        if not check_message_in_folder(message_id, 'INBOX', should_exist=False):
+            raise TestError("Message incorrectly in INBOX (re-filtering failed)")
 
         logger.info("✓ PASSED")
         return True

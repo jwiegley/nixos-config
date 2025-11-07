@@ -298,11 +298,6 @@ in
         imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/rspamd/learn-ham.sieve
         imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/process-good.sieve
 
-        # Process Good folder: Apply user filtering rules to sort messages
-        imapsieve_mailbox3_name = Good
-        imapsieve_mailbox3_causes = COPY APPEND
-        imapsieve_mailbox3_before = file:/var/lib/dovecot/sieve/process-good.sieve
-
         # Sieve pipe configuration
         # Note: Using sieve_extprograms with direct Nix store paths, no bin_dir needed
         sieve_plugins = sieve_imapsieve sieve_extprograms

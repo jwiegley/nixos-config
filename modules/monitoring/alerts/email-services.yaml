@@ -184,3 +184,146 @@ groups:
         annotations:
           summary: "Roundcube Redis cache is down"
           description: "Redis cache for Roundcube is not active. Session handling may be degraded."
+
+      # Dovecot Message/Byte Delivery Metrics
+      - alert: DovecotNoRecentActivity
+        expr: |
+          (time() - dovecot_user_last_update) > 86400
+        for: 30m
+        labels:
+          severity: info
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot user {{ $labels.user }} has no recent activity"
+          description: "User {{ $labels.user }} has had no IMAP activity for more than 24 hours. Last activity: {{ $value | humanizeDuration }} ago."
+
+      - alert: DovecotServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="dovecot2.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot IMAP service has failed"
+          description: "Dovecot service is in failed state. Check logs: journalctl -u dovecot2 -n 50"
+
+      - alert: DovecotServiceInactive
+        expr: |
+          systemd_unit_state{
+            name="dovecot2.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot IMAP service is not active"
+          description: "Dovecot service is not running. Email retrieval is unavailable."
+
+      # Postfix Message/Byte Delivery Metrics
+      - alert: PostfixNoMessagesProcessed
+        expr: |
+          rate(postfix_cleanup_messages_processed_total[30m]) == 0
+          and
+          (time() - (postfix_cleanup_messages_processed_total > 0)) < 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix has not processed any messages recently"
+          description: "Postfix has not processed any messages in the last 30 minutes. This may indicate a service issue or lack of outbound mail."
+
+      - alert: PostfixHighMessageVolume
+        expr: |
+          rate(postfix_cleanup_messages_processed_total[5m]) > 10
+        for: 15m
+        labels:
+          severity: info
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix is processing high message volume"
+          description: "Postfix is processing {{ $value | humanize }} messages per second. This may be normal bulk sending or potential spam."
+
+      - alert: PostfixMessageProcessingStalled
+        expr: |
+          rate(postfix_qmgr_messages_removed_total[15m]) == 0
+          and
+          postfix_showq_message_age_seconds_count > 0
+        for: 30m
+        labels:
+          severity: critical
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix message processing has stalled"
+          description: "Postfix has {{ $value }} messages in queue but is not delivering them. Check service health and network connectivity."
+
+      - alert: PostfixServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="postfix.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix mail service has failed"
+          description: "Postfix service is in failed state. Check logs: journalctl -u postfix -n 50"
+
+      - alert: PostfixServiceInactive
+        expr: |
+          systemd_unit_state{
+            name="postfix.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: email
+          service: postfix
+        annotations:
+          summary: "Postfix mail service is not active"
+          description: "Postfix service is not running. Mail delivery is unavailable."
+
+      # Combined Email System Health
+      - alert: EmailSystemDegraded
+        expr: |
+          (up{job="dovecot"} == 0 or up{job="postfix"} == 0)
+        for: 5m
+        labels:
+          severity: critical
+          category: email
+          service: email-system
+        annotations:
+          summary: "Email system is degraded"
+          description: "One or more core email services (Dovecot, Postfix) are down. Email functionality is impaired."
+
+      - alert: EmailDeliveryLatencyHigh
+        expr: |
+          histogram_quantile(0.95, rate(postfix_qmgr_messages_inserted_size_bytes_bucket[5m])) > 1000000
+        for: 10m
+        labels:
+          severity: warning
+          category: email
+          service: postfix
+        annotations:
+          summary: "Email delivery latency is high"
+          description: "95th percentile message size is {{ $value | humanize1024 }} bytes, indicating potential large message backlog or slow processing."

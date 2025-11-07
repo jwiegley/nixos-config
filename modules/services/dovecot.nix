@@ -262,11 +262,11 @@ in
         imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/rspamd/learn-spam.sieve
         imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve
 
-        # Rspamd training: TrainGood folder (learn ham, then move to Good)
+        # Rspamd training: TrainGood folder (learn ham, then re-filter via Sieve)
         imapsieve_mailbox2_name = TrainGood
         imapsieve_mailbox2_causes = COPY APPEND
         imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/rspamd/learn-ham.sieve
-        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/rspamd/move-to-good.sieve
+        imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/process-good.sieve
 
         # Process Good folder: Apply user filtering rules to sort messages
         imapsieve_mailbox3_name = Good

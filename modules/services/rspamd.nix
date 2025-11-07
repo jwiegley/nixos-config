@@ -1,183 +1,6 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Helper script to scan mailboxes with rspamc and process training folders
-  mailboxScannerScript = pkgs.writeShellScript "rspamd-scan-mailboxes" ''
-    set -euo pipefail
-
-    # Configuration
-    USERS=("johnw" "assembly")
-    MAIL_ROOT="/var/mail"
-    SPAM_THRESHOLD=6  # Rspamd score threshold for spam (matches "add header" action)
-    RSPAMC="${pkgs.rspamd}/bin/rspamc"
-    DOVEADM="${pkgs.dovecot}/bin/doveadm"
-    SIEVE_FILTER="${pkgs.dovecot_pigeonhole}/bin/sieve-filter"
-    GETENT="/run/current-system/sw/bin/getent"
-
-    # Counters
-    GOOD_SCANNED=0
-    GOOD_SPAM_MOVED=0
-    GOOD_HAM_DELIVERED=0
-    TRAIN_GOOD_LEARNED=0
-    TRAIN_GOOD_DELIVERED=0
-    TRAIN_SPAM_LEARNED=0
-    TRAIN_SPAM_MOVED=0
-
-    # Process .Good folder: scan with rspamd, move spam or deliver ham via sieve
-    process_good() {
-      local user=$1
-      local maildir="$MAIL_ROOT/$user/.Good"
-
-      if [ ! -d "$maildir" ]; then
-        return
-      fi
-
-      echo "Processing .Good for $user..."
-
-      # Process messages in new/ and cur/
-      for dir in new cur; do
-        if [ ! -d "$maildir/$dir" ]; then
-          continue
-        fi
-
-        for msg in "$maildir/$dir"/*; do
-          [ -f "$msg" ] || continue
-
-          # Scan with rspamd
-          result=$($RSPAMC --json < "$msg" 2>/dev/null || true)
-          score=$(echo "$result" | ${pkgs.jq}/bin/jq -r '.default.score // 0' 2>/dev/null || echo "0")
-
-          GOOD_SCANNED=$((GOOD_SCANNED + 1))
-
-          # Check if spam
-          if (( $(echo "$score > $SPAM_THRESHOLD" | ${pkgs.bc}/bin/bc -l) )); then
-            # Move to .Spam
-            spam_dir="$MAIL_ROOT/$user/.Spam/cur"
-            mkdir -p "$spam_dir"
-            mv "$msg" "$spam_dir/"
-            echo "  → SPAM (score: $score): $(basename "$msg")"
-            GOOD_SPAM_MOVED=$((GOOD_SPAM_MOVED + 1))
-          else
-            # Deliver ham through sieve filter using dovecot-lda
-            if ${pkgs.dovecot}/libexec/dovecot/dovecot-lda -d "$user" < "$msg" 2>/dev/null; then
-              rm -f "$msg"
-              echo "  → HAM delivered via sieve: $(basename "$msg")"
-              GOOD_HAM_DELIVERED=$((GOOD_HAM_DELIVERED + 1))
-            else
-              echo "  ⚠ Sieve delivery failed, keeping in .Good: $(basename "$msg")"
-            fi
-          fi
-        done
-      done
-    }
-
-    # Process .TrainGood folder: learn as ham, then deliver via sieve
-    process_train_good() {
-      local user=$1
-      local maildir="$MAIL_ROOT/$user/.TrainGood"
-
-      if [ ! -d "$maildir" ]; then
-        return
-      fi
-
-      echo "Processing .TrainGood for $user..."
-
-      for dir in new cur; do
-        if [ ! -d "$maildir/$dir" ]; then
-          continue
-        fi
-
-        for msg in "$maildir/$dir"/*; do
-          [ -f "$msg" ] || continue
-
-          # Learn as ham
-          if $RSPAMC learn_ham < "$msg" >/dev/null 2>&1; then
-            echo "  → Learned HAM: $(basename "$msg")"
-            TRAIN_GOOD_LEARNED=$((TRAIN_GOOD_LEARNED + 1))
-
-            # Deliver through sieve filter using dovecot-lda
-            if ${pkgs.dovecot}/libexec/dovecot/dovecot-lda -d "$user" < "$msg" 2>/dev/null; then
-              rm -f "$msg"
-              echo "  → Delivered via sieve: $(basename "$msg")"
-              TRAIN_GOOD_DELIVERED=$((TRAIN_GOOD_DELIVERED + 1))
-            else
-              echo "  ⚠ Sieve delivery failed, removing from .TrainGood: $(basename "$msg")"
-              rm -f "$msg"
-            fi
-          else
-            echo "  ⚠ Failed to learn: $(basename "$msg")"
-          fi
-        done
-      done
-    }
-
-    # Process .TrainSpam folder: learn as spam, then move to .Spam (unread)
-    process_train_spam() {
-      local user=$1
-      local maildir="$MAIL_ROOT/$user/.TrainSpam"
-
-      if [ ! -d "$maildir" ]; then
-        return
-      fi
-
-      echo "Processing .TrainSpam for $user..."
-
-      spam_dest="$MAIL_ROOT/$user/.IsSpam/new"
-      mkdir -p "$spam_dest"
-
-      for dir in new cur; do
-        if [ ! -d "$maildir/$dir" ]; then
-          continue
-        fi
-
-        for msg in "$maildir/$dir"/*; do
-          [ -f "$msg" ] || continue
-
-          # Learn as spam
-          if $RSPAMC learn_spam < "$msg" >/dev/null 2>&1; then
-            echo "  → Learned SPAM: $(basename "$msg")"
-            TRAIN_SPAM_LEARNED=$((TRAIN_SPAM_LEARNED + 1))
-
-            # Move to .IsSpam/new (unread)
-            mv "$msg" "$spam_dest/"
-            echo "  → Moved to .IsSpam: $(basename "$msg")"
-            TRAIN_SPAM_MOVED=$((TRAIN_SPAM_MOVED + 1))
-          else
-            echo "  ⚠ Failed to learn: $(basename "$msg")"
-          fi
-        done
-      done
-    }
-
-    # Main processing loop
-    echo "=== Rspamd Mailbox Scanner ==="
-    echo ""
-
-    for user in "''${USERS[@]}"; do
-      echo "User: $user"
-      user_root="$MAIL_ROOT/$user"
-
-      if [ ! -d "$user_root" ]; then
-        echo "  Maildir not found: $user_root"
-        echo ""
-        continue
-      fi
-
-      # Process all three mailboxes
-      process_good "$user"
-      process_train_good "$user"
-      process_train_spam "$user"
-
-      echo ""
-    done
-
-    # Summary
-    echo "=== Summary ==="
-    echo ".Good: scanned=$GOOD_SCANNED, spam_moved=$GOOD_SPAM_MOVED, ham_delivered=$GOOD_HAM_DELIVERED"
-    echo ".TrainGood: learned=$TRAIN_GOOD_LEARNED, delivered=$TRAIN_GOOD_DELIVERED"
-    echo ".TrainSpam: learned=$TRAIN_SPAM_LEARNED, moved=$TRAIN_SPAM_MOVED"
-  '';
-
   # Shell script to call rspamc learn_spam
   learnSpamShellScript = pkgs.writeShellScript "rspamd-learn-spam.sh" ''
     exec ${pkgs.rspamd}/bin/rspamc learn_spam
@@ -224,13 +47,8 @@ let
     fileinto "IsSpam";
   '';
 
-  # Sieve script to move trained ham to Good folder
-  moveToGoodScript = pkgs.writeText "move-to-good.sieve" ''
-    require ["fileinto", "imap4flags"];
-
-    # Move all messages in TrainGood to Good after learning
-    fileinto "Good";
-  '';
+  # Note: moveToGoodScript removed - TrainGood now uses process-good.sieve directly
+  # to re-filter messages via active.sieve instead of moving to Good folder first
 in
 {
   # SOPS secret for Rspamd controller password
@@ -406,33 +224,8 @@ in
     "L+ /var/lib/dovecot/sieve/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
     "L+ /var/lib/dovecot/sieve/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
-    "L+ /var/lib/dovecot/sieve/rspamd/move-to-good.sieve - - - - ${moveToGoodScript}"
+    # move-to-good.sieve removed - TrainGood now uses process-good.sieve directly
   ];
-
-  # Systemd service to scan mailboxes
-  # Triggered by mbsync-johnw.service completion via OnSuccess hook
-  systemd.services.rspamd-scan-mailboxes = {
-    description = "Scan mailboxes with Rspamd and move spam";
-
-    # Ensure rspamd and dovecot are running
-    after = [ "rspamd.service" "dovecot.service" ];
-    wants = [ "rspamd.service" "dovecot.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${mailboxScannerScript}";
-      User = "root";  # Need root to access /var/mail directories
-      Group = "root";
-    };
-
-    # Ensure dovecot_pigeonhole is in PATH for doveadm sieve commands
-    path = [ pkgs.dovecot_pigeonhole ];
-  };
-
-  # Hook into mbsync-johnw service to trigger scanning after sync
-  systemd.services.mbsync-johnw = {
-    onSuccess = [ "rspamd-scan-mailboxes.service" ];
-  };
 
   # Nginx virtual host for Rspamd web UI
   services.nginx.virtualHosts."rspamd.vulcan.lan" = {

@@ -485,4 +485,10 @@ in
   # Increase file descriptor limit for Dovecot to accommodate auth client_limit
   # client_limit=1500 requires fd limit >= 1500
   systemd.services.dovecot.serviceConfig.LimitNOFILE = 2048;
+
+  # Override preStart to NOT delete Sieve directories
+  # The NixOS dovecot module has a preStart that runs "rm -rf /var/lib/dovecot/sieve"
+  # This was breaking spam filtering by removing default.sieve on every restart
+  # We manage Sieve scripts via tmpfiles.rules and need them to persist
+  systemd.services.dovecot.preStart = lib.mkForce "";
 }

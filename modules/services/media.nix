@@ -15,6 +15,14 @@
     # Ensure config directory exists
     mkdir -p ${config.services.jellyfin.configDir}
 
+    # Ensure jellyfin data directory is traversable by group (for promtail to reach log/)
+    chmod 750 /var/lib/jellyfin
+
+    # Ensure log directory has group read permissions for promtail
+    mkdir -p /var/lib/jellyfin/log
+    chmod 750 /var/lib/jellyfin/log
+    find /var/lib/jellyfin/log -type f -name "*.log" -exec chmod 640 {} \;
+
     # Create or update network.xml to add localhost and server IP as known proxies
     NETWORK_XML="${config.services.jellyfin.configDir}/network.xml"
 

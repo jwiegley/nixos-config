@@ -75,6 +75,7 @@
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
     ../../modules/services/mbsync-alerts.nix
+    ../../modules/services/fetchmail.nix
     ../../modules/services/radicale.nix
     ../../modules/services/vdirsyncer.nix
     ../../modules/services/vdirsyncer-alerts.nix

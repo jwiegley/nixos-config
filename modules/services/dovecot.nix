@@ -12,11 +12,8 @@ let
 
     # Include the user's personal filtering script
     # This applies their rules to messages that land in Good
+    # Messages that don't match any rules will fall through to INBOX (implicit keep)
     include :personal "active";
-
-    # CRITICAL: Remove from Good after filing elsewhere
-    # This prevents rspamd-scan-mailboxes from reprocessing IMAP-delivered messages
-    discard;
   '';
 in
 {

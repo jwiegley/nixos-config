@@ -17,8 +17,11 @@ let
 
     # Check for Sieve-related errors in Dovecot logs
     if LOGS=$(${pkgs.systemd}/bin/journalctl -u dovecot2 --since "$LOG_SINCE" 2>/dev/null); then
-      # Count permission errors (non-critical but should be tracked)
+      # Count permission errors (should trigger alerts if affecting message delivery)
       PERMISSION_ERRORS=$(echo "$LOGS" | { grep -i "sieve.*permission denied" || true; } | wc -l)
+
+      # Check if permission errors are blocking message processing (critical)
+      PERMISSION_BLOCKING=$(echo "$LOGS" | { grep -i "sieve.*permission denied.*process-good" || true; } | wc -l)
 
       # Count compilation errors (critical)
       COMPILATION_ERRORS=$(echo "$LOGS" | { grep -i "sieve.*validation failed\|sieve.*compile.*fail" || true; } | wc -l)
@@ -29,8 +32,12 @@ let
       # Count warnings
       SIEVE_WARNINGS=$(echo "$LOGS" | { grep -i "sieve.*warning" || true; } | wc -l)
 
-      # Total errors (excluding permission errors which are expected for process-good.sieve)
-      SIEVE_ERRORS=$((COMPILATION_ERRORS + RUNTIME_ERRORS))
+      # Total errors (include permission errors if they're blocking message processing)
+      if [ "$PERMISSION_BLOCKING" -gt 0 ]; then
+        SIEVE_ERRORS=$((COMPILATION_ERRORS + RUNTIME_ERRORS + PERMISSION_BLOCKING))
+      else
+        SIEVE_ERRORS=$((COMPILATION_ERRORS + RUNTIME_ERRORS))
+      fi
     fi
 
     # Write metrics to Prometheus textfile collector
@@ -39,9 +46,13 @@ let
       echo "# TYPE imapsieve_errors_total counter"
       echo "imapsieve_errors_total $SIEVE_ERRORS"
 
-      echo "# HELP imapsieve_permission_errors_total Total number of Sieve permission errors (non-critical)"
+      echo "# HELP imapsieve_permission_errors_total Total number of Sieve permission errors"
       echo "# TYPE imapsieve_permission_errors_total counter"
       echo "imapsieve_permission_errors_total $PERMISSION_ERRORS"
+
+      echo "# HELP imapsieve_permission_blocking_total Total number of permission errors blocking message processing"
+      echo "# TYPE imapsieve_permission_blocking_total counter"
+      echo "imapsieve_permission_blocking_total $PERMISSION_BLOCKING"
 
       echo "# HELP imapsieve_compilation_errors_total Total number of Sieve compilation errors"
       echo "# TYPE imapsieve_compilation_errors_total counter"
@@ -76,10 +87,19 @@ let
       echo "CRITICAL: Found $SIEVE_ERRORS critical Sieve errors in last 5 minutes"
       echo "  Compilation errors: $COMPILATION_ERRORS"
       echo "  Runtime errors: $RUNTIME_ERRORS"
+      if [ "$PERMISSION_BLOCKING" -gt 0 ]; then
+        echo "  Permission errors blocking message processing: $PERMISSION_BLOCKING"
+      fi
       exit 2
     elif [ "$PERMISSION_ERRORS" -gt 0 ]; then
-      echo "WARNING: Found $PERMISSION_ERRORS permission errors (expected for process-good.sieve)"
-      exit 0
+      if [ "$PERMISSION_BLOCKING" -gt 0 ]; then
+        echo "CRITICAL: Permission errors are blocking message processing"
+        echo "  Permission errors affecting process-good.sieve: $PERMISSION_BLOCKING"
+        exit 2
+      else
+        echo "INFO: Found $PERMISSION_ERRORS benign permission errors (compilation cache)"
+        exit 0
+      fi
     else
       echo "OK: No Sieve errors detected"
       exit 0
@@ -169,6 +189,17 @@ in
                 summary: "imapsieve health check is stale"
                 description: "imapsieve health check hasn't run in {{ $value }}s. Check if the timer is working: systemctl status dovecot-imapsieve-health-check.timer"
 
+            # Critical alert for permission errors blocking message processing
+            - alert: ImapsievePermissionBlocking
+              expr: increase(imapsieve_permission_blocking_total[10m]) > 0
+              for: 2m
+              labels:
+                severity: critical
+                component: mail
+              annotations:
+                summary: "Sieve permission errors blocking message processing"
+                description: "{{ $value }} permission errors are preventing process-good.sieve from working. Messages are not being filtered correctly. Check: journalctl --since '10 minutes ago' | grep 'sieve.*permission'"
+
             # Info alert for excessive permission errors (not critical but worth noting)
             - alert: ImapsievePermissionErrorsHigh
               expr: increase(imapsieve_permission_errors_total[1h]) > 100
@@ -178,7 +209,7 @@ in
                 component: mail
               annotations:
                 summary: "High number of Sieve permission errors"
-                description: "{{ $value }} Sieve permission errors in the last hour. This is expected for process-good.sieve but should be monitored."
+                description: "{{ $value }} Sieve permission errors in the last hour. These may be benign compilation cache errors."
     '')
   ];
 }

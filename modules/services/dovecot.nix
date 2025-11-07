@@ -36,6 +36,10 @@ in
   };
   users.groups.dovecot-exporter = {};
 
+  # Users do NOT need dovecot2 group membership
+  # Global Sieve scripts are pre-compiled by root during system activation
+  # This maintains security by preventing users from modifying shared Dovecot files
+
   services.dovecot2 = {
     enable = true;
 
@@ -249,6 +253,11 @@ in
         sieve_default = /var/lib/dovecot/sieve/default.sieve
         sieve_default_name = default
 
+        # Store compiled binaries for global imapsieve scripts in user's home directory
+        # This prevents permission errors when Dovecot tries to cache compiled binaries
+        # for global scripts referenced by imapsieve (process-good.sieve)
+        sieve_script_bin_path = ~/sieve-bin
+
         # Sieve extensions
         sieve_extensions = +notify +imapflags +vacation-seconds +editheader +include
         sieve_max_script_size = 1M
@@ -326,11 +335,16 @@ in
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
+    # Sieve directory with restrictive permissions (read-only for non-dovecot users)
+    # Scripts are pre-compiled during system activation, users don't need write access
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
     "L+ /var/lib/dovecot/sieve/process-good.sieve - - - - ${processGoodScript}"
+    # Create sieve-bin directory for compiled binaries from global scripts
+    "d /home/johnw/sieve-bin 0700 johnw users -"
+    "d /home/assembly/sieve-bin 0700 assembly users -"
   ];
 
   # Pre-compile global Sieve scripts to avoid permission errors
@@ -343,16 +357,28 @@ in
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = with pkgs; [ dovecot_pigeonhole ];
+    path = with pkgs; [ dovecot_pigeonhole coreutils ];
     script = ''
-      # Pre-compile all global Sieve scripts so users don't need write
-      # permission
+      # Pre-compile all global Sieve scripts so users don't need write permission
+      # IMPORTANT: Touch .svbin files after compilation to ensure they have NEWER
+      # timestamps than .sieve sources. Dovecot considers binaries "outdated" if
+      # timestamps are identical or older, causing recompilation attempts that fail
+      # due to correct restrictive permissions.
       echo "Pre-compiling global Sieve scripts..."
 
       for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
         if [ -f "$script" ]; then
           echo "  Compiling: $script"
-          sievec "$script" || echo "  Warning: Failed to compile $script"
+          if sievec "$script"; then
+            # Touch the compiled binary to ensure it has a newer timestamp
+            binary="''${script%.sieve}.svbin"
+            if [ -f "$binary" ]; then
+              touch "$binary"
+              echo "  ✓ Compiled and timestamp updated: $binary"
+            fi
+          else
+            echo "  ✗ Warning: Failed to compile $script"
+          fi
         fi
       done
 

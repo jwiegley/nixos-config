@@ -71,6 +71,10 @@
     ../../modules/services/rspamd.nix
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/roundcube.nix
+
+    # Email testing script (manual use only)
+    # Note: Automated monitoring disabled to avoid over-training rspamd
+    ../../modules/services/email-tester-manual.nix
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
     ../../modules/services/mbsync-alerts.nix

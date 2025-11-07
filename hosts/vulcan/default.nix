@@ -70,7 +70,6 @@
     ../../modules/services/dovecot-imapsieve-monitor.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/rspamd-alerts.nix
-    ../../modules/services/rspamd-training-backup.nix
     ../../modules/services/roundcube.nix
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix

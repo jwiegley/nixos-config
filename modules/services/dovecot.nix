@@ -20,12 +20,13 @@ let
   '';
 
   # Sieve script for TrainGood folder processing (via imapsieve)
-  # After learning ham, move message to INBOX and mark original as deleted
+  # After learning ham, re-filter through user's active.sieve and mark original as deleted
   processGoodScript = pkgs.writeText "process-good.sieve" ''
-    require ["fileinto", "imap4flags"];
+    require ["include", "imap4flags"];
 
-    # Move message to INBOX (not spam)
-    fileinto "INBOX";
+    # Re-filter message through user's personal Sieve rules
+    # This ensures newsletters go to correct folders, not just INBOX
+    include :personal "active";
 
     # Mark the original message in TrainGood as deleted
     addflag "\\Deleted";
@@ -332,7 +333,7 @@ in
 
         # Disable compiled binary caching for global/shared scripts
         # Users can't write to /var/lib/dovecot/sieve, so don't try to save .svbin files there
-        sieve_global_extensions = +vnd.dovecot.pipe +editheader +notify +imapflags
+        sieve_global_extensions = +vnd.dovecot.pipe +editheader +notify +imapflags +include
       }
 
       # Mailbox configuration

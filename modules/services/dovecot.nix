@@ -1,25 +1,22 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Default Sieve script for LMTP delivery
-  # Filters spam based on rspamd X-Spam headers (for fetchmail-good)
-  # Messages from fetchmail-spam go directly to Spam folder
-  # User's personal script will run separately after this (configured via sieve= in Dovecot)
+  # Global Sieve script that runs BEFORE personal filters (sieve_before)
+  # Filters spam based on rspamd X-Spam headers
+  # This script runs FIRST, before user's personal Sieve rules
   defaultSieveScript = pkgs.writeText "default.sieve" ''
     require ["fileinto", "envelope"];
 
-    # Check if rspamd marked this message as spam (from fetchmail-good via Postfix)
+    # Check if rspamd marked this message as spam
     # Rspamd adds "X-Spam: Yes" header for spam messages via Postfix milter
     if header :contains "X-Spam" "Yes" {
-      # Message is spam - file to Spam folder
+      # Message is spam - file to Spam folder and stop processing
       fileinto "Spam";
       stop;
     }
 
-    # Message is not spam - let it pass through to user's personal script
-    # Dovecot will automatically apply personal filters after default script
-
-    # If no personal filters match, delivers to INBOX
+    # Message is not spam - continue to user's personal script
+    # User's personal filters will handle newsletters, lists, etc.
   '';
 
   # Sieve script for TrainGood folder processing (via imapsieve)
@@ -293,8 +290,8 @@ in
         # Users can manage scripts via ManageSieve (port 4190)
         sieve = file:~/sieve;active=~/.dovecot.sieve
         sieve_global_dir = /var/lib/dovecot/sieve/global/
-        sieve_default = /var/lib/dovecot/sieve/default.sieve
-        sieve_default_name = default
+        # Run spam filtering BEFORE personal scripts
+        sieve_before = /var/lib/dovecot/sieve/default.sieve
 
         # Compiled binaries for global imapsieve scripts are pre-compiled by root
         # during system activation and stored alongside the script sources.

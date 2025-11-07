@@ -74,8 +74,8 @@ in
     logwatch = {
       enable = true;
       range = "since 24 hours ago for those hours";
-      mailto = "johnw@newartisans.com";
-      mailfrom = "johnw@newartisans.com";
+      mailto = "johnw@vulcan.lan";
+      mailfrom = "logwatch@vulcan.lan";
       customServices = [
         {
           name = "systemctl-failed";

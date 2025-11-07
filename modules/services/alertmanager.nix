@@ -41,7 +41,7 @@
           name = "default-receiver";
           email_configs = [
             {
-              to = "johnw@newartisans.com";
+              to = "johnw@vulcan.lan";
               headers = {
                 Subject = "[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }} on vulcan";
               };
@@ -66,7 +66,7 @@
           name = "critical-receiver";
           email_configs = [
             {
-              to = "johnw@newartisans.com";
+              to = "johnw@vulcan.lan";
               headers = {
                 Subject = "[CRITICAL] {{ .GroupLabels.alertname }} - IMMEDIATE ACTION REQUIRED";
                 Priority = "1";

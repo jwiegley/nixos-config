@@ -1,19 +1,43 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Sieve script to apply user's filtering rules when messages arrive in Good folder
-  processGoodScript = pkgs.writeText "process-good.sieve" ''
-    require ["include", "environment", "variables", "fileinto"];
+  # Default Sieve script for LMTP delivery
+  # Filters spam based on rspamd X-Spam headers (for fetchmail-good)
+  # Messages from fetchmail-spam go directly to Spam folder
+  # User's personal script will run separately after this (configured via sieve= in Dovecot)
+  defaultSieveScript = pkgs.writeText "default.sieve" ''
+    require ["fileinto", "envelope"];
 
-    # Get the current user from the environment
+    # Check if rspamd marked this message as spam (from fetchmail-good via Postfix)
+    # Rspamd adds "X-Spam: Yes" header for spam messages via Postfix milter
+    if header :contains "X-Spam" "Yes" {
+      # Message is spam - file to Spam folder
+      fileinto "Spam";
+      stop;
+    }
+
+    # Message is not spam - let it pass through to user's personal script
+    # Dovecot will automatically apply personal filters after default script
+
+    # If no personal filters match, delivers to INBOX
+  '';
+
+  # Sieve script for TrainGood folder processing (via imapsieve)
+  # Filters spam, then applies user's rules to re-file messages
+  processGoodScript = pkgs.writeText "process-good.sieve" ''
+    require ["fileinto", "include", "environment", "variables"];
+
+    # Message is not spam - apply user's personal filtering rules
+    # Get the current user from the environment (for imapsieve context)
     if environment :matches "imap.user" "*" {
       set "username" "''${1}";
     }
 
     # Include the user's personal filtering script
-    # This applies their rules to messages that land in Good
-    # Messages that don't match any rules will fall through to INBOX (implicit keep)
-    include :personal "active";
+    # Use :optional to avoid errors if script doesn't exist
+    include :optional :personal "active";
+
+    # If no personal filters match, delivers to INBOX
   '';
 in
 {
@@ -357,6 +381,9 @@ in
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
+    # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
+    "L+ /var/lib/dovecot/sieve/default.sieve - - - - ${defaultSieveScript}"
+    # Deploy process-good.sieve for TrainGood folder processing via imapsieve
     "L+ /var/lib/dovecot/sieve/process-good.sieve - - - - ${processGoodScript}"
     # Create sieve-bin directory for compiled binaries from global scripts
     "d /home/johnw/sieve-bin 0700 johnw users -"

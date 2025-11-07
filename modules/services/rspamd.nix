@@ -84,6 +84,21 @@ in
       '';
     };
 
+    # Configure proxy worker for milter protocol integration with Postfix
+    workers.rspamd_proxy = {
+      type = "rspamd_proxy";
+      bindSockets = [ "localhost:11332" ];
+      count = 1;
+      extraConfig = ''
+        milter = yes;
+        timeout = 120s;
+        upstream "local" {
+          default = yes;
+          self_scan = yes;
+        }
+      '';
+    };
+
     # Use local Redis instance for statistics
     locals = {
       "redis.conf".text = ''
@@ -136,8 +151,9 @@ in
       '';
 
       "actions.conf".text = ''
-        # Action thresholds
-        reject = 15;
+        # Action thresholds - never reject, only add headers
+        # Let Sieve handle spam filing based on X-Spam headers
+        reject = 999;  # Effectively disable rejection
         add_header = 6;
         greylist = 4;
       '';

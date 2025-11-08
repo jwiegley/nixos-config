@@ -44,6 +44,10 @@
     };
 
     settings.main = {
+      # Message size limits (100 MB)
+      message_size_limit = 104857600;  # 100 MB
+      mailbox_size_limit = 104857600;  # 100 MB (must be >= message_size_limit)
+
       myhostname = "vulcan.lan";
       mydomain = "lan";
       myorigin = "$myhostname";

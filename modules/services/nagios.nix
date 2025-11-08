@@ -180,8 +180,8 @@ let
   '';
 
   # Helper function to generate monitored host with ping check and optional parent
-  # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; }
-  mkMonitoredHost = { hostname, address, alias, parent ? null }: ''
+  # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; pingWarn = "100.0,20%"; pingCrit = "500.0,60%"; }
+  mkMonitoredHost = { hostname, address, alias, parent ? null, pingWarn ? "100.0,20%", pingCrit ? "500.0,60%" }: ''
     define host {
       use                     linux-server
       host_name               ${hostname}
@@ -193,7 +193,7 @@ let
       use                     generic-service
       host_name               ${hostname}
       service_description     PING
-      check_command           check_ping!100.0,20%!500.0,60%
+      check_command           check_ping!${pingWarn}!${pingCrit}
       service_groups          network-hosts
     }
   '';

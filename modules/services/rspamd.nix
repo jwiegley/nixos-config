@@ -91,10 +91,10 @@ in
     workers.rspamd_proxy = {
       type = "rspamd_proxy";
       bindSockets = [ "localhost:11332" ];
-      count = 1;
+      count = 4;
       extraConfig = ''
         milter = yes;
-        timeout = 120s;
+        timeout = 30s;
         upstream "local" {
           default = yes;
           self_scan = yes;
@@ -104,6 +104,18 @@ in
 
     # Use local Redis instance for statistics
     locals = {
+      "options.inc".text = ''
+        # DNS configuration for better performance
+        # Rspamd can make 20-64 concurrent DNS queries per message for RBLs/SURBLs/URIBLs
+        # Use Unbound recursive resolver to avoid blocklist rate-limiting/blocking
+        dns {
+          nameserver = ["192.168.1.1"];  # Use local Unbound recursive resolver
+          timeout = 2s;                   # Timeout for DNS queries
+          sockets = 32;                   # Number of concurrent DNS sockets
+          retransmits = 2;                # Number of retries for failed queries
+        }
+      '';
+
       "redis.conf".text = ''
         # Redis backend configuration for Bayes classifier
         servers = "127.0.0.1:6381";

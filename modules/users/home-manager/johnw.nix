@@ -357,6 +357,7 @@
         commit.gpgsign         = false;
         commit.status          = false;
         github.user            = "jwiegley";
+        credential.helper      = "store";
         # credential.helper      = "${pkgs.pass-git-helper}/bin/pass-git-helper";
         hub.protocol           = "${pkgs.openssh}/bin/ssh";
         mergetool.keepBackup   = true;

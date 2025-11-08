@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1762466517,
-        "narHash": "sha256-sFlWhpLBmORSIwdhIinu2nos0xhQkUzFkO3AOHRolps=",
+        "lastModified": 1762556512,
+        "narHash": "sha256-7uGIQFw271wtV/8sf96a6NKdEQXw89Z6chF7JvDDBxU=",
         "owner": "sadjow",
         "repo": "claude-code-nix",
-        "rev": "c75a19ff3b5de3edc68512b31c406338c3c3ce65",
+        "rev": "64434a9abd9630774b658d071792f97fd2b1707a",
         "type": "github"
       },
       "original": {

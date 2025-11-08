@@ -175,7 +175,8 @@ in
 
       "milter_headers.conf".text = ''
         # Add spam headers to messages
-        use = ["x-spamd-bar", "x-spam-level", "x-spam-status", "authentication-results"];
+        # x-spam adds "X-Spam: Yes/No" header used by Sieve for spam filing
+        use = ["x-spam", "x-spamd-bar", "x-spam-level", "x-spam-status", "authentication-results"];
 
         # Extended headers for better filtering
         extended_spam_headers = true;

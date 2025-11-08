@@ -48,10 +48,9 @@ Guidance for Claude Code when working with this NixOS repository.
 
 ## System Overview
 
-**Host:** vulcan - x86_64 Linux on Apple hardware (Asahi Linux)
+**Host:** vulcan - aarch64 Linux on Apple hardware (Asahi Linux)
 **Key Services:** PostgreSQL, Step-CA, Dovecot, Samba, Home Assistant, Prometheus/Grafana, Nginx
 **Storage:** ZFS on /tank
-**Networking:** Tailscale/Nebula VPN
 **State Version:** 25.05 (DO NOT change)
 
 ## SOPS Secrets Management

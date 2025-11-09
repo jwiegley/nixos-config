@@ -24,6 +24,8 @@
     enableSubmissions = true;  # Port 465 with implicit TLS (recommended)
 
     # TLS configuration for submission services
+    # Note: inet_interfaces is set to loopback-only in main.cf, but we override
+    # it here to listen on all interfaces for submission ports (587/465)
     submissionOptions = {
       smtpd_tls_security_level = "encrypt";
       smtpd_sasl_auth_enable = "yes";
@@ -31,6 +33,7 @@
       smtpd_recipient_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_relay_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       milter_macro_daemon_name = "ORIGINATING";
+      inet_interfaces = "all";  # Override main.cf to allow network access
     };
 
     submissionsOptions = {
@@ -41,12 +44,16 @@
       smtpd_recipient_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_relay_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       milter_macro_daemon_name = "ORIGINATING";
+      inet_interfaces = "all";  # Override main.cf to allow network access
     };
 
     settings.main = {
       # Message size limits (100 MB)
       message_size_limit = 104857600;  # 100 MB
       mailbox_size_limit = 104857600;  # 100 MB (must be >= message_size_limit)
+
+      # Bind to localhost only (SMTP port 25, 465, 587)
+      inet_interfaces = "loopback-only";
 
       myhostname = "vulcan.lan";
       mydomain = "lan";

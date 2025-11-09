@@ -42,6 +42,10 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    org-jw = {
+      url = "github:jwiegley/org-jw";
+    };
   };
 
   outputs = inputs: let system = "aarch64-linux"; in {

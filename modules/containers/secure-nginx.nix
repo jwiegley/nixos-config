@@ -54,7 +54,6 @@ in
 
   # Ensure directories exist on host
   systemd.tmpfiles.rules = [
-    "d /var/lib/acme-container 0755 root root -"
     "d /var/www/home.newartisans.com 0755 root root -"
     "d /var/lib/copyparty-container 0755 root root -"
     "d /var/lib/copyparty-container/.hist 0755 root root -"
@@ -73,17 +72,7 @@ in
     isReadOnly = false;
   };
 
-  # Enable NAT for container to access internet
-  networking.nat = {
-    enable = true;
-    internalInterfaces = [ "ve-+" ];  # All container interfaces
-    externalInterface = "end0";
-  };
-
-  # Open firewall ports on host for container access
-  networking.firewall.allowedTCPPorts = [ 18080 18443 18873 18874 13923 ];
-
-  # NixOS container for secure nginx with direct SSL/ACME
+  # NixOS container for nginx with copyparty (HTTP-only, localhost access)
   containers.secure-nginx = {
 
     # Enable private network for isolation
@@ -91,44 +80,12 @@ in
     hostAddress = "10.233.1.1";
     localAddress = "10.233.1.2";
 
-    # Forward ports from host to container
-    forwardPorts = [
-      {
-        protocol = "tcp";
-        hostPort = 18080;
-        containerPort = 80;
-      }
-      {
-        protocol = "tcp";
-        hostPort = 18443;
-        containerPort = 443;
-      }
-      {
-        protocol = "tcp";
-        hostPort = 18873;
-        containerPort = 873;
-      }
-      {
-        protocol = "tcp";
-        hostPort = 18874;
-        containerPort = 874;
-      }
-      {
-        protocol = "tcp";
-        hostPort = 13923;
-        containerPort = 3923;
-      }
-    ];
+    # Port forwarding removed - using systemd socket units instead for localhost-only binding
 
     bindMounts = {
       # Bind mount the web directory (read-write for copyparty uploads)
       "/var/www/home.newartisans.com" = {
         hostPath = "/var/www/home.newartisans.com";
-        isReadOnly = false;
-      };
-      # Bind mount for ACME certificate storage
-      "/var/lib/acme" = {
-        hostPath = "/var/lib/acme-container";
         isReadOnly = false;
       };
       # Bind mount for copyparty state (history, thumbnails)
@@ -165,9 +122,12 @@ in
       networking = {
         firewall = {
           enable = true;
-          # Allow HTTP for ACME challenges, HTTPS for secure traffic, rsync
-          # daemon, rsync-ssl proxy, and copyparty metrics
-          allowedTCPPorts = [ 80 443 873 874 3923 ];
+          # Allow HTTP, rsync daemon, and copyparty metrics
+          allowedTCPPorts = [
+            80
+            873
+            3923
+          ];
         };
       };
 
@@ -181,22 +141,7 @@ in
         options edns0
       '';
 
-      # ACME configuration for Let's Encrypt certificates
-      security.acme = {
-        acceptTerms = true;
-        defaults = {
-          email = "johnw@newartisans.com";
-          # Use production Let's Encrypt server for trusted certificates
-          server = "https://acme-v02.api.letsencrypt.org/directory";
-        };
-        # Individual certificate configuration
-        certs."home.newartisans.com" = {
-          # Don't block nginx startup on certificate fetch
-          postRun = "systemctl reload nginx.service || true";
-        };
-      };
-
-      # Nginx configuration with TLS/ACME
+      # Nginx configuration
       services.nginx = {
         enable = true;
 
@@ -204,35 +149,18 @@ in
         recommendedGzipSettings = true;
         recommendedOptimisation = true;
         recommendedProxySettings = true;
-        recommendedTlsSettings = true;
 
         virtualHosts."home.newartisans.com" = {
           default = true;
-          # Use addSSL instead of forceSSL to allow ACME challenges on HTTP
-          addSSL = true;
-          enableACME = true;
-
-          # Listen on standard ports (443 is forwarded from host:18443)
           listen = [
-            { addr = "0.0.0.0"; port = 443; ssl = true; }
-            { addr = "0.0.0.0"; port = 80; }
+            {
+              addr = "0.0.0.0";
+              port = 80;
+            }
           ];
 
-          # Security headers for internet-facing service
+          # Container identifier header
           extraConfig = ''
-            # Strict Transport Security
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-
-            # Additional security headers
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header X-XSS-Protection "1; mode=block" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-            # CSP Header
-            add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
-
-            # Indicate this is served from the secure container
             add_header X-Served-By "secure-nginx-container" always;
           '';
 
@@ -282,27 +210,6 @@ in
             '';
           };
         };
-
-        # Stream configuration for rsync-ssl proxy
-        streamConfig = ''
-          # rsync-ssl proxy: accepts SSL connections and forwards to local
-          # rsync daemon
-          server {
-            listen 874 ssl;
-
-            ssl_certificate /var/lib/acme/home.newartisans.com/cert.pem;
-            ssl_certificate_key /var/lib/acme/home.newartisans.com/key.pem;
-            ssl_trusted_certificate /var/lib/acme/home.newartisans.com/chain.pem;
-
-            ssl_protocols TLSv1.2 TLSv1.3;
-            ssl_ciphers HIGH:!aNULL:!MD5;
-            ssl_prefer_server_ciphers on;
-
-            proxy_pass 127.0.0.1:873;
-            proxy_connect_timeout 10s;
-            proxy_timeout 30m;
-          }
-        '';
       };
 
       # Ensure nginx user exists
@@ -351,52 +258,104 @@ in
           friend = "/var/lib/copyparty-passwords/friend";
           nasimw = "/var/lib/copyparty-passwords/nasimw";
         };
-
-        extraConfig = ''
-          # Personal directory for johnw
-          [/johnw]
-            ${config.services.copyparty.shareDir}/johnw
-            accs:
-              rwmda: johnw
-            flags:
-              nodupe
-              e2d
-              d2t
-
-          # Shared directory for nasimw and johnw
-          [/nasimw]
-            ${config.services.copyparty.shareDir}/nasimw
-            accs:
-              rwmda: nasimw,johnw
-            flags:
-              nodupe
-              e2d
-              d2t
-        '';
       };
 
       systemd.services = {
         nginx = {
-          after = [ "var-www-home.newartisans.com.mount" "copyparty.service" ];
+          after = [
+            "var-www-home.newartisans.com.mount"
+            "copyparty.service"
+          ];
           wants = [ "copyparty.service" ];
         };
         rsyncd = {
           after = [ "var-www-home.newartisans.com.mount" ];
         };
       };
+    };
+  };
 
-      # Make ACME non-blocking for container startup
-      systemd.services."acme-order-renew-home.newartisans.com" = {
-        after = [ "nginx.service" "network-online.target" ];
-        wants = [ "network-online.target" ];
-        # Don't fail if ACME fails
-        unitConfig = {
-          FailureAction = "none";
-        };
-        serviceConfig = {
-          # Shorter timeout to avoid blocking container startup
-          TimeoutStartSec = "30s";
-        };
+  # Systemd socket units for localhost-only port forwarding to container
+  # These bind only to 127.0.0.1 and forward to the container's internal IP
+  systemd.sockets = {
+    "secure-nginx-http" = {
+      description = "Secure Nginx HTTP Socket (localhost only)";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ "127.0.0.1:18080" ];
+      socketConfig = {
+        Accept = false;
+      };
+    };
+
+    "secure-nginx-rsync" = {
+      description = "Secure Nginx Rsync Socket (localhost only)";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ "127.0.0.1:18873" ];
+      socketConfig = {
+        Accept = false;
+      };
+    };
+
+    "secure-nginx-copyparty" = {
+      description = "Secure Nginx Copyparty Metrics Socket (localhost only)";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ "127.0.0.1:13923" ];
+      socketConfig = {
+        Accept = false;
+      };
+    };
+  };
+
+  # Systemd services to proxy connections to the container
+  systemd.services = {
+    "secure-nginx-http" = {
+      description = "Proxy HTTP to secure-nginx container";
+      requires = [
+        "container@secure-nginx.service"
+        "secure-nginx-http.socket"
+      ];
+      after = [
+        "container@secure-nginx.service"
+        "secure-nginx-http.socket"
+      ];
+      serviceConfig = {
+        ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 10.233.1.2:80";
+        PrivateTmp = true;
+        PrivateNetwork = false;
+      };
+    };
+
+    "secure-nginx-rsync" = {
+      description = "Proxy Rsync to secure-nginx container";
+      requires = [
+        "container@secure-nginx.service"
+        "secure-nginx-rsync.socket"
+      ];
+      after = [
+        "container@secure-nginx.service"
+        "secure-nginx-rsync.socket"
+      ];
+      serviceConfig = {
+        ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 10.233.1.2:873";
+        PrivateTmp = true;
+        PrivateNetwork = false;
+      };
+    };
+
+    "secure-nginx-copyparty" = {
+      description = "Proxy Copyparty Metrics to secure-nginx container";
+      requires = [
+        "container@secure-nginx.service"
+        "secure-nginx-copyparty.socket"
+      ];
+      after = [
+        "container@secure-nginx.service"
+        "secure-nginx-copyparty.socket"
+      ];
+      serviceConfig = {
+        ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 10.233.1.2:3923";
+        PrivateTmp = true;
+        PrivateNetwork = false;
       };
     };
   };

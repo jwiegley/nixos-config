@@ -62,6 +62,26 @@ let
       friend: $FRIEND_PASS
       ${if cfg.passwordFiles ? nasimw || config.sops.secrets ? "copyparty/nasimw-password" then "nasimw: $NASIMW_PASS" else ""}
 
+    # Personal directory for johnw
+    [/johnw]
+      ${shareDir}/johnw
+      accs:
+        rwmda: johnw
+      flags:
+        nodupe
+        e2d
+        d2t
+
+    # Shared directory for nasimw and johnw
+    [/nasimw]
+      ${shareDir}/nasimw
+      accs:
+        rwmda: nasimw,johnw
+      flags:
+        nodupe
+        e2d
+        d2t
+
     [/pub]
       ${shareDir}/pub
       accs:

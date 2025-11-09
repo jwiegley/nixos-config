@@ -6,18 +6,25 @@ Guidance for Claude Code when working with this NixOS repository.
 
 ### DATA LOSS PREVENTION
 
-**NEVER modify systemd tmpfiles.rules without explicit user approval:**
+**NEVER use systemd tmpfiles.rules for persistent data directories:**
 
-- `d` directive = **DELETES ALL CONTENTS** on every systemd-tmpfiles run
-- `D` directive = Creates directory, **PRESERVES EXISTING CONTENTS**
-- `e` directive = Adjusts permissions only, never deletes
+- **`d` directive** = Creates directory if it doesn't exist, **PRESERVES contents**
+- **`D` directive** = Creates OR **EMPTIES directory** when `systemd-tmpfiles --remove` runs (on every boot/rebuild)
+- **`e` directive** = Adjusts permissions only, never creates or deletes
 
-**Before modifying tmpfiles.rules for user data directories:**
-1. STOP and ask: "Do you have backups of this directory?"
-2. Explain the risk of data deletion
-3. Wait for explicit approval
+**CRITICAL: The D directive is for temporary directories like /tmp, NOT for data storage!**
 
-**Past incident (2025-11-04):** Changed `/var/mail/johnw` from `d` to `D` without understanding that `d` actively deletes contents. User lost unrecoverable mail data.
+**For persistent data directories, use ZFS datasets or regular directories WITHOUT tmpfiles.rules.**
+
+**Before modifying tmpfiles.rules:**
+1. STOP and verify: Is this data meant to persist or be temporary?
+2. For persistent data: Use ZFS datasets, NOT tmpfiles.rules
+3. For temporary data: Use `D` directive with age parameters
+4. Wait for explicit user approval
+
+**Past incidents:**
+- **2025-11-04**: Changed `/var/mail/johnw` from `d` to `D`, causing mail deletion
+- **2025-11-09**: Used `D` for Monica/MariaDB, lost database twice due to emptying on rebuild
 
 ### SECURITY - NO SECRETS IN OUTPUT
 

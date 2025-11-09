@@ -45,6 +45,7 @@
         bash
         coreutils
         curl
+        diffutils  # Provides diff command
         git
         gnugrep
         gnused

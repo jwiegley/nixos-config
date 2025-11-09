@@ -105,7 +105,7 @@ in
       mailutils
       nettools
       openssl
-      pinentry
+      pinentry-curses
       pv
       python3
       restic

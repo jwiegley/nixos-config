@@ -10,7 +10,7 @@ let
   # So we wrap it to add bind.host to the PATH
   checkSSLCertFixed = pkgs.symlinkJoin {
     name = "check_ssl_cert-fixed";
-    paths = [ pkgs.checkSSLCert ];
+    paths = [ pkgs.nagiosPlugins.check_ssl_cert ];
     buildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/check_ssl_cert \
@@ -573,7 +573,7 @@ let
 
     define command {
       command_name    check_systemd_service
-      command_line    ${pkgs.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
+      command_line    ${pkgs.nagiosPlugins.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
     }
 
     define command {
@@ -734,7 +734,7 @@ let
 
     define command {
       command_name    check_zfs_pool
-      command_line    ${pkgs.check_zfs}/bin/check_zfs --nosudo $ARG1$
+      command_line    ${pkgs.nagiosPlugins.check_zfs}/bin/check_zfs --nosudo $ARG1$
     }
 
     define command {
@@ -1512,8 +1512,8 @@ in
     # Add monitoring plugins to PATH
     plugins = with pkgs; [
       monitoring-plugins
-      check_systemd
-      check_zfs
+      nagiosPlugins.check_systemd
+      nagiosPlugins.check_zfs
       podman
       coreutils
       gnugrep

@@ -11,7 +11,7 @@ in
       image = "ghcr.io/sillytavern/sillytavern:latest";
       port = 8083;
       requiresPostgres = false;
-      containerUser = "container-web";  # Run rootless as container-web user
+      containerUser = "sillytavern";  # Run rootless as dedicated sillytavern user
 
       # Enable health checks
       healthCheck = {
@@ -47,11 +47,11 @@ in
         '';
       };
 
-      # Rootless container directories owned by container-web
+      # Rootless container directories owned by sillytavern
       tmpfilesRules = [
-        "d /var/lib/silly-tavern 0755 container-web container-web -"
-        "d /var/lib/silly-tavern/config 0755 container-web container-web -"
-        "d /var/lib/silly-tavern/data 0755 container-web container-web -"
+        "d /var/lib/silly-tavern 0755 sillytavern sillytavern -"
+        "d /var/lib/silly-tavern/config 0755 sillytavern sillytavern -"
+        "d /var/lib/silly-tavern/data 0755 sillytavern sillytavern -"
       ];
     })
   ];

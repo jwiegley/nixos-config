@@ -11,7 +11,7 @@ in
       image = "localhost/vanna:latest";
       port = 5000;
       requiresPostgres = false;  # Vanna connects to databases dynamically, no bootstrap needed
-      containerUser = "container-db";  # Run rootless as container-db user
+      containerUser = "vanna";  # Run rootless as dedicated vanna user
 
       # Never pull image - it's built locally and loaded into rootless user's store
       extraContainerConfig = {
@@ -102,9 +102,9 @@ in
       };
 
       tmpfilesRules = [
-        "d /var/lib/vanna 0755 container-db container-db -"
-        "d /var/lib/vanna/faiss 0755 container-db container-db -"
-        "d /var/lib/vanna/cache 0755 container-db container-db -"
+        "d /var/lib/vanna 0755 vanna vanna -"
+        "d /var/lib/vanna/faiss 0755 vanna vanna -"
+        "d /var/lib/vanna/cache 0755 vanna vanna -"
       ];
     })
   ];

@@ -337,19 +337,20 @@ let
   # Podman Containers
   # rootless containers (runAs set) run in user namespaces and require special checks
   # root containers (no runAs) run in the root namespace via system services
+  # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
   containers = [
-    { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "container-db"; }
-    { name = "metabase"; display = "Metabase BI Platform"; runAs = "container-db"; }
-    { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "container-db"; }
-    { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "container-db"; }
-    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "container-monitor"; }
-    { name = "paperless-ai"; display = "Paperless-AI Document Processing"; runAs = "container-misc"; }
-    { name = "speedtest"; display = "Open SpeedTest"; runAs = "container-misc"; }
-    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "container-web"; }
-    { name = "teable"; display = "Teable Database Platform"; runAs = "container-db"; }
-    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "container-monitor"; }
-    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; runAs = "container-db"; }
-    { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "container-db"; }
+    { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
+    { name = "metabase"; display = "Metabase BI Platform"; runAs = "metabase"; }
+    { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "mindsdb"; }
+    { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
+    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
+    { name = "paperless-ai"; display = "Paperless-AI Document Processing"; runAs = "paperless-ai"; }
+    { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
+    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
+    { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
+    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "technitium-dns-exporter"; }
+    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; runAs = "vanna"; }
+    { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "wallabag"; }
   ];
 
   # Container systemd services (for Quadlet-managed containers)

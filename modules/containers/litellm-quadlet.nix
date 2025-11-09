@@ -11,7 +11,7 @@ in
       image = "ghcr.io/berriai/litellm-database:main-stable";
       port = 4000;
       requiresPostgres = true;
-      containerUser = "container-db";  # Run rootless as container-db user
+      containerUser = "litellm";  # Run rootless as dedicated litellm user
 
       # Health check disabled - /health endpoint requires API authentication
       healthCheck = {
@@ -43,7 +43,7 @@ in
       };
 
       tmpfilesRules = [
-        "d /etc/litellm 0755 container-db container-db -"
+        "d /etc/litellm 0755 litellm litellm -"
       ];
     })
   ];

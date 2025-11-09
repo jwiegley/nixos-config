@@ -11,7 +11,7 @@ in
       image = "docker.io/nocobase/nocobase:latest";
       port = 13000;
       requiresPostgres = true;
-      containerUser = "container-db";  # Run rootless as container-db user
+      containerUser = "nocobase";  # Run rootless as dedicated nocobase user
 
       # Enable health checks
       healthCheck = {
@@ -66,9 +66,9 @@ in
 
       tmpfilesRules = [
         # Create directory with proper ownership
-        "d /var/lib/nocobase 0755 container-db container-db -"
+        "d /var/lib/nocobase 0755 nocobase nocobase -"
         # Recursively fix ownership of existing files (Z = recursive ownership/mode fix)
-        "Z /var/lib/nocobase 0755 container-db container-db -"
+        "Z /var/lib/nocobase 0755 nocobase nocobase -"
       ];
     })
   ];

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+sudo podman exec monica-app php -r "
+  require '/var/www/html/vendor/autoload.php';
+  \$app = require_once '/var/www/html/bootstrap/app.php';
+  \$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+
+  \$user = App\Models\User\User::where('email', 'jwiegley@gmail.com')->first();
+  if (\$user) {
+      \$token = \$user->createToken('My API Token');
+      echo 'Personal Access Token: ' . \$token->accessToken . PHP_EOL;
+  } else {
+      echo 'User not found!' . PHP_EOL;
+  }
+  "

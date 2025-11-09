@@ -12,15 +12,15 @@
   sops.secrets."mariadb-env" = {
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
-    owner = "container-db";
-    path = "/run/secrets-container-db/mariadb-env";
+    owner = "root";
+    path = "/run/secrets/mariadb-env";
   };
 
   sops.secrets."monica-env" = {
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
-    owner = "container-db";
-    path = "/run/secrets-container-db/monica-env";
+    owner = "root";
+    path = "/run/secrets/monica-env";
     restartUnits = [ "monica-app.service" ];
   };
 
@@ -29,6 +29,31 @@
     "D /var/lib/mariadb 0755 362144 362144 -"  # UID 362144 = container root (UID 0)
     "D /var/lib/monica 0755 362144 362144 -"   # UID 362144 = container root (UID 0)
   ];
+
+  # Create CSRF patch script
+  environment.etc."monica-csrf-patch.sh" = {
+    mode = "0755";
+    text = ''
+      #!/bin/bash
+      # Patch Monica's CSRF middleware to exclude OAuth routes
+      # This fixes the issue where personal access tokens cannot be created
+
+      CSRF_FILE="/var/www/html/app/Http/Middleware/VerifyCsrfToken.php"
+
+      if [ -f "$CSRF_FILE" ]; then
+          # Check if oauth/* is already in the exclusion list
+          if ! grep -q "'oauth/\*'" "$CSRF_FILE"; then
+              echo "Patching CSRF middleware to exclude OAuth routes..."
+              sed -i "s/'stripe\/\*',/'stripe\/*',\n        'oauth\/*',/" "$CSRF_FILE"
+              echo "CSRF middleware patched successfully."
+          else
+              echo "OAuth routes already excluded from CSRF protection."
+          fi
+      else
+          echo "Warning: CSRF middleware file not found at $CSRF_FILE"
+      fi
+    '';
+  };
 
   # Monica Pod - containers share network namespace
   virtualisation.quadlet.pods.monica = {
@@ -72,14 +97,14 @@
         # MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD from mariadb-env secret
       };
 
-      environmentFiles = [ "/run/secrets-container-db/mariadb-env" ];
+      environmentFiles = [ "/run/secrets/mariadb-env" ];
 
       volumes = [
         "/var/lib/mariadb:/var/lib/mysql:rw"
       ];
 
       # Join the monica pod
-      pod = "monica";
+      pod = "monica.pod";
     };
 
     unitConfig = {
@@ -91,8 +116,6 @@
     };
 
     serviceConfig = {
-      User = "container-db";
-      Group = "container-db";
       Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
       Restart = "always";
       RestartSec = "10s";
@@ -154,14 +177,14 @@
         QUEUE_CONNECTION = "sync";
       };
 
-      environmentFiles = [ "/run/secrets-container-db/monica-env" ];
+      environmentFiles = [ "/run/secrets/monica-env" ];
 
       volumes = [
         "/var/lib/monica:/var/www/html/storage:rw"
       ];
 
       # Join the monica pod
-      pod = "monica";
+      pod = "monica.pod";
     };
 
     unitConfig = {
@@ -173,8 +196,6 @@
     };
 
     serviceConfig = {
-      User = "container-db";
-      Group = "container-db";
       Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
       Restart = "always";
       RestartSec = "10s";
@@ -213,6 +234,7 @@
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     9092  # monica
   ];
+
 
   # Monica CRM - Personal Relationship Manager
   # ==========================================

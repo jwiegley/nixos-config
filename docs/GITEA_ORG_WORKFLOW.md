@@ -15,9 +15,16 @@ Run `sops /etc/nixos/secrets.yaml` and add the following keys:
 # Get this from: https://gitea.vulcan.lan/admin/runners
 gitea-runner-token: YOUR_RUNNER_TOKEN_HERE
 
-# Rclone password for fastmail sync
-# This should be the same password you currently use with: pass show Passwords/rclone
-rclone-password: YOUR_RCLONE_PASSWORD_HERE
+# Rclone configuration file with obscured password
+# First, obscure your password: rclone obscure "your-plain-password"
+# Then add the obscured output to the pass field below
+rclone-config: |
+  [fastmail]
+  type = webdav
+  url = https://webdav.fastmail.com
+  vendor = fastmail
+  user = your-email@fastmail.com
+  pass = YOUR_OBSCURED_PASSWORD_HERE
 ```
 
 ### 2. Create Workflow File in org Repository
@@ -61,8 +68,8 @@ jobs:
 
       - name: Sync to Fastmail
         run: |
-          # Access rclone password from SOPS secret
-          export RCLONE_PASSWORD_COMMAND="cat /run/secrets/rclone-password"
+          # Point rclone to the config file from SOPS (includes obscured password)
+          export RCLONE_CONFIG=/run/secrets/rclone-config
 
           # Sync the generated site (in the workspace) to Fastmail
           rclone sync -v \
@@ -99,9 +106,10 @@ After building the NixOS configuration:
 ## Secrets Access
 
 The runner has access to secrets via:
-- `/run/secrets/rclone-password` - The rclone password from SOPS
+- `/run/secrets/rclone-config` - The rclone configuration file from SOPS (includes obscured password)
+- `/run/secrets/gitea-runner-token` - The runner registration token
 - Secrets are accessible to the gitea-runner user (via the `keys` group)
-- Permissions: 0440 (read-only for owner and group)
+- Permissions: 0440 (read-only for root and keys group - NOT world-readable)
 
 ## Testing
 
@@ -123,8 +131,10 @@ sudo journalctl -u gitea-runner-org-builder.service -f
 **Secrets not accessible:**
 ```bash
 sudo ls -la /run/secrets/
-stat /run/secrets/rclone-password
+stat /run/secrets/rclone-config
 stat /run/secrets/gitea-runner-token
+# Verify gitea-runner can read the config
+sudo -u gitea-runner cat /run/secrets/rclone-config > /dev/null && echo "OK"
 ```
 
 **Workflow fails:**

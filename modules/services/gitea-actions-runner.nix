@@ -1,6 +1,14 @@
 { config, lib, pkgs, ... }:
 
 {
+  # Create a static gitea-runner user and add to keys group
+  users.users.gitea-runner = {
+    isSystemUser = true;
+    group = "gitea-runner";
+    extraGroups = [ "keys" ];
+  };
+  users.groups.gitea-runner = {};
+
   # SOPS secrets for Gitea Actions Runner
   sops.secrets = {
     "gitea-runner-token" = {
@@ -9,10 +17,10 @@
       group = "keys";
       mode = "0440";
     };
-    "rclone-password" = {
+    "rclone-config" = {
       owner = "root";
       group = "keys";
-      mode = "0440";
+      mode = "0440";  # Restricted to root and keys group (gitea-runner is a member)
     };
   };
 
@@ -47,7 +55,7 @@
         rclone
         stdenv.cc
         which
-        # TODO: Add org-jw package once build issues are resolved
+        yuicompressor  # Required for org-jw CSS/JS minification
       ];
 
       # Additional settings
@@ -57,17 +65,13 @@
   };
 
   # The runner service is automatically configured by the NixOS module
-  # with DynamicUser=true and proper permissions
+  # Override DynamicUser since we created a static user with keys group membership
+  systemd.services."gitea-runner-org-builder" = {
+    serviceConfig = {
+      DynamicUser = lib.mkForce false;
+    };
+  };
 
   # Allow the gitea-runner user to access the Nix daemon
   nix.settings.trusted-users = [ "gitea-runner" ];
-
-  # Wrapper script for rclone with SOPS secret
-  environment.systemPackages = [
-    (pkgs.writeScriptBin "rclone-with-secret" ''
-      #!${pkgs.bash}/bin/bash
-      export RCLONE_PASSWORD_COMMAND="cat ${config.sops.secrets."rclone-password".path}"
-      exec ${pkgs.rclone}/bin/rclone "$@"
-    '')
-  ];
 }

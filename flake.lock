@@ -567,11 +567,11 @@
     "nagios": {
       "flake": false,
       "locked": {
-        "lastModified": 1761885107,
-        "narHash": "sha256-jBGTKq4nQ+ARYxCYy3ve5mzXcBod5XgHa1Df2EtIRgI=",
+        "lastModified": 1762727102,
+        "narHash": "sha256-TNUAJpZ1uuqjluJ21f5HNe7XKfn1TI4cMlMmlXLLA+k=",
         "ref": "refs/heads/main",
-        "rev": "d44a7da9bb7209d8e3a6624f2de62c6c40a6e2d3",
-        "revCount": 4,
+        "rev": "069744f3a377cde2fe87f7d04651df045d10c2cf",
+        "revCount": 5,
         "type": "git",
         "url": "file:///etc/nixos/nagios"
       },

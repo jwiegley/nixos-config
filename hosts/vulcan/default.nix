@@ -41,6 +41,7 @@
     ../../modules/services/dirscan-share-config.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/gitea.nix
+    ../../modules/services/github-gitea-mirror.nix
     ../../modules/services/web.nix
     ../../modules/services/media.nix
     ../../modules/services/monitoring.nix
@@ -114,6 +115,16 @@
     ../../modules/storage/backup-monitoring.nix
     ../../modules/services/samba.nix
   ];
+
+  # GitHub to Gitea mirroring service
+  services.github-gitea-mirror = {
+    enable = true;
+    githubUser = "jwiegley";
+    giteaUser = "johnw";
+    giteaUrl = "https://gitea.vulcan.lan";
+    mirrorInterval = "8h";  # 8 hours (Go duration format)
+    schedule = "*-*-* 03:00:00";  # Daily at 3 AM
+  };
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

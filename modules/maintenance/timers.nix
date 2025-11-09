@@ -148,7 +148,7 @@ in
       description = "Archive Git repositories";
       path = with pkgs; [
         git
-        gitAndTools.git-workspace
+        git-workspace
         openssh
       ];
       after = [ "sops-nix.service" ];

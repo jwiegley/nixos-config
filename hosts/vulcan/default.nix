@@ -61,6 +61,7 @@
     ../../modules/services/mosquitto.nix
     ../../modules/services/node-red.nix
     ../../modules/services/n8n.nix
+    ../../modules/services/nginx-n8n-webhook.nix
     ../../modules/services/jupyterlab.nix
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix

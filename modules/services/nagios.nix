@@ -277,9 +277,7 @@ let
     { name = "redis-n8n.service"; display = "Redis (n8n)"; }
     { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
     { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
-    { name = "changedetection-pod.service"; display = "ChangeDetection Pod"; }
-    { name = "changedetection-app-container.service"; display = "ChangeDetection Application"; }
-    { name = "changedetection-exporter-container.service"; display = "ChangeDetection Exporter"; }
+    { name = "changedetection.service"; display = "ChangeDetection"; }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)

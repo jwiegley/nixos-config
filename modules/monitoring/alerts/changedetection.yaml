@@ -3,38 +3,21 @@ groups:
     interval: 60s
     rules:
       - alert: ChangeDetectionAppDown
-        expr: systemd_unit_state{name="changedetection-app-container.service",state="active"} == 0
+        expr: systemd_unit_state{name="changedetection.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical
           component: changedetection
         annotations:
-          summary: "ChangeDetection.io application container is down"
+          summary: "ChangeDetection.io service is down"
           description: |
-            ChangeDetection.io application container has been down for {{ $value }} minutes.
+            ChangeDetection.io service has been down for {{ $value }} minutes.
             Website change monitoring service is unavailable.
 
-            Check service status: systemctl status changedetection-app-container.service
-            Check container: podman ps -a | grep changedetection-app
-            View logs: journalctl -u changedetection-app-container -f
-            Check podman logs: podman logs changedetection-app
-
-      - alert: ChangeDetectionExporterDown
-        expr: systemd_unit_state{name="changedetection-exporter-container.service",state="active"} == 0
-        for: 2m
-        labels:
-          severity: warning
-          component: changedetection
-        annotations:
-          summary: "ChangeDetection.io Prometheus exporter is down"
-          description: |
-            ChangeDetection.io Prometheus exporter has been down for {{ $value }} minutes.
-            Metrics collection is unavailable but core service may still be functional.
-
-            Check service status: systemctl status changedetection-exporter-container.service
-            Check container: podman ps -a | grep changedetection-exporter
-            View logs: journalctl -u changedetection-exporter-container -f
-            Check podman logs: podman logs changedetection-exporter
+            Check service status: systemctl status changedetection.service
+            Check container: podman ps -a | grep changedetection
+            View logs: journalctl -u changedetection.service -f
+            Check podman logs: podman logs --user changedetection changedetection
 
       - alert: ChangeDetectionHTTPSProbeFailed
         expr: probe_success{job="blackbox_https_local",instance="https://changes.vulcan.lan"} == 0
@@ -50,7 +33,7 @@ groups:
 
             Check nginx status: systemctl status nginx
             Check SSL certificate: curl -vI https://changes.vulcan.lan
-            Check app container: podman ps | grep changedetection-app
+            Check app container: podman ps --user changedetection | grep changedetection
             Test local endpoint: curl -I http://127.0.0.1:5055
 
       - alert: ChangeDetectionSlowResponse
@@ -65,13 +48,12 @@ groups:
             ChangeDetection.io response time is {{ $value }}s (threshold: 10s).
             Web interface may be slow due to high scraping activity.
 
-            Check container resources: podman stats changedetection-app
-            View recent activity: podman logs changedetection-app --tail 50
-            Check fetch worker count: podman exec changedetection-app env | grep FETCH_WORKERS
-            Check queue size via metrics: curl http://localhost:9123/metrics | grep queue
+            Check container resources: podman stats --user changedetection changedetection
+            View recent activity: podman logs --user changedetection changedetection --tail 50
+            Check fetch worker count: podman exec --user changedetection changedetection env | grep FETCH_WORKERS
 
       - alert: ChangeDetectionContainerRestarts
-        expr: rate(systemd_unit_state{name="changedetection-app-container.service",state="failed"}[15m]) > 0
+        expr: rate(systemd_unit_state{name="changedetection.service",state="failed"}[15m]) > 0
         for: 5m
         labels:
           severity: warning
@@ -82,76 +64,7 @@ groups:
             ChangeDetection.io container has restarted {{ $value }} times in the last 15 minutes.
             This indicates instability.
 
-            View recent logs: journalctl -u changedetection-app-container --since "15 minutes ago"
-            Check container logs: podman logs changedetection-app --tail 100
+            View recent logs: journalctl -u changedetection.service --since "15 minutes ago"
+            Check container logs: podman logs --user changedetection changedetection --tail 100
             Check for OOM: dmesg | grep -i "changedetection\|oom"
             Check datastore integrity: ls -la /var/lib/changedetection
-
-      - alert: ChangeDetectionMetricsUnavailable
-        expr: up{job="changedetection",service="changedetection"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          component: changedetection
-        annotations:
-          summary: "ChangeDetection.io Prometheus metrics unavailable"
-          description: |
-            ChangeDetection.io Prometheus exporter has not responded for {{ $value }} minutes.
-            Metrics scraping is failing.
-
-            Check exporter status: systemctl status changedetection-exporter-container.service
-            Test metrics endpoint: curl http://localhost:9123/metrics
-            Check exporter logs: journalctl -u changedetection-exporter-container -f
-            Verify API key is loaded: cat /run/changedetection/exporter.env
-            Check app is accessible to exporter: podman exec changedetection-exporter curl -I http://localhost:5000
-
-      - alert: ChangeDetectionHighScrapeFailures
-        expr: rate(changedetection_scrape_errors_total[5m]) > 0.1
-        for: 10m
-        labels:
-          severity: warning
-          component: changedetection
-        annotations:
-          summary: "ChangeDetection.io is experiencing high scrape failure rate"
-          description: |
-            ChangeDetection.io scrape error rate is {{ $value }} errors/second.
-            Website monitoring may be failing for some watches.
-
-            Check application logs: podman logs changedetection-app --tail 100
-            View failed watches via API: curl http://localhost:5055/api/v1/watches
-            Check network connectivity from container: podman exec changedetection-app ping -c 3 google.com
-            Review watch configurations for invalid URLs
-
-      - alert: ChangeDetectionPodDown
-        expr: systemd_unit_state{name="changedetection-pod.service",state="active"} == 0
-        for: 1m
-        labels:
-          severity: critical
-          component: changedetection
-        annotations:
-          summary: "ChangeDetection.io pod is down"
-          description: |
-            ChangeDetection.io Podman pod is not running.
-            Both application and exporter containers are affected.
-
-            Check pod status: podman pod ps | grep changedetection
-            Inspect pod: podman pod inspect changedetection
-            Restart pod: systemctl restart changedetection-pod.service
-            View pod logs: journalctl -u changedetection-pod.service -f
-
-      - alert: ChangeDetectionHighQueueSize
-        expr: changedetection_queue_size > 100
-        for: 30m
-        labels:
-          severity: warning
-          component: changedetection
-        annotations:
-          summary: "ChangeDetection.io has a large processing queue"
-          description: |
-            ChangeDetection.io queue size is {{ $value }} (threshold: 100).
-            Watch processing may be backlogged.
-
-            Check current queue: curl http://localhost:9123/metrics | grep queue
-            View application logs: podman logs changedetection-app --tail 50
-            Consider increasing FETCH_WORKERS: podman exec changedetection-app env | grep FETCH_WORKERS
-            Check watch intervals for too-frequent checks

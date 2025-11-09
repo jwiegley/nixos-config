@@ -57,8 +57,8 @@ in
   services.n8n = {
     enable = true;
 
-    # Webhook URL for external triggers
-    webhookUrl = "https://n8n.vulcan.lan/";
+    # Webhook URL for external triggers (public Cloudflare Tunnel)
+    webhookUrl = "https://n8n.newartisans.com/";
 
     # Configuration settings
     settings = {

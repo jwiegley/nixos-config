@@ -126,6 +126,7 @@ in
       service imap-login {
         inet_listener imap {
           port = 143
+          address = 127.0.0.1
           ssl = no
         }
         inet_listener imaps {

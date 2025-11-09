@@ -63,8 +63,8 @@
     # Admin password from SOPS
     passwordFile = config.sops.secrets."paperless/admin-password".path;
 
-    # Bind to all interfaces (nginx reverse proxy + container access)
-    address = "0.0.0.0";
+    # Bind to localhost only (accessed via nginx reverse proxy)
+    address = "127.0.0.1";
     port = 28981;
 
     # Enable Tika and Gotenberg for Office document OCR

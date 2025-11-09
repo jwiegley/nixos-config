@@ -131,6 +131,11 @@ in
         LEVEL = "Info";
         ROOT_PATH = "/var/lib/gitea/log";
       };
+
+      # Enable Gitea Actions
+      actions = {
+        ENABLED = true;
+      };
     };
   };
 

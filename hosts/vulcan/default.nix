@@ -41,6 +41,7 @@
     ../../modules/services/dirscan-share-config.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/gitea.nix
+    ../../modules/services/gitea-actions-runner.nix
     ../../modules/services/github-gitea-mirror.nix
     ../../modules/services/web.nix
     ../../modules/services/media.nix

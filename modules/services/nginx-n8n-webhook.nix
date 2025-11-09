@@ -14,7 +14,7 @@
   users.groups.cloudflared = { };
 
   # SOPS secret for Cloudflare Tunnel credentials
-  sops.secrets."cloudflared-n8n" = {
+  sops.secrets."cloudflared/n8n" = {
     owner = "cloudflared";
     group = "cloudflared";
     mode = "0400";
@@ -54,7 +54,7 @@
     enable = true;
     tunnels = {
       "n8n-webhook" = {
-        credentialsFile = config.sops.secrets."cloudflared-n8n".path;
+        credentialsFile = config.sops.secrets."cloudflared/n8n".path;
         default = "http_status:404";
 
         ingress = {

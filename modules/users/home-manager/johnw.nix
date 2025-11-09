@@ -213,7 +213,7 @@
         b      = "${pkgs.git}/bin/git b";
         l      = "${pkgs.git}/bin/git l";
         w      = "${pkgs.git}/bin/git w";
-        ga     = "${pkgs.gitAndTools.git-annex}/bin/git-annex";
+        ga     = "${pkgs.git-annex}/bin/git-annex";
         good   = "${pkgs.git}/bin/git bisect good";
         bad    = "${pkgs.git}/bin/git bisect bad";
         par    = "${pkgs.parallel}/bin/parallel";
@@ -499,8 +499,8 @@
     # Packages to install for the user
     home.packages = with pkgs; [
       # Development tools
-      gitAndTools.git-annex
-      gitAndTools.git-workspace
+      git-annex
+      git-workspace
       global
       claude-code
       apacheHttpd

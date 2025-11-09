@@ -15,6 +15,10 @@ in
     })
   ];
 
+  environment.systemPackages = with pkgs; [
+    gitea
+  ];
+
   # SOPS secrets for Gitea
   sops.secrets = {
     "gitea-db-password" = {

@@ -29,6 +29,7 @@ let
 
   # List of all dedicated container users
   containerUsers = [
+    "changedetection"
     "litellm"
     "metabase"
     "mindsdb"

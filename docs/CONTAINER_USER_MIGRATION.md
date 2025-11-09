@@ -38,7 +38,6 @@ Each service runs under its own dedicated user account:
 The following containers run in pods as root and are **excluded** from this migration:
 - **monica pod**: monica-app, mariadb
 - **budget-board pod**: budget-board-server, budget-board-client
-- **changedetection pod**: changedetection-app, changedetection-exporter
 
 These remain unchanged because they are pod members, which require different handling.
 
@@ -491,7 +490,7 @@ A: Yes, slightly. Each user will have their own podman storage, but container im
 A: Yes, through the network stack (podman bridge, localhost, host services). Filesystem isolation doesn't affect network communication.
 
 **Q: What about pod-based services?**
-A: Pods (monica, budget-board, changedetection) remain as root containers. Converting them requires different approach due to pod architecture.
+A: Pods (monica, budget-board) remain as root containers. Converting them requires different approach due to pod architecture.
 
 **Q: Do I need to update secrets.yaml?**
 A: No. The secret values don't change, only the deployment paths and ownership change automatically.

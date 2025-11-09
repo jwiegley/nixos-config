@@ -1,0 +1,103 @@
+groups:
+  - name: monica_service
+    interval: 60s
+    rules:
+      - alert: MonicaServiceDown
+        expr: node_systemd_unit_state{name="monica-pod.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monica
+        annotations:
+          summary: "Monica CRM pod service is down"
+          description: |
+            Monica CRM pod has been down for {{ $value }} minutes.
+            Personal relationship manager is unavailable.
+
+            Check service status: systemctl status monica-pod.service
+            Check containers: podman pod ps; podman ps -a --pod
+            View logs: journalctl -u monica-pod -f
+            Check pod logs: podman pod logs monica
+
+      - alert: MonicaHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://monica.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: monica
+        annotations:
+          summary: "Monica CRM HTTPS probe failed"
+          description: |
+            Monica CRM web interface at https://monica.vulcan.lan is not responding.
+            Personal CRM platform is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://monica.vulcan.lan
+            Check container: podman ps | grep monica
+            Test local endpoint: curl -I http://127.0.0.1:9092
+
+      - alert: MonicaSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://monica.vulcan.lan"} > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: monica
+        annotations:
+          summary: "Monica CRM is responding slowly"
+          description: |
+            Monica CRM response time is {{ $value }}s (threshold: 5s).
+            Application loading may be degraded.
+
+            Check container resources: podman stats monica-app
+            Check MariaDB: podman logs mariadb --tail 50
+            Check PHP performance: podman logs monica-app | grep -i "fpm\|php"
+
+      - alert: MonicaContainerRestarts
+        expr: rate(node_systemd_unit_state{name="monica-pod.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monica
+        annotations:
+          summary: "Monica CRM pod is restarting frequently"
+          description: |
+            Monica CRM pod has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability.
+
+            View recent logs: journalctl -u monica-pod --since "15 minutes ago"
+            Check container logs: podman logs monica-app --tail 100
+            Check for OOM: dmesg | grep -i "monica\|oom"
+            Verify MariaDB: podman exec mariadb mysql -u monica -p monica -e "SELECT 1;"
+
+      - alert: MonicaDatabaseConnectionFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://monica.vulcan.lan"} == 0 and node_systemd_unit_state{name="monica-pod.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: monica
+        annotations:
+          summary: "Monica CRM cannot connect to MariaDB backend"
+          description: |
+            Monica CRM pod is running but web interface is down.
+            This likely indicates a MariaDB connection failure.
+
+            Check MariaDB: podman logs mariadb --tail 50
+            Check database exists: podman exec mariadb mysql -u root -p -e "SHOW DATABASES;"
+            Check container logs: podman logs monica-app | grep -i "database\|mysql\|connection"
+            Verify network: podman exec monica-app nc -zv 127.0.0.1 3306
+
+      - alert: MonicaHighMemoryUsage
+        expr: container_memory_usage_bytes{name="monica-app"} / container_spec_memory_limit_bytes{name="monica-app"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: monica
+        annotations:
+          summary: "Monica CRM is using high memory"
+          description: |
+            Monica CRM memory usage is {{ $value | humanizePercentage }} of limit.
+            PHP memory may need adjustment.
+
+            Check container stats: podman stats monica-app
+            Review PHP memory_limit: podman exec monica-app php -i | grep memory_limit
+            Consider increasing memory limit

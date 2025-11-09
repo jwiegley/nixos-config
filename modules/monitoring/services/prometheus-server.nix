@@ -17,6 +17,7 @@ let
     "ntopng.yaml"
     "litellm-availability.yaml"
     "metabase.yaml"
+    "monica.yaml"
     "nocobase.yaml"
     "home-assistant.yaml"
     "home-assistant-backup.yaml"

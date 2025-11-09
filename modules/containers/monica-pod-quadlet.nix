@@ -24,12 +24,6 @@
     restartUnits = [ "monica-app.service" ];
   };
 
-  # Create data directories
-  systemd.tmpfiles.rules = [
-    "D /var/lib/mariadb 0755 362144 362144 -"  # UID 362144 = container root (UID 0)
-    "D /var/lib/monica 0755 362144 362144 -"   # UID 362144 = container root (UID 0)
-  ];
-
   # Create CSRF patch script
   environment.etc."monica-csrf-patch.sh" = {
     mode = "0755";

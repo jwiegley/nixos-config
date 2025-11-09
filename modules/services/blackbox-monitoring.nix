@@ -485,6 +485,7 @@ in
             "https://speedtest.vulcan.lan"
             "https://litellm.vulcan.lan"
             "https://metabase.vulcan.lan"
+            "https://monica.vulcan.lan"
             "https://teable.vulcan.lan"
             "https://vanna.vulcan.lan"
             "https://budget.vulcan.lan"

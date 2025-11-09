@@ -261,6 +261,10 @@ with lib;
                       color = "150 60 55";
                       links = [
                         {
+                          title = "Monica CRM";
+                          url = "https://monica.vulcan.lan";
+                        }
+                        {
                           title = "Teable";
                           url = "https://teable.vulcan.lan";
                         }

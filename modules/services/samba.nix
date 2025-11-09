@@ -162,6 +162,17 @@ in
           "force user" = "paperless";
           "force group" = "paperless";
         };
+
+        # Monica CRM Storage
+        monica-storage = {
+          path = "/var/lib/monica";
+          comment = "Monica CRM Data and Documents";
+          "valid users" = "johnw";
+          "read only" = "no";
+          browseable = "yes";
+          "create mask" = "0644";
+          "directory mask" = "0755";
+        };
       } // zfsShares;
     };
 

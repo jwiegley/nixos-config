@@ -7,6 +7,7 @@
     ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
     ./metabase-quadlet.nix
+    ./monica-pod-quadlet.nix  # Monica + MariaDB in a pod
     ./nocobase-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix

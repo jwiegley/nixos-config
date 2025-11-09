@@ -368,10 +368,10 @@ def main():
     print(f"Metrics port: {METRICS_PORT}")
     print(f"Fail-fast threshold: {MAX_CONSECUTIVE_FAILURES} consecutive failures")
 
-    # Start Prometheus metrics HTTP server in a separate thread
+    # Start Prometheus metrics HTTP server in a separate thread (localhost only)
     try:
-        start_http_server(METRICS_PORT)
-        print(f"Prometheus metrics server started on port {METRICS_PORT}")
+        start_http_server(METRICS_PORT, addr='127.0.0.1')
+        print(f"Prometheus metrics server started on 127.0.0.1:{METRICS_PORT}")
     except Exception as exception:
         print(f"Failed to start metrics server: {exception}", file=sys.stderr)
         sys.exit(1)

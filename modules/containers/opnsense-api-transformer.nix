@@ -98,8 +98,8 @@ let
             pass
 
     if __name__ == "__main__":
-        server = HTTPServer(('0.0.0.0', LISTEN_PORT), TransformingProxy)
-        print(f"OPNsense API Transformer listening on port {LISTEN_PORT}", flush=True)
+        server = HTTPServer(('127.0.0.1', LISTEN_PORT), TransformingProxy)
+        print(f"OPNsense API Transformer listening on 127.0.0.1:{LISTEN_PORT}", flush=True)
         print(f"Proxying to https://{TARGET_HOST}:{TARGET_PORT}", flush=True)
         server.serve_forever()
   '';

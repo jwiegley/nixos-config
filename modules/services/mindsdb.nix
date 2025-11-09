@@ -23,7 +23,7 @@ in
       image = "docker.io/mindsdb/mindsdb:latest";
       port = 47334;
       requiresPostgres = true;
-      containerUser = "container-db";  # Run rootless as container-db user
+      containerUser = "mindsdb";  # Run rootless as dedicated mindsdb user
 
       # Health checks disabled - will verify service health via Prometheus/Nagios
       healthCheck = {
@@ -108,7 +108,7 @@ in
     "mindsdb/env" = {
       sopsFile = config.sops.defaultSopsFile;
       mode = "0400";
-      owner = "container-db";
+      owner = "mindsdb";
       restartUnits = [ "mindsdb.service" ];
     };
   };

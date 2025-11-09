@@ -22,13 +22,10 @@
     ../../modules/users/johnw.nix
     ../../modules/users/nasimw.nix
     ../../modules/users/assembly.nix
-    ../../modules/users/container-users.nix
+    ../../modules/users/container-users-dedicated.nix
     ../../modules/users/home-manager
     ../../modules/users/home-manager/johnw.nix
-    ../../modules/users/home-manager/container-db.nix
-    ../../modules/users/home-manager/container-web.nix
-    ../../modules/users/home-manager/container-monitor.nix
-    ../../modules/users/home-manager/container-misc.nix
+    ../../modules/users/home-manager/container-users-dedicated.nix
 
     # Services
     ../../modules/services/certificates.nix
@@ -64,6 +61,7 @@
     ../../modules/services/node-red.nix
     ../../modules/services/n8n.nix
     ../../modules/services/nginx-n8n-webhook.nix
+    ../../modules/services/cloudflare-tunnels.nix
     ../../modules/services/jupyterlab.nix
     ../../modules/services/grafana.nix
     ../../modules/services/loki.nix
@@ -98,7 +96,6 @@
 
     # Containers
     ../../modules/containers/default.nix
-    ../../modules/containers/secrets-migration.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix
     ../../modules/containers/paperless-ai-quadlet.nix

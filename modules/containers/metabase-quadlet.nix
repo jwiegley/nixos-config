@@ -11,7 +11,7 @@ in
       image = "docker.io/metabase/metabase:latest";
       port = 3200;
       requiresPostgres = true;
-      containerUser = "container-db";  # Run rootless as container-db user
+      containerUser = "metabase";  # Run rootless as dedicated metabase user
 
       # Enable health checks
       healthCheck = {

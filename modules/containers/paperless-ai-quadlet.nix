@@ -34,7 +34,7 @@ let
 
   # Secrets environment file - generated at runtime from SOPS secrets
   # For rootless containers, secrets go in /run/secrets-<user>/ directory
-  paperlessAiSecretsEnvPath = "/run/secrets-container-misc/paperless-ai-secrets.env";
+  paperlessAiSecretsEnvPath = "/run/secrets-paperless-ai/paperless-ai-secrets.env";
 in
 {
   # Create systemd service to generate secrets env file for rootless container
@@ -49,15 +49,15 @@ in
       RemainAfterExit = true;
     };
     script = ''
-      # Ensure secrets directory exists and is owned by container-misc
-      mkdir -p /run/secrets-container-misc
-      chown container-misc:container-misc /run/secrets-container-misc
-      chmod 755 /run/secrets-container-misc
+      # Ensure secrets directory exists and is owned by paperless-ai
+      mkdir -p /run/secrets-paperless-ai
+      chown paperless-ai:paperless-ai /run/secrets-paperless-ai
+      chmod 755 /run/secrets-paperless-ai
 
       # Copy CA certificate to location accessible by rootless container
-      cp /var/lib/private/step-ca-state/certs/root_ca.crt /run/secrets-container-misc/vulcan-ca.crt
-      chown container-misc:container-misc /run/secrets-container-misc/vulcan-ca.crt
-      chmod 644 /run/secrets-container-misc/vulcan-ca.crt
+      cp /var/lib/private/step-ca-state/certs/root_ca.crt /run/secrets-paperless-ai/vulcan-ca.crt
+      chown paperless-ai:paperless-ai /run/secrets-paperless-ai/vulcan-ca.crt
+      chmod 644 /run/secrets-paperless-ai/vulcan-ca.crt
 
       # Generate secrets file
       cat > ${paperlessAiSecretsEnvPath} <<EOF
@@ -66,7 +66,7 @@ in
       EOF
 
       # Set ownership and permissions for rootless container access
-      chown container-misc:container-misc ${paperlessAiSecretsEnvPath}
+      chown paperless-ai:paperless-ai ${paperlessAiSecretsEnvPath}
       chmod 600 ${paperlessAiSecretsEnvPath}
     '';
   };
@@ -76,7 +76,7 @@ in
       name = "paperless-ai";
       image = "docker.io/clusterzx/paperless-ai:latest";
       port = 3001;
-      containerUser = "container-misc";  # Run as rootless container (matches other misc services)
+      containerUser = "paperless-ai";  # Run rootless as dedicated paperless-ai user
 
       # Bind to localhost only (nginx reverse proxy provides access)
       publishPorts = [
@@ -98,7 +98,7 @@ in
       volumes = [
         "paperless-ai-data:/app/data"
         # Mount Vulcan CA root cert (copied to accessible location by paperless-ai-secrets service)
-        "/run/secrets-container-misc/vulcan-ca.crt:/usr/local/share/ca-certificates/vulcan-ca.crt:ro"
+        "/run/secrets-paperless-ai/vulcan-ca.crt:/usr/local/share/ca-certificates/vulcan-ca.crt:ro"
       ];
 
       nginxVirtualHost = {

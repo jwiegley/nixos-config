@@ -25,10 +25,16 @@ in
       cat ${config.sops.secrets."copyparty/admin-password".path} > /var/lib/copyparty-passwords/admin
       cat ${config.sops.secrets."copyparty/johnw-password".path} > /var/lib/copyparty-passwords/johnw
       cat ${config.sops.secrets."copyparty/friend-password".path} > /var/lib/copyparty-passwords/friend
+      ${lib.optionalString (config.sops.secrets ? "copyparty/nasimw-password") ''
+        cat ${config.sops.secrets."copyparty/nasimw-password".path} > /var/lib/copyparty-passwords/nasimw
+      ''}
 
       chmod 644 /var/lib/copyparty-passwords/admin
       chmod 644 /var/lib/copyparty-passwords/johnw
       chmod 644 /var/lib/copyparty-passwords/friend
+      ${lib.optionalString (config.sops.secrets ? "copyparty/nasimw-password") ''
+        chmod 644 /var/lib/copyparty-passwords/nasimw
+      ''}
     '';
   };
 
@@ -42,6 +48,9 @@ in
   sops.secrets."copyparty/friend-password" = {
     restartUnits = [ "copyparty-password-setup.service" ];
   };
+  sops.secrets."copyparty/nasimw-password" = {
+    restartUnits = [ "copyparty-password-setup.service" ];
+  };
 
   # Ensure directories exist on host
   systemd.tmpfiles.rules = [
@@ -51,6 +60,9 @@ in
     "d /var/lib/copyparty-container/.hist 0755 root root -"
     "d /var/lib/copyparty-container/.th 0755 root root -"
     "d /var/lib/copyparty-passwords 0755 root root -"
+    # Personal directories for copyparty shares
+    "d /tank/Public/johnw 0755 root root -"
+    "d /tank/Public/nasimw 0755 root root -"
   ];
 
   # Bind mount ZFS dataset to host directory (container will access via bindMount)
@@ -337,10 +349,29 @@ in
           admin = "/var/lib/copyparty-passwords/admin";
           johnw = "/var/lib/copyparty-passwords/johnw";
           friend = "/var/lib/copyparty-passwords/friend";
+          nasimw = "/var/lib/copyparty-passwords/nasimw";
         };
 
         extraConfig = ''
-          # Container serves from bind-mounted directory
+          # Personal directory for johnw
+          [/johnw]
+            ${config.services.copyparty.shareDir}/johnw
+            accs:
+              rwmda: johnw
+            flags:
+              nodupe
+              e2d
+              d2t
+
+          # Shared directory for nasimw and johnw
+          [/nasimw]
+            ${config.services.copyparty.shareDir}/nasimw
+            accs:
+              rwmda: nasimw,johnw
+            flags:
+              nodupe
+              e2d
+              d2t
         '';
       };
 

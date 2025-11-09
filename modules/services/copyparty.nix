@@ -11,17 +11,26 @@ let
   useSOPS = cfg.passwordFiles == null;
 
   # Script to generate config with passwords from secrets or files
+  nasimwPasswordLine =
+    if cfg.passwordFiles != null then
+      optionalString (cfg.passwordFiles ? nasimw) "NASIMW_PASS=$(cat ${cfg.passwordFiles.nasimw})"
+    else
+      optionalString (config.sops.secrets ? "copyparty/nasimw-password")
+        "NASIMW_PASS=$(cat ${config.sops.secrets."copyparty/nasimw-password".path})";
+
   configGenerator = pkgs.writeShellScript "copyparty-config-generator" (
     (if cfg.passwordFiles != null then ''
       # Read passwords from password files
       ADMIN_PASS=$(cat ${cfg.passwordFiles.admin})
       JOHNW_PASS=$(cat ${cfg.passwordFiles.johnw})
       FRIEND_PASS=$(cat ${cfg.passwordFiles.friend})
+      ${nasimwPasswordLine}
     '' else ''
       # Read passwords from SOPS secrets
       ADMIN_PASS=$(cat ${config.sops.secrets."copyparty/admin-password".path})
       JOHNW_PASS=$(cat ${config.sops.secrets."copyparty/johnw-password".path})
       FRIEND_PASS=$(cat ${config.sops.secrets."copyparty/friend-password".path})
+      ${nasimwPasswordLine}
     '') + ''
 
     # Generate configuration file
@@ -51,6 +60,7 @@ let
     [accounts]
       johnw: $JOHNW_PASS
       friend: $FRIEND_PASS
+      ${if cfg.passwordFiles ? nasimw || config.sops.secrets ? "copyparty/nasimw-password" then "nasimw: $NASIMW_PASS" else ""}
 
     [/pub]
       ${shareDir}/pub

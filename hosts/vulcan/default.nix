@@ -20,6 +20,7 @@
 
     # User management
     ../../modules/users/johnw.nix
+    ../../modules/users/nasimw.nix
     ../../modules/users/assembly.nix
     ../../modules/users/container-users.nix
     ../../modules/users/home-manager

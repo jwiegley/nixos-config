@@ -5,7 +5,8 @@
     # Use fixed quadlet configuration with proper network setup
     ./quadlet.nix
 
-    # Keep secure-nginx as it may have other configurations
-    ./secure-nginx.nix
+    # Separate containers for copyparty and static nginx
+    ./copyparty-container.nix
+    ./static-nginx-container.nix
   ];
 }

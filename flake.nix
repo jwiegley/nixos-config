@@ -55,7 +55,7 @@
     nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = {
-        inherit system;
+        inherit system inputs;
         inherit (inputs) firmware secrets nagios;
       };
       modules = [

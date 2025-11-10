@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ inputs, config, lib, pkgs, ... }:
 
 {
   # Create a static gitea-runner user and add to keys group
@@ -57,6 +57,7 @@
         stdenv.cc
         which
         yuicompressor  # Required for org-jw CSS/JS minification
+        inputs.org-jw.packages.${system}.default
       ];
 
       # Additional settings

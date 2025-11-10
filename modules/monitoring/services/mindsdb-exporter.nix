@@ -15,7 +15,7 @@
       };
       static_configs = [{
         targets = [
-          "http://127.0.0.1:47334"  # MindsDB API endpoint
+          "http://127.0.0.1:47334/api/status"  # MindsDB API status endpoint (web UI disabled)
         ];
       }];
       relabel_configs = [
@@ -49,10 +49,13 @@
       service health using Blackbox Exporter to probe the HTTP endpoint.
 
       ## Monitoring Strategy
-      - **HTTP Health Check**: Blackbox exporter probes http://127.0.0.1:47334
+      - **HTTP Health Check**: Blackbox exporter probes http://127.0.0.1:47334/api/status
       - **Response Time**: Track API response latency
       - **Availability**: Monitor service uptime via probe success
       - **Container Health**: Podman container status via systemd
+
+      Note: The web UI is disabled (MINDSDB_WEB_GUI=false) to avoid S3 DNS issues.
+      The API endpoints remain fully functional at /api/*
 
       ## Available Metrics
       Via Blackbox Exporter:
@@ -68,11 +71,11 @@
 
       ## Checking Metrics
       ```bash
-      # Check MindsDB API endpoint
-      curl http://localhost:47334
+      # Check MindsDB API status endpoint
+      curl http://localhost:47334/api/status
 
       # Check via HTTPS (nginx proxy)
-      curl https://mindsdb.vulcan.lan
+      curl https://mindsdb.vulcan.lan/api/status
 
       # Check Prometheus scrape status
       curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="mindsdb")'

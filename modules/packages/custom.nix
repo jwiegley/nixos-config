@@ -90,6 +90,7 @@ in
     (with pkgs; [
       b3sum
       btop
+      cloudflared
       dh
       dig
       dirscan
@@ -108,6 +109,7 @@ in
       pinentry-curses
       pv
       python3
+      rclone
       restic
       ripgrep
       socat

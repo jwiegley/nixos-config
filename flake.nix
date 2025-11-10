@@ -2,7 +2,9 @@
   inputs = {
     # nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon";
+    # Pin to commit with kernel 6.16.x (ZFS-compatible)
+    # Newer versions use kernel 6.17.x which breaks ZFS
+    nixos-apple-silicon.url = "github:nix-community/nixos-apple-silicon/7aad69158fc1b5bbbddac19040b6aae14daaa35c";
 
     firmware = {
       url = "git+file:///etc/nixos/firmware";

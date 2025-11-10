@@ -1,4 +1,4 @@
-{ inputs, config, lib, pkgs, ... }:
+{ inputs, config, lib, pkgs, system, ... }:
 
 {
   # Create a static gitea-runner user and add to keys group
@@ -46,6 +46,7 @@
         coreutils
         curl
         diffutils  # Provides diff command
+        gawk
         git
         gnugrep
         gnused

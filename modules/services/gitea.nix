@@ -86,7 +86,19 @@ in
         REQUIRE_SIGNIN_VIEW = false;
         DEFAULT_KEEP_EMAIL_PRIVATE = true;
         DEFAULT_ALLOW_CREATE_ORGANIZATION = true;
-        ENABLE_NOTIFY_MAIL = false; # Disable email notifications (no SMTP configured yet)
+        ENABLE_NOTIFY_MAIL = true; # Enable email notifications via local Postfix
+        DEFAULT_EMAIL_NOTIFICATIONS = "enabled"; # Enable notifications by default (including Actions)
+      };
+
+      # Email/Mailer configuration
+      mailer = {
+        ENABLED = true;
+        PROTOCOL = "smtp";
+        SMTP_ADDR = "127.0.0.1";
+        SMTP_PORT = 25;
+        FROM = "gitea@vulcan.lan";
+        USER = ""; # No auth required for localhost
+        PASSWD = ""; # No auth required for localhost
       };
 
       # Session configuration using Redis
@@ -135,6 +147,7 @@ in
       # Enable Gitea Actions
       actions = {
         ENABLED = true;
+        DEFAULT_ACTIONS_URL = "github"; # Use GitHub-compatible actions
       };
     };
   };

@@ -11,7 +11,7 @@
     master_key     = "4710CF98AF9B327BB80F60E146C4BD1A7AC14BA2";
     signing_key    = "12D70076AB504679";
 
-    external_host  = "home.newartisans.com";
+    external_host  = "data.newartisans.com";
 
     ca-bundle_path = "${pkgs.cacert}/etc/ssl/certs/";
     ca-bundle_crt  = "${ca-bundle_path}/ca-bundle.crt";

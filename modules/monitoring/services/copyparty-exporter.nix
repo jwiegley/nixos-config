@@ -23,7 +23,7 @@
     {
       job_name = "copyparty";
       static_configs = [{
-        targets = [ "10.233.1.2:3923" ];  # Container IP:port
+        targets = [ "10.233.2.2:3923" ];  # Container IP:port
         labels = {
           service = "copyparty";
           instance = "vulcan";
@@ -75,14 +75,14 @@
          - `copyparty_storage_bytes` - Storage usage
 
       ## Accessing Copyparty
-      - **Web UI**: https://home.newartisans.com
+      - **Web UI**: https://data.newartisans.com
       - **Metrics**: http://localhost:13923/.cpr/metrics (requires auth)
-      - **Container**: secure-nginx (10.233.1.2:3923 → host:13923)
+      - **Container**: copyparty (10.233.2.2:3923 → host:13923)
 
       ## Troubleshooting
       - **Metrics not showing**: Check copyparty service is running in container:
         ```bash
-        sudo machinectl shell secure-nginx /run/current-system/sw/bin/systemctl status copyparty
+        sudo machinectl shell copyparty /run/current-system/sw/bin/systemctl status copyparty
         ```
       - **Scrape failures**: Check Prometheus targets page for error messages
       - **Authentication errors**: Verify SOPS secret is loaded:
@@ -92,27 +92,27 @@
         ```
       - **Port forward issues**: Check container is forwarding port 3923→13923:
         ```bash
-        sudo systemctl status container@secure-nginx
+        sudo systemctl status container@copyparty
         netstat -tuln | grep 13923
         ```
 
       ## Related Files
       - Module: /etc/nixos/modules/monitoring/services/copyparty-exporter.nix
       - Service config: /etc/nixos/modules/services/copyparty.nix
-      - Container config: /etc/nixos/modules/containers/secure-nginx.nix
+      - Container config: /etc/nixos/modules/containers/copyparty-container.nix
       - Prometheus config: /etc/nixos/modules/monitoring/services/prometheus-server.nix
       - Dashboard: /etc/nixos/modules/monitoring/dashboards/copyparty.json
 
       ## Service Management
       ```bash
       # Check service status (in container)
-      sudo machinectl shell secure-nginx /run/current-system/sw/bin/systemctl status copyparty
+      sudo machinectl shell copyparty /run/current-system/sw/bin/systemctl status copyparty
 
       # Restart service (in container)
-      sudo machinectl shell secure-nginx /run/current-system/sw/bin/systemctl restart copyparty
+      sudo machinectl shell copyparty /run/current-system/sw/bin/systemctl restart copyparty
 
       # View logs (in container)
-      sudo machinectl shell secure-nginx /run/current-system/sw/bin/journalctl -u copyparty -f
+      sudo machinectl shell copyparty /run/current-system/sw/bin/journalctl -u copyparty -f
 
       # Check Prometheus scraping
       curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="copyparty")'

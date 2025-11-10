@@ -240,13 +240,13 @@
     };
   };
 
-  # Create directory structure using 'D' directive (preserve existing contents)
-  # CRITICAL: Using 'D' instead of 'd' to prevent data loss on rebuild
+  # Create directory structure using 'd' directive (preserve existing contents)
+  # CRITICAL: Using 'd' to preserve contents - 'D' would empty directories on rebuild!
   systemd.tmpfiles.rules = [
-    "D /var/lib/paperless-ngx 0755 paperless paperless -"
-    "D /var/lib/paperless-ngx/data 0755 paperless paperless -"
-    "D /var/lib/paperless-ngx/media 0755 paperless paperless -"
-    "D /var/lib/paperless-ngx/consume 0777 paperless paperless -" # World-writable for easy document drop
+    "d /var/lib/paperless-ngx 0755 paperless paperless -"
+    "d /var/lib/paperless-ngx/data 0755 paperless paperless -"
+    "d /var/lib/paperless-ngx/media 0755 paperless paperless -"
+    "d /var/lib/paperless-ngx/consume 0777 paperless paperless -" # World-writable for easy document drop
   ];
 
   # Nginx reverse proxy configuration

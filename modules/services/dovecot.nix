@@ -5,11 +5,17 @@ let
   # Filters spam based on rspamd X-Spam headers
   # This script runs FIRST, before user's personal Sieve rules
   defaultSieveScript = pkgs.writeText "default.sieve" ''
-    require ["fileinto", "envelope"];
+    require ["fileinto", "envelope", "relational", "comparator-i;ascii-numeric"];
 
     # Check if rspamd marked this message as spam
     # Rspamd adds "X-Spam: Yes" header for spam messages via Postfix milter
-    if header :contains "X-Spam" "Yes" {
+    # OR if the X-Spam-Score is 10 or greater (catches high-scoring spam
+    # without "Yes" header)
+    if anyof (
+      header :contains "X-Spam" "Yes",
+      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "10"
+      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Level" "10"
+    ) {
       # Message is spam - file to Spam folder and stop processing
       fileinto "Spam";
       stop;

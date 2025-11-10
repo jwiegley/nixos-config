@@ -122,10 +122,9 @@ in
       networking = {
         firewall = {
           enable = true;
-          # Allow HTTP, rsync daemon, and copyparty metrics
+          # Allow HTTP, copyparty metrics
           allowedTCPPorts = [
             80
-            873
             3923
           ];
         };
@@ -150,7 +149,7 @@ in
         recommendedOptimisation = true;
         recommendedProxySettings = true;
 
-        virtualHosts."home.newartisans.com" = {
+        virtualHosts."data.newartisans.com" = {
           default = true;
           listen = [
             {
@@ -181,7 +180,7 @@ in
               proxy_set_header Host $host;
               proxy_set_header X-Real-IP $remote_addr;
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Proto https;
 
               # Timeouts for large uploads
               proxy_connect_timeout 300;
@@ -220,30 +219,6 @@ in
       };
       users.groups.nginx.gid = 60;
 
-      # Rsync daemon configuration for serving public files
-      services.rsyncd = {
-        enable = true;
-        socketActivated = true;
-        settings = {
-          globalSection = {
-            uid = "nginx";
-            gid = "nginx";
-            "use chroot" = true;
-            "max connections" = 10;
-            "log file" = "/var/log/rsyncd.log";
-            "transfer logging" = true;
-          };
-          sections = {
-            pub = {
-              path = "/var/www/home.newartisans.com/pub";
-              comment = "Public files for home.newartisans.com";
-              "read only" = true;
-              list = true;
-            };
-          };
-        };
-      };
-
       # Enable copyparty service with password files
       services.copyparty = {
         enable = true;
@@ -268,9 +243,6 @@ in
           ];
           wants = [ "copyparty.service" ];
         };
-        rsyncd = {
-          after = [ "var-www-home.newartisans.com.mount" ];
-        };
       };
     };
   };
@@ -282,15 +254,6 @@ in
       description = "Secure Nginx HTTP Socket (localhost only)";
       wantedBy = [ "sockets.target" ];
       listenStreams = [ "127.0.0.1:18080" ];
-      socketConfig = {
-        Accept = false;
-      };
-    };
-
-    "secure-nginx-rsync" = {
-      description = "Secure Nginx Rsync Socket (localhost only)";
-      wantedBy = [ "sockets.target" ];
-      listenStreams = [ "127.0.0.1:18873" ];
       socketConfig = {
         Accept = false;
       };
@@ -320,23 +283,6 @@ in
       ];
       serviceConfig = {
         ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 10.233.1.2:80";
-        PrivateTmp = true;
-        PrivateNetwork = false;
-      };
-    };
-
-    "secure-nginx-rsync" = {
-      description = "Proxy Rsync to secure-nginx container";
-      requires = [
-        "container@secure-nginx.service"
-        "secure-nginx-rsync.socket"
-      ];
-      after = [
-        "container@secure-nginx.service"
-        "secure-nginx-rsync.socket"
-      ];
-      serviceConfig = {
-        ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd 10.233.1.2:873";
         PrivateTmp = true;
         PrivateNetwork = false;
       };

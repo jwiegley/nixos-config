@@ -184,6 +184,7 @@
 
   # Add container users to Nix allowed-users for store access and container image operations
   nix.settings.allowed-users = [
+    "changedetection"
     "litellm"
     "metabase"
     "mindsdb"

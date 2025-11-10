@@ -26,29 +26,30 @@ let
     if [[ -n "''${1:-}" ]]; then
         dedup_mailboxes "$@"
     else
-        dedup_mailboxes                             \
-                                                    \
-            list/ledger                             \
-            list/haskell                            \
-            list/haskell/hackage-trustees           \
-            list/haskell/infrastructure             \
-            list/haskell/admin                      \
-            list/emacs/tangents                     \
-            list/emacs/org-mode                     \
-            list/emacs/devel                        \
-            list/bahai                              \
-            list/bahai/tarjuman                     \
-            list/bahai/c2g                          \
-            list/bahai/assembly                     \
-            list/bahai/andf                         \
-                                                    \
-            list/notifications                      \
-            list/misc                               \
-            list/github                             \
-                                                    \
-            mail/quantum                            \
-                                                    \
-            INBOX
+        dedup_mailboxes                   \
+            list/ledger                   \
+            list/haskell/infrastructure   \
+            list/haskell/hackage-trustees \
+            list/haskell/admin            \
+            list/emacs/org-mode           \
+            list/emacs/devel              \
+            list/emacs/tangents           \
+            list/bahai/tarjuman           \
+            list/bahai/c2g                \
+            list/bahai/assembly           \
+            list/bahai/andf               \
+            list/bahai                    \
+            list/vulcan                   \
+            list/notifications            \
+            list/misc                     \
+            list/github                   \
+            mail/quantum                  \
+            Archive                       \
+            INBOX                         \
+            Sent                          \
+            IsSpam                        \
+            Spam                          \
+            Trash
     fi
   '';
 in

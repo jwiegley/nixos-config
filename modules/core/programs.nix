@@ -18,6 +18,9 @@
     tmux.enable = true;
     vim.enable = true;
 
+    # Enable firejail with setuid wrapper for user-level sandboxing
+    firejail.enable = true;
+
     # Enable nix-ld for running pre-compiled binaries (e.g., npm native modules)
     nix-ld = {
       enable = true;

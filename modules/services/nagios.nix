@@ -241,6 +241,7 @@ let
     { name = "samba-nmbd.service"; display = "Samba NetBIOS Name Server"; mount = "/tank"; }
     { name = "samba-winbindd.service"; display = "Samba Winbind Daemon"; mount = "/tank"; }
     { name = "prometheus-zfs-exporter.service"; display = "ZFS Metrics Exporter"; mount = "/tank"; }
+    { name = "aria2.service"; display = "aria2 Download Manager"; mount = "/tank"; }
   ];
 
   # Monitoring Stack Services
@@ -254,6 +255,7 @@ let
     { name = "nagios.service"; display = "Nagios Monitoring"; }
     { name = "critical-services-exporter.service"; display = "Critical Services Exporter"; }
     { name = "dns-query-log-exporter.service"; display = "DNS Query Log Exporter"; }
+    { name = "aria2-exporter.service"; display = "aria2 Metrics Exporter"; }
   ];
 
   # Home Automation Services

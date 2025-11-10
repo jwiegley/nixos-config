@@ -93,6 +93,7 @@
     ../../modules/services/llama-swap.nix
     ../../modules/services/mindsdb.nix
     ../../modules/services/paperless.nix
+    ../../modules/services/aria2.nix
 
     # Containers
     ../../modules/containers/default.nix

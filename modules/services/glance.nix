@@ -197,6 +197,10 @@ with lib;
                           url = "https://home.newartisans.com";
                         }
                         {
+                          title = "aria2";
+                          url = "https://aria.vulcan.lan";
+                        }
+                        {
                           title = "Silly Tavern";
                           url = "https://silly-tavern.vulcan.lan";
                         }

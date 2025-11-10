@@ -321,6 +321,14 @@ in
         imapsieve_mailbox2_before = file:/var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve
         imapsieve_mailbox2_after = file:/var/lib/dovecot/sieve/global/rspamd/process-good.sieve
 
+        # Retrain folder: rescan through rspamd and redeliver via LDA
+        # This reprocesses messages as if they were freshly delivered via Postfix
+        # Rescans for spam, then applies full Sieve pipeline (default.sieve + active.sieve)
+        imapsieve_mailbox3_name = Retrain
+        imapsieve_mailbox3_causes = COPY APPEND
+        imapsieve_mailbox3_before = file:/var/lib/dovecot/sieve/global/rspamd/retrain.sieve
+        imapsieve_mailbox3_after = file:/var/lib/dovecot/sieve/global/rspamd/retrain-cleanup.sieve
+
         # Sieve pipe configuration
         # sieve_pipe_bin_dir is required for vnd.dovecot.pipe extension
         # Scripts must be in this directory for security reasons

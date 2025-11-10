@@ -50,6 +50,58 @@ let
     addflag "\\Deleted";
   '';
 
+  # Shell script to rescan message and redeliver via Postfix
+  retrainShellScript = pkgs.writeShellScript "rspamd-retrain.sh" ''
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Receive username as argument from Sieve
+    USER="$1"
+
+    if [ -z "$USER" ]; then
+      echo "ERROR: No username provided" >&2
+      exit 1
+    fi
+
+    # Reinject via sendmail to trigger full Postfix delivery pipeline:
+    # Postfix → rspamd milter (adds/updates X-Spam headers) → dovecot LMTP → Sieve filtering
+    # Use setuid wrapper to handle Postfix permissions
+    # -G: gateway submission (don't add headers)
+    # -i: ignore single dots on lines by themselves
+    # -f: envelope sender
+    exec /run/wrappers/bin/sendmail -G -i -f "$USER@localhost" "$USER@localhost"
+  '';
+
+  # Sieve script for retraining (when moved to Retrain folder)
+  retrainScript = pkgs.writeText "retrain.sieve" ''
+    require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+
+    # Capture the username from IMAP session
+    if environment :matches "imap.user" "*" {
+      set "username" "''${1}";
+    }
+
+    # Only process if in Retrain mailbox
+    if environment :matches "imap.mailbox" "*" {
+      set "mailbox" "''${1}";
+    }
+
+    if string "''${mailbox}" "Retrain" {
+      # Pipe message through rspamd for rescanning, then redeliver via LDA
+      # Pass username as argument so dovecot-lda knows where to deliver
+      pipe :copy "rspamd-retrain.sh" ["''${username}"];
+    }
+  '';
+
+  # Sieve script to clean up retrained messages
+  retrainCleanupScript = pkgs.writeText "retrain-cleanup.sieve" ''
+    require ["imap4flags"];
+
+    # Mark the original message in Retrain as deleted
+    # User's mail client will expunge it on next sync
+    addflag "\\Deleted";
+  '';
+
   # Note: moveToGoodScript removed - TrainGood now uses process-good.sieve directly
   # to re-filter messages via active.sieve instead of moving to Good folder first
 in
@@ -267,6 +319,9 @@ in
     "L+ /var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
     "L+ /var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
     "L+ /var/lib/dovecot/sieve/global/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
+    # Retrain folder scripts
+    "L+ /var/lib/dovecot/sieve/global/rspamd/retrain.sieve - - - - ${retrainScript}"
+    "L+ /var/lib/dovecot/sieve/global/rspamd/retrain-cleanup.sieve - - - - ${retrainCleanupScript}"
     # move-to-good.sieve removed - TrainGood now uses process-good.sieve directly
 
     # Sieve pipe executables directory
@@ -274,6 +329,7 @@ in
     "d /var/lib/dovecot/sieve-pipe-bin 0755 dovecot2 dovecot2 -"
     "L+ /var/lib/dovecot/sieve-pipe-bin/rspamd-learn-spam.sh - - - - ${learnSpamShellScript}"
     "L+ /var/lib/dovecot/sieve-pipe-bin/rspamd-learn-ham.sh - - - - ${learnHamShellScript}"
+    "L+ /var/lib/dovecot/sieve-pipe-bin/rspamd-retrain.sh - - - - ${retrainShellScript}"
   ];
 
   # Nginx virtual host for Rspamd web UI

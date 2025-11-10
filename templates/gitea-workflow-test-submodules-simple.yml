@@ -1,0 +1,48 @@
+name: Test Submodules (Simple)
+
+# Minimal workflow to verify submodules can be cloned
+# Place in: .gitea/workflows/test-submodules.yml
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test-submodules:
+    runs-on: nixos  # Change as needed: org-builder, ubuntu-latest, etc.
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify submodules
+        run: |
+          if [ ! -f .gitmodules ]; then
+            echo "No submodules in this repository"
+            exit 0
+          fi
+
+          echo "Submodule status:"
+          git submodule status --recursive
+
+          # Fail if any submodules are uninitialized
+          if git submodule status --recursive | grep -q '^-'; then
+            echo "ERROR: Uninitialized submodules found"
+            exit 1
+          fi
+
+          # Check directories are populated
+          submodules=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
+          for path in $submodules; do
+            if [ ! -d "$path" ] || [ ! "$(ls -A $path)" ]; then
+              echo "ERROR: Submodule directory missing or empty: $path"
+              exit 1
+            fi
+            echo "✓ $path"
+          done
+
+          echo "✅ All submodules verified successfully!"

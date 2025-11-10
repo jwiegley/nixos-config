@@ -66,14 +66,6 @@
     };
   };
 
-  # The runner service is automatically configured by the NixOS module
-  # Override DynamicUser since we created a static user with keys group membership
-  systemd.services."gitea-runner-org-builder" = {
-    serviceConfig = {
-      DynamicUser = lib.mkForce false;
-    };
-  };
-
   # Allow the gitea-runner user to access the Nix daemon
   nix.settings.trusted-users = [ "gitea-runner" ];
 }

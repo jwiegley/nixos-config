@@ -55,7 +55,6 @@ in
       # Expose client port to host
       publishPorts = [
         "127.0.0.1:6253:6253/tcp"
-        "10.88.0.1:6253:6253/tcp"
       ];
       networks = [ "podman" ];
     };

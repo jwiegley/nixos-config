@@ -57,60 +57,47 @@ in
   services.n8n = {
     enable = true;
 
-    # Webhook URL for external triggers (public Cloudflare Tunnel)
-    webhookUrl = "https://n8n.newartisans.com/";
+    # Configuration via environment variables (new format after nixpkgs update)
+    environment = {
+      # Webhook URL for external triggers (public Cloudflare Tunnel)
+      WEBHOOK_URL = "https://n8n.newartisans.com/";
 
-    # Configuration settings
-    settings = {
       # Database configuration - PostgreSQL
-      database = {
-        type = "postgresdb";
-        postgresdb = {
-          host = "/run/postgresql";
-          database = "n8n";
-          user = "n8n";
-        };
-      };
+      DB_TYPE = "postgresdb";
+      DB_POSTGRESDB_HOST = "/run/postgresql";
+      DB_POSTGRESDB_DATABASE = "n8n";
+      DB_POSTGRESDB_USER = "n8n";
+      # DB_POSTGRESDB_PASSWORD is set via EnvironmentFile from SOPS secret
 
       # Queue mode using Redis for better performance
-      executions = {
-        mode = "queue";
-      };
+      EXECUTIONS_MODE = "queue";
+      # QUEUE_BULL_REDIS_HOST and EXECUTIONS_PROCESS are set via EnvironmentFile
 
       # Public URL configuration for editor
-      host = "127.0.0.1";
-      port = 5678;
-      protocol = "http"; # nginx provides SSL termination
-      path = "/";
+      N8N_HOST = "127.0.0.1";
+      N8N_PORT = "5678";
+      N8N_PROTOCOL = "http"; # nginx provides SSL termination
+      N8N_PATH = "/";
 
       # Generic timezone
-      timezone = "America/Los_Angeles";
+      GENERIC_TIMEZONE = "America/Los_Angeles";
 
-      # User management
-      userManagement = {
-        disabled = false; # Enable user management for multi-user setup
-      };
+      # User management (disabled = false is the default, so we don't need to set it)
 
       # Credentials encryption
-      # Note: N8N_ENCRYPTION_KEY environment variable is set via systemd
+      # N8N_ENCRYPTION_KEY is set via EnvironmentFile from SOPS secret
 
       # Metrics endpoint for Prometheus
-      endpoints = {
-        metrics = {
-          enable = true;
-          prefix = "n8n_";
-          includeDefaultMetrics = true;
-          includeApiEndpoints = true;
-          includeMessageEventBusMetrics = true;
-          includeWorkflowIdLabel = true;
-        };
-      };
+      N8N_METRICS = "true";
+      N8N_METRICS_PREFIX = "n8n_";
+      N8N_METRICS_INCLUDE_DEFAULT_METRICS = "true";
+      N8N_METRICS_INCLUDE_API_ENDPOINTS = "true";
+      N8N_METRICS_INCLUDE_MESSAGE_EVENT_BUS_METRICS = "true";
+      N8N_METRICS_INCLUDE_WORKFLOW_ID_LABEL = "true";
 
       # Log configuration
-      logs = {
-        level = "info";
-        output = "console";
-      };
+      N8N_LOG_LEVEL = "info";
+      N8N_LOG_OUTPUT = "console";
     };
   };
 
@@ -144,7 +131,7 @@ in
       cat > /run/n8n/env <<EOF
       DB_POSTGRESDB_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/db-password")
       N8N_ENCRYPTION_KEY=$(cat "$CREDENTIALS_DIRECTORY/encryption-key")
-      QUEUE_BULL_REDIS_HOST=/run/redis-n8n/redis.sock
+      QUEUE_BULL_REDIS_PATH=/run/redis-n8n/redis.sock
       EXECUTIONS_PROCESS=main
       EOF
 

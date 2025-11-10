@@ -194,10 +194,10 @@ with lib;
                         }
                         {
                           title = "Copyparty";
-                          url = "https://home.newartisans.com";
+                          url = "https://data.newartisans.com";
                         }
                         {
-                          title = "aria2";
+                          title = "AriaNG";
                           url = "https://aria.vulcan.lan";
                         }
                         {
@@ -293,11 +293,11 @@ with lib;
                           url = "https://budget.vulcan.lan";
                         }
                         {
-                          title = "Paperless-ngx";
+                          title = "Paperless-NGX";
                           url = "https://paperless.vulcan.lan";
                         }
                         {
-                          title = "Paperless-ai";
+                          title = "Paperless-AI";
                           url = "https://paperless-ai.vulcan.lan";
                         }
                       ];

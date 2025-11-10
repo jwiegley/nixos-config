@@ -821,11 +821,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1762726122,
-        "narHash": "sha256-zxxbsFtRNa83ar/CKqY5dfZ/CKtN687eVX7Sd383Qfs=",
+        "lastModified": 1762739220,
+        "narHash": "sha256-l2JcACPwddw5A/LYtA5wFH6GaMIedsxYwN8DEOG/qhE=",
         "ref": "refs/heads/main",
-        "rev": "e4f0f8a9b5da228795f178e1ba0678f6678b9884",
-        "revCount": 72,
+        "rev": "1c2ff842b25c157356a2abf5db1bf2be51b1471c",
+        "revCount": 73,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

@@ -30,6 +30,8 @@
     ../monitoring/services/gitea-exporter.nix
     ../monitoring/services/paperless-exporter.nix
     ../monitoring/services/paperless-ai-exporter.nix
+    ../monitoring/services/aria2-exporter.nix
+    ../monitoring/services/aria2-alerts.nix
 
     # Infrastructure monitoring
     ../monitoring/services/certificate-exporter.nix

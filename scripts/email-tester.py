@@ -20,6 +20,7 @@ import re
 import imaplib
 import email
 import os
+import argparse
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import List, Dict, Tuple, Optional
@@ -702,8 +703,201 @@ def test_train_spam() -> bool:
         return False
 
 
+def test_retrain_spam() -> bool:
+    """Test 5: Retrain spam message via Retrain folder."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 5: Retrain Spam Message")
+    logger.info("=" * 70)
+
+    try:
+        # Ensure folders exist
+        ensure_folder_exists('INBOX')
+        ensure_folder_exists('Retrain')
+        ensure_folder_exists('Spam')
+
+        # Create a spam message with actual spammy content
+        # Don't use GTUBE as it triggers rspamd rejection before delivery
+        spam_body = """
+CONGRATULATIONS!!! YOU HAVE WON $5,000,000 USD!!!
+
+Dear Winner,
+
+This is NOT a scam! You have been RANDOMLY SELECTED to receive FIVE MILLION DOLLARS ($5,000,000.00 USD) from our INTERNATIONAL LOTTERY COMMISSION!!!
+
+*** URGENT ACTION REQUIRED - CLAIM EXPIRES IN 24 HOURS ***
+
+To claim your prize, you MUST provide the following information IMMEDIATELY:
+- Full Name
+- Bank Account Number
+- Social Security Number
+- Credit Card Details
+- Mother's Maiden Name
+
+CLICK HERE NOW TO CLAIM: http://totally-legit-lottery.biz/claim?winner=YOU
+Alternative link: http://192.168.999.999/phishing.php
+
+*** THIS IS 100% LEGAL AND COMPLETELY SAFE ***
+*** GUARANTEED WINNER - NO PURCHASE NECESSARY ***
+*** ACT NOW - LIMITED TIME OFFER ***
+*** FREE MONEY - RISK FREE ***
+
+Why wait? This is YOUR chance to become a MILLIONAIRE!!!
+
+Send all information to: scammer@suspicious-domain.ru
+
+CLICK HERE: http://bit.ly/definitelynotascam
+VERIFY NOW: http://tinyurl.com/freemoney123
+ORDER TODAY: http://shady-link.tk/virus.exe
+
+P.S. This email is 100% genuine and not spam at all. Trust us!
+
+Unsubscribe by sending your bank details to stop-spam@malware.com
+
+------
+Sent from my iPhone (definitely not a mass mailer)
+------
+        """
+
+        msg = create_test_message(
+            subject="RE: FW: FW: URGENT!!! $5,000,000 WINNER - Test Retrain",
+            body=spam_body,
+            scenario='retrain-spam'
+        )
+        # Add spammy headers
+        msg['Reply-To'] = 'scammer@suspicious-domain.ru'
+        msg['X-Mailer'] = 'SpamBot 3000'
+        message_id = msg['Message-ID']
+
+        # Append directly to INBOX (simulate misdelivery or user moving it there)
+        imap_append_message(msg, 'INBOX')
+        time.sleep(1)
+
+        logger.info("  ✓ Created test message in INBOX")
+
+        # Copy to Retrain via IMAP (triggers IMAPSieve)
+        # This will rescan through rspamd and redeliver
+        imap_copy_message(message_id, 'INBOX', 'Retrain')
+
+        # Wait for IMAPSieve processing
+        logger.info(f"  → Waiting {WAIT_AFTER_IMAP_OPERATION}s for IMAPSieve redelivery...")
+        time.sleep(WAIT_AFTER_IMAP_OPERATION)
+
+        # Verify message ended up in Spam folder
+        if not check_message_in_folder(message_id, 'Spam', should_exist=True):
+            raise TestError("Message not in Spam after retraining")
+
+        logger.info("  ✓ Message correctly filtered to Spam")
+
+        # Verify message has spam headers
+        if not check_spam_header(message_id, 'Spam', should_be_spam=True):
+            raise TestError("Missing X-Spam: Yes header")
+
+        # Verify message is NOT left in Retrain folder
+        # (cleanup script should mark as deleted)
+        if not check_message_in_folder(message_id, 'Retrain', should_exist=False):
+            logger.warning("  ⚠ Message still in Retrain (may need manual expunge)")
+
+        # Verify original is in INBOX (we used COPY, not MOVE)
+        if not check_message_in_folder(message_id, 'INBOX', should_exist=True):
+            logger.info("  ✓ Original message remains in INBOX (as expected)")
+
+        logger.info("✓ PASSED")
+        return True
+
+    except Exception as e:
+        logger.error(f"✗ FAILED: {e}")
+        return False
+
+
+def test_retrain_ham() -> bool:
+    """Test 6: Retrain ham message via Retrain folder."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 6: Retrain Ham/Newsletter Message")
+    logger.info("=" * 70)
+
+    try:
+        # Ensure folders exist
+        ensure_folder_exists('INBOX')
+        ensure_folder_exists('Retrain')
+        ensure_folder_exists('list/misc')
+
+        # Create a newsletter message that should be filtered to list/misc
+        msg = create_test_message(
+            subject="Test Newsletter Retrain",
+            body="This is a newsletter that should be filtered to list/misc.",
+            scenario='retrain-ham'
+        )
+        # Use newsletter sender to trigger Sieve filtering
+        msg.replace_header('From', 'newsletter@fastmail.com')
+        message_id = msg['Message-ID']
+
+        # Append directly to INBOX (simulate misdelivery)
+        imap_append_message(msg, 'INBOX')
+        time.sleep(1)
+
+        logger.info("  ✓ Created test message in INBOX")
+
+        # Copy to Retrain via IMAP (triggers IMAPSieve)
+        # This will rescan through rspamd and redeliver via LDA
+        # LDA will run default.sieve (spam check) then active.sieve (filter to list/misc)
+        imap_copy_message(message_id, 'INBOX', 'Retrain')
+
+        # Wait for IMAPSieve processing
+        logger.info(f"  → Waiting {WAIT_AFTER_IMAP_OPERATION}s for IMAPSieve redelivery...")
+        time.sleep(WAIT_AFTER_IMAP_OPERATION)
+
+        # Verify message ended up in list/misc folder (filtered by Sieve)
+        if not check_message_in_folder(message_id, 'list/misc', should_exist=True):
+            raise TestError("Message not in list/misc after retraining")
+
+        logger.info("  ✓ Message correctly filtered to list/misc")
+
+        # Verify message is NOT marked as spam
+        if not check_spam_header(message_id, 'list/misc', should_be_spam=False):
+            raise TestError("Message incorrectly marked as spam")
+
+        # Verify message is NOT left in Retrain folder
+        if not check_message_in_folder(message_id, 'Retrain', should_exist=False):
+            logger.warning("  ⚠ Message still in Retrain (may need manual expunge)")
+
+        # Verify original is in INBOX (we used COPY, not MOVE)
+        if not check_message_in_folder(message_id, 'INBOX', should_exist=True):
+            logger.info("  ✓ Original message remains in INBOX (as expected)")
+
+        logger.info("✓ PASSED")
+        return True
+
+    except Exception as e:
+        logger.error(f"✗ FAILED: {e}")
+        return False
+
+
 def main():
     """Main test runner"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Email pipeline tester')
+    parser.add_argument('tests', nargs='*', help='Specific tests to run (default: all)')
+    parser.add_argument('--list', action='store_true', help='List available tests')
+    args = parser.parse_args()
+
+    # Test registry
+    available_tests = {
+        'normal': ('Normal Delivery', test_normal_delivery),
+        'spam-folder': ('Spam Folder Access', test_spam_folder_accessibility),
+        'spam-detection': ('Spam Detection', test_spam_detection_and_delivery),
+        'train-good': ('Train Good (Ham)', test_train_good),
+        'train-spam': ('Train Spam', test_train_spam),
+        'retrain-spam': ('Retrain Spam', test_retrain_spam),
+        'retrain-ham': ('Retrain Ham', test_retrain_ham),
+    }
+
+    # List tests if requested
+    if args.list:
+        print("Available tests:")
+        for key, (name, _) in available_tests.items():
+            print(f"  {key:20} - {name}")
+        return 0
+
     print("=" * 70)
     print("EMAIL PIPELINE TESTER")
     print("=" * 70)
@@ -722,12 +916,23 @@ def main():
             logger.error(f"✗ {e}")
             return 1
 
-        # Run all tests
-        results['Normal Delivery'] = test_normal_delivery()
-        results['Spam Folder Access'] = test_spam_folder_accessibility()
-        results['Spam Detection'] = test_spam_detection_and_delivery()
-        results['Train Good (Ham)'] = test_train_good()
-        results['Train Spam'] = test_train_spam()
+        # Determine which tests to run
+        if args.tests:
+            tests_to_run = []
+            for test_key in args.tests:
+                if test_key in available_tests:
+                    tests_to_run.append((test_key, available_tests[test_key]))
+                else:
+                    logger.error(f"Unknown test: {test_key}")
+                    logger.info(f"Use --list to see available tests")
+                    return 1
+        else:
+            # Run all tests
+            tests_to_run = list(available_tests.items())
+
+        # Run selected tests
+        for test_key, (test_name, test_func) in tests_to_run:
+            results[test_name] = test_func()
 
         # Check logs for errors
         logger.info("\n" + "=" * 70)

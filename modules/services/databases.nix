@@ -79,6 +79,23 @@ in
 
         # Authentication settings
         password_encryption = "scram-sha-256";
+
+        # Logging configuration for troubleshooting
+        # Log slow queries (longer than 1 second)
+        log_min_duration_statement = 1000;  # milliseconds
+
+        # Log lock waits that take longer than deadlock_timeout
+        log_lock_waits = true;
+        deadlock_timeout = "1s";  # How long to wait before checking for deadlock
+
+        # Log checkpoints (helps identify I/O bottlenecks)
+        log_checkpoints = true;
+
+        # Log autovacuum activity
+        log_autovacuum_min_duration = 0;  # Log all autovacuum runs
+
+        # Include more context in logs
+        log_line_prefix = "%m [%p] %q%u@%d ";  # timestamp [pid] app_name user@database
       };
 
       ensureDatabases = [

@@ -37,6 +37,7 @@
     ../monitoring/services/certificate-exporter.nix
     ../monitoring/services/restic-metrics.nix
     ../monitoring/services/health-check-exporters.nix
+    ../monitoring/services/git-workspace-alerts.nix
 
     # External systems monitoring
     ../monitoring/services/opnsense-monitoring.nix

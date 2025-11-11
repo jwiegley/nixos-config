@@ -87,6 +87,11 @@ let
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
 
+    WORKSPACE_DIR="/var/lib/git-workspace-archive"
+    STATE_FILE="$WORKSPACE_DIR/.sync-state.json"
+    STATE_FILE_TMP="$STATE_FILE.tmp"
+    LOG_FILE="$WORKSPACE_DIR/sync.log"
+
     # Parse arguments
     if [[ "''${1:-}" == "--passwords" ]]; then
         source $2
@@ -115,17 +120,67 @@ let
     # Clean up any stale lock files from previous crashed runs
     cleanup_stale_locks
 
+    # Track sync metrics
+    START_TIME=$(${pkgs.coreutils}/bin/date +%s)
+    START_ISO=$(${pkgs.coreutils}/bin/date -Iseconds)
+
+    # Capture output to parse for failures
+    OUTPUT_FILE=$(${pkgs.coreutils}/bin/mktemp)
+    trap "${pkgs.coreutils}/bin/rm -f $OUTPUT_FILE" EXIT
+
     # Run update and fetch with single thread to avoid concurrency issues
     # These commands will still report "failures" for repos with multiple remotes
     # where git's atomic ref updates encounter race conditions, but the repos
     # are actually updated successfully - these are false-positive errors
-    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive update -t 1
-    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive fetch -t 1
+    echo "Starting git workspace sync at $START_ISO" | ${pkgs.coreutils}/bin/tee -a "$LOG_FILE"
+
+    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive update -t 1 2>&1 | ${pkgs.coreutils}/bin/tee -a "$OUTPUT_FILE" "$LOG_FILE" || true
+    ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive fetch -t 1 2>&1 | ${pkgs.coreutils}/bin/tee -a "$OUTPUT_FILE" "$LOG_FILE" || true
 
     if [[ "''${1:-}" == "--archive" ]]; then
         shift 1
-        ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive archive --force
+        ${pkgs.git}/bin/git workspace --workspace /var/lib/git-workspace-archive archive --force 2>&1 | ${pkgs.coreutils}/bin/tee -a "$LOG_FILE" || true
     fi
+
+    # Calculate metrics
+    END_TIME=$(${pkgs.coreutils}/bin/date +%s)
+    END_ISO=$(${pkgs.coreutils}/bin/date -Iseconds)
+    DURATION=$((END_TIME - START_TIME))
+
+    # Parse output for failures
+    # Use tail -1 to get only the last occurrence (from the final fetch command)
+    # and handle case where grep doesn't match by defaulting to 0
+    FAILED_COUNT=$(${pkgs.gnugrep}/bin/grep "repositories failed:" "$OUTPUT_FILE" | ${pkgs.coreutils}/bin/tail -1 | ${pkgs.gawk}/bin/awk '{print $1}' || echo "0")
+
+    # Ensure FAILED_COUNT is a valid number (default to 0 if empty or invalid)
+    if ! [[ "$FAILED_COUNT" =~ ^[0-9]+$ ]]; then
+        FAILED_COUNT=0
+    fi
+
+    # Extract failed repo names and reasons
+    FAILED_REPOS=$(${pkgs.gnugrep}/bin/grep -A 1000 "repositories failed:" "$OUTPUT_FILE" | ${pkgs.gnugrep}/bin/grep "^github/" | ${pkgs.coreutils}/bin/tr '\n' ',' | ${pkgs.gnused}/bin/sed 's/,$//' || echo "")
+
+    # Count total repos from workspace-lock.toml
+    TOTAL_REPOS=$(${pkgs.gnugrep}/bin/grep -c '^\[repo\]' "$WORKSPACE_DIR/workspace-lock.toml" || echo "0")
+    SUCCESSFUL_REPOS=$((TOTAL_REPOS - FAILED_COUNT))
+
+    # Write state file atomically
+    ${pkgs.coreutils}/bin/cat > "$STATE_FILE_TMP" <<EOF
+{
+  "last_run_start": "$START_ISO",
+  "last_run_end": "$END_ISO",
+  "duration_seconds": $DURATION,
+  "total_repos": $TOTAL_REPOS,
+  "successful": $SUCCESSFUL_REPOS,
+  "failed": $FAILED_COUNT,
+  "failed_repos": "$FAILED_REPOS",
+  "workspace_dir": "$WORKSPACE_DIR"
+}
+EOF
+    ${pkgs.coreutils}/bin/mv "$STATE_FILE_TMP" "$STATE_FILE"
+    ${pkgs.coreutils}/bin/chmod 644 "$STATE_FILE"
+
+    echo "Sync completed at $END_ISO. Duration: $DURATION seconds. Failed: $FAILED_COUNT/$TOTAL_REPOS" | ${pkgs.coreutils}/bin/tee -a "$LOG_FILE"
   '';
 in
 {

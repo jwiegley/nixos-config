@@ -90,6 +90,158 @@ let
     exit "$STATE_OK"
   '';
 
+  # Check plugin for git workspace sync status
+  checkGitWorkspaceSync = pkgs.writeShellScript "check_git_workspace_sync.sh" ''
+    set -euo pipefail
+
+    WORKSPACE_DIR="/var/lib/git-workspace-archive"
+    STATE_FILE="$WORKSPACE_DIR/.sync-state.json"
+
+    # Nagios exit codes
+    STATE_OK=0
+    STATE_WARNING=1
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+
+    # Check if state file exists
+    if [[ ! -f "$STATE_FILE" ]]; then
+      echo "UNKNOWN: Sync state file not found at $STATE_FILE - service may not have run yet"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Parse JSON using jq
+    if ! ${pkgs.jq}/bin/jq . "$STATE_FILE" >/dev/null 2>&1; then
+      echo "UNKNOWN: Sync state file is not valid JSON"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Extract metrics
+    LAST_RUN=$(${pkgs.jq}/bin/jq -r '.last_run_end' "$STATE_FILE")
+    TOTAL_REPOS=$(${pkgs.jq}/bin/jq -r '.total_repos' "$STATE_FILE")
+    SUCCESSFUL=$(${pkgs.jq}/bin/jq -r '.successful' "$STATE_FILE")
+    FAILED=$(${pkgs.jq}/bin/jq -r '.failed' "$STATE_FILE")
+    FAILED_REPOS=$(${pkgs.jq}/bin/jq -r '.failed_repos' "$STATE_FILE")
+    DURATION=$(${pkgs.jq}/bin/jq -r '.duration_seconds' "$STATE_FILE")
+
+    # Check if last run is recent (< 26 hours = daily + 2 hour buffer)
+    CURRENT_TIME=$(${pkgs.coreutils}/bin/date +%s)
+    LAST_RUN_TIME=$(${pkgs.coreutils}/bin/date -d "$LAST_RUN" +%s 2>/dev/null || echo 0)
+
+    if [[ "$LAST_RUN_TIME" -eq 0 ]]; then
+      echo "UNKNOWN: Unable to parse last run time: $LAST_RUN"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    AGE_HOURS=$(( (CURRENT_TIME - LAST_RUN_TIME) / 3600 ))
+
+    if [[ $AGE_HOURS -gt 26 ]]; then
+      echo "CRITICAL: Last sync was ''${AGE_HOURS}h ago (expected < 26h)"
+      exit "$STATE_CRITICAL"
+    fi
+
+    # Check repo count (alert if dropped significantly)
+    if [[ "$TOTAL_REPOS" -lt 500 ]]; then
+      echo "WARNING: Only $TOTAL_REPOS repos found (expected ~619) - possible config issue"
+      exit "$STATE_WARNING"
+    fi
+
+    # Check failure count
+    if [[ "$FAILED" -ge 10 ]]; then
+      echo "CRITICAL: $FAILED/$TOTAL_REPOS repos failed to sync. Failed: $FAILED_REPOS"
+      exit "$STATE_CRITICAL"
+    elif [[ "$FAILED" -ge 5 ]]; then
+      echo "WARNING: $FAILED/$TOTAL_REPOS repos failed to sync. Failed: $FAILED_REPOS"
+      exit "$STATE_WARNING"
+    elif [[ "$FAILED" -gt 0 ]]; then
+      echo "OK: $SUCCESSFUL/$TOTAL_REPOS repos synced successfully, $FAILED minor failures: $FAILED_REPOS"
+      exit "$STATE_OK"
+    fi
+
+    # All good
+    DURATION_MIN=$((DURATION / 60))
+    echo "OK: All $TOTAL_REPOS repos synced successfully in ''${DURATION_MIN}m (last run ''${AGE_HOURS}h ago)"
+    exit "$STATE_OK"
+  '';
+
+  # Check plugin for stale git repositories
+  checkGitWorkspaceStale = pkgs.writeShellScript "check_git_workspace_stale.sh" ''
+    set -euo pipefail
+
+    WORKSPACE_DIR="/var/lib/git-workspace-archive"
+    STALE_DAYS="''${1:-3}"  # Default: 3 days
+    STALE_PERCENT_WARN="''${2:-10}"  # Default: warn if > 10% stale
+    STALE_PERCENT_CRIT="''${3:-25}"  # Default: critical if > 25% stale
+
+    # Nagios exit codes
+    STATE_OK=0
+    STATE_WARNING=1
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+
+    # Check if workspace directory exists
+    if [[ ! -d "$WORKSPACE_DIR/github" ]]; then
+      echo "UNKNOWN: Workspace directory not found: $WORKSPACE_DIR/github"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Calculate stale threshold in seconds
+    STALE_SECONDS=$((STALE_DAYS * 86400))
+    CURRENT_TIME=$(${pkgs.coreutils}/bin/date +%s)
+    CUTOFF_TIME=$((CURRENT_TIME - STALE_SECONDS))
+
+    # Count total repos and stale repos
+    TOTAL_REPOS=0
+    STALE_REPOS=0
+    STALE_LIST=""
+
+    while IFS= read -r -d ''' fetch_head; do
+      TOTAL_REPOS=$((TOTAL_REPOS + 1))
+      FETCH_TIME=$(${pkgs.coreutils}/bin/stat -c %Y "$fetch_head" 2>/dev/null || echo 0)
+
+      if [[ "$FETCH_TIME" -lt "$CUTOFF_TIME" && "$FETCH_TIME" -gt 0 ]]; then
+        STALE_REPOS=$((STALE_REPOS + 1))
+        # Extract repo name from path
+        REPO_PATH=$(${pkgs.coreutils}/bin/dirname "$fetch_head")
+        REPO_NAME=$(echo "$REPO_PATH" | ${pkgs.gnused}/bin/sed "s|$WORKSPACE_DIR/||" | ${pkgs.gnused}/bin/sed 's|/.git$||')
+        AGE_DAYS=$(( (CURRENT_TIME - FETCH_TIME) / 86400 ))
+
+        if [[ $STALE_REPOS -le 10 ]]; then
+          # Only list first 10 stale repos to avoid too long output
+          STALE_LIST="''${STALE_LIST}$REPO_NAME(''${AGE_DAYS}d), "
+        fi
+      fi
+    done < <(${pkgs.findutils}/bin/find "$WORKSPACE_DIR/github" -name "FETCH_HEAD" -path "*/.git/FETCH_HEAD" -print0 2>/dev/null)
+
+    if [[ "$TOTAL_REPOS" -eq 0 ]]; then
+      echo "UNKNOWN: No repositories found in $WORKSPACE_DIR/github"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Calculate percentage
+    STALE_PERCENT=$((STALE_REPOS * 100 / TOTAL_REPOS))
+
+    # Trim trailing comma from stale list
+    STALE_LIST=$(echo "$STALE_LIST" | ${pkgs.gnused}/bin/sed 's/, $//')
+    if [[ $STALE_REPOS -gt 10 ]]; then
+      STALE_LIST="''${STALE_LIST}, and $((STALE_REPOS - 10)) more..."
+    fi
+
+    # Check thresholds
+    if [[ "$STALE_PERCENT" -ge "$STALE_PERCENT_CRIT" ]]; then
+      echo "CRITICAL: $STALE_REPOS/$TOTAL_REPOS repos (''${STALE_PERCENT}%) haven't been updated in >''${STALE_DAYS} days: $STALE_LIST"
+      exit "$STATE_CRITICAL"
+    elif [[ "$STALE_PERCENT" -ge "$STALE_PERCENT_WARN" ]]; then
+      echo "WARNING: $STALE_REPOS/$TOTAL_REPOS repos (''${STALE_PERCENT}%) haven't been updated in >''${STALE_DAYS} days: $STALE_LIST"
+      exit "$STATE_WARNING"
+    elif [[ "$STALE_REPOS" -gt 0 ]]; then
+      echo "OK: $STALE_REPOS/$TOTAL_REPOS repos (''${STALE_PERCENT}%) are >''${STALE_DAYS} days old (acceptable): $STALE_LIST"
+      exit "$STATE_OK"
+    fi
+
+    echo "OK: All $TOTAL_REPOS repos have been updated within the last ''${STALE_DAYS} days"
+    exit "$STATE_OK"
+  '';
+
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";
 
@@ -758,6 +910,16 @@ let
       command_line    ${checkBackupAge} $ARG1$ $ARG2$
     }
 
+    define command {
+      command_name    check_git_workspace_sync
+      command_line    ${checkGitWorkspaceSync}
+    }
+
+    define command {
+      command_name    check_git_workspace_stale
+      command_line    ${checkGitWorkspaceStale} $ARG1$ $ARG2$ $ARG3$
+    }
+
     ###############################################################################
     # HOSTS
     ###############################################################################
@@ -1344,6 +1506,28 @@ let
     }
 
     ###############################################################################
+    # SERVICES - GIT WORKSPACE ARCHIVE
+    ###############################################################################
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Git Workspace Sync Status
+      check_command           check_git_workspace_sync
+      check_interval          10
+      service_groups          backup-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Git Workspace Stale Repositories
+      check_command           check_git_workspace_stale!3!10!25
+      check_interval          60
+      service_groups          backup-services
+    }
+
+    ###############################################################################
     # SERVICES - HOME ASSISTANT
     ###############################################################################
 
@@ -1535,6 +1719,8 @@ in
       inetutils  # for hostname
       bc  # calculator for check_ssl_cert
       gawk  # required by check_ssl_cert for certificate parsing
+      jq  # required by check_git_workspace_sync for JSON parsing
+      findutils  # required by check_git_workspace_stale for find command
     ];
 
     # Validate configuration at build time

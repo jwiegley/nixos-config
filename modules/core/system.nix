@@ -35,4 +35,38 @@
       generateKey = true;
     };
   };
+
+  # Systemd coredump configuration with limits
+  # Prevents excessive disk usage and CPU load from core dump processing
+  # See: coredump.conf(5) for details
+  systemd.coredump = {
+    enable = true;
+    extraConfig = ''
+      # Storage mode: "external" stores cores in /var/lib/systemd/coredump
+      # Alternative: "journal" stores in journal (slower, more space-efficient)
+      Storage=external
+
+      # Compress core dumps with zstd (reduces storage significantly)
+      Compress=yes
+
+      # Processing limits to prevent system overload during mass crashes
+      # ProcessSizeMax: Maximum size of a single core dump (500M)
+      ProcessSizeMax=500M
+
+      # ExternalSizeMax: Total disk space for all external core dumps (2G)
+      # This limits /var/lib/systemd/coredump to 2GB
+      ExternalSizeMax=2G
+
+      # JournalSizeMax: Total disk space for journal-stored cores (1G)
+      JournalSizeMax=1G
+
+      # KeepFree: Minimum free space to maintain on disk (5G)
+      # Prevents core dumps from filling up the filesystem
+      KeepFree=5G
+
+      # MaxUse: Maximum total disk usage by coredump (3G)
+      # Combined limit for both external and journal storage
+      MaxUse=3G
+    '';
+  };
 }

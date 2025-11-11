@@ -117,6 +117,7 @@ in
       task-master-ai
       tcpdump
       traceroute
+      tree
       zfs-prune-snapshots
       llama-swap
       llama-cpp

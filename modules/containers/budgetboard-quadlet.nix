@@ -49,6 +49,26 @@ in
     '';
   };
 
+  # Cleanup service to handle stale pods/containers after reboot
+  # This prevents cgroup errors when the pod service tries to start
+  systemd.services.budget-board-cleanup = {
+    description = "Cleanup stale BudgetBoard pod and containers";
+    before = [ "budget-board-pod.service" ];
+    wantedBy = [ "budget-board-pod.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Remove any leftover pod and containers from previous session
+      # Ignore errors from stale cgroups after reboot
+      ${pkgs.podman}/bin/podman pod rm -f budget-board || true
+      ${pkgs.podman}/bin/podman rm -f budget-board-server budget-board-client || true
+    '';
+  };
+
   # BudgetBoard Pod - containers share network namespace
   virtualisation.quadlet.pods.budget-board = {
     podConfig = {

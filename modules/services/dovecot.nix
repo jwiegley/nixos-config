@@ -371,6 +371,24 @@ in
         mailbox "[Gmail]/Spam" {
           special_use = \Junk
         }
+
+        # Training folders with auto-expunge for cleanup
+        # Messages marked as \Deleted are automatically removed after 1 day
+        mailbox "TrainSpam" {
+          autoexpunge = 7d
+        }
+        mailbox "TrainGood" {
+          autoexpunge = 7d
+        }
+        mailbox "Retrain" {
+          autoexpunge = 7d
+        }
+        # mailbox "Trash" {
+        #   autoexpunge = 90d
+        # }
+        # mailbox "IsSpam" {
+        #   autoexpunge = 90d
+        # }
       }
     '';
   };

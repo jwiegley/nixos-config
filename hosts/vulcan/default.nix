@@ -52,6 +52,7 @@
     ../../modules/monitoring/nagios-daily-report.nix
     ../../modules/monitoring/container-health-exporter.nix
     ../../modules/monitoring/services/windows-exporter.nix
+    ../../modules/monitoring/services/git-workspace-exporter.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/network-services.nix
     ../../modules/services/ntopng.nix

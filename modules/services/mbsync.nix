@@ -32,7 +32,7 @@ in
         Patterns INBOX Sent mail/* list/*
         Create Both
         Remove None
-        Expunge Both
+        # Expunge Both
         Sync Full
         SyncState /var/lib/mbsync-johnw/
         CopyArrivalDate yes

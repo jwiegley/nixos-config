@@ -23,7 +23,6 @@ let
     { name = "tank/Desktop";                  mountpoint = "/tank/Desktop"; }
     { name = "tank/Documents";                mountpoint = "/tank/Documents"; }
     { name = "tank/Downloads";                mountpoint = "/tank/Downloads"; }
-    { name = "tank/Files";                    mountpoint = "/tank/Files"; }
     { name = "tank/Home";                     mountpoint = "/tank/Home"; }
     { name = "tank/Machines";                 mountpoint = "/tank/Machines"; }
     { name = "tank/Media";                    mountpoint = "/tank/Media"; }

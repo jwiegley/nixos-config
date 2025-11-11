@@ -13,7 +13,7 @@ let
     # without "Yes" header)
     if anyof (
       header :contains "X-Spam" "Yes",
-      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "10"
+      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "10",
       header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Level" "10"
     ) {
       # Message is spam - file to Spam folder and stop processing

@@ -333,6 +333,9 @@ in
       # Weather
       "accuweather" # AccuWeather weather forecasts
       "nws" # National Weather Service (NOAA) weather forecasts
+
+      # Metrics export
+      "influxdb" # InfluxDB integration for pushing metrics to VictoriaMetrics
     ];
 
     # Home Assistant configuration (YAML format)
@@ -678,6 +681,50 @@ in
           ];
         }
       ];
+
+      # InfluxDB integration for pushing metrics to VictoriaMetrics
+      # VictoriaMetrics accepts InfluxDB line protocol via /write endpoint
+      influxdb = {
+        host = "127.0.0.1";
+        port = 8428;
+        database = "homeassistant";  # Required for compatibility, ignored by VictoriaMetrics
+
+        # Push metrics every 60 seconds (aligned with VictoriaMetrics scrape interval)
+        max_retries = 3;
+        default_measurement = "state";
+
+        # Include domains - aligned with previous Prometheus exporter filter
+        include = {
+          domains = [
+            "sensor"
+            "climate"
+            "binary_sensor"
+            "lock"
+            "switch"
+            "light"
+            "cover"
+            "fan"
+            "person"
+            "device_tracker"
+            "media_player"  # Bose speaker, LG webOS TV, etc.
+            "vacuum"        # Dreame robot vacuum
+            "camera"        # Ring doorbell cameras
+            "update"        # Integration and device updates
+            "button"        # Device buttons
+          ];
+        };
+
+        # Exclude noisy entities - aligned with previous Prometheus exporter filter
+        exclude = {
+          entity_globs = [
+            "sensor.weather_*"
+            # Dreame Vacuum: Exclude per-room cleaning configuration entities
+            "select.*_room_*"
+            "sensor.*_room_*"
+            "switch.*_room_*"
+          ];
+        };
+      };
 
       # HomeKit Bridge integration
       # Exposes Home Assistant entities to Apple HomeKit for Siri control

@@ -221,7 +221,10 @@ in
         # Load GitHub token as a systemd credential
         LoadCredential = "github-token:${config.sops.secrets."github-token".path}";
         # Ensure directory permissions allow monitoring users (prometheus, nagios) to read
-        ExecStartPost = "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive";
+        ExecStartPost = [
+          "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive"
+          "${pkgs.coreutils}/bin/chmod -R g+rX /var/lib/git-workspace-archive/github"
+        ];
       };
     };
 

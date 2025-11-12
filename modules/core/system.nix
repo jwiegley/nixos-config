@@ -36,6 +36,14 @@
     };
   };
 
+  # zram swap configuration
+  # Provides compressed swap in RAM to prevent OOM kills during memory pressure
+  # 50% of RAM (32GB) can hold ~64-96GB of compressed data
+  zramSwap = {
+    enable = true;
+    memoryPercent = 50;
+  };
+
   # Systemd coredump configuration with limits
   # Prevents excessive disk usage and CPU load from core dump processing
   # See: coredump.conf(5) for details

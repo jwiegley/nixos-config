@@ -12,7 +12,6 @@ let
   # Configuration file for ntopng (using command-line option format)
   ntopngConfig = pkgs.writeText "ntopng.conf" ''
     -i=end0
-    -i=podman0
     -i=wlp1s0f0
     -w=${toString ntopngPort}
     --http-bind-address=127.0.0.1

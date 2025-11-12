@@ -79,6 +79,9 @@ in
     ];
   };
 
+  # Ensure prometheus user can access git-workspace-archive directory
+  users.users.prometheus.extraGroups = [ "johnw" ];
+
   # Firewall configuration for Prometheus server
   networking.firewall.interfaces."lo".allowedTCPPorts = [
     config.services.prometheus.port

@@ -86,15 +86,22 @@ EOF
     # This gives us per-repo freshness metrics
     REPO_COUNT=0
     if [[ -d "$WORKSPACE_DIR/github" ]]; then
-      while IFS= read -r -d $'\0' fetch_head; do
+      # Use find -printf to get mtime without separate stat calls (much faster)
+      while IFS= read -r -d $'\0' line; do
         REPO_COUNT=$((REPO_COUNT + 1))
+
+        # Parse the find output: "mtime path"
+        FETCH_TIME=''${line%% *}
+        fetch_head=''${line#* }
+
+        # Convert fractional timestamp to integer
+        FETCH_TIME=''${FETCH_TIME%.*}
 
         # Extract repo path relative to workspace
         REPO_PATH=$(${pkgs.coreutils}/bin/dirname "$fetch_head")
         REPO_NAME=$(echo "$REPO_PATH" | ${pkgs.gnused}/bin/sed "s|$WORKSPACE_DIR/||" | ${pkgs.gnused}/bin/sed 's|/.git$||')
 
-        # Get FETCH_HEAD modification time
-        FETCH_TIME=$(${pkgs.coreutils}/bin/stat -c %Y "$fetch_head" 2>/dev/null || echo "0")
+        # Calculate age
         AGE_SECONDS=$((CURRENT_TIME - FETCH_TIME))
 
         # Track stale repos
@@ -107,10 +114,12 @@ EOF
         # We'll export the 50 stalest repos
         echo "$AGE_SECONDS $FETCH_TIME $REPO_NAME" >> "$TEMP_FILE.repos"
 
-      done < <(${pkgs.findutils}/bin/find "$WORKSPACE_DIR/github" -name "FETCH_HEAD" -path "*/.git/FETCH_HEAD" -print0 2>/dev/null)
+      done < <(${pkgs.findutils}/bin/find "$WORKSPACE_DIR/github" -name "FETCH_HEAD" -path "*/.git/FETCH_HEAD" -printf '%T@ %p\0' 2>/dev/null)
 
       # Sort by age (descending) and take top 50 stalest repos
+      # Disable pipefail temporarily to prevent SIGPIPE when head closes the pipe
       if [[ -f "$TEMP_FILE.repos" ]]; then
+        set +o pipefail
         ${pkgs.coreutils}/bin/sort -rn "$TEMP_FILE.repos" | ${pkgs.coreutils}/bin/head -50 | while read age fetch_time repo_name; do
           # Escape repo name for Prometheus label (replace special chars with _)
           SAFE_REPO_NAME=$(echo "$repo_name" | ${pkgs.gnused}/bin/sed 's/[^a-zA-Z0-9_\/]/_/g')
@@ -119,6 +128,7 @@ git_workspace_repo_last_fetch_timestamp_seconds{repository="$SAFE_REPO_NAME"} $f
 git_workspace_repo_age_seconds{repository="$SAFE_REPO_NAME"} $age
 EOF
         done
+        set -o pipefail
         ${pkgs.coreutils}/bin/rm -f "$TEMP_FILE.repos"
       fi
     fi
@@ -172,13 +182,15 @@ in
     };
   };
 
-  # Timer to collect metrics every 5 minutes
+  # Timer to collect metrics twice daily
+  # Runs at 00:30 (after daily git-workspace-archive sync at 00:00)
+  # and at 12:00 (midday verification check)
   systemd.timers.git-workspace-metrics = {
     description = "Timer for Git Workspace metrics collection";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "5min";
+      OnCalendar = [ "00:30" "12:00" ];
+      Persistent = true;
       Unit = "git-workspace-metrics.service";
     };
   };

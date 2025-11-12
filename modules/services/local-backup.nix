@@ -37,6 +37,8 @@ let
         "tmp/"
         "run/"
         "lock/"
+        # Exclude Loki chunks (constantly changing, causes rsync timeouts)
+        "lib/loki/"
         # Exclude large log files (optional - keep if you want logs backed up)
         # "log/"
       ];

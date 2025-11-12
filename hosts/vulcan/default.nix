@@ -71,6 +71,7 @@
     ../../modules/services/postfix.nix
     ../../modules/services/dovecot.nix
     ../../modules/services/dovecot-imapsieve-monitor.nix
+    ../../modules/services/dovecot-archive.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/roundcube.nix

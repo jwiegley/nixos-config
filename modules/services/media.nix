@@ -11,7 +11,14 @@
   };
 
   # Configure Jellyfin to trust nginx as a known proxy
-  systemd.services.jellyfin.preStart = ''
+  systemd.services.jellyfin = {
+    # Set umask to allow group-read permissions on new files
+    # This ensures new log files are created with 640 instead of 600
+    # so promtail (in jellyfin group) can read them
+    # Use mkForce to override the default 0077 umask from jellyfin module
+    serviceConfig.UMask = lib.mkForce "0027";
+
+    preStart = ''
     # Ensure config directory exists
     mkdir -p ${config.services.jellyfin.configDir}
 
@@ -61,7 +68,8 @@
           "$NETWORK_XML"
       fi
     fi
-  '';
+    '';
+  };
 
   services.nginx.virtualHosts."jellyfin.vulcan.lan" = {
     forceSSL = true;

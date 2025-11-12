@@ -2015,10 +2015,10 @@ in
     "d /run/nagios/spool/checkresults 0755 nagios nagios -"
 
     # Allow nagios user to traverse /tank/Backups to check backup timestamps
-    # Mode 701 allows owner (johnw) full access, but others can only traverse (execute)
-    # This enables nagios to access specific files like /tank/Backups/Machines/Vulcan/.etc.latest
-    # without being able to list directory contents
-    "z /tank/Backups 0701 johnw johnw -"
+    # Mode 0711 allows owner (johnw) full access, group and others can traverse (execute)
+    # This enables nagios (member of johnw group) to access specific files like
+    # /tank/Backups/Machines/Vulcan/.etc.latest without being able to list directory contents
+    "z /tank/Backups 0711 johnw johnw -"
   ];
 
   # Ensure tmpfiles setup runs after ZFS mounts

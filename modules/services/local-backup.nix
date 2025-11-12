@@ -107,8 +107,11 @@ let
 
       # Run rsync and capture exit code
       # Using --info=progress2 for better monitoring, --timeout=60 to detect stalls
+      # Temporarily disable set -e to properly capture rsync exit codes (especially 23/24 for vanished files)
+      set +e
       eval "${pkgs.rsync}/bin/rsync -aHx --delete --timeout=60 --info=progress2 $exclude_args '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
       rc=$?
+      set -e
 
       # Exit codes: 0=success, 23=partial transfer, 24=vanished files (all acceptable)
       if [[ $rc -eq 0 || $rc -eq 23 || $rc -eq 24 ]]; then

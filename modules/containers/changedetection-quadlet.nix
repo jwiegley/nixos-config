@@ -41,6 +41,18 @@ in
 
       # Nginx virtual host disabled - manually configured below for custom hostname
       nginxVirtualHost = null;
+
+      # Filter out HTTP access logs that are logged to stderr at error priority
+      # The app writes normal access logs (e.g., "GET / HTTP/1.1 200") to stderr,
+      # causing them to appear as error-level messages in journald and trigger alerts.
+      # Use pattern matching to filter only access logs, preserving actual error messages.
+      extraServiceConfig = {
+        # Filter out successful HTTP access logs (200-399 status codes)
+        # Pattern: IP - - [date] "METHOD /path HTTP/1.x" 2xx/3xx -
+        LogFilterPatterns = [
+          "~.*(GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS) .* HTTP/1\\.[0-9]. [23][0-9][0-9] -"
+        ];
+      };
     })
   ];
 

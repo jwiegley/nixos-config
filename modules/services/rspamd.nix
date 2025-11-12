@@ -156,6 +156,15 @@ in
 
     # Use local Redis instance for statistics
     locals = {
+      "logging.inc".text = ''
+        # Logging configuration - reduce verbosity to warnings and errors only
+        # This significantly reduces log volume from ~60 logs/sec to <1 log/sec
+        level = "warning";
+
+        # Keep systemd journal logging but with reduced verbosity
+        systemd = true;
+      '';
+
       "options.inc".text = ''
         # DNS configuration for better performance
         # Rspamd can make 20-64 concurrent DNS queries per message for RBLs/SURBLs/URIBLs

@@ -13,16 +13,10 @@ in
       requiresPostgres = true;
       containerUser = "teable";  # Run rootless as dedicated teable user
 
-      # Enable health checks
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "http";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "60s";
-        retries = 3;
-        httpPath = "/";
-        httpPort = 3000;  # Internal container port
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

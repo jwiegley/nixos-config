@@ -13,15 +13,10 @@ in
       requiresPostgres = false;
       containerUser = "sillytavern";  # Run rootless as dedicated sillytavern user
 
-      # Enable health checks
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "exec";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "30s";
-        retries = 3;
-        execCommand = "wget --spider -q http://127.0.0.1:8000/ || exit 1";
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

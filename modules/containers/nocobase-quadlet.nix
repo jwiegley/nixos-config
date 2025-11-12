@@ -13,15 +13,10 @@ in
       requiresPostgres = true;
       containerUser = "nocobase";  # Run rootless as dedicated nocobase user
 
-      # Enable health checks
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "exec";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "90s";  # NocoBase needs time to initialize
-        retries = 3;
-        execCommand = "node -e \"require('http').get('http://localhost:80/', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\"";
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

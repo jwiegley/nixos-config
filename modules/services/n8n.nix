@@ -60,7 +60,8 @@ in
     # Configuration via environment variables (new format after nixpkgs update)
     environment = {
       # Webhook URL for external triggers (public Cloudflare Tunnel)
-      WEBHOOK_URL = "https://n8n.newartisans.com/";
+      # WEBHOOK_URL = "https://n8n.newartisans.com/";
+      WEBHOOK_URL = "https://n8n.vulcan.lan/";
 
       # Database configuration - PostgreSQL
       DB_TYPE = "postgresdb";
@@ -98,6 +99,11 @@ in
       # Log configuration
       N8N_LOG_LEVEL = "info";
       N8N_LOG_OUTPUT = "console";
+
+      # Disable external telemetry/analytics (blocked by Technitium DNS ad-blocker anyway)
+      N8N_DIAGNOSTICS_ENABLED = "false";
+      N8N_VERSION_NOTIFICATIONS_ENABLED = "false";
+      N8N_DISABLE_PRODUCTION_MAIN_PROCESS = "true";
     };
   };
 

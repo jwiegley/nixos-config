@@ -16,6 +16,8 @@
         grpc_listen_port = 9096;
         log_level = "info";
         grpc_server_max_concurrent_streams = 1000;
+        grpc_server_max_recv_msg_size = 33554432; # 32MB (default is 4MB)
+        grpc_server_max_send_msg_size = 33554432; # 32MB
       };
 
       # Common configuration - minimal for single-instance
@@ -113,6 +115,7 @@
     # Deploy Loki alert rules (fake tenant for single-tenant mode)
     "d /var/lib/loki/rules/fake 0755 loki loki -"
     "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
+    "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
   ];
 
   # Loki nginx upstream with retry logic

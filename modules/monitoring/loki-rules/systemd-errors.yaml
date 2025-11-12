@@ -1,0 +1,74 @@
+groups:
+  - name: systemd_journal_errors
+    interval: 5m
+    rules:
+      # Alert on high error rate in systemd journal
+      # Triggers if more than 10 errors in 10 minutes (excluding known transient issues)
+      - alert: SystemdJournalHighErrorRate
+        expr: |
+          sum(rate({job="systemd-journal"} |~ "level=error|ERROR|failed"
+            != "connection refused"
+            != "max retries"
+            != "Temporary failure in name resolution"
+            [10m])) * 600 > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          summary: "High error rate detected in systemd journal"
+          description: "More than 10 errors detected in the last 10 minutes across systemd services. This indicates potential system instability that requires investigation."
+
+      # Alert on critical errors in systemd journal
+      # Triggers on any CRITICAL level errors
+      - alert: SystemdJournalCriticalError
+        expr: |
+          count_over_time({job="systemd-journal"} |~ "CRITICAL|level=critical|panic|fatal" [5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: logs
+        annotations:
+          summary: "Critical error detected in systemd journal"
+          description: "A critical-level error has been detected in the systemd journal. This requires immediate attention."
+
+      # Alert on specific service errors with high frequency
+      # Excludes expected transient errors
+      - alert: SystemdServicePersistentErrors
+        expr: |
+          sum by (unit) (count_over_time({job="systemd-journal"}
+            |~ "level=error|ERROR"
+            | json
+            | unit != ""
+            [10m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          summary: "Service {{ $labels.unit }} generating persistent errors"
+          description: "Service {{ $labels.unit }} has generated more than 10 errors in the last 10 minutes. This may indicate a configuration problem or service malfunction."
+
+      # Alert on OOM (Out of Memory) kills
+      - alert: SystemdOOMKill
+        expr: |
+          count_over_time({job="systemd-journal"} |~ "Out of memory|OOM|oom-kill|killed process" [10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: logs
+        annotations:
+          summary: "Out of Memory event detected"
+          description: "A process was killed due to OOM condition. System may be under memory pressure."
+
+      # Alert on segmentation faults
+      - alert: SystemdSegmentationFault
+        expr: |
+          count_over_time({job="systemd-journal"} |~ "segfault|segmentation fault|SIGSEGV" [10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          summary: "Segmentation fault detected"
+          description: "A process has crashed with a segmentation fault. This may indicate a software bug or memory corruption."

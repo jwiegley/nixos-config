@@ -15,16 +15,10 @@ in
 
       publishPorts = [ "127.0.0.1:3002:3000/tcp" ];
 
-      # Enable comprehensive health monitoring
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "http";
-        interval = "30s";
-        timeout = "5s";
-        startPeriod = "30s";  # OpenSpeedTest starts quickly
-        retries = 3;
-        httpPath = "/";
-        httpPort = 3000;  # Internal container port
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

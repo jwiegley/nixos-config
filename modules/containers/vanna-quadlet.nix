@@ -18,15 +18,10 @@ in
         pull = "never";
       };
 
-      # Enable health checks using Python (Flask app)
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "exec";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "45s";
-        retries = 3;
-        execCommand = "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=5)\"";
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

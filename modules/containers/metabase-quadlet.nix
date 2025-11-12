@@ -13,16 +13,10 @@ in
       requiresPostgres = true;
       containerUser = "metabase";  # Run rootless as dedicated metabase user
 
-      # Enable health checks
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "http";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "120s";  # Metabase takes time to initialize
-        retries = 3;
-        httpPath = "/api/health";
-        httpPort = 3000;  # Internal container port
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

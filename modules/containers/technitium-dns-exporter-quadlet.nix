@@ -55,15 +55,10 @@ in
       requiresPostgres = false;
       containerUser = "technitium-dns-exporter";  # Run rootless as dedicated technitium-dns-exporter user
 
-      # Enable health checks
+      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
+      # External monitoring via Prometheus/blackbox exporter is used instead
       healthCheck = {
-        enable = true;
-        type = "exec";
-        interval = "30s";
-        timeout = "10s";
-        startPeriod = "30s";
-        retries = 3;
-        execCommand = "wget --spider -q http://localhost:8080/metrics || exit 1";
+        enable = false;
       };
       enableWatchdog = false;  # Disabled - requires sdnotify
 

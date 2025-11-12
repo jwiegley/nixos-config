@@ -150,7 +150,7 @@ let
     # Parse output for failures
     # Use tail -1 to get only the last occurrence (from the final fetch command)
     # and handle case where grep doesn't match by defaulting to 0
-    FAILED_COUNT=$(${pkgs.gnugrep}/bin/grep "repositories failed:" "$OUTPUT_FILE" | ${pkgs.coreutils}/bin/tail -1 | ${pkgs.gawk}/bin/awk '{print $1}' || echo "0")
+    FAILED_COUNT=$(${pkgs.gnugrep}/bin/grep "repositories failed:" "$OUTPUT_FILE" | ${pkgs.coreutils}/bin/tail -1 | ${pkgs.gawk}/bin/awk '{print $1}' | ${pkgs.coreutils}/bin/tr -d '\n ' || echo "0")
 
     # Ensure FAILED_COUNT is a valid number (default to 0 if empty or invalid)
     if ! [[ "$FAILED_COUNT" =~ ^[0-9]+$ ]]; then
@@ -161,7 +161,13 @@ let
     FAILED_REPOS=$(${pkgs.gnugrep}/bin/grep -A 1000 "repositories failed:" "$OUTPUT_FILE" | ${pkgs.gnugrep}/bin/grep "^github/" | ${pkgs.coreutils}/bin/tr '\n' ',' | ${pkgs.gnused}/bin/sed 's/,$//' || echo "")
 
     # Count total repos from workspace-lock.toml
-    TOTAL_REPOS=$(${pkgs.gnugrep}/bin/grep -c '^\[repo\]' "$WORKSPACE_DIR/workspace-lock.toml" || echo "0")
+    TOTAL_REPOS=$(${pkgs.gnugrep}/bin/grep -c '^\[\[repo\]\]' "$WORKSPACE_DIR/workspace-lock.toml" 2>/dev/null | ${pkgs.coreutils}/bin/tr -d '\n ' || echo "0")
+
+    # Ensure TOTAL_REPOS is a valid number (default to 0 if empty or invalid)
+    if ! [[ "$TOTAL_REPOS" =~ ^[0-9]+$ ]]; then
+        TOTAL_REPOS=0
+    fi
+
     SUCCESSFUL_REPOS=$((TOTAL_REPOS - FAILED_COUNT))
 
     # Write state file atomically
@@ -214,6 +220,8 @@ in
         ExecStart = "${workspaceUpdateScript} --archive";
         # Load GitHub token as a systemd credential
         LoadCredential = "github-token:${config.sops.secrets."github-token".path}";
+        # Ensure directory permissions allow monitoring users (prometheus, nagios) to read
+        ExecStartPost = "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive";
       };
     };
 

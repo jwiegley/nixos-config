@@ -1974,7 +1974,8 @@ in
   users.users.nginx.extraGroups = [ "nagios" ];
 
   # Ensure nagios user is in podman group for container monitoring
-  users.users.nagios.extraGroups = [ "podman" ];
+  # and johnw group for accessing git-workspace-archive
+  users.users.nagios.extraGroups = [ "podman" "johnw" ];
 
   # Create command file directory with proper permissions
   systemd.services.nagios-rw-directory = {

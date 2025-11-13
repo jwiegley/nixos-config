@@ -71,7 +71,7 @@ in
         DOMAIN = "gitea.vulcan.lan";
         ROOT_URL = "https://gitea.vulcan.lan/";
         HTTP_ADDR = "127.0.0.1";
-        HTTP_PORT = 3005;  # Changed from 3003 (conflict with Gotenberg from Paperless)
+        HTTP_PORT = 3005;
         PROTOCOL = "http";
         DISABLE_SSH = false;
         SSH_PORT = 2222;
@@ -86,8 +86,8 @@ in
         REQUIRE_SIGNIN_VIEW = false;
         DEFAULT_KEEP_EMAIL_PRIVATE = true;
         DEFAULT_ALLOW_CREATE_ORGANIZATION = true;
-        ENABLE_NOTIFY_MAIL = true; # Enable email notifications via local Postfix
-        DEFAULT_EMAIL_NOTIFICATIONS = "enabled"; # Enable notifications by default (including Actions)
+        ENABLE_NOTIFY_MAIL = true;
+        DEFAULT_EMAIL_NOTIFICATIONS = "enabled";
       };
 
       # Email/Mailer configuration

@@ -394,6 +394,48 @@ def check_rspamd_learning(since_time: datetime, learn_type: str) -> bool:
         return False
 
 
+def check_for_forwarding_loops(since_time: datetime, message_id: str) -> bool:
+    """Check if a specific message triggered a mail forwarding loop.
+
+    This is critical for Retrain folder functionality - if the local_transport
+    is misconfigured, sendmail will create forwarding loops.
+
+    Args:
+        since_time: Start time to check logs from
+        message_id: Message ID to check for (used for context in errors)
+
+    Returns:
+        True if no forwarding loops detected, False otherwise
+    """
+    since_str = since_time.strftime('%Y-%m-%d %H:%M:%S')
+
+    cmd = [
+        'journalctl',
+        '-u', 'postfix',
+        '--since', since_str,
+        '--no-pager',
+        '-o', 'cat'  # Just message content, no timestamps
+    ]
+    result = run_command(cmd, check=False)
+
+    # Check for mail forwarding loop errors
+    loop_errors = [
+        line for line in result.stdout.split('\n')
+        if 'mail forwarding loop' in line.lower()
+        and 'johnw@localhost' in line
+    ]
+
+    if loop_errors:
+        logger.error(f"  ✗ Mail forwarding loop detected during Retrain redelivery")
+        logger.error(f"  ℹ This indicates local_transport is misconfigured in Postfix")
+        logger.error(f"  ℹ Should be: local_transport = lmtp:unix:/var/run/dovecot2/lmtp")
+        for error in loop_errors[:3]:  # Show first 3 errors
+            logger.error(f"    {error}")
+        return False
+
+    return True
+
+
 def check_logs_for_errors(since_time: datetime) -> Tuple[bool, List[str]]:
     """Check journalctl for errors in mail services."""
     since_str = since_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -877,6 +919,9 @@ Sent from my iPhone (definitely not a mass mailer)
 
         logger.info("  ✓ Created test message in INBOX")
 
+        # Record time before Retrain operation for log checking
+        retrain_start_time = datetime.now()
+
         # Copy to Retrain via IMAP (triggers IMAPSieve)
         # This will rescan through rspamd and redeliver
         imap_copy_message(message_id, 'INBOX', 'Retrain')
@@ -884,6 +929,11 @@ Sent from my iPhone (definitely not a mass mailer)
         # Wait for IMAPSieve processing
         logger.info(f"  → Waiting {WAIT_AFTER_IMAP_OPERATION}s for IMAPSieve redelivery...")
         time.sleep(WAIT_AFTER_IMAP_OPERATION)
+
+        # Check for mail forwarding loops in Postfix logs
+        # This is critical - if local_transport is misconfigured, redelivery will fail
+        if not check_for_forwarding_loops(retrain_start_time, message_id):
+            raise TestError("Mail forwarding loop detected during redelivery")
 
         # Verify message ended up in Spam folder
         if not check_message_in_folder(message_id, 'Spam', should_exist=True):
@@ -940,6 +990,9 @@ def test_retrain_ham() -> bool:
 
         logger.info("  ✓ Created test message in INBOX")
 
+        # Record time before Retrain operation for log checking
+        retrain_start_time = datetime.now()
+
         # Copy to Retrain via IMAP (triggers IMAPSieve)
         # This will rescan through rspamd and redeliver via LDA
         # LDA will run default.sieve (spam check) then active.sieve (filter to list/misc)
@@ -948,6 +1001,11 @@ def test_retrain_ham() -> bool:
         # Wait for IMAPSieve processing
         logger.info(f"  → Waiting {WAIT_AFTER_IMAP_OPERATION}s for IMAPSieve redelivery...")
         time.sleep(WAIT_AFTER_IMAP_OPERATION)
+
+        # Check for mail forwarding loops in Postfix logs
+        # This is critical - if local_transport is misconfigured, redelivery will fail
+        if not check_for_forwarding_loops(retrain_start_time, message_id):
+            raise TestError("Mail forwarding loop detected during redelivery")
 
         # Verify message ended up in list/misc folder (filtered by Sieve)
         if not check_message_in_folder(message_id, 'list/misc', should_exist=True):

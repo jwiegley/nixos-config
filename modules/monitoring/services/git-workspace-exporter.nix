@@ -97,9 +97,12 @@ EOF
         # Convert fractional timestamp to integer
         FETCH_TIME=''${FETCH_TIME%.*}
 
-        # Extract repo path relative to workspace
-        REPO_PATH=$(${pkgs.coreutils}/bin/dirname "$fetch_head")
-        REPO_NAME=$(echo "$REPO_PATH" | ${pkgs.gnused}/bin/sed "s|$WORKSPACE_DIR/||" | ${pkgs.gnused}/bin/sed 's|/.git$||')
+        # Extract repo path relative to workspace using bash built-ins
+        # (avoids spawning 3 processes per repo: dirname + 2 sed)
+        # fetch_head format: /path/to/workspace/github/owner/repo/.git/FETCH_HEAD
+        git_dir="''${fetch_head%/FETCH_HEAD}"      # Remove /FETCH_HEAD suffix
+        REPO_PATH="''${git_dir%/.git}"             # Remove /.git suffix
+        REPO_NAME="''${REPO_PATH#$WORKSPACE_DIR/}" # Remove workspace prefix
 
         # Calculate age
         AGE_SECONDS=$((CURRENT_TIME - FETCH_TIME))

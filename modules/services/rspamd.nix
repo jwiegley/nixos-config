@@ -268,6 +268,40 @@ in
         allow_hdrfrom_mismatch_sign_networks = false;
       '';
 
+      # Custom rules for spam detection
+      "custom_rules.conf".text = ''
+        -- Detect non-standard x-binaryenc encoding (spam indicator)
+        -- Background: x-binaryenc is a fake/non-standard encoding used by spammers
+        -- to evade detection. ICU library correctly refuses to convert it.
+        -- This rule penalizes emails using this encoding.
+
+        -- Register the rule
+        X_BINARYENC_SPAM = {
+          callback = function(task)
+            local parts = task:get_text_parts()
+            if parts then
+              for _,part in ipairs(parts) do
+                local enc = part:get_encoding()
+                if enc and enc:lower() == 'x-binaryenc' then
+                  return true
+                end
+              end
+            end
+
+            -- Also check Content-Transfer-Encoding header
+            local cte = task:get_header('Content-Transfer-Encoding')
+            if cte and cte:lower():match('x%-binaryenc') then
+              return true
+            end
+
+            return false
+          end,
+          score = 7.5,
+          description = 'Message uses non-standard x-binaryenc encoding (spam indicator)',
+          group = 'headers'
+        }
+      '';
+
       # Worker controller configuration for web UI
       "worker-controller.inc".text = ''
         # Enable web UI

@@ -6,7 +6,6 @@
     ./budgetboard-quadlet.nix
     ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
-    ./metabase-quadlet.nix
     ./monica-pod-quadlet.nix  # Monica + MariaDB in a pod
     ./nocobase-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
@@ -16,7 +15,6 @@
     ./silly-tavern-quadlet.nix
     ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
-    ./vanna-quadlet.nix
     ./wallabag-quadlet.nix
   ];
 
@@ -72,16 +70,14 @@
   networking.firewall.interfaces.podman0 = {
     # 1433: mssql
     # 3001: teable
-    # 3200: metabase
     # 4000: litellm
-    # 5000: vanna
     # 5380: Technitium DNS
     # 5432: PostgreSQL
     # 6253: budgetboard-client
     # 8085: Redis
     # 9182: mssql-exporter
     # 13000: nocobase
-    allowedTCPPorts = [ 1433 3001 3200 4000 5000 5380 5432 6253 8085 9182 13000 ];
+    allowedTCPPorts = [ 1433 3001 4000 5380 5432 6253 8085 9182 13000 ];
     allowedUDPPorts = [ 53 ];
   };
 

@@ -31,10 +31,8 @@ let
   containerUsers = [
     "changedetection"
     "litellm"
-    "metabase"
     "mindsdb"
     "nocobase"
-    "vanna"
     "wallabag"
     "teable"
     "sillytavern"

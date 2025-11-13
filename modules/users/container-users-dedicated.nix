@@ -28,18 +28,6 @@
         description = "Container user for LiteLLM proxy service";
       };
 
-      metabase = {
-        isSystemUser = true;
-        group = "metabase";
-        home = "/var/lib/containers/metabase";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Metabase analytics service";
-      };
-
       mindsdb = {
         isSystemUser = true;
         group = "mindsdb";
@@ -62,18 +50,6 @@
         linger = true;
         extraGroups = [ "podman" ];
         description = "Container user for NocoDB database service";
-      };
-
-      vanna = {
-        isSystemUser = true;
-        group = "vanna";
-        home = "/var/lib/containers/vanna";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Vanna AI service";
       };
 
       wallabag = {
@@ -167,10 +143,8 @@
     # Create corresponding groups for each container user
     groups = {
       litellm = {};
-      metabase = {};
       mindsdb = {};
       nocobase = {};
-      vanna = {};
       wallabag = {};
       teable = {};
       sillytavern = {};
@@ -186,10 +160,8 @@
   nix.settings.allowed-users = [
     "changedetection"
     "litellm"
-    "metabase"
     "mindsdb"
     "nocobase"
-    "vanna"
     "wallabag"
     "teable"
     "sillytavern"
@@ -209,10 +181,8 @@
   # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
   systemd.tmpfiles.rules = [
     "d /run/secrets-litellm 0750 litellm litellm - -"
-    "d /run/secrets-metabase 0750 metabase metabase - -"
     "d /run/secrets-mindsdb 0750 mindsdb mindsdb - -"
     "d /run/secrets-nocobase 0750 nocobase nocobase - -"
-    "d /run/secrets-vanna 0750 vanna vanna - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
     "d /run/secrets-teable 0750 teable teable - -"
     "d /run/secrets-sillytavern 0750 sillytavern sillytavern - -"

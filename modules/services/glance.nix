@@ -277,14 +277,6 @@ with lib;
                           url = "https://nocobase.vulcan.lan";
                         }
                         {
-                          title = "Metabase";
-                          url = "https://metabase.vulcan.lan";
-                        }
-                        {
-                          title = "Vanna.AI";
-                          url = "https://vanna.vulcan.lan";
-                        }
-                        {
                           title = "MindsDB";
                           url = "https://mindsdb.vulcan.lan";
                         }

@@ -48,6 +48,11 @@
       message_size_limit = 104857600;  # 100 MB
       mailbox_size_limit = 104857600;  # 100 MB (must be >= message_size_limit)
 
+      # Disable SMTPUTF8 support - not needed for ASCII-only email addresses
+      # UTF-8 in message headers/body is handled via standard MIME encoding
+      # Prevents delivery failures when Dovecot LMTP doesn't advertise SMTPUTF8
+      smtputf8_enable = false;
+
       myhostname = "vulcan.lan";
       mydomain = "lan";
       myorigin = "$myhostname";
@@ -93,6 +98,8 @@
       milter_default_action = "accept";
 
       # Deliver local mail to Dovecot LMTP
+      # Use LMTP for ALL local delivery (including @localhost)
+      local_transport = "lmtp:unix:/var/run/dovecot2/lmtp";
       virtual_transport = "lmtp:unix:/var/run/dovecot2/lmtp";
       mailbox_transport = "lmtp:unix:/var/run/dovecot2/lmtp";
     };

@@ -8,11 +8,10 @@ let
     require ["fileinto", "envelope", "relational", "comparator-i;ascii-numeric"];
 
     # Check if rspamd marked this message as spam
-    # Rspamd adds "X-Spam: Yes" header for spam messages via Postfix milter
-    # OR if the X-Spam-Score is 10 or greater (catches high-scoring spam
-    # without "Yes" header)
     if anyof (
       header :contains "X-Spam" "Yes",
+      header :contains "X-Spam-Status" "Yes",
+      header :contains "X-Spamd-Result" "True",
       header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "10",
       header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Level" "10"
     ) {

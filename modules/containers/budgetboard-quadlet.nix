@@ -122,7 +122,7 @@ in
       ];
 
       # Join the budget-board pod
-      pod = "budget-board";
+      pod = "budget-board.pod";
     };
 
     unitConfig = {
@@ -174,7 +174,7 @@ in
       ];
 
       # Join the budget-board pod (shares network with server)
-      pod = "budget-board";
+      pod = "budget-board.pod";
     };
 
     unitConfig = {
@@ -254,59 +254,8 @@ in
     '';
   };
 
-  # Systemd services to start the containers (workaround for quadlet not auto-generating services)
-  systemd.services.budget-board-server-container = {
-    description = "BudgetBoard Server Container";
-    after = [ "budget-board-pod.service" "budgetboard-env-setup.service" "postgresql.service" ];
-    requires = [ "budget-board-pod.service" "budgetboard-env-setup.service" "postgresql.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "forking";
-      Restart = "always";
-      RestartSec = "10s";
-      ExecStartPre = [
-        "${pkgs.postgresql}/bin/pg_isready -h 192.168.1.2 -p 5432 -t 30"
-        "${pkgs.podman}/bin/podman rm -f budget-board-server || true"
-      ];
-      ExecStart = ''${pkgs.podman}/bin/podman run -d \
-        --name budget-board-server \
-        --pod budget-board \
-        --env Logging__LogLevel__Default=Information \
-        --env CLIENT_URL=https://budget.vulcan.lan \
-        --env POSTGRES_HOST=192.168.1.2 \
-        --env POSTGRES_PORT=5432 \
-        --env POSTGRES_DATABASE=budgetboard \
-        --env POSTGRES_USER=budgetboard \
-        --env AUTO_UPDATE_DB=true \
-        --env-file /run/budgetboard/server.env \
-        -v /var/lib/budgetboard-server:/app/data:rw \
-        ghcr.io/teelur/budget-board/server:release'';
-      ExecStop = "${pkgs.podman}/bin/podman stop budget-board-server";
-    };
-  };
-
-  systemd.services.budget-board-client-container = {
-    description = "BudgetBoard Client Container";
-    after = [ "budget-board-pod.service" "budget-board-server-container.service" ];
-    requires = [ "budget-board-pod.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "forking";
-      Restart = "always";
-      RestartSec = "10s";
-      ExecStartPre = "${pkgs.podman}/bin/podman rm -f budget-board-client || true";
-      ExecStart = ''${pkgs.podman}/bin/podman run -d \
-        --name budget-board-client \
-        --pod budget-board \
-        --env PORT=6253 \
-        -v /var/lib/budgetboard-client:/app/data:rw \
-        -v /etc/nixos/configs/budgetboard-nginx.conf:/etc/nginx/conf.d/default.conf:ro \
-        ghcr.io/teelur/budget-board/client:release'';
-      ExecStop = "${pkgs.podman}/bin/podman stop budget-board-client";
-    };
-  };
+  # Note: The quadlet definitions above (lines 73-192) handle container lifecycle.
+  # Manual systemd services removed to avoid conflict with quadlet-generated services.
 
   # Firewall configuration
   networking.firewall.interfaces.podman0.allowedTCPPorts = [

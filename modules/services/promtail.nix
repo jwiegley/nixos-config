@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Promtail log shipping agent for Loki
@@ -17,32 +22,36 @@
       # Position file to track what has been read
       positions = {
         filename = "/var/lib/promtail/positions.yaml";
+        sync_period = "10s"; # How often to update positions
+        ignore_invalid_yaml = true; # Don't crash on corrupted positions
       };
 
       # Loki client configuration
       clients = [
         {
           url = "http://localhost:3100/loki/api/v1/push";
-          batchwait = "1s";
-          batchsize = 1048576; # 1MB
+          batchwait = "2s"; # Increased from 1s to reduce CPU overhead
+          batchsize = 2097152; # Increased to 2MB for more efficient batching
           timeout = "10s";
         }
       ];
 
       # Scrape configurations for different log sources
       scrape_configs = [
-        # Systemd journal logs
+        # Systemd journal logs - CONSOLIDATED config for all journal-based sources
+        # This single scraper replaces 15+ individual journal scrapers for better performance
         {
           job_name = "systemd-journal";
           journal = {
             json = true;
-            max_age = "5m";  # Only read last 5 minutes to prevent overwhelming Loki
+            max_age = "5m"; # Only read last 5 minutes to prevent overwhelming Loki
             labels = {
               job = "systemd-journal";
               host = "vulcan";
             };
           };
           relabel_configs = [
+            # Extract basic labels from journal
             {
               source_labels = [ "__journal__systemd_unit" ];
               target_label = "unit";
@@ -60,15 +69,112 @@
               target_label = "syslog_identifier";
             }
             {
-              # Drop audit logs - they generate 100+ logs/sec
+              source_labels = [ "__journal__comm" ];
+              target_label = "process";
+            }
+
+            # Extract service_type for major service categories
+            # This consolidates the filtering logic from individual scrapers
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(postfix).*\\.service";
+              replacement = "mail";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(restic-backups-.*)\\service";
+              replacement = "backup";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(step-ca|technitium-dns-server)\\.service";
+              replacement = "infrastructure";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(grafana|loki|prometheus.*|alertmanager)\\.service";
+              replacement = "monitoring";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(pgadmin|redis-.*)\\.service";
+              replacement = "database";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(glance.*|silly-tavern|wallabag|litellm)\\.service";
+              replacement = "application";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(container@.*|opnsense-.*)\\.service";
+              replacement = "container";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(zfs-zed|bolt)\\.service";
+              replacement = "system";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(sshd|polkit)\\.service";
+              replacement = "auth";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "service_type";
+              regex = "(phpfpm-nextcloud)\\.service";
+              replacement = "webapp";
+            }
+
+            # Extract instance name for services with multiple instances (e.g., redis-loki, redis-gitea)
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "instance";
+              regex = "redis-(.*)\\.service";
+              replacement = "$1";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "backup_set";
+              regex = "restic-backups-(.*)\\.service";
+              replacement = "$1";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "container";
+              regex = "container@(.*)\\.service";
+              replacement = "$1";
+            }
+
+            # Extract component from postfix, glance
+            {
+              source_labels = [ "__journal_syslog_identifier" ];
+              target_label = "component";
+              regex = "(postfix/.*)";
+              replacement = "$1";
+            }
+
+            # Drop audit logs - they generate 100+ logs/sec
+            {
               source_labels = [ "__journal_syslog_identifier" ];
               regex = "audit";
               action = "drop";
             }
+
+            # Drop low-priority logs (5=notice, 6=info, 7=debug)
+            # Keep only 0-4 (emerg, alert, crit, err, warning)
+            # This reduces log volume by 99%+ while preserving critical events
             {
-              # Drop low-priority logs (5=notice, 6=info, 7=debug)
-              # Keep only 0-4 (emerg, alert, crit, err, warning)
-              # This reduces log volume by 99%+ while preserving critical events
               source_labels = [ "__journal_priority" ];
               regex = "[5-7]";
               action = "drop";
@@ -147,71 +253,6 @@
         # PostgreSQL logs
 
         # Dovecot mail logs
-
-        # Postfix mail logs
-        {
-          job_name = "postfix";
-          journal = {
-            json = true;
-            max_age = "5m";  # Only read last 5 minutes
-            labels = {
-              job = "postfix";
-              host = "vulcan";
-            };
-            # No matches filter - will use relabel_configs to filter
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              # Keep only postfix related services
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "(postfix.*\\.service)";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal_syslog_identifier" ];
-              target_label = "component";
-            }
-          ];
-        }
-
-        # Docker container logs (if Docker is enabled)
-
-        # Restic backup logs
-        {
-          job_name = "restic-backups";
-          journal = {
-            json = true;
-            max_age = "5m";  # Only read last 5 minutes
-            labels = {
-              job = "restic";
-              host = "vulcan";
-            };
-            # No matches filter - will get all journal entries
-            # Filtering will be done via relabel_configs
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              # Only keep restic backup services
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "restic-backups-.*\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "backup_set";
-              regex = "restic-backups-(.*)\\.service";
-              replacement = "$1";
-            }
-          ];
-        }
 
         # Nextcloud logs (if present)
 
@@ -410,356 +451,6 @@
           ];
         }
 
-        # Step-CA certificate authority logs from journal
-        {
-          job_name = "step-ca";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "step-ca";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "step-ca\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # Technitium DNS Server logs from journal
-        {
-          job_name = "technitium-dns";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "technitium-dns";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "technitium-dns-server\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # Grafana logs from journal
-        {
-          job_name = "grafana";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "grafana";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "grafana\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # Prometheus and exporters logs from journal
-        {
-          job_name = "prometheus-stack";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "prometheus-stack";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "(prometheus.*\\.service|alertmanager\\.service)";
-              action = "keep";
-            }
-            {
-              # Extract service name for better categorization
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "service";
-              regex = "(prometheus|alertmanager|.*-exporter).*";
-              replacement = "$1";
-            }
-          ];
-        }
-
-        # Loki logs from journal
-        {
-          job_name = "loki";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "loki";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "loki\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # PGAdmin logs from journal
-        {
-          job_name = "pgadmin";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "pgadmin";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "pgadmin\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # Redis instances logs from journal
-        {
-          job_name = "redis";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "redis";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "redis-.*\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "instance";
-              regex = "redis-(.*)\\.service";
-              replacement = "$1";
-            }
-          ];
-        }
-
-        # Glance dashboard and GitHub extension logs from journal
-        {
-          job_name = "glance";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "glance";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "glance.*\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "component";
-              regex = "glance(-(.*))?.*";
-              replacement = "$2";
-            }
-          ];
-        }
-
-        # Container logs for services running in Podman
-        {
-          job_name = "podman-containers";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "podman-containers";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "(silly-tavern|wallabag|litellm|opnsense-exporter|opnsense-api-transformer)\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "container";
-              regex = "(.*)\\.service";
-              replacement = "$1";
-            }
-            {
-              source_labels = [ "__journal__comm" ];
-              target_label = "process";
-            }
-          ];
-        }
-
-        # Secure nginx container logs from journal
-        {
-          job_name = "secure-nginx";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "secure-nginx";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "container@secure-nginx\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # ZFS Event Daemon logs from journal
-        {
-          job_name = "zfs-zed";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "zfs-zed";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "zfs-zed\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # Bolt thunderbolt daemon logs from journal
-        {
-          job_name = "bolt";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "bolt";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "bolt\\.service";
-              action = "keep";
-            }
-          ];
-        }
-
-        # System authentication logs from journal
-        {
-          job_name = "auth";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "auth";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "(sshd|polkit)\\.service";
-              action = "keep";
-            }
-            {
-              source_labels = [ "__journal_priority" ];
-              target_label = "priority";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "service";
-              regex = "(.*)\\.service";
-              replacement = "$1";
-            }
-          ];
-        }
       ];
     };
   };
@@ -769,11 +460,11 @@
     extraGroups = [
       "systemd-journal"
       "nginx"
-      "podman"    # For Podman/Docker socket access
-      "jellyfin"  # For Jellyfin logs
-      "gitea"     # For Gitea logs
-      "wheel"     # For audit logs
-      "adm"       # For sudo logs
+      "podman" # For Podman/Docker socket access
+      "jellyfin" # For Jellyfin logs
+      "gitea" # For Gitea logs
+      "wheel" # For audit logs
+      "adm" # For sudo logs
     ];
   };
 
@@ -785,13 +476,26 @@
 
   # Ensure Promtail starts after Loki
   systemd.services.promtail = {
-    after = [ "loki.service" "network-online.target" ];
-    wants = [ "loki.service" "network-online.target" ];
+    after = [
+      "loki.service"
+      "network-online.target"
+    ];
+    wants = [
+      "loki.service"
+      "network-online.target"
+    ];
 
     # Restart on failure with delay
     serviceConfig = {
       Restart = "on-failure";
       RestartSec = "5s";
+
+      # Resource limits to prevent runaway usage
+      # After consolidation, Promtail should use ~100-150MB (was 250MB with redundant scrapers)
+      MemoryMax = "512M"; # Hard limit - kill if exceeded
+      MemoryHigh = "384M"; # Start throttling at 384MB
+      CPUQuota = "50%"; # Limit to 50% of one core
+      TasksMax = 256; # Limit number of threads/goroutines
     };
   };
 
@@ -810,9 +514,13 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "promtail";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.promtail.configuration.server.http_listen_port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [
+            "localhost:${toString config.services.promtail.configuration.server.http_listen_port}"
+          ];
+        }
+      ];
       scrape_interval = "30s";
     }
   ];

@@ -175,6 +175,20 @@ in
         PrivateTmp = true;
         NoNewPrivileges = true;
 
+        # Resource limits to prevent OOM and reduce I/O impact
+        # Memory limit: 2GB should be more than sufficient for rsync operations
+        MemoryMax = "2G";
+        MemoryHigh = "1.5G";
+
+        # I/O limits: Use best-effort scheduling to minimize impact on other services
+        IOSchedulingClass = "best-effort";
+        IOSchedulingPriority = 7;  # Lowest priority (0=highest, 7=lowest)
+        IOWeight = 10;  # Low I/O weight (10-1000 scale)
+
+        # CPU priority: Run at lower priority
+        CPUSchedulingPolicy = "batch";
+        Nice = 19;  # Lowest CPU priority
+
         # Timeout and logging
         # Increased from 1h to 2h to accommodate slow backups with many changed files
         TimeoutStartSec = "2h";

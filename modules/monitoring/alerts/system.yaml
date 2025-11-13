@@ -24,15 +24,68 @@ groups:
           description: "{{ $labels.device }} on {{ $labels.instance }} has less than 5% free space"
 
       # Memory alerts
-      - alert: MemoryPressure
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
-        for: 5m
+      # Multi-tier memory monitoring to catch OOM conditions early
+      - alert: MemoryPressureHigh
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+        for: 10m
         labels:
           severity: warning
           category: system
         annotations:
           summary: "High memory usage on {{ $labels.instance }}"
-          description: "Memory usage is above 90% on {{ $labels.instance }}"
+          description: "Memory usage is above 85% for 10 minutes on {{ $labels.instance }}. Available: {{ $value | humanize1024 }}B"
+
+      - alert: MemoryPressureCritical
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.92
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Critical memory pressure on {{ $labels.instance }}"
+          description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
+
+      - alert: MemoryAllocationFailures
+        expr: increase(node_vmstat_pgmajfault[5m]) > 1000
+        for: 2m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Memory allocation failures detected on {{ $labels.instance }}"
+          description: "High number of page faults ({{ $value }}) indicates memory thrashing or allocation failures"
+
+      # Swap monitoring
+      - alert: SwapUsageHigh
+        expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High swap usage on {{ $labels.instance }}"
+          description: "Swap usage is above 75% for 10 minutes. Used: {{ $value | humanize1024 }}B. System under memory pressure."
+
+      - alert: SwapUsageCritical
+        expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Critical swap usage on {{ $labels.instance }}"
+          description: "Swap usage is above 90%. Used: {{ $value | humanize1024 }}B. Immediate OOM risk!"
+
+      # RAM + Swap combined capacity alert
+      - alert: TotalMemoryExhaustion
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes + node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / (node_memory_MemTotal_bytes + node_memory_SwapTotal_bytes)) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Total memory (RAM+Swap) exhaustion on {{ $labels.instance }}"
+          description: "Combined RAM and swap usage is above 90%. System approaching OOM condition!"
 
       # CPU alerts
       - alert: HighCPUUsage

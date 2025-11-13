@@ -9,7 +9,9 @@ let
     A simple HTTP proxy that transforms OPNsense API responses to fix
     type mismatches in the opnsense-exporter.
 
-    Specifically fixes: monitor_disable field from boolean to string
+    Specifically fixes:
+    - Gateway endpoint: monitor_disable field from boolean to string
+    - Firmware endpoint: empty strings to "0" for integer fields
     """
 
     from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -75,6 +77,33 @@ let
                         except (json.JSONDecodeError, KeyError):
                             pass  # If we can't parse, just pass through unchanged
 
+                    # Transform response if it's the firmware status endpoint
+                    # Fix for empty string → int parsing errors in firmware collector
+                    # The exporter expects integer fields that may not be present in the API response
+                    # UpgradeNeedsReboot is nested under product.product_check.upgrade_needs_reboot
+                    if '/api/core/firmware/status' in self.path:
+                        try:
+                            data = json.loads(response_body)
+
+                            # needs_reboot is at root level
+                            if 'needs_reboot' not in data or data['needs_reboot'] == "":
+                                data['needs_reboot'] = "0"
+
+                            # upgrade_needs_reboot is nested under product.product_check
+                            if 'product' in data:
+                                # Ensure product_check exists and is not null
+                                if data['product'].get('product_check') is None or 'product_check' not in data['product']:
+                                    data['product']['product_check'] = {}
+
+                                # Add the upgrade_needs_reboot field if missing
+                                if 'upgrade_needs_reboot' not in data['product']['product_check'] or \
+                                   data['product']['product_check']['upgrade_needs_reboot'] == "":
+                                    data['product']['product_check']['upgrade_needs_reboot'] = "0"
+
+                            response_body = json.dumps(data).encode()
+                        except (json.JSONDecodeError, KeyError):
+                            pass  # If we can't parse, just pass through unchanged
+
                     # Send response
                     self.send_response(response.getcode())
                     for header, value in response.headers.items():
@@ -107,12 +136,14 @@ in
 {
   # OPNsense API Transformer Service
   #
-  # This is a workaround for issue #70 in opnsense-exporter v0.0.11:
-  # https://github.com/AthennaMind/opnsense-exporter/issues/70
+  # This is a workaround for multiple issues in opnsense-exporter v0.0.11:
+  # 1. Gateway collector issue #70: https://github.com/AthennaMind/opnsense-exporter/issues/70
+  #    - The OPNsense API returns monitor_disable as a boolean, but the exporter expects it as a string
+  # 2. Firmware collector: Empty string → int parsing errors
+  #    - The OPNsense API returns empty strings for integer fields (needs_reboot, upgrade_needs_reboot)
+  #    - The exporter tries to parse these with strconv.Atoi which fails on empty strings
   #
-  # The OPNsense API returns monitor_disable as a boolean, but the exporter
-  # expects it as a string. This proxy transforms the response before it
-  # reaches the exporter.
+  # This proxy transforms the responses before they reach the exporter.
 
   systemd.services.opnsense-api-transformer = {
     description = "OPNsense API Response Transformer Proxy";

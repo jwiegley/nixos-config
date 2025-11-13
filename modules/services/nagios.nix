@@ -492,7 +492,6 @@ let
   # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
   containers = [
     { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
-    { name = "metabase"; display = "Metabase BI Platform"; runAs = "metabase"; }
     { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "mindsdb"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
@@ -501,7 +500,6 @@ let
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
     { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "technitium-dns-exporter"; }
-    { name = "vanna"; display = "Vanna.AI Text-to-SQL"; runAs = "vanna"; }
     { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "wallabag"; }
   ];
 
@@ -1373,14 +1371,6 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
-      service_description     SSL Cert: metabase.vulcan.lan
-      check_command           check_ssl_cert!metabase.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
       service_description     SSL Cert: monica.vulcan.lan
       check_command           check_ssl_cert!monica.vulcan.lan
       service_groups          ssl-certificates
@@ -1431,14 +1421,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: victoriametrics.vulcan.lan
       check_command           check_ssl_cert!victoriametrics.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: vanna.vulcan.lan
-      check_command           check_ssl_cert!vanna.vulcan.lan
       service_groups          ssl-certificates
     }
 

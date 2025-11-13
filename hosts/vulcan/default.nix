@@ -95,14 +95,12 @@
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
     ../../modules/services/mindsdb.nix
-    ../../modules/services/paperless.nix
     ../../modules/services/aria2.nix
 
     # Containers
     ../../modules/containers/default.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix
-    ../../modules/containers/paperless-ai-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

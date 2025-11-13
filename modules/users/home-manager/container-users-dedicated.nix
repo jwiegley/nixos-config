@@ -39,7 +39,6 @@ let
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
-    "paperless-ai"
   ];
 in
 {

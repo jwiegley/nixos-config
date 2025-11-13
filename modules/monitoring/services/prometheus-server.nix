@@ -28,8 +28,6 @@ let
     "mindsdb.yaml"
     "container-health.yaml"
     "windows-container.yaml"
-    "paperless.yaml"
-    "paperless-ai.yaml"
     "email-services.yaml"
     "application-services.yaml"
   ];

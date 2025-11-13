@@ -28,8 +28,6 @@
     ../monitoring/services/jupyterlab-alerts.nix
     ../monitoring/services/vdirsyncer-exporter.nix
     ../monitoring/services/gitea-exporter.nix
-    ../monitoring/services/paperless-exporter.nix
-    ../monitoring/services/paperless-ai-exporter.nix
     ../monitoring/services/aria2-exporter.nix
     ../monitoring/services/aria2-alerts.nix
 

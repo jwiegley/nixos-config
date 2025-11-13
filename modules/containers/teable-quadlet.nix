@@ -39,7 +39,7 @@ in
         TIMEZONE = "America/Los_Angeles";
       };
 
-      publishPorts = [ "127.0.0.1:3004:3000/tcp" ];  # Use 3004 (3000=Grafana, 3001=paperless-ai, 3002=openspeedtest, 3003=Gotenberg)
+      publishPorts = [ "127.0.0.1:3004:3000/tcp" ];
 
       volumes = [
         "/var/lib/teable:/app/.assets:rw"

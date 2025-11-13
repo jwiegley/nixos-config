@@ -284,14 +284,6 @@ with lib;
                           title = "BudgetBoard";
                           url = "https://budget.vulcan.lan";
                         }
-                        {
-                          title = "Paperless-NGX";
-                          url = "https://paperless.vulcan.lan";
-                        }
-                        {
-                          title = "Paperless-AI";
-                          url = "https://paperless-ai.vulcan.lan";
-                        }
                       ];
                     }
                     {

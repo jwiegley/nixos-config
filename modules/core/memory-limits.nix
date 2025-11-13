@@ -6,7 +6,6 @@
   #
   # These limits are based on observed memory usage patterns:
   # - Promtail: ~1.1GB (limited in promtail.nix)
-  # - Paperless-AI: ~1.1GB
   # - Metabase: ~962MB (Java heap already limited to 2GB)
   # - Home Assistant: ~612MB
   #

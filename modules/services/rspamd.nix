@@ -171,9 +171,13 @@ in
         # Use Unbound recursive resolver to avoid blocklist rate-limiting/blocking
         dns {
           nameserver = ["192.168.1.1"];  # Use local Unbound recursive resolver
-          timeout = 2s;                   # Timeout for DNS queries
-          sockets = 32;                   # Number of concurrent DNS sockets
-          retransmits = 2;                # Number of retries for failed queries
+          timeout = 2s;                  # Timeout for DNS queries
+          sockets = 32;                  # Number of concurrent DNS sockets
+          retransmits = 2;               # Number of retries for failed queries
+        }
+
+        neighbours {
+          server1 { host = "https://rspamd.vulcan.lan:443"; }
         }
       '';
 
@@ -235,12 +239,16 @@ in
       '';
 
       "milter_headers.conf".text = ''
-        # Add spam headers to messages
-        # x-spam adds "X-Spam: Yes/No" header used by Sieve for spam filing
-        use = ["x-spam", "x-spamd-bar", "x-spam-level", "x-spam-status", "authentication-results"];
-
-        # Extended headers for better filtering
+        # Extended headers for comprehensive spam analysis
+        # Enables: X-Spamd-Result, X-Spamd-Bar, X-Spam-Level, X-Spam-Status,
+        #          X-Rspamd-Server, X-Rspamd-Queue-Id, Authentication-Results
         extended_spam_headers = true;
+
+        # CRITICAL: Add headers to local and authenticated mail
+        # Without these, rspamd won't add headers to mail from localhost or authenticated users
+        # This is why headers were missing in test messages!
+        skip_local = false;
+        skip_authenticated = false;
       '';
 
       "metrics.conf".text = ''

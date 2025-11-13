@@ -13,6 +13,7 @@ let
   ntopngConfig = pkgs.writeText "ntopng.conf" ''
     -i=end0
     -i=wlp1s0f0
+    -i=view:end0,wlp1s0f0
     -w=${toString ntopngPort}
     --http-bind-address=127.0.0.1
     -d=${ntopngDataDir}
@@ -24,8 +25,15 @@ let
     --db-name=ntopng
     --disable-autologout
     --disable-login=1
-    --dns-mode=1
+    --dns-mode=0
     --community
+
+    # Performance optimizations
+    --max-num-flows=50000
+    --max-num-hosts=10000
+    --local-networks=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+    --dump-flows=diskful
+    --dump-flow-frequency=300
   '';
 
 in

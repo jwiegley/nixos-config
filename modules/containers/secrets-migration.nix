@@ -4,8 +4,9 @@
   # Container Secrets Migration Module
   #
   # This module creates user-specific variants of existing container secrets
-  # for rootless Podman operation. It maintains backward compatibility by keeping
-  # the original /run/secrets/ paths while adding new /run/secrets-<user>/ paths.
+  # for rootless Podman operation. It maintains backward compatibility by
+  # keeping the original /run/secrets/ paths while adding new
+  # /run/secrets-<user>/ paths.
   #
   # Migration strategy:
   # - Existing secrets remain at /run/secrets/ (root-owned)
@@ -14,9 +15,9 @@
   # - Services gradually migrated to use user-specific paths
   #
   # Container user assignments:
-  # - container-db: Database-dependent services (litellm, metabase, wallabag, teable, nocobase, vanna)
+  # - container-db: Database-dependent services (litellm, wallabag, teable, nocobase)
   # - container-web: Web services (changedetection, openspeedtest, silly-tavern)
-  # - container-monitor: Monitoring services (opnsense-exporter, technitium-dns-exporter)
+  # - container-monitor: Monitoring (opnsense-exporter, technitium-dns-exporter)
   # - container-misc: Miscellaneous services (budgetboard)
 
   sops = {
@@ -68,24 +69,6 @@
         group = "container-db";
         mode = "0400";
         path = "/run/secrets-container-db/nocobase-secrets";
-      };
-
-      # Vanna AI secrets
-      "vanna-env-container-db" = {
-        key = "vanna-env";
-        owner = "container-db";
-        group = "container-db";
-        mode = "0400";
-        path = "/run/secrets-container-db/vanna-env";
-      };
-
-      # Metabase secrets
-      "metabase-env-container-db" = {
-        key = "metabase-env";
-        owner = "container-db";
-        group = "container-db";
-        mode = "0400";
-        path = "/run/secrets-container-db/metabase-env";
       };
 
       # === container-monitor secrets (monitoring services) ===

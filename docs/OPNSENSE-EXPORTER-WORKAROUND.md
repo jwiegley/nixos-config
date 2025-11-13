@@ -1,6 +1,8 @@
-# OPNsense Exporter Gateway Collector Workaround - IMPLEMENTED
+# OPNsense Exporter Workarounds - IMPLEMENTED
 
-## Problem
+## Problems
+
+### 1. Gateway Collector Issue
 The opnsense-exporter v0.0.11 has a bug where it expects the `monitor_disable` field from the OPNsense API to be a string, but the API returns it as a boolean. This causes the gateway collector to fail with:
 
 ```
@@ -9,6 +11,15 @@ json: cannot unmarshal bool into Go struct field .rows.monitor_disable of type s
 
 - **Issue**: https://github.com/AthennaMind/opnsense-exporter/issues/70
 - **PR with fix**: https://github.com/AthennaMind/opnsense-exporter/pull/58
+
+### 2. Firmware Collector Issue
+The opnsense-exporter v0.0.11 fails to parse firmware status when the OPNsense API hasn't performed an update check yet. The API returns `product_check: null`, but the exporter expects `product.product_check.upgrade_needs_reboot` to be present. This causes warnings:
+
+```
+firmware: failed to parse UpgradeNeedsReboot
+opnsense-client api call error: endpoint: api/core/firmware/status; failed status code: 0;
+msg: error parsing '' to int: strconv.Atoi: parsing "": invalid syntax
+```
 
 ## Current Workaround - ACTIVE AND WORKING
 We've implemented a Python-based HTTP proxy that intercepts API requests and transforms type-mismatched fields before the exporter receives them.
@@ -20,15 +31,25 @@ We've implemented a Python-based HTTP proxy that intercepts API requests and tra
 ### How it works:
 1. The exporter makes requests to `http://10.88.0.1:8444` (Python proxy)
 2. The proxy forwards requests to `https://192.168.1.1` (actual OPNsense API)
-3. For `/api/routing/settings/searchGateway` endpoint, the proxy transforms the response:
-   - Converts `"monitor_disable": true` to `"monitor_disable": "true"`
-   - Converts `"monitor_disable": false` to `"monitor_disable": "false"`
+3. For `/api/routing/settings/searchGateway` endpoint, the proxy transforms:
+   - Converts `"monitor_disable": true/false` to `"monitor_disable": "true"/"false"`
    - Converts `"priority": <number>` to `"priority": "<string>"`
-4. The exporter receives the transformed response and can properly unmarshal it
+4. For `/api/core/firmware/status` endpoint, the proxy transforms:
+   - Adds `"needs_reboot": "0"` if missing or empty
+   - Creates `product.product_check` object if null or missing
+   - Adds `product.product_check.upgrade_needs_reboot": "0"` if missing or empty
+5. The exporter receives the transformed response and can properly unmarshal it
 
-### Fields currently being transformed:
+### Transformations applied:
+
+#### Gateway endpoint (`/api/routing/settings/searchGateway`):
 - `monitor_disable` - boolean to string
 - `priority` - number to string
+
+#### Firmware endpoint (`/api/core/firmware/status`):
+- `needs_reboot` - add with value "0" if missing
+- `product.product_check` - create object if null
+- `product.product_check.upgrade_needs_reboot` - add with value "0" if missing
 
 ## Testing the Fix
 
@@ -122,7 +143,9 @@ Simply wait for the maintainers to merge the fix and release a new version.
 
 ## Current Status
 - Workaround is **ACTIVE**
-- Implemented: 2025-01-03
-- Last tested: 2025-01-03
-- Upstream issue: Open
-- Upstream PR: Closed (not merged)
+- Gateway collector fix implemented: 2025-01-03
+- Firmware collector fix implemented: 2025-11-12
+- Last tested: 2025-11-12
+- Gateway upstream issue: Open (#70)
+- Gateway upstream PR: Closed (not merged, #58)
+- Firmware issue: Not yet reported upstream

@@ -256,6 +256,8 @@ in
       auth_debug = no
       mail_debug = no
       verbose_ssl = no
+      # Enable for troubleshooting:
+      # log_debug = category=sieve
 
       # Performance tuning
       mail_fsync = optimized
@@ -340,10 +342,10 @@ in
         sieve_plugins = sieve_imapsieve sieve_extprograms
         sieve_pipe_bin_dir = /var/lib/dovecot/sieve-pipe-bin
 
-        # Sieve debug logging (verbose mode for troubleshooting)
-        sieve_trace_debug = yes
-        sieve_trace_addresses = yes
-        sieve_trace_level = matching
+        # Enable for troubleshooting (verbose Sieve debugging):
+        # sieve_trace_debug = yes
+        # sieve_trace_addresses = yes
+        # sieve_trace_level = matching
 
         # Disable compiled binary caching for global/shared scripts
         # Users can't write to /var/lib/dovecot/sieve, so don't try to save .svbin files there
@@ -408,12 +410,13 @@ in
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
-    # Sieve directory with restrictive permissions (read-only for non-dovecot users)
-    # Scripts are pre-compiled during system activation, users don't need write access
+    # Sieve directory with group write permissions for IMAPSieve
+    # Scripts are pre-compiled during system activation, but users need write access
+    # to recompile when IMAPSieve triggers (dovecot runs scripts in user context)
     # IMPORTANT: Create parent directories BEFORE rspamd.nix creates child symlinks
     "d /var/lib/dovecot/sieve 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot/sieve/global 0755 dovecot2 dovecot2 -"
-    "d /var/lib/dovecot/sieve/global/rspamd 0755 dovecot2 dovecot2 -"
+    "d /var/lib/dovecot/sieve/global/rspamd 0775 dovecot2 mail -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
     # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
@@ -455,8 +458,9 @@ in
           if sievec "$script" "$binary"; then
             # Touch the compiled binary to ensure it has a newer timestamp than source
             touch "$binary"
-            # Make binary world-readable so all users can access it
-            chmod 644 "$binary"
+            # Make binary group-writable for IMAPSieve recompilation
+            chmod 664 "$binary"
+            chgrp mail "$binary" 2>/dev/null || true
             echo "  ✓ Compiled: $binary"
           else
             echo "  ✗ Warning: Failed to compile $script"
@@ -527,7 +531,7 @@ in
         # Suppress stats socket errors (dovecot not running yet during preStart)
         ${pkgs.dovecot_pigeonhole}/bin/sievec "$script" "$binary" 2>&1 | \
           grep -v "stats: open(/run/dovecot2/old-stats-mail) failed" || true
-        chmod 644 "$binary" && touch "$binary"
+        chmod 664 "$binary" && chgrp mail "$binary" 2>/dev/null && touch "$binary"
       fi
     done
   '';

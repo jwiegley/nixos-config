@@ -47,7 +47,7 @@ in
 
     sourceDir = mkOption {
       type = types.path;
-      default = "/tank/Nextcloud/johnw/files/share";
+      default = "/tank/Public/johnw";
       description = ''
         Source directory to monitor and share from.
         Changes to this directory will trigger share.py execution.

@@ -97,7 +97,6 @@ in
     }
   ];
 
-  # Bind mount ZFS dataset to Nextcloud data directory
   fileSystems = bindTankPath {
     path = "/var/lib/postgresql-backup";
     device = "/tank/Backups/PostgreSQL";

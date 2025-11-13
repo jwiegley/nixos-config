@@ -29,7 +29,6 @@ DOMAINS=(
     "mindsdb.vulcan.lan"
     "n8n.vulcan.lan"
     "nagios.vulcan.lan"
-    "nextcloud.vulcan.lan"
     "nodered.vulcan.lan"
     "ntopng.vulcan.lan"
     "postgres.vulcan.lan"

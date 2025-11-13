@@ -61,7 +61,6 @@ This configuration follows a highly modular architecture, organizing system conf
   - HTTP/2, HSTS, security headers
   - Automatic HTTP → HTTPS redirect
 - **Glance**: Alternative dashboard with customizable widgets
-- **Nextcloud**: Self-hosted cloud storage and collaboration
 - **Wallabag**: Read-it-later service (containerized)
 
 ### Mail Infrastructure
@@ -345,7 +344,6 @@ Located in `modules/monitoring/alerts/`:
 - **storage.yaml**: ZFS pool health, disk space
 - **certificates.yaml**: Certificate expiration warnings
 - **network.yaml**: Network connectivity and performance
-- **nextcloud.yaml**: Nextcloud-specific alerts
 
 ### Grafana Dashboards
 

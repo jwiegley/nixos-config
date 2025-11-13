@@ -203,18 +203,8 @@ in
       exclude = homeExcludes;
     })
     (mkBackup {
-      name = "Nextcloud";
-      exclude = [
-        "*/cache/*"
-        "*/appdata_*/preview/*"
-        "*/tmp/*"
-        "*/updater-*"
-      ];
-    })
-    (mkBackup {
       name = "Photos";
     })
-
     (mkBackup {
       name = "Video";
       exclude = videoExcludes;

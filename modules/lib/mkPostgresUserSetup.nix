@@ -6,10 +6,10 @@
   # Usage:
   #   imports = [
   #     (mkPostgresUserSetup {
-  #       user = "nextcloud";
-  #       database = "nextcloud";
-  #       secretPath = config.sops.secrets."nextcloud-db-password".path;
-  #       dependentService = "nextcloud-setup.service";
+  #       user = "johnw";
+  #       database = "johnw";
+  #       secretPath = config.sops.secrets."johnw-db-password".path;
+  #       dependentService = "johnw-setup.service";
   #     })
   #   ];
   #
@@ -17,7 +17,8 @@
   #   - user: PostgreSQL username to set password for
   #   - database: Database name for connection test
   #   - secretPath: Path to SOPS secret containing password
-  #   - dependentService: Optional service that depends on this setup (e.g., "nextcloud-setup.service")
+  #   - dependentService: Optional service that depends on this setup
+  #     (e.g., "johnw-setup.service")
 
   mkPostgresUserSetup = {
     user,

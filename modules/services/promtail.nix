@@ -132,7 +132,7 @@
             {
               source_labels = [ "__journal__systemd_unit" ];
               target_label = "service_type";
-              regex = "(phpfpm-nextcloud)\\.service";
+              regex = "phpfpm-(.*)\\.service";
               replacement = "webapp";
             }
 
@@ -253,8 +253,6 @@
         # PostgreSQL logs
 
         # Dovecot mail logs
-
-        # Nextcloud logs (if present)
 
         # Jellyfin logs
         {

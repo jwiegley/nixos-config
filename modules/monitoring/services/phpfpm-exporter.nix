@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 {
-  # PHP-FPM exporter for monitoring Nextcloud PHP-FPM performance
+  # PHP-FPM exporter for monitoring Roundcube PHP-FPM performance
   # Monitors process counts, queue length, request latency
 
   services.prometheus.exporters.php-fpm = {
@@ -14,16 +14,16 @@
     telemetryPath = "/metrics";
   };
 
-  # Configure the exporter to scrape Nextcloud PHP-FPM
+  # Configure the exporter to scrape Roundcube PHP-FPM
   systemd.services.prometheus-php-fpm-exporter = {
     # Ensure exporter starts after PHP-FPM is ready
-    after = [ "phpfpm-nextcloud.service" ];
-    wants = [ "phpfpm-nextcloud.service" ];
+    after = [ "phpfpm-roundcube.service" ];
+    wants = [ "phpfpm-roundcube.service" ];
 
     serviceConfig = {
       # Add environment variables for PHP-FPM scraping
       Environment = [
-        "PHP_FPM_SCRAPE_URI=unix://${config.services.phpfpm.pools.nextcloud.socket};/status"
+        "PHP_FPM_SCRAPE_URI=unix://${config.services.phpfpm.pools.roundcube.socket};/status"
         "PHP_FPM_FIX_PROCESS_COUNT=true"
       ];
       # Allow Unix socket connections
@@ -50,7 +50,7 @@
       static_configs = [{
         targets = [ "localhost:${toString config.services.prometheus.exporters.php-fpm.port}" ];
         labels = {
-          pool = "nextcloud";
+          pool = "roundcube";
         };
       }];
       scrape_interval = "15s";

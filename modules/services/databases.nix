@@ -10,12 +10,6 @@ in
   imports = [
     # Set up PostgreSQL passwords for database users
     (mkPostgresUserSetup {
-      user = "nextcloud";
-      database = "nextcloud";
-      secretPath = config.sops.secrets."nextcloud-db-password".path;
-      dependentService = "nextcloud-setup.service";
-    })
-    (mkPostgresUserSetup {
       user = "teable";
       database = "teable";
       secretPath = config.sops.secrets."teable-postgres-password".path;
@@ -95,7 +89,6 @@ in
       ensureDatabases = [
         "litellm"
         "wallabag"
-        "nextcloud"
         "teable"
         "budgetboard"
         "nocobase"
@@ -107,10 +100,6 @@ in
         { name = "johnw"; }
         { name = "litellm"; }
         { name = "wallabag"; }
-        {
-          name = "nextcloud";
-          ensureDBOwnership = true;
-        }
         {
           name = "teable";
           ensureDBOwnership = true;

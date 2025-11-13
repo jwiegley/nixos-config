@@ -760,30 +760,6 @@
             }
           ];
         }
-
-        # PHPFPM Nextcloud logs from journal
-        {
-          job_name = "phpfpm-nextcloud";
-          journal = {
-            json = true;
-            max_age = "5m";
-            labels = {
-              job = "phpfpm-nextcloud";
-              host = "vulcan";
-            };
-          };
-          relabel_configs = [
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              target_label = "unit";
-            }
-            {
-              source_labels = [ "__journal__systemd_unit" ];
-              regex = "phpfpm-nextcloud\\.service";
-              action = "keep";
-            }
-          ];
-        }
       ];
     };
   };

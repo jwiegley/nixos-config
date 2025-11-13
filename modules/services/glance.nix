@@ -189,10 +189,6 @@ with lib;
                           url = "https://jellyfin.vulcan.lan";
                         }
                         {
-                          title = "Nextcloud";
-                          url = "https://nextcloud.vulcan.lan";
-                        }
-                        {
                           title = "Copyparty";
                           url = "https://data.newartisans.com";
                         }

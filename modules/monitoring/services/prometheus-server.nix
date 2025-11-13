@@ -13,7 +13,6 @@ let
     "certificates.yaml"
     "dns.yaml"
     "network.yaml"
-    "nextcloud.yaml"
     "ntopng.yaml"
     "litellm-availability.yaml"
     "monica.yaml"

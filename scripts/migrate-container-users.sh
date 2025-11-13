@@ -49,10 +49,8 @@ fi
 # Migration mappings: service_name:old_user:new_user
 declare -A migrations=(
     ["litellm"]="container-db:litellm"
-    ["metabase"]="container-db:metabase"
     ["mindsdb"]="container-db:mindsdb"
     ["nocobase"]="container-db:nocobase"
-    ["vanna"]="container-db:vanna"
     ["wallabag"]="container-db:wallabag"
     ["teable"]="container-db:teable"
     ["silly-tavern"]="container-web:sillytavern"
@@ -157,16 +155,6 @@ log_info "Applying service-specific migrations..."
 if [[ -d "/etc/litellm" ]]; then
     log_info "  litellm: Migrating /etc/litellm ownership to litellm user"
     chown -R litellm:litellm /etc/litellm
-fi
-
-# vanna: subdirectories
-if [[ -d "/var/lib/vanna" ]]; then
-    log_info "  vanna: Migrating /var/lib/vanna subdirectories to vanna user"
-    for subdir in faiss cache; do
-        if [[ -d "/var/lib/vanna/$subdir" ]]; then
-            chown -R vanna:vanna "/var/lib/vanna/$subdir"
-        fi
-    done
 fi
 
 # silly-tavern: config and data subdirectories

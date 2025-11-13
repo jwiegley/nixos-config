@@ -6,7 +6,6 @@
   #
   # These limits are based on observed memory usage patterns:
   # - Promtail: ~1.1GB (limited in promtail.nix)
-  # - Metabase: ~962MB (Java heap already limited to 2GB)
   # - Home Assistant: ~612MB
   #
   # Philosophy:
@@ -15,12 +14,13 @@
   # - Set Max ~30% above typical usage, High ~10% above typical usage
 
   systemd.services = {
-    # NOTE: Container services (paperless-ai, metabase, etc.) managed by quadlet
-    # have their resource limits set via podman's --memory and --memory-reservation flags
-    # in their respective quadlet configuration files. Setting systemd limits here
+    # NOTE: Container services managed by quadlet have their resource limits
+    # set via podman's --memory and --memory-reservation flags in their
+    # respective quadlet configuration files. Setting systemd limits here
     # would conflict with quadlet's overrideStrategy.
     #
-    # To set memory limits for quadlet containers, use extraContainerConfig in mkQuadletService:
+    # To set memory limits for quadlet containers, use extraContainerConfig in
+    # mkQuadletService:
     # podmanArgs = [ "--memory=1.8g" "--memory-reservation=1.5g" ]
 
     # Home Assistant memory limits

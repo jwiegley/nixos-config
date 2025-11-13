@@ -150,19 +150,6 @@ in
           "directory mask" = "0755";
         };
 
-        # Paperless-NGX Document Ingestion
-        paperless-consume = {
-          path = "/var/lib/paperless-ngx/consume";
-          comment = "Paperless Document Upload";
-          "valid users" = "johnw assembly";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0666";  # Files readable/writable by paperless group
-          "directory mask" = "0777";  # Match the directory's existing permissions
-          "force user" = "paperless";
-          "force group" = "paperless";
-        };
-
         # Monica CRM Storage
         monica-storage = {
           path = "/var/lib/monica";

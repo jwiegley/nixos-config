@@ -59,7 +59,6 @@ declare -A migrations=(
     ["opnsense-exporter"]="container-monitor:opnsense-exporter"
     ["technitium-dns-exporter"]="container-monitor:technitium-dns-exporter"
     ["openspeedtest"]="container-misc:openspeedtest"
-    ["paperless-ai"]="container-misc:paperless-ai"
 )
 
 # Stop all containers

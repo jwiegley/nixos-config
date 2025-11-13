@@ -45,12 +45,6 @@ in
       secretPath = config.sops.secrets."rspamd-db-password".path;
       dependentService = "rspamd.service";
     })
-    (mkPostgresUserSetup {
-      user = "paperless";
-      database = "paperless";
-      secretPath = config.sops.secrets."paperless/postgres-password".path;
-      dependentService = "paperless-scheduler.service";
-    })
   ];
 
   services = {

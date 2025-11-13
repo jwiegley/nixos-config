@@ -495,7 +495,6 @@ let
     { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "mindsdb"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
-    { name = "paperless-ai"; display = "Paperless-AI Document Processing"; runAs = "paperless-ai"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }

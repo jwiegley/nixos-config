@@ -126,18 +126,6 @@
         extraGroups = [ "podman" ];
         description = "Container user for OpenSpeedTest service";
       };
-
-      paperless-ai = {
-        isSystemUser = true;
-        group = "paperless-ai";
-        home = "/var/lib/containers/paperless-ai";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Paperless AI service";
-      };
     };
 
     # Create corresponding groups for each container user
@@ -151,7 +139,6 @@
       opnsense-exporter = {};
       technitium-dns-exporter = {};
       openspeedtest = {};
-      paperless-ai = {};
       podman = {};
     };
   };
@@ -168,7 +155,6 @@
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
-    "paperless-ai"
   ];
 
   # Grant full Nix daemon access to wheel group (admin users like johnw)
@@ -189,6 +175,5 @@
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"
     "d /run/secrets-openspeedtest 0750 openspeedtest openspeedtest - -"
-    "d /run/secrets-paperless-ai 0750 paperless-ai paperless-ai - -"
   ];
 }

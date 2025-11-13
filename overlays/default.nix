@@ -11,29 +11,20 @@ let
   # Import check-systemd overlay to add reload-notify support
   checkSystemdOverlay = import ./check-systemd.nix;
 
-  # Import rspamd-iscan overlay
-  rspamdIscanOverlay = import ./rspamd-iscan.nix;
-
   # Apply Haskell overlay first to get patched haskellPackages
   prevWithHaskell = prev // (haskellOverlay final prev);
 
   # Apply check-systemd overlay
   prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
-
-  # Apply rspamd-iscan overlay
-  prevWithRspamdIscan = prevWithCheckSystemd // (rspamdIscanOverlay final prevWithCheckSystemd);
 in
 {
-  inherit (import ./dirscan.nix final prevWithRspamdIscan) dirscan;
+  inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
 
   # Inherit the patched check_systemd from the check-systemd overlay
   inherit (prevWithCheckSystemd) check_systemd;
-
-  # Inherit rspamd-iscan from the rspamd-iscan overlay
-  inherit (prevWithRspamdIscan) rspamd-iscan;
   # Extend Python package sets system-wide using pythonPackagesExtensions
   # This ensures all Python derivations (including Home Assistant's) get our custom packages
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [] ++ [

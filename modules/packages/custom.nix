@@ -112,7 +112,6 @@ in
       rclone
       restic
       ripgrep
-      rspamd-iscan
       socat
       sops
       task-master-ai

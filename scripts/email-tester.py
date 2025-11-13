@@ -225,6 +225,62 @@ def check_spam_header(message_id: str, folder: str, should_be_spam: bool) -> boo
     return True
 
 
+def check_rspamd_headers(message_id: str, folder: str) -> bool:
+    """Check for presence of rspamd headers via IMAP.
+
+    Requires X-Spamd-Result (the primary detailed header).
+    Other headers are checked and reported but not required.
+    """
+    headers = get_message_headers(message_id, folder)
+
+    if not headers:
+        logger.error(f"  ✗ Cannot fetch headers")
+        return False
+
+    # Required header: X-Spamd-Result provides detailed scan results
+    required_header = ('X-Spamd-Result', r'^X-Spamd-Result:\s*\S+')
+
+    # Optional headers (nice to have but not required for test to pass)
+    optional_headers = {
+        'X-Spam': r'^X-Spam:\s*\S+',
+        'X-Spam-Flag': r'^X-Spam-Flag:\s*\S+',
+        'X-Spam-Status': r'^X-Spam-Status:\s*\S+',
+        'X-Spam-Level': r'^X-Spam-Level:\s*',
+        'X-Spamd-Bar': r'^X-Spamd-Bar:\s*',
+        'X-Rspamd-Server': r'^X-Rspamd-Server:\s*',
+        'X-Rspamd-Queue-Id': r'^X-Rspamd-Queue-Id:\s*',
+        'Authentication-Results': r'^Authentication-Results:\s*',
+    }
+
+    # Check required header
+    if not re.search(required_header[1], headers, re.MULTILINE | re.IGNORECASE):
+        logger.error(f"  ✗ Missing required header: {required_header[0]}")
+        logger.error(f"  ℹ Check rspamd milter_headers.conf: extended_spam_headers = true")
+        return False
+
+    logger.info(f"  ✓ Required header present: {required_header[0]}")
+
+    # Extract and display X-Spamd-Result for debugging
+    result_match = re.search(r'^X-Spamd-Result:\s*(.+?)$', headers, re.MULTILINE | re.IGNORECASE)
+    if result_match:
+        result_value = result_match.group(1).strip()
+        # Show score if present
+        score_match = re.search(r'\[([0-9.-]+)\s*/\s*([0-9.-]+)\]', result_value)
+        if score_match:
+            logger.info(f"  ℹ Spam score: {score_match.group(1)} / {score_match.group(2)}")
+
+    # Check optional headers and report (but don't fail)
+    found_optional = []
+    for header_name, pattern in optional_headers.items():
+        if re.search(pattern, headers, re.MULTILINE | re.IGNORECASE):
+            found_optional.append(header_name)
+
+    if found_optional:
+        logger.info(f"  ℹ Additional headers: {', '.join(found_optional)}")
+
+    return True
+
+
 def imap_copy_message(message_id: str, source_folder: str, dest_folder: str) -> None:
     """Copy message via IMAP COPY command (triggers IMAPSieve)."""
     mail = imap_connect()
@@ -429,6 +485,10 @@ def test_normal_delivery() -> bool:
         if not check_spam_header(message_id, 'INBOX', should_be_spam=False):
             raise TestError("Incorrectly marked as spam")
 
+        # Check rspamd headers are present
+        if not check_rspamd_headers(message_id, 'INBOX'):
+            raise TestError("Missing rspamd headers")
+
         logger.info("✓ PASSED")
         return True
 
@@ -561,6 +621,10 @@ Sent from my iPhone (definitely not a mass mailer)
             # Verify spam headers
             if not check_spam_header(message_id, 'Spam', should_be_spam=True):
                 raise TestError("Missing spam headers")
+
+            # Check rspamd headers are present
+            if not check_rspamd_headers(message_id, 'Spam'):
+                raise TestError("Missing rspamd headers")
 
             logger.info("✓ PASSED")
             return True

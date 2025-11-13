@@ -2,7 +2,7 @@
 
 {
   # Redis exporter for multiple Redis instances
-  # Monitors: redis-litellm, redis-nextcloud
+  # Monitors: redis-litellm
 
   services.prometheus.exporters.redis = {
     enable = true;
@@ -14,7 +14,6 @@
     # Format: redis://host:port or unix:///path/to/socket
     extraFlags = [
       "-redis.addr=redis://10.88.0.1:8085"  # litellm
-      "-redis.addr=unix:///run/redis-nextcloud/redis.sock"  # nextcloud
     ];
   };
 
@@ -25,7 +24,6 @@
   users.users.redis-exporter = {
     isSystemUser = true;
     group = "redis-exporter";
-    extraGroups = [ "redis-nextcloud" ];
   };
 
   users.groups.redis-exporter = {};

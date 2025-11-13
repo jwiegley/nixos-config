@@ -110,7 +110,6 @@
     ../../modules/packages/zsh.nix
 
     # Storage
-    ../../modules/services/nextcloud.nix
     ../../modules/storage/zfs.nix
     ../../modules/storage/hd-idle.nix
     ../../modules/storage/backups.nix

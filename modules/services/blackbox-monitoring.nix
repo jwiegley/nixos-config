@@ -471,7 +471,6 @@ in
             "https://postgres.vulcan.lan"
             "https://hass.vulcan.lan"
             "https://nodered.vulcan.lan"
-            "https://nextcloud.vulcan.lan"
             "https://nocobase.vulcan.lan"
             "https://ntopng.vulcan.lan"
             "https://wallabag.vulcan.lan"

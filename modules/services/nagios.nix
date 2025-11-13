@@ -386,9 +386,6 @@ let
 
   # Critical Services that depend on /tank mount
   tankDependentServices = [
-    { name = "nextcloud-setup.service"; display = "Nextcloud Setup"; mount = "/tank"; }
-    { name = "nextcloud-update-db.service"; display = "Nextcloud Database Update"; mount = "/tank"; }
-    { name = "nextcloud-cron.service"; display = "Nextcloud Cron"; mount = "/tank"; }
     { name = "samba-smbd.service"; display = "Samba SMB Daemon"; mount = "/tank"; }
     { name = "samba-nmbd.service"; display = "Samba NetBIOS Name Server"; mount = "/tank"; }
     { name = "samba-winbindd.service"; display = "Samba Winbind Daemon"; mount = "/tank"; }
@@ -429,7 +426,6 @@ let
     { name = "redis-gitea.service"; display = "Redis (Gitea)"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
     { name = "redis-n8n.service"; display = "Redis (n8n)"; }
-    { name = "redis-nextcloud.service"; display = "Redis (Nextcloud)"; }
     { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
     { name = "changedetection.service"; display = "ChangeDetection"; }
   ];
@@ -441,7 +437,6 @@ let
     { name = "restic-backups-Databases.service"; display = "Restic Backup: Databases"; mount = "/tank"; }
     { name = "restic-backups-doc.service"; display = "Restic Backup: doc"; mount = "/tank"; }
     { name = "restic-backups-Home.service"; display = "Restic Backup: Home"; mount = "/tank"; }
-    { name = "restic-backups-Nextcloud.service"; display = "Restic Backup: Nextcloud"; mount = "/tank"; }
     { name = "restic-backups-Photos.service"; display = "Restic Backup: Photos"; mount = "/tank"; }
     { name = "restic-backups-src.service"; display = "Restic Backup: src"; mount = "/tank"; }
     { name = "restic-backups-Video.service"; display = "Restic Backup: Video"; mount = "/tank"; }
@@ -1300,14 +1295,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: n8n.vulcan.lan
       check_command           check_ssl_cert!n8n.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: nextcloud.vulcan.lan
-      check_command           check_ssl_cert!nextcloud.vulcan.lan
       service_groups          ssl-certificates
     }
 

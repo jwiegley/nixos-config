@@ -8,7 +8,6 @@
   }:
   let
     # Convert device path to systemd mount unit name
-    # Example: /tank/Nextcloud -> tank-Nextcloud.mount
     deviceUnitName =
       (lib.replaceStrings ["/"] ["-"]
         (lib.removePrefix "/" device)) + ".mount";

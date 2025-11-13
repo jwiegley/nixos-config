@@ -12,7 +12,6 @@ let
     "storage.yaml"
     "certificates.yaml"
     "network.yaml"
-    "nextcloud.yaml"
   ];
 in
 {

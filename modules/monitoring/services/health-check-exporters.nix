@@ -32,7 +32,6 @@ let
 
     # Critical Dependencies
     "redis-litellm"
-    "redis-nextcloud"
   ];
 
   # Script to generate backup status metrics

@@ -76,8 +76,8 @@ if not args or "backups" in args:
                    onEntryPastLimit = safeRemove,
                    **opts).scanEntries()
 
-    if exists('/tank/Nextcloud/johnw/files/OPNsense-Backup'):
-        DirScanner(directory        = '/tank/Nextcloud/johnw/files/OPNsense-Backup',
+    if exists('/tank/Backups/OPNsense'):
+        DirScanner(directory        = '/tank/Backups/OPNsense',
                    days             = 28,
                    mtime            = True,
                    sudo             = True,

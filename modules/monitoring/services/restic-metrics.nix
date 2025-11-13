@@ -16,7 +16,6 @@ let
           "Backups"
           "Databases"
           "Home"
-          "Nextcloud"
           "Photos"
           "Video"
           "doc"

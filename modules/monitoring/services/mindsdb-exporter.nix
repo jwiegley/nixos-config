@@ -9,6 +9,7 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "mindsdb";
+      scrape_interval = "60s";  # Reduced from default 15s to minimize log noise
       metrics_path = "/probe";
       params = {
         module = [ "http_2xx" ];

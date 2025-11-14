@@ -91,7 +91,8 @@ in
       # No port publishing needed - client accesses via pod's shared network
 
       # Health check configuration
-      healthCmd = "CMD-SHELL curl -f http://localhost:8080/ || exit 1";
+      # Uses bash TCP redirection instead of curl (which isn't in the container image)
+      healthCmd = "CMD-SHELL timeout 2 bash -c '</dev/tcp/localhost/8080' || exit 1";
       healthInterval = "30s";
       healthTimeout = "10s";
       healthStartPeriod = "60s";

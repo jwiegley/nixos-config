@@ -142,14 +142,14 @@ let
 
       # Alert if high scrape duration (collection taking too long)
       - alert: GitWorkspaceMetricCollectionSlow
-        expr: git_workspace_scrape_duration_seconds > 60
+        expr: git_workspace_scrape_duration_seconds > 180
         for: 10m
         labels:
           severity: info
           service: git-workspace-archive
         annotations:
           summary: "Git workspace metrics collection is slow"
-          description: "Collecting metrics is taking {{ $value | humanizeDuration }} (over 1 minute). With 619 repositories, this may indicate disk I/O issues or slow filesystem operations on /var/lib/git-workspace-archive."
+          description: "Collecting metrics is taking {{ $value | humanizeDuration }} (over 3 minutes). With 621 repositories, this may indicate disk I/O issues or slow filesystem operations on /var/lib/git-workspace-archive."
   '';
 in
 {

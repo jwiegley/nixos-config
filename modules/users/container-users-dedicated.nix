@@ -28,18 +28,6 @@
         description = "Container user for LiteLLM proxy service";
       };
 
-      mindsdb = {
-        isSystemUser = true;
-        group = "mindsdb";
-        home = "/var/lib/containers/mindsdb";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for MindsDB ML service";
-      };
-
       nocobase = {
         isSystemUser = true;
         group = "nocobase";
@@ -131,7 +119,6 @@
     # Create corresponding groups for each container user
     groups = {
       litellm = {};
-      mindsdb = {};
       nocobase = {};
       wallabag = {};
       teable = {};
@@ -147,7 +134,6 @@
   nix.settings.allowed-users = [
     "changedetection"
     "litellm"
-    "mindsdb"
     "nocobase"
     "wallabag"
     "teable"
@@ -167,7 +153,6 @@
   # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
   systemd.tmpfiles.rules = [
     "d /run/secrets-litellm 0750 litellm litellm - -"
-    "d /run/secrets-mindsdb 0750 mindsdb mindsdb - -"
     "d /run/secrets-nocobase 0750 nocobase nocobase - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
     "d /run/secrets-teable 0750 teable teable - -"

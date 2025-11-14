@@ -24,7 +24,6 @@ let
     "budgetboard.yaml"
     "copyparty.yaml"
     "gitea.yaml"
-    "mindsdb.yaml"
     "container-health.yaml"
     "windows-container.yaml"
     "email-services.yaml"

@@ -20,8 +20,6 @@
     # Application-specific exporters
     ../monitoring/services/home-assistant-backup-exporter.nix
     ../monitoring/services/litellm-exporter.nix
-    ../monitoring/services/mindsdb-exporter.nix
-    ../monitoring/services/mindsdb-alerts.nix
     ../monitoring/services/node-red-exporter.nix
     ../monitoring/services/n8n-exporter.nix
     ../monitoring/services/n8n-alerts.nix

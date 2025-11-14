@@ -42,14 +42,11 @@ in
   };
 
   # Redis instance for n8n (queue and cache)
-  users.groups.redis-n8n = {};
-
+  # Using TCP on localhost - n8n doesn't support Unix sockets via env vars
   services.redis.servers.n8n = {
     enable = true;
-    port = 0; # Unix socket only
-    bind = null;
-    unixSocket = "/run/redis-n8n/redis.sock";
-    unixSocketPerm = 660;
+    port = 6382;  # Use non-default port (6380, 6381 already in use)
+    bind = "127.0.0.1";  # Localhost only for security
     user = "redis-n8n";
   };
 
@@ -77,7 +74,7 @@ in
 
       # Queue mode using Redis for better performance
       EXECUTIONS_MODE = "queue";
-      # QUEUE_BULL_REDIS_HOST and EXECUTIONS_PROCESS are set via EnvironmentFile
+      # QUEUE_BULL_REDIS_HOST, PORT, and DB are set via EnvironmentFile
 
       # Public URL configuration for editor
       N8N_HOST = "127.0.0.1";
@@ -130,8 +127,6 @@ in
     wants = [ "sops-install-secrets.service" ];
 
     serviceConfig = {
-      # Add n8n dynamic user to redis-n8n group for socket access
-      SupplementaryGroups = [ "redis-n8n" ];
 
       # Load secrets via systemd LoadCredential (works with DynamicUser)
       LoadCredential = [
@@ -153,7 +148,9 @@ in
       cat > /run/n8n/env <<EOF
       DB_POSTGRESDB_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/db-password")
       N8N_ENCRYPTION_KEY=$(cat "$CREDENTIALS_DIRECTORY/encryption-key")
-      QUEUE_BULL_REDIS_PATH=/run/redis-n8n/redis.sock
+      QUEUE_BULL_REDIS_HOST=127.0.0.1
+      QUEUE_BULL_REDIS_PORT=6382
+      QUEUE_BULL_REDIS_DB=0
       EOF
 
       # Set permissions so dynamic user can read it

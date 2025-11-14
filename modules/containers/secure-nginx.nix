@@ -242,6 +242,47 @@ in
             "copyparty.service"
           ];
           wants = [ "copyparty.service" ];
+
+          # Systemd hardening
+          serviceConfig = {
+            # Filesystem hardening
+            ProtectSystem = "strict";
+            ProtectHome = true;
+            PrivateTmp = true;
+            ReadWritePaths = [ "/var/log/nginx" ];
+
+            # Privilege restrictions
+            NoNewPrivileges = true;
+            PrivateDevices = true;
+
+            # Kernel hardening
+            ProtectKernelModules = true;
+            ProtectKernelTunables = true;
+            ProtectKernelLogs = true;
+            ProtectControlGroups = true;
+
+            # Capabilities
+            CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
+            AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
+
+            # Syscall filtering
+            SystemCallFilter = [
+              "@system-service"
+              "~@privileged"
+              "~@resources"
+            ];
+            SystemCallArchitectures = "native";
+
+            # Network restrictions
+            RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+
+            # Misc hardening
+            LockPersonality = true;
+            RestrictNamespaces = true;
+            RestrictRealtime = true;
+            RestrictSUIDSGID = true;
+            RemoveIPC = true;
+          };
         };
       };
     };

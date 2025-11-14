@@ -45,15 +45,15 @@ groups:
           summary: "Critical memory pressure on {{ $labels.instance }}"
           description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
 
-      - alert: MemoryAllocationFailures
-        expr: increase(node_vmstat_pgmajfault[5m]) > 1000
-        for: 2m
+      - alert: HighMajorPageFaultRate
+        expr: increase(node_vmstat_pgmajfault[5m]) > 10000
+        for: 5m
         labels:
-          severity: critical
+          severity: warning
           category: system
         annotations:
-          summary: "Memory allocation failures detected on {{ $labels.instance }}"
-          description: "High number of page faults ({{ $value }}) indicates memory thrashing or allocation failures"
+          summary: "High major page fault rate on {{ $labels.instance }}"
+          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}). This may indicate memory thrashing or excessive disk I/O due to memory pressure."
 
       # Swap monitoring
       - alert: SwapUsageHigh

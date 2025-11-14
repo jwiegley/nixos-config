@@ -146,6 +146,49 @@ let
     END_TIME=$(${pkgs.coreutils}/bin/date +%s)
     END_ISO=$(${pkgs.coreutils}/bin/date -Iseconds)
     DURATION=$((END_TIME - START_TIME))
+    CURRENT_TIME=$END_TIME
+    STALE_THRESHOLD=$((3 * 86400))  # 3 days in seconds
+    STALE_COUNT=0
+    STALE_REPOS_JSON=""
+
+    # Collect staleness data while files are hot in cache
+    echo "Collecting repository staleness metrics..." | ${pkgs.coreutils}/bin/tee -a "$LOG_FILE"
+    if [[ -d "$WORKSPACE_DIR/github" ]]; then
+      STALE_REPOS_FILE=$(${pkgs.coreutils}/bin/mktemp)
+      trap "${pkgs.coreutils}/bin/rm -f $OUTPUT_FILE $STALE_REPOS_FILE" EXIT
+
+      # Scan repositories for staleness (this is fast now since files are cached)
+      while IFS= read -r -d $'\0' line; do
+        FETCH_TIME=''${line%% *}
+        fetch_head=''${line#* }
+        FETCH_TIME=''${FETCH_TIME%.*}  # Convert fractional to integer
+
+        # Extract repo path
+        git_dir="''${fetch_head%/FETCH_HEAD}"
+        REPO_PATH="''${git_dir%/.git}"
+        REPO_NAME="''${REPO_PATH#$WORKSPACE_DIR/}"
+
+        # Calculate age
+        AGE_SECONDS=$((CURRENT_TIME - FETCH_TIME))
+
+        # Track stale repos (>3 days)
+        if [[ $AGE_SECONDS -gt $STALE_THRESHOLD && $FETCH_TIME -gt 0 ]]; then
+          STALE_COUNT=$((STALE_COUNT + 1))
+          # Store top 50 stalest repos for detailed metrics
+          echo "$AGE_SECONDS $FETCH_TIME $REPO_NAME" >> "$STALE_REPOS_FILE"
+        fi
+      done < <(${pkgs.findutils}/bin/find "$WORKSPACE_DIR/github" -name "FETCH_HEAD" -path "*/.git/FETCH_HEAD" -printf '%T@ %p\0' 2>/dev/null)
+
+      # Convert top 50 stalest repos to JSON array
+      if [[ -f "$STALE_REPOS_FILE" && -s "$STALE_REPOS_FILE" ]]; then
+        STALE_REPOS_JSON=$(${pkgs.coreutils}/bin/sort -rn "$STALE_REPOS_FILE" | ${pkgs.coreutils}/bin/head -50 | ${pkgs.gawk}/bin/awk '{printf "{\"repo\":\"%s\",\"age\":%s,\"last_fetch\":%s},", $3, $1, $2}' | ${pkgs.gnused}/bin/sed 's/,$//')
+        STALE_REPOS_JSON="[$STALE_REPOS_JSON]"
+      else
+        STALE_REPOS_JSON="[]"
+      fi
+    fi
+
+    echo "Found $STALE_COUNT stale repositories (>3 days old)" | ${pkgs.coreutils}/bin/tee -a "$LOG_FILE"
 
     # Parse output for failures
     # Use tail -1 to get only the last occurrence (from the final fetch command)
@@ -180,7 +223,9 @@ let
   "successful": $SUCCESSFUL_REPOS,
   "failed": $FAILED_COUNT,
   "failed_repos": "$FAILED_REPOS",
-  "workspace_dir": "$WORKSPACE_DIR"
+  "workspace_dir": "$WORKSPACE_DIR",
+  "stale_repos_count": $STALE_COUNT,
+  "stale_repos_detail": $STALE_REPOS_JSON
 }
 EOF
     ${pkgs.coreutils}/bin/mv "$STATE_FILE_TMP" "$STATE_FILE"
@@ -211,6 +256,9 @@ in
         git
         git-workspace
         openssh
+        gawk
+        gnused
+        findutils
       ];
       after = [ "sops-nix.service" ];
       wants = [ "sops-nix.service" ];

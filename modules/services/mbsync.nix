@@ -7,43 +7,43 @@ in
 {
   imports = [
     # Johnw configuration
-    # (mkMbsyncService {
-    #   name = "johnw";
-    #   user = "johnw";
-    #   group = "users";
-    #   secretName = "johnw-fastmail-password";
+    (mkMbsyncService {
+      name = "johnw";
+      user = "johnw";
+      group = "users";
+      secretName = "johnw-fastmail-password";
 
-    #   remoteConfig = ''
-    #     Host imap.fastmail.com
-    #     User johnw@newartisans.com
-    #     PassCmd "cat /run/secrets/johnw-fastmail-password"
-    #     TLSType IMAPS
-    #     CertificateFile /etc/ssl/certs/ca-certificates.crt
-    #     Port 993
-    #     PipelineDepth 1
-    #   '';
+      remoteConfig = ''
+        Host imap.fastmail.com
+        User johnw@newartisans.com
+        PassCmd "cat /run/secrets/johnw-fastmail-password"
+        TLSType IMAPS
+        CertificateFile /etc/ssl/certs/ca-certificates.crt
+        Port 993
+        PipelineDepth 1
+      '';
 
-    #   channels = ''
-    #     # Sync all folders from Fastmail (pull only)
-    #     # Good and Spam folders are now handled by fetchmail via LMTP to trigger imapsieve
-    #     Channel fastmail-all
-    #     Far :johnw-remote:
-    #     Near :dovecot-local:
-    #     Patterns INBOX Sent mail/* list/*
-    #     Create Both
-    #     Remove None
-    #     # Expunge Both
-    #     Sync Full
-    #     SyncState /var/lib/mbsync-johnw/
-    #     CopyArrivalDate yes
-    #   '';
+      channels = ''
+        # Sync all folders from Fastmail (pull only)
+        # Good and Spam folders are now handled by fetchmail via LMTP to trigger imapsieve
+        Channel fastmail-all
+        Far :johnw-remote:
+        Near :dovecot-local:
+        Patterns *
+        Create Both
+        Remove None
+        # Expunge Both
+        Sync Full
+        SyncState /var/lib/mbsync-johnw/
+        CopyArrivalDate yes
+      '';
 
-    #   timerInterval = "15min";
+      timerInterval = "15min";
 
-    #   # Don't use RemainAfterExit with OnUnitActiveSec timer
-    #   # The service needs to become inactive for the timer to schedule the next run
-    #   extraServiceConfig = {};
-    # })
+      # Don't use RemainAfterExit with OnUnitActiveSec timer
+      # The service needs to become inactive for the timer to schedule the next run
+      extraServiceConfig = {};
+    })
 
     # Assembly configuration
     (mkMbsyncService {

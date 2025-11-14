@@ -273,10 +273,6 @@ with lib;
                           url = "https://nocobase.vulcan.lan";
                         }
                         {
-                          title = "MindsDB";
-                          url = "https://mindsdb.vulcan.lan";
-                        }
-                        {
                           title = "BudgetBoard";
                           url = "https://budget.vulcan.lan";
                         }

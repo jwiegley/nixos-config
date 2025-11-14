@@ -26,7 +26,6 @@ DOMAINS=(
     "jupyter.vulcan.lan"
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
-    "mindsdb.vulcan.lan"
     "n8n.vulcan.lan"
     "nagios.vulcan.lan"
     "nodered.vulcan.lan"

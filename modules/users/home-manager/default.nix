@@ -31,7 +31,6 @@
   }) [
     "changedetection"
     "litellm"
-    "mindsdb"
     "nocobase"
     "wallabag"
     "teable"

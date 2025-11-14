@@ -94,7 +94,6 @@
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
-    ../../modules/services/mindsdb.nix
     ../../modules/services/aria2.nix
 
     # Containers

@@ -487,7 +487,6 @@ let
   # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
   containers = [
     { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
-    { name = "mindsdb"; display = "MindsDB AI Platform"; runAs = "mindsdb"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
@@ -1359,14 +1358,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: monica.vulcan.lan
       check_command           check_ssl_cert!monica.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: mindsdb.vulcan.lan
-      check_command           check_ssl_cert!mindsdb.vulcan.lan
       service_groups          ssl-certificates
     }
 

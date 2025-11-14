@@ -14,7 +14,7 @@ let
     buildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/check_ssl_cert \
-        --prefix PATH : ${pkgs.bind.host}/bin
+        --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.bind.host pkgs.bc ]}
     '';
   };
 

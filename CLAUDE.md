@@ -4,6 +4,13 @@ Guidance for Claude Code when working with this NixOS repository.
 
 ## ⚠️ CRITICAL SAFETY RULES ⚠️
 
+### SYSTEM OPERATIONS
+
+**NEVER reboot the machine:**
+- Only the user will manually reboot the system
+- Do not suggest, recommend, or attempt system reboots
+- If a change requires a reboot, inform the user and let them decide when to reboot
+
 ### DATA LOSS PREVENTION
 
 **NEVER use systemd tmpfiles.rules for persistent data directories:**

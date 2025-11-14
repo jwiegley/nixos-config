@@ -241,17 +241,40 @@ in {
       '';
 
       serviceConfig = {
-        Type = "notify";
+        Type = "simple";
         User = "copyparty";
         Group = "copyparty";
         WorkingDirectory = dataDir;
 
-        # Security hardening
+        # Filesystem hardening
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadWritePaths = [ dataDir shareDir ];
+        PrivateDevices = true;
+
+        # Kernel hardening
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+
+        # Syscall filtering
+        SystemCallFilter = [
+          "@system-service"
+          "~@privileged"
+        ];
+        SystemCallArchitectures = "native";
+
+        # Network restrictions
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+
+        # Misc hardening
+        LockPersonality = true;
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
 
         # Resource limits
         MemoryMax = "2G";

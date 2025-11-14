@@ -217,6 +217,9 @@ in
       name = "src";
       exclude = sourceExcludes;
     })
+    (mkBackup {
+      name = "Public";
+    })
   ];
 
   # Get list of all backup names to create service overrides

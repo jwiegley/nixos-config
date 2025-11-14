@@ -9,6 +9,8 @@
     destinationDir = "/tank/Public/share";
     user = "root";
     group = "root";
+    sourceOwner = "johnw";
+    sourceGroup = "johnw";
     destinationOwner = "johnw";
     destinationGroup = "johnw";
     extraArgs = [ "-v" ];

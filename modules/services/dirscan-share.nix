@@ -36,6 +36,8 @@ let
     ${pkgs.python3}/bin/python3 ${pkgs.dirscan}/bin/share.py \
       "${cfg.sourceDir}" \
       "${cfg.destinationDir}" \
+      "${cfg.sourceOwner}:${cfg.sourceGroup}" \
+      "${cfg.destinationOwner}:${cfg.destinationGroup}" \
       ${concatStringsSep " " cfg.extraArgs}
 
     log "Share completed successfully"
@@ -79,6 +81,18 @@ in
       default = [ "-v" ];  # Verbose by default for debugging
       description = "Additional arguments to pass to share.py";
       example = [ "-v" "--dry-run" ];
+    };
+
+    sourceOwner = mkOption {
+      type = types.str;
+      default = "root";
+      description = "Expected owner of files in source directory";
+    };
+
+    sourceGroup = mkOption {
+      type = types.str;
+      default = "root";
+      description = "Expected group of files in source directory";
     };
 
     destinationOwner = mkOption {

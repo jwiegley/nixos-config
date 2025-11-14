@@ -8,9 +8,9 @@ dirscan = with super; python3Packages.buildPythonPackage rec {
   src = super.fetchFromGitHub {
     owner = "jwiegley";
     repo = "dirscan";
-    rev = "73378768709014a2ac97171c36a2287da79d09aa";
-    sha256 = "02a1pr9msnxaydzdx7j7bnis54ylpccz9akbyri8yx2rgzgyvgm5";
-    # date = "2025-11-03T17:26:54-08:00";
+    rev = "fbfe86782187c9cacf7c098963a8ccad346312b1";
+    sha256 = "1gmxcjpwgpqkp4awgldaf8yzz1lhynfrj6qnfs4f5dllmi90ycmm";
+    # date = "2025-11-13";
   };
 
   phases = [ "unpackPhase" "installPhase" ];

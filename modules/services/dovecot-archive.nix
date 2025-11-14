@@ -14,8 +14,7 @@ let
 
     # Archive emails older than 365 days from INBOX to Archive folder
     # Runs as user johnw
-    # NOTE: Using 'echo' prefix for testing - remove 'echo' to enable actual archival
-    echo ${pkgs.dovecot}/bin/doveadm move -u johnw Archive mailbox INBOX SENTBEFORE 365d
+    ${pkgs.dovecot}/bin/doveadm move -u johnw Archive mailbox INBOX SENTBEFORE 365d
 
     exit_code=$?
 

@@ -62,6 +62,11 @@ in
       # Webhook URL for external triggers (public Cloudflare Tunnel)
       # WEBHOOK_URL = "https://n8n.newartisans.com/";
       WEBHOOK_URL = "https://n8n.vulcan.lan/";
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS = "true";
+
+      # Allow access from local network clients
+      N8N_ALLOWED_ORIGINS = "https://n8n.vulcan.lan,http://192.168.1.2:5678";
+      N8N_PROXY_HOPS = "1";
 
       # Database configuration - PostgreSQL
       DB_TYPE = "postgresdb";
@@ -104,6 +109,17 @@ in
       N8N_DIAGNOSTICS_ENABLED = "false";
       N8N_VERSION_NOTIFICATIONS_ENABLED = "false";
       N8N_DISABLE_PRODUCTION_MAIN_PROCESS = "true";
+
+      # Task runners and worker configuration
+      N8N_RUNNERS_ENABLED = "true";
+      OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS = "true";
+
+      # Security settings
+      N8N_BLOCK_ENV_ACCESS_IN_NODE = "false";  # Allow env var access from Code Node
+      N8N_GIT_NODE_DISABLE_BARE_REPOS = "true";  # Disable bare repos for security
+
+      # Trust Step-CA root certificate for webhook HTTPS connections
+      NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/vulcan-ca.crt";
     };
   };
 
@@ -138,7 +154,6 @@ in
       DB_POSTGRESDB_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/db-password")
       N8N_ENCRYPTION_KEY=$(cat "$CREDENTIALS_DIRECTORY/encryption-key")
       QUEUE_BULL_REDIS_PATH=/run/redis-n8n/redis.sock
-      EXECUTIONS_PROCESS=main
       EOF
 
       # Set permissions so dynamic user can read it
@@ -175,12 +190,25 @@ in
         proxy_next_upstream_tries 3;
         proxy_next_upstream_timeout 10s;
 
-        # Increase timeouts for long-running workflows
-        proxy_connect_timeout 300;
-        proxy_send_timeout 300;
-        proxy_read_timeout 300;
+        # Preserve headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Original-Host $host;
 
-        # Buffer settings for large payloads
+        # (Optional) origin passthrough if your app needs it
+        proxy_set_header Origin $host;
+
+        # Timeouts for long-running requests
+        proxy_connect_timeout 300;
+        proxy_read_timeout 36000s;
+        proxy_send_timeout 36000s;
+
+        # Disable buffering/caching for streaming/WS
+        chunked_transfer_encoding off;
+        proxy_cache off;
         proxy_buffering off;
         proxy_request_buffering off;
         client_max_body_size 100M;

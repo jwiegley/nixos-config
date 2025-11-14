@@ -31,6 +31,13 @@ in
       };
       enableWatchdog = false;
 
+      # Rate limit journald logging to reduce health check noise
+      # Prometheus scrapes /api/status every 60s, generating access logs
+      extraServiceConfig = {
+        LogRateLimitIntervalSec = "60s";
+        LogRateLimitBurst = 10;
+      };
+
       # Environment file with secrets (DB_PASSWORD)
       environmentFiles = [
         config.sops.secrets."mindsdb/env".path

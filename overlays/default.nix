@@ -136,6 +136,21 @@ in
     '';
   });
 
+  # Rspamd - Update to 3.14.0 to fix lua_magic empty text part errors
+  # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts
+  # Fixed in 3.13.1+, using 3.14.0 for latest fixes including DNS stability and memory leaks
+  rspamd = prev.rspamd.overrideAttrs (oldAttrs: {
+    version = "3.14.0";
+    src = prev.fetchFromGitHub {
+      owner = "rspamd";
+      repo = "rspamd";
+      rev = "3.14.0";
+      hash = "sha256-AZk1mUMFC5FHDFX9CwZEbhzfdxXUw8SbpkvhUmq219Q=";
+    };
+    # Remove patches that are already included in 3.14.0
+    patches = [];
+  });
+
   # ZFS - Enable support for 16K page size (Apple Silicon / Asahi Linux)
   # EXPERIMENTAL: This may cause data corruption - use at your own risk!
   #

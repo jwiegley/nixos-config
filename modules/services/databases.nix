@@ -33,6 +33,12 @@ in
       secretPath = config.sops.secrets."rspamd-db-password".path;
       dependentService = "rspamd.service";
     })
+    (mkPostgresUserSetup {
+      user = "mailarchiver";
+      database = "mailarchiver";
+      secretPath = config.sops.secrets."mailarchiver-db-password".path;
+      dependentService = "podman-mailarchiver.service";
+    })
   ];
 
   services = {
@@ -87,6 +93,7 @@ in
         "budgetboard"
         "nocobase"
         "gitea"
+        "mailarchiver"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -103,6 +110,10 @@ in
         }
         {
           name = "nocobase";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "mailarchiver";
           ensureDBOwnership = true;
         }
       ];

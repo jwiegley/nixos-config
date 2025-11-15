@@ -488,6 +488,7 @@ in
             "https://teable.vulcan.lan"
             "https://budget.vulcan.lan"
             "https://changes.vulcan.lan"
+            "https://aria.vulcan.lan"
           ];
         }];
         relabel_configs = [

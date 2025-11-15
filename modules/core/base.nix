@@ -39,6 +39,16 @@
     "flakes"
   ];
 
+  # Configure Nix to use system CA bundle (includes step-ca root certificate)
+  # This allows git+https:// flake inputs to work with internal services
+  # using certificates signed by step-ca
+  nix.settings.ssl-cert-file = "/etc/ssl/certs/ca-bundle.crt";
+
+  # Also set NIX_SSL_CERT_FILE environment variable for all users
+  # This ensures git operations invoked by Nix use the correct CA bundle
+  environment.variables.NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+  environment.variables.GIT_SSL_CAINFO = "/etc/ssl/certs/ca-bundle.crt";
+
   # --------------------------------------------------------------------------
   # Firewall Configuration
   # --------------------------------------------------------------------------

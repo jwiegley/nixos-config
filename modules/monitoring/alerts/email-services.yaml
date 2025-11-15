@@ -136,55 +136,6 @@ groups:
           summary: "Rspamd service has failed"
           description: "Rspamd service is in failed state. Check logs for errors."
 
-      # Roundcube Webmail Alerts
-      - alert: RoundcubeServiceDown
-        expr: |
-          systemd_unit_state{
-            name="phpfpm-roundcube.service",
-            state="active",
-            type="service"
-          } == 0
-        for: 2m
-        labels:
-          severity: warning
-          category: email
-          service: roundcube
-        annotations:
-          summary: "Roundcube webmail service is down"
-          description: "Roundcube PHP-FPM service is not active. Webmail access is unavailable."
-
-      - alert: RoundcubeServiceFailed
-        expr: |
-          systemd_unit_state{
-            name="phpfpm-roundcube.service",
-            state="failed",
-            type="service"
-          } == 1
-        for: 1m
-        labels:
-          severity: warning
-          category: email
-          service: roundcube
-        annotations:
-          summary: "Roundcube service has failed"
-          description: "Roundcube PHP-FPM service is in failed state. Check logs for errors."
-
-      - alert: RoundcubeRedisDown
-        expr: |
-          systemd_unit_state{
-            name="redis-roundcube.service",
-            state="active",
-            type="service"
-          } == 0
-        for: 2m
-        labels:
-          severity: warning
-          category: email
-          service: roundcube
-        annotations:
-          summary: "Roundcube Redis cache is down"
-          description: "Redis cache for Roundcube is not active. Session handling may be degraded."
-
       # Dovecot Message/Byte Delivery Metrics
       - alert: DovecotNoRecentActivity
         expr: |

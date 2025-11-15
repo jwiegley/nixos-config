@@ -75,7 +75,6 @@
     ../../modules/services/dovecot-archive.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/rspamd-alerts.nix
-    ../../modules/services/roundcube.nix
 
     # Email testing script (manual use only)
     # Note: Automated monitoring disabled to avoid over-training rspamd

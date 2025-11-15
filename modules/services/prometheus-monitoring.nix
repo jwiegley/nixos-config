@@ -15,7 +15,6 @@
     ../monitoring/services/prometheus-nginx.nix
     ../monitoring/services/nginx-exporter.nix
     ../monitoring/services/redis-exporter.nix
-    ../monitoring/services/phpfpm-exporter.nix
 
     # Application-specific exporters
     ../monitoring/services/home-assistant-backup-exporter.nix

@@ -28,12 +28,6 @@ in
       dependentService = "podman-nocobase.service";
     })
     (mkPostgresUserSetup {
-      user = "roundcube";
-      database = "roundcube";
-      secretPath = config.sops.secrets."roundcube-db-password".path;
-      dependentService = "roundcube-setup.service";
-    })
-    (mkPostgresUserSetup {
       user = "rspamd";
       database = "rspamd";
       secretPath = config.sops.secrets."rspamd-db-password".path;
@@ -92,7 +86,6 @@ in
         "teable"
         "budgetboard"
         "nocobase"
-        "roundcube"
         "gitea"
       ];
       ensureUsers = [
@@ -110,10 +103,6 @@ in
         }
         {
           name = "nocobase";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "roundcube";
           ensureDBOwnership = true;
         }
       ];

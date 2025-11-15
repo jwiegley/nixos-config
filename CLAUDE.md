@@ -48,6 +48,26 @@ Guidance for Claude Code when working with this NixOS repository.
 - Reading `/var/lib/hass/.storage/*` files
 - Commands showing `access_token`, `refresh_token`, `api_key` fields
 
+### SECURITY - FILE PERMISSIONS
+
+**NEVER make sensitive files world-readable or group-readable without explicit justification:**
+
+- **Password files, private keys, tokens** = MUST be `600` (owner read/write only) or `400` (owner read-only)
+- **NEVER use `644` (world-readable) or `664` (group-readable) for sensitive files**
+- **NEVER use `777`, `666`, or any permission that allows write access to group/others**
+
+**Proper permission patterns:**
+- Secrets for root-only services: `600 root:root`
+- Secrets for specific service user: `600 service-user:service-user` or `640 root:service-group`
+- If a service can't read a secret file, the solution is NOT to open permissions - instead:
+  1. Check what user/group the service runs as
+  2. Change file ownership to match (`chown user:group`)
+  3. Use minimal permissions (`600` or `640` if group access needed)
+  4. Consider using systemd `LoadCredential=` for better isolation
+
+**Past violations:**
+- **2025-11-14**: Attempted to fix PostgreSQL password read by changing from `600` to `644` (world-readable)
+
 **SAFE operations:**
 - `sops /etc/nixos/secrets.yaml` (interactive editor)
 - `ls -la /run/secrets/` (metadata only)

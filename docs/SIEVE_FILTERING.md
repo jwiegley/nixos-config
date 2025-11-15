@@ -66,7 +66,7 @@ When you move messages to the **Good** folder via IMAP, they are automatically f
 
 #### Workflow
 
-1. Move message(s) to **Good** folder (via Thunderbird, webmail, etc.)
+1. Move message(s) to **Good** folder (via Thunderbird, IMAP client, etc.)
 2. IMAPSieve triggers immediately
 3. `process-good.sieve` script runs
 4. Messages matching rules are moved to target folders

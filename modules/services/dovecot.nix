@@ -12,8 +12,8 @@ let
       header :contains "X-Spam" "Yes",
       header :contains "X-Spam-Status" "Yes",
       header :contains "X-Spamd-Result" "True",
-      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "10",
-      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Level" "10"
+      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Score" "4",
+      header :value "ge" :comparator "i;ascii-numeric" "X-Spam-Level" "4"
     ) {
       # Message is spam - file to Spam folder and stop processing
       fileinto "Spam";

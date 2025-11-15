@@ -234,8 +234,8 @@ in
         # Action thresholds - never reject, only add headers
         # Let Sieve handle spam filing based on X-Spam headers
         reject = 999;  # Effectively disable rejection
-        add_header = 6;
-        greylist = 4;
+        add_header = 4;
+        greylist = 3;
       '';
 
       "milter_headers.conf".text = ''

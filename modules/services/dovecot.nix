@@ -375,14 +375,17 @@ in
 
         # Training folders with auto-expunge for cleanup
         # Messages marked as \Deleted are automatically removed after 1 day
+        mailbox "Spam" {
+          autoexpunge = 1d
+        }
         mailbox "TrainSpam" {
-          autoexpunge = 7d
+          autoexpunge = 1d
         }
         mailbox "TrainGood" {
-          autoexpunge = 7d
+          autoexpunge = 1d
         }
         mailbox "Retrain" {
-          autoexpunge = 7d
+          autoexpunge = 1d
         }
         # mailbox "Trash" {
         #   autoexpunge = 90d

@@ -1,0 +1,139 @@
+# Port Registry for vulcan.lan
+# Format: PORT INTERFACE... [SERVICE/DESCRIPTION]
+# Keep this file updated when adding new services!
+
+# SSH & Remote Access
+22 0.0.0.0 :: SSH
+2222 * :: Gitea SSH
+
+# DNS Services
+53 0.0.0.0 :: Technitium DNS
+853 0.0.0.0 :: DNS over TLS
+5353 0.0.0.0 :: mDNS (various interfaces)
+5355 0.0.0.0 :: LLMNR
+
+# Web Services (HTTP/HTTPS)
+80 0.0.0.0 :: Nginx HTTP
+443 0.0.0.0 :: Nginx HTTPS
+
+# Mail Services (SMTP/IMAP)
+25 0.0.0.0 :: Postfix SMTP
+143 127.0.0.1 Dovecot IMAP (local only, proxied by nginx)
+465 0.0.0.0 :: Postfix SMTPS
+587 0.0.0.0 :: Postfix submission
+993 0.0.0.0 :: Dovecot IMAPS
+4190 0.0.0.0 :: Dovecot ManageSieve
+
+# File Sharing (Samba/SMB)
+137 0.0.0.0 :: NetBIOS Name Service
+138 0.0.0.0 :: NetBIOS Datagram Service
+139 0.0.0.0 :: SMB over NetBIOS
+445 0.0.0.0 :: SMB Direct
+
+# MQTT & IoT
+1883 0.0.0.0 MQTT Mosquitto
+
+# Discovery Protocols
+1900 0.0.0.0 * SSDP
+3702 0.0.0.0 * :: WS-Discovery (various interfaces)
+5357 0.0.0.0 :: WSDD (various interfaces)
+
+# Databases
+5432 0.0.0.0 :: PostgreSQL
+
+# Redis Instances
+6379 container Redis - convention-speaker-list
+6380 127.0.0.1 Redis - ntopng
+6381 127.0.0.1 Redis - rspamd
+6382 127.0.0.1 Redis - n8n
+
+# Web Applications (localhost only, proxied via nginx)
+1880 127.0.0.1 Node-RED
+3000 127.0.0.1 Grafana
+3002 127.0.0.1 OpenSpeedTest container
+3004 127.0.0.1 (Unknown)
+3005 127.0.0.1 :: Gitea
+3050 127.0.0.1 Glance
+3100 * :: Loki
+4000 127.0.0.1 LiteLLM
+5050 127.0.0.1 pgAdmin
+5055 127.0.0.1 (Unknown - possibly Overseerr or similar)
+5232 127.0.0.1 ::1 Radicale CalDAV/CardDAV
+5678 * :: n8n main web interface
+5677 * :: n8n worker health check
+5679 127.0.0.1 (Unknown)
+6253 127.0.0.1 (Unknown)
+6800 127.0.0.1 ::1 (Unknown)
+8080 127.0.0.1 (Unknown - possibly backend service)
+8081 0.0.0.0 :: ntopng
+8082 127.0.0.1 (Unknown)
+8083 127.0.0.1 Silly Tavern container
+8085 127.0.0.1 LiteLLM proxy
+8089 127.0.0.1 (Unknown)
+8096 0.0.0.0 (Unknown - possibly Jellyfin or similar)
+8123 127.0.0.1 Home Assistant
+8428 127.0.0.1 VictoriaMetrics
+8443 127.0.0.1 Step-CA
+8444 0.0.0.0 (Unknown)
+8888 127.0.0.1 JupyterLab
+9080 127.0.0.1 Promtail
+9091 127.0.0.1 Wallabag container
+9092 127.0.0.1 (Unknown)
+9095 127.0.0.1 (Unknown)
+9097 127.0.0.1 MailArchiver container
+9099 127.0.0.1 Cockpit
+11332 127.0.0.1 ::1 rspamd
+11334 127.0.0.1 ::1 rspamd
+13000 127.0.0.1 10.88.0.1 Nocobase
+13923 127.0.0.1 Copyparty container
+18080 127.0.0.1 Static nginx container
+18873 127.0.0.1 rsync Cloudflare tunnel backend
+20241 127.0.0.1 (Unknown)
+20242 127.0.0.1 (Unknown)
+40293 127.0.0.1 (Unknown)
+
+# Home Assistant Additional Ports
+21063 192.168.3.16 Home Assistant (interface-specific)
+21065 0.0.0.0 :: Home Assistant
+21066 0.0.0.0 :: Home Assistant
+21067 0.0.0.0 :: Home Assistant
+21068 0.0.0.0 :: Home Assistant
+21069 0.0.0.0 :: Home Assistant
+
+# Prometheus Exporters (all on all interfaces unless noted)
+9090 127.0.0.1 Prometheus Server
+9093 127.0.0.1 Alertmanager
+9094 * :: Alertmanager clustering (UDP + TCP)
+9096 * :: Loki gRPC
+9100 * :: Node Exporter
+9113 127.0.0.1 Nginx Exporter
+9115 * :: Blackbox Exporter
+9121 127.0.0.1 Redis Exporter
+9134 * :: Process Exporter
+9154 * :: Postfix Exporter
+9166 * :: Dovecot Exporter
+9187 * :: PostgreSQL Exporter
+9221 127.0.0.1 Health Check Exporter (critical services)
+9273 127.0.0.1 OPNsense Exporter
+9274 127.0.0.1 Technitium DNS Exporter
+9275 127.0.0.1 (Unknown)
+9280 127.0.0.1 Mbsync Prometheus Exporter
+9374 127.0.0.1 (Unknown)
+
+# Container Services
+3001 container Teable
+5000 container changedetection
+5380 0.0.0.0 Technitium DNS container
+
+# Other Services
+41941 * (Unknown)
+61208 0.0.0.0 Glances
+
+# Notes:
+# - 0.0.0.0 = All IPv4 interfaces
+# - :: = All IPv6 interfaces
+# - * = All interfaces (IPv4 and IPv6)
+# - 127.0.0.1 = IPv4 localhost only
+# - ::1 = IPv6 localhost only
+# - Specific IPs (192.168.x.x, 10.x.x.x) = Interface-specific binding
+# - "container" = Port used within container, may not be exposed to host

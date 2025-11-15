@@ -125,6 +125,54 @@ sudo systemctl status postgresql-backup.timer
 sudo systemctl start postgresql-backup.service  # Manual backup
 ```
 
+### Port Management
+
+**Port Registry: `/etc/nixos/docs/ports.txt`**
+
+The system maintains a comprehensive port registry to prevent conflicts and track port assignments.
+
+```bash
+# View all ports in use
+cat /etc/nixos/docs/ports.txt
+
+# Find an available port in a range
+grep -E "^90[0-9]{2}" /etc/nixos/docs/ports.txt  # Check 9000-9099 range
+```
+
+**CRITICAL: When adding a new service that uses a port:**
+
+1. **Check `/etc/nixos/docs/ports.txt` FIRST** to find an available port
+2. Assign the port to your service in the NixOS configuration
+3. **IMMEDIATELY update `/etc/nixos/docs/ports.txt`** with the new port assignment
+4. Include the interface binding (0.0.0.0, 127.0.0.1, ::, *, etc.)
+5. Add a descriptive service name
+
+**Format for ports.txt entries:**
+```
+PORT INTERFACE... [SERVICE/DESCRIPTION]
+
+Examples:
+9999 127.0.0.1 MyService exporter
+8888 0.0.0.0 :: MyApp web interface
+3000 * MyService (all interfaces)
+```
+
+**Verifying port availability:**
+```bash
+# Check if port is already assigned in config
+grep "^PORT_NUMBER " /etc/nixos/docs/ports.txt
+
+# Check if port is actually in use (run as root)
+sudo ss -tunlp | grep :PORT_NUMBER
+```
+
+**Common port ranges:**
+- 80, 443: HTTP/HTTPS (nginx proxies)
+- 9000-9999: Prometheus exporters and monitoring
+- 5000-5999: Application services
+- 3000-3999: Web applications
+- 127.0.0.1 ports: Services proxied by nginx (not directly exposed)
+
 ### Common Services
 
 **Home Assistant**
@@ -193,6 +241,7 @@ journalctl -u <service> -f  # View logs
 ## Important Files
 
 - `/etc/nixos/nagios-hosts.nix` - Private network topology (excluded from git)
+- `/etc/nixos/docs/ports.txt` - Port registry (MUST update when adding services)
 - `/etc/nixos/docs/` - Detailed service documentation
 - `/tank/Backups/` - Backup storage location
 - `/run/secrets/` - Runtime secret deployment

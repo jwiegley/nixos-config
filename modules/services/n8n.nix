@@ -99,8 +99,9 @@ in
       N8N_METRICS_INCLUDE_WORKFLOW_ID_LABEL = "true";
 
       # Log configuration
-      N8N_LOG_LEVEL = "info";
-      N8N_LOG_OUTPUT = "console";
+      N8N_LOG_LEVEL = "debug";
+      N8N_LOG_OUTPUT = "console,file";
+      N8N_LOG_FILE_LOCATION = "/tmp/n8n.log";
 
       # Disable external telemetry/analytics (blocked by Technitium DNS ad-blocker anyway)
       N8N_DIAGNOSTICS_ENABLED = "false";
@@ -210,6 +211,88 @@ in
         proxy_request_buffering off;
         client_max_body_size 100M;
       '';
+    };
+  };
+
+  # n8n worker service (required for queue mode)
+  # In queue mode, the main process enqueues jobs and the worker(s) execute them
+  systemd.services.n8n-worker = {
+    description = "n8n worker - executes queued jobs";
+    after = [ "redis-n8n.service" "postgresql.service" "n8n.service" ];
+    requires = [ "redis-n8n.service" "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    # Use the same environment as the main n8n service, but override settings for workers
+    # Workers should not run their own task broker (port conflict) and need a different port
+    environment = config.services.n8n.environment // {
+      N8N_RUNNERS_ENABLED = "false";  # Task runners only in main process
+      QUEUE_HEALTH_CHECK_PORT = "5677";  # Worker health/metrics port (main uses 5678)
+    };
+
+    serviceConfig = {
+      Type = "simple";
+      Restart = "always";
+      RestartSec = "5s";
+
+      # Run as dynamic user (same as main n8n service)
+      DynamicUser = true;
+      User = "n8n";
+      Group = "n8n";
+      StateDirectory = "n8n";
+      StateDirectoryMode = "0750";
+
+      # Load the same credentials as main service
+      LoadCredential = [
+        "db-password:${config.sops.secrets."n8n-db-password".path}"
+        "encryption-key:${config.sops.secrets."n8n-encryption-key".path}"
+      ];
+
+      # Runtime directory for environment file
+      RuntimeDirectory = "n8n-worker";
+      RuntimeDirectoryMode = "0750";
+
+      # Load environment file with credentials
+      EnvironmentFile = "-/run/n8n-worker/env";
+
+      # Execute n8n worker command
+      ExecStartPre = pkgs.writeShellScript "n8n-worker-pre-start" ''
+        # Create environment file from credentials
+        cat > /run/n8n-worker/env <<EOF
+        DB_POSTGRESDB_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/db-password")
+        N8N_ENCRYPTION_KEY=$(cat "$CREDENTIALS_DIRECTORY/encryption-key")
+        QUEUE_BULL_REDIS_HOST=127.0.0.1
+        QUEUE_BULL_REDIS_PORT=6382
+        QUEUE_BULL_REDIS_DB=0
+        EOF
+
+        # Set permissions
+        chmod 640 /run/n8n-worker/env
+      '';
+
+      ExecStart = "${pkgs.n8n}/bin/n8n worker";
+
+      # Resource limits
+      MemoryMax = "2G";
+      CPUQuota = "200%";
+
+      # Security hardening
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictNamespaces = true;
+      LockPersonality = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      RemoveIPC = true;
+      PrivateMounts = true;
+
+      # Allow network access for webhooks and external API calls
+      PrivateNetwork = false;
     };
   };
 

@@ -4,6 +4,7 @@ let
   hacsFrontendDef = import ./hacs-frontend.nix;
   miniRacerDef = import ./mini-racer.nix;
   copypartyDef = import ./copyparty.nix;
+  conventionSpeakerListDef = import ../pkgs/convention-speaker-list;
 
   # Import Haskell overlay to fix broken packages
   haskellOverlay = import ./haskell-sizes.nix;
@@ -19,6 +20,9 @@ let
 in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
+
+  # Convention Speaker List application
+  convention-speaker-list-app = final.callPackage conventionSpeakerListDef { };
 
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;

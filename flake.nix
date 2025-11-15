@@ -48,6 +48,11 @@
     org-jw = {
       url = "github:jwiegley/org-jw";
     };
+
+    convention-speaker-list = {
+      url = "git+https://gitea.vulcan.lan/johnw/convention-speaker-list";
+      flake = false;  # Not a flake, just source code
+    };
   };
 
   outputs = inputs: let system = "aarch64-linux"; in {
@@ -58,7 +63,7 @@
       inherit system;
       specialArgs = {
         inherit system inputs;
-        inherit (inputs) firmware secrets nagios;
+        inherit (inputs) firmware secrets nagios convention-speaker-list;
       };
       modules = [
         inputs.nixos-apple-silicon.nixosModules.default

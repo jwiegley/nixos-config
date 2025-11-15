@@ -99,6 +99,8 @@
     ../../modules/containers/default.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix
+    ../../modules/containers/convention-speaker-list-container.nix
+    ../../modules/services/cloudflare-tunnel-convention.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

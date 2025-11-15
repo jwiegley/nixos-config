@@ -104,6 +104,22 @@
         "type": "github"
       }
     },
+    "convention-speaker-list": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1757112340,
+        "narHash": "sha256-v7O+dmo+0o2B1Ob4/eFHqy6ku/mNzc/ZlzypYK2/VIo=",
+        "ref": "refs/heads/main",
+        "rev": "f00f47a948f276111bf936e19c12a0b05b6e9065",
+        "revCount": 22,
+        "type": "git",
+        "url": "https://gitea.vulcan.lan/johnw/convention-speaker-list"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://gitea.vulcan.lan/johnw/convention-speaker-list"
+      }
+    },
     "firmware": {
       "flake": false,
       "locked": {
@@ -807,6 +823,7 @@
     "root": {
       "inputs": {
         "claude-code-nix": "claude-code-nix",
+        "convention-speaker-list": "convention-speaker-list",
         "firmware": "firmware",
         "home-manager": "home-manager",
         "nagios": "nagios",
@@ -822,11 +839,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1762739220,
-        "narHash": "sha256-l2JcACPwddw5A/LYtA5wFH6GaMIedsxYwN8DEOG/qhE=",
+        "lastModified": 1763242295,
+        "narHash": "sha256-v8fs86OAb46ZyFkXwQDD+FIHANKz2f6AjKE2WYEAtWs=",
         "ref": "refs/heads/main",
-        "rev": "1c2ff842b25c157356a2abf5db1bf2be51b1471c",
-        "revCount": 73,
+        "rev": "a29220c218fffc4d098894457f1f3f9bd4bf9fb8",
+        "revCount": 79,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

@@ -68,6 +68,11 @@ in
         # Authentication settings
         password_encryption = "scram-sha-256";
 
+        # Session timeouts
+        # Automatically terminate connections that are idle in a transaction for too long
+        # This prevents locks from being held indefinitely by abandoned transactions
+        idle_in_transaction_session_timeout = "10min";  # 10 minutes
+
         # Logging configuration for troubleshooting
         # Log slow queries (longer than 1 second)
         log_min_duration_statement = 1000;  # milliseconds

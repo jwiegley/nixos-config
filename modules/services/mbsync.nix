@@ -29,7 +29,7 @@ in
         Channel fastmail-all
         Far :johnw-remote:
         Near :dovecot-local:
-        Patterns * !Trash !IsSpam !Spam !Archive
+        Patterns * !IsSpam !Spam
         Create Both
         Remove None
         # Expunge Both

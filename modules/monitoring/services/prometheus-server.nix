@@ -15,6 +15,7 @@ let
     "network.yaml"
     "ntopng.yaml"
     "litellm-availability.yaml"
+    "mailarchiver.yaml"
     "monica.yaml"
     "nocobase.yaml"
     "home-assistant.yaml"

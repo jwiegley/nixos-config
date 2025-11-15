@@ -177,6 +177,10 @@ with lib;
                           url = "https://app.fastmail.com/mail/Inbox/?u=d30140a0";
                         }
                         {
+                          title = "Mail Archiver";
+                          url = "https://mailarchiver.vulcan.lan";
+                        }
+                        {
                           title = "Wallabag";
                           url = "https://wallabag.vulcan.lan";
                         }

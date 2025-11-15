@@ -483,6 +483,7 @@ in
             "https://alertmanager.vulcan.lan"
             "https://speedtest.vulcan.lan"
             "https://litellm.vulcan.lan"
+            "https://mailarchiver.vulcan.lan"
             "https://monica.vulcan.lan"
             "https://teable.vulcan.lan"
             "https://budget.vulcan.lan"

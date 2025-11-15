@@ -1,0 +1,102 @@
+groups:
+  - name: mailarchiver_service
+    interval: 60s
+    rules:
+      - alert: MailArchiverServiceDown
+        expr: node_systemd_unit_state{name="mailarchiver.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver service is down"
+          description: |
+            Mail Archiver service has been down for {{ $value }} minutes.
+            Email archiving and search platform is unavailable.
+
+            Check service status: systemctl status mailarchiver.service
+            Check container: podman ps | grep mailarchiver
+            View logs: journalctl -u mailarchiver -f
+            Check container logs: podman logs mailarchiver --tail 100
+
+      - alert: MailArchiverHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver HTTPS probe failed"
+          description: |
+            Mail Archiver web interface at https://mailarchiver.vulcan.lan is not responding.
+            Email archiving platform is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://mailarchiver.vulcan.lan
+            Check container: podman ps | grep mailarchiver
+            Test local endpoint: curl -I http://127.0.0.1:9097
+
+      - alert: MailArchiverSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver is responding slowly"
+          description: |
+            Mail Archiver response time is {{ $value }}s (threshold: 5s).
+            Application loading may be degraded.
+
+            Check container resources: podman stats mailarchiver
+            Check PostgreSQL: systemctl status postgresql
+            Check database connections: psql -U postgres -c "SELECT * FROM pg_stat_activity WHERE datname='mailarchiver';"
+
+      - alert: MailArchiverContainerRestarts
+        expr: rate(node_systemd_unit_state{name="mailarchiver.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver is restarting frequently"
+          description: |
+            Mail Archiver has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability.
+
+            View recent logs: journalctl -u mailarchiver --since "15 minutes ago"
+            Check container logs: podman logs mailarchiver --tail 100
+            Check for OOM: dmesg | grep -i "mailarchiver\|oom"
+            Verify PostgreSQL: psql -U mailarchiver -d mailarchiver -c "SELECT 1;"
+
+      - alert: MailArchiverDatabaseConnectionFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} == 0 and node_systemd_unit_state{name="mailarchiver.service",state="active"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver cannot connect to PostgreSQL backend"
+          description: |
+            Mail Archiver service is running but web interface is down.
+            This likely indicates a PostgreSQL connection failure.
+
+            Check PostgreSQL: systemctl status postgresql
+            Check database exists: psql -U postgres -c "\l" | grep mailarchiver
+            Check container logs: podman logs mailarchiver | grep -i "database\|postgres\|connection"
+            Verify network: podman exec mailarchiver nc -zv 10.88.0.1 5432
+
+      - alert: MailArchiverCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} - time() < 86400 * 7
+        for: 1h
+        labels:
+          severity: warning
+          component: mailarchiver
+        annotations:
+          summary: "Mail Archiver SSL certificate expiring soon"
+          description: |
+            SSL certificate for mailarchiver.vulcan.lan expires in {{ $value | humanizeDuration }}.
+            Certificate renewal needed.
+
+            Check certificate expiry: echo | openssl s_client -connect mailarchiver.vulcan.lan:443 2>/dev/null | openssl x509 -noout -dates
+            Renew certificate: sudo /etc/nixos/certs/renew-certificate.sh mailarchiver.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner nginx:nginx

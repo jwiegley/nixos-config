@@ -18,6 +18,8 @@
 
     # Security modules
     ../../modules/security/hardening.nix
+    ../../modules/security/aide.nix
+    ../../modules/monitoring/aide-nagios-check.nix
 
     # User management
     ../../modules/users/johnw.nix

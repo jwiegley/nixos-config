@@ -33,6 +33,7 @@
     ../monitoring/services/restic-metrics.nix
     ../monitoring/services/health-check-exporters.nix
     ../monitoring/services/git-workspace-alerts.nix
+    ../monitoring/services/aide-metrics.nix
 
     # External systems monitoring
     ../monitoring/services/opnsense-monitoring.nix

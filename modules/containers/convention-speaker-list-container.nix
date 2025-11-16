@@ -51,33 +51,26 @@ in
       mkdir -p /var/lib/convention-speaker-list-env
       chmod 755 /var/lib/convention-speaker-list-env
 
-      # Read secrets
+      # Read secrets from SOPS
       POSTGRES_PASSWORD=$(cat ${config.sops.secrets."convention-speaker-list/postgres-password".path})
       JWT_SECRET=$(cat ${config.sops.secrets."convention-speaker-list/jwt-secret".path})
       SESSION_SECRET=$(cat ${config.sops.secrets."convention-speaker-list/session-secret".path})
 
-      # Generate environment file for the application
-      # SECURITY: Using production mode for better error handling and performance
-      cat > /var/lib/convention-speaker-list-env/app.env <<EOF
-      NODE_ENV=production
-      DATABASE_URL=postgresql://convention_user:$POSTGRES_PASSWORD@127.0.0.1:5432/convention_db
-      REDIS_URL=redis://127.0.0.1:6379
-      PORT=${toString appPort}
-      JWT_SECRET=$JWT_SECRET
-      SESSION_SECRET=$SESSION_SECRET
-      SESSION_MAX_AGE=86400000
-      APP_URL=https://convention.newartisans.com
-      EOF
+      # SECURITY: Write individual credential files for systemd LoadCredential
+      # These will be loaded via LoadCredential and exposed in /run/credentials/
+      echo -n "$POSTGRES_PASSWORD" > /var/lib/convention-speaker-list-env/postgres-password
+      echo -n "$JWT_SECRET" > /var/lib/convention-speaker-list-env/jwt-secret
+      echo -n "$SESSION_SECRET" > /var/lib/convention-speaker-list-env/session-secret
 
-      chmod 644 /var/lib/convention-speaker-list-env/app.env
-
-      # Generate PostgreSQL password file
-      echo "$POSTGRES_PASSWORD" > /var/lib/convention-speaker-list-env/postgres-password
+      # Set permissions - must be readable by container's convention-app user
+      # With user namespaces, we need world-readable since UIDs are mapped
       chmod 644 /var/lib/convention-speaker-list-env/postgres-password
+      chmod 644 /var/lib/convention-speaker-list-env/jwt-secret
+      chmod 644 /var/lib/convention-speaker-list-env/session-secret
 
       # CRITICAL: With user namespaces enabled (privateUsers="pick"),
       # the container's root (UID 0) is mapped to an unprivileged UID on the host.
-      # We need to make these files readable by everyone so the mapped UID can access them.
+      # We make credential files world-readable so the mapped UID can access them.
       # Since this directory is only accessible via bind mount to the container,
       # world-readable here doesn't expose secrets to other host processes.
     '';
@@ -341,7 +334,9 @@ in
           fi
 
           # Set permissions
-          chown -R convention-app:convention-app "$APP_DIR"
+          # NOTE: With user namespaces (privateUsers=pick), container root can't chown
+          # bind-mounted host directories. Files are already accessible with correct perms.
+          chown -R convention-app:convention-app "$APP_DIR" || true
         '';
       };
 
@@ -364,20 +359,68 @@ in
         ];
         wantedBy = [ "multi-user.target" ];
 
-        path = with pkgs; [ nodejs_20 postgresql_15 bash ];
+        path = with pkgs; [ nodejs_20 postgresql_15 bash python3 ];
 
         serviceConfig = {
           Type = "simple";
           User = "convention-app";
           Group = "convention-app";
           WorkingDirectory = "${appDataDir}/app/src";
-          EnvironmentFile = "/var/lib/convention-speaker-list-env/app.env";
 
-          # Wait for database to be ready (skip migrations - ts-node not available)
+          # SECURITY: Use LoadCredential instead of EnvironmentFile
+          # Credentials are loaded from bind-mounted directory and exposed via /run/credentials/
+          LoadCredential = [
+            "postgres-password:/var/lib/convention-speaker-list-env/postgres-password"
+            "jwt-secret:/var/lib/convention-speaker-list-env/jwt-secret"
+            "session-secret:/var/lib/convention-speaker-list-env/session-secret"
+          ];
+
+          # Set environment variables (non-secret config)
+          Environment = [
+            "NODE_ENV=production"
+            "PORT=${toString appPort}"
+            "APP_URL=https://convention.newartisans.com"
+            "SESSION_MAX_AGE=86400000"
+          ];
+
+          # Wait for database to be ready
           ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..30}; do ${pkgs.postgresql_15}/bin/pg_isready -h 127.0.0.1 -p 5432 -U convention_user && break || sleep 1; done'";
 
-          # Start the application (development mode - use npx to get ts-node, transpile-only to skip type checking, tsconfig-paths for workspace imports)
-          ExecStart = "${pkgs.nodejs_20}/bin/npx --yes ts-node -r tsconfig-paths/register --transpile-only backend/src/index.ts";
+          # SECURITY: Start app with credentials from LoadCredential
+          # Reads secrets from /run/credentials/ and constructs environment variables
+          ExecStart = pkgs.writeShellScript "start-convention-app" ''
+            set -euo pipefail
+
+            # Debug: Check credentials directory
+            echo "CREDENTIALS_DIRECTORY=$CREDENTIALS_DIRECTORY"
+            ls -la "$CREDENTIALS_DIRECTORY" || echo "Could not list credentials directory"
+
+            # Read credentials from systemd LoadCredential
+            POSTGRES_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/postgres-password")
+            JWT_SECRET=$(cat "$CREDENTIALS_DIRECTORY/jwt-secret")
+            SESSION_SECRET=$(cat "$CREDENTIALS_DIRECTORY/session-secret")
+
+            # Debug: Check if we got the values (without printing secrets)
+            echo "Password length: ''${#POSTGRES_PASSWORD}"
+            echo "JWT length: ''${#JWT_SECRET}"
+            echo "Session length: ''${#SESSION_SECRET}"
+
+            # URL-encode the password for use in DATABASE_URL
+            # Special characters like +, /, = need to be encoded
+            ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | ${pkgs.python3}/bin/python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')
+
+            # Construct DATABASE_URL with URL-encoded password
+            export DATABASE_URL="postgresql://convention_user:$ENCODED_PASSWORD@127.0.0.1:5432/convention_db"
+            export REDIS_URL="redis://127.0.0.1:6379"
+            export JWT_SECRET
+            export SESSION_SECRET
+
+            echo "Starting application..."
+
+            # Run the application
+            cd ${appDataDir}/app/src
+            exec ${pkgs.nodejs_20}/bin/npx --yes ts-node -r tsconfig-paths/register --transpile-only backend/src/index.ts
+          '';
 
           # Hardening
           NoNewPrivileges = true;
@@ -448,7 +491,14 @@ in
             add_header X-XSS-Protection "1; mode=block" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self';" always;
+
+            # HSTS (HTTP Strict Transport Security) - Defense-in-depth
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+            # Content Security Policy - Enhanced with base-uri and form-action
+            # NOTE: Uses 'unsafe-inline' and 'unsafe-eval' for framework compatibility
+            # TODO: After testing, tighten by using nonces/hashes instead of unsafe-*
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
 
             # Connection limits
             limit_conn addr 50;
@@ -469,7 +519,8 @@ in
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header X-XSS-Protection "1; mode=block" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-                add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self';" always;
+                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+                add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
               }
             '';
           };

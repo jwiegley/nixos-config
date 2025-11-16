@@ -89,13 +89,13 @@ in
 
       # Security hardening
       PrivateTmp = true;
-      ProtectSystem = "strict";
+      ProtectSystem = "full";  # Changed from "strict" to allow DNS resolution
       ProtectHome = true;
       NoNewPrivileges = true;
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" "AF_NETLINK" ];
       RestrictNamespaces = true;
       LockPersonality = true;
       RestrictRealtime = true;

@@ -55,10 +55,10 @@ EOF
 
     # Parse output (use $NF to get last field, handles tabs)
     # Note: AIDE prints "Number of entries:" when OK, "  Total number of entries:" when changes detected
-    TOTAL=$(echo "$CHECK_OUTPUT" | grep "Number of entries:" | head -1 | awk '{print $NF}' || echo "0")
-    ADDED=$(echo "$CHECK_OUTPUT" | grep "^  Added entries:" | awk '{print $NF}' || echo "0")
-    REMOVED=$(echo "$CHECK_OUTPUT" | grep "^  Removed entries:" | awk '{print $NF}' || echo "0")
-    CHANGED=$(echo "$CHECK_OUTPUT" | grep "^  Changed entries:" | awk '{print $NF}' || echo "0")
+    TOTAL=$(echo "$CHECK_OUTPUT" | grep "Number of entries:" | head -1 | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
+    ADDED=$(echo "$CHECK_OUTPUT" | grep "^  Added entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
+    REMOVED=$(echo "$CHECK_OUTPUT" | grep "^  Removed entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
+    CHANGED=$(echo "$CHECK_OUTPUT" | grep "^  Changed entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
 
     # Determine status
     # 0=OK, 1-7=changes detected, 14+=error
@@ -102,12 +102,13 @@ in {
   ];
 
   # Also run metrics on timer to ensure Prometheus has fresh data
+  # Note: This runs AIDE check, so it should match aide-check.timer frequency
   systemd.timers.aide-metrics = {
-    description = "Collect AIDE metrics hourly";
+    description = "Collect AIDE metrics daily";
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
-      OnCalendar = "hourly";
+      OnCalendar = "daily";
       Persistent = true;
       RandomizedDelaySec = "5min";
     };

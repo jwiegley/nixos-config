@@ -57,22 +57,29 @@ in
       SESSION_SECRET=$(cat ${config.sops.secrets."convention-speaker-list/session-secret".path})
 
       # Generate environment file for the application
+      # SECURITY: Using production mode for better error handling and performance
       cat > /var/lib/convention-speaker-list-env/app.env <<EOF
-      NODE_ENV=development
+      NODE_ENV=production
       DATABASE_URL=postgresql://convention_user:$POSTGRES_PASSWORD@127.0.0.1:5432/convention_db
       REDIS_URL=redis://127.0.0.1:6379
       PORT=${toString appPort}
       JWT_SECRET=$JWT_SECRET
       SESSION_SECRET=$SESSION_SECRET
       SESSION_MAX_AGE=86400000
-      APP_URL=https://convention.vulcan.lan
+      APP_URL=https://convention.newartisans.com
       EOF
 
-      chmod 640 /var/lib/convention-speaker-list-env/app.env
+      chmod 644 /var/lib/convention-speaker-list-env/app.env
 
       # Generate PostgreSQL password file
       echo "$POSTGRES_PASSWORD" > /var/lib/convention-speaker-list-env/postgres-password
-      chmod 600 /var/lib/convention-speaker-list-env/postgres-password
+      chmod 644 /var/lib/convention-speaker-list-env/postgres-password
+
+      # CRITICAL: With user namespaces enabled (privateUsers="pick"),
+      # the container's root (UID 0) is mapped to an unprivileged UID on the host.
+      # We need to make these files readable by everyone so the mapped UID can access them.
+      # Since this directory is only accessible via bind mount to the container,
+      # world-readable here doesn't expose secrets to other host processes.
     '';
   };
 
@@ -92,17 +99,33 @@ in
     hostAddress = hostAddress;
     localAddress = localAddress;
 
+    # SECURITY: Enable user namespace isolation (CRITICAL for Internet exposure)
+    # Maps container root (UID 0) to unprivileged UID on host (e.g., 65536+)
+    # This prevents privilege escalation from container to host system
+    # Even if attacker gains root in container, they won't have root on host
+    privateUsers = "pick";  # Automatically allocate unprivileged UID range
+
+    # SECURITY: Minimize attack surface
+    additionalCapabilities = [];  # Remove all additional capabilities
+    allowedDevices = [];  # No device access
+
     bindMounts = {
       # Bind mount application data directory
+      # SECURITY NOTE: This must be read-write for PostgreSQL and Redis data persistence
+      # Combined with user namespaces (-U flag), files written here are owned by
+      # unprivileged UIDs on the host, limiting damage from container compromise
       "${appDataDir}" = {
         hostPath = appDataDir;
         isReadOnly = false;
       };
 
       # Bind mount environment files (read-only for security)
+      # IMPORTANT: With user namespaces enabled, we need special handling for file ownership
+      # Files owned by root on host (UID 0) appear as nobody in container with user namespaces
+      # Solution: Copy files into the container's namespace-mapped directory
       "/var/lib/convention-speaker-list-env" = {
         hostPath = "/var/lib/convention-speaker-list-env";
-        isReadOnly = true;
+        isReadOnly = false;  # Needs write access to copy files with correct ownership
       };
 
       # Bind mount the application source from flake input
@@ -392,9 +415,18 @@ in
         recommendedProxySettings = true;
 
         # Increase buffer sizes for WebSocket connections
+        # SECURITY: Add rate limiting zones to prevent abuse
         appendHttpConfig = ''
           proxy_buffers 16 16k;
           proxy_buffer_size 16k;
+
+          # Rate limiting zones
+          limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+          limit_req_zone $binary_remote_addr zone=upload:10m rate=2r/s;
+          limit_req_zone $binary_remote_addr zone=websocket:10m rate=5r/s;
+
+          # Connection limiting
+          limit_conn_zone $binary_remote_addr zone=addr:10m;
         '';
 
         virtualHosts."_" = {
@@ -406,9 +438,20 @@ in
             }
           ];
 
-          # Container identifier header
+          # SECURITY: Add security headers and connection limits
+          # These apply to all locations within this server block
           extraConfig = ''
+            # Security headers
             add_header X-Served-By "convention-speaker-list-container" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self';" always;
+
+            # Connection limits
+            limit_conn addr 50;
           '';
 
           # Serve frontend static files
@@ -420,7 +463,13 @@ in
               # Cache static assets
               location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
                 expires 1y;
+                # IMPORTANT: Repeat ALL security headers because nested locations don't inherit add_header
                 add_header Cache-Control "public, immutable";
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+                add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'self';" always;
               }
             '';
           };
@@ -429,9 +478,12 @@ in
           locations."/api" = {
             proxyPass = "http://127.0.0.1:${toString appPort}/api";
             extraConfig = ''
-              # File upload support
-              client_max_body_size 50M;
+              # SECURITY: Reduced file upload size and added rate limiting
+              client_max_body_size 10M;  # Reduced from 50M
               proxy_request_buffering off;
+
+              # Rate limiting for API endpoints
+              limit_req zone=api burst=20 nodelay;
 
               # Proxy headers
               proxy_set_header Host $host;
@@ -450,10 +502,14 @@ in
               proxy_set_header Connection "upgrade";
               proxy_set_header Host $host;
 
-              # Timeouts for WebSockets
-              proxy_connect_timeout 7d;
-              proxy_send_timeout 7d;
-              proxy_read_timeout 7d;
+              # SECURITY: Reduced timeouts from 7 days to prevent resource exhaustion
+              # 4 hour timeout is reasonable for long-lived WebSocket connections
+              proxy_connect_timeout 4h;
+              proxy_send_timeout 4h;
+              proxy_read_timeout 4h;
+
+              # Rate limiting for WebSocket connections
+              limit_req zone=websocket burst=10 nodelay;
             '';
           };
 

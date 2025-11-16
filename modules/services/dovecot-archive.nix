@@ -17,9 +17,8 @@ let
     ${pkgs.dovecot}/bin/doveadm move -u johnw Archive mailbox INBOX SENTBEFORE 365d
 
     exit_code=$?
-
     if [ $exit_code -eq 0 ]; then
-      log "Email archive completed successfully (DRY RUN - remove 'echo' to enable)"
+      log "Email archive completed successfully"
     else
       log "ERROR: Email archive failed with exit code $exit_code"
       exit $exit_code
@@ -36,8 +35,7 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        User = "johnw";
-        Group = "users";
+        User = "root";
         ExecStart = dovecotArchiveScript;
 
         # Security hardening

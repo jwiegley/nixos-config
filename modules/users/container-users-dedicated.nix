@@ -114,6 +114,30 @@
         extraGroups = [ "podman" ];
         description = "Container user for OpenSpeedTest service";
       };
+
+      changedetection = {
+        isSystemUser = true;
+        group = "changedetection";
+        home = "/var/lib/containers/changedetection";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for ChangeDetection.io service";
+      };
+
+      mailarchiver = {
+        isSystemUser = true;
+        group = "mailarchiver";
+        home = "/var/lib/containers/mailarchiver";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Mail Archiver service";
+      };
     };
 
     # Create corresponding groups for each container user
@@ -126,6 +150,8 @@
       opnsense-exporter = {};
       technitium-dns-exporter = {};
       openspeedtest = {};
+      changedetection = {};
+      mailarchiver = {};
       podman = {};
     };
   };
@@ -134,6 +160,7 @@
   nix.settings.allowed-users = [
     "changedetection"
     "litellm"
+    "mailarchiver"
     "nocobase"
     "wallabag"
     "teable"
@@ -152,7 +179,9 @@
   # Permissions: 0750 (owner: rwx, group: r-x, others: ---)
   # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
   systemd.tmpfiles.rules = [
+    "d /run/secrets-changedetection 0750 changedetection changedetection - -"
     "d /run/secrets-litellm 0750 litellm litellm - -"
+    "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
     "d /run/secrets-nocobase 0750 nocobase nocobase - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
     "d /run/secrets-teable 0750 teable teable - -"

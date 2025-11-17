@@ -30,6 +30,18 @@
     ../../modules/users/home-manager/johnw.nix
     ../../modules/users/home-manager/container-users-dedicated.nix
 
+    # Rootless container Home Manager configs
+    ../../modules/users/home-manager/litellm.nix
+    ../../modules/users/home-manager/changedetection.nix
+    ../../modules/users/home-manager/mailarchiver.nix
+    ../../modules/users/home-manager/nocobase.nix
+    ../../modules/users/home-manager/teable.nix
+    ../../modules/users/home-manager/wallabag.nix
+    ../../modules/users/home-manager/sillytavern.nix
+    ../../modules/users/home-manager/opnsense-exporter.nix
+    # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
+    ../../modules/users/home-manager/openspeedtest.nix
+
     # Services
     ../../modules/services/certificates.nix
     ../../modules/services/certificate-automation.nix

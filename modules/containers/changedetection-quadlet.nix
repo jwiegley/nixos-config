@@ -1,60 +1,22 @@
+# ChangeDetection.io - System Configuration
+#
+# Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/changedetection.nix)
+# This file: Nginx virtual host, SOPS secrets, and tmpfiles
+
 { config, lib, pkgs, secrets, ... }:
 
-let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
-  inherit (mkQuadletLib) mkQuadletService;
-in
 {
-  imports = [
-    (mkQuadletService {
-      name = "changedetection";
-      image = "ghcr.io/dgtlmoon/changedetection.io:latest";
-      port = 5000;
-      containerUser = "changedetection";  # Run rootless as dedicated changedetection user
-
-      # Health checks disabled - not supported for rootless system users
-      # Rootless containers run by system users (not logged-in users) can't
-      # create /tmp/storage-run-<uid>/systemd directories for health checks
-      healthCheck = {
-        enable = false;
-      };
-      enableWatchdog = false;
-
-      secrets = {
-        apiKey = "changedetection/api-key";
-      };
-
-      # Override default port publishing to use 5055 instead of 5000
-      publishPorts = [ "127.0.0.1:5055:5000/tcp" ];
-
-      environments = {
-        PORT = "5000";
-        BASE_URL = "https://changes.vulcan.lan";
-        FETCH_WORKERS = "10";
-        LOGGER_LEVEL = "INFO";
-        TZ = "America/Los_Angeles";
-      };
-
-      volumes = [
-        "/var/lib/changedetection:/datastore:rw"
-      ];
-
-      # Nginx virtual host disabled - manually configured below for custom hostname
-      nginxVirtualHost = null;
-
-      # Filter out HTTP access logs that are logged to stderr at error priority
-      # The app writes normal access logs (e.g., "GET / HTTP/1.1 200") to stderr,
-      # causing them to appear as error-level messages in journald and trigger alerts.
-      # Use pattern matching to filter only access logs, preserving actual error messages.
-      extraServiceConfig = {
-        # Filter out successful HTTP access logs (200-399 status codes)
-        # Pattern: IP - - [date] "METHOD /path HTTP/1.x" 2xx/3xx -
-        LogFilterPatterns = [
-          "~.*(GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS) .* HTTP/1\\.[0-9]. [23][0-9][0-9] -"
-        ];
-      };
-    })
-  ];
+  # Quadlet container configuration moved to Home Manager
+  # See /etc/nixos/modules/users/home-manager/changedetection.nix
+  # imports = [
+  #   (mkQuadletService {
+  #     name = "changedetection";
+  #     image = "ghcr.io/dgtlmoon/changedetection.io:latest";
+  #     port = 5000;
+  #     containerUser = "changedetection";
+  #     ...
+  #   })
+  # ];
 
   # Nginx virtual host using "changes.vulcan.lan" instead of "changedetection.vulcan.lan"
   services.nginx.virtualHosts."changes.vulcan.lan" = {
@@ -74,16 +36,12 @@ in
     };
   };
 
-  # Create changedetection system user for rootless operation
-  users.users.changedetection = {
-    isSystemUser = true;
-    group = "changedetection";
-    description = "ChangeDetection.io service user";
-    home = "/var/lib/containers/changedetection";
-    createHome = true;
+  # SOPS secrets
+  sops.secrets."changedetection/api-key" = {
+    sopsFile = config.sops.defaultSopsFile;
+    mode = "0400";
+    owner = "changedetection";
   };
-
-  users.groups.changedetection = {};
 
   # Ensure data directory has correct ownership for container data
   # Home directory (/var/lib/containers/changedetection) is managed by home-manager

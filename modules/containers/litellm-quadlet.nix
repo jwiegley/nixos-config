@@ -1,51 +1,52 @@
+# LiteLLM - System Configuration
+#
+# Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/litellm.nix)
+# This file: Redis service, Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
+
 { config, lib, pkgs, secrets, ... }:
 
-let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
-  inherit (mkQuadletLib) mkQuadletService;
-in
 {
-  imports = [
-    (mkQuadletService {
-      name = "litellm";
-      image = "ghcr.io/berriai/litellm-database:main-stable";
-      port = 4000;
-      requiresPostgres = true;
-      containerUser = "litellm";  # Run rootless as dedicated litellm user
+  # Quadlet container configuration moved to Home Manager
+  # See /etc/nixos/modules/users/home-manager/litellm.nix
+  # imports = [
+  #   (mkQuadletService {
+  #     name = "litellm";
+  #     image = "ghcr.io/berriai/litellm-database:main-stable";
+  #     port = 4000;
+  #     requiresPostgres = true;
+  #     containerUser = "litellm";
+  #     ...
+  #   })
+  # ];
 
-      # Health check disabled - /health endpoint requires API authentication
-      healthCheck = {
-        enable = false;
-      };
-      enableWatchdog = false;
+  # Nginx virtual host
+  services.nginx.virtualHosts."litellm.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/litellm.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/litellm.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:4000/";
+      proxyWebsockets = true;
+      extraConfig = ''
+        proxy_buffering off;
+        client_max_body_size 20M;
+        proxy_read_timeout 2h;
+        # Note: Standard proxy headers (Host, X-Real-IP, etc.) are automatically
+        # included by NixOS nginx module via recommendedProxySettings
+      '';
+    };
+  };
 
-      # Rootless container - bind to localhost only
-      publishPorts = [
-        "127.0.0.1:4000:4000/tcp"
-      ];
+  # SOPS secrets
+  sops.secrets."litellm-secrets" = {
+    sopsFile = config.sops.defaultSopsFile;
+    mode = "0400";
+    owner = "litellm";
+  };
 
-      secrets = {
-        litellmApiKey = "litellm-secrets";
-      };
-
-      volumes = [ "/etc/litellm/config.yaml:/app/config.yaml:ro" ];
-      exec = "--config /app/config.yaml";
-
-      nginxVirtualHost = {
-        enable = true;
-        proxyPass = "http://127.0.0.1:4000/";
-        proxyWebsockets = true;
-        extraConfig = ''
-          proxy_buffering off;
-          client_max_body_size 20M;
-          proxy_read_timeout 2h;
-        '';
-      };
-
-      tmpfilesRules = [
-        "d /etc/litellm 0755 litellm litellm -"
-      ];
-    })
+  # tmpfiles rules
+  systemd.tmpfiles.rules = [
+    "d /etc/litellm 0755 litellm litellm -"
   ];
 
   # Redis server for litellm (rootless container access via localhost)

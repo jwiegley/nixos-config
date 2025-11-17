@@ -493,13 +493,13 @@ let
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
-    { name = "technitium-dns-exporter"; display = "Technitium DNS Exporter"; runAs = "technitium-dns-exporter"; }
     { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "wallabag"; }
   ];
 
   # Container systemd services (for Quadlet-managed containers)
   containerSystemdServices = [
     { name = "container@secure-nginx.service"; display = "Secure Nginx Container"; }
+    { name = "technitium-dns-exporter.service"; display = "Technitium DNS Exporter"; }
   ];
 
   # On-demand services (manually started/stopped, only alert on failures)

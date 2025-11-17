@@ -29,18 +29,80 @@ let
       name = "var";
       source = "/var";
       excludes = [
+        # === CONTAINER & OVERLAY STORAGE (30GB+) ===
         # Exclude container overlay storage (ephemeral, causes rsync to hang)
         "lib/containers/"
         "lib/docker/overlay2/"
-        # Exclude volatile runtime directories
+        "lib/podman/"
+        "lib/containers/storage/"
+
+        # === VOLATILE RUNTIME DIRECTORIES ===
         "cache/"
         "tmp/"
         "run/"
         "lock/"
-        # Exclude Loki chunks (constantly changing, causes rsync timeouts)
-        "lib/loki/"
-        # Exclude large log files (optional - keep if you want logs backed up)
-        # "log/"
+
+        # === LARGE ARCHIVE/BACKUP DATA (30GB+) ===
+        # Already backed up or archived elsewhere
+        "lib/git-workspace-archive/"     # 23GB - Git archives
+        "lib/windows/"                    # 9.5GB - VM images
+        "lib/postgresql-backup/"          # 7.5GB - Already backed up dumps
+        "lib/technitium-dns-backup/"      # 1.2GB - DNS backups
+
+        # === ACTIVE DATABASES (Need special handling) ===
+        # These should use proper dump commands, not file copies
+        "lib/postgresql/"                 # 9.3GB - Use pg_dump (already done)
+        "lib/mariadb/"                    # Active MariaDB files
+        "lib/mysql/"                      # MySQL data files
+        "lib/mongodb/"                    # MongoDB files
+        "lib/elasticsearch/"              # 406MB - Search indices, recreatable
+
+        # === HIGH-CHURN MONITORING DATA ===
+        # Constantly changing, causes I/O storms
+        "lib/loki/"                       # 9.7GB - Log chunks
+        "lib/prometheus2/"                # 5.7GB - Time-series data
+        "lib/ntopng/"                     # 1.7GB - 517 files/hour!
+        "lib/victoria-metrics/"           # Time-series data
+        "lib/private/victoriametrics/"    # 122 files/hour
+        "lib/grafana/dashboards/"         # Temporary dashboard data
+        "lib/influxdb/"                   # Time-series data
+
+        # === GIT REPOSITORIES (Use git bundle) ===
+        "lib/gitea/repositories/"         # Use git bundle instead
+        "lib/gitlab/"                     # GitLab repos
+
+        # === MEDIA & TEMPORARY FILES ===
+        "lib/jellyfin/transcodes/"        # Temporary transcoding
+        "lib/jellyfin/metadata/"          # Can be regenerated
+        "lib/plex/"                       # Media server data
+
+        # === MAIL INDICES (Recreatable) ===
+        "spool/mail/*/fts-flatcurve/"     # Mail search indices
+        "spool/mail/*/.notmuch/"          # Notmuch indices
+        "lib/dovecot/indices/"            # Dovecot indices
+
+        # === SYSTEM FILES ===
+        "lib/systemd/coredump/"           # Core dumps
+        "lib/systemd/catalog/"            # System catalogs
+        "crash/"                          # Crash dumps
+
+        # === CACHE & TEMP DATA ===
+        "lib/redis/"                      # Redis persistence files
+        "lib/memcached/"                  # Memcached data
+        "lib/snapd/"                      # Snap data
+        "lib/flatpak/"                    # Flatpak data
+
+        # === DATABASE FILES (Need special handling) ===
+        "**/*.sqlite"
+        "**/*.sqlite3"
+        "**/*.sqlite-wal"
+        "**/*.sqlite-shm"
+        "**/*.db"
+        "**/*.mdb"                        # LMDB files
+        "**/*.ldb"                        # LevelDB files
+
+        # === SWAP FILES ===
+        "swap/"                           # 17GB swap files
       ];
     }
   ];
@@ -108,10 +170,24 @@ let
       '') (backup.excludes or [])}
 
       # Run rsync and capture exit code
-      # Using --info=progress2 for better monitoring, --timeout=60 to detect stalls
+      # Enhanced rsync options to prevent I/O overload:
+      # - --one-file-system: Don't cross filesystem boundaries
+      # - --bwlimit=30000: Limit bandwidth to 30MB/s
+      # - --timeout=120: Increased timeout for large files
+      # - --partial: Keep partial transfers for resumption
+      # - --inplace: Update destination files in-place (reduces I/O)
       # Temporarily disable set -e to properly capture rsync exit codes (especially 23/24 for vanished files)
       set +e
-      eval "${pkgs.rsync}/bin/rsync -aHx --delete --timeout=60 --info=progress2 $exclude_args '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
+      eval "${pkgs.rsync}/bin/rsync -aHx \
+        --one-file-system \
+        --delete \
+        --timeout=120 \
+        --bwlimit=30000 \
+        --partial \
+        --inplace \
+        --info=progress2 \
+        $exclude_args \
+        '${backup.source}/' '${backupBaseDir}/${backup.name}/'"
       rc=$?
       set -e
 
@@ -185,6 +261,13 @@ in
         IOSchedulingPriority = 7;  # Lowest priority (0=highest, 7=lowest)
         IOWeight = 10;  # Low I/O weight (10-1000 scale)
 
+        # Enhanced I/O throttling with cgroup v2 bandwidth limits
+        # Limit read speed from source drive to prevent I/O saturation
+        IOReadBandwidthMax = "/dev/nvme0n1 50M";  # 50MB/s read limit
+
+        # Limit write speed to backup destination
+        IOWriteBandwidthMax = "/dev/nvme0n1 30M";  # 30MB/s write limit
+
         # CPU priority: Run at lower priority
         CPUSchedulingPolicy = "batch";
         Nice = 19;  # Lowest CPU priority
@@ -197,20 +280,21 @@ in
       };
     };
 
-    # Timer for hourly execution
+    # Timer for 4x daily execution (reduced from hourly to prevent I/O storms)
     timers.local-backup = {
-      description = "Timer for hourly local backups";
+      description = "Timer for 4x daily local backups";
       wantedBy = [ "timers.target" ];
 
       timerConfig = {
-        # Run every hour
-        OnCalendar = "hourly";
+        # Run 4 times per day: midnight, 6am, noon, 6pm
+        # This reduces I/O pressure while maintaining regular backups
+        OnCalendar = "*-*-* 00,06,12,18:00:00";
 
         # Run on boot if missed (e.g., system was off)
         Persistent = true;
 
-        # Add some randomization to prevent all backups running at exactly the same time
-        RandomizedDelaySec = "5m";
+        # Increased randomization to spread I/O load
+        RandomizedDelaySec = "15m";
 
         # Unit to trigger
         Unit = "local-backup.service";

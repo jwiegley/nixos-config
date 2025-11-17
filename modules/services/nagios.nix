@@ -1450,7 +1450,7 @@ let
       use                     generic-service
       host_name               vulcan
       service_description     Local Backup: /etc
-      check_command           check_backup_age!etc!14400
+      check_command           check_backup_age!etc!28800
       check_interval          15
       service_groups          local-backups
     }
@@ -1459,7 +1459,7 @@ let
       use                     generic-service
       host_name               vulcan
       service_description     Local Backup: /home
-      check_command           check_backup_age!home!14400
+      check_command           check_backup_age!home!28800
       check_interval          15
       service_groups          local-backups
     }
@@ -1468,7 +1468,7 @@ let
       use                     generic-service
       host_name               vulcan
       service_description     Local Backup: /var
-      check_command           check_backup_age!var!14400
+      check_command           check_backup_age!var!28800
       check_interval          15
       service_groups          local-backups
     }

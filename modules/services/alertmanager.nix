@@ -21,16 +21,31 @@
         group_by = [ "alertname" "cluster" "service" ];
         group_wait = "10s";
         group_interval = "10m";
-        repeat_interval = "1h";
+        repeat_interval = "4h";
 
-        # Special routing for critical alerts
+        # Special routing rules
         routes = [
+          # Backup and storage alerts - group by category and reduce noise
+          {
+            match = {
+              category = "storage";
+            };
+            receiver = "storage-receiver";
+            group_by = [ "alertname" "category" "repository" ];
+            group_wait = "30s";
+            group_interval = "30m";
+            repeat_interval = "12h";
+          }
+          # Critical alerts - faster notification but still grouped
           {
             match = {
               severity = "critical";
             };
             receiver = "critical-receiver";
-            repeat_interval = "15m";
+            group_by = [ "alertname" "severity" "service" "repository" ];
+            group_wait = "30s";
+            group_interval = "5m";
+            repeat_interval = "4h";
           }
         ];
       };
@@ -58,6 +73,38 @@
 
                 Source: {{ .GeneratorURL }}
                 {{ end }}
+              '';
+            }
+          ];
+        }
+        {
+          name = "storage-receiver";
+          email_configs = [
+            {
+              to = "johnw@vulcan.lan";
+              headers = {
+                Subject = "[Storage] {{ .GroupLabels.alertname }} - {{ .Alerts | len }} alert(s)";
+              };
+              text = ''
+                Storage/Backup Alert Summary
+                ============================
+
+                Alert: {{ .GroupLabels.alertname }}
+                Category: {{ .GroupLabels.category }}
+                Affected Items: {{ .Alerts | len }}
+
+                {{ range .Alerts }}
+                ---
+                {{ if .Labels.repository }}Repository: {{ .Labels.repository }}{{ end }}
+                {{ if .Labels.pool }}Pool: {{ .Labels.pool }}{{ end }}
+                {{ if .Labels.snapshot }}Snapshot: {{ .Labels.snapshot }}{{ end }}
+                Severity: {{ .Labels.severity }}
+                Summary: {{ .Annotations.summary }}
+                Description: {{ .Annotations.description }}
+
+                {{ end }}
+
+                This alert will repeat in 12 hours if not resolved.
               '';
             }
           ];
@@ -95,6 +142,7 @@
 
       # Inhibit rules to prevent alert storms
       inhibit_rules = [
+        # Suppress warning alerts when critical alerts are firing for the same service
         {
           source_match = {
             severity = "critical";
@@ -103,6 +151,38 @@
             severity = "warning";
           };
           equal = [ "alertname" "instance" ];
+        }
+        # Suppress warning backup alerts when critical backup alerts are firing for same repo
+        {
+          source_match = {
+            severity = "critical";
+            category = "storage";
+          };
+          target_match = {
+            severity = "warning";
+            category = "storage";
+          };
+          equal = [ "repository" ];
+        }
+        # Suppress ResticNoRecentSnapshot when ResticCheckFailed is firing for same repo
+        {
+          source_match = {
+            alertname = "ResticCheckFailed";
+          };
+          target_match = {
+            alertname = "ResticNoRecentSnapshot";
+          };
+          equal = [ "repository" ];
+        }
+        # Suppress BackupNotRunning when BackupServiceFailed is firing for same backup
+        {
+          source_match = {
+            alertname = "BackupServiceFailed";
+          };
+          target_match = {
+            alertname = "BackupNotRunning";
+          };
+          equal = [ "name" ];
         }
       ];
     };

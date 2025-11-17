@@ -1,3 +1,21 @@
+# Technitium DNS Exporter - System Configuration
+#
+# NOTE: This container runs as a system-level container (not rootless) because it uses
+# a locally-built image (localhost/technitium-dns-exporter:latest) which cannot be
+# easily shared with rootless user containers. Locally-built images are stored in the
+# root user's image store and would need to be rebuilt for each user.
+#
+# Technitium DNS Prometheus Exporter container configuration
+#
+# This exporter collects DNS metrics from Technitium DNS Server including:
+# - Query rates and types (A, AAAA, MX, etc.)
+# - Response codes (NOERROR, NXDOMAIN, SERVFAIL, etc.)
+# - Cache hit/miss statistics
+# - Query latency metrics
+# - Blocking statistics
+#
+# GitHub: https://github.com/brioche-works/technitium-dns-prometheus-exporter
+
 { config, lib, pkgs, secrets, ... }:
 
 let
@@ -5,16 +23,35 @@ let
   inherit (mkQuadletLib) mkQuadletService;
 in
 {
-  # Technitium DNS Prometheus Exporter container configuration
-  #
-  # This exporter collects DNS metrics from Technitium DNS Server including:
-  # - Query rates and types (A, AAAA, MX, etc.)
-  # - Response codes (NOERROR, NXDOMAIN, SERVFAIL, etc.)
-  # - Cache hit/miss statistics
-  # - Query latency metrics
-  # - Blocking statistics
-  #
-  # GitHub: https://github.com/brioche-works/technitium-dns-prometheus-exporter
+  imports = [
+    (mkQuadletService {
+      name = "technitium-dns-exporter";
+      image = "localhost/technitium-dns-exporter:latest";
+      port = 9274;
+      requiresPostgres = false;
+
+      # Run as system container due to localhost image
+      # containerUser = null;  # System-level container
+
+      publishPorts = [ "127.0.0.1:9274:8080/tcp" ];
+
+      secrets = {
+        technitiumEnv = "technitium-dns-exporter-env";
+      };
+
+      exec = "--log.level=info --log.format=json";
+
+      extraUnitConfig = {
+        After = [ "technitium-dns-server.service" ];
+        Wants = [ "technitium-dns-server.service" ];
+      };
+
+      healthCheck = {
+        enable = false;
+      };
+      enableWatchdog = false;
+    })
+  ];
 
   # Automatically build the container image if it doesn't exist
   system.activationScripts.technitium-dns-exporter-image = {
@@ -46,49 +83,6 @@ in
     deps = [];
   };
 
-  imports = [
-    (mkQuadletService {
-      name = "technitium-dns-exporter";
-      # Use locally-built image (auto-built at activation if missing)
-      image = "localhost/technitium-dns-exporter:latest";
-      port = 9274;
-      requiresPostgres = false;
-      containerUser = "technitium-dns-exporter";  # Run rootless as dedicated technitium-dns-exporter user
-
-      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
-      # External monitoring via Prometheus/blackbox exporter is used instead
-      healthCheck = {
-        enable = false;
-      };
-      enableWatchdog = false;  # Disabled - requires sdnotify
-
-      # Bind to localhost only for Prometheus scraping
-      publishPorts = [
-        "127.0.0.1:9274:8080/tcp"
-      ];
-
-      secrets = {
-        technitiumDnsEnv = "technitium-dns-exporter-env";
-      };
-
-      # Container runs on port 8080 internally
-      exec = "--log.level=info --log.format=json";
-
-      # No nginx virtual host for this exporter (Prometheus scrapes directly)
-      nginxVirtualHost = null;
-
-      # Wait for Technitium DNS Server
-      extraUnitConfig = {
-        After = [ "technitium-dns-server.service" ];
-        Wants = [ "technitium-dns-server.service" ];
-      };
-    })
-  ];
-
-  # Open firewall port on localhost for Prometheus access
-  networking.firewall.interfaces = {
-    "lo".allowedTCPPorts = [
-      9274  # technitium-dns-exporter
-    ];
-  };
+  # Note: SOPS secrets automatically configured by mkQuadletService
+  # Note: Firewall rules automatically configured by mkQuadletService
 }

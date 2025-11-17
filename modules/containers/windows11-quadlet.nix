@@ -63,9 +63,8 @@
       # Timeout for stopping (allow Windows to shut down gracefully)
       TimeoutStopSec = "180s";
 
-      # Run as root (required for KVM device access)
-      User = "root";
-      Group = "root";
+      # Runs as root by default (required for KVM device access)
+      # No explicit User/Group needed - quadlet system containers run as root
     };
   };
 

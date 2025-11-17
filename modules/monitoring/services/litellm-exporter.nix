@@ -94,8 +94,9 @@ in
   # Systemd service to run the exporter
   systemd.services.litellm-exporter = {
     description = "LiteLLM Prometheus Exporter";
-    after = [ "litellm.service" "node-exporter.service" ];
-    requires = [ "litellm.service" ];
+    after = [ "node-exporter.service" ];
+    # Note: litellm runs as a user service (Home Manager), so we can't depend on it here
+    # The health check script will report availability=0 if litellm is down
 
     serviceConfig = {
       Type = "oneshot";

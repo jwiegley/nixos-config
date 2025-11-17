@@ -1,71 +1,54 @@
+# Teable - System Configuration
+#
+# Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/teable.nix)
+# This file: Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
+
 { config, lib, pkgs, secrets, ... }:
 
-let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
-  inherit (mkQuadletLib) mkQuadletService;
-in
 {
-  imports = [
-    (mkQuadletService {
-      name = "teable";
-      image = "ghcr.io/teableio/teable-community:latest";
-      port = 3001;
-      requiresPostgres = true;
-      containerUser = "teable";  # Run rootless as dedicated teable user
+  # Quadlet container configuration moved to Home Manager
+  # See /etc/nixos/modules/users/home-manager/teable.nix
+  # imports = [
+  #   (mkQuadletService {
+  #     name = "teable";
+  #     image = "ghcr.io/teableio/teable-community:latest";
+  #     port = 3001;
+  #     requiresPostgres = true;
+  #     containerUser = "teable";
+  #     ...
+  #   })
+  # ];
 
-      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
-      # External monitoring via Prometheus/blackbox exporter is used instead
-      healthCheck = {
-        enable = false;
-      };
-      enableWatchdog = false;  # Disabled - requires sdnotify
+  # Nginx virtual host
+  services.nginx.virtualHosts."teable.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/teable.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/teable.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:3004/";
+      proxyWebsockets = true;
+      extraConfig = ''
+        proxy_buffering off;
+        client_max_body_size 100M;
+        proxy_read_timeout 5m;
+        proxy_connect_timeout 5m;
+        proxy_send_timeout 5m;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      '';
+    };
+  };
 
-      # SOPS secret containing all Teable environment variables
-      secrets = {
-        env = "teable-env";
-      };
-
-      environments = {
-        # PostgreSQL Configuration (minimal set matching official CE deployment)
-        POSTGRES_HOST = "10.88.0.1";
-        POSTGRES_PORT = "5432";
-        POSTGRES_DB = "teable";
-        POSTGRES_USER = "teable";
-
-        # Application Configuration (required for public URL)
-        PUBLIC_ORIGIN = "https://teable.vulcan.lan";
-
-        # Timezone
-        TIMEZONE = "America/Los_Angeles";
-      };
-
-      publishPorts = [ "127.0.0.1:3004:3000/tcp" ];
-
-      volumes = [
-        "/var/lib/teable:/app/.assets:rw"
-      ];
-
-      nginxVirtualHost = {
-        enable = true;
-        proxyPass = "http://127.0.0.1:3004/";
-        proxyWebsockets = true;
-        extraConfig = ''
-          proxy_buffering off;
-          client_max_body_size 100M;
-          proxy_read_timeout 5m;
-          proxy_connect_timeout 5m;
-          proxy_send_timeout 5m;
-        '';
-      };
-
-      tmpfilesRules = [
-        "d /var/lib/teable 0755 root root -"
-      ];
-    })
-  ];
+  # SOPS secrets
+  sops.secrets."teable-env" = {
+    sopsFile = config.sops.defaultSopsFile;
+    mode = "0400";
+    owner = "teable";
+  };
 
   # Additional SOPS secret for PostgreSQL user setup
-  # (teable-env is automatically declared by mkQuadletService)
   sops.secrets."teable-postgres-password" = {
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
@@ -73,7 +56,13 @@ in
     restartUnits = [ "postgresql-teable-setup.service" ];
   };
 
+  # Firewall rules
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
     3001  # teable
+  ];
+
+  # tmpfiles rules
+  systemd.tmpfiles.rules = [
+    "d /var/lib/teable 0755 root root -"
   ];
 }

@@ -1,53 +1,44 @@
+# Wallabag - System Configuration
+#
+# Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/wallabag.nix)
+# This file: Nginx virtual host and SOPS secrets
+
 { config, lib, pkgs, secrets, ... }:
 
-let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
-  inherit (mkQuadletLib) mkQuadletService;
-in
 {
-  imports = [
-    (mkQuadletService {
-      name = "wallabag";
-      image = "docker.io/wallabag/wallabag:latest";
-      port = 9091;
-      requiresPostgres = true;
-      containerUser = "wallabag";  # Run rootless as dedicated wallabag user
+  # Quadlet container configuration moved to Home Manager
+  # See /etc/nixos/modules/users/home-manager/wallabag.nix
+  # imports = [
+  #   (mkQuadletService {
+  #     name = "wallabag";
+  #     image = "docker.io/wallabag/wallabag:latest";
+  #     port = 9091;
+  #     requiresPostgres = true;
+  #     containerUser = "wallabag";
+  #     ...
+  #   })
+  # ];
 
-      # Disabled - Podman healthchecks cause cgroup permission errors with rootless containers
-      # External monitoring via Prometheus/blackbox exporter is used instead
-      healthCheck = {
-        enable = false;
-      };
-      enableWatchdog = false;  # Disabled - requires sdnotify
+  # Nginx virtual host
+  services.nginx.virtualHosts."wallabag.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:9091/";
+      extraConfig = ''
+        proxy_read_timeout 1h;
+        proxy_buffering off;
+        # Note: Standard proxy headers (Host, X-Real-IP, etc.) are automatically
+        # included by NixOS nginx module via recommendedProxySettings
+      '';
+    };
+  };
 
-      secrets = {
-        wallabagPassword = "wallabag-secrets";
-      };
-
-      environments = {
-        SYMFONY__ENV__DATABASE_DRIVER = "pdo_pgsql";
-        SYMFONY__ENV__DATABASE_HOST = "10.88.0.1";  # Use Podman bridge IP directly
-        SYMFONY__ENV__DATABASE_PORT = "5432";
-        SYMFONY__ENV__DATABASE_NAME = "wallabag";
-        SYMFONY__ENV__DATABASE_USER = "wallabag";
-        SYMFONY__ENV__DATABASE_CHARSET = "utf8";
-        SYMFONY__ENV__DOMAIN_NAME = "https://wallabag.vulcan.lan";
-        SYMFONY__ENV__SERVER_NAME = "Wallabag";
-        SYMFONY__ENV__FOSUSER_CONFIRMATION = "false";
-        SYMFONY__ENV__TWOFACTOR_AUTH = "false";
-        POPULATE_DATABASE = "False";  # Database already exists, skip setup
-      };
-
-      publishPorts = [ "127.0.0.1:9091:80/tcp" ];
-
-      nginxVirtualHost = {
-        enable = true;
-        proxyPass = "http://127.0.0.1:9091/";
-        extraConfig = ''
-          proxy_read_timeout 1h;
-          proxy_buffering off;
-        '';
-      };
-    })
-  ];
+  # SOPS secrets
+  sops.secrets."wallabag-secrets" = {
+    sopsFile = config.sops.defaultSopsFile;
+    mode = "0400";
+    owner = "wallabag";
+  };
 }

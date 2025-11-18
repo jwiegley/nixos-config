@@ -52,8 +52,6 @@ let
         # === ACTIVE DATABASES (Need special handling) ===
         # These should use proper dump commands, not file copies
         "lib/postgresql/"                 # 9.3GB - Use pg_dump (already done)
-        "lib/mariadb/"                    # Active MariaDB files
-        "lib/mysql/"                      # MySQL data files
         "lib/mongodb/"                    # MongoDB files
         "lib/elasticsearch/"              # 406MB - Search indices, recreatable
 

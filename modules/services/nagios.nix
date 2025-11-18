@@ -1365,14 +1365,6 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
-      service_description     SSL Cert: monica.vulcan.lan
-      check_command           check_ssl_cert!monica.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
       service_description     SSL Cert: nocobase.vulcan.lan
       check_command           check_ssl_cert!nocobase.vulcan.lan
       service_groups          ssl-certificates

@@ -60,8 +60,11 @@
     DefaultEnvironment="PATH=/run/current-system/sw/bin:/run/wrappers/bin"
   '';
 
-  # Enable auto-escaping for quadlet configurations
-  virtualisation.quadlet.autoEscape = true;
+  # Enable quadlet and auto-escaping for quadlet configurations
+  virtualisation.quadlet = {
+    enable = true;
+    autoEscape = true;
+  };
 
   # Note: Podman network is automatically managed by NixOS via
   # virtualisation.podman.defaultNetwork.settings No manual network creation

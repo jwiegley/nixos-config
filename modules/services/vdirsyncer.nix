@@ -1,33 +1,69 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # vdirsyncer - Synchronize calendars and contacts
-  # Bidirectional sync between Radicale (local) and Fastmail (remote)
+  # Bidirectional sync between Radicale (local) and remote services
+  # - johnw: Radicale <-> Fastmail
+  # - nasimw: Radicale <-> iCloud
   # Documentation: https://vdirsyncer.pimutils.org/
 
   # SOPS secrets for authentication
-  sops.secrets."vdirsyncer/fastmail-username" = {
+  sops.secrets."vdirsyncer-johnw/fastmail-username" = {
     owner = "vdirsyncer";
     group = "vdirsyncer";
     mode = "0400";
     restartUnits = [ "vdirsyncer.service" ];
   };
 
-  sops.secrets."vdirsyncer/fastmail-password" = {
+  sops.secrets."vdirsyncer-johnw/fastmail-password" = {
     owner = "vdirsyncer";
     group = "vdirsyncer";
     mode = "0400";
     restartUnits = [ "vdirsyncer.service" ];
   };
 
-  sops.secrets."vdirsyncer/radicale-username" = {
+  sops.secrets."vdirsyncer-johnw/radicale-username" = {
     owner = "vdirsyncer";
     group = "vdirsyncer";
     mode = "0400";
     restartUnits = [ "vdirsyncer.service" ];
   };
 
-  sops.secrets."vdirsyncer/radicale-password" = {
+  sops.secrets."vdirsyncer-johnw/radicale-password" = {
+    owner = "vdirsyncer";
+    group = "vdirsyncer";
+    mode = "0400";
+    restartUnits = [ "vdirsyncer.service" ];
+  };
+
+  # SOPS secrets for nasimw iCloud sync
+  sops.secrets."vdirsyncer-nasimw/icloud-username" = {
+    owner = "vdirsyncer";
+    group = "vdirsyncer";
+    mode = "0400";
+    restartUnits = [ "vdirsyncer.service" ];
+  };
+
+  sops.secrets."vdirsyncer-nasimw/icloud-password" = {
+    owner = "vdirsyncer";
+    group = "vdirsyncer";
+    mode = "0400";
+    restartUnits = [ "vdirsyncer.service" ];
+  };
+
+  sops.secrets."vdirsyncer-nasimw/radicale-username" = {
+    owner = "vdirsyncer";
+    group = "vdirsyncer";
+    mode = "0400";
+    restartUnits = [ "vdirsyncer.service" ];
+  };
+
+  sops.secrets."vdirsyncer-nasimw/radicale-password" = {
     owner = "vdirsyncer";
     group = "vdirsyncer";
     mode = "0400";
@@ -43,7 +79,7 @@
     createHome = true;
   };
 
-  users.groups.vdirsyncer = {};
+  users.groups.vdirsyncer = { };
 
   # Install vdirsyncer package
   environment.systemPackages = [ pkgs.vdirsyncer ];
@@ -53,33 +89,79 @@
     [general]
     status_path = "/var/lib/vdirsyncer/status/"
 
-    # Contacts sync pair
-    [pair contacts]
-    a = "radicale_contacts"
+    # ===== johnw: Fastmail <-> Radicale =====
+
+    # Contacts sync pair (johnw)
+    [pair contacts_johnw]
+    a = "radicale_contacts_johnw"
     b = "fastmail_contacts"
     collections = [["personal", "contacts", "Default"]]
     metadata = ["displayname", "color"]
     conflict_resolution = "a wins"
 
-    # Local Radicale storage
-    [storage radicale_contacts]
+    # Local Radicale storage (johnw)
+    [storage radicale_contacts_johnw]
     type = "carddav"
     url = "http://127.0.0.1:5232/"
-    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${config.sops.secrets."vdirsyncer/radicale-username".path}"]
-    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${config.sops.secrets."vdirsyncer/radicale-password".path}"]
+    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-johnw/radicale-username".path
+    }"]
+    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-johnw/radicale-password".path
+    }"]
 
-    # Remote Fastmail storage
+    # Remote Fastmail storage (johnw)
     [storage fastmail_contacts]
     type = "carddav"
     url = "https://carddav.fastmail.com/"
-    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${config.sops.secrets."vdirsyncer/fastmail-username".path}"]
-    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${config.sops.secrets."vdirsyncer/fastmail-password".path}"]
+    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-johnw/fastmail-username".path
+    }"]
+    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-johnw/fastmail-password".path
+    }"]
+
+    # ===== nasimw: iCloud <-> Radicale =====
+
+    # Contacts sync pair (nasimw)
+    [pair contacts_nasimw]
+    a = "radicale_contacts_nasimw"
+    b = "icloud_contacts_nasimw"
+    collections = ["from b"]
+    metadata = ["displayname", "color"]
+    conflict_resolution = "b wins"
+
+    # Local Radicale storage (nasimw)
+    [storage radicale_contacts_nasimw]
+    type = "carddav"
+    url = "http://127.0.0.1:5232/"
+    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-nasimw/radicale-username".path
+    }"]
+    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-nasimw/radicale-password".path
+    }"]
+
+    # Remote iCloud storage (nasimw)
+    [storage icloud_contacts_nasimw]
+    type = "carddav"
+    url = "https://contacts.icloud.com/"
+    username.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-nasimw/icloud-username".path
+    }"]
+    password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "${
+      config.sops.secrets."vdirsyncer-nasimw/icloud-password".path
+    }"]
   '';
 
   # Systemd service for vdirsyncer sync
   systemd.services.vdirsyncer = {
     description = "vdirsyncer synchronization";
-    after = [ "network-online.target" "radicale.service" "sops-install-secrets.service" ];
+    after = [
+      "network-online.target"
+      "radicale.service"
+      "sops-install-secrets.service"
+    ];
     wants = [ "network-online.target" ];
 
     serviceConfig = {
@@ -101,7 +183,11 @@
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      RestrictAddressFamilies = [
+        "AF_INET"
+        "AF_INET6"
+        "AF_UNIX"
+      ];
       RestrictNamespaces = true;
       RestrictRealtime = true;
       RestrictSUIDSGID = true;
@@ -161,7 +247,10 @@
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [
+        "AF_INET"
+        "AF_INET6"
+      ];
       RestrictNamespaces = true;
       RestrictRealtime = true;
       RestrictSUIDSGID = true;

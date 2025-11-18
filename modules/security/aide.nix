@@ -5,7 +5,6 @@
 #
 # This module configures AIDE to monitor:
 # - System binaries and libraries
-# - Container files (convention-speaker-list)
 # - Critical backup directories (/tank/Backups/Images, /tank/Backups/Messages)
 # - SSH keys and configuration files
 # - SOPS secrets configuration
@@ -97,16 +96,6 @@
     /etc/nixos/secrets.yaml CONFIG
     # Exclude private age keys (should never be committed)
     !/etc/nixos/.*.age$
-
-    # ===== CONTAINER MONITORING =====
-
-    # Convention speaker list container files
-    /var/lib/convention-speaker-list/postgres CRITICAL
-    /var/lib/convention-speaker-list/redis CRITICAL
-    /var/lib/convention-speaker-list/app CONFIG
-
-    # Container configuration
-    /var/lib/nixos-containers/convention-speaker-list READONLY
 
     # ===== CRITICAL BACKUPS (IMMUTABLE) =====
 

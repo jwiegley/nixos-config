@@ -42,7 +42,6 @@
 5432 0.0.0.0 :: PostgreSQL
 
 # Redis Instances
-6379 container Redis - convention-speaker-list
 6380 127.0.0.1 Redis - ntopng
 6381 127.0.0.1 Redis - rspamd
 6382 127.0.0.1 Redis - n8n

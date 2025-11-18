@@ -258,6 +258,12 @@
         cp /etc/nixos/modules/monitoring/dashboards/windows-container.json "$DASHBOARD_DIR/windows-container.json"
       fi
 
+      # Copy ATD Job Scheduler Dashboard (always update)
+      echo "Installing ATD Job Scheduler dashboard..."
+      if [ -f "/etc/nixos/modules/monitoring/grafana-dashboards/atd-dashboard.json" ]; then
+        cp /etc/nixos/modules/monitoring/grafana-dashboards/atd-dashboard.json "$DASHBOARD_DIR/atd-dashboard.json"
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

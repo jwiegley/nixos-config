@@ -163,6 +163,10 @@ with lib;
                           url = "https://jupyter.vulcan.lan";
                         }
                         {
+                          title = "ATD Scheduler";
+                          url = "https://atd.vulcan.lan";
+                        }
+                        {
                           title = "Windows 11";
                           url = "https://windows.vulcan.lan";
                         }

@@ -108,6 +108,12 @@
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
     ../../modules/services/aria2.nix
+    ../../modules/services/atd.nix
+    ../../modules/services/atd-web.nix
+    ../../modules/services/atd-nginx.nix
+    ../../modules/monitoring/services/atd-exporter.nix
+    ../../modules/monitoring/services/atd-alerts.nix
+    ../../modules/monitoring/services/atd-nagios.nix
 
     # Containers
     ../../modules/containers/default.nix

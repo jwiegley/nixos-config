@@ -39,8 +39,8 @@ groups:
           category: sync
           service: vdirsyncer
         annotations:
-          summary: "vdirsyncer hasn't synced in over 1 hour"
-          description: "Last sync was {{ $value | humanizeDuration }} ago (expected: every 15 minutes). Contacts/calendars may be out of sync."
+          summary: "vdirsyncer {{ $labels.pair }} hasn't synced in over 1 hour"
+          description: "Sync pair {{ $labels.pair }} last synced {{ $value | humanizeDuration }} ago (expected: every 15 minutes). Contacts/calendars may be out of sync."
 
       - alert: VdirsyncerSyncUnhealthy
         expr: vdirsyncer_sync_healthy == 0
@@ -50,8 +50,8 @@ groups:
           category: sync
           service: vdirsyncer
         annotations:
-          summary: "vdirsyncer sync is unhealthy"
-          description: "vdirsyncer sync status is unhealthy. Check logs for sync errors between Radicale and Fastmail."
+          summary: "vdirsyncer {{ $labels.pair }} sync is unhealthy"
+          description: "Sync pair {{ $labels.pair }} status is unhealthy. Check logs for sync errors."
 
       - alert: VdirsyncerServiceFailed
         expr: |

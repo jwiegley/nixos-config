@@ -91,6 +91,31 @@ class StatusHandler(http.server.BaseHTTPRequestHandler):
         </div>
 
         <div class="sync-history">
+            <h2>Sync Pairs Status</h2>
+'''
+        for pair_name, pair_data in status['pairs'].items():
+            pair_healthy = pair_data['sync_healthy']
+            pair_class = '' if pair_healthy else 'error'
+            pair_health_text = 'Healthy' if pair_healthy else 'Issues'
+
+            html += '''
+            <div class="status-card ''' + pair_class + '''" style="margin: 10px 0;">
+                <h3>''' + pair_name + '''</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <strong>Status:</strong> ''' + pair_health_text + '''<br>
+                        <strong>Last Sync:</strong> ''' + pair_data['last_sync_human'] + '''<br>
+                        <strong>Collections:</strong> ''' + str(pair_data['collections_count']) + '''
+                    </div>
+                    <div class="timestamp">''' + pair_data['last_sync_time'] + '''</div>
+                </div>
+            </div>
+'''
+
+        html += '''
+        </div>
+
+        <div class="sync-history">
             <h2>Recent Sync History</h2>
             ''' + log_entries + '''
         </div>
@@ -99,6 +124,7 @@ class StatusHandler(http.server.BaseHTTPRequestHandler):
             <h2>Configuration</h2>
             <pre>Radicale: http://127.0.0.1:5232/
 Fastmail: https://carddav.fastmail.com/
+iCloud: https://contacts.icloud.com/
 Sync Interval: 15 minutes
 Status Directory: /var/lib/vdirsyncer/status/</pre>
         </div>
@@ -115,31 +141,31 @@ Status Directory: /var/lib/vdirsyncer/status/</pre>
         """Serve Prometheus metrics"""
         status = self.get_status()
 
-        sync_healthy = status['sync_healthy']
-        if sync_healthy:
-            healthy_value = 1
-        else:
-            healthy_value = 0
-
-        metrics = '''# HELP vdirsyncer_last_sync_timestamp Unix timestamp of last successful sync
+        metrics = '''# HELP vdirsyncer_last_sync_timestamp Unix timestamp of last successful sync per pair
 # TYPE vdirsyncer_last_sync_timestamp gauge
-vdirsyncer_last_sync_timestamp ''' + str(status['last_sync_timestamp']) + '''
+'''
+        for pair_name, pair_data in status['pairs'].items():
+            metrics += 'vdirsyncer_last_sync_timestamp{pair="' + pair_name + '"} ' + str(pair_data['last_sync_timestamp']) + '\n'
 
-# HELP vdirsyncer_sync_healthy Whether the sync is healthy (1) or has issues (0)
+        metrics += '''
+# HELP vdirsyncer_sync_healthy Whether the sync is healthy (1) or has issues (0) per pair
 # TYPE vdirsyncer_sync_healthy gauge
-vdirsyncer_sync_healthy ''' + str(healthy_value) + '''
+'''
+        for pair_name, pair_data in status['pairs'].items():
+            healthy_value = 1 if pair_data['sync_healthy'] else 0
+            metrics += 'vdirsyncer_sync_healthy{pair="' + pair_name + '"} ' + str(healthy_value) + '\n'
 
-# HELP vdirsyncer_collections_total Total number of collections being synced
+        metrics += '''
+# HELP vdirsyncer_collections_total Total number of collections being synced per pair
 # TYPE vdirsyncer_collections_total gauge
-vdirsyncer_collections_total ''' + str(status['collections_count']) + '''
+'''
+        for pair_name, pair_data in status['pairs'].items():
+            metrics += 'vdirsyncer_collections_total{pair="' + pair_name + '"} ' + str(pair_data['collections_count']) + '\n'
 
+        metrics += '''
 # HELP vdirsyncer_sync_pairs_total Total number of sync pairs configured
 # TYPE vdirsyncer_sync_pairs_total gauge
 vdirsyncer_sync_pairs_total ''' + str(status['sync_pairs']) + '''
-
-# HELP vdirsyncer_last_sync_duration_seconds Duration of last sync in seconds
-# TYPE vdirsyncer_last_sync_duration_seconds gauge
-vdirsyncer_last_sync_duration_seconds ''' + str(status['last_sync_duration']) + '''
 '''
 
         self.send_response(200)
@@ -163,25 +189,65 @@ vdirsyncer_last_sync_duration_seconds ''' + str(status['last_sync_duration']) + 
             'last_sync_time': 'Never',
             'last_sync_human': 'Never',
             'sync_healthy': False,
-            'sync_pairs': 1,
+            'sync_pairs': 0,
             'collections_count': 0,
-            'last_sync_duration': 0,
-            'recent_logs': []
+            'recent_logs': [],
+            'pairs': {}
         }
 
-        # Check status directory
+        # Check status directory for sync pairs
         if STATUS_DIR.exists():
-            status_files = list(STATUS_DIR.glob('*'))
-            status['collections_count'] = len(status_files)
+            # Find all pair directories (exclude .collections files)
+            pair_dirs = [d for d in STATUS_DIR.iterdir() if d.is_dir()]
+            status['sync_pairs'] = len(pair_dirs)
 
-            # Get most recent modification time
-            if status_files:
-                latest_mtime = max(f.stat().st_mtime for f in status_files)
-                status['last_sync_timestamp'] = int(latest_mtime)
-                status['last_sync_time'] = datetime.fromtimestamp(latest_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            global_latest_mtime = 0
 
-                # Calculate human-readable time difference
-                diff_seconds = time.time() - latest_mtime
+            for pair_dir in pair_dirs:
+                pair_name = pair_dir.name
+                pair_files = list(pair_dir.glob('*'))
+                pair_collections = len(pair_files)
+
+                pair_data = {
+                    'last_sync_timestamp': 0,
+                    'last_sync_time': 'Never',
+                    'last_sync_human': 'Never',
+                    'sync_healthy': False,
+                    'collections_count': pair_collections
+                }
+
+                if pair_files:
+                    latest_mtime = max(f.stat().st_mtime for f in pair_files)
+                    pair_data['last_sync_timestamp'] = int(latest_mtime)
+                    pair_data['last_sync_time'] = datetime.fromtimestamp(latest_mtime).strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Calculate human-readable time difference
+                    diff_seconds = time.time() - latest_mtime
+                    if diff_seconds < 60:
+                        pair_data['last_sync_human'] = 'Just now'
+                    elif diff_seconds < 3600:
+                        pair_data['last_sync_human'] = str(int(diff_seconds / 60)) + ' min ago'
+                    elif diff_seconds < 86400:
+                        pair_data['last_sync_human'] = str(int(diff_seconds / 3600)) + ' hours ago'
+                    else:
+                        pair_data['last_sync_human'] = str(int(diff_seconds / 86400)) + ' days ago'
+
+                    # Sync is healthy if last sync was within 30 minutes
+                    pair_data['sync_healthy'] = diff_seconds < 1800
+
+                    # Track global latest sync time
+                    if latest_mtime > global_latest_mtime:
+                        global_latest_mtime = latest_mtime
+
+                status['pairs'][pair_name] = pair_data
+                status['collections_count'] += pair_collections
+
+            # Set global status based on most recent sync
+            if global_latest_mtime > 0:
+                status['last_sync_timestamp'] = int(global_latest_mtime)
+                status['last_sync_time'] = datetime.fromtimestamp(global_latest_mtime).strftime('%Y-%m-%d %H:%M:%S')
+
+                diff_seconds = time.time() - global_latest_mtime
                 if diff_seconds < 60:
                     status['last_sync_human'] = 'Just now'
                 elif diff_seconds < 3600:
@@ -191,7 +257,6 @@ vdirsyncer_last_sync_duration_seconds ''' + str(status['last_sync_duration']) + 
                 else:
                     status['last_sync_human'] = str(int(diff_seconds / 86400)) + ' days ago'
 
-                # Sync is healthy if last sync was within 30 minutes
                 status['sync_healthy'] = diff_seconds < 1800
 
         # Get recent logs from journalctl

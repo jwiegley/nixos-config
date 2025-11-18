@@ -16,10 +16,12 @@
     # ZFS ARC (Adaptive Replacement Cache) memory limits
     # Maximum: 16 GiB (17179869184 bytes)
     # Minimum: 2 GiB (2147483648 bytes)
-    kernelParams = [
-      "zfs.zfs_arc_max=17179869184"
-      "zfs.zfs_arc_min=2147483648"
-    ];
+    # Using extraModprobeConfig instead of kernelParams so limits apply
+    # at module load time without requiring a reboot
+    extraModprobeConfig = ''
+      options zfs zfs_arc_max=17179869184
+      options zfs zfs_arc_min=2147483648
+    '';
   };
 
   # Ensure zfs-mount waits for pool imports to complete

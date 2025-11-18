@@ -107,6 +107,11 @@ in
           "server string" = "Vulcan NixOS Samba Server";
           workgroup = "WORKGROUP";
 
+          # Disable NetBIOS master browser (not needed with samba-wsdd)
+          "local master" = "no";
+          "preferred master" = "no";
+          "domain master" = "no";
+
           # Modern protocol settings (SMB 3.1.1 minimum for security)
           "server min protocol" = "SMB3_11";
           "client min protocol" = "SMB3_11";

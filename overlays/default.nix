@@ -136,18 +136,19 @@ in
     '';
   });
 
-  # Rspamd - Update to 3.14.0 to fix lua_magic empty text part errors
+  # Rspamd - Update to 3.13.2 to fix lua_magic empty text part errors
   # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts
-  # Fixed in 3.13.1+, using 3.14.0 for latest fixes including DNS stability and memory leaks
+  # Fixed in 3.13.1+, using 3.13.2 (more stable than 3.14.0 which crashes on AARCH64)
+  # 3.14.0 has Lua API crash: "invalid option '%.' to 'lua_pushfstring'" on ARM64
   rspamd = prev.rspamd.overrideAttrs (oldAttrs: {
-    version = "3.14.0";
+    version = "3.13.2";
     src = prev.fetchFromGitHub {
       owner = "rspamd";
       repo = "rspamd";
-      rev = "3.14.0";
-      hash = "sha256-AZk1mUMFC5FHDFX9CwZEbhzfdxXUw8SbpkvhUmq219Q=";
+      rev = "3.13.2";
+      hash = "sha256-lfMU9o/wnHHAnfRUUNto1edZjXI32q847ZQkSoekg5o=";
     };
-    # Remove patches that are already included in 3.14.0
+    # Remove patches that are already included in 3.13.2
     patches = [];
   });
 

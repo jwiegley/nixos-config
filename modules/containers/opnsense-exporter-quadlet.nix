@@ -38,6 +38,7 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "opnsense-exporter";
+    path = "/run/secrets-opnsense-exporter/opnsense-exporter-secrets";
   };
 
   # Open firewall port on podman0 interface for container access

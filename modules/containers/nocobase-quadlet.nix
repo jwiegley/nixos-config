@@ -44,6 +44,7 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "nocobase";
+    path = "/run/secrets-nocobase/nocobase-secrets";
   };
 
   # Additional SOPS secret for PostgreSQL user setup

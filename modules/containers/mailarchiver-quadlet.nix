@@ -63,6 +63,7 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "mailarchiver";
+    path = "/run/secrets-mailarchiver/mailarchiver-env";
   };
 
   # Additional SOPS secret for PostgreSQL user setup

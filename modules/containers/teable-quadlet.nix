@@ -46,6 +46,7 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "teable";
+    path = "/run/secrets-teable/teable-env";
   };
 
   # Additional SOPS secret for PostgreSQL user setup

@@ -40,5 +40,6 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "wallabag";
+    path = "/run/secrets-wallabag/wallabag-secrets";
   };
 }

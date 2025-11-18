@@ -42,6 +42,7 @@
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "litellm";
+    path = "/run/secrets-litellm/litellm-secrets";
   };
 
   # tmpfiles rules

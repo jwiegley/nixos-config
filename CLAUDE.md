@@ -31,7 +31,7 @@ Guidance for Claude Code when working with this NixOS repository.
 
 **Past incidents:**
 - **2025-11-04**: Changed `/var/mail/johnw` from `d` to `D`, causing mail deletion
-- **2025-11-09**: Used `D` for Monica/MariaDB, lost database twice due to emptying on rebuild
+- **2025-11-09**: Used `D` directive for container data directories, lost database twice due to emptying on rebuild
 
 ### SECURITY - NO SECRETS IN OUTPUT
 

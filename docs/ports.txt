@@ -78,7 +78,6 @@
 8888 127.0.0.1 JupyterLab
 9080 127.0.0.1 Promtail
 9091 127.0.0.1 Wallabag container
-9092 127.0.0.1 (Unknown)
 9095 127.0.0.1 (Unknown)
 9097 127.0.0.1 MailArchiver container
 9099 127.0.0.1 Cockpit

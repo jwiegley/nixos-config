@@ -178,16 +178,29 @@
   # These directories are used for deploying user-specific secrets via SOPS
   # Permissions: 0750 (owner: rwx, group: r-x, others: ---)
   # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
+  #
+  # Symlinks are created to make SOPS secrets (in /run/secrets/<service>/) accessible
+  # to user services as /run/secrets-<service>/<service>/ for container environmentFiles
   systemd.tmpfiles.rules = [
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
+    "L+ /run/secrets-changedetection/changedetection - - - - /run/secrets/changedetection"
     "d /run/secrets-litellm 0750 litellm litellm - -"
+    "L+ /run/secrets-litellm/litellm - - - - /run/secrets/litellm"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
+    "L+ /run/secrets-mailarchiver/mailarchiver - - - - /run/secrets/mailarchiver"
     "d /run/secrets-nocobase 0750 nocobase nocobase - -"
+    "L+ /run/secrets-nocobase/nocobase - - - - /run/secrets/nocobase"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
+    "L+ /run/secrets-wallabag/wallabag - - - - /run/secrets/wallabag"
     "d /run/secrets-teable 0750 teable teable - -"
+    "L+ /run/secrets-teable/teable - - - - /run/secrets/teable"
     "d /run/secrets-sillytavern 0750 sillytavern sillytavern - -"
+    "L+ /run/secrets-sillytavern/sillytavern - - - - /run/secrets/sillytavern"
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
+    "L+ /run/secrets-opnsense-exporter/opnsense-exporter - - - - /run/secrets/opnsense-exporter"
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"
+    "L+ /run/secrets-technitium-dns-exporter/technitium-dns-exporter - - - - /run/secrets/technitium-dns-exporter"
     "d /run/secrets-openspeedtest 0750 openspeedtest openspeedtest - -"
+    "L+ /run/secrets-openspeedtest/openspeedtest - - - - /run/secrets/openspeedtest"
   ];
 }

@@ -139,7 +139,7 @@ groups:
       # Dovecot Message/Byte Delivery Metrics
       - alert: DovecotNoRecentActivity
         expr: |
-          (time() - dovecot_user_last_update) > 86400
+          (time() - dovecot_user_last_update{user!="root"}) > 86400
         for: 30m
         labels:
           severity: info

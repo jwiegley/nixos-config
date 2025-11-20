@@ -107,8 +107,9 @@
     # File content integrity verified via ZFS scrub and snapshots
     !/tank/Backups/Messages
 
-    # PostgreSQL backups (small, can be fully monitored)
-    /tank/Backups/PostgreSQL CRITICAL
+    # PostgreSQL backups - Excluded to avoid daily alerts from automated backups
+    # Backup integrity verified via daily backup service monitoring
+    !/tank/Backups/PostgreSQL
 
     # ===== CONFIGURATION FILES =====
 

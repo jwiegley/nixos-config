@@ -21,6 +21,9 @@ import imaplib
 import email
 import os
 import argparse
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import List, Dict, Tuple, Optional
@@ -36,6 +39,10 @@ GTUBE_SPAM_STRING = "XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EM
 IMAP_HOST = "localhost"
 IMAP_PORT = 143  # STARTTLS
 IMAP_PASSWORD_FILE = "/run/secrets/email-tester-imap-password"
+
+# LiteLLM configuration
+LITELLM_HOST = "localhost"
+LITELLM_PORT = 4000
 
 # Track all test Message-IDs for cleanup
 test_message_ids: List[str] = []
@@ -465,6 +472,144 @@ def check_logs_for_errors(since_time: datetime) -> Tuple[bool, List[str]]:
                 errors.extend(filtered)
 
     return (len(errors) == 0), errors
+
+
+def check_litellm_health() -> Tuple[bool, str]:
+    """Check if LiteLLM service is available and healthy.
+
+    Returns:
+        Tuple of (is_healthy, message)
+    """
+    try:
+        url = f"http://{LITELLM_HOST}:{LITELLM_PORT}/health/readiness"
+        req = urllib.request.Request(url, method='GET')
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                return True, "LiteLLM is healthy and ready"
+            else:
+                return False, f"LiteLLM returned status {response.status}"
+
+    except urllib.error.URLError as e:
+        return False, f"Cannot connect to LiteLLM: {e.reason}"
+    except Exception as e:
+        return False, f"LiteLLM health check failed: {str(e)}"
+
+
+def extract_spam_score(headers: str) -> Optional[float]:
+    """Extract overall spam score from X-Spamd-Result header.
+
+    Args:
+        headers: Email headers as string
+
+    Returns:
+        Spam score as float, or None if not found
+    """
+    # Extract X-Spamd-Result header
+    # Format: X-Spamd-Result: default: F (no action): [score/threshold] [symbols...]
+    result_match = re.search(r'^X-Spamd-Result:.*?\[\s*([0-9.-]+)\s*/\s*([0-9.-]+)\s*\]',
+                            headers, re.MULTILINE | re.IGNORECASE)
+    if result_match:
+        return float(result_match.group(1))
+
+    return None
+
+
+def extract_symbol_score(headers: str, symbol_name: str) -> Optional[Tuple[float, Optional[str]]]:
+    """Extract score and optional details for a specific symbol from X-Spamd-Result header.
+
+    Args:
+        headers: Email headers as string
+        symbol_name: Symbol to look for (e.g., 'GPT_SPAM', 'GPT_HAM')
+
+    Returns:
+        Tuple of (score, details) if symbol found, None otherwise
+        Details may contain additional info like spam probability in brackets
+    """
+    # Extract X-Spamd-Result header
+    result_match = re.search(r'^X-Spamd-Result:\s*(.+?)(?=\n\S|\n\n|\Z)', headers,
+                            re.MULTILINE | re.IGNORECASE | re.DOTALL)
+    if not result_match:
+        return None
+
+    result_value = result_match.group(1)
+
+    # Look for symbol in format: SYMBOL_NAME(score){details} or SYMBOL_NAME(score)
+    # GPT symbols typically appear as: GPT_SPAM(2.94){0.99} where 0.99 is probability
+    pattern = rf'{symbol_name}\s*\(([0-9.-]+)\)(?:\{{([^}}]*)\}})?'
+    match = re.search(pattern, result_value, re.IGNORECASE)
+
+    if match:
+        score = float(match.group(1))
+        details = match.group(2) if match.group(2) else None
+        return (score, details)
+
+    return None
+
+
+def check_gpt_symbols(message_id: str, folder: str, expected_symbol: str, optional: bool = False) -> bool:
+    """Check for GPT symbols in message headers.
+
+    Args:
+        message_id: Message ID to check
+        folder: IMAP folder containing the message
+        expected_symbol: Expected GPT symbol (GPT_SPAM, GPT_HAM, or GPT_UNCERTAIN)
+        optional: If True, GPT analysis is optional (for ham messages where rspamd may skip GPT)
+
+    Returns:
+        True if expected symbol found OR (if optional=True) no GPT symbols but spam score is very negative
+    """
+    headers = get_message_headers(message_id, folder)
+
+    if not headers:
+        logger.error(f"  ✗ Cannot fetch headers")
+        return False
+
+    # Check for any GPT symbol
+    gpt_symbols = ['GPT_SPAM', 'GPT_HAM', 'GPT_UNCERTAIN']
+    found_symbols = {}
+
+    for symbol in gpt_symbols:
+        result = extract_symbol_score(headers, symbol)
+        if result:
+            found_symbols[symbol] = result
+
+    if not found_symbols:
+        if optional:
+            # For ham messages, rspamd may skip GPT if message is clearly legitimate
+            # Check if the overall spam score is very negative (clearly ham)
+            spam_score = extract_spam_score(headers)
+            if spam_score is not None and spam_score < -1.0:
+                logger.info(f"  ℹ GPT analysis skipped (message clearly ham with score {spam_score:.2f})")
+                logger.info(f"  ✓ Message correctly identified as ham without GPT")
+                return True
+            else:
+                logger.error(f"  ✗ No GPT symbols found and spam score not clearly negative ({spam_score})")
+                return False
+        else:
+            logger.error(f"  ✗ No GPT symbols found in headers")
+            logger.error(f"  ℹ Check that rspamd GPT module is enabled and working")
+            return False
+
+    # Check if expected symbol is present
+    if expected_symbol not in found_symbols:
+        logger.error(f"  ✗ Expected {expected_symbol} but found: {', '.join(found_symbols.keys())}")
+        for sym, (score, details) in found_symbols.items():
+            detail_str = f" [{details}]" if details else ""
+            logger.error(f"    {sym}({score}){detail_str}")
+        return False
+
+    # Report the GPT classification
+    score, details = found_symbols[expected_symbol]
+    detail_str = f" (probability: {details})" if details else ""
+    logger.info(f"  ✓ GPT classified as {expected_symbol}({score}){detail_str}")
+
+    # Report any other GPT symbols found (shouldn't happen, but informative)
+    other_symbols = {k: v for k, v in found_symbols.items() if k != expected_symbol}
+    if other_symbols:
+        logger.info(f"  ℹ Other GPT symbols: {', '.join(other_symbols.keys())}")
+
+    return True
 
 
 def cleanup_test_messages() -> None:
@@ -1033,6 +1178,205 @@ def test_retrain_ham() -> bool:
         return False
 
 
+def test_litellm_connectivity() -> bool:
+    """Test 7: LiteLLM service connectivity."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 7: LiteLLM Service Connectivity")
+    logger.info("=" * 70)
+
+    try:
+        # Check LiteLLM health endpoint
+        is_healthy, message = check_litellm_health()
+
+        if not is_healthy:
+            raise TestError(message)
+
+        logger.info(f"  ✓ {message}")
+        logger.info(f"  ℹ LiteLLM endpoint: http://{LITELLM_HOST}:{LITELLM_PORT}")
+
+        logger.info("✓ PASSED")
+        return True
+
+    except Exception as e:
+        logger.error(f"✗ FAILED: {e}")
+        logger.error(f"  ℹ Ensure LiteLLM service is running on port {LITELLM_PORT}")
+        return False
+
+
+def test_gpt_spam_detection() -> bool:
+    """Test 8: GPT-based spam detection with LLM."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 8: GPT Spam Detection (LLM-based)")
+    logger.info("=" * 70)
+
+    try:
+        # First check if LiteLLM is available
+        is_healthy, message = check_litellm_health()
+        if not is_healthy:
+            logger.error(f"  ✗ LiteLLM not available: {message}")
+            raise TestError("LiteLLM service not available")
+
+        logger.info("  ✓ LiteLLM service is available")
+
+        # Create a highly spammy message for GPT to analyze
+        spam_body = """
+URGENT!!! YOU HAVE WON $10,000,000 USD!!!
+
+Dear Lucky Winner,
+
+CONGRATULATIONS!!! You have been RANDOMLY SELECTED to receive TEN MILLION DOLLARS ($10,000,000.00 USD) from our INTERNATIONAL PRIZE COMMISSION!!!
+
+*** CLAIM YOUR PRIZE NOW - EXPIRES IN 24 HOURS ***
+
+To receive your winnings, you MUST provide:
+- Full Name and Address
+- Bank Account Number and Routing Number
+- Social Security Number
+- Credit Card Details (for verification)
+- Mother's Maiden Name
+
+CLICK HERE IMMEDIATELY: http://totally-not-a-scam.ru/claim?id=WINNER
+Alternative: http://suspicious-domain.tk/phishing.exe
+
+*** 100% LEGAL AND SAFE ***
+*** NO PURCHASE NECESSARY ***
+*** ACT NOW - LIMITED TIME ***
+*** FREE MONEY GUARANTEED ***
+
+Why wait? Become a MILLIONAIRE TODAY!!!
+
+Reply with ALL information to: scammer@fraud-central.ru
+
+VERIFY NOW: http://bit.ly/definitelylegit
+ORDER TODAY: http://malware.biz/virus.exe
+
+P.S. This is 100% genuine and NOT spam. Trust us completely!
+
+Unsubscribe: Send your bank credentials to remove@scam.net
+"""
+
+        msg = create_test_message(
+            subject="FW: FW: URGENT!!! $10,000,000 PRIZE WINNER NOTIFICATION!!!",
+            body=spam_body,
+            scenario='gpt-spam-test'
+        )
+
+        # Add spammy headers
+        msg['Reply-To'] = 'scammer@fraud-central.ru'
+        msg['X-Mailer'] = 'MassMailer Pro 5000'
+
+        message_id = msg['Message-ID']
+
+        # Send via Postfix (rspamd will scan with GPT)
+        send_via_postfix(msg)
+
+        # Wait longer for GPT analysis (LLM calls take time)
+        logger.info(f"  → Waiting {WAIT_AFTER_DELIVERY + 2}s for GPT analysis...")
+        time.sleep(WAIT_AFTER_DELIVERY + 2)
+
+        # Check where message was delivered
+        in_spam = check_message_in_folder(message_id, 'Spam', should_exist=True)
+        not_in_inbox = check_message_in_folder(message_id, 'INBOX', should_exist=False)
+
+        if not (in_spam and not_in_inbox):
+            raise TestError("Message not delivered to Spam folder")
+
+        # Check for GPT_SPAM symbol in headers
+        if not check_gpt_symbols(message_id, 'Spam', 'GPT_SPAM'):
+            raise TestError("GPT did not classify message as spam")
+
+        # Verify rspamd headers are present
+        if not check_rspamd_headers(message_id, 'Spam'):
+            raise TestError("Missing rspamd headers")
+
+        logger.info("✓ PASSED")
+        return True
+
+    except Exception as e:
+        logger.error(f"✗ FAILED: {e}")
+        return False
+
+
+def test_gpt_ham_detection() -> bool:
+    """Test 9: GPT-based ham detection with LLM."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 9: GPT Ham Detection (LLM-based)")
+    logger.info("=" * 70)
+
+    try:
+        # First check if LiteLLM is available
+        is_healthy, message = check_litellm_health()
+        if not is_healthy:
+            logger.error(f"  ✗ LiteLLM not available: {message}")
+            raise TestError("LiteLLM service not available")
+
+        logger.info("  ✓ LiteLLM service is available")
+
+        # Create a legitimate business email for GPT to analyze
+        ham_body = """
+Hi team,
+
+I wanted to follow up on yesterday's quarterly planning meeting and share the updated project timeline.
+
+Key Updates:
+- Q4 deliverables are on track for November 30th deadline
+- Design review scheduled for next Tuesday at 2pm (Conference Room B)
+- Engineering team has completed the initial prototype testing
+- Marketing campaign materials will be ready by end of week
+
+Action Items:
+1. Please review the attached project roadmap document
+2. Submit your team's resource requirements by Friday
+3. Prepare status updates for the stakeholder presentation
+
+If you have any questions or concerns, please don't hesitate to reach out.
+
+Best regards,
+Project Manager
+"""
+
+        msg = create_test_message(
+            subject="Q4 Project Timeline Update - Action Required",
+            body=ham_body,
+            scenario='gpt-ham-test'
+        )
+
+        message_id = msg['Message-ID']
+
+        # Send via Postfix (rspamd will scan with GPT)
+        send_via_postfix(msg)
+
+        # Wait longer for GPT analysis (LLM calls take time)
+        logger.info(f"  → Waiting {WAIT_AFTER_DELIVERY + 2}s for GPT analysis...")
+        time.sleep(WAIT_AFTER_DELIVERY + 2)
+
+        # Check where message was delivered
+        in_inbox = check_message_in_folder(message_id, 'INBOX', should_exist=True)
+        not_in_spam = check_message_in_folder(message_id, 'Spam', should_exist=False)
+
+        if not (in_inbox and not_in_spam):
+            raise TestError("Message not delivered to INBOX")
+
+        # Check for GPT_HAM symbol in headers (optional=True because rspamd may skip GPT on clearly legitimate messages)
+        if not check_gpt_symbols(message_id, 'INBOX', 'GPT_HAM', optional=True):
+            raise TestError("Message not correctly identified as ham")
+
+        # Verify message is not marked as spam
+        if not check_spam_header(message_id, 'INBOX', should_be_spam=False):
+            raise TestError("Message incorrectly marked as spam")
+
+        # Verify rspamd headers are present
+        if not check_rspamd_headers(message_id, 'INBOX'):
+            raise TestError("Missing rspamd headers")
+
+        logger.info("✓ PASSED")
+        return True
+
+    except Exception as e:
+        logger.error(f"✗ FAILED: {e}")
+        return False
+
+
 def main():
     """Main test runner"""
     # Parse command line arguments
@@ -1050,6 +1394,9 @@ def main():
         'train-spam': ('Train Spam', test_train_spam),
         'retrain-spam': ('Retrain Spam', test_retrain_spam),
         'retrain-ham': ('Retrain Ham', test_retrain_ham),
+        'litellm': ('LiteLLM Connectivity', test_litellm_connectivity),
+        'gpt-spam': ('GPT Spam Detection', test_gpt_spam_detection),
+        'gpt-ham': ('GPT Ham Detection', test_gpt_ham_detection),
     }
 
     # List tests if requested

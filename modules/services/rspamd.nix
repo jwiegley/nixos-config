@@ -120,6 +120,13 @@ in
     restartUnits = [ "rspamd.service" ];
   };
 
+  # SOPS secret for LiteLLM API key
+  sops.secrets."litellm-vulcan-lan" = {
+    owner = "rspamd";
+    mode = "0400";
+    restartUnits = [ "rspamd.service" ];
+  };
+
   # Enable Rspamd service using NixOS module
   services.rspamd = {
     enable = true;
@@ -157,11 +164,10 @@ in
     # Use local Redis instance for statistics
     locals = {
       "logging.inc".text = ''
-        # Logging configuration - reduce verbosity to warnings and errors only
-        # This significantly reduces log volume from ~60 logs/sec to <1 log/sec
-        level = "warning";
+        # Logging configuration - TEMPORARY: verbose for GPT debugging
+        level = "info";
 
-        # Keep systemd journal logging but with reduced verbosity
+        # Keep systemd journal logging
         systemd = true;
       '';
 
@@ -258,6 +264,50 @@ in
         }
       '';
 
+      "gpt.conf".text = ''
+        # GPT/LLM integration via LiteLLM proxy
+        # NOTE: This file is included INSIDE the gpt{} block from modules.d/gpt.conf
+        # Do NOT wrap these settings in another gpt{} block - that causes nested sections
+
+        enabled = true;
+
+        # LiteLLM proxy configuration (OpenAI-compatible API)
+        type = "openai";
+        url = "http://127.0.0.1:4000/v1/chat/completions";
+        model = "hera/gpt-oss-safeguard-20b";
+
+        # Model parameters (required for OpenAI-type endpoints)
+        model_parameters = {
+          "hera/gpt-oss-safeguard-20b" = {
+            max_completion_tokens = 500;
+          }
+        };
+
+        # Request timeout
+        timeout = 15s;
+
+        # Spam classification prompt - must return JSON with probability and reason fields
+        prompt = "Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";
+
+        # Enable JSON mode - this selects the JSON conversion function
+        json = true;
+        # Request JSON response format from the API
+        include_response_format = true;
+
+        # Feed GPT results back to Bayes classifier for learning
+        autolearn = false;
+
+        # Custom header for GPT reasoning (set to null to disable)
+        reason_header = "X-GPT-Spam-Reason";
+
+        # Placeholder for API key - will be overridden by include below
+        api_key = "placeholder";
+
+        # Load API key from runtime-generated file (injected by systemd preStart)
+        # This include has priority 15 (higher than default override.d priority of 10)
+        .include(try=true; priority=15) "/var/lib/rspamd/override.d/gpt.conf"
+      '';
+
       "dkim_signing.conf".text = ''
         # Disable DKIM signing for local/private domains
         # DKIM is only useful for public internet domains
@@ -332,11 +382,29 @@ in
         chown rspamd:rspamd /var/lib/rspamd/override.d/worker-controller.inc
         chmod 600 /var/lib/rspamd/override.d/worker-controller.inc
       fi
+
+      # Read LiteLLM API key from SOPS secret and write to GPT module override file
+      # Use /var/lib/rspamd because /etc is read-only on NixOS
+      if [ -f "${config.sops.secrets."litellm-vulcan-lan".path}" ]; then
+        API_KEY=$(cat "${config.sops.secrets."litellm-vulcan-lan".path}")
+        {
+          echo "# Auto-generated GPT module override from SOPS"
+          echo "# This overrides the default enabled=false in modules.d/gpt.conf"
+          echo "enabled = true;"
+          echo "api_key = \"$API_KEY\";"
+        } > /var/lib/rspamd/override.d/gpt.conf
+
+        chown rspamd:rspamd /var/lib/rspamd/override.d/gpt.conf
+        chmod 600 /var/lib/rspamd/override.d/gpt.conf
+      fi
     '';
 
     serviceConfig = {
       # Ensure SOPS secrets are available before starting
-      LoadCredential = "rspamd-password:${config.sops.secrets."rspamd-controller-password".path}";
+      LoadCredential = [
+        "rspamd-password:${config.sops.secrets."rspamd-controller-password".path}"
+        "litellm-api-key:${config.sops.secrets."litellm-vulcan-lan".path}"
+      ];
     };
   };
 

@@ -92,18 +92,20 @@ in
 
       # Health check configuration
       # Uses bash TCP redirection instead of curl (which isn't in the container image)
-      healthCmd = "CMD-SHELL timeout 2 bash -c '</dev/tcp/localhost/8080' || exit 1";
+      # More lenient settings to handle database migrations and slow starts
+      healthCmd = "CMD-SHELL timeout 5 bash -c '</dev/tcp/localhost/8080' || exit 1";
       healthInterval = "30s";
-      healthTimeout = "10s";
-      healthStartPeriod = "60s";
-      healthRetries = 3;
+      healthTimeout = "15s";
+      healthStartPeriod = "120s";  # Give 2 minutes for DB migrations
+      healthRetries = 5;  # More retries before marking unhealthy
 
       environments = {
         # Logging configuration
         "Logging__LogLevel__Default" = "Information";
 
-        # Client URL for CORS configuration
-        "CLIENT_URL" = "https://budget.vulcan.lan";
+        # Client address for server-to-client communication
+        # Uses localhost since containers share network namespace in pod
+        "CLIENT_ADDRESS" = "localhost";
 
         # PostgreSQL connection to host database
         "POSTGRES_HOST" = common.postgresDefaults.host;
@@ -135,10 +137,15 @@ in
     };
 
     serviceConfig = {
-      # Wait for PostgreSQL to be ready
-      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 30";
+      # Wait for PostgreSQL to be ready before starting container
+      # pg_isready doesn't require authentication, perfect for pre-start checks
+      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 60";
       Restart = "always";
-      RestartSec = "10s";
+      RestartSec = "15s";  # Wait longer between restart attempts
+      TimeoutStartSec = "180s";  # Allow up to 3 minutes for startup (includes DB migrations)
+      # Prevent rapid restart loops if there's a persistent issue
+      StartLimitBurst = 5;
+      StartLimitIntervalSec = 300;  # 5 restarts within 5 minutes max
     };
   };
 

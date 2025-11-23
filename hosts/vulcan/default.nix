@@ -16,6 +16,9 @@
     ../../modules/core/programs.nix
     ../../modules/core/memory-limits.nix
 
+    # Hardware modules
+    ../../modules/hardware/wifi-stability.nix
+
     # Security modules
     ../../modules/security/hardening.nix
     ../../modules/security/aide.nix

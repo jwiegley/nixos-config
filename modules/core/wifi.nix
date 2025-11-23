@@ -77,10 +77,12 @@
           };
           ipv4 = {
             method = "auto";  # DHCP
+            never-default = true;  # Never use WiFi for internet (Ethernet only)
           };
           ipv6 = {
             method = "auto";
             addr-gen-mode = "stable-privacy";
+            never-default = true;  # Never use WiFi for internet (Ethernet only)
           };
         };
       };

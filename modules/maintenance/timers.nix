@@ -263,6 +263,7 @@ in
       after = [ "sops-nix.service" ];
       wants = [ "sops-nix.service" ];
       serviceConfig = {
+        Type = "oneshot";
         User = "johnw";
         Group = "johnw";
         ExecStart = "${workspaceUpdateScript} --archive";
@@ -273,6 +274,10 @@ in
           "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive"
           "${pkgs.coreutils}/bin/chmod -R g+rX /var/lib/git-workspace-archive/github"
         ];
+        TimeoutStartSec = "1h";
+        RemainAfterExit = false;
+        StandardOutput = "journal";
+        StandardError = "journal";
       };
     };
 

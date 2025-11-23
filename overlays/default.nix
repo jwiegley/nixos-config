@@ -152,6 +152,23 @@ in
     patches = [];
   });
 
+  # n8n - Update to 1.120.3 to fix workflow execution bug in 1.118.2
+  # Version 1.118.2 has a critical bug (upstream issue #21647) that prevents
+  # workflow execution with "problem running workflow - lost connection" error
+  # Fixed in 1.120.x series
+  n8n = prev.n8n.overrideAttrs (oldAttrs: {
+    version = "1.120.3";
+    src = prev.fetchFromGitHub {
+      owner = "n8n-io";
+      repo = "n8n";
+      rev = "n8n@1.120.3";
+      hash = "sha256-bKMOK0Z6gGSEdtGdFc9YsaCeRwUM5mCTGQjB+bWmfLM=";
+    };
+    pnpmDeps = oldAttrs.pnpmDeps.overrideAttrs {
+      outputHash = "sha256-YvDszeLaATHqiEU7bakiS4a0lvcl+NbRX7ggoHbVMFM=";
+    };
+  });
+
   # ZFS - Enable support for 16K page size (Apple Silicon / Asahi Linux)
   # EXPERIMENTAL: This may cause data corruption - use at your own risk!
   #

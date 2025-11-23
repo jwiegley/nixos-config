@@ -58,6 +58,21 @@
     logRefusedPackets = true;
     logRefusedUnicastsOnly = true;
     logReversePathDrops = true;
+
+    # Use loose reverse path filtering for asymmetric routing
+    # Allows WiFi devices (192.168.3.x) to reach services at Ethernet IP (192.168.1.2)
+    # when packets are routed between networks
+    checkReversePath = "loose";
+  };
+
+  # Enable loose reverse path filtering for asymmetric routing
+  # This allows WiFi devices (192.168.3.0/24) to access services at the
+  # Ethernet IP (192.168.1.2) without rpfilter dropping packets
+  # Mode 2 = loose mode (allows packets from any interface)
+  # Mode 1 = strict mode (default, drops asymmetric packets)
+  boot.kernel.sysctl = {
+    "net.ipv4.conf.all.rp_filter" = 2;
+    "net.ipv4.conf.default.rp_filter" = 2;
   };
 
   # --------------------------------------------------------------------------

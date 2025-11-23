@@ -56,8 +56,8 @@ in
 
     # Configuration via environment variables (new format after nixpkgs update)
     environment = {
-      # Webhook URL for external triggers (public Cloudflare Tunnel)
-      # WEBHOOK_URL = "https://n8n.newartisans.com/";
+      # Webhook URL for external triggers
+      # Using HTTPS because n8n 1.120.3+ requires secure context for crypto.randomUUID()
       WEBHOOK_URL = "https://n8n.vulcan.lan/";
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS = "true";
 
@@ -72,7 +72,8 @@ in
       DB_POSTGRESDB_USER = "n8n";
       # DB_POSTGRESDB_PASSWORD is set via EnvironmentFile from SOPS secret
 
-      # Queue mode using Redis for better performance
+      # Execution mode - using regular mode for simpler webhook testing
+      # Queue mode can be re-enabled later if needed for production scaling
       EXECUTIONS_MODE = "queue";
       # QUEUE_BULL_REDIS_HOST, PORT, and DB are set via EnvironmentFile
 
@@ -99,18 +100,17 @@ in
       N8N_METRICS_INCLUDE_WORKFLOW_ID_LABEL = "true";
 
       # Log configuration
-      N8N_LOG_LEVEL = "debug";
-      N8N_LOG_OUTPUT = "console,file";
-      N8N_LOG_FILE_LOCATION = "/tmp/n8n.log";
+      # N8N_LOG_LEVEL = "debug";
+      # N8N_LOG_OUTPUT = "console,file";
+      # N8N_LOG_FILE_LOCATION = "/tmp/n8n.log";
 
       # Disable external telemetry/analytics (blocked by Technitium DNS ad-blocker anyway)
       N8N_DIAGNOSTICS_ENABLED = "false";
       N8N_VERSION_NOTIFICATIONS_ENABLED = "false";
-      N8N_DISABLE_PRODUCTION_MAIN_PROCESS = "true";
+      # N8N_DISABLE_PRODUCTION_MAIN_PROCESS removed - may block executions in regular mode
 
-      # Task runners and worker configuration
-      N8N_RUNNERS_ENABLED = "true";
-      OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS = "true";
+      # Task runners configuration
+      N8N_RUNNERS_ENABLED = "true";  # Enabled with nodejs in PATH for Code node execution
 
       # Security settings
       N8N_BLOCK_ENV_ACCESS_IN_NODE = "false";  # Allow env var access from Code Node
@@ -126,6 +126,9 @@ in
     after = [ "redis-n8n.service" "postgresql-n8n-setup.service" "sops-install-secrets.service" ];
     requires = [ "redis-n8n.service" "postgresql-n8n-setup.service" ];
     wants = [ "sops-install-secrets.service" ];
+
+    # Add nodejs to PATH so task runners can spawn node processes
+    path = [ pkgs.nodejs ];
 
     serviceConfig = {
 

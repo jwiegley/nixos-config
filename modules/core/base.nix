@@ -44,6 +44,12 @@
   # using certificates signed by step-ca
   nix.settings.ssl-cert-file = "/etc/ssl/certs/ca-bundle.crt";
 
+  # Limit build parallelism to prevent WiFi driver crashes on Asahi Linux
+  # The brcmfmac driver becomes unstable under high CPU + network load
+  # Reducing parallelism prevents kernel panics during nixos-rebuild
+  nix.settings.max-jobs = 4;  # Limit concurrent builds (default: auto = 10 cores)
+  nix.settings.cores = 2;     # Limit cores per build job (default: 0 = all cores)
+
   # Also set NIX_SSL_CERT_FILE environment variable for all users
   # This ensures git operations invoked by Nix use the correct CA bundle
   environment.variables.NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";

@@ -15,6 +15,7 @@
     ../../modules/core/system.nix
     ../../modules/core/programs.nix
     ../../modules/core/memory-limits.nix
+    ../../modules/core/crash-debug.nix
 
     # Hardware modules
     ../../modules/hardware/wifi-stability.nix

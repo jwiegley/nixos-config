@@ -29,6 +29,10 @@ let
   processGoodScript = pkgs.writeText "process-good.sieve" ''
     require ["include", "imap4flags"];
 
+    # Remove the \Seen flag to ensure message remains unread after refiltering
+    # This handles cases where user opened the message in Spam before moving to TrainGood
+    removeflag "\\Seen";
+
     # Re-filter message through user's personal Sieve rules
     # This ensures newsletters go to correct folders, not just INBOX
     include :personal "active";

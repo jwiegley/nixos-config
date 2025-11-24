@@ -46,14 +46,24 @@ groups:
           description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
 
       - alert: HighMajorPageFaultRate
-        expr: increase(node_vmstat_pgmajfault[5m]) > 10000
+        expr: increase(node_vmstat_pgmajfault[5m]) > 25000
         for: 5m
         labels:
           severity: warning
           category: system
         annotations:
           summary: "High major page fault rate on {{ $labels.instance }}"
-          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}). This may indicate memory thrashing or excessive disk I/O due to memory pressure."
+          description: "Major page faults exceed 25000 per 5 minutes ({{ $value | humanize }}). This may indicate memory thrashing or excessive disk I/O due to memory pressure."
+
+      - alert: HighMajorPageFaultWithMemoryPressure
+        expr: increase(node_vmstat_pgmajfault[5m]) > 10000 and ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.75 or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.50)
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "High major page faults with memory pressure on {{ $labels.instance }}"
+          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing!"
 
       # Swap monitoring
       - alert: SwapUsageHigh

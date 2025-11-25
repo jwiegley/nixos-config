@@ -24,8 +24,8 @@
       # Port mappings - localhost only for security
       publishPorts = [
         "127.0.0.1:8006:8006/tcp"    # Web interface (noVNC)
-        "127.0.0.1:3389:3389/tcp"    # RDP
-        "127.0.0.1:3389:3389/udp"    # RDP (UDP)
+        "0.0.0.0:3389:3389/tcp"    # RDP
+        "0.0.0.0:3389:3389/udp"    # RDP (UDP)
       ];
 
       # Volume mounts
@@ -153,8 +153,8 @@
   };
 
   # Firewall - allow RDP from local network (optional, currently localhost only)
-  # networking.firewall.allowedTCPPorts = [ 3389 ];
-  # networking.firewall.allowedUDPPorts = [ 3389 ];
+  networking.firewall.allowedTCPPorts = [ 3389 ];
+  networking.firewall.allowedUDPPorts = [ 3389 ];
 
   # Open firewall for podman interface (web and RDP access)
   networking.firewall.interfaces.podman0.allowedTCPPorts = [ 8006 3389 ];

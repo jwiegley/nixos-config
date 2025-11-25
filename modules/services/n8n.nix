@@ -298,10 +298,4 @@ in
       PrivateNetwork = false;
     };
   };
-
-  # Open firewall for local network access
-  # HTTPS access via nginx on port 443 (already open globally in web.nix)
-  networking.firewall.interfaces."end0".allowedTCPPorts = [
-    5678 # n8n web interface (for direct local access)
-  ];
 }

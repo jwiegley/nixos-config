@@ -257,6 +257,48 @@ in
         skip_authenticated = false;
       '';
 
+      # Email authentication policy scores (SPF, DKIM, DMARC)
+      # These modules are enabled by default; we customize scores for better spam detection
+      "policies_group.conf".text = ''
+        # Custom scores for email authentication policies
+        # More aggressive than defaults to properly penalize/reward authentication
+
+        symbols {
+          # SPF (Sender Policy Framework) symbols
+          "R_SPF_ALLOW" { weight = -1.0; description = "SPF verification passed"; }
+          "R_SPF_FAIL" { weight = 3.0; description = "SPF verification failed"; }
+          "R_SPF_SOFTFAIL" { weight = 1.5; description = "SPF verification soft-failed"; }
+          "R_SPF_NEUTRAL" { weight = 0.0; description = "SPF neutral result"; }
+          "R_SPF_NA" { weight = 0.5; description = "No SPF record"; }
+          "R_SPF_DNSFAIL" { weight = 0.0; description = "SPF DNS lookup failed"; }
+          "R_SPF_PERMFAIL" { weight = 2.0; description = "SPF permanent failure"; }
+          "R_SPF_PLUSALL" { weight = 5.0; description = "Dangerous +all SPF record"; }
+
+          # DKIM (DomainKeys Identified Mail) symbols
+          "R_DKIM_ALLOW" { weight = -1.0; description = "DKIM verification passed"; }
+          "R_DKIM_REJECT" { weight = 3.0; description = "DKIM verification failed"; }
+          "R_DKIM_TEMPFAIL" { weight = 0.5; description = "DKIM temporary failure"; }
+          "R_DKIM_PERMFAIL" { weight = 2.0; description = "DKIM permanent failure"; }
+          "R_DKIM_NA" { weight = 0.5; description = "No DKIM signature"; }
+
+          # DMARC (Domain-based Message Authentication) symbols
+          "DMARC_POLICY_ALLOW" { weight = -1.5; description = "DMARC verification passed"; }
+          "DMARC_POLICY_ALLOW_WITH_FAILURES" { weight = -0.5; description = "DMARC passed with some failures"; }
+          "DMARC_POLICY_REJECT" { weight = 4.0; description = "DMARC policy requests rejection"; }
+          "DMARC_POLICY_QUARANTINE" { weight = 2.5; description = "DMARC policy requests quarantine"; }
+          "DMARC_POLICY_SOFTFAIL" { weight = 0.5; description = "DMARC policy is none"; }
+          "DMARC_NA" { weight = 0.0; description = "No DMARC policy"; }
+          "DMARC_BAD_POLICY" { weight = 1.0; description = "Invalid DMARC policy in DNS"; }
+
+          # ARC (Authenticated Received Chain) symbols
+          "ARC_ALLOW" { weight = -1.0; description = "ARC verification passed"; }
+          "ARC_REJECT" { weight = 1.0; description = "ARC verification failed"; }
+          "ARC_INVALID" { weight = 0.5; description = "ARC chain invalid"; }
+          "ARC_DNSFAIL" { weight = 0.0; description = "ARC DNS lookup failed"; }
+          "ARC_NA" { weight = 0.0; description = "No ARC signatures"; }
+        }
+      '';
+
       "metrics.conf".text = ''
         # Prometheus metrics export
         group "web" {

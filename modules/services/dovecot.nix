@@ -318,13 +318,13 @@ in
         sieve_max_actions = 32
         sieve_max_redirects = 4
 
-        # Rspamd training: TrainSpam folder (learn spam, then move to IsSpam)
+        # Rspamd training: TrainSpam folder (learn spam, then move to Spam)
         # Note: COPY includes IMAP MOVE operations (destination side)
         # Scripts are symlinks to Nix store; binaries are pre-compiled with explicit output paths
         imapsieve_mailbox1_name = TrainSpam
         imapsieve_mailbox1_causes = COPY APPEND
         imapsieve_mailbox1_before = file:/var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve
-        imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/global/rspamd/move-to-isspam.sieve
+        imapsieve_mailbox1_after = file:/var/lib/dovecot/sieve/global/rspamd/move-to-spam.sieve
 
         # Rspamd training: TrainGood folder (learn ham, then re-filter via Sieve)
         imapsieve_mailbox2_name = TrainGood
@@ -379,9 +379,9 @@ in
 
         # Training folders with auto-expunge for cleanup
         # Messages marked as \Deleted are automatically removed after 1 day
-        mailbox "Spam" {
-          autoexpunge = 1d
-        }
+        # mailbox "Spam" {
+        #   autoexpunge = 1d
+        # }
         mailbox "TrainSpam" {
           autoexpunge = 1d
         }
@@ -392,9 +392,6 @@ in
           autoexpunge = 1d
         }
         # mailbox "Trash" {
-        #   autoexpunge = 90d
-        # }
-        # mailbox "IsSpam" {
         #   autoexpunge = 90d
         # }
       }

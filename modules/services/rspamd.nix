@@ -39,12 +39,12 @@ let
     }
   '';
 
-  # Sieve script to move trained spam to IsSpam folder
-  moveToIsSpamScript = pkgs.writeText "move-to-isspam.sieve" ''
+  # Sieve script to move trained spam to Spam folder
+  moveToSpamScript = pkgs.writeText "move-to-spam.sieve" ''
     require ["fileinto", "imap4flags"];
 
-    # Move all messages in TrainSpam to IsSpam after learning
-    fileinto "IsSpam";
+    # Move all messages in TrainSpam to Spam after learning
+    fileinto "Spam";
 
     # Mark the original message in TrainSpam as deleted
     addflag "\\Deleted";
@@ -459,7 +459,7 @@ in
     # Sieve scripts symlinks (directory created in dovecot.nix)
     "L+ /var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve - - - - ${learnSpamScript}"
     "L+ /var/lib/dovecot/sieve/global/rspamd/learn-ham.sieve - - - - ${learnHamScript}"
-    "L+ /var/lib/dovecot/sieve/global/rspamd/move-to-isspam.sieve - - - - ${moveToIsSpamScript}"
+    "L+ /var/lib/dovecot/sieve/global/rspamd/move-to-spam.sieve - - - - ${moveToSpamScript}"
     # Retrain folder scripts
     "L+ /var/lib/dovecot/sieve/global/rspamd/retrain.sieve - - - - ${retrainScript}"
     "L+ /var/lib/dovecot/sieve/global/rspamd/retrain-cleanup.sieve - - - - ${retrainCleanupScript}"

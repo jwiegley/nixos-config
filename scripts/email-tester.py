@@ -939,7 +939,7 @@ def test_train_spam() -> bool:
         # Ensure folders exist
         ensure_folder_exists('INBOX')
         ensure_folder_exists('TrainSpam')
-        ensure_folder_exists('IsSpam')
+        ensure_folder_exists('Spam')
 
         # Create message in INBOX via IMAP
         # Add unique content to prevent rspamd fuzzy hash duplicate detection
@@ -979,12 +979,12 @@ def test_train_spam() -> bool:
         else:
             logger.info(f"  ℹ Rspamd count unchanged ({spam_count_before} -> {spam_count_after}) - likely duplicate detection")
 
-        # Verify message in IsSpam (move-to-isspam.sieve moves it)
+        # Verify message in Spam (move-to-spam.sieve moves it)
         # This confirms IMAPSieve triggered successfully
-        if not check_message_in_folder(message_id, 'IsSpam', should_exist=True):
-            raise TestError("Message not in IsSpam after training (IMAPSieve may not have triggered)")
+        if not check_message_in_folder(message_id, 'Spam', should_exist=True):
+            raise TestError("Message not in Spam after training (IMAPSieve may not have triggered)")
 
-        logger.info("  ✓ Message moved to IsSpam (IMAPSieve triggered successfully)")
+        logger.info("  ✓ Message moved to Spam (IMAPSieve triggered successfully)")
         logger.info("✓ PASSED")
         return True
 

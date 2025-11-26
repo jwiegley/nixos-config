@@ -42,13 +42,13 @@ User Training Workflow:
          ↓
     Sieve: rspamc learn_spam
          ↓
-    Move to IsSpam folder
+    Move to Spam folder
 
     TrainGood folder ← User moves ham
          ↓
     Sieve: rspamc learn_ham
          ↓
-    Move to Good folder
+    Re-filter through personal Sieve rules
 ```
 
 ### Redis Backend
@@ -196,13 +196,13 @@ ls -la /var/mail/johnw/Spam/cur/
 1. **Train Spam**:
    - Move a spam message to `TrainSpam` folder via IMAP client
    - Sieve script should run `rspamc learn_spam`
-   - Message should be moved to `IsSpam` folder
+   - Message should be moved to `Spam` folder
    - Check Dovecot logs: `sudo journalctl -u dovecot2 -f`
 
 2. **Train Ham**:
    - Move a legitimate message to `TrainGood` folder
    - Sieve script should run `rspamc learn_ham`
-   - Message should be moved to `Good` folder
+   - Message should be re-filtered through personal Sieve rules
 
 ### Test 5: Monitoring
 
@@ -269,12 +269,12 @@ Rspamd configuration uses local overrides in `/var/lib/rspamd/local.d/`:
 
 ### Sieve Scripts
 
-Located in `/var/lib/dovecot/sieve/rspamd/`:
+Located in `/var/lib/dovecot/sieve/global/rspamd/`:
 
 - **learn-spam.sieve**: Triggered when message moved to TrainSpam
 - **learn-ham.sieve**: Triggered when message moved to TrainGood
-- **move-to-isspam.sieve**: Moves trained spam to IsSpam
-- **move-to-good.sieve**: Moves trained ham to Good
+- **move-to-spam.sieve**: Moves trained spam to Spam folder
+- **process-good.sieve**: Re-filters trained ham through personal Sieve rules
 
 Shell scripts in `/usr/local/bin/`:
 
@@ -289,7 +289,7 @@ Every 15 minutes, the `rspamd-scan-mailboxes.service` runs:
 
 1. Scans mailboxes for users: `johnw`, `assembly`
 2. Processes folders: INBOX, Sent, Drafts, NeedsRule, TrainGood, Good, mail/*, list/*
-3. Skips: Spam, TrainSpam, IsSpam (to avoid loops)
+3. Skips: Spam, TrainSpam (to avoid loops)
 4. For each message:
    - Calls `rspamc` to analyze
    - If score > 15 (spam threshold), moves to Spam folder
@@ -302,12 +302,12 @@ Users can improve spam detection by:
 1. **Report False Negatives** (missed spam):
    - Move message to `TrainSpam` folder
    - Rspamd learns it as spam
-   - Message automatically moves to `IsSpam`
+   - Message automatically moves to `Spam` folder
 
 2. **Report False Positives** (legitimate mail marked as spam):
    - Move message to `TrainGood` folder
    - Rspamd learns it as ham
-   - Message automatically moves to `Good`
+   - Message automatically re-filters through personal Sieve rules
 
 The Bayes classifier improves over time with user feedback.
 

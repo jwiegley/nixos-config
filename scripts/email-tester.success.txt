@@ -54,7 +54,7 @@ TEST 4: Train Spam (TrainSpam Folder)
   → Copied INBOX → TrainSpam (via IMAP)
   → Waiting 6s for IMAPSieve...
   ✓ Rspamd learned spam
-  ✓ Message in IsSpam
+  ✓ Message in Spam
 ✓ PASSED
 
 ======================================================================

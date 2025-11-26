@@ -47,7 +47,6 @@ let
             Archive                       \
             INBOX                         \
             Sent                          \
-            IsSpam                        \
             Spam                          \
             Trash
     fi

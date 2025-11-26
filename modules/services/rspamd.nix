@@ -318,6 +318,28 @@ in
         allow_hdrfrom_mismatch_sign_networks = false;
       '';
 
+      # Settings for whitelisting local domain mail
+      "settings.conf".text = ''
+        # Whitelist for local vulcan.lan domain mail
+        # Applies when both sender and recipient are in vulcan.lan
+        # This prevents false positives like R_SUSPICIOUS_URL on internal URLs
+        local_mail_whitelist {
+          priority = high;
+
+          # Match sender from vulcan.lan or any subdomain (e.g., nagios.vulcan.lan)
+          from = "/.*@(.*\\.)?vulcan\\.lan$/i";
+
+          # Match recipient in vulcan.lan (local delivery)
+          rcpt = "/.*@(.*\\.)?vulcan\\.lan$/i";
+
+          apply {
+            # Disable URL reputation checks for internal mail
+            # Internal URLs like nagios.vulcan.lan trigger R_SUSPICIOUS_URL false positives
+            symbols_disabled = ["R_SUSPICIOUS_URL", "URIBL_BLOCKED"];
+          }
+        }
+      '';
+
       # Custom rules for spam detection
       "custom_rules.conf".text = ''
         -- Detect non-standard x-binaryenc encoding (spam indicator)

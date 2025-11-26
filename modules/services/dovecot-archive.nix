@@ -13,8 +13,10 @@ let
     log "Starting Dovecot email archive process"
 
     # Archive emails older than 365 days from INBOX to Archive folder
+    # Archive emails older than 30 days from Spam to SpamArchive folder
     # Runs as user johnw
     ${pkgs.dovecot}/bin/doveadm move -u johnw Archive mailbox INBOX SENTBEFORE 365d
+    ${pkgs.dovecot}/bin/doveadm move -u johnw SpamArchive mailbox Spam SENTBEFORE 30d
 
     exit_code=$?
     if [ $exit_code -eq 0 ]; then

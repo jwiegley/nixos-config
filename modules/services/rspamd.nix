@@ -276,6 +276,10 @@ in
         url = "http://127.0.0.1:4000/v1/chat/completions";
         model = "hera/gpt-oss-safeguard-20b";
 
+        # Enable GPT analysis for ham messages (default is false)
+        # Without this, GPT is skipped for messages with negative scores
+        allow_ham = true;
+
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
           "hera/gpt-oss-safeguard-20b" = {

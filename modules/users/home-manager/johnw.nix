@@ -1,8 +1,9 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 {
   home-manager.users.johnw = { config, lib, pkgs, ... }:
   let
+    hostname       = "vulcan";
     home           = config.home.homeDirectory;
     tmpdir         = "/tmp";
 
@@ -293,203 +294,231 @@
       };
     };
 
-    programs.git = {
-      enable = true;
+    programs = {
+      git = {
+        enable = true;
 
-      # signing = {
-      #   key = signing_key;
-      #   signByDefault = true;
-      # };
-
-      settings = {
-        user = {
-          name = "John Wiegley";
-          email = "johnw@newartisans.com";
-        };
-
-        alias = {
-          amend      = "commit --amend -C HEAD";
-          authors    = "!\"${pkgs.git}/bin/git log --pretty=format:%aN"
-                     + " | ${pkgs.coreutils}/bin/sort"
-                     + " | ${pkgs.coreutils}/bin/uniq -c"
-                     + " | ${pkgs.coreutils}/bin/sort -rn\"";
-          b          = "branch --color -v";
-          ca         = "commit --amend";
-          changes    = "diff --name-status -r";
-          clone      = "clone --recursive";
-          co         = "checkout";
-          cp         = "cherry-pick";
-          dc         = "diff --cached";
-          dh         = "diff HEAD";
-          ds         = "diff --staged";
-          from       = "!${pkgs.git}/bin/git bisect start && ${pkgs.git}/bin/git bisect bad HEAD && ${pkgs.git}/bin/git bisect good";
-          ls-ignored = "ls-files --exclude-standard --ignored --others";
-          rc         = "rebase --continue";
-          rh         = "reset --hard";
-          ri         = "rebase --interactive";
-          rs         = "rebase --skip";
-          ru         = "remote update --prune";
-          snap       = "!${pkgs.git}/bin/git stash"
-                     + " && ${pkgs.git}/bin/git stash apply";
-          snaplog    = "!${pkgs.git}/bin/git log refs/snapshots/refs/heads/"
-                     + "\\$(${pkgs.git}/bin/git rev-parse HEAD)";
-          spull      = "!${pkgs.git}/bin/git stash"
-                     + " && ${pkgs.git}/bin/git pull"
-                     + " && ${pkgs.git}/bin/git stash pop";
-          su         = "submodule update --init --recursive";
-          undo       = "reset --soft HEAD^";
-          w          = "status -sb";
-          wdiff      = "diff --color-words";
-          l          = "log --graph --pretty=format:'%Cred%h%Creset"
-                     + " —%Cblue%d%Creset %s %Cgreen(%cr)%Creset'"
-                     + " --abbrev-commit --date=relative --show-notes=*";
-        };
-
-        core = {
-          editor            = "vim";
-          trustctime        = false;
-          pager             = "${pkgs.less}/bin/less --tabs=4 -RFX";
-          logAllRefUpdates  = true;
-          precomposeunicode = false;
-          whitespace        = "trailing-space,space-before-tab";
-          untrackedCache    = true;
-        };
-
-        branch.autosetupmerge  = true;
-        commit.gpgsign         = false;
-        commit.status          = false;
-        github.user            = "jwiegley";
-        credential.helper      = "store";
-        # credential.helper      = "${pkgs.pass-git-helper}/bin/pass-git-helper";
-        hub.protocol           = "${pkgs.openssh}/bin/ssh";
-        mergetool.keepBackup   = true;
-        pull.rebase            = true;
-        rebase.autosquash      = true;
-        rerere.enabled         = false;
-        init.defaultBranch     = "main";
-
-        "merge \"ours\"".driver   = true;
-        "magithub \"ci\"".enabled = false;
-
-        http = {
-          sslCAinfo = ca-bundle_crt;
-          sslverify = true;
-        };
-
-        color = {
-          status      = "auto";
-          diff        = "auto";
-          branch      = "auto";
-          interactive = "auto";
-          ui          = "auto";
-          sh          = "auto";
-        };
-
-        push = {
-          default = "tracking";
-        };
-
-        # "merge \"merge-changelog\"" = {
-        #   name = "GNU-style ChangeLog merge driver";
-        #   driver = "${pkgs.git-scripts}/bin/git-merge-changelog %O %A %B";
+        # signing = {
+        #   key = signing_key;
+        #   signByDefault = true;
         # };
 
-        merge = {
-          conflictstyle = "diff3";
-          stat = true;
+        settings = {
+          user = {
+            name = "John Wiegley";
+            email = "johnw@newartisans.com";
+          };
+
+          alias = {
+            amend      = "commit --amend -C HEAD";
+            authors    = "!\"${pkgs.git}/bin/git log --pretty=format:%aN"
+                       + " | ${pkgs.coreutils}/bin/sort"
+                       + " | ${pkgs.coreutils}/bin/uniq -c"
+                       + " | ${pkgs.coreutils}/bin/sort -rn\"";
+            b          = "branch --color -v";
+            ca         = "commit --amend";
+            changes    = "diff --name-status -r";
+            clone      = "clone --recursive";
+            co         = "checkout";
+            cp         = "cherry-pick";
+            dc         = "diff --cached";
+            dh         = "diff HEAD";
+            ds         = "diff --staged";
+            from       = "!${pkgs.git}/bin/git bisect start && ${pkgs.git}/bin/git bisect bad HEAD && ${pkgs.git}/bin/git bisect good";
+            ls-ignored = "ls-files --exclude-standard --ignored --others";
+            rc         = "rebase --continue";
+            rh         = "reset --hard";
+            ri         = "rebase --interactive";
+            rs         = "rebase --skip";
+            ru         = "remote update --prune";
+            snap       = "!${pkgs.git}/bin/git stash"
+                       + " && ${pkgs.git}/bin/git stash apply";
+            snaplog    = "!${pkgs.git}/bin/git log refs/snapshots/refs/heads/"
+                       + "\\$(${pkgs.git}/bin/git rev-parse HEAD)";
+            spull      = "!${pkgs.git}/bin/git stash"
+                       + " && ${pkgs.git}/bin/git pull"
+                       + " && ${pkgs.git}/bin/git stash pop";
+            su         = "submodule update --init --recursive";
+            undo       = "reset --soft HEAD^";
+            w          = "status -sb";
+            wdiff      = "diff --color-words";
+            l          = "log --graph --pretty=format:'%Cred%h%Creset"
+                       + " —%Cblue%d%Creset %s %Cgreen(%cr)%Creset'"
+                       + " --abbrev-commit --date=relative --show-notes=*";
+          };
+
+          core = {
+            editor            = "vim";
+            trustctime        = false;
+            pager             = "${pkgs.less}/bin/less --tabs=4 -RFX";
+            logAllRefUpdates  = true;
+            precomposeunicode = false;
+            whitespace        = "trailing-space,space-before-tab";
+            untrackedCache    = true;
+          };
+
+          branch.autosetupmerge  = true;
+          commit.gpgsign         = false;
+          commit.status          = false;
+          github.user            = "jwiegley";
+          credential.helper      = "store";
+          # credential.helper      = "${pkgs.pass-git-helper}/bin/pass-git-helper";
+          hub.protocol           = "${pkgs.openssh}/bin/ssh";
+          mergetool.keepBackup   = true;
+          pull.rebase            = true;
+          rebase.autosquash      = true;
+          rerere.enabled         = false;
+          init.defaultBranch     = "main";
+
+          "merge \"ours\"".driver   = true;
+          "magithub \"ci\"".enabled = false;
+
+          http = {
+            sslCAinfo = ca-bundle_crt;
+            sslverify = true;
+          };
+
+          color = {
+            status      = "auto";
+            diff        = "auto";
+            branch      = "auto";
+            interactive = "auto";
+            ui          = "auto";
+            sh          = "auto";
+          };
+
+          push = {
+            default = "tracking";
+          };
+
+          # "merge \"merge-changelog\"" = {
+          #   name = "GNU-style ChangeLog merge driver";
+          #   driver = "${pkgs.git-scripts}/bin/git-merge-changelog %O %A %B";
+          # };
+
+          merge = {
+            conflictstyle = "diff3";
+            stat = true;
+          };
+
+          "color \"sh\"" = {
+            branch      = "yellow reverse";
+            workdir     = "blue bold";
+            dirty       = "red";
+            dirty-stash = "red";
+            repo-state  = "red";
+          };
+
+          annex = {
+            backends = "BLAKE2B512E";
+            alwayscommit = false;
+          };
+
+          "filter \"media\"" = {
+            required = true;
+            clean = "${pkgs.git}/bin/git media clean %f";
+            smudge = "${pkgs.git}/bin/git media smudge %f";
+          };
+
+          diff = {
+            ignoreSubmodules = "dirty";
+            renames = "copies";
+            mnemonicprefix = true;
+          };
+
+          advice = {
+            statusHints = false;
+            pushNonFastForward = false;
+            objectNameWarning = "false";
+          };
+
+          "filter \"lfs\"" = {
+            clean = "${pkgs.git-lfs}/bin/git-lfs clean -- %f";
+            smudge = "${pkgs.git-lfs}/bin/git-lfs smudge --skip -- %f";
+            required = true;
+          };
+
+          "url \"git://github.com/ghc/packages-\"".insteadOf = "git://github.com/ghc/packages/";
+          "url \"http://github.com/ghc/packages-\"".insteadOf = "http://github.com/ghc/packages/";
+          "url \"https://github.com/ghc/packages-\"".insteadOf = "https://github.com/ghc/packages/";
+          "url \"ssh://git@github.com/ghc/packages-\"".insteadOf = "ssh://git@github.com/ghc/packages/";
+          "url \"git@github.com:/ghc/packages-\"".insteadOf = "git@github.com:/ghc/packages/";
         };
 
-        "color \"sh\"" = {
-          branch      = "yellow reverse";
-          workdir     = "blue bold";
-          dirty       = "red";
-          dirty-stash = "red";
-          repo-state  = "red";
-        };
-
-        annex = {
-          backends = "BLAKE2B512E";
-          alwayscommit = false;
-        };
-
-        "filter \"media\"" = {
-          required = true;
-          clean = "${pkgs.git}/bin/git media clean %f";
-          smudge = "${pkgs.git}/bin/git media smudge %f";
-        };
-
-        diff = {
-          ignoreSubmodules = "dirty";
-          renames = "copies";
-          mnemonicprefix = true;
-        };
-
-        advice = {
-          statusHints = false;
-          pushNonFastForward = false;
-          objectNameWarning = "false";
-        };
-
-        "filter \"lfs\"" = {
-          clean = "${pkgs.git-lfs}/bin/git-lfs clean -- %f";
-          smudge = "${pkgs.git-lfs}/bin/git-lfs smudge --skip -- %f";
-          required = true;
-        };
-
-        "url \"git://github.com/ghc/packages-\"".insteadOf = "git://github.com/ghc/packages/";
-        "url \"http://github.com/ghc/packages-\"".insteadOf = "http://github.com/ghc/packages/";
-        "url \"https://github.com/ghc/packages-\"".insteadOf = "https://github.com/ghc/packages/";
-        "url \"ssh://git@github.com/ghc/packages-\"".insteadOf = "ssh://git@github.com/ghc/packages/";
-        "url \"git@github.com:/ghc/packages-\"".insteadOf = "git@github.com:/ghc/packages/";
+        ignores = [
+          "#*#"
+          "*.a"
+          "*.agdai"
+          "*.aux"
+          "*.dylib"
+          "*.elc"
+          "*.glob"
+          "*.hi"
+          "*.la"
+          "*.lia.cache"
+          "*.lra.cache"
+          "*.nia.cache"
+          "*.nra.cache"
+          "*.o"
+          "*.so"
+          "*.v.d"
+          "*.v.tex"
+          "*.vio"
+          "*.vo"
+          "*.vok"
+          "*.vos"
+          "*~"
+          ".*.aux"
+          ".Makefile.d"
+          ".clean"
+          ".coq-native/"
+          ".coqdeps.d"
+          ".direnv/"
+          ".envrc"
+          ".envrc.cache"
+          ".envrc.override"
+          ".ghc.environment.x86_64-linux-*"
+          ".makefile"
+          ".pact-history"
+          "TAGS"
+          "cabal.project.local*"
+          "default.hoo"
+          "default.warn"
+          "dist-newstyle/"
+          "ghc[0-9]*_[0-9]*/"
+          "input-haskell-*.tar.gz"
+          "input-haskell-*.txt"
+          "result"
+          "result-*"
+          "tags"
+        ];
       };
 
-      ignores = [
-        "#*#"
-        "*.a"
-        "*.agdai"
-        "*.aux"
-        "*.dylib"
-        "*.elc"
-        "*.glob"
-        "*.hi"
-        "*.la"
-        "*.lia.cache"
-        "*.lra.cache"
-        "*.nia.cache"
-        "*.nra.cache"
-        "*.o"
-        "*.so"
-        "*.v.d"
-        "*.v.tex"
-        "*.vio"
-        "*.vo"
-        "*.vok"
-        "*.vos"
-        "*~"
-        ".*.aux"
-        ".Makefile.d"
-        ".clean"
-        ".coq-native/"
-        ".coqdeps.d"
-        ".direnv/"
-        ".envrc"
-        ".envrc.cache"
-        ".envrc.override"
-        ".ghc.environment.x86_64-linux-*"
-        ".makefile"
-        ".pact-history"
-        "TAGS"
-        "cabal.project.local*"
-        "default.hoo"
-        "default.warn"
-        "dist-newstyle/"
-        "ghc[0-9]*_[0-9]*/"
-        "input-haskell-*.tar.gz"
-        "input-haskell-*.txt"
-        "result"
-        "result-*"
-        "tags"
-      ];
+      ssh = {
+        enable = true;
+        enableDefaultConfig = false;
+
+        matchBlocks =
+          let
+            withIdentity = attrs: attrs // {
+              identityFile   = "${home}/.ssh/id_${hostname}";
+              identitiesOnly = true;
+            };
+
+            localBind = port: {
+              bind = { inherit port; };
+              host = { inherit port; address = "127.0.0.1"; };
+            };
+          in rec {
+
+          gitea = withIdentity {
+            user = "gitea";
+            hostname = "localhost";
+            port = 2222;
+            compression = false;
+          };
+        };
+      };
     };
 
     # XDG configuration
@@ -500,6 +529,8 @@
 
     # Packages to install for the user
     home.packages = with pkgs; [
+      inputs.org-jw.packages.${system}.default
+
       # Development tools
       git-annex
       git-workspace

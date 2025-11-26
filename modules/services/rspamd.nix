@@ -11,6 +11,258 @@ let
     exec ${pkgs.rspamd}/bin/rspamc learn_ham
   '';
 
+  # Custom Lua rules for rspamd
+  customLuaRules = pkgs.writeText "rspamd.local.lua" ''
+    -- =======================================================================
+    -- Custom rspamd Lua rules
+    -- =======================================================================
+
+    local rspamd_logger = require "rspamd_logger"
+
+    -- Detect non-standard x-binaryenc encoding (spam indicator)
+    -- Background: x-binaryenc is a fake/non-standard encoding used by spammers
+    -- to evade detection. ICU library correctly refuses to convert it.
+    rspamd_config.X_BINARYENC_SPAM = {
+      callback = function(task)
+        -- Check MIME parts for x-binaryenc in content-transfer-encoding or charset
+        local parts = task:get_parts()
+        if parts then
+          for _,part in ipairs(parts) do
+            -- Check content-transfer-encoding via get_cte()
+            local cte = part:get_cte()
+            if cte and cte:lower():match('x%-binaryenc') then
+              return true
+            end
+            -- Check charset for text parts
+            if part:is_text() then
+              local tp = part:get_text()
+              if tp then
+                local charset = tp:get_charset()
+                if charset and charset:lower():match('x%-binaryenc') then
+                  return true
+                end
+              end
+            end
+          end
+        end
+
+        -- Also check Content-Transfer-Encoding header directly
+        local cte_header = task:get_header('Content-Transfer-Encoding')
+        if cte_header and cte_header:lower():match('x%-binaryenc') then
+          return true
+        end
+
+        return false
+      end,
+      score = 7.5,
+      description = 'Message uses non-standard x-binaryenc encoding (spam indicator)',
+      group = 'headers'
+    }
+
+    -- =======================================================================
+    -- Detect random/gibberish email addresses using entropy analysis
+    -- Spammers often use randomly generated addresses like "xk8jf2dk9@domain.com"
+    -- =======================================================================
+
+    -- Helper function: Calculate Shannon entropy of a string
+    local function calculate_entropy(str)
+      if not str or #str == 0 then return 0 end
+
+      local freq = {}
+      local len = #str
+
+      -- Count character frequencies
+      for i = 1, len do
+        local c = str:sub(i, i):lower()
+        freq[c] = (freq[c] or 0) + 1
+      end
+
+      -- Calculate entropy: H = -Σ(p * log2(p))
+      local entropy = 0
+      for _, count in pairs(freq) do
+        local p = count / len
+        entropy = entropy - (p * math.log(p) / math.log(2))
+      end
+
+      return entropy
+    end
+
+    -- Helper function: Calculate consonant-to-vowel ratio
+    local function consonant_vowel_ratio(str)
+      if not str or #str == 0 then return 0, 0 end
+
+      local vowels = 0
+      local consonants = 0
+      local vowel_set = { a=1, e=1, i=1, o=1, u=1 }
+
+      for i = 1, #str do
+        local c = str:sub(i, i):lower()
+        if c:match('[a-z]') then
+          if vowel_set[c] then
+            vowels = vowels + 1
+          else
+            consonants = consonants + 1
+          end
+        end
+      end
+
+      return consonants, vowels
+    end
+
+    -- Helper function: Count letter-digit transitions (mixing indicator)
+    local function count_transitions(str)
+      if not str or #str < 2 then return 0 end
+
+      local transitions = 0
+      local last_is_digit = str:sub(1, 1):match('%d') ~= nil
+
+      for i = 2, #str do
+        local c = str:sub(i, i)
+        local is_digit = c:match('%d') ~= nil
+        local is_letter = c:match('[a-zA-Z]') ~= nil
+
+        if is_digit or is_letter then
+          local current_is_digit = is_digit
+          if current_is_digit ~= last_is_digit then
+            transitions = transitions + 1
+          end
+          last_is_digit = current_is_digit
+        end
+      end
+
+      return transitions
+    end
+
+    -- Helper function: Check for consecutive consonants (gibberish indicator)
+    local function max_consecutive_consonants(str)
+      if not str then return 0 end
+
+      local max_consec = 0
+      local current = 0
+      local vowel_set = { a=1, e=1, i=1, o=1, u=1 }
+
+      for i = 1, #str do
+        local c = str:sub(i, i):lower()
+        if c:match('[a-z]') then
+          if vowel_set[c] then
+            current = 0
+          else
+            current = current + 1
+            if current > max_consec then
+              max_consec = current
+            end
+          end
+        end
+      end
+
+      return max_consec
+    end
+
+    -- Main gibberish detection rule
+    rspamd_config.FROM_ADDR_GIBBERISH = {
+      callback = function(task)
+        -- Get sender from SMTP envelope first, then MIME
+        local from = task:get_from('smtp')
+        if not from or not from[1] then
+          from = task:get_from('mime')
+        end
+        if not from or not from[1] then
+          return false
+        end
+
+        local user = from[1].user
+        if not user then return false end
+
+        -- Strip plus-addressing suffix (user+tag@domain)
+        local base_user = user:match('^([^+]+)') or user
+
+        -- Skip very short addresses (< 5 chars) - too little data
+        if #base_user < 5 then return false end
+
+        -- Skip addresses that look like UUIDs or system addresses
+        if base_user:match('^[0-9a-f][-0-9a-f]+[0-9a-f]$') then return false end
+        if base_user:match('^noreply') or base_user:match('^no%-reply') then return false end
+        if base_user:match('^postmaster') or base_user:match('^mailer%-daemon') then return false end
+
+        -- Calculate metrics
+        local entropy = calculate_entropy(base_user)
+        local consonants, vowels = consonant_vowel_ratio(base_user)
+        local transitions = count_transitions(base_user)
+        local max_consec = max_consecutive_consonants(base_user)
+
+        -- Calculate scores for each metric
+        local score = 0
+        local reasons = {}
+
+        -- High entropy check (random strings typically > 3.8)
+        -- Normalize by length: shorter strings naturally have lower entropy
+        local normalized_entropy = entropy
+        if #base_user < 10 then
+          -- Adjust threshold for short strings
+          normalized_entropy = entropy * (10 / #base_user) * 0.7
+        end
+
+        if normalized_entropy > 4.2 then
+          score = score + 2.0
+          table.insert(reasons, string.format("high_entropy=%.2f", entropy))
+        elseif normalized_entropy > 3.8 then
+          score = score + 1.0
+          table.insert(reasons, string.format("elevated_entropy=%.2f", entropy))
+        end
+
+        -- Consonant-to-vowel ratio check
+        -- Normal English: ~1.5-2.5 consonants per vowel
+        if vowels > 0 then
+          local ratio = consonants / vowels
+          if ratio > 5.0 then
+            score = score + 2.0
+            table.insert(reasons, string.format("few_vowels=%.1f", ratio))
+          elseif ratio > 3.5 then
+            score = score + 1.0
+            table.insert(reasons, string.format("low_vowels=%.1f", ratio))
+          end
+        elseif consonants > 3 then
+          -- No vowels at all in a string with >3 consonants
+          score = score + 2.5
+          table.insert(reasons, "no_vowels")
+        end
+
+        -- Letter-digit transition check
+        -- Many transitions suggest random mixing like "a1b2c3d4"
+        local transition_ratio = transitions / #base_user
+        if transition_ratio > 0.4 then
+          score = score + 2.0
+          table.insert(reasons, string.format("digit_mixing=%d", transitions))
+        elseif transition_ratio > 0.25 then
+          score = score + 1.0
+          table.insert(reasons, string.format("some_mixing=%d", transitions))
+        end
+
+        -- Consecutive consonants check
+        -- Normal words rarely have >4 consecutive consonants
+        if max_consec >= 6 then
+          score = score + 1.5
+          table.insert(reasons, string.format("consonant_cluster=%d", max_consec))
+        elseif max_consec >= 5 then
+          score = score + 0.5
+          table.insert(reasons, string.format("long_consonants=%d", max_consec))
+        end
+
+        -- Only flag if multiple indicators present (score >= 2.5)
+        -- This reduces false positives on unusual but legitimate addresses
+        if score >= 2.5 then
+          local desc = string.format("%s [%s]", base_user, table.concat(reasons, ", "))
+          return true, score, desc
+        end
+
+        return false
+      end,
+      score = 1.0,  -- Base score, actual score returned by callback
+      description = 'Sender address appears randomly generated (gibberish)',
+      group = 'headers'
+    }
+  '';
+
   # Sieve script for learning spam (when moved to TrainSpam)
   # References script by name from sieve_pipe_bin_dir
   learnSpamScript = pkgs.writeText "learn-spam.sieve" ''
@@ -130,6 +382,9 @@ in
   # Enable Rspamd service using NixOS module
   services.rspamd = {
     enable = true;
+
+    # Custom Lua rules (gibberish detection, etc.)
+    localLuaRules = customLuaRules;
 
     # Configure workers to include override directory for password
     workers.controller = {
@@ -383,40 +638,6 @@ in
             # Internal URLs like nagios.vulcan.lan trigger R_SUSPICIOUS_URL false positives
             symbols_disabled = ["R_SUSPICIOUS_URL", "URIBL_BLOCKED"];
           }
-        }
-      '';
-
-      # Custom rules for spam detection
-      "custom_rules.conf".text = ''
-        -- Detect non-standard x-binaryenc encoding (spam indicator)
-        -- Background: x-binaryenc is a fake/non-standard encoding used by spammers
-        -- to evade detection. ICU library correctly refuses to convert it.
-        -- This rule penalizes emails using this encoding.
-
-        -- Register the rule
-        X_BINARYENC_SPAM = {
-          callback = function(task)
-            local parts = task:get_text_parts()
-            if parts then
-              for _,part in ipairs(parts) do
-                local enc = part:get_encoding()
-                if enc and enc:lower() == 'x-binaryenc' then
-                  return true
-                end
-              end
-            end
-
-            -- Also check Content-Transfer-Encoding header
-            local cte = task:get_header('Content-Transfer-Encoding')
-            if cte and cte:lower():match('x%-binaryenc') then
-              return true
-            end
-
-            return false
-          end,
-          score = 7.5,
-          description = 'Message uses non-standard x-binaryenc encoding (spam indicator)',
-          group = 'headers'
         }
       '';
 

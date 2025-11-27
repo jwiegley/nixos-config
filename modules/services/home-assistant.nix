@@ -69,6 +69,26 @@ let
 
     doCheck = false; # Skip tests to avoid test dependencies
   };
+
+  # Custom Python package for Waze Travel Time integration
+  pywaze = pkgs.python3Packages.buildPythonPackage rec {
+    pname = "pywaze";
+    version = "1.1.1";
+    format = "wheel";
+
+    src = pkgs.fetchPypi {
+      inherit pname version format;
+      dist = "py3";
+      python = "py3";
+      sha256 = "0hil7r00ifbyg57hgbfziv3ra25g036aph53975ny17wifq211j0";
+    };
+
+    dependencies = with pkgs.python3Packages; [
+      httpx
+    ];
+
+    doCheck = false; # Skip tests for simplicity
+  };
 in
 
 {
@@ -223,6 +243,7 @@ in
         doInstallCheck = false;
       }))
       intellicenter # Pentair IntelliCenter integration
+      spook # Spook - powerful toolbox for Home Assistant (services, templates, repairs)
     ];
 
     # Use PostgreSQL for better performance
@@ -246,6 +267,7 @@ in
       ps.pyatv # Required for Apple TV integration
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
       ps.wakeonlan # Required for Wake on LAN integration
+      pywaze # Required for Waze Travel Time integration
     ];
 
     # Components that don't require YAML configuration

@@ -68,8 +68,31 @@ let
       /etc/nixos/certs/validate-certificates-concise.sh || true
     '';
   };
+
+  # AI-powered log summary script
+  aiLogSummaryScript = pkgs.writeShellApplication {
+    name = "logwatch-ai-summary";
+    runtimeInputs = with pkgs; [ python3 systemd ];
+    text = ''
+      # Read LiteLLM API key from SOPS secret (logwatch-specific, owned by root)
+      if [ -f "/run/secrets/litellm-vulcan-lan-logwatch" ]; then
+        LITELLM_API_KEY=$(cat "/run/secrets/litellm-vulcan-lan-logwatch")
+        export LITELLM_API_KEY
+      fi
+
+      # Run the AI log summarizer
+      ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py 2>/dev/null || true
+    '';
+  };
 in
 {
+  # SOPS secret for LiteLLM API key (accessible by logwatch service which runs as root)
+  sops.secrets."litellm-vulcan-lan-logwatch" = {
+    key = "litellm-vulcan-lan";  # Same key in secrets.yaml
+    owner = "root";
+    mode = "0400";
+  };
+
   services = {
     logwatch = {
       enable = true;
@@ -77,6 +100,11 @@ in
       mailto = "johnw@vulcan.lan";
       mailfrom = "logwatch@vulcan.lan";
       customServices = [
+        {
+          name = "ai-log-summary";
+          title = "AI-Powered System Log Analysis";
+          script = lib.getExe aiLogSummaryScript;
+        }
         {
           name = "systemctl-failed";
           title = "Failed systemctl services";

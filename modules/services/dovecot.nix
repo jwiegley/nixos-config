@@ -112,11 +112,13 @@ in
       mail_access_groups = mail
       first_valid_uid = 1000
 
+      # Default connection limit per user/IP (overridden below for local network)
+      mail_max_userip_connections = 50
+
       # Protocol-specific settings
       protocol imap {
         mail_plugins = $mail_plugins old_stats fts fts_flatcurve imap_sieve
         imap_idle_notify_interval = 2 mins
-        mail_max_userip_connections = 50
         imap_capability = +IDLE SORT THREAD=REFERENCES THREAD=REFS MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 LITERAL+ NOTIFY SPECIAL-USE
       }
 
@@ -279,6 +281,11 @@ in
       mail_cache_purge_delete_percentage = 20
       mail_cache_purge_continued_percentage = 200
       mail_cache_purge_header_continue_count = 4
+
+      # Allow more connections from local network (multiple mail clients/devices)
+      remote 192.168.0.0/16 {
+        mail_max_userip_connections = 100
+      }
 
       # mdbox-specific settings and FTS configuration
       plugin {

@@ -81,9 +81,19 @@ HEADER
       fi
 
       # Get last run timestamp (use real timestamp, not monotonic)
+      # If service is currently running, ExecMainExitTimestamp is "n/a"
+      # In that case, use ExecMainStartTimestamp (a running backup is "recent")
       LAST_RUN_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestamp --value "$service" || echo "")
       if [ -z "$LAST_RUN_TS" ] || [ "$LAST_RUN_TS" = "n/a" ]; then
-        LAST_RUN_EPOCH=0
+        # Service might be running or never ran - check start timestamp
+        START_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainStartTimestamp --value "$service" || echo "")
+        if [ -n "$START_TS" ] && [ "$START_TS" != "n/a" ]; then
+          # Service is running or has run before - use start timestamp
+          LAST_RUN_EPOCH=$(${pkgs.coreutils}/bin/date -d "$START_TS" +%s 2>/dev/null || echo "0")
+        else
+          # Service has never run
+          LAST_RUN_EPOCH=0
+        fi
       else
         # Convert systemd timestamp to epoch seconds
         LAST_RUN_EPOCH=$(${pkgs.coreutils}/bin/date -d "$LAST_RUN_TS" +%s 2>/dev/null || echo "0")

@@ -441,12 +441,6 @@ containers, and file sharing) are functioning within normal parameters.
 def main() -> int:
     """Main execution function"""
 
-    # Print header
-    print("=" * 70)
-    print(f"AI-Powered Log Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 70)
-    print()
-
     # Collect logs
     print("Collecting logs from journalctl...", file=sys.stderr)
     collector = LogCollector()

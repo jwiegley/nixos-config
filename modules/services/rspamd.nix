@@ -619,6 +619,32 @@ in
         allow_hdrfrom_mismatch_sign_networks = false;
       '';
 
+      # Phishing module configuration - whitelist internal domains
+      "phishing.conf".text = ''
+        # Phishing module configuration for internal domain whitelisting
+        # Prevents false positives on internal URLs like nagios.vulcan.lan
+
+        # Keep phishing detection enabled but with local exceptions
+        openphish_enabled = false;  # Disable external OpenPhish feed (high resource usage)
+
+        # Exceptions for internal domains - prevents false positives
+        # The PHISHED_WHITELISTED symbol allows legitimate internal URLs
+        exceptions = {
+          PHISHED_WHITELISTED = [
+            "$LOCAL_CONFDIR/local.d/maps.d/phishing_whitelist.inc",
+          ];
+        };
+      '';
+
+      # Phishing whitelist map - contains internal domains to exclude from phishing checks
+      "maps.d/phishing_whitelist.inc".text = ''
+        # Internal domain whitelist for phishing module
+        # Format: one domain per line, supports wildcards with glob: prefix
+        # These domains will not trigger phishing alerts
+        vulcan.lan
+        *.vulcan.lan
+      '';
+
       # Settings for whitelisting local domain mail
       "settings.conf".text = ''
         # Whitelist for local vulcan.lan domain mail

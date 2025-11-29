@@ -197,6 +197,44 @@ in
     '';
   };
 
+  # Optimize mailarchiver database with performance indexes
+  # Fixes PostgreSQLSlowQueries alert caused by sequential scans on ArchivedEmails
+  systemd.services.postgresql-mailarchiver-optimize = {
+    description = "Create performance indexes for mailarchiver database";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d mailarchiver -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      # Check if the mail_archiver schema and ArchivedEmails table exist
+      # (they are created by the application on first run via EF Core migrations)
+      if ${config.services.postgresql.package}/bin/psql -d mailarchiver -tAc \
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'mail_archiver' AND table_name = 'ArchivedEmails'" | grep -q 1; then
+
+        # Create composite index for MessageId + MailAccountId lookups
+        # The application frequently queries by these columns to check for duplicate emails
+        # Without this index, queries do expensive sequential scans on 200k+ rows
+        ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \
+          'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_archivedemails_mailaccountid_messageid ON mail_archiver."ArchivedEmails" ("MailAccountId", "MessageId");'
+
+        # Update table statistics after index creation
+        ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \
+          'ANALYZE mail_archiver."ArchivedEmails";'
+      fi
+    '';
+  };
+
   # CRITICAL FIX: PostgreSQL must wait for network devices before starting
   # Problem: PostgreSQL starts before network interfaces are fully up
   # Result: PostgreSQL fails to bind to configured addresses

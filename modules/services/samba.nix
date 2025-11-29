@@ -18,7 +18,7 @@ let
     { name = "tank/Backups/Machines/Clio";    mountpoint = "/tank/Backups/Machines/Clio"; }
     { name = "tank/Backups/Machines/Vulcan";  mountpoint = "/tank/Backups/Machines/Vulcan"; }
     { name = "tank/Backups/Machines/Athena";  mountpoint = "/tank/Backups/Machines/Athena"; }
-    { name = "tank/Backups/Games";            mountpoint = "/tank/Backups/Games"; }
+    { name = "tank/Games";                    mountpoint = "/tank/Games"; }
     { name = "tank/Databases";                mountpoint = "/tank/Databases"; }
     { name = "tank/Desktop";                  mountpoint = "/tank/Desktop"; }
     { name = "tank/Documents";                mountpoint = "/tank/Documents"; }

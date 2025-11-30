@@ -512,6 +512,26 @@ in
         skip_authenticated = false;
       '';
 
+      # RBL configuration - disable unreliable blocklists
+      "rbl.conf".text = ''
+        # Disable problematic RBL sources that cause excessive warnings
+        # These generate thousands of log entries due to service issues
+
+        rbls {
+          # SenderScore changed their DNS response format (returns 127.0.4.99 for "no listing"
+          # instead of NXDOMAIN), causing rspamd to log "DNS spoofing" warnings
+          senderscore {
+            enabled = false;
+          }
+
+          # bl.blocklist.de is unreliable with frequent SERVFAIL responses
+          # Total downtime exceeds 25 hours, causing constant dead/alive state changes
+          blocklist_de {
+            enabled = false;
+          }
+        }
+      '';
+
       # Email authentication policy scores (SPF, DKIM, DMARC)
       # These modules are enabled by default; we customize scores for better spam detection
       "policies_group.conf".text = ''

@@ -239,7 +239,11 @@ in
       description = "Timer for backup status metrics exporter";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*:0/15";  # Every 15 minutes
+        # Run at :05, :20, :35, :50 to avoid race condition with backup services
+        # which start at :00 (e.g., restic-backups at 02:00). Running 5 minutes
+        # after allows services to either be fully running or have completed,
+        # ensuring ExecMainStartTimestamp/ExecMainExitTimestamp are valid.
+        OnCalendar = "*:5/15";  # Every 15 minutes, offset by 5
         OnBootSec = "10min";
         Persistent = true;
       };

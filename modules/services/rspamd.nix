@@ -440,6 +440,23 @@ in
         neighbours {
           server1 { host = "https://rspamd.vulcan.lan:443"; }
         }
+
+        # Custom local TLD file to recognize .lan domain
+        # This prevents "TLD part is not detected" warnings for internal URLs
+        # like nagios.vulcan.lan
+        url_tld = "$LOCAL_CONFDIR/local.d/maps.d/effective_tld_names.dat";
+      '';
+
+      # Custom TLD file - includes .lan for internal domain URLs
+      # This file supplements the default public suffix list
+      "maps.d/effective_tld_names.dat".source = pkgs.runCommand "custom-tlds" {} ''
+        # Copy the default TLD list
+        cat ${pkgs.rspamd}/share/rspamd/effective_tld_names.dat > $out
+        # Add custom local TLDs
+        echo "" >> $out
+        echo "// Custom local TLDs for internal network domains" >> $out
+        echo "lan" >> $out
+        echo "local" >> $out
       '';
 
       "redis.conf".text = ''
@@ -516,18 +533,28 @@ in
       "rbl.conf".text = ''
         # Disable problematic RBL sources that cause excessive warnings
         # These generate thousands of log entries due to service issues
+        # IMPORTANT: Both 'enabled' and 'monitored' must be false to fully disable
+        # - enabled = false: Stops the RBL from being used for scoring
+        # - monitored = false: Stops rspamd from monitoring DNS availability
 
         rbls {
           # SenderScore changed their DNS response format (returns 127.0.4.99 for "no listing"
           # instead of NXDOMAIN), causing rspamd to log "DNS spoofing" warnings
+          # Both senderscore and senderscore_reputation must be disabled
           senderscore {
             enabled = false;
+            monitored = false;
+          }
+          senderscore_reputation {
+            enabled = false;
+            monitored = false;
           }
 
           # bl.blocklist.de is unreliable with frequent SERVFAIL responses
           # Total downtime exceeds 25 hours, causing constant dead/alive state changes
           blocklist_de {
             enabled = false;
+            monitored = false;
           }
         }
       '';
@@ -815,9 +842,14 @@ in
   };
 
   # Prometheus scrape configuration for Rspamd metrics
+  # Using 60s interval instead of global 15s to reduce "allow unauthorized
+  # connection from trusted IP" log messages. These messages are informational
+  # (not warnings) - they indicate Prometheus scrapes are being accepted from
+  # localhost without password authentication, which is expected behavior.
   services.prometheus.scrapeConfigs = [
     {
       job_name = "rspamd";
+      scrape_interval = "60s";
       static_configs = [{
         targets = [ "localhost:11334" ];
       }];

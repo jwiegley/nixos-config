@@ -67,10 +67,24 @@ let
             # Get container name for logging
             name=$(${pkgs.podman}/bin/podman ps -a --filter "id=$container" --format='{{.Names}}')
 
-            if ${pkgs.podman}/bin/podman restart "$container" >/dev/null 2>&1; then
-              log "Restarted container: $name ($container)"
+            # Check if container is managed by systemd (quadlet)
+            # If so, use systemctl restart for proper container recreation
+            systemd_unit=$(${pkgs.podman}/bin/podman inspect "$container" --format='{{index .Config.Labels "PODMAN_SYSTEMD_UNIT"}}' 2>/dev/null || echo "")
+
+            if [ -n "$systemd_unit" ] && [ "$systemd_unit" != "<no value>" ]; then
+              log "Container $name is managed by systemd ($systemd_unit), using systemctl restart"
+              if ${pkgs.systemd}/bin/systemctl restart "$systemd_unit" 2>&1; then
+                log "Restarted service: $systemd_unit (container: $name)"
+              else
+                log "ERROR: Failed to restart service: $systemd_unit"
+              fi
             else
-              log "ERROR: Failed to restart container: $name ($container)"
+              # Fallback to podman restart for non-quadlet containers
+              if ${pkgs.podman}/bin/podman restart "$container" >/dev/null 2>&1; then
+                log "Restarted container: $name ($container)"
+              else
+                log "ERROR: Failed to restart container: $name ($container)"
+              fi
             fi
           done <<< "$containers"
         fi

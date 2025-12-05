@@ -102,7 +102,12 @@
 
       GATEWAY="192.168.1.1"
 
-      # Create return route table for end0 - uses the router as gateway
+      # Create return route table for end0
+      # First, add direct route for the local subnet so local traffic doesn't go via gateway
+      ${pkgs.iproute2}/bin/ip route add 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return 2>/dev/null || \
+        ${pkgs.iproute2}/bin/ip route replace 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return
+
+      # Then add default route via gateway for cross-subnet traffic (e.g., to 192.168.3.x)
       ${pkgs.iproute2}/bin/ip route add default via $GATEWAY table end0_return 2>/dev/null || \
         ${pkgs.iproute2}/bin/ip route replace default via $GATEWAY table end0_return
 
@@ -130,6 +135,7 @@
       ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip route del 192.168.1.0/24 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del default table end0_return 2>/dev/null || true
     '';
   };

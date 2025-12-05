@@ -89,6 +89,85 @@ let
 
     doCheck = false; # Skip tests for simplicity
   };
+
+  # Custom Home Assistant component: Multiscrape
+  # Advanced web scraping for Home Assistant with multiple sensors per page
+  # GitHub: https://github.com/danieldotnl/ha-multiscrape
+  multiscrape = pkgs.buildHomeAssistantComponent rec {
+    owner = "danieldotnl";
+    domain = "multiscrape";
+    version = "8.0.5";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "danieldotnl";
+      repo = "ha-multiscrape";
+      rev = "v${version}";
+      hash = "sha256-J0LeQq31zQsBnVl6X2WJTJXK6D+k9kzFgwmbCH/VTiU=";
+    };
+
+    dependencies = with pkgs.python3Packages; [
+      lxml
+      beautifulsoup4
+    ];
+
+    meta = with pkgs.lib; {
+      description = "Home Assistant custom component for scraping multiple values from a single HTTP request";
+      homepage = "https://github.com/danieldotnl/ha-multiscrape";
+      license = licenses.mit;
+    };
+  };
+
+  # Custom Home Assistant component: Chime TTS
+  # Play chime sounds before TTS announcements
+  # GitHub: https://github.com/nimroddolev/chime_tts
+  chime-tts = pkgs.buildHomeAssistantComponent rec {
+    owner = "nimroddolev";
+    domain = "chime_tts";
+    version = "1.2.2";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "nimroddolev";
+      repo = "chime_tts";
+      rev = "v${version}";
+      hash = "sha256-PoAblubm3TPZ9LAYmkEEEcuND6VWnGyx2T6btgDMsDQ=";
+    };
+
+    dependencies = with pkgs.python3Packages; [
+      pydub
+      aiofiles
+    ];
+
+    meta = with pkgs.lib; {
+      description = "Home Assistant custom component for playing chime sounds before TTS announcements";
+      homepage = "https://github.com/nimroddolev/chime_tts";
+      license = licenses.mit;
+    };
+  };
+
+  # Custom Home Assistant component: Presence Simulation
+  # Simulate presence by replaying historical entity states
+  # GitHub: https://github.com/slashback100/presence_simulation
+  presence-simulation = pkgs.buildHomeAssistantComponent rec {
+    owner = "slashback100";
+    domain = "presence_simulation";
+    version = "5.0";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "slashback100";
+      repo = "presence_simulation";
+      rev = "v${version}";
+      hash = "sha256-47O6qzTiWnfjin0kQ14UZwMLB/XEi8bBf3MjsABnpwQ=";
+    };
+
+    # No additional Python dependencies required (uses core HA integrations)
+    dependencies = [ ];
+
+    meta = with pkgs.lib; {
+      description = "Home Assistant custom component for simulating presence when away";
+      homepage = "https://github.com/slashback100/presence_simulation";
+      license = licenses.asl20;
+    };
+  };
 in
 
 {
@@ -244,6 +323,12 @@ in
       }))
       intellicenter # Pentair IntelliCenter integration
       spook # Spook - powerful toolbox for Home Assistant (services, templates, repairs)
+      waste_collection_schedule # Garbage/recycling collection schedule tracking
+
+      # Custom-packaged integrations (not in nixpkgs)
+      multiscrape # Advanced web scraping with multiple sensors per page
+      chime-tts # Play chime sounds before TTS announcements
+      presence-simulation # Simulate presence by replaying historical entity states
     ];
 
     # Use PostgreSQL for better performance
@@ -268,6 +353,7 @@ in
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
       ps.wakeonlan # Required for Wake on LAN integration
       pywaze # Required for Waze Travel Time integration
+      ps.pydub # Required for Chime TTS audio processing
     ];
 
     # Components that don't require YAML configuration
@@ -277,6 +363,9 @@ in
       "default_config"
       "met"
       "mqtt"  # MQTT broker for HASS.Agent and other IoT devices
+
+      # Calendar and scheduling
+      "workday" # Binary sensor for workday/holiday detection
 
       # Yale/August lock integration
       "yale_home"
@@ -336,6 +425,7 @@ in
 
       # Casting & Display
       "cast" # Google Home Hub / Cast devices
+      "vlc_telnet" # VLC media player via telnet (for desktop TTS)
 
       # Health & Fitness
       "withings" # Withings digital scale and health devices
@@ -886,6 +976,9 @@ EOF
       SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
       REQUESTS_CA_BUNDLE = "/etc/ssl/certs/ca-bundle.crt";
     };
+
+    # Add ffmpeg to PATH for Chime TTS audio processing
+    path = [ pkgs.ffmpeg-full ];
   };
 
   # Fix ownership of Home Assistant state directory files

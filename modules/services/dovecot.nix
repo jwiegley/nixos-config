@@ -68,8 +68,11 @@ in
     # Enable IMAP protocol
     enableImap = true;
 
-    # Enable PAM authentication for system users
-    enablePAM = true;
+    # Disable NixOS auto-generated PAM passdb - we define passdb order manually in extraConfig
+    # This ensures passwd-file is checked FIRST (for app-specific passwords),
+    # with PAM as fallback (for system passwords)
+    # Without this, NixOS adds PAM before our extraConfig, causing spurious "authentication failure" logs
+    enablePAM = false;
 
     # Mail location using Maildir format
     mailLocation = "maildir:/var/mail/%u";

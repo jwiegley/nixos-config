@@ -106,21 +106,30 @@
       ${pkgs.iproute2}/bin/ip route add default via $GATEWAY table end0_return 2>/dev/null || \
         ${pkgs.iproute2}/bin/ip route replace default via $GATEWAY table end0_return
 
-      # Route DNS responses (UDP/TCP sport 53) and NTP responses (UDP sport 123) to WiFi subnet via router
-      # This ensures services at 192.168.1.2 can serve clients on 192.168.3.0/24 (WiFi)
-      # Uses ip rule sport matching for clean routing without iptables marking
-      # Other traffic (like HomeKit on port 21063) uses normal direct routing via wlp1s0f0
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 53 to 192.168.3.0/24 table end0_return priority 60 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto tcp sport 53 to 192.168.3.0/24 table end0_return priority 61 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 123 to 192.168.3.0/24 table end0_return priority 62 2>/dev/null || true
+      # Route ALL traffic from 192.168.1.2 destined to non-local subnets via the ethernet gateway
+      ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 192.168.0.0/16 table end0_return priority 50 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 10.0.0.0/8 table end0_return priority 51 2>/dev/null || true
 
-      echo "Asymmetric routing configured: DNS/NTP responses to 192.168.3.0/24 route via $GATEWAY"
+      # Keep specific port rules as fallback (lower priority) for any edge cases
+      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 53 to 192.168.0.0/16 table end0_return priority 60 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add ipproto tcp sport 53 to 192.168.0.0/16 table end0_return priority 61 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 123 to 192.168.0.0/16 table end0_return priority 62 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 53 to 10.0.0.0/8 table end0_return priority 60 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add ipproto tcp sport 53 to 10.0.0.0/8 table end0_return priority 61 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 123 to 10.0.0.0/8 table end0_return priority 62 2>/dev/null || true
+
+      echo "Asymmetric routing configured: all traffic from 192.168.1.2 routes via $GATEWAY"
     '';
 
     preStop = ''
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 192.168.3.0/24 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 192.168.3.0/24 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 192.168.3.0/24 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 192.168.0.0/16 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 192.168.0.0/16 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 192.168.0.0/16 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 192.168.0.0/16 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del default table end0_return 2>/dev/null || true
     '';
   };

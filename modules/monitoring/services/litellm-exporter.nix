@@ -12,13 +12,13 @@ let
       exit 1
     fi
 
-    # Test query to hera/gpt-oss-safeguard-20b
+    # Test query to hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4
     RESPONSE=$(${pkgs.curl}/bin/curl -s -w "\n%{http_code}" -X POST \
       http://127.0.0.1:4000/v1/chat/completions \
       -H "x-api-key: $API_KEY" \
       -H "Content-Type: application/json" \
       -d '{
-        "model": "hera/gpt-oss-safeguard-20b",
+        "model": "hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4",
         "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
         "max_tokens": 10,
         "temperature": 0

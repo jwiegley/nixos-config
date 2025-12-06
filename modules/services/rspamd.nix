@@ -588,6 +588,8 @@ in
         # LiteLLM proxy configuration (OpenAI-compatible API)
         type = "openai";
         url = "http://127.0.0.1:4000/v1/chat/completions";
+        # Using non-quantized model for more reliable JSON output
+        # The MLX-MXFP4 quantized version was producing invalid JSON responses
         model = "hera/gpt-oss-safeguard-20b";
 
         # Enable GPT analysis for ham messages (default is false)

@@ -588,9 +588,9 @@ in
         # LiteLLM proxy configuration (OpenAI-compatible API)
         type = "openai";
         url = "http://127.0.0.1:4000/v1/chat/completions";
-        # Using non-quantized model for more reliable JSON output
-        # The MLX-MXFP4 quantized version was producing invalid JSON responses
-        model = "hera/gpt-oss-safeguard-20b";
+        # Using MLX quantized model with Harmony filter for efficient inference
+        # LiteLLM harmony_filter guardrail strips analysis channel markers
+        model = "hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4";
 
         # Enable GPT analysis for ham messages (default is false)
         # Without this, GPT is skipped for messages with negative scores
@@ -598,7 +598,7 @@ in
 
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
-          "hera/gpt-oss-safeguard-20b" = {
+          "hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4" = {
             max_completion_tokens = 500;
           }
         };

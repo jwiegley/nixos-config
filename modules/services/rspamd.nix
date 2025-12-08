@@ -437,6 +437,14 @@ in
           retransmits = 2;               # Number of retries for failed queries
         }
 
+        local_addrs = [
+          "127.0.0.0/8",
+          "192.168.0.0/16",
+          "172.16.0.0/12",
+          "10.0.0.0/8",
+          "::1",
+        ];
+
         neighbours {
           server1 { host = "https://rspamd.vulcan.lan:443"; }
         }

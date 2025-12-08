@@ -1,6 +1,12 @@
 { config, lib, pkgs, inputs, ... }:
 
 {
+  # Deploy harmony_filter.py from /etc/nixos/scripts to /etc/litellm
+  environment.etc."litellm/harmony_filter.py" = {
+    source = ../../../scripts/harmony_filter.py;
+    mode = "0644";
+  };
+
   home-manager.users.litellm = { config, lib, pkgs, ... }: {
     # Import the quadlet-nix Home Manager module
     imports = [
@@ -42,13 +48,17 @@
         # Environment configuration
         environments = {
           POSTGRES_HOST = "127.0.0.1";
+          PYTHONPATH = "/app";
         };
 
         # Secrets via environment file
         environmentFiles = [ "/run/secrets-litellm/litellm-secrets" ];
 
         # Volume mounts
-        volumes = [ "/etc/litellm/config.yaml:/app/config.yaml:ro" ];
+        volumes = [
+          "/etc/litellm/config.yaml:/app/config.yaml:ro"
+          "/etc/litellm/harmony_filter.py:/app/harmony_filter.py:ro"
+        ];
 
         # Container exec command
         exec = "--config /app/config.yaml";

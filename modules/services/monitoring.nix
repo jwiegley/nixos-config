@@ -69,19 +69,30 @@ let
     '';
   };
 
-  # AI-powered log summary script
-  aiLogSummaryScript = pkgs.writeShellApplication {
-    name = "logwatch-ai-summary";
+  # AI log analysis script (used by both logwatch and command-line)
+  analyzeLogsScript = pkgs.writeShellApplication {
+    name = "analyze-logs";
     runtimeInputs = with pkgs; [ python3 systemd ];
     text = ''
-      # Read LiteLLM API key from SOPS secret (logwatch-specific, owned by root)
+      # Read LiteLLM API key from SOPS secret
       if [ -f "/run/secrets/litellm-vulcan-lan-logwatch" ]; then
         LITELLM_API_KEY=$(cat "/run/secrets/litellm-vulcan-lan-logwatch")
         export LITELLM_API_KEY
+      else
+        echo "Warning: LiteLLM API key not found. AI analysis may fail." >&2
       fi
 
-      # Run the AI log summarizer
-      ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py 2>/dev/null || true
+      # Pass all arguments to the log summarizer
+      exec ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py "$@"
+    '';
+  };
+
+  # Wrapper for logwatch (quiet mode, suppress errors)
+  logwatchAiScript = pkgs.writeShellApplication {
+    name = "logwatch-ai-summary";
+    runtimeInputs = [ analyzeLogsScript ];
+    text = ''
+      analyze-logs --quiet 2>/dev/null || true
     '';
   };
 in
@@ -103,7 +114,7 @@ in
         {
           name = "ai-log-summary";
           title = "AI-Powered System Log Analysis";
-          script = lib.getExe aiLogSummaryScript;
+          script = lib.getExe logwatchAiScript;
         }
         {
           name = "systemctl-failed";
@@ -138,4 +149,7 @@ in
       ];
     };
   };
+
+  # Make analyze-logs available in PATH
+  environment.systemPackages = [ analyzeLogsScript ];
 }

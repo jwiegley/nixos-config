@@ -4,6 +4,7 @@ AI-Powered Log Summarization for LogWatch
 Collects logs from journalctl and uses LiteLLM for intelligent summarization.
 """
 
+import argparse
 import json
 import os
 import re
@@ -232,12 +233,15 @@ class AIAnalyzer:
 
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions"):
         self.api_url = api_url
-        self.model = "hera/gpt-oss-120b"
+        self.model = "hera/mlx-community/gpt-oss-120b-MXFP4-Q8"
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
-        self.timeout = 45  # seconds
+        self.timeout = 7200  # 2 hours (local LLM can be slow)
 
-    def analyze_logs(self, grouped_logs: Dict[str, List[LogEntry]], stats: Dict) -> str:
+    def analyze_logs(self, grouped_logs: Dict[str, List[LogEntry]], stats: Dict,
+                     time_range: str = "24 hours") -> str:
         """Analyze logs using AI and generate summary"""
+
+        self.time_range = time_range
 
         # Prepare log context for AI
         log_context = self._prepare_log_context(grouped_logs, stats)
@@ -300,7 +304,7 @@ Output plain ASCII text only. Do NOT use:
 Use simple dashes (-) for bullet points. Be factual and concise.
 Report what happened and what to do about it, without dramatization."""
 
-        user_prompt = f"""Analyze these system logs from the past 24 hours:
+        user_prompt = f"""Analyze these system logs from the past {self.time_range}:
 
 {log_context}
 
@@ -353,12 +357,14 @@ Provide a clear, actionable summary."""
 
     def _generate_simple_summary(self, stats: Dict) -> str:
         """Generate simple summary when no significant logs"""
-        return f"""System Log Summary - {datetime.now().strftime('%Y-%m-%d')}
+        return f"""System Log Summary - {datetime.now().strftime('%Y-%m-%d %H:%M')}
 {'=' * 60}
+
+Time Range: {self.time_range}
 
 SYSTEM STATUS: All systems operating normally
 
-No critical issues, errors, or warnings detected in the past 24 hours.
+No critical issues, errors, or warnings detected in this time period.
 
 STATISTICS:
 - Total log entries processed: {stats['total']:,}
@@ -372,8 +378,9 @@ containers, and file sharing) are functioning within normal parameters.
     def _generate_fallback_summary(self, grouped_logs: Dict[str, List[LogEntry]], stats: Dict) -> str:
         """Generate fallback summary without AI"""
         lines = [
-            f"System Log Summary - {datetime.now().strftime('%Y-%m-%d')}",
+            f"System Log Summary - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "=" * 60,
+            f"Time Range: {self.time_range}",
             ""
         ]
 
@@ -438,27 +445,120 @@ containers, and file sharing) are functioning within normal parameters.
         return "\n".join(lines)
 
 
+def parse_time_range(time_str: str) -> Tuple[str, str]:
+    """
+    Parse user-friendly time range into journalctl --since format.
+
+    Args:
+        time_str: User input like "2h", "30m", "1d", "2 hours", "last 2 hours"
+
+    Returns:
+        Tuple of (journalctl_since_format, human_readable_description)
+    """
+    import re
+
+    # Clean up input
+    time_str = time_str.lower().strip()
+
+    # Remove common prefixes
+    for prefix in ["last ", "past ", "previous "]:
+        if time_str.startswith(prefix):
+            time_str = time_str[len(prefix):]
+
+    # Try to parse shorthand formats like "2h", "30m", "1d"
+    shorthand_match = re.match(r'^(\d+)\s*([hmds])$', time_str)
+    if shorthand_match:
+        value = int(shorthand_match.group(1))
+        unit = shorthand_match.group(2)
+        unit_map = {
+            'h': ('hours', 'hour' if value == 1 else 'hours'),
+            'm': ('minutes', 'minute' if value == 1 else 'minutes'),
+            'd': ('days', 'day' if value == 1 else 'days'),
+            's': ('seconds', 'second' if value == 1 else 'seconds'),
+        }
+        full_unit, display_unit = unit_map[unit]
+        return (f"{value} {full_unit} ago", f"{value} {display_unit}")
+
+    # Try to parse full formats like "2 hours", "30 minutes"
+    full_match = re.match(r'^(\d+)\s*(hours?|minutes?|mins?|days?|seconds?|secs?)$', time_str)
+    if full_match:
+        value = int(full_match.group(1))
+        unit = full_match.group(2)
+
+        # Normalize unit names
+        if unit.startswith('min'):
+            unit = 'minutes'
+        elif unit.startswith('sec'):
+            unit = 'seconds'
+        elif unit.startswith('hour'):
+            unit = 'hours'
+        elif unit.startswith('day'):
+            unit = 'days'
+
+        display_unit = unit[:-1] if value == 1 and unit.endswith('s') else unit
+        return (f"{value} {unit} ago", f"{value} {display_unit}")
+
+    # If it's already in journalctl format (contains "ago"), use as-is
+    if "ago" in time_str:
+        # Extract the descriptive part
+        desc = time_str.replace(" ago", "").strip()
+        return (time_str, desc)
+
+    # Default: treat as literal journalctl --since value
+    return (time_str, time_str)
+
+
 def main() -> int:
     """Main execution function"""
 
+    parser = argparse.ArgumentParser(
+        description="AI-powered system log analysis",
+        epilog="""
+Examples:
+  %(prog)s                    # Analyze last 24 hours (default)
+  %(prog)s --since "2 hours"  # Analyze last 2 hours
+  %(prog)s --since 30m        # Analyze last 30 minutes
+  %(prog)s --since 1d         # Analyze last 1 day
+  %(prog)s --since "2024-12-08 10:00" # Since specific time
+        """
+    )
+    parser.add_argument(
+        '--since', '-s',
+        default="24 hours ago",
+        help='Time range to analyze (e.g., "2 hours", "30m", "1d", "24 hours ago")'
+    )
+    parser.add_argument(
+        '--quiet', '-q',
+        action='store_true',
+        help='Suppress progress messages to stderr'
+    )
+
+    args = parser.parse_args()
+
+    # Parse the time range
+    since_value, time_description = parse_time_range(args.since)
+
     # Collect logs
-    print("Collecting logs from journalctl...", file=sys.stderr)
+    if not args.quiet:
+        print(f"Collecting logs from the past {time_description}...", file=sys.stderr)
     collector = LogCollector()
 
-    if not collector.collect_logs(since="24 hours ago"):
+    if not collector.collect_logs(since=since_value):
         print("Error: Failed to collect logs", file=sys.stderr)
         return 1
 
-    print(f"Collected {collector.stats['total']} log entries, filtered {collector.stats['filtered']} routine entries",
-          file=sys.stderr)
+    if not args.quiet:
+        print(f"Collected {collector.stats['total']} log entries, filtered {collector.stats['filtered']} routine entries",
+              file=sys.stderr)
 
     # Group logs
     grouped_logs = collector.get_grouped_logs()
 
     # Analyze with AI
-    print("Analyzing logs...", file=sys.stderr)
+    if not args.quiet:
+        print("Analyzing logs...", file=sys.stderr)
     analyzer = AIAnalyzer()
-    summary = analyzer.analyze_logs(grouped_logs, collector.stats)
+    summary = analyzer.analyze_logs(grouped_logs, collector.stats, time_range=time_description)
 
     # Output summary
     print(summary)

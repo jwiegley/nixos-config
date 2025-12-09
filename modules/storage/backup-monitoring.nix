@@ -75,7 +75,8 @@ in
       "backup-alert@" = {
         description = "Backup failure alert for %i";
         after = [ "zfs.target" "zfs-import-tank.service" ];
-        wantedBy = [ "tank.mount" ];
+        # NOTE: Template units should not have wantedBy - they are instantiated on-demand
+        # via OnFailure=backup-alert@%n.service from restic backup services
         unitConfig = {
           RequiresMountsFor = [ "/tank" ];
           ConditionPathIsMountPoint = "/tank";

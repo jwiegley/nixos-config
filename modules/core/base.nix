@@ -69,6 +69,17 @@
     # Allows WiFi devices (192.168.3.x) to reach services at Ethernet IP (192.168.1.2)
     # when packets are routed between networks
     checkReversePath = "loose";
+
+    # Allow IGMP (protocol 2) on WiFi interface
+    # Router sends IGMP membership queries to 224.0.0.1 (all-hosts multicast)
+    # These have unicast MAC but multicast IP, so logRefusedUnicastsOnly doesn't filter them
+    # IGMP is harmless - just for multicast group management
+    extraCommands = ''
+      iptables -A nixos-fw -i wlp1s0f0 -p igmp -j nixos-fw-accept
+    '';
+    extraStopCommands = ''
+      iptables -D nixos-fw -i wlp1s0f0 -p igmp -j nixos-fw-accept 2>/dev/null || true
+    '';
   };
 
   # Enable loose reverse path filtering for asymmetric routing

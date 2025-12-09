@@ -143,9 +143,7 @@ in
       Restart = "always";
       RestartSec = "15s";  # Wait longer between restart attempts
       TimeoutStartSec = "180s";  # Allow up to 3 minutes for startup (includes DB migrations)
-      # Prevent rapid restart loops if there's a persistent issue
-      StartLimitBurst = 5;
-      StartLimitIntervalSec = 300;  # 5 restarts within 5 minutes max
+      # NOTE: StartLimitBurst/StartLimitIntervalSec are in unitConfig (belong in [Unit], not [Service])
     };
   };
 

@@ -55,6 +55,12 @@ in
   services.gitea = {
     enable = true;
 
+    # CAPTCHA on registration page (built-in image captcha)
+    captcha = {
+      enable = true;
+      type = "image";
+    };
+
     # Use PostgreSQL database
     database = {
       type = "postgres";
@@ -88,6 +94,8 @@ in
         DEFAULT_ALLOW_CREATE_ORGANIZATION = true;
         ENABLE_NOTIFY_MAIL = true;
         DEFAULT_EMAIL_NOTIFICATIONS = "enabled";
+        # Email verification: new users must click a link in confirmation email
+        REGISTER_EMAIL_CONFIRM = true;
       };
 
       # Email/Mailer configuration

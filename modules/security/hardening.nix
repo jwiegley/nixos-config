@@ -52,8 +52,11 @@
     chmod 640 /var/log/sudo.log
   '';
 
-  # Create polkit rules directory to suppress harmless error messages
+  # Create polkit rules directories to suppress harmless error messages
+  # polkitd is hardcoded to check /usr/local/share/polkit-1/rules.d which doesn't
+  # exist on NixOS since it doesn't follow FHS conventions
   systemd.tmpfiles.rules = [
     "d /run/polkit-1/rules.d 0755 root root -"
+    "d /usr/local/share/polkit-1/rules.d 0755 root root -"
   ];
 }

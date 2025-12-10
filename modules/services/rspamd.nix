@@ -703,6 +703,34 @@ in
         secure_ip = "127.0.0.1";
         secure_ip = "::1";
       '';
+
+      "rbl.conf".text = ''
+        # Disable problematic RBL sources that cause excessive warnings
+        # IMPORTANT: Both 'enabled' and 'monitored' must be false to fully disable
+        # - enabled = false: Stops RBL from being used for scoring
+        # - monitored = false: Stops rspamd from checking DNS availability
+
+        rbls {
+          # SenderScore changed DNS response format in 2024
+          # Now returns 127.0.4.XX (score) for ALL IPs including test IP 127.0.0.1
+          # This causes rspamd to log "DNS spoofing" warnings
+          senderscore {
+            enabled = false;
+            monitored = false;
+          }
+          senderscore_reputation {
+            enabled = false;
+            monitored = false;
+          }
+
+          # bl.blocklist.de has unreliable DNS (frequent SERVFAIL)
+          # Authoritative servers on Cloudflare are misconfigured
+          blocklist_de {
+            enabled = false;
+            monitored = false;
+          }
+        }
+      '';
     };
   };
 

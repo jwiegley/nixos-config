@@ -163,12 +163,15 @@ let
     exit "$STATE_OK"
   '';
 
-  # Check plugin for stale git repositories
+  # Check plugin for stale git repositories (fast version using state file)
+  # The old version scanned all 625+ FETCH_HEAD files which timed out after 60s
+  # This version reads from the pre-computed state file for near-instant results
   checkGitWorkspaceStale = pkgs.writeShellScript "check_git_workspace_stale.sh" ''
     set -euo pipefail
 
     WORKSPACE_DIR="/var/lib/git-workspace-archive"
-    STALE_DAYS="''${1:-3}"  # Default: 3 days
+    STATE_FILE="$WORKSPACE_DIR/.sync-state.json"
+    STALE_DAYS="''${1:-3}"  # Default: 3 days (used for display only, actual staleness is computed by sync service)
     STALE_PERCENT_WARN="''${2:-10}"  # Default: warn if > 10% stale
     STALE_PERCENT_CRIT="''${3:-25}"  # Default: critical if > 25% stale
 
@@ -178,52 +181,53 @@ let
     STATE_CRITICAL=2
     STATE_UNKNOWN=3
 
-    # Check if workspace directory exists
-    if [[ ! -d "$WORKSPACE_DIR/github" ]]; then
-      echo "UNKNOWN: Workspace directory not found: $WORKSPACE_DIR/github"
+    # Check if state file exists
+    if [[ ! -f "$STATE_FILE" ]]; then
+      echo "UNKNOWN: Sync state file not found at $STATE_FILE - service may not have run yet"
       exit "$STATE_UNKNOWN"
     fi
 
-    # Calculate stale threshold in seconds
-    STALE_SECONDS=$((STALE_DAYS * 86400))
+    # Validate JSON
+    if ! ${pkgs.jq}/bin/jq . "$STATE_FILE" >/dev/null 2>&1; then
+      echo "UNKNOWN: Sync state file is not valid JSON"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Extract metrics from state file
+    TOTAL_REPOS=$(${pkgs.jq}/bin/jq -r '.total_repos' "$STATE_FILE")
+    STALE_REPOS=$(${pkgs.jq}/bin/jq -r '.stale_repos_count // 0' "$STATE_FILE")
+    LAST_RUN=$(${pkgs.jq}/bin/jq -r '.last_run_end' "$STATE_FILE")
+
+    # Check if sync has run recently (< 26 hours = daily + 2 hour buffer)
     CURRENT_TIME=$(${pkgs.coreutils}/bin/date +%s)
-    CUTOFF_TIME=$((CURRENT_TIME - STALE_SECONDS))
+    LAST_RUN_TIME=$(${pkgs.coreutils}/bin/date -d "$LAST_RUN" +%s 2>/dev/null || echo 0)
 
-    # Count total repos and stale repos
-    TOTAL_REPOS=0
-    STALE_REPOS=0
-    STALE_LIST=""
+    if [[ "$LAST_RUN_TIME" -eq 0 ]]; then
+      echo "UNKNOWN: Unable to parse last run time: $LAST_RUN"
+      exit "$STATE_UNKNOWN"
+    fi
 
-    while IFS= read -r -d ''' fetch_head; do
-      TOTAL_REPOS=$((TOTAL_REPOS + 1))
-      FETCH_TIME=$(${pkgs.coreutils}/bin/stat -c %Y "$fetch_head" 2>/dev/null || echo 0)
+    AGE_HOURS=$(( (CURRENT_TIME - LAST_RUN_TIME) / 3600 ))
 
-      if [[ "$FETCH_TIME" -lt "$CUTOFF_TIME" && "$FETCH_TIME" -gt 0 ]]; then
-        STALE_REPOS=$((STALE_REPOS + 1))
-        # Extract repo name from path
-        REPO_PATH=$(${pkgs.coreutils}/bin/dirname "$fetch_head")
-        REPO_NAME=$(echo "$REPO_PATH" | ${pkgs.gnused}/bin/sed "s|$WORKSPACE_DIR/||" | ${pkgs.gnused}/bin/sed 's|/.git$||')
-        AGE_DAYS=$(( (CURRENT_TIME - FETCH_TIME) / 86400 ))
-
-        if [[ $STALE_REPOS -le 10 ]]; then
-          # Only list first 10 stale repos to avoid too long output
-          STALE_LIST="''${STALE_LIST}$REPO_NAME(''${AGE_DAYS}d), "
-        fi
-      fi
-    done < <(${pkgs.findutils}/bin/find "$WORKSPACE_DIR/github" -name "FETCH_HEAD" -path "*/.git/FETCH_HEAD" -print0 2>/dev/null)
+    if [[ $AGE_HOURS -gt 26 ]]; then
+      echo "CRITICAL: State file is stale - last sync was ''${AGE_HOURS}h ago (expected < 26h)"
+      exit "$STATE_CRITICAL"
+    fi
 
     if [[ "$TOTAL_REPOS" -eq 0 ]]; then
-      echo "UNKNOWN: No repositories found in $WORKSPACE_DIR/github"
+      echo "UNKNOWN: No repositories found in state file"
       exit "$STATE_UNKNOWN"
     fi
 
     # Calculate percentage
     STALE_PERCENT=$((STALE_REPOS * 100 / TOTAL_REPOS))
 
-    # Trim trailing comma from stale list
-    STALE_LIST=$(echo "$STALE_LIST" | ${pkgs.gnused}/bin/sed 's/, $//')
-    if [[ $STALE_REPOS -gt 10 ]]; then
-      STALE_LIST="''${STALE_LIST}, and $((STALE_REPOS - 10)) more..."
+    # Get stale repos list (first 10)
+    STALE_LIST=$(${pkgs.jq}/bin/jq -r '.stale_repos_detail[:10] | map("\(.repo)(\(.age / 86400 | floor)d)") | join(", ")' "$STATE_FILE" 2>/dev/null || echo "")
+    STALE_DETAIL_COUNT=$(${pkgs.jq}/bin/jq -r '.stale_repos_detail | length' "$STATE_FILE" 2>/dev/null || echo "0")
+
+    if [[ "$STALE_DETAIL_COUNT" -gt 10 ]]; then
+      STALE_LIST="''${STALE_LIST}, and $((STALE_DETAIL_COUNT - 10)) more..."
     fi
 
     # Check thresholds
@@ -238,7 +242,7 @@ let
       exit "$STATE_OK"
     fi
 
-    echo "OK: All $TOTAL_REPOS repos have been updated within the last ''${STALE_DAYS} days"
+    echo "OK: All $TOTAL_REPOS repos have been updated within the last ''${STALE_DAYS} days (last sync ''${AGE_HOURS}h ago)"
     exit "$STATE_OK"
   '';
 

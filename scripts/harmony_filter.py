@@ -23,15 +23,30 @@ class HarmonyResponseFilter(CustomGuardrail):
     leaving only the <|channel|>final content.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        guardrail_name: str = "harmony_filter",
+        event_hook=None,
+        default_on: bool = True,
+        **kwargs
+    ):
+        # Use provided event_hook or default to post_call
+        if event_hook is None:
+            event_hook = GuardrailEventHooks.post_call
+
+        # Remove these from kwargs if present to avoid duplicate keyword args
+        kwargs.pop("guardrail_name", None)
+        kwargs.pop("event_hook", None)
+        kwargs.pop("default_on", None)
+
         super().__init__(
-            guardrail_name="harmony_filter",
+            guardrail_name=guardrail_name,
             supported_event_hooks=[GuardrailEventHooks.post_call],
-            event_hook=GuardrailEventHooks.post_call,
-            default_on=True,  # Run on ALL requests by default
+            event_hook=event_hook,
+            default_on=default_on,
             **kwargs
         )
-        logger.info("HarmonyResponseFilter guardrail initialized with default_on=True")
+        logger.info(f"HarmonyResponseFilter guardrail '{guardrail_name}' initialized with default_on={default_on}")
 
     def _should_filter(self, model: str) -> bool:
         """Check if this model uses Harmony format."""
@@ -109,5 +124,5 @@ class HarmonyResponseFilter(CustomGuardrail):
         return response
 
 
-# Create the guardrail instance
-harmony_filter = HarmonyResponseFilter()
+# Note: Do NOT create an instance here - LiteLLM will instantiate the class itself
+# when loading it from config.yaml

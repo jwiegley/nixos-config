@@ -17,6 +17,7 @@
       root: johnw
       postmaster: johnw
       ntopng: johnw
+      gitea: johnw
     '';
 
     # Enable submission services for encrypted mail submission

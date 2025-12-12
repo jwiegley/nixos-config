@@ -433,6 +433,7 @@ in
     "d /var/lib/dovecot/sieve/global/rspamd 0775 dovecot2 mail -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
+    # Note: gitea mail is aliased to johnw in postfix.nix (gitea UID < first_valid_uid)
     # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
     "L+ /var/lib/dovecot/sieve/default.sieve - - - - ${defaultSieveScript}"
     # Deploy process-good.sieve for TrainGood folder processing via imapsieve

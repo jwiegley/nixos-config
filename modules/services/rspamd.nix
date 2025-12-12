@@ -725,7 +725,8 @@ in
 
           # bl.blocklist.de has unreliable DNS (frequent SERVFAIL)
           # Authoritative servers on Cloudflare are misconfigured
-          blocklist_de {
+          # NOTE: Use 'blocklistde' (no underscore) to match rspamd's default config naming
+          blocklistde {
             enabled = false;
             monitored = false;
           }

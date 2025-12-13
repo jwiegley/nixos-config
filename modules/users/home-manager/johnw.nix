@@ -68,6 +68,9 @@
       HF_HUB_ENABLE_HF_TRANSFER      = "1";
       LLAMA_INDEX_CACHE_DIR          = "${config.xdg.cacheHome}/llama-index";
 
+      # Factory CLI (droid) - disable auto-update attempts
+      FACTORY_AUTO_UPDATE            = "false";
+
       # This forces clearing the variable so home-manager can set it
       SSH_AUTH_SOCK = "";
     };
@@ -95,6 +98,9 @@
         ca_directory = ${ca-bundle_path}
         ca_certificate = ${ca-bundle_crt}
       '';
+
+      # Factory CLI (droid) expects ripgrep at this location
+      ".factory/bin/rg".source = "${pkgs.ripgrep}/bin/rg";
     };
 
     # Programs configuration
@@ -536,6 +542,7 @@
       git-workspace
       global
       claude-code
+      factory-cli
       apacheHttpd
 
       # Shell enhancements

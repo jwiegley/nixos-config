@@ -104,6 +104,26 @@
         "type": "github"
       }
     },
+    "factory-cli-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763033679,
+        "narHash": "sha256-OjkIOT45QzH9jdv1FmRpuoGEph7VM/2HPdum8Dzl1qw=",
+        "owner": "GutMutCode",
+        "repo": "factory-cli-nix",
+        "rev": "262bbfd9bebab0f291de6f37b414e2ec7ea7fb44",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GutMutCode",
+        "repo": "factory-cli-nix",
+        "type": "github"
+      }
+    },
     "firmware": {
       "flake": false,
       "locked": {
@@ -793,6 +813,7 @@
     "root": {
       "inputs": {
         "claude-code-nix": "claude-code-nix",
+        "factory-cli-nix": "factory-cli-nix",
         "firmware": "firmware",
         "home-manager": "home-manager",
         "nagios": "nagios",

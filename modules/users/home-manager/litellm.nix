@@ -7,6 +7,12 @@
     mode = "0644";
   };
 
+  # Deploy logging config to suppress INFO-level scheduler logs
+  environment.etc."litellm/logging.conf" = {
+    source = ../../../files/litellm-logging.conf;
+    mode = "0644";
+  };
+
   home-manager.users.litellm = { config, lib, pkgs, ... }: {
     # Import the quadlet-nix Home Manager module
     imports = [
@@ -49,6 +55,8 @@
         environments = {
           POSTGRES_HOST = "127.0.0.1";
           PYTHONPATH = "/app";
+          LITELLM_LOG = "WARNING";  # Suppress INFO-level scheduler logs
+          LOG_LEVEL = "WARNING";    # Python logging level
         };
 
         # Secrets via environment file
@@ -58,10 +66,11 @@
         volumes = [
           "/etc/litellm/config.yaml:/app/config.yaml:ro"
           "/etc/litellm/harmony_filter.py:/app/harmony_filter.py:ro"
+          "/etc/litellm/logging.conf:/app/logging.conf:ro"
         ];
 
         # Container exec command
-        exec = "--config /app/config.yaml";
+        exec = "--config /app/config.yaml --log_config /app/logging.conf";
       };
 
       unitConfig = {

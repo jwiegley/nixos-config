@@ -196,4 +196,48 @@ in
       broken = false;
     };
   });
+
+  # Factory CLI - Fix for aarch64-linux (steam-run is x86-only)
+  # The upstream factory-cli-nix overlay uses steam-run which doesn't work on ARM64.
+  # The ARM64 binary runs natively without FHS wrapper, just needs ripgrep in PATH.
+  factory-cli =
+    let
+      version = "0.25.1";
+      baseUrl = "https://downloads.factory.ai";
+      droidSrc = prev.fetchurl {
+        url = "${baseUrl}/factory-cli/releases/${version}/linux/arm64/droid";
+        hash = "sha256-O/FROT/QqHZsZXhWbbQhe7ktl+wAeXYiJLOKVX4DSM0=";
+      };
+    in
+    prev.stdenv.mkDerivation {
+      pname = "factory-cli";
+      inherit version;
+      dontUnpack = true;
+      dontConfigure = true;
+      dontBuild = true;
+      dontCheck = true;
+      dontStrip = true;
+
+      nativeBuildInputs = [ prev.makeWrapper ];
+
+      installPhase = ''
+        runHook preInstall
+        install -Dm755 ${droidSrc} "$out/bin/droid-unwrapped"
+        mkdir -p "$out/bin"
+
+        # Create wrapper that adds ripgrep to PATH
+        # The binary runs natively on aarch64-linux without FHS wrapper
+        makeWrapper "$out/bin/droid-unwrapped" "$out/bin/droid" \
+          --prefix PATH : ${prev.lib.makeBinPath [ prev.ripgrep ]}
+
+        runHook postInstall
+      '';
+
+      meta = {
+        description = "Command-line interface for Factory AI (aarch64-linux)";
+        homepage = "https://factory.ai/";
+        license = prev.lib.licenses.unfree;
+        platforms = [ "aarch64-linux" ];
+      };
+    };
 }

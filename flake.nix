@@ -51,6 +51,11 @@
     org-jw = {
       url = "github:jwiegley/org-jw";
     };
+
+    factory-cli-nix = {
+      url = "github:GutMutCode/factory-cli-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs: let system = "aarch64-linux"; in {
@@ -72,6 +77,7 @@
         {
           nixpkgs.overlays = [
             inputs.claude-code-nix.overlays.default
+            inputs.factory-cli-nix.overlays.default
             (import ./overlays)
           ];
         }

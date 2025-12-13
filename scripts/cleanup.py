@@ -60,7 +60,7 @@ if not args or "backups" in args:
                    mtime            = True,
                    sudo             = True,
                    depth            = 0,
-                   maxSize          = '10000000000',
+                   maxSize          = '200000000000',  # 200 GB
                    minimalScan      = True,
                    onEntryPastLimit = safeRemove,
                    **opts).scanEntries()

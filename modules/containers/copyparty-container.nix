@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ inputs, system, config, lib, pkgs, ... }:
 
 let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
@@ -109,7 +109,7 @@ in
 
       # Apply host overlays to container nixpkgs
       nixpkgs.overlays = [
-        (import ../../overlays)
+        (import ../../overlays inputs system)
       ];
 
       # Basic system configuration

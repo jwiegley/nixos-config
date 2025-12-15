@@ -538,15 +538,19 @@
       inputs.org-jw.packages.${system}.default
 
       # Development tools
+      apacheHttpd
       git-annex
       git-workspace
       global
+
+      # AI tools
       claude-code
-      factory-cli
-      apacheHttpd
+      claude-code-acp
+      ccusage
+      droid
+      vips                      # needed by fetch mcp server
 
       # Shell enhancements
-      zsh-z
       eza
       fd
       fzf
@@ -556,13 +560,13 @@
       zsh
       zsh-autosuggestions
       zsh-syntax-highlighting
+      zsh-z
 
       gcc
       gnumake
+      nodejs
       python3
       uv
-      nodejs
-      vips                      # needed by fetch mcp server
     ];
   };
 }

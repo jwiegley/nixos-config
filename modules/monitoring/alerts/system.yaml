@@ -3,8 +3,10 @@ groups:
     interval: 30s
     rules:
       # Disk space alerts
+      # Excluded mountpoints:
+      #   /Volumes/studio - backup volume on hera (expected to be near-full)
       - alert: DiskSpaceLow
-        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.1
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs", mountpoint!="/Volumes/studio"} / node_filesystem_size_bytes < 0.1
         for: 5m
         labels:
           severity: warning
@@ -14,7 +16,7 @@ groups:
           description: "{{ $labels.device }} on {{ $labels.instance }} has less than 10% free space"
 
       - alert: DiskSpaceCritical
-        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes < 0.05
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs", mountpoint!="/Volumes/studio"} / node_filesystem_size_bytes < 0.05
         for: 1m
         labels:
           severity: critical

@@ -88,7 +88,7 @@ in
 
       # Service configuration
       service = {
-        DISABLE_REGISTRATION = false; # Allow registration initially
+        DISABLE_REGISTRATION = true;
         REQUIRE_SIGNIN_VIEW = false;
         DEFAULT_KEEP_EMAIL_PRIVATE = true;
         DEFAULT_ALLOW_CREATE_ORGANIZATION = true;

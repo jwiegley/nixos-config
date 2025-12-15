@@ -59,8 +59,13 @@ groups:
           summary: "Restic repository check failed"
           description: "Restic check for repository {{ $labels.repository }} has failed"
 
+      # Alert threshold: 30 hours (108000s)
+      # Rationale: Backups run daily at 02:00, metrics collection runs every 6 hours.
+      # The 30h threshold prevents false alerts during the ~40min window each day
+      # when metrics are stale (between 28h mark and next metrics collection at 06:39).
+      # With 30h threshold, there's a 2h buffer before alerting on actual failures.
       - alert: ResticNoRecentSnapshot
-        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 100800
+        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 108000
         for: 10m
         labels:
           severity: warning
@@ -68,7 +73,7 @@ groups:
           service: restic
         annotations:
           summary: "Restic repository has no recent snapshots"
-          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 28 hours (last: {{ $value | humanizeDuration }} ago)"
+          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 30 hours (last: {{ $value | humanizeDuration }} ago)"
 
       - alert: ResticNoSnapshots
         expr: restic_snapshots_total{repository!=""} == 0

@@ -89,7 +89,7 @@ systemd.timers.log-summarizer = {
 
 Default configuration (modify in script if needed):
 - **API URL**: `http://127.0.0.1:4000/v1/chat/completions`
-- **Model**: `hera/mlx-community/gpt-oss-120b-MXFP4-Q8`
+- **Model**: `hera/gpt-oss-120b`
 - **Timeout**: 45 seconds
 - **Max Tokens**: 1000
 

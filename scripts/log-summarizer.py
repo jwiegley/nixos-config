@@ -233,7 +233,7 @@ class AIAnalyzer:
 
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions"):
         self.api_url = api_url
-        self.model = "hera/mlx-community/gpt-oss-120b-MXFP4-Q8"
+        self.model = "hera/gpt-oss-120b"
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 

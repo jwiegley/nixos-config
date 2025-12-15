@@ -43,18 +43,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    claude-code-nix = {
-      url = "github:sadjow/claude-code-nix";
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     org-jw = {
       url = "github:jwiegley/org-jw";
-    };
-
-    factory-cli-nix = {
-      url = "github:GutMutCode/factory-cli-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -76,9 +71,7 @@
         inputs.home-manager.nixosModules.home-manager
         {
           nixpkgs.overlays = [
-            inputs.claude-code-nix.overlays.default
-            inputs.factory-cli-nix.overlays.default
-            (import ./overlays)
+            (import ./overlays inputs system)
           ];
         }
         ./hosts/vulcan

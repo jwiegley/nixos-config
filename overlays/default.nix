@@ -1,4 +1,4 @@
-final: prev:
+inputs: system: final: prev:
 let
   # Import the package definitions to capture paths at evaluation time
   hacsFrontendDef = import ./hacs-frontend.nix;
@@ -122,7 +122,7 @@ in
   # Claude Code - Fix bundled ripgrep for 16K page size (Apple Silicon / Asahi Linux)
   # The bundled ripgrep is compiled with jemalloc for 4K pages, which crashes on Asahi
   # Replace with system ripgrep that's properly compiled for this platform
-  claude-code = prev.claude-code.overrideAttrs (oldAttrs: {
+  claude-code = inputs.llm-agents.packages.${system}.claude-code.overrideAttrs (oldAttrs: { #
     preFixup = (oldAttrs.preFixup or "") + ''
       # Replace bundled arm64-linux ripgrep with system ripgrep
       # This fixes crashes caused by jemalloc 4K/16K page size incompatibility
@@ -135,6 +135,9 @@ in
       fi
     '';
   });
+  claude-code-acp = inputs.llm-agents.packages.${system}.claude-code-acp;
+  ccusage = inputs.llm-agents.packages.${system}.ccusage;
+  droid = inputs.llm-agents.packages.${system}.droid;
 
   # Rspamd - Update to 3.13.2 to fix lua_magic empty text part errors
   # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts

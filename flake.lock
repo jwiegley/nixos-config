@@ -16,6 +16,28 @@
         "type": "github"
       }
     },
+    "blueprint": {
+      "inputs": {
+        "nixpkgs": [
+          "llm-agents",
+          "nixpkgs"
+        ],
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1763308703,
+        "narHash": "sha256-O9Y+Wer8wOh+N+4kcCK5p/VLrXyX+ktk0/s3HdZvJzk=",
+        "owner": "numtide",
+        "repo": "blueprint",
+        "rev": "5a9bba070f801d63e2af3c9ef00b86b212429f4f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "blueprint",
+        "type": "github"
+      }
+    },
     "cabal-32": {
       "flake": false,
       "locked": {
@@ -83,47 +105,6 @@
         "type": "github"
       }
     },
-    "claude-code-nix": {
-      "inputs": {
-        "flake-utils": "flake-utils",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1765429411,
-        "narHash": "sha256-cV+59MYdlAFsTRUDkY100swIJPuaA+4R+WZ/rLK9rKw=",
-        "owner": "sadjow",
-        "repo": "claude-code-nix",
-        "rev": "2b9308602908c04c45eb393b6c4038d3c1c979d9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "sadjow",
-        "repo": "claude-code-nix",
-        "type": "github"
-      }
-    },
-    "factory-cli-nix": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1763033679,
-        "narHash": "sha256-OjkIOT45QzH9jdv1FmRpuoGEph7VM/2HPdum8Dzl1qw=",
-        "owner": "GutMutCode",
-        "repo": "factory-cli-nix",
-        "rev": "262bbfd9bebab0f291de6f37b414e2ec7ea7fb44",
-        "type": "github"
-      },
-      "original": {
-        "owner": "GutMutCode",
-        "repo": "factory-cli-nix",
-        "type": "github"
-      }
-    },
     "firmware": {
       "flake": false,
       "locked": {
@@ -173,24 +154,6 @@
       }
     },
     "flake-utils": {
-      "inputs": {
-        "systems": "systems"
-      },
-      "locked": {
-        "lastModified": 1731533236,
-        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "type": "github"
-      }
-    },
-    "flake-utils_2": {
       "inputs": {
         "systems": "systems_2"
       },
@@ -585,6 +548,28 @@
         "type": "github"
       }
     },
+    "llm-agents": {
+      "inputs": {
+        "blueprint": "blueprint",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "treefmt-nix": "treefmt-nix"
+      },
+      "locked": {
+        "lastModified": 1765808439,
+        "narHash": "sha256-91nHAaN/JN+NpQ62BqUPUOE20DrT+yOvhRefKbbFQGI=",
+        "owner": "numtide",
+        "repo": "llm-agents.nix",
+        "rev": "9b3299dcb5c78bf043d92c46b5ef601ac0db0295",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "llm-agents.nix",
+        "type": "github"
+      }
+    },
     "nagios": {
       "flake": false,
       "locked": {
@@ -773,7 +758,7 @@
     },
     "org-jw": {
       "inputs": {
-        "flake-utils": "flake-utils_2",
+        "flake-utils": "flake-utils",
         "haskellNix": "haskellNix",
         "nixpkgs": [
           "org-jw",
@@ -812,10 +797,9 @@
     },
     "root": {
       "inputs": {
-        "claude-code-nix": "claude-code-nix",
-        "factory-cli-nix": "factory-cli-nix",
         "firmware": "firmware",
         "home-manager": "home-manager",
+        "llm-agents": "llm-agents",
         "nagios": "nagios",
         "nixos-apple-silicon": "nixos-apple-silicon",
         "nixos-logwatch": "nixos-logwatch",
@@ -905,6 +889,27 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "treefmt-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "llm-agents",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1762938485,
+        "narHash": "sha256-AlEObg0syDl+Spi4LsZIBrjw+snSVU4T8MOeuZJUJjM=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "5b4ee75aeefd1e2d5a1cc43cf6ba65eba75e83e4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
         "type": "github"
       }
     }

@@ -1,0 +1,73 @@
+groups:
+  - name: victoriametrics_data_protection
+    interval: 30s
+    rules:
+      # Memory monitoring
+      - alert: VictoriaMetricsHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="victoriametrics"} / 1024 / 1024 / 1024 > 2
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics memory usage high"
+          description: "VictoriaMetrics is using {{ $value | printf \"%.2f\" }} GB of memory. Approaching MemoryHigh limit (2G)."
+
+      - alert: VictoriaMetricsApproachingOOMLimit
+        expr: |
+          process_resident_memory_bytes{job="victoriametrics"} / 1024 / 1024 / 1024 > 2.3
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics approaching OOM kill threshold"
+          description: "VictoriaMetrics is using {{ $value | printf \"%.2f\" }} GB of memory. Close to MemoryMax limit (2.5G). Risk of OOM kill!"
+
+      # Snapshot health - ensure daily backups are running
+      - alert: VictoriaMetricsSnapshotStale
+        expr: |
+          (time() - systemd_timer_last_trigger_seconds{name="victoriametrics-snapshot.timer"}) > 172800
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics snapshot is stale"
+          description: "No VictoriaMetrics snapshot has been created in over 48 hours. Disaster recovery data may be outdated."
+
+      # Service health
+      - alert: VictoriaMetricsDown
+        expr: |
+          up{job="victoriametrics"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics is down"
+          description: "VictoriaMetrics service is not responding. Home Assistant metrics are not being collected."
+
+      # Storage health
+      - alert: VictoriaMetricsSlowInserts
+        expr: |
+          rate(vm_slow_row_inserts_total[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics experiencing slow inserts"
+          description: "VictoriaMetrics is experiencing slow row inserts ({{ $value | printf \"%.2f\" }}/s). This may indicate storage or memory pressure."
+
+      - alert: VictoriaMetricsTooManyTimeSeries
+        expr: |
+          vm_rows{type="storage/inmemory"} > 10000000
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "VictoriaMetrics has high cardinality"
+          description: "VictoriaMetrics has {{ $value | humanize }} in-memory rows. High cardinality can cause memory issues."

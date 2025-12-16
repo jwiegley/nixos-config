@@ -1,0 +1,84 @@
+groups:
+  - name: prometheus_data_protection
+    interval: 30s
+    rules:
+      # Memory and OOM protection monitoring
+      - alert: PrometheusHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="prometheus"} / 1024 / 1024 / 1024 > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus memory usage high"
+          description: "Prometheus is using {{ $value | printf \"%.2f\" }} GB of memory. Approaching MemoryHigh limit (1.5G)."
+
+      - alert: PrometheusApproachingOOMLimit
+        expr: |
+          process_resident_memory_bytes{job="prometheus"} / 1024 / 1024 / 1024 > 1.8
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Prometheus approaching OOM kill threshold"
+          description: "Prometheus is using {{ $value | printf \"%.2f\" }} GB of memory. Close to MemoryMax limit (2G). Risk of OOM kill!"
+
+      # WAL health monitoring
+      - alert: PrometheusWALCorruption
+        expr: |
+          increase(prometheus_tsdb_wal_corruptions_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Prometheus WAL corruption detected"
+          description: "Prometheus detected {{ $value }} WAL corruptions in the last hour. Data loss may have occurred!"
+
+      - alert: PrometheusHeadChunksTooLarge
+        expr: |
+          prometheus_tsdb_head_chunks > 5000000
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus head chunks growing too large"
+          description: "Prometheus has {{ $value | humanize }} head chunks. This indicates high cardinality or block compaction issues."
+
+      # Snapshot health - ensure daily backups are running
+      - alert: PrometheusSnapshotStale
+        expr: |
+          (time() - systemd_timer_last_trigger_seconds{name="prometheus-snapshot.timer"}) > 172800
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus TSDB snapshot is stale"
+          description: "No Prometheus snapshot has been created in over 48 hours. Disaster recovery data may be outdated."
+
+      # TSDB health
+      - alert: PrometheusTSDBCompactionsFailing
+        expr: |
+          increase(prometheus_tsdb_compactions_failed_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus TSDB compactions failing"
+          description: "Prometheus TSDB compaction failures detected. This can lead to increased disk usage and query latency."
+
+      - alert: PrometheusTSDBReloadsFailing
+        expr: |
+          increase(prometheus_tsdb_reloads_failures_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus TSDB reloads failing"
+          description: "Prometheus TSDB reload failures detected. Configuration changes may not be applied."

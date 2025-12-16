@@ -97,10 +97,77 @@
       "home-assistant.service"
     ];
 
-    # Use systemd LoadCredential to make token available
-    # Token will be available at $CREDENTIALS_DIRECTORY/ha-token
     serviceConfig = {
+      # Use systemd LoadCredential to make token available
       LoadCredential = "ha-token:${config.sops.secrets."prometheus/home-assistant-token".path}";
+      # OOM protection - make VictoriaMetrics less likely to be killed
+      # VictoriaMetrics doesn't have Prometheus's WAL replay memory spike,
+      # but still benefits from OOM protection for data integrity
+      OOMScoreAdjust = -500;
+      # Memory limits are set in memory-limits.nix (2.5G max, 2G high)
+    };
+  };
+
+  # Daily VictoriaMetrics snapshot for disaster recovery
+  # VictoriaMetrics snapshots are instant and don't require stopping the service
+  systemd.services.victoriametrics-snapshot = {
+    description = "Create VictoriaMetrics snapshot for disaster recovery";
+    after = [ "victoriametrics.service" ];
+    requires = [ "victoriametrics.service" ];
+    path = [ pkgs.curl pkgs.jq pkgs.coreutils ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      # Run as root since we need to access /var/lib/victoriametrics
+      User = "root";
+    };
+
+    script = ''
+      set -euo pipefail
+
+      SNAPSHOT_DIR="/var/lib/victoriametrics/disaster-recovery"
+      VM_DATA_DIR="/var/lib/victoriametrics"
+      RETENTION_DAYS=7
+
+      # Create snapshot via API (instant, no downtime)
+      echo "Creating VictoriaMetrics snapshot..."
+      RESPONSE=$(curl -sf "http://127.0.0.1:8428/snapshot/create")
+      SNAPSHOT_NAME=$(echo "$RESPONSE" | jq -r '.snapshot')
+
+      if [ -z "$SNAPSHOT_NAME" ] || [ "$SNAPSHOT_NAME" = "null" ]; then
+        echo "ERROR: Failed to create snapshot. Response: $RESPONSE"
+        exit 1
+      fi
+
+      echo "Snapshot created: $SNAPSHOT_NAME"
+
+      # Copy snapshot to disaster recovery location
+      mkdir -p "$SNAPSHOT_DIR"
+      DEST="$SNAPSHOT_DIR/snapshot-$(date +%Y%m%d-%H%M%S)"
+      cp -a "$VM_DATA_DIR/snapshots/$SNAPSHOT_NAME" "$DEST"
+      chown -R victoriametrics:victoriametrics "$DEST"
+      echo "Copied to: $DEST"
+
+      # Delete the in-place snapshot (we have our copy)
+      curl -sf "http://127.0.0.1:8428/snapshot/delete?snapshot=$SNAPSHOT_NAME" || true
+
+      # Remove snapshots older than retention period
+      echo "Cleaning snapshots older than $RETENTION_DAYS days..."
+      find "$SNAPSHOT_DIR" -maxdepth 1 -name "snapshot-*" -type d -mtime +$RETENTION_DAYS -exec rm -rf {} \; || true
+
+      # Report current snapshots
+      echo "Current snapshots:"
+      ls -la "$SNAPSHOT_DIR"
+    '';
+  };
+
+  systemd.timers.victoriametrics-snapshot = {
+    description = "Daily VictoriaMetrics snapshot timer";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
     };
   };
 

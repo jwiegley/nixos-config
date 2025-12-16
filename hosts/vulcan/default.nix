@@ -47,52 +47,51 @@
     ../../modules/users/home-manager/openspeedtest.nix
 
     # Services
-    ../../modules/services/certificates.nix
+    ../../modules/services/alertmanager.nix
+    ../../modules/services/blackbox-monitoring.nix
     ../../modules/services/certificate-automation.nix
-    ../../modules/services/databases.nix
-    ../../modules/services/postgresql-backup.nix
-    ../../modules/services/technitium-dns-backup.nix
-    ../../modules/services/local-backup.nix
+    ../../modules/services/certificates.nix
     ../../modules/services/cleanup.nix
-    ../../modules/services/dirscan-share.nix
+    ../../modules/services/cloudflare-tunnels.nix
+    ../../modules/services/databases.nix
     ../../modules/services/dirscan-share-config.nix
-    ../../modules/services/pgadmin.nix
-    ../../modules/services/gitea.nix
+    ../../modules/services/dirscan-share.nix
+    ../../modules/services/dovecot-archive.nix
+    ../../modules/services/dovecot-imapsieve-monitor.nix
+    ../../modules/services/dovecot.nix
     ../../modules/services/gitea-actions-runner.nix
+    ../../modules/services/gitea.nix
     ../../modules/services/github-gitea-mirror.nix
-    ../../modules/services/web.nix
+    ../../modules/services/grafana.nix
+    ../../modules/services/home-assistant-metric-trick.nix
+    ../../modules/services/home-assistant.nix
+    ../../modules/services/jupyterlab.nix
+    ../../modules/services/local-backup.nix
+    ../../modules/services/loki.nix
     ../../modules/services/media.nix
     ../../modules/services/monitoring.nix
-    ../../modules/services/prometheus-monitoring.nix
-    ../../modules/services/blackbox-monitoring.nix
-    ../../modules/services/alertmanager.nix
+    ../../modules/services/mosquitto.nix
+    ../../modules/services/n8n.nix
     ../../modules/services/nagios.nix
+    ../../modules/services/network-services.nix
+    ../../modules/services/nginx-n8n-webhook.nix
+    ../../modules/services/node-red.nix
+    ../../modules/services/ntopng.nix
+    ../../modules/services/pgadmin.nix
+    ../../modules/services/postfix.nix
+    ../../modules/services/postgresql-backup.nix
+    ../../modules/services/promtail.nix
+    ../../modules/services/rspamd-alerts.nix
+    ../../modules/services/rspamd.nix
+    ../../modules/services/service-reliability.nix
+    ../../modules/services/technitium-dns-backup.nix
+    ../../modules/services/web.nix
+
+    # Service monitoring
+    ../../modules/monitoring/container-health-exporter.nix
     ../../modules/monitoring/homeassistant-nagios-check.nix
     ../../modules/monitoring/nagios-daily-report.nix
-    ../../modules/monitoring/container-health-exporter.nix
-    ../../modules/monitoring/services/windows-exporter.nix
-    ../../modules/monitoring/services/git-workspace-exporter.nix
-    ../../modules/services/service-reliability.nix
-    ../../modules/services/network-services.nix
-    ../../modules/services/ntopng.nix
-    ../../modules/services/home-assistant.nix
-    ../../modules/services/home-assistant-metric-trick.nix
-    ../../modules/services/mosquitto.nix
-    ../../modules/services/node-red.nix
-    ../../modules/services/n8n.nix
-    ../../modules/services/nginx-n8n-webhook.nix
-    ../../modules/services/cloudflare-tunnels.nix
-    ../../modules/services/jupyterlab.nix
-    ../../modules/services/grafana.nix
-    ../../modules/services/loki.nix
-    ../../modules/services/promtail.nix
-    ../../modules/monitoring/services/victoriametrics.nix
-    ../../modules/services/postfix.nix
-    ../../modules/services/dovecot.nix
-    ../../modules/services/dovecot-imapsieve-monitor.nix
-    ../../modules/services/dovecot-archive.nix
-    ../../modules/services/rspamd.nix
-    ../../modules/services/rspamd-alerts.nix
+    ../../modules/monitoring/services
 
     # Email testing script (manual use only)
     # Note: Automated monitoring disabled to avoid over-training rspamd

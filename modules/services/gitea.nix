@@ -150,6 +150,8 @@ in
         MODE = "console,file";
         LEVEL = "Info";
         ROOT_PATH = "/var/lib/gitea/log";
+        # Disable router logging (noisy metrics/HTTP request logs)
+        "logger.router.MODE" = "";
       };
 
       # Enable Gitea Actions

@@ -253,9 +253,12 @@ in
       }
 
       # Fall back to system passwd
+      # Override home to mail location so autoexpunge locks are created there
+      # instead of in the user's system home directory (which may be read-only)
       userdb {
         driver = passwd
         args = blocking=no
+        override_fields = home=/var/mail/%u
       }
 
       # Logging
@@ -309,9 +312,10 @@ in
         fts_tokenizer_generic = algorithm=simple
 
         # Sieve mail filtering configuration
-        # User scripts in home directory (Dovecot best practice)
+        # User scripts stored in system home directory (not Dovecot home which is /var/mail/%u)
+        # We use explicit /home/%u paths because ~ expands to Dovecot home (override for autoexpunge lock)
         # Users can manage scripts via ManageSieve (port 4190)
-        sieve = file:~/sieve;active=~/.dovecot.sieve
+        sieve = file:/home/%u/sieve;active=/home/%u/.dovecot.sieve
         sieve_global_dir = /var/lib/dovecot/sieve/global/
         # Run spam filtering BEFORE personal scripts
         sieve_before = /var/lib/dovecot/sieve/default.sieve
@@ -320,7 +324,7 @@ in
         # during system activation and stored alongside the script sources.
         # This prevents permission errors since users don't need write access.
         # sieve_script_bin_path for user's personal scripts only
-        sieve_script_bin_path = ~/sieve-bin
+        sieve_script_bin_path = /home/%u/sieve-bin
 
         # Sieve extensions
         sieve_extensions = +notify +imapflags +vacation-seconds +editheader +include

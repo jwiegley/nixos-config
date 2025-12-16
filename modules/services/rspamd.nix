@@ -419,8 +419,11 @@ in
     # Use local Redis instance for statistics
     locals = {
       "logging.inc".text = ''
-        # Logging configuration - TEMPORARY: verbose for GPT debugging
-        level = "info";
+        # Logging configuration
+        # Using "notice" to suppress frequent "allow unauthorized connection from trusted IP"
+        # messages that occur every minute from Prometheus scraping /metrics.
+        # These are informational (not warnings) but clutter logs significantly.
+        level = "notice";
 
         # Keep systemd journal logging
         systemd = true;

@@ -106,8 +106,10 @@ in
       };
 
       # Logging configuration
+      # Using "warning" to reduce log volume from frequent CardDAV/CalDAV syncs
+      # macOS AddressBook/Calendar sync every ~30 seconds, generating 3+ log lines each
       logging = {
-        level = "info";
+        level = "warning";
         mask_passwords = true;
       };
 

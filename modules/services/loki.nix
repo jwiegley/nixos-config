@@ -14,7 +14,9 @@
       server = {
         http_listen_port = 3100;
         grpc_listen_port = 9096;
-        log_level = "info";
+        # Using "warn" to reduce log volume from index table management
+        # INFO level logs uploads/cleanups every 15 seconds
+        log_level = "warn";
         grpc_server_max_concurrent_streams = 1000;
         grpc_server_max_recv_msg_size = 33554432; # 32MB (default is 4MB)
         grpc_server_max_send_msg_size = 33554432; # 32MB

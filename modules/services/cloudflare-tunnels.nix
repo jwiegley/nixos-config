@@ -39,11 +39,21 @@
   };
 
   # Ensure tunnels start automatically and stay running
+  # Added resilience for boot timing: delays between restarts and higher burst limit
   systemd.services."cloudflared-tunnel-data" = {
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
+    after = [ "network-online.target" "nss-lookup.target" ];
     wants = [ "network-online.target" ];
+    requires = [ "network-online.target" ];
     description = "CloudFlare Tunnel for data.newartisans.com";
+
+    serviceConfig = {
+      # Wait 10 seconds between restart attempts to allow network to stabilize
+      RestartSec = 10;
+      # Allow up to 10 restarts within a 5-minute window before giving up
+      StartLimitIntervalSec = 300;
+      StartLimitBurst = 10;
+    };
   };
 
   # Helper scripts for tunnel management

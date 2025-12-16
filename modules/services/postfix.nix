@@ -44,6 +44,14 @@
       milter_macro_daemon_name = "ORIGINATING";
     };
 
+    # Virtual alias maps for rewrites that MUST happen before LMTP delivery
+    # These are processed before any transport, unlike extraAliases which only
+    # work with the local transport (not LMTP)
+    virtual = ''
+      gitea@vulcan.lan    johnw@vulcan.lan
+      gitea@localhost     johnw@localhost
+    '';
+
     settings.main = {
       # Message size limits (100 MB)
       message_size_limit = 104857600;  # 100 MB

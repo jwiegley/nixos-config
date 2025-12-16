@@ -8,11 +8,11 @@ groups:
         labels:
           severity: critical
           component: litellm
-          model: hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4
+          model: hera/gpt-oss-120b
         annotations:
-          summary: "LiteLLM model hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4 is unavailable"
+          summary: "LiteLLM model hera/gpt-oss-120b is unavailable"
           description: |
-            LiteLLM model hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4 has been unavailable for {{ $value }} checks.
+            LiteLLM model hera/gpt-oss-120b has been unavailable for {{ $value }} checks.
             This indicates the model is not responding to simple queries.
 
             Check LiteLLM service status: systemctl status litellm
@@ -25,11 +25,11 @@ groups:
         labels:
           severity: warning
           component: litellm
-          model: hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4
+          model: hera/gpt-oss-120b
         annotations:
-          summary: "LiteLLM model hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4 is responding slowly"
+          summary: "LiteLLM model hera/gpt-oss-120b is responding slowly"
           description: |
-            LiteLLM model hera/lmstudio-community/gpt-oss-safeguard-20b-MLX-MXFP4 response time is {{ $value }}s (threshold: 30s).
+            LiteLLM model hera/gpt-oss-120b response time is {{ $value }}s (threshold: 30s).
             This may indicate backend performance issues.
 
       - alert: LiteLLMExporterDown

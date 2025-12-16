@@ -247,9 +247,12 @@ in
       }
 
       # User database from passwd-file first
+      # Override home to mail location so autoexpunge locks are created there
+      # instead of in the user's system home directory (which may be read-only)
       userdb {
         driver = passwd-file
         args = username_format=%n /var/lib/dovecot/users
+        override_fields = home=/var/mail/%u
       }
 
       # Fall back to system passwd

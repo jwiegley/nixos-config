@@ -25,6 +25,7 @@
     hosts = {
       "127.0.0.2" = [];
       "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
+      "192.168.1.4" = [ "Hera.local" ];
     };
 
     # Enable NetworkManager for WiFi and Ethernet management

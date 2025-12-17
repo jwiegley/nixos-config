@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Windows 11 ARM container for running Windows applications
@@ -15,36 +20,37 @@
 
       # Environment variables
       environments = {
-        VERSION = "11";           # Windows 11 Pro
-        CPU_CORES = "4";          # Allocate 4 CPU cores
-        RAM_SIZE = "8G";          # Allocate 8GB RAM
-        DISK_SIZE = "128G";       # 128GB virtual disk
+        VERSION = "11"; # Windows 11 Pro
+        CPU_CORES = "4"; # Allocate 4 CPU cores
+        RAM_SIZE = "8G"; # Allocate 8GB RAM
+        DISK_SIZE = "128G"; # 128GB virtual disk
+        # Note: DHCP=Y removed - macvlan+macvtap doesn't work properly with Podman
+        # Windows uses NAT through the container (passt user-mode networking)
+        USER_PORTS = "3389"; # Forward RDP port to Windows via passt
       };
 
-      # Port mappings - localhost only for security
+      # Port mappings - noVNC and RDP on localhost (nginx proxies externally)
       publishPorts = [
-        "127.0.0.1:8006:8006/tcp"    # Web interface (noVNC)
-        "0.0.0.0:3389:3389/tcp"    # RDP
-        "0.0.0.0:3389:3389/udp"    # RDP (UDP)
+        "127.0.0.1:8006:8006/tcp" # Web interface (noVNC)
+        "127.0.0.1:13389:3389/tcp" # RDP mapped to 13389 (nginx proxies 3389->13389)
       ];
 
       # Volume mounts
       volumes = [
-        "/var/lib/windows:/storage"              # Persistent Windows installation
-        "/var/lib/windows/shared:/shared:z"      # Shared folder for CTA installer
+        "/var/lib/windows:/storage" # Persistent Windows installation
+        "/var/lib/windows/shared:/shared:z" # Shared folder for CTA installer
       ];
 
       # Device passthrough and capabilities via podmanArgs
       podmanArgs = [
-        "--device=/dev/kvm"           # KVM acceleration for virtualization
-        "--device=/dev/net/tun"       # TUN device for networking
-        "--cap-add=NET_ADMIN"         # Network administration capability
-        "--stop-timeout=120"          # Allow 2 minutes for graceful Windows shutdown
+        "--device=/dev/kvm" # KVM acceleration for virtualization
+        "--device=/dev/net/tun" # TUN device for networking
+        "--cap-add=NET_ADMIN" # Network administration capability
+        "--stop-timeout=120" # Allow 2 minutes for graceful Windows shutdown
       ];
 
-      # Use default podman bridge network
-      # (KVM-based containers work best with default networking)
-      networks = [ "podman" ];
+      # Use default podman bridge network (NAT mode)
+      # Note: macvlan removed - doesn't work with nested macvtap for QEMU
     };
 
     # Systemd unit configuration
@@ -56,12 +62,15 @@
 
     # Systemd service configuration
     serviceConfig = {
-      # Restart policy - always restart on failure
-      Restart = "always";
+      # Restart policy - only restart on failure, not when manually stopped
+      Restart = "on-failure";
       RestartSec = "30s";
 
       # Timeout for stopping (allow Windows to shut down gracefully)
       TimeoutStopSec = "180s";
+
+      # Exit code 143 (SIGTERM) is a successful stop for containers
+      SuccessExitStatus = "143";
 
       # Runs as root by default (required for KVM device access)
       # No explicit User/Group needed - quadlet system containers run as root
@@ -101,7 +110,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -152,11 +164,30 @@
     '';
   };
 
-  # Firewall - allow RDP from local network (optional, currently localhost only)
-  networking.firewall.allowedTCPPorts = [ 3389 ];
-  networking.firewall.allowedUDPPorts = [ 3389 ];
+  # Open firewall for podman interface
+  networking.firewall.interfaces.podman0.allowedTCPPorts = [
+    8006
+    13389
+  ];
 
-  # Open firewall for podman interface (web and RDP access)
-  networking.firewall.interfaces.podman0.allowedTCPPorts = [ 8006 3389 ];
-  networking.firewall.interfaces.podman0.allowedUDPPorts = [ 3389 ];
+  # Open firewall for external RDP access
+  networking.firewall.allowedTCPPorts = [ 3389 ];
+
+  # Nginx stream proxy for RDP (TCP passthrough)
+  # This allows external RDP clients to connect via windows.vulcan.lan:3389
+  # External 3389 -> nginx -> 127.0.0.1:13389 (container) -> Windows 3389
+  services.nginx.streamConfig = ''
+    # RDP TCP proxy to Windows container
+    upstream windows_rdp {
+      server 127.0.0.1:13389;
+    }
+
+    server {
+      listen 3389;
+      listen [::]:3389;
+      proxy_pass windows_rdp;
+      proxy_connect_timeout 10s;
+      proxy_timeout 1h;  # Long timeout for RDP sessions
+    }
+  '';
 }

@@ -5,6 +5,8 @@
 # SSH & Remote Access
 22 0.0.0.0 :: SSH
 2222 * :: Gitea SSH
+3389 0.0.0.0 :: Windows 11 RDP (nginx stream proxy)
+13389 127.0.0.1 Windows 11 RDP internal (container port, proxied by nginx)
 
 # DNS Services
 53 0.0.0.0 :: Technitium DNS

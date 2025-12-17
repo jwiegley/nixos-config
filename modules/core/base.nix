@@ -12,6 +12,7 @@
   boot = {
     loader = {
       systemd-boot.enable = true;
+      systemd-boot.configurationLimit = 10;  # Keep only 10 boot entries to save /boot space
       efi.canTouchEfiVariables = false;
     };
 

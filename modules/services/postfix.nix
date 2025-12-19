@@ -52,7 +52,17 @@
       gitea@localhost     johnw@localhost
     '';
 
+    # Sender address rewriting for external mail relay
+    # Fastmail only accepts mail from authorized sender addresses
+    # Rewrite ALL @vulcan.lan addresses to authorized Fastmail sender when relaying
+    mapFiles."sender_canonical_regexp" = pkgs.writeText "sender_canonical_regexp" ''
+      /^.*@vulcan\.lan$/    jwiegley@gmail.com
+    '';
+
     settings.main = {
+      sender_canonical_classes = [ "envelope_sender" "header_sender" ];
+      sender_canonical_maps = "regexp:/var/lib/postfix/conf/sender_canonical_regexp";
+
       # Message size limits (100 MB)
       message_size_limit = 104857600;  # 100 MB
       mailbox_size_limit = 104857600;  # 100 MB (must be >= message_size_limit)

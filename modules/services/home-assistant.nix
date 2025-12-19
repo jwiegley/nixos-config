@@ -365,6 +365,7 @@ in
       "mqtt"  # MQTT broker for HASS.Agent and other IoT devices
 
       # Calendar and scheduling
+      "google" # Google Calendar integration (requires gcal_sync)
       "workday" # Binary sensor for workday/holiday detection
 
       # Yale/August lock integration

@@ -62,27 +62,27 @@ let
           summary: "Many git repositories failed to sync"
           description: "{{ $value }} out of {{ query \"git_workspace_repos_total\" | first | value }} repositories failed to sync. This indicates a serious problem. Check logs with 'journalctl -u git-workspace-archive.service -f' and verify GitHub token with 'ls -la /run/secrets/github-token'"
 
-      # Alert if sync is taking unusually long (>10 minutes)
+      # Alert if sync is taking unusually long (>30 minutes)
       - alert: GitWorkspaceSyncSlow
-        expr: git_workspace_sync_duration_seconds > 600
+        expr: git_workspace_sync_duration_seconds > 1800
         for: 5m
         labels:
           severity: warning
           service: git-workspace-archive
         annotations:
           summary: "Git workspace sync is taking unusually long"
-          description: "The last sync took {{ $value | humanizeDuration }} to complete (over 10 minutes). This may indicate network issues, GitHub API rate limiting, or repository problems. Check logs with 'journalctl -u git-workspace-archive.service'"
+          description: "The last sync took {{ $value | humanizeDuration }} to complete (over 30 minutes). This may indicate network issues, GitHub API rate limiting, or repository problems. Check logs with 'journalctl -u git-workspace-archive.service'"
 
-      # Alert if sync is taking extremely long (>30 minutes)
+      # Alert if sync is taking extremely long (>60 minutes)
       - alert: GitWorkspaceSyncVerySlow
-        expr: git_workspace_sync_duration_seconds > 1800
+        expr: git_workspace_sync_duration_seconds > 3600
         for: 5m
         labels:
           severity: critical
           service: git-workspace-archive
         annotations:
           summary: "Git workspace sync is extremely slow"
-          description: "The last sync took {{ $value | humanizeDuration }} to complete (over 30 minutes). This is abnormally slow and requires investigation. Check for network issues or hanging git processes."
+          description: "The last sync took {{ $value | humanizeDuration }} to complete (over 60 minutes). This is abnormally slow and requires investigation. Check for network issues or hanging git processes."
 
       # Alert if too many repos are stale (>10% haven't updated in 3+ days) - WARNING
       - alert: GitWorkspaceManyStaleRepos

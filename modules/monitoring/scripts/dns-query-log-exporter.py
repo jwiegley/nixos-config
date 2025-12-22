@@ -283,7 +283,9 @@ def process_new_logs():
 
     # Calculate how many new entries we have
     new_entries_count = latest_row - last_row
-    print(f"Found {new_entries_count} new log entries (rows {last_row + 1} to {latest_row})")
+    # Only log when processing a significant number of entries (reduces noise)
+    if new_entries_count >= 100:
+        print(f"Found {new_entries_count} new log entries (rows {last_row + 1} to {latest_row})")
 
     # Fetch new entries in batches
     # Note: API returns newest first, we need to fetch from page 1
@@ -313,15 +315,12 @@ def process_new_logs():
             batch = new_entries[i:i+100]
             loki_data = format_loki_push(batch)
 
-            if push_to_loki(loki_data):
-                print(f"Pushed {len(batch)} entries to Loki")
-            else:
+            if not push_to_loki(loki_data):
                 print(f"Failed to push batch {i//100 + 1}", file=sys.stderr)
                 return  # Don't update state if push failed
 
-        # Update state with latest row
+        # Update state with latest row (silently to reduce log noise)
         save_last_row_number(new_entries[-1]['rowNumber'])
-        print(f"Updated state to row {new_entries[-1]['rowNumber']}")
 
 
 def validate_environment():

@@ -84,8 +84,8 @@ in
         # Log checkpoints (helps identify I/O bottlenecks)
         log_checkpoints = true;
 
-        # Log autovacuum activity
-        log_autovacuum_min_duration = 0;  # Log all autovacuum runs
+        # Log autovacuum activity (only log runs taking longer than 10 seconds)
+        log_autovacuum_min_duration = 10000;  # Log autovacuum runs > 10s to reduce noise
 
         # Include more context in logs
         log_line_prefix = "%m [%p] %q%u@%d ";  # timestamp [pid] app_name user@database

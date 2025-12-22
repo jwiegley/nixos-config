@@ -10,6 +10,15 @@
     };
   };
 
+  # Ensure Jellyfin directories have correct permissions for promtail to read logs
+  # This runs on every boot/rebuild, not just when jellyfin starts
+  systemd.tmpfiles.rules = [
+    # Jellyfin data directory - group traversable for promtail
+    "d /var/lib/jellyfin 0750 johnw jellyfin -"
+    # Jellyfin log directory - group readable for promtail
+    "d /var/lib/jellyfin/log 0750 johnw jellyfin -"
+  ];
+
   # Configure Jellyfin to trust nginx as a known proxy
   systemd.services.jellyfin = {
     # Set umask to allow group-read permissions on new files

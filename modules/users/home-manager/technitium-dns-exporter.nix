@@ -32,7 +32,7 @@
 
         environmentFiles = [ "/run/secrets-technitium-dns-exporter/technitium-dns-exporter-env" ];
 
-        exec = "--log.level=info --log.format=json";
+        exec = "--log.level=warn --log.format=json";
       };
 
       unitConfig = {

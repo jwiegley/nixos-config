@@ -96,7 +96,7 @@
             # Run mbsync with proper error handling
             echo "[$(date)] Starting mbsync synchronization" | tee -a "$LOG_FILE"
 
-            if ${pkgs.isync}/bin/mbsync -c "$CONFIG_FILE" -a -V 2>&1 | tee -a "$LOG_FILE"; then
+            if ${pkgs.isync}/bin/mbsync -c "$CONFIG_FILE" -a 2>&1 | tee -a "$LOG_FILE"; then
               echo "[$(date)] Synchronization completed successfully" | tee -a "$LOG_FILE"
 
               # Update metrics for Prometheus textfile collector

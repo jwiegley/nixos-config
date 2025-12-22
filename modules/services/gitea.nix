@@ -74,8 +74,8 @@ in
     settings = {
       # Server configuration
       server = {
-        DOMAIN = "gitea.vulcan.lan";
-        ROOT_URL = "https://gitea.vulcan.lan/";
+        DOMAIN = "gitea.newartisans.com";
+        ROOT_URL = "https://gitea.newartisans.com/";
         HTTP_ADDR = "127.0.0.1";
         HTTP_PORT = 3005;
         PROTOCOL = "http";
@@ -104,7 +104,7 @@ in
         PROTOCOL = "smtp";
         SMTP_ADDR = "127.0.0.1";
         SMTP_PORT = 25;
-        FROM = "gitea@vulcan.lan";
+        FROM = "gitea@newartisans.com";
         USER = ""; # No auth required for localhost
         PASSWD = ""; # No auth required for localhost
       };

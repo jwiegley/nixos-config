@@ -1,4 +1,4 @@
-{ config, lib, pkgs, inputs, ... }:
+{ system, config, lib, pkgs, inputs, ... }:
 
 {
   home-manager.users.johnw = { config, lib, pkgs, ... }:
@@ -82,7 +82,7 @@
     ];
 
     # Home files
-    home.file = {
+    home.file = let mkLink = config.lib.file.mkOutOfStoreSymlink; in {
       ".ledgerrc".text = ''
         --file ${home}/doc/accounts/main.ledger
         --input-date-format %Y/%m/%d
@@ -98,6 +98,9 @@
         ca_directory = ${ca-bundle_path}
         ca_certificate = ${ca-bundle_crt}
       '';
+
+      # Use the overlay's patched claude-code with 16K page size fix
+      ".local/bin/claude".source = mkLink "${pkgs.claude-code}/bin/claude";
 
       # Factory CLI (droid) expects ripgrep at this location
       ".factory/bin/rg".source = "${pkgs.ripgrep}/bin/rg";

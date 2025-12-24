@@ -16,6 +16,215 @@ let
 
   # Apply check-systemd overlay
   prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
+
+  # wrapBuddy with 16K page size support for Asahi Linux
+  # The upstream wrapBuddy uses hardcoded PAGE_SIZE=4096, but Asahi Linux
+  # uses 16K pages due to Apple Silicon IOMMU requirements.
+  # This causes mprotect() to fail with EINVAL when trying to restore
+  # original entry point bytes at 4K-aligned addresses on a 16K page system.
+  #
+  # The llm-agents wrapBuddy has three components:
+  # 1. wrap-buddy-loader (C binary with PAGE_SIZE)
+  # 2. wrap-buddy (Python script that references the loader)
+  # 3. wrap-buddy-hook (setup hook)
+  #
+  # We rebuild from source with patched PAGE_SIZE.
+  wrapBuddy-16k =
+    let
+      # Get the original wrapBuddy source
+      originalWrapBuddy = inputs.llm-agents.packages.${system}.wrapBuddy;
+
+      # Build patched loader with 16K page size
+      wrap-buddy-loader-16k = prev.stdenv.mkDerivation {
+        pname = "wrap-buddy-loader-16k";
+        version = "0.3.0";
+
+        # Use the same source as the original llm-agents flake
+        src = prev.fetchFromGitHub {
+          owner = "numtide";
+          repo = "llm-agents.nix";
+          rev = "98185694332ee75319f8139fcc751eea9426bde7";
+          hash = "sha256-dMOdwzCdJeJHRVT2udM3cziJAsxMOO0wHjeZ2WWhzk0=";
+        };
+
+        sourceRoot = "source/packages/wrapBuddy";
+
+        nativeBuildInputs = [ prev.binutils ];
+
+        # Patch PAGE_SIZE from 4096 to 16384 for Asahi Linux 16K pages
+        postPatch = ''
+          echo "Patching types.h for 16K page size (Asahi Linux)"
+          substituteInPlace types.h \
+            --replace-fail '#define PAGE_SIZE 4096' '#define PAGE_SIZE 16384'
+        '';
+
+        buildPhase = ''
+          runHook preBuild
+
+          # Compile loader to ELF, then extract flat binary with objcopy
+          arch_flags=""
+          if [[ "$($CC -dumpmachine)" == aarch64* ]]; then
+            arch_flags="-mcmodel=tiny"
+          fi
+          $CC -nostdlib -fPIC -fno-stack-protector \
+            -fno-exceptions -fno-unwind-tables \
+            -fno-asynchronous-unwind-tables -fno-builtin \
+            -Os -I. $arch_flags \
+            -Wl,-T,preamble.ld \
+            -Wl,-e,_start \
+            -Wl,-Ttext=0 \
+            -o loader.elf loader.c
+          objcopy -O binary --only-section=.all loader.elf loader.bin
+
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          mkdir -p $out
+          cp loader.bin $out/loader.bin
+          runHook postInstall
+        '';
+
+        meta = {
+          description = "wrapBuddy loader with 16K page size support for Asahi Linux";
+          license = prev.lib.licenses.mit;
+          platforms = [ "aarch64-linux" ];
+        };
+      };
+
+      # Build the Python script with patched loader path
+      wrap-buddy-script-16k = prev.stdenv.mkDerivation {
+        pname = "wrap-buddy-16k";
+        version = "0.3.0";
+
+        src = prev.fetchFromGitHub {
+          owner = "numtide";
+          repo = "llm-agents.nix";
+          rev = "98185694332ee75319f8139fcc751eea9426bde7";
+          hash = "sha256-dMOdwzCdJeJHRVT2udM3cziJAsxMOO0wHjeZ2WWhzk0=";
+        };
+
+        sourceRoot = "source/packages/wrapBuddy";
+
+        buildInputs = [
+          (prev.python3.withPackages (ps: [ ps.pyelftools ]))
+        ];
+
+        installPhase = ''
+          runHook preInstall
+
+          mkdir -p $out/bin $out/share/wrap-buddy
+
+          # Install the main script with substituted loader path
+          substitute wrap-buddy.py $out/bin/wrap-buddy \
+            --replace-fail "@loader_path@" "${wrap-buddy-loader-16k}/loader.bin"
+          chmod +x $out/bin/wrap-buddy
+
+          # Also patch the hardcoded PAGE_SIZE in the Python script
+          substituteInPlace $out/bin/wrap-buddy \
+            --replace-fail 'PAGE_SIZE = 4096' 'PAGE_SIZE = 16384'
+
+          # Install source files for stub compilation
+          cp arch.h common.h types.h preamble.ld $out/share/wrap-buddy/
+          # Patch types.h in shared files too
+          substituteInPlace $out/share/wrap-buddy/types.h \
+            --replace-fail '#define PAGE_SIZE 4096' '#define PAGE_SIZE 16384'
+          install -Dm644 stub.c $out/share/wrap-buddy/stub.c
+
+          runHook postInstall
+        '';
+
+        meta = {
+          description = "wrapBuddy script with 16K page size support for Asahi Linux";
+          license = prev.lib.licenses.mit;
+          platforms = [ "aarch64-linux" ];
+          mainProgram = "wrap-buddy";
+        };
+      };
+    in
+    # Create the hook that references our patched script
+    prev.runCommand "wrap-buddy-hook-16k" {
+      propagatedBuildInputs = [ wrap-buddy-script-16k ];
+    } ''
+      mkdir -p $out/nix-support
+
+      cat > $out/nix-support/setup-hook << HOOK
+      # shellcheck shell=bash
+
+      declare -a wrapBuddyLibs
+      declare -a extraWrapBuddyLibs
+
+      gatherWrapBuddyLibs() {
+        if [[ -d "\$1/lib" ]]; then
+          wrapBuddyLibs+=("\$1/lib")
+        fi
+      }
+
+      addEnvHooks "\$targetOffset" gatherWrapBuddyLibs
+
+      addWrapBuddySearchPath() {
+        local dir
+        for dir in "\$@"; do
+          if [[ -d \$dir ]]; then
+            extraWrapBuddyLibs+=("\$dir")
+          fi
+        done
+      }
+
+      declare -a wrapBuddyRuntimeDeps
+
+      addWrapBuddyRuntimeDeps() {
+        local dep
+        for dep in "\$@"; do
+          if [[ -d "\$dep/lib" ]]; then
+            wrapBuddyRuntimeDeps+=("\$dep/lib")
+          elif [[ -d \$dep ]]; then
+            wrapBuddyRuntimeDeps+=("\$dep")
+          fi
+        done
+      }
+
+      wrapBuddy() {
+        local norecurse=
+
+        while [ \$# -gt 0 ]; do
+          case "\$1" in
+          --) shift; break ;;
+          --no-recurse) shift; norecurse=1 ;;
+          --*) echo "wrapBuddy: ERROR: Invalid argument: \$1" >&2; return 1 ;;
+          *) break ;;
+          esac
+        done
+
+        echo "wrapBuddy: wrapping paths: \$*"
+
+        if [[ -n \''${runtimeDependencies:-} ]]; then
+          addWrapBuddyRuntimeDeps \$runtimeDependencies
+        fi
+
+        ${wrap-buddy-script-16k}/bin/wrap-buddy \\
+          \''${norecurse:+--no-recurse} \\
+          --paths "\$@" \\
+          --libs "\''${wrapBuddyLibs[@]}" "\''${extraWrapBuddyLibs[@]}" \\
+          \''${wrapBuddyRuntimeDeps:+--runtime-dependencies "\''${wrapBuddyRuntimeDeps[@]}"}
+      }
+
+      wrapBuddyPostFixup() {
+        if [[ -n \''${dontWrapBuddy:-} ]]; then
+          return
+        fi
+
+        wrapBuddy -- \$(for output in \$(getAllOutputNames); do
+          [ -e "\''${!output}" ] || continue
+          [ "\''${output}" = debug ] && continue
+          echo "\''${!output}"
+        done)
+      }
+
+      postFixupHooks+=(wrapBuddyPostFixup)
+      HOOK
+    '';
 in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
@@ -119,25 +328,50 @@ in
     };
   });
 
-  # Claude Code - Fix bundled ripgrep for 16K page size (Apple Silicon / Asahi Linux)
-  # The bundled ripgrep is compiled with jemalloc for 4K pages, which crashes on Asahi
-  # Replace with system ripgrep that's properly compiled for this platform
-  claude-code = inputs.llm-agents.packages.${system}.claude-code.overrideAttrs (oldAttrs: { #
-    preFixup = (oldAttrs.preFixup or "") + ''
-      # Replace bundled arm64-linux ripgrep with system ripgrep
-      # This fixes crashes caused by jemalloc 4K/16K page size incompatibility
-      rg_path="$out/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-linux/rg"
-      if [ -f "$rg_path" ]; then
-        echo "Replacing bundled ripgrep with system ripgrep (16K page size compatible)"
-        chmod +w "$(dirname "$rg_path")"
-        rm -f "$rg_path"
-        ln -s ${final.ripgrep}/bin/rg "$rg_path"
-      fi
-    '';
-  });
+  # Claude Code - Fix for 16K page size (Apple Silicon / Asahi Linux)
+  #
+  # Two fixes are needed:
+  # 1. Replace bundled ripgrep (compiled with jemalloc for 4K pages)
+  # 2. Use patched wrapBuddy with 16K page size support
+  #
+  # The wrapBuddy loader uses hardcoded PAGE_SIZE=4096, causing mprotect() to fail
+  # with EINVAL when restoring original entry bytes at 4K-aligned addresses on 16K pages.
+  claude-code =
+    let
+      upstreamWrapBuddy = inputs.llm-agents.packages.${system}.wrapBuddy;
+    in
+    inputs.llm-agents.packages.${system}.claude-code.overrideAttrs (oldAttrs: {
+      # Replace wrapBuddy with our 16K page size patched version in nativeBuildInputs
+      nativeBuildInputs = map (dep:
+        if dep == upstreamWrapBuddy then wrapBuddy-16k else dep
+      ) (oldAttrs.nativeBuildInputs or []);
+
+      preFixup = (oldAttrs.preFixup or "") + ''
+        # Replace bundled arm64-linux ripgrep with system ripgrep
+        # This fixes crashes caused by jemalloc 4K/16K page size incompatibility
+        rg_path="$out/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-linux/rg"
+        if [ -f "$rg_path" ]; then
+          echo "Replacing bundled ripgrep with system ripgrep (16K page size compatible)"
+          chmod +w "$(dirname "$rg_path")"
+          rm -f "$rg_path"
+          ln -s ${final.ripgrep}/bin/rg "$rg_path"
+        fi
+      '';
+    });
   claude-code-acp = inputs.llm-agents.packages.${system}.claude-code-acp;
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
-  droid = inputs.llm-agents.packages.${system}.droid;
+
+  # Droid (Factory AI) - Fix for 16K page size (Apple Silicon / Asahi Linux)
+  # Same wrapBuddy fix as claude-code above
+  droid =
+    let
+      upstreamWrapBuddy = inputs.llm-agents.packages.${system}.wrapBuddy;
+    in
+    inputs.llm-agents.packages.${system}.droid.overrideAttrs (oldAttrs: {
+      nativeBuildInputs = map (dep:
+        if dep == upstreamWrapBuddy then wrapBuddy-16k else dep
+      ) (oldAttrs.nativeBuildInputs or []);
+    });
 
   # Rspamd - Update to 3.13.2 to fix lua_magic empty text part errors
   # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts

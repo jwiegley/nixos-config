@@ -274,8 +274,12 @@ in
         gnused
         findutils
       ];
-      after = [ "sops-nix.service" ];
+      after = [
+        "sops-nix.service"
+        "var-lib-git\\x2dworkspace\\x2darchive.mount"
+      ];
       wants = [ "sops-nix.service" ];
+      requires = [ "var-lib-git\\x2dworkspace\\x2darchive.mount" ];
       serviceConfig = {
         Type = "oneshot";
         User = "johnw";

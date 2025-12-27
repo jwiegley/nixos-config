@@ -77,7 +77,7 @@
       set -euo pipefail
 
       SNAPSHOT_DIR="/var/lib/prometheus2/disaster-recovery"
-      TSDB_DIR="/var/lib/prometheus2"
+      TSDB_DIR="/var/lib/prometheus2/data"
       RETENTION_DAYS=7
 
       # Create snapshot via admin API

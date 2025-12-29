@@ -38,6 +38,20 @@ in
 
       # Copyparty: Portable file server with media features
       copyparty = pyfinal.callPackage copypartyDef { };
+
+      # Google Nest SDM - Update to 9.1.2 to fix datetime comparison errors
+      # Version 9.1.0 has a bug comparing offset-naive and offset-aware datetimes
+      # Fixed in PR #1225 (9.1.1) and PR #1227 (9.1.2) - "Ensure all trait timestamp
+      # comparisons are done with timezones"
+      google-nest-sdm = pyprev.google-nest-sdm.overridePythonAttrs (oldAttrs: rec {
+        version = "9.1.2";
+        src = prev.fetchFromGitHub {
+          owner = "allenporter";
+          repo = "python-google-nest-sdm";
+          rev = version;
+          hash = "sha256-yElmh+ajNVbjhsnNsUtQ3mJw9fvJtXqgS58iow+Nwi8=";
+        };
+      });
     })
   ];
 

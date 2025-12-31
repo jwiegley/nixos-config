@@ -4,6 +4,8 @@ let
   hacsFrontendDef = import ./hacs-frontend.nix;
   miniRacerDef = import ./mini-racer.nix;
   copypartyDef = import ./copyparty.nix;
+  vobjectDef = import ./vobject.nix;
+  radicaleVcard4Def = import ./radicale-vcard4.nix;
 
   # Import Haskell overlay to fix broken packages
   haskellOverlay = import ./haskell-sizes.nix;
@@ -38,6 +40,10 @@ in
 
       # Copyparty: Portable file server with media features
       copyparty = pyfinal.callPackage copypartyDef { };
+
+      # vobject: Override with jwiegley's fork for vCard 4.0 support
+      # https://github.com/jwiegley/vobject
+      vobject = pyfinal.callPackage vobjectDef { };
 
       # Google Nest SDM - Update to 9.1.2 to fix datetime comparison errors
       # Version 9.1.0 has a bug comparing offset-naive and offset-aware datetimes
@@ -137,6 +143,11 @@ in
   claude-code-acp = inputs.llm-agents.packages.${system}.claude-code-acp;
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;
+
+  # Radicale - Override with jwiegley's fork for vCard 4.0 support
+  # https://github.com/jwiegley/Radicale
+  # Uses the vobject overlay defined in pythonPackagesExtensions above
+  radicale = final.callPackage radicaleVcard4Def { };
 
   # Rspamd - Update to 3.13.2 to fix lua_magic empty text part errors
   # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts

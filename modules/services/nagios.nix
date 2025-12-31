@@ -426,6 +426,9 @@ let
     { name = "ntopng.service"; display = "ntopng Network Monitor"; }
     { name = "copyparty.service"; display = "Copyparty File Server"; }
     { name = "gitea.service"; display = "Gitea Git Server"; }
+    { name = "immich-server.service"; display = "Immich Photo Server"; }
+    { name = "immich-machine-learning.service"; display = "Immich Machine Learning"; }
+    { name = "redis-immich.service"; display = "Redis (Immich)"; }
     { name = "n8n.service"; display = "n8n Workflow Automation"; }
     { name = "redis-gitea.service"; display = "Redis (Gitea)"; }
     { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
@@ -1259,6 +1262,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: hass.vulcan.lan
       check_command           check_ssl_cert!hass.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: immich.vulcan.lan
+      check_command           check_ssl_cert!immich.vulcan.lan
       service_groups          ssl-certificates
     }
 

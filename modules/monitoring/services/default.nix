@@ -22,6 +22,7 @@
 
     # Application-specific exporters
     ./home-assistant-backup-exporter.nix
+    ./immich-exporter.nix
     ./litellm-exporter.nix
     ./node-red-exporter.nix
     ./n8n-exporter.nix

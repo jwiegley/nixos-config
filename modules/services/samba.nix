@@ -32,6 +32,7 @@ let
     { name = "tank/Movies";                   mountpoint = "/tank/Movies"; }
     { name = "tank/Music";                    mountpoint = "/tank/Music"; }
     { name = "tank/Photos";                   mountpoint = "/tank/Photos"; }
+    { name = "tank/Photos/Immich";            mountpoint = "/tank/Photos/Immich"; }
     { name = "tank/Pictures";                 mountpoint = "/tank/Pictures"; }
     { name = "tank/Public";                   mountpoint = "/tank/Public"; }
     { name = "tank/Public/download";          mountpoint = "/tank/Public/download"; }

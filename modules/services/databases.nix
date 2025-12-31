@@ -128,6 +128,8 @@ in
 
         # Unix socket connections - require password for non-postgres users
         local   all       postgres                peer
+        # Immich uses peer auth (NixOS native module)
+        local   immich    immich                  peer
         local   all       all                     scram-sha-256
 
         # Localhost connections - require password

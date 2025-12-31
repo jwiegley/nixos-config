@@ -1,0 +1,139 @@
+groups:
+  - name: immich
+    interval: 30s
+    rules:
+      # Immich API service availability
+      - alert: ImmichAPIDown
+        expr: up{job="immich-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: immich
+        annotations:
+          summary: "Immich API service is down"
+          description: "Immich API has been unavailable for more than 2 minutes on {{ $labels.instance }}"
+
+      # Immich Microservices availability
+      - alert: ImmichMicroservicesDown
+        expr: up{job="immich-microservices"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: immich
+        annotations:
+          summary: "Immich Microservices are down"
+          description: "Immich Microservices have been unavailable for more than 2 minutes on {{ $labels.instance }}"
+
+      # High HTTP error rate
+      - alert: ImmichHighHTTPErrorRate
+        expr: |
+          rate(http_request_duration_seconds_count{job=~"immich.*",code=~"5.."}[5m]) /
+          rate(http_request_duration_seconds_count{job=~"immich.*"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich has high HTTP error rate"
+          description: "Immich HTTP 5xx error rate is above 5% on {{ $labels.instance }}"
+
+      # Slow HTTP response times
+      - alert: ImmichSlowResponse
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job=~"immich.*"}[5m])
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich has slow HTTP response times"
+          description: "95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+
+      # High memory usage (API)
+      - alert: ImmichAPIHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="immich-api"} > 2147483648
+        for: 10m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich API memory usage is high"
+          description: "Immich API is using {{ $value | humanize1024 }}B of memory on {{ $labels.instance }}"
+
+      # High memory usage (Microservices)
+      - alert: ImmichMicroservicesHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="immich-microservices"} > 4294967296
+        for: 10m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich Microservices memory usage is high"
+          description: "Immich Microservices is using {{ $value | humanize1024 }}B of memory on {{ $labels.instance }}"
+
+      # Job queue backing up
+      - alert: ImmichJobQueueBacklog
+        expr: |
+          immich_jobs_pending > 1000
+        for: 30m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich job queue has large backlog"
+          description: "Immich has {{ $value }} pending jobs on {{ $labels.instance }}"
+
+      # Failed jobs accumulating
+      - alert: ImmichJobFailures
+        expr: |
+          increase(immich_jobs_failed_total[1h]) > 100
+        for: 15m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich has high job failure rate"
+          description: "Immich has {{ $value }} failed jobs in the last hour on {{ $labels.instance }}"
+
+      # Machine learning service issues
+      - alert: ImmichMLServiceSlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(immich_ml_request_duration_seconds_bucket[5m])
+          ) > 30
+        for: 15m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich ML service is slow"
+          description: "Immich ML 95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+
+      # Database connection issues
+      - alert: ImmichDatabaseConnectionIssues
+        expr: |
+          immich_database_connection_errors_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: immich
+        annotations:
+          summary: "Immich has database connection errors"
+          description: "Immich has {{ $value }} database connection errors on {{ $labels.instance }}"
+
+      # Storage space warning
+      - alert: ImmichStorageSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/tank/Photos/Immich"} /
+           node_filesystem_size_bytes{mountpoint="/tank/Photos/Immich"}) * 100 < 10
+        for: 30m
+        labels:
+          severity: warning
+          service: immich
+        annotations:
+          summary: "Immich storage space is running low"
+          description: "Immich storage has less than 10% free space available"

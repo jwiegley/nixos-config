@@ -189,6 +189,10 @@ with lib;
                           url = "https://wallabag.vulcan.lan";
                         }
                         {
+                          title = "Immich";
+                          url = "https://immich.vulcan.lan";
+                        }
+                        {
                           title = "Jellyfin";
                           url = "https://jellyfin.vulcan.lan";
                         }

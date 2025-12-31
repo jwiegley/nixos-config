@@ -50,6 +50,7 @@
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
+2283 127.0.0.1 Immich photo management
 3000 127.0.0.1 Grafana
 3002 127.0.0.1 OpenSpeedTest container
 3004 127.0.0.1 (Unknown)
@@ -119,6 +120,8 @@
 9275 127.0.0.1 (Unknown)
 9280 127.0.0.1 Mbsync Prometheus Exporter
 9281 127.0.0.1 ATD Web Status Interface
+9283 127.0.0.1 Immich API Metrics
+9284 127.0.0.1 Immich Microservices Metrics
 9374 127.0.0.1 (Unknown)
 
 # Container Services

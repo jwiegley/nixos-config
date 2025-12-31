@@ -144,6 +144,12 @@ in
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;
 
+  # Immich - Update to 2.4.1 for Canon CR3 thumbnail fix (PR #24587)
+  # Version 2.3.1 incorrectly detects CR3 files as having 1-second duration,
+  # causing them to be treated as animated GIFs and displaying "Error loading image"
+  # https://github.com/immich-app/immich/issues/24559
+  immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
+
   # Radicale - Override with jwiegley's fork for vCard 4.0 support
   # https://github.com/jwiegley/Radicale
   # Uses the vobject overlay defined in pythonPackagesExtensions above

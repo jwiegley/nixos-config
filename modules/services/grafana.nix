@@ -264,6 +264,14 @@
         cp /etc/nixos/modules/monitoring/grafana-dashboards/atd-dashboard.json "$DASHBOARD_DIR/atd-dashboard.json"
       fi
 
+      # Immich Photo Management Dashboard (ID: 22555 from Grafana.com)
+      if [ ! -f "$DASHBOARD_DIR/immich.json" ]; then
+        echo "Downloading Immich dashboard..."
+        ${pkgs.curl}/bin/curl -sSL \
+          "https://grafana.com/api/dashboards/22555/revisions/latest/download" \
+          -o "$DASHBOARD_DIR/immich.json" || true
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

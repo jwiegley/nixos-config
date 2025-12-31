@@ -65,6 +65,7 @@
     ../../modules/services/grafana.nix
     ../../modules/services/home-assistant-metric-trick.nix
     ../../modules/services/home-assistant.nix
+    ../../modules/services/immich.nix
     ../../modules/services/jupyterlab.nix
     ../../modules/services/local-backup.nix
     ../../modules/services/loki.nix

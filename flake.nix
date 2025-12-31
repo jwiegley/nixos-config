@@ -50,6 +50,11 @@
     org-jw = {
       url = "github:jwiegley/org-jw";
     };
+
+    # Newer nixpkgs for Immich 2.4.1 (CR3 thumbnail fix in PR #24587)
+    nixpkgs-immich = {
+      url = "github:NixOS/nixpkgs/nixos-unstable";
+    };
   };
 
   outputs = inputs: let system = "aarch64-linux"; in {

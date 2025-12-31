@@ -33,7 +33,8 @@ let
       # Set permissions on backup file
       ${pkgs.coreutils}/bin/chown postgres:postgres "${backupFile}"
       ${pkgs.coreutils}/bin/chmod 640 "${backupFile}"
-      ${pkgs.xz}/bin/xz "${backupFile}"
+      # Use parallel compression (-T0) with fast preset (-0) for speed over size
+      ${pkgs.xz}/bin/xz -T0 -0 "${backupFile}"
 
       # Log backup size
       size=$(${pkgs.coreutils}/bin/du -h "${backupFile}.xz" | ${pkgs.coreutils}/bin/cut -f1)

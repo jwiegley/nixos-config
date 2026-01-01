@@ -118,6 +118,7 @@
     ../../modules/monitoring/services/atd-exporter.nix
     ../../modules/monitoring/services/atd-alerts.nix
     ../../modules/monitoring/services/atd-nagios.nix
+    ../../modules/services/zimit.nix
 
     # Containers
     ../../modules/containers/default.nix

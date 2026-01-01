@@ -60,6 +60,8 @@
 4000 127.0.0.1 LiteLLM
 5050 127.0.0.1 pgAdmin
 5055 127.0.0.1 (Unknown - possibly Overseerr or similar)
+5060 127.0.0.1 Zimit Web UI (archive job management)
+5061 127.0.0.1 Kiwix-serve (ZIM file browser)
 5232 127.0.0.1 ::1 Radicale CalDAV/CardDAV
 5678 * :: n8n main web interface
 5677 * :: n8n worker health check

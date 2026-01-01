@@ -170,6 +170,14 @@ with lib;
                           title = "Windows 11";
                           url = "https://windows.vulcan.lan";
                         }
+                        {
+                          title = "Zimit";
+                          url = "https://zimit.vulcan.lan";
+                        }
+                        {
+                          title = "Kiwix";
+                          url = "https://kiwix.vulcan.lan";
+                        }
                       ];
                     }
                     {

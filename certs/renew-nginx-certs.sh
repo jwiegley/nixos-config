@@ -42,6 +42,8 @@ DOMAINS=(
     "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"
+    "zimit.vulcan.lan"
+    "kiwix.vulcan.lan"
 )
 
 # Check if the general renewal script exists

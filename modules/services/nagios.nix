@@ -435,6 +435,8 @@ let
     { name = "redis-n8n.service"; display = "Redis (n8n)"; }
     { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
     { name = "changedetection.service"; display = "ChangeDetection"; }
+    { name = "zimit-web-ui.service"; display = "Zimit Web UI"; }
+    { name = "kiwix-serve.service"; display = "Kiwix ZIM Server"; }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)
@@ -461,6 +463,7 @@ let
     { name = "logrotate.timer"; display = "Log Rotation"; }
     { name = "fstrim.timer"; display = "Filesystem Trim"; }
     { name = "podman-prune.timer"; display = "Podman Cleanup"; }
+    { name = "zimit-job-runner.timer"; display = "Zimit Job Runner"; }
   ];
 
   # Timers whose services depend on /tank mount
@@ -1446,6 +1449,22 @@ let
       host_name               vulcan
       service_description     SSL Cert: windows.vulcan.lan
       check_command           check_ssl_cert!windows.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: zimit.vulcan.lan
+      check_command           check_ssl_cert!zimit.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: kiwix.vulcan.lan
+      check_command           check_ssl_cert!kiwix.vulcan.lan
       service_groups          ssl-certificates
     }
 

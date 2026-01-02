@@ -39,6 +39,12 @@ in
       secretPath = config.sops.secrets."mailarchiver-db-password".path;
       dependentService = "podman-mailarchiver.service";
     })
+    (mkPostgresUserSetup {
+      user = "openproject";
+      database = "openproject";
+      secretPath = config.sops.secrets."openproject-db-password".path;
+      dependentService = "podman-openproject.service";
+    })
   ];
 
   services = {
@@ -99,6 +105,7 @@ in
         "nocobase"
         "gitea"
         "mailarchiver"
+        "openproject"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -119,6 +126,10 @@ in
         }
         {
           name = "mailarchiver";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "openproject";
           ensureDBOwnership = true;
         }
       ];

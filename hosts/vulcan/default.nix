@@ -39,6 +39,7 @@
     ../../modules/users/home-manager/changedetection.nix
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/nocobase.nix
+    ../../modules/users/home-manager/openproject.nix
     ../../modules/users/home-manager/teable.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/sillytavern.nix
@@ -122,6 +123,7 @@
 
     # Containers
     ../../modules/containers/default.nix
+    ../../modules/containers/openproject-quadlet.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix
 

@@ -277,6 +277,10 @@ with lib;
                       color = "150 60 55";
                       links = [
                         {
+                          title = "OpenProject";
+                          url = "https://openproject.vulcan.lan";
+                        }
+                        {
                           title = "Teable";
                           url = "https://teable.vulcan.lan";
                         }

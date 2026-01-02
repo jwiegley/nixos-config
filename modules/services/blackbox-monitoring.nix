@@ -488,6 +488,7 @@ in
             "https://budget.vulcan.lan"
             "https://changes.vulcan.lan"
             "https://aria.vulcan.lan"
+            "https://openproject.vulcan.lan"
           ];
         }];
         relabel_configs = [

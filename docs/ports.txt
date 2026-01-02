@@ -47,6 +47,7 @@
 6380 127.0.0.1 Redis - ntopng
 6381 127.0.0.1 Redis - rspamd
 6382 127.0.0.1 Redis - n8n
+6383 127.0.0.1 Redis - OpenProject
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
@@ -69,6 +70,7 @@
 6253 127.0.0.1 (Unknown)
 6800 127.0.0.1 ::1 (Unknown)
 8080 127.0.0.1 (Unknown - possibly backend service)
+8180 127.0.0.1 OpenProject web interface
 8081 0.0.0.0 :: ntopng
 8082 127.0.0.1 (Unknown)
 8083 127.0.0.1 Silly Tavern container
@@ -125,6 +127,7 @@
 9283 127.0.0.1 Immich API Metrics
 9284 127.0.0.1 Immich Microservices Metrics
 9374 127.0.0.1 (Unknown)
+9394 127.0.0.1 OpenProject Prometheus metrics
 
 # Container Services
 3001 container Teable

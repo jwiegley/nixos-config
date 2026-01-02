@@ -190,6 +190,31 @@ HOME_CONTENT = """
             <p class="help-text">Name for the ZIM file (without extension). Use lowercase and hyphens.</p>
         </div>
         <div class="form-group">
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" required placeholder="Example Site Documentation">
+            <p class="help-text">Display title shown in Kiwix library. Make it descriptive!</p>
+        </div>
+        <div class="form-group">
+            <label for="description">Description (optional)</label>
+            <input type="text" id="description" name="description" placeholder="Official documentation for Example" maxlength="30">
+            <p class="help-text">Short description (max 30 chars) shown in Kiwix library.</p>
+        </div>
+        <div class="form-group">
+            <label for="favicon">Favicon URL (optional)</label>
+            <input type="url" id="favicon" name="favicon" placeholder="https://example.com/favicon.ico">
+            <p class="help-text">URL to favicon/icon for Kiwix library thumbnail. If not set, auto-detected from site.</p>
+        </div>
+        <div class="form-group">
+            <label for="scope_type">Scope Type</label>
+            <select id="scope_type" name="scope_type">
+                <option value="host" selected>Host (recommended) - All pages on same domain</option>
+                <option value="prefix">Prefix - Only URLs starting with seed URL</option>
+                <option value="domain">Domain - Include subdomains</option>
+                <option value="page">Page - Single page only</option>
+            </select>
+            <p class="help-text">How broadly to crawl from the seed URL.</p>
+        </div>
+        <div class="form-group">
             <label for="workers">Workers</label>
             <input type="number" id="workers" name="workers" value="2" min="1" max="8">
             <p class="help-text">Number of parallel crawl workers (1-8). More workers = faster but more resource intensive.</p>
@@ -322,18 +347,26 @@ def home():
 def submit_job():
     url = request.form.get("url", "").strip()
     name = request.form.get("name", "").strip().lower().replace(" ", "-")
+    title = request.form.get("title", "").strip()
+    description = request.form.get("description", "").strip()[:30]  # Max 30 chars
+    favicon = request.form.get("favicon", "").strip()
+    scope_type = request.form.get("scope_type", "host").strip()
     workers = int(request.form.get("workers", 2))
     page_limit = request.form.get("page_limit", "").strip()
     scope_regex = request.form.get("scope_regex", "").strip()
 
-    if not url or not name:
-        flash("URL and name are required", "error")
+    if not url or not name or not title:
+        flash("URL, name, and title are required", "error")
         return redirect(url_for("home"))
 
     job_id = str(uuid.uuid4())[:8]
     job_data = {
         "url": url,
         "name": name,
+        "title": title,
+        "description": description if description else None,
+        "favicon": favicon if favicon else None,
+        "scope_type": scope_type,
         "workers": workers,
         "page_limit": int(page_limit) if page_limit else None,
         "scope_regex": scope_regex if scope_regex else None,
@@ -446,6 +479,9 @@ RUNNER
     text = ''
       set -euo pipefail
 
+      # Ensure newuidmap/newgidmap are found (required for rootless podman)
+      export PATH="/run/wrappers/bin:$PATH"
+
       JOB_QUEUE_DIR="${jobQueueDir}"
       ZIM_DIR="${zimDir}"
       WORK_DIR="${workDir}"
@@ -474,9 +510,13 @@ RUNNER
         # Extract job parameters
         url=$(jq -r '.url' "$job_file")
         name=$(jq -r '.name' "$job_file")
+        title=$(jq -r '.title // empty' "$job_file")
+        description=$(jq -r '.description // empty' "$job_file")
+        favicon=$(jq -r '.favicon // empty' "$job_file")
         workers=$(jq -r '.workers // 2' "$job_file")
         page_limit=$(jq -r '.page_limit // empty' "$job_file")
         scope_regex=$(jq -r '.scope_regex // empty' "$job_file")
+        scope_type=$(jq -r '.scope_type // "host"' "$job_file")
 
         # Build Zimit command arguments
         zimit_args=(
@@ -486,12 +526,35 @@ RUNNER
           "--output" "/output"
         )
 
+        # Title is required for proper Kiwix display
+        if [ -n "$title" ] && [ "$title" != "null" ]; then
+          zimit_args+=("--title" "$title")
+        else
+          # Fallback to name if no title provided
+          zimit_args+=("--title" "$name")
+        fi
+
+        # Description (max 30 chars) for Kiwix library
+        if [ -n "$description" ] && [ "$description" != "null" ]; then
+          zimit_args+=("--description" "$description")
+        fi
+
+        # Favicon URL for Kiwix library thumbnail
+        if [ -n "$favicon" ] && [ "$favicon" != "null" ]; then
+          zimit_args+=("--favicon" "$favicon")
+        fi
+
         if [ -n "$page_limit" ] && [ "$page_limit" != "null" ]; then
-          zimit_args+=("--limit" "$page_limit")
+          zimit_args+=("--pageLimit" "$page_limit")
         fi
 
         if [ -n "$scope_regex" ] && [ "$scope_regex" != "null" ]; then
           zimit_args+=("--scopeExcludeRx" "$scope_regex")
+        fi
+
+        # Scope type: page, page-spa, prefix, host, domain, any
+        if [ -n "$scope_type" ] && [ "$scope_type" != "null" ]; then
+          zimit_args+=("--scopeType" "$scope_type")
         fi
 
         log "Running Zimit for $url with args: ''${zimit_args[*]}"
@@ -500,11 +563,11 @@ RUNNER
         job_work_dir="$WORK_DIR/$job_id"
         mkdir -p "$job_work_dir"
 
-        # Run Zimit container
+        # Run Zimit container (using locally-built ARM64 image)
         if podman run --rm \
           -v "$job_work_dir:/output" \
           --shm-size=1gb \
-          ghcr.io/openzim/zimit \
+          localhost/zimit:arm64 \
           zimit "''${zimit_args[@]}" 2>&1 | tee "$job_work_dir/zimit.log"; then
 
           log "Zimit completed successfully for $name"
@@ -534,7 +597,7 @@ RUNNER
 
 in
 {
-  # Create zimit system user
+  # Create zimit system user with subuid/subgid for rootless podman
   users.users.zimit = {
     isSystemUser = true;
     group = "zimit";
@@ -543,6 +606,9 @@ in
     shell = pkgs.bash;
     description = "Zimit web archive service user";
     extraGroups = [ "podman" ];
+    subUidRanges = [{ startUid = 100000; count = 65536; }];
+    subGidRanges = [{ startGid = 100000; count = 65536; }];
+    linger = true;  # Enable lingering for rootless podman
   };
 
   users.groups.zimit = {};
@@ -592,7 +658,10 @@ in
       JOB_QUEUE_DIR = jobQueueDir;
       ZIM_DIR = zimDir;
       WORK_DIR = workDir;
+      # Required for rootless podman
+      XDG_RUNTIME_DIR = "/run/user/929";  # zimit user ID
     };
+
 
     serviceConfig = {
       Type = "oneshot";
@@ -600,10 +669,10 @@ in
       Group = "zimit";
       ExecStart = lib.getExe zimitJobRunner;
       TimeoutStartSec = "4h";  # Allow up to 4 hours for large sites
+      ReadWritePaths = [ jobQueueDir zimDir workDir ];
 
-      # Security hardening
+      # Note: NoNewPrivileges disabled - required for podman user namespace mapping
       PrivateTmp = true;
-      NoNewPrivileges = true;
     };
   };
 
@@ -633,11 +702,10 @@ in
         exit 0
       fi
 
+      # Note: Don't use --library flag when passing ZIM files directly
       exec ${pkgs.kiwix-tools}/bin/kiwix-serve \
         --port ${toString kiwixPort} \
-        --library \
-        --monitorLibrary \
-        --nodatealias \
+        --nodatealiases \
         "''${zim_files[@]}"
     '';
   in {

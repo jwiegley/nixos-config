@@ -138,6 +138,18 @@
         extraGroups = [ "podman" ];
         description = "Container user for Mail Archiver service";
       };
+
+      openproject = {
+        isSystemUser = true;
+        group = "openproject";
+        home = "/var/lib/containers/openproject";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for OpenProject project management";
+      };
     };
 
     # Create corresponding groups for each container user
@@ -152,6 +164,7 @@
       openspeedtest = {};
       changedetection = {};
       mailarchiver = {};
+      openproject = {};
       podman = {};
     };
   };
@@ -162,6 +175,7 @@
     "litellm"
     "mailarchiver"
     "nocobase"
+    "openproject"
     "wallabag"
     "teable"
     "sillytavern"
@@ -202,5 +216,7 @@
     "L+ /run/secrets-technitium-dns-exporter/technitium-dns-exporter - - - - /run/secrets/technitium-dns-exporter"
     "d /run/secrets-openspeedtest 0750 openspeedtest openspeedtest - -"
     "L+ /run/secrets-openspeedtest/openspeedtest - - - - /run/secrets/openspeedtest"
+    "d /run/secrets-openproject 0750 openproject openproject - -"
+    "L+ /run/secrets-openproject/openproject - - - - /run/secrets/openproject"
   ];
 }

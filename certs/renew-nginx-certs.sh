@@ -31,6 +31,7 @@ DOMAINS=(
     "nagios.vulcan.lan"
     "nodered.vulcan.lan"
     "ntopng.vulcan.lan"
+    "openproject.vulcan.lan"
     "postgres.vulcan.lan"
     "prometheus.vulcan.lan"
     "promtail.vulcan.lan"

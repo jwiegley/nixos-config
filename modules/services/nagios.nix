@@ -499,6 +499,7 @@ let
     { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
     { name = "mailarchiver"; display = "Mail Archiver"; runAs = "mailarchiver"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
+    { name = "openproject"; display = "OpenProject Project Management"; runAs = "openproject"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }

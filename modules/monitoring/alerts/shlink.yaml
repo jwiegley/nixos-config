@@ -1,0 +1,144 @@
+groups:
+  - name: shlink
+    interval: 30s
+    rules:
+      # Shlink container down
+      - alert: ShlinkContainerDown
+        expr: |
+          time() - container_last_seen{container_name="shlink"} > 60
+        for: 3m
+        labels:
+          severity: critical
+          component: shlink
+        annotations:
+          summary: "Shlink container is down"
+          description: |
+            Shlink container has been down for {{ $value }} minutes.
+            URL shortening service is unavailable.
+
+            Check service status: systemctl --user -M shlink@ status podman-shlink.service
+            Check container: podman --remote ps -a | grep shlink
+            View logs: journalctl --user-unit podman-shlink -M shlink@ -f
+            Check podman logs: podman --remote logs shlink
+
+      - alert: ShlinkHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://shlink.vulcan.lan/rest/health"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: shlink
+        annotations:
+          summary: "Shlink HTTPS probe failed"
+          description: |
+            Shlink web interface at https://shlink.vulcan.lan is not responding.
+            URL shortening service is inaccessible.
+
+            Check nginx status: systemctl status nginx
+            Check SSL certificate: curl -vI https://shlink.vulcan.lan
+            Check container: sudo -u shlink podman ps | grep shlink
+            Test local endpoint: curl -I http://127.0.0.1:8580
+            View container logs: sudo -u shlink podman logs shlink --tail 50
+
+      - alert: ShlinkSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://shlink.vulcan.lan/rest/health"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: shlink
+        annotations:
+          summary: "Shlink is responding slowly"
+          description: |
+            Shlink response time is {{ $value }}s (threshold: 10s).
+            Web interface may be slow due to database operations or resource constraints.
+
+            Check database connectivity: pg_isready -h 127.0.0.1 -p 5432 -d shlink -U shlink
+            Check Redis: redis-cli -p 6385 ping
+            Check container resources: sudo -u shlink podman stats shlink --no-stream
+
+      - alert: ShlinkContainerRestarts
+        expr: |
+          increase(container_restart_count{container_name="shlink"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: shlink
+        annotations:
+          summary: "Shlink container is restarting frequently"
+          description: |
+            Shlink container has restarted {{ $value }} times in the last 15 minutes.
+            This indicates instability or crashes.
+
+            View service logs: journalctl --user-unit podman-shlink -M shlink@ --since "15 minutes ago"
+            Check container logs: sudo -u shlink podman logs shlink --tail 100
+            Check for OOM: dmesg | grep -i "shlink\|oom"
+            Check database connectivity: pg_isready -h 127.0.0.1 -p 5432 -d shlink -U shlink
+
+      - alert: ShlinkDatabaseConnectionFailed
+        expr: |
+          systemd_unit_state{name="podman-shlink.service",state="active"} == 1 and probe_success{job="blackbox_https_local",instance="https://shlink.vulcan.lan/rest/health"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: shlink
+        annotations:
+          summary: "Shlink cannot connect to PostgreSQL database"
+          description: |
+            Shlink container is running but web interface is down.
+            This likely indicates database connectivity issues.
+
+            Check PostgreSQL: systemctl status postgresql
+            Test database connection: psql -h 127.0.0.1 -U shlink -d shlink -c "SELECT 1"
+            Check Redis: redis-cli -p 6385 ping
+            View container logs: sudo -u shlink podman logs shlink --tail 50
+
+      - alert: ShlinkRedisDown
+        expr: |
+          redis_up{instance=~".*:6385"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: shlink
+        annotations:
+          summary: "Shlink Redis is down"
+          description: |
+            Redis server for Shlink (port 6385) is unreachable.
+            URL shortening may experience degraded performance.
+
+            Check Redis service: systemctl status redis-shlink
+            Test Redis connection: redis-cli -p 6385 ping
+            View logs: journalctl -u redis-shlink -f
+
+      - alert: ShlinkSSLCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https_local",instance="https://shlink.vulcan.lan/rest/health"} - time() < 604800
+        for: 1h
+        labels:
+          severity: warning
+          component: shlink
+        annotations:
+          summary: "Shlink SSL certificate expiring soon"
+          description: |
+            SSL certificate for shlink.vulcan.lan expires in {{ $value | humanizeDuration }}.
+            Certificate renewal required.
+
+            Renew certificate: sudo /etc/nixos/certs/renew-certificate.sh "shlink.vulcan.lan" -o "/var/lib/nginx-certs" --owner "nginx:nginx"
+            Check current cert: openssl s_client -connect shlink.vulcan.lan:443 -servername shlink.vulcan.lan < /dev/null 2>/dev/null | openssl x509 -noout -dates
+
+      # Cloudflare tunnel monitoring (Shlink uses the shared data tunnel)
+      # Note: The data tunnel is monitored separately in copyparty.yaml or a dedicated alert file
+      # This alert checks that external access to Shlink via the data tunnel is working
+      - alert: ShlinkExternalAccessDown
+        expr: |
+          systemd_unit_state{name="cloudflared-tunnel-data.service",state="active"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: shlink
+        annotations:
+          summary: "Cloudflare tunnel (data) is down - Shlink external access unavailable"
+          description: |
+            Cloudflare data tunnel is not running.
+            External access to Shlink at s.newartisans.com is unavailable.
+
+            Check tunnel status: systemctl status cloudflared-tunnel-data
+            View logs: journalctl -u cloudflared-tunnel-data -f
+            Restart tunnel: sudo systemctl restart cloudflared-tunnel-data

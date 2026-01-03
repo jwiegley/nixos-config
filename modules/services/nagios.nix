@@ -501,6 +501,7 @@ let
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
     { name = "openproject"; display = "OpenProject Project Management"; runAs = "openproject"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
+    { name = "shlink"; display = "Shlink URL Shortener"; runAs = "shlink"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }

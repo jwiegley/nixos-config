@@ -12,6 +12,7 @@
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
+    ./shlink-quadlet.nix
     ./silly-tavern-quadlet.nix
     ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix

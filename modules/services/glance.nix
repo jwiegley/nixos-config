@@ -178,6 +178,10 @@ with lib;
                           title = "Kiwix";
                           url = "https://kiwix.vulcan.lan";
                         }
+                        {
+                          title = "Shlink";
+                          url = "https://shlink.vulcan.lan";
+                        }
                       ];
                     }
                     {

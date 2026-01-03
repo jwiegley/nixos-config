@@ -45,6 +45,12 @@ in
       secretPath = config.sops.secrets."openproject-db-password".path;
       dependentService = "podman-openproject.service";
     })
+    (mkPostgresUserSetup {
+      user = "shlink";
+      database = "shlink";
+      secretPath = config.sops.secrets."shlink-db-password".path;
+      dependentService = "podman-shlink.service";
+    })
   ];
 
   services = {
@@ -106,6 +112,7 @@ in
         "gitea"
         "mailarchiver"
         "openproject"
+        "shlink"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -130,6 +137,10 @@ in
         }
         {
           name = "openproject";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "shlink";
           ensureDBOwnership = true;
         }
       ];

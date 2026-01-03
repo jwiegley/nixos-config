@@ -1,7 +1,9 @@
 # Always-running CloudFlare Tunnels for external service access
 #
 # Provides persistent CloudFlare Tunnel connections for:
-# - data.newartisans.com → localhost:18080
+# - data.newartisans.com → localhost:18080 (Copyparty)
+# - gitea.newartisans.com → localhost:3005 (Gitea)
+# - s.newartisans.com → localhost:8580 (Shlink)
 
 { config, pkgs, lib, ... }:
 
@@ -26,13 +28,15 @@
   services.cloudflared = {
     enable = true;
     tunnels = {
-      # Data tunnel: data.newartisans.com → localhost:18080
+      # Data tunnel: serves multiple external domains
       "data" = {
         credentialsFile = config.sops.secrets."cloudflared/data".path;
         default = "http_status:404";
 
         ingress = {
           "data.newartisans.com" = "http://localhost:18080";
+          "gitea.newartisans.com" = "http://localhost:3005";
+          "s.newartisans.com" = "http://localhost:8580";
         };
       };
     };
@@ -65,7 +69,7 @@
       echo "Data Tunnel (data.newartisans.com → localhost:18080):"
       systemctl status cloudflared-tunnel-data --no-pager | head -3
       echo ""
-      echo "Use 'cloudflare-tunnel-logs <data>' for detailed logs"
+      echo "Use 'cloudflare-tunnel-logs data' for detailed logs"
     '')
 
     (pkgs.writeScriptBin "cloudflare-tunnel-logs" ''
@@ -81,14 +85,10 @@
 
     (pkgs.writeScriptBin "cloudflare-tunnel-restart" ''
       #!${pkgs.bash}/bin/bash
-      if [ "$1" = "data" ]; then
+      if [ "$1" = "data" ] || [ "$1" = "all" ]; then
         echo "Restarting Data tunnel..."
         sudo systemctl restart cloudflared-tunnel-data
         echo "✓ Data tunnel restarted"
-      elif [ "$1" = "all" ]; then
-        echo "Restarting all tunnels..."
-        sudo systemctl restart cloudflared-tunnel-data
-        echo "✓ All tunnels restarted"
       else
         echo "Usage: cloudflare-tunnel-restart <data|all>"
         exit 1

@@ -150,6 +150,18 @@
         extraGroups = [ "podman" ];
         description = "Container user for OpenProject project management";
       };
+
+      shlink = {
+        isSystemUser = true;
+        group = "shlink";
+        home = "/var/lib/containers/shlink";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Shlink URL shortener";
+      };
     };
 
     # Create corresponding groups for each container user
@@ -165,6 +177,7 @@
       changedetection = {};
       mailarchiver = {};
       openproject = {};
+      shlink = {};
       podman = {};
     };
   };
@@ -176,6 +189,7 @@
     "mailarchiver"
     "nocobase"
     "openproject"
+    "shlink"
     "wallabag"
     "teable"
     "sillytavern"
@@ -218,5 +232,7 @@
     "L+ /run/secrets-openspeedtest/openspeedtest - - - - /run/secrets/openspeedtest"
     "d /run/secrets-openproject 0750 openproject openproject - -"
     "L+ /run/secrets-openproject/openproject - - - - /run/secrets/openproject"
+    "d /run/secrets-shlink 0750 shlink shlink - -"
+    "L+ /run/secrets-shlink/shlink - - - - /run/secrets/shlink"
   ];
 }

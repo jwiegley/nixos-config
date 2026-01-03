@@ -48,6 +48,7 @@
 6381 127.0.0.1 Redis - rspamd
 6382 127.0.0.1 Redis - n8n
 6383 127.0.0.1 Redis - OpenProject
+6385 127.0.0.1 Redis - Shlink
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
@@ -75,6 +76,7 @@
 8082 127.0.0.1 (Unknown)
 8083 127.0.0.1 Silly Tavern container
 8085 127.0.0.1 LiteLLM proxy
+8580 127.0.0.1 Shlink URL shortener
 8089 127.0.0.1 (Unknown)
 8096 0.0.0.0 (Unknown - possibly Jellyfin or similar)
 8123 127.0.0.1 Home Assistant

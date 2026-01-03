@@ -40,6 +40,7 @@
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/nocobase.nix
     ../../modules/users/home-manager/openproject.nix
+    ../../modules/users/home-manager/shlink.nix
     ../../modules/users/home-manager/teable.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/sillytavern.nix

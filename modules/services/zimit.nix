@@ -595,6 +595,140 @@ RUNNER
     '';
   };
 
+  # Progress monitor script - updates job status from running containers
+  zimitProgressMonitor = pkgs.writeShellApplication {
+    name = "zimit-progress-monitor";
+    runtimeInputs = with pkgs; [ jq coreutils podman gnugrep gawk ];
+    text = ''
+      set -euo pipefail
+
+      # Ensure newuidmap/newgidmap are found (required for rootless podman)
+      export PATH="/run/wrappers/bin:$PATH"
+
+      JOB_QUEUE_DIR="${jobQueueDir}"
+      WORK_DIR="${workDir}"
+      JOBS_DIR="$JOB_QUEUE_DIR/jobs"
+      PROGRESS_FILE="$JOB_QUEUE_DIR/progress.json"
+
+      log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+      }
+
+      log "Starting progress monitor"
+
+      # Initialize progress file
+      echo '{"updated": "'"$(date -Iseconds)"'", "jobs": []}' > "$PROGRESS_FILE.tmp"
+
+      # Check for running zimit containers
+      running_containers=$(podman ps --format '{{.Names}} {{.ID}}' 2>/dev/null | grep -v "^$" || true)
+
+      if [ -z "$running_containers" ]; then
+        log "No running containers found"
+        # Check for orphaned "running" jobs and collect their info from log files
+        for job_file in "$JOBS_DIR"/*.json; do
+          [ -f "$job_file" ] || continue
+          status=$(jq -r '.status' "$job_file")
+          [ "$status" = "running" ] || continue
+
+          job_id=$(basename "$job_file" .json)
+          job_name=$(jq -r '.name' "$job_file")
+          log_file="$WORK_DIR/$job_id/zimit.log"
+
+          if [ -f "$log_file" ]; then
+            # Get last progress from log file
+            last_progress=$(grep -o '"crawled":[0-9]*,"total":[0-9]*' "$log_file" 2>/dev/null | tail -1 || echo "")
+            if [ -n "$last_progress" ]; then
+              crawled=$(echo "$last_progress" | grep -o '"crawled":[0-9]*' | grep -o '[0-9]*')
+              total=$(echo "$last_progress" | grep -o '"total":[0-9]*' | grep -o '[0-9]*')
+              percent=$(awk "BEGIN {if ($total > 0) printf \"%.1f\", ($crawled/$total)*100; else print \"0\"}")
+              log "Job $job_name: $crawled/$total pages ($percent%) - FROM LOG FILE (no container running)"
+
+              # Update job file with progress info
+              jq --arg crawled "$crawled" --arg total "$total" --arg percent "$percent" \
+                '.progress = {crawled: ($crawled|tonumber), total: ($total|tonumber), percent: ($percent|tonumber), updated: (now | strftime("%Y-%m-%dT%H:%M:%S")), source: "log_file", warning: "No container running - job may be orphaned"}' \
+                "$job_file" > "$job_file.tmp" && mv "$job_file.tmp" "$job_file"
+            fi
+          fi
+        done
+        mv "$PROGRESS_FILE.tmp" "$PROGRESS_FILE"
+        log "Progress monitor completed"
+        exit 0
+      fi
+
+      log "Found running containers: $running_containers"
+
+      # Process each running container
+      echo "$running_containers" | while read -r container_name container_id; do
+        log "Checking container: $container_name ($container_id)"
+
+        # Get the command to find which job this is
+        container_cmd=$(podman inspect "$container_id" --format '{{.Config.Cmd}}' 2>/dev/null || echo "")
+
+        # Extract job name from zimit command
+        job_name=$(echo "$container_cmd" | grep -oP '(?<=--name )[^ \]]+' | head -1 || echo "unknown")
+
+        if [ "$job_name" = "unknown" ]; then
+          log "Could not determine job name for container $container_name"
+          continue
+        fi
+
+        log "Container is running job: $job_name"
+
+        # Find the job file by name
+        job_file=""
+        job_id=""
+        for f in "$JOBS_DIR"/*.json; do
+          [ -f "$f" ] || continue
+          if [ "$(jq -r '.name' "$f")" = "$job_name" ] && [ "$(jq -r '.status' "$f")" = "running" ]; then
+            job_file="$f"
+            job_id=$(basename "$f" .json)
+            break
+          fi
+        done
+
+        if [ -z "$job_file" ]; then
+          log "No matching job file found for $job_name"
+          continue
+        fi
+
+        log "Found job file: $job_file (id: $job_id)"
+
+        # Get progress from work directory log file (primary source)
+        log_file="$WORK_DIR/$job_id/zimit.log"
+        last_progress=""
+
+        if [ -f "$log_file" ]; then
+          last_progress=$(grep -o '"crawled":[0-9]*,"total":[0-9]*' "$log_file" 2>/dev/null | tail -1 || echo "")
+          log "Reading progress from log file: $log_file"
+        fi
+
+        # Fallback to container logs if log file has no progress
+        if [ -z "$last_progress" ]; then
+          last_progress=$(podman logs --tail 1000 "$container_id" 2>&1 | grep -o '"crawled":[0-9]*,"total":[0-9]*' | tail -1 || echo "")
+          [ -n "$last_progress" ] && log "Got progress from container logs"
+        fi
+
+        if [ -n "$last_progress" ]; then
+          crawled=$(echo "$last_progress" | grep -o '"crawled":[0-9]*' | grep -o '[0-9]*')
+          total=$(echo "$last_progress" | grep -o '"total":[0-9]*' | grep -o '[0-9]*')
+          percent=$(awk "BEGIN {if ($total > 0) printf \"%.1f\", ($crawled/$total)*100; else print \"0\"}")
+
+          log "Job $job_name: $crawled/$total pages ($percent%)"
+
+          # Update job file with progress info
+          jq --arg crawled "$crawled" --arg total "$total" --arg percent "$percent" --arg container "$container_name" \
+            '.progress = {crawled: ($crawled|tonumber), total: ($total|tonumber), percent: ($percent|tonumber), updated: (now | strftime("%Y-%m-%dT%H:%M:%S")), container: $container, source: "log_file"}' \
+            "$job_file" > "$job_file.tmp" && mv "$job_file.tmp" "$job_file"
+        else
+          log "No progress info found for $job_name"
+        fi
+      done
+
+      mv "$PROGRESS_FILE.tmp" "$PROGRESS_FILE"
+      log "Progress monitor completed"
+    '';
+  };
+
 in
 {
   # Create zimit system user with subuid/subgid for rootless podman
@@ -668,7 +802,7 @@ in
       User = "zimit";
       Group = "zimit";
       ExecStart = lib.getExe zimitJobRunner;
-      TimeoutStartSec = "4h";  # Allow up to 4 hours for large sites
+      TimeoutStartSec = "30d";  # Allow up to 30 days for very large sites
       ReadWritePaths = [ jobQueueDir zimDir workDir ];
 
       # Note: NoNewPrivileges disabled - required for podman user namespace mapping
@@ -682,6 +816,41 @@ in
 
     timerConfig = {
       OnCalendar = "*:0/5";  # Every 5 minutes
+      Persistent = true;
+      RandomizedDelaySec = "30s";
+    };
+  };
+
+  # Progress monitor service - updates job progress from running containers
+  systemd.services.zimit-progress-monitor = {
+    description = "Monitor Zimit job progress from running containers";
+    after = [ "network.target" "podman.socket" ];
+
+    path = with pkgs; [ podman jq coreutils gnugrep gawk ];
+
+    environment = {
+      JOB_QUEUE_DIR = jobQueueDir;
+      WORK_DIR = workDir;
+      XDG_RUNTIME_DIR = "/run/user/929";  # zimit user ID
+    };
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "zimit";
+      Group = "zimit";
+      ExecStart = lib.getExe zimitProgressMonitor;
+      TimeoutStartSec = "5m";
+      ReadWritePaths = [ jobQueueDir workDir ];
+      PrivateTmp = true;
+    };
+  };
+
+  systemd.timers.zimit-progress-monitor = {
+    description = "Timer for Zimit progress monitor";
+    wantedBy = [ "timers.target" ];
+
+    timerConfig = {
+      OnCalendar = "*:0/15";  # Every 15 minutes
       Persistent = true;
       RandomizedDelaySec = "30s";
     };

@@ -1,46 +1,13 @@
+# Container Users Home Manager Configuration
+#
+# This file is intentionally empty - all container users now have their own
+# dedicated Home Manager modules in this directory (e.g., litellm.nix, shlink.nix).
+#
+# The system user definitions are in /etc/nixos/modules/users/container-users-dedicated.nix
+
 { config, lib, pkgs, ... }:
 
-let
-  # Helper function to create home-manager config for container users
-  mkContainerUserHome = username: {
-    home-manager.users.${username} = { config, lib, pkgs, ... }: {
-      # Home Manager state version
-      home.stateVersion = "24.11";
-
-      # Basic home settings
-      home.username = username;
-      home.homeDirectory = "/var/lib/containers/${username}";
-
-      # Minimal environment for container operation
-      home.sessionVariables = {
-        PODMAN_USERNS = "keep-id";
-      };
-
-      # Ensure home directory structure exists
-      home.file.".keep".text = "";
-
-      # Basic packages available in container user environment
-      home.packages = with pkgs; [
-        podman
-        coreutils
-      ];
-    };
-  };
-
-  # List of all dedicated container users
-  containerUsers = [
-    "changedetection"
-    "litellm"
-    "nocobase"
-    "wallabag"
-    "teable"
-    "sillytavern"
-    "opnsense-exporter"
-    "technitium-dns-exporter"
-    "openspeedtest"
-  ];
-in
 {
-  # Generate home-manager configurations for all container users
-  imports = map mkContainerUserHome containerUsers;
+  # All container users have individual Home Manager modules
+  # See: litellm.nix, shlink.nix, changedetection.nix, etc.
 }

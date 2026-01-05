@@ -3,7 +3,7 @@ groups:
     interval: 60s
     rules:
       - alert: BudgetBoardServerDown
-        expr: systemd_unit_state{name="budget-board-server-container.service",state="active"} == 0
+        expr: systemd_unit_state{name="budget-board-server.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical
@@ -14,13 +14,13 @@ groups:
             BudgetBoard server container has been down for {{ $value }} minutes.
             Budget tracking backend service is unavailable.
 
-            Check service status: systemctl status budget-board-server-container.service
+            Check service status: systemctl status budget-board-server.service
             Check container: podman ps -a | grep budget-board-server
-            View logs: journalctl -u budget-board-server-container -f
+            View logs: journalctl -u budget-board-server -f
             Check podman logs: podman logs budget-board-server
 
       - alert: BudgetBoardClientDown
-        expr: systemd_unit_state{name="budget-board-client-container.service",state="active"} == 0
+        expr: systemd_unit_state{name="budget-board-client.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical
@@ -31,7 +31,7 @@ groups:
             BudgetBoard client container has been down for {{ $value }} minutes.
             Budget tracking web interface is unavailable.
 
-            Check service status: systemctl status budget-board-client-container.service
+            Check service status: systemctl status budget-board-client.service
             Check container: podman ps -a | grep budget-board-client
             View logs: journalctl -u budget-board-client -f
             Check podman logs: podman logs budget-board-client
@@ -72,7 +72,7 @@ groups:
             Check database connection: podman exec budget-board-server pg_isready -h 192.168.1.2
 
       - alert: BudgetBoardContainerRestarts
-        expr: rate(systemd_unit_state{name=~"budget-board-(server|client)-container.service",state="failed"}[15m]) > 0
+        expr: rate(systemd_unit_state{name=~"budget-board-(server|client).service",state="failed"}[15m]) > 0
         for: 5m
         labels:
           severity: warning
@@ -83,8 +83,8 @@ groups:
             BudgetBoard containers have restarted {{ $value }} times in the last 15 minutes.
             This indicates instability.
 
-            View server logs: journalctl -u budget-board-server-container --since "15 minutes ago"
-            View client logs: journalctl -u budget-board-client-container --since "15 minutes ago"
+            View server logs: journalctl -u budget-board-server --since "15 minutes ago"
+            View client logs: journalctl -u budget-board-client --since "15 minutes ago"
             Check server logs: podman logs budget-board-server --tail 100
             Check client logs: podman logs budget-board-client --tail 100
             Check for OOM: dmesg | grep -i "budget-board\|oom"
@@ -108,7 +108,7 @@ groups:
             View pod logs: journalctl -u budget-board-pod.service -f
 
       - alert: BudgetBoardDatabaseConnectionFailed
-        expr: systemd_unit_state{name="budget-board-server-container.service",state="active"} == 1 and probe_success{job="blackbox_https_local",instance="https://budget.vulcan.lan"} == 0
+        expr: systemd_unit_state{name="budget-board-server.service",state="active"} == 1 and probe_success{job="blackbox_https_local",instance="https://budget.vulcan.lan"} == 0
         for: 3m
         labels:
           severity: critical

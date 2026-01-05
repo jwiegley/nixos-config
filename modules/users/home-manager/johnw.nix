@@ -548,7 +548,7 @@
 
       # AI tools
       claude-code
-      claude-code-acp
+      # claude-code-acp
       ccusage
       droid
       vips                      # needed by fetch mcp server

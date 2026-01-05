@@ -115,6 +115,11 @@ in
 
         # Enable automatic database schema updates
         "AUTO_UPDATE_DB" = "true";
+
+        # Automatic SimpleFIN sync configuration
+        # DISABLE_AUTO_SYNC defaults to false (enabled)
+        # SYNC_INTERVAL_HOURS: sync every 24 hours (daily)
+        "SYNC_INTERVAL_HOURS" = "24";
       };
 
       # Password loaded from generated environment file

@@ -108,6 +108,13 @@
       ${pkgs.iproute2}/bin/ip route add 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return 2>/dev/null || \
         ${pkgs.iproute2}/bin/ip route replace 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return
 
+      # Add route for container network (10.88.0.0/16) via podman0
+      # This is critical: rule 51 routes traffic from 192.168.1.2 to 10.0.0.0/8 through this table
+      # Without this, DNS responses being de-NAT'd to container IPs would be routed to the gateway
+      # instead of to podman0, causing container DNS to fail
+      ${pkgs.iproute2}/bin/ip route add 10.88.0.0/16 dev podman0 table end0_return 2>/dev/null || \
+        ${pkgs.iproute2}/bin/ip route replace 10.88.0.0/16 dev podman0 table end0_return
+
       # Then add default route via gateway for cross-subnet traffic (e.g., to 192.168.3.x)
       ${pkgs.iproute2}/bin/ip route add default via $GATEWAY table end0_return 2>/dev/null || \
         ${pkgs.iproute2}/bin/ip route replace default via $GATEWAY table end0_return
@@ -136,6 +143,7 @@
       ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip route del 10.88.0.0/16 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del 192.168.1.0/24 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del default table end0_return 2>/dev/null || true
     '';

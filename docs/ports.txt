@@ -76,7 +76,8 @@
 8082 127.0.0.1 (Unknown)
 8083 127.0.0.1 Silly Tavern container
 8085 127.0.0.1 LiteLLM proxy
-8580 127.0.0.1 Shlink URL shortener
+8580 127.0.0.1 Shlink API (URL shortener backend)
+8581 127.0.0.1 Shlink Web Client (management UI)
 8089 127.0.0.1 (Unknown)
 8096 0.0.0.0 (Unknown - possibly Jellyfin or similar)
 8123 127.0.0.1 Home Assistant

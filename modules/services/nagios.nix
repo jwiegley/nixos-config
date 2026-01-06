@@ -501,7 +501,8 @@ let
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
     { name = "openproject"; display = "OpenProject Project Management"; runAs = "openproject"; }
     { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
-    { name = "shlink"; display = "Shlink URL Shortener"; runAs = "shlink"; }
+    { name = "shlink"; display = "Shlink URL Shortener API"; runAs = "shlink"; }
+    { name = "shlink-web-client"; display = "Shlink Web Client"; runAs = "shlink-web-client"; }
     { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
@@ -1467,6 +1468,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: kiwix.vulcan.lan
       check_command           check_ssl_cert!kiwix.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: shlink-api.vulcan.lan
+      check_command           check_ssl_cert!shlink-api.vulcan.lan
       service_groups          ssl-certificates
     }
 

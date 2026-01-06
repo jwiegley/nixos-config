@@ -1,11 +1,15 @@
 # Shlink URL Shortener - System Configuration
 #
-# Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/shlink.nix)
-# This file: Redis service, Nginx virtual host (Cloudflare tunnel), SOPS secrets, firewall rules
+# Quadlet containers: Managed by Home Manager
+#   - Shlink API: /etc/nixos/modules/users/home-manager/shlink.nix
+#   - Shlink Web Client: /etc/nixos/modules/users/home-manager/shlink-web-client.nix
+#
+# This file: Redis service, Nginx virtual hosts, SOPS secrets, firewall rules
 #
 # Access:
-#   - External: https://s.newartisans.com (via Cloudflare Tunnel)
-#   - Internal: https://shlink.vulcan.lan
+#   - Web Client (UI): https://shlink.vulcan.lan
+#   - API (internal): https://shlink-api.vulcan.lan
+#   - API (external): https://s.newartisans.com (via Cloudflare Tunnel)
 #
 # Database: PostgreSQL (shlink database, shlink user) - configured in databases.nix
 # Cache: Redis on port 6385
@@ -100,13 +104,22 @@
       mode = "0400";
     };
 
-    # Shlink secrets (API key, etc.) - deployed to container user's secrets dir
+    # Shlink API secrets (database password in env format) - deployed to container user's secrets dir
     "shlink-secrets" = {
       sopsFile = config.sops.defaultSopsFile;
       mode = "0400";
       owner = "shlink";
       path = "/run/secrets-shlink/shlink-secrets";
       restartUnits = [ "podman-shlink.service" ];
+    };
+
+    # Shlink Web Client secrets (API URL and key) - deployed to web client container user's secrets dir
+    "shlink-web-client" = {
+      sopsFile = config.sops.defaultSopsFile;
+      mode = "0400";
+      owner = "shlink-web-client";
+      path = "/run/secrets-shlink-web-client/shlink-web-client";
+      restartUnits = [ "podman-shlink-web-client.service" ];
     };
   };
 
@@ -128,14 +141,34 @@
   };
 
   # ============================================================================
-  # Nginx Virtual Host
+  # Nginx Virtual Hosts
   # ============================================================================
 
-  # Internal access via vulcan.lan domain (with step-ca certificate)
+  # Shlink Web Client - the management UI
+  # This is the main user-facing interface for managing short URLs
   services.nginx.virtualHosts."shlink.vulcan.lan" = {
     forceSSL = true;
     sslCertificate = "/var/lib/nginx-certs/shlink.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/shlink.vulcan.lan.key";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:8581/";
+      proxyWebsockets = true;
+      extraConfig = ''
+        proxy_buffering off;
+        client_max_body_size 10M;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_connect_timeout 30s;
+      '';
+    };
+  };
+
+  # Shlink API - internal access for the web client and other integrations
+  # Note: Shlink handles CORS internally (Access-Control-Allow-Origin: *), no need for nginx CORS config
+  services.nginx.virtualHosts."shlink-api.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/shlink-api.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/shlink-api.vulcan.lan.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:8580/";
       proxyWebsockets = true;
@@ -154,11 +187,11 @@
   # ============================================================================
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    8580  # shlink web interface
+    8580  # shlink API
+    8581  # shlink web client
     6385  # redis[shlink]
   ];
 
-  # Note: User secrets directory (/run/secrets-shlink) is created by
-  # modules/users/container-users-dedicated.nix along with the symlink
-  # to /run/secrets/shlink
+  # Note: User secrets directories (/run/secrets-shlink, /run/secrets-shlink-web-client) are created by
+  # modules/users/container-users-dedicated.nix along with the symlinks to /run/secrets/
 }

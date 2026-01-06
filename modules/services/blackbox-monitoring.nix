@@ -489,7 +489,8 @@ in
             "https://changes.vulcan.lan"
             "https://aria.vulcan.lan"
             "https://openproject.vulcan.lan"
-            "https://shlink.vulcan.lan/rest/health"
+            "https://shlink.vulcan.lan"
+            "https://shlink-api.vulcan.lan/rest/health"
           ];
         }];
         relabel_configs = [

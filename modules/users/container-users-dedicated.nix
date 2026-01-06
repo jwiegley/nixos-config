@@ -162,6 +162,18 @@
         extraGroups = [ "podman" ];
         description = "Container user for Shlink URL shortener";
       };
+
+      shlink-web-client = {
+        isSystemUser = true;
+        group = "shlink-web-client";
+        home = "/var/lib/containers/shlink-web-client";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Shlink Web Client";
+      };
     };
 
     # Create corresponding groups for each container user
@@ -178,6 +190,7 @@
       mailarchiver = {};
       openproject = {};
       shlink = {};
+      shlink-web-client = {};
       podman = {};
     };
   };
@@ -190,6 +203,7 @@
     "nocobase"
     "openproject"
     "shlink"
+    "shlink-web-client"
     "wallabag"
     "teable"
     "sillytavern"
@@ -234,5 +248,7 @@
     "L+ /run/secrets-openproject/openproject - - - - /run/secrets/openproject"
     "d /run/secrets-shlink 0750 shlink shlink - -"
     "L+ /run/secrets-shlink/shlink - - - - /run/secrets/shlink"
+    "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"
+    "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
   ];
 }

@@ -1,0 +1,92 @@
+groups:
+  - name: letta_alerts
+    interval: 60s
+    rules:
+      - alert: LettaContainerDown
+        expr: |
+          absent(container_last_seen{name="letta"}) or
+          (time() - container_last_seen{name="letta"}) > 300
+        for: 5m
+        labels:
+          severity: critical
+          category: ai-services
+          service: letta
+        annotations:
+          summary: "Letta container is down"
+          description: |
+            The Letta AI memory service container has been down for more than 5 minutes.
+
+            Check container status: sudo -u letta podman ps -a
+            Check container logs: sudo -u letta podman logs letta
+            Check systemd service: systemctl --user -M letta@ status podman-letta
+
+      - alert: LettaServiceFailed
+        expr: |
+          systemd_unit_state{
+            name=~"podman-letta.*",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: ai-services
+          service: letta
+        annotations:
+          summary: "Letta systemd service has failed"
+          description: |
+            The Letta systemd service is in failed state.
+
+            Check service status: systemctl --user -M letta@ status podman-letta
+            View service logs: journalctl --user -M letta@ -u podman-letta -f
+
+      - alert: LettaDatabaseConnectionFailed
+        expr: |
+          pg_stat_activity_count{datname="letta"} == 0 and
+          up{job="postgresql"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          category: ai-services
+          service: letta
+        annotations:
+          summary: "No active connections to Letta database"
+          description: |
+            There are no active PostgreSQL connections to the letta database.
+            This may indicate the Letta service is not running or unable to connect.
+
+            Check Letta container: sudo -u letta podman logs letta
+            Check PostgreSQL: sudo -u postgres psql -c "SELECT * FROM pg_stat_activity WHERE datname='letta'"
+
+      - alert: LettaHighMemoryUsage
+        expr: |
+          container_memory_usage_bytes{name="letta"} /
+          container_spec_memory_limit_bytes{name="letta"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          category: ai-services
+          service: letta
+        annotations:
+          summary: "Letta container memory usage is high"
+          description: |
+            Letta container is using more than 90% of its memory limit.
+            Current usage: {{ $value | humanizePercentage }}
+
+            Consider increasing memory limits or investigating memory leaks.
+
+      - alert: LettaAPIUnreachable
+        expr: probe_success{job="blackbox", instance=~".*letta.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: ai-services
+          service: letta
+        annotations:
+          summary: "Letta API is unreachable"
+          description: |
+            The Letta API endpoint is not responding to HTTP probes.
+
+            Check nginx proxy: systemctl status nginx
+            Check Letta container: sudo -u letta podman logs letta
+            Test endpoint: curl -s https://letta.vulcan.lan/v1/health

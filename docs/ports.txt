@@ -48,11 +48,13 @@
 6381 127.0.0.1 Redis - rspamd
 6382 127.0.0.1 Redis - n8n
 6383 127.0.0.1 Redis - OpenProject
+6384 0.0.0.0 Redis - Letta
 6385 127.0.0.1 Redis - Shlink
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
 2283 127.0.0.1 Immich photo management
+8283 127.0.0.1 Letta AI memory service
 3000 127.0.0.1 Grafana
 3002 127.0.0.1 OpenSpeedTest container
 3004 127.0.0.1 (Unknown)

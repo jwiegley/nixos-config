@@ -30,6 +30,7 @@
     };
   }) [
     "changedetection"
+    "letta"
     "litellm"
     "nocobase"
     "wallabag"

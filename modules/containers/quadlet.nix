@@ -5,6 +5,7 @@
   imports = [
     ./budgetboard-quadlet.nix
     ./changedetection-quadlet.nix
+    ./letta-quadlet.nix
     ./litellm-quadlet.nix
     ./mailarchiver-quadlet.nix
     ./nocobase-quadlet.nix

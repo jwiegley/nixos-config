@@ -496,6 +496,7 @@ let
   # root containers (no runAs) run in the root namespace via system services
   # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
   containers = [
+    { name = "letta"; display = "Letta AI Memory Service"; runAs = "letta"; }
     { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
     { name = "mailarchiver"; display = "Mail Archiver"; runAs = "mailarchiver"; }
     { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
@@ -793,8 +794,13 @@ let
 
           # For oneshot services: inactive+dead with Result=success and ConditionResult=yes is OK
           # For running services: active+running is OK
+          # For services currently executing: activating state is OK (backup in progress)
           if [ "$ACTIVE_STATE" = "active" ] && [ "$RESULT" = "success" ]; then
             echo "OK: $SERVICE is active (mount $MOUNTPOINT available)"
+            exit 0
+          elif [ "$ACTIVE_STATE" = "activating" ]; then
+            # Service is currently starting/running - this is expected for backup jobs
+            echo "OK: $SERVICE is currently running (mount $MOUNTPOINT available)"
             exit 0
           elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ] && [ "$RESULT" = "success" ] && [ "$CONDITION_RESULT" = "yes" ]; then
             echo "OK: $SERVICE completed successfully (mount $MOUNTPOINT available)"
@@ -1479,6 +1485,14 @@ let
       service_groups          ssl-certificates
     }
 
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: letta.vulcan.lan
+      check_command           check_ssl_cert!letta.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
     ###############################################################################
     # SERVICES - LOCAL BACKUPS
     ###############################################################################
@@ -2083,6 +2097,15 @@ in
     {
       users = [ "nagios" ];
       runAs = "container-web";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as letta (for Letta AI memory service container)
+    {
+      users = [ "nagios" ];
+      runAs = "letta";
       commands = [{
         command = "${pkgs.podman}/bin/podman";
         options = [ "NOPASSWD" ];

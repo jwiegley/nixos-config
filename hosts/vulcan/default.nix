@@ -35,6 +35,7 @@
     ../../modules/users/home-manager/container-users-dedicated.nix
 
     # Rootless container Home Manager configs
+    ../../modules/users/home-manager/letta.nix
     ../../modules/users/home-manager/litellm.nix
     ../../modules/users/home-manager/changedetection.nix
     ../../modules/users/home-manager/mailarchiver.nix

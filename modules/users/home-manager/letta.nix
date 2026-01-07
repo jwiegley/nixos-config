@@ -40,28 +40,36 @@
         # Rootless networking with host loopback access
         networks = [ "slirp4netns:allow_host_loopback=true" ];
 
+        # Override entrypoint to run our wrapper script
+        exec = "/bin/bash /entrypoint-wrapper.sh";
+
         # Environment configuration for external PostgreSQL and Redis
-        # Using host.containers.internal to access host services from rootless container
+        # Services bound to all interfaces: use host.containers.internal (192.168.1.2)
+        # Services bound to localhost only: use slirp4netns gateway 10.0.2.2 (with allow_host_loopback=true)
         environments = {
           # Disable internal PostgreSQL and Redis - use external services
           LETTA_USE_EXTERNAL_POSTGRES = "true";
           LETTA_USE_EXTERNAL_REDIS = "true";
 
-          # Redis connection (external instance on host)
+          # Redis connection (external instance on host, bound to all interfaces)
           REDIS_URL = "redis://host.containers.internal:6384";
+          LETTA_REDIS_HOST = "host.containers.internal";
+          LETTA_REDIS_PORT = "6384";
 
           # LiteLLM proxy as OpenAI-compatible backend
-          # This allows using models like "hera/gpt-oss-120b" via the openai provider
-          OPENAI_API_BASE = "http://host.containers.internal:4000";
+          # LiteLLM binds to 127.0.0.1 only, so use slirp4netns gateway to reach host localhost
+          OPENAI_API_BASE = "http://10.0.2.2:4000";
         };
 
         # Secrets via environment file (contains LETTA_PG_URI, OPENAI_API_KEY, etc.)
         # LETTA_PG_URI format: postgresql://letta:<password>@host.containers.internal:5432/letta
         environmentFiles = [ "/run/secrets-letta/letta-secrets" ];
 
-        # Volume mounts for persistent data
+        # Volume mounts for persistent data and custom model patches
         volumes = [
           "/var/lib/letta:/root/.letta:rw"
+          "/etc/letta/patch-constants.py:/patch-constants.py:ro"
+          "/etc/letta/entrypoint-wrapper.sh:/entrypoint-wrapper.sh:ro"
         ];
       };
 

@@ -175,17 +175,6 @@
         description = "Container user for Shlink Web Client";
       };
 
-      letta = {
-        isSystemUser = true;
-        group = "letta";
-        home = "/var/lib/containers/letta";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Letta AI memory service";
-      };
     };
 
     # Create corresponding groups for each container user
@@ -203,7 +192,6 @@
       openproject = {};
       shlink = {};
       shlink-web-client = {};
-      letta = {};
       podman = {};
     };
   };
@@ -211,7 +199,6 @@
   # Add container users to Nix allowed-users for store access and container image operations
   nix.settings.allowed-users = [
     "changedetection"
-    "letta"
     "litellm"
     "mailarchiver"
     "nocobase"
@@ -264,7 +251,5 @@
     "L+ /run/secrets-shlink/shlink - - - - /run/secrets/shlink"
     "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"
     "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
-    "d /run/secrets-letta 0750 letta letta - -"
-    "L+ /run/secrets-letta/letta-secrets - - - - /run/secrets/letta-secrets"
   ];
 }

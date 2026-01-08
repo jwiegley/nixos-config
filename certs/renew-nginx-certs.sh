@@ -25,7 +25,6 @@ DOMAINS=(
     "immich.vulcan.lan"
     "jellyfin.vulcan.lan"
     "jupyter.vulcan.lan"
-    "letta.vulcan.lan"
     "litellm.vulcan.lan"
     "loki.vulcan.lan"
     "n8n.vulcan.lan"

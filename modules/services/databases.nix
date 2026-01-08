@@ -51,12 +51,6 @@ in
       secretPath = config.sops.secrets."shlink-db-password".path;
       dependentService = "podman-shlink.service";
     })
-    (mkPostgresUserSetup {
-      user = "letta";
-      database = "letta";
-      secretPath = config.sops.secrets."letta-db-password".path;
-      dependentService = "podman-letta.service";
-    })
   ];
 
   services = {
@@ -110,7 +104,6 @@ in
       };
 
       ensureDatabases = [
-        "letta"
         "litellm"
         "wallabag"
         "teable"
@@ -124,10 +117,6 @@ in
       ensureUsers = [
         { name = "postgres"; }
         { name = "johnw"; }
-        {
-          name = "letta";
-          ensureDBOwnership = true;
-        }
         { name = "litellm"; }
         { name = "wallabag"; }
         {

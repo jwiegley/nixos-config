@@ -491,7 +491,6 @@ in
             "https://openproject.vulcan.lan"
             "https://shlink.vulcan.lan"
             "https://shlink-api.vulcan.lan/rest/health"
-            "https://letta.vulcan.lan"
           ];
         }];
         relabel_configs = [

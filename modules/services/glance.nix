@@ -159,10 +159,6 @@ with lib;
                           url = "https://litellm.vulcan.lan/ui";
                         }
                         {
-                          title = "Letta";
-                          url = "https://letta.vulcan.lan";
-                        }
-                        {
                           title = "JupyterLab";
                           url = "https://jupyter.vulcan.lan";
                         }

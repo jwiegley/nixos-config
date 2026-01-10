@@ -8,6 +8,7 @@
     ./litellm-quadlet.nix
     ./mailarchiver-quadlet.nix
     ./nocobase-quadlet.nix
+    ./open-webui-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix

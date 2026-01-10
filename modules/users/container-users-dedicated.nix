@@ -175,6 +175,18 @@
         description = "Container user for Shlink Web Client";
       };
 
+      open-webui = {
+        isSystemUser = true;
+        group = "open-webui";
+        home = "/var/lib/containers/open-webui";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Open WebUI AI chat interface";
+      };
+
     };
 
     # Create corresponding groups for each container user
@@ -192,6 +204,7 @@
       openproject = {};
       shlink = {};
       shlink-web-client = {};
+      open-webui = {};
       podman = {};
     };
   };
@@ -202,6 +215,7 @@
     "litellm"
     "mailarchiver"
     "nocobase"
+    "open-webui"
     "openproject"
     "shlink"
     "shlink-web-client"
@@ -251,5 +265,7 @@
     "L+ /run/secrets-shlink/shlink - - - - /run/secrets/shlink"
     "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"
     "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
+    "d /run/secrets-open-webui 0750 open-webui open-webui - -"
+    "L+ /run/secrets-open-webui/open-webui-secrets - - - - /run/secrets/open-webui-secrets"
   ];
 }

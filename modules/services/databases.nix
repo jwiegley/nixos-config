@@ -105,6 +105,7 @@ in
 
       ensureDatabases = [
         "litellm"
+        "open_webui"
         "wallabag"
         "teable"
         "budgetboard"
@@ -141,6 +142,10 @@ in
         }
         {
           name = "shlink";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "open_webui";
           ensureDBOwnership = true;
         }
       ];

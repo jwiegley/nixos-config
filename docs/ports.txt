@@ -57,6 +57,7 @@
 3002 127.0.0.1 OpenSpeedTest container
 3004 127.0.0.1 (Unknown)
 3005 127.0.0.1 :: Gitea
+# 3006 - removed, Open WebUI uses host networking on port 8080
 3050 127.0.0.1 Glance
 3100 * :: Loki
 4000 127.0.0.1 LiteLLM
@@ -70,7 +71,8 @@
 5679 127.0.0.1 (Unknown)
 6253 127.0.0.1 (Unknown)
 6800 127.0.0.1 ::1 (Unknown)
-8080 127.0.0.1 (Unknown - possibly backend service)
+8080 127.0.0.1 llama-swap (user johnw)
+8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
 8180 127.0.0.1 OpenProject web interface
 8081 0.0.0.0 :: ntopng
 8082 127.0.0.1 (Unknown)

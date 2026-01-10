@@ -155,8 +155,12 @@ with lib;
                           url = "https://n8n.vulcan.lan";
                         }
                         {
-                          title = "LiteLLM";
+                          title = "LiteLLM Proxy";
                           url = "https://litellm.vulcan.lan/ui";
+                        }
+                        {
+                          title = "Open WebUI";
+                          url = "https://chat.vulcan.lan";
                         }
                         {
                           title = "JupyterLab";

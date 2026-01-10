@@ -39,6 +39,7 @@
     ../../modules/users/home-manager/changedetection.nix
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/nocobase.nix
+    ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
     ../../modules/users/home-manager/shlink.nix
     ../../modules/users/home-manager/shlink-web-client.nix

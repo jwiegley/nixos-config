@@ -507,6 +507,7 @@ let
     { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
     { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
     { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "wallabag"; }
+    { name = "open-webui"; display = "Open WebUI AI Chat"; runAs = "open-webui"; }
   ];
 
   # Container systemd services (for Quadlet-managed containers)
@@ -1484,6 +1485,14 @@ let
       service_groups          ssl-certificates
     }
 
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: chat.vulcan.lan
+      check_command           check_ssl_cert!chat.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
     ###############################################################################
     # SERVICES - LOCAL BACKUPS
     ###############################################################################
@@ -2088,6 +2097,15 @@ in
     {
       users = [ "nagios" ];
       runAs = "container-web";
+      commands = [{
+        command = "${pkgs.podman}/bin/podman";
+        options = [ "NOPASSWD" ];
+      }];
+    }
+    # Allow nagios to run podman as open-webui (for Open WebUI rootless container)
+    {
+      users = [ "nagios" ];
+      runAs = "open-webui";
       commands = [{
         command = "${pkgs.podman}/bin/podman";
         options = [ "NOPASSWD" ];

@@ -32,6 +32,7 @@
     "changedetection"
     "litellm"
     "nocobase"
+    "open-webui"
     "wallabag"
     "teable"
     "sillytavern"

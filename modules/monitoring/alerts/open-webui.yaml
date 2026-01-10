@@ -1,0 +1,61 @@
+groups:
+  - name: open_webui
+    interval: 60s
+    rules:
+      - alert: OpenWebUIContainerDown
+        expr: |
+          absent(container_health_status{container="open-webui"})
+          or container_health_status{container="open-webui"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: open-webui
+        annotations:
+          summary: "Open WebUI container is down"
+          description: |
+            The Open WebUI container has been down or unhealthy for more than 5 minutes.
+
+            Check container status: sudo -u open-webui podman ps -a
+            Check container logs: sudo -u open-webui podman logs open-webui
+            Check systemd service: systemctl --user -M open-webui@ status podman-open-webui
+
+      - alert: OpenWebUIHighMemoryUsage
+        expr: |
+          container_memory_usage_bytes{container="open-webui"} / container_memory_limit_bytes{container="open-webui"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: open-webui
+        annotations:
+          summary: "Open WebUI container memory usage is high"
+          description: |
+            Open WebUI container is using {{ $value | humanizePercentage }} of its memory limit.
+            Consider increasing memory limits or investigating memory leaks.
+
+      - alert: OpenWebUIUnhealthy
+        expr: container_health_status{container="open-webui"} != 1
+        for: 3m
+        labels:
+          severity: warning
+          component: open-webui
+        annotations:
+          summary: "Open WebUI health check is failing"
+          description: |
+            The Open WebUI container health check has been failing for 3 minutes.
+            The container may be starting up or experiencing issues.
+
+            Check health status: sudo -u open-webui podman healthcheck run open-webui
+            Check container logs: sudo -u open-webui podman logs --tail 100 open-webui
+
+      - alert: OpenWebUICertificateExpiringSoon
+        expr: |
+          probe_ssl_earliest_cert_expiry{instance=~".*chat.vulcan.lan.*"} - time() < 86400 * 14
+        for: 1h
+        labels:
+          severity: warning
+          component: open-webui
+        annotations:
+          summary: "Open WebUI SSL certificate expires in less than 14 days"
+          description: |
+            The SSL certificate for chat.vulcan.lan expires in {{ $value | humanizeDuration }}.
+            Run certificate renewal: sudo /etc/nixos/certs/renew-certificate.sh "chat.vulcan.lan" -o "/var/lib/nginx-certs" -d 365 --owner "root:nginx"

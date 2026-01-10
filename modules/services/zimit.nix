@@ -564,9 +564,10 @@ RUNNER
         mkdir -p "$job_work_dir"
 
         # Run Zimit container (using locally-built ARM64 image)
+        # Note: shm-size increased to 16GB to prevent browser crashes on large crawls
         if podman run --rm \
           -v "$job_work_dir:/output" \
-          --shm-size=8gb \
+          --shm-size=16gb \
           localhost/zimit:arm64 \
           zimit "''${zimit_args[@]}" 2>&1 | tee "$job_work_dir/zimit.log"; then
 

@@ -5,7 +5,8 @@ groups:
       - alert: OpenWebUIContainerDown
         expr: |
           absent(container_health_status{container="open-webui"})
-          or container_health_status{container="open-webui"} == 0
+          or container_health_status{container="open-webui"} == 1
+          or container_running{container="open-webui"} == 0
         for: 5m
         labels:
           severity: critical
@@ -33,7 +34,7 @@ groups:
             Consider increasing memory limits or investigating memory leaks.
 
       - alert: OpenWebUIUnhealthy
-        expr: container_health_status{container="open-webui"} != 1
+        expr: container_health_status{container="open-webui"} > 0 and container_health_status{container="open-webui"} < 3
         for: 3m
         labels:
           severity: warning

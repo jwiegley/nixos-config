@@ -27,6 +27,65 @@ in
 
   # Inherit the patched check_systemd from the check-systemd overlay
   inherit (prevWithCheckSystemd) check_systemd;
+  # Python environment for JupyterLab from nixpkgs-unstable
+  # Uses unstable's Python to avoid version mismatch (stable has 3.13.9, unstable has 3.13.11)
+  # This gives us JupyterLab 4.5.0+ with PyTorch and data science packages
+  jupyterlab-env =
+    let
+      unstable = inputs.nixpkgs-unstable.legacyPackages.${system};
+    in
+    let
+      # d2l (Dive into Deep Learning) - not in nixpkgs, build from PyPI
+      d2l = unstable.python3Packages.buildPythonPackage rec {
+        pname = "d2l";
+        version = "1.0.3";
+        format = "wheel";
+
+        src = unstable.fetchurl {
+          url = "https://files.pythonhosted.org/packages/8b/39/418ef003ed7ec0f2a071e24ec3f58c7b1f179ef44bec5224dcca276876e3/d2l-1.0.3-py3-none-any.whl";
+          hash = "sha256-xiWgHmbrXXk6fgpvhYKx4eNd+tArXnfz0qspnQcXe6Y=";
+        };
+
+        dependencies = with unstable.python3Packages; [
+          numpy
+          matplotlib
+          requests
+          pandas
+        ];
+
+        # Skip tests - package doesn't include test suite
+        doCheck = false;
+
+        meta = {
+          description = "Dive into Deep Learning - interactive book companion library";
+          homepage = "https://d2l.ai";
+          license = unstable.lib.licenses.mit;
+        };
+      };
+    in
+    unstable.python3.withPackages (ps: [
+      ps.jupyterlab
+      ps.ipykernel
+      ps.ipywidgets
+      ps.jupyterlab-widgets
+      # ps.jupyter-collaboration  # Disabled - causes WebSocketClosedError and notebook loading issues
+      ps.notebook
+      ps.torch
+      ps.torchvision
+      ps.numpy
+      ps.pandas
+      ps.matplotlib
+      ps.scipy
+      ps.scikit-learn
+      ps.seaborn
+      ps.pillow
+      ps.requests
+      ps.tqdm
+
+      # Deep Learning books/tutorials
+      d2l  # Dive into Deep Learning companion library
+    ]);
+
   # Extend Python package sets system-wide using pythonPackagesExtensions
   # This ensures all Python derivations (including Home Assistant's) get our custom packages
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [] ++ [

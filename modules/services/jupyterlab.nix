@@ -1,8 +1,16 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Use sage package which includes jupyterlab with SageMath kernel pre-configured
+  # SageMath for the kernel only
   sage = pkgs.sage;
+
+  # JupyterLab environment from nixpkgs-unstable (defined in overlay)
+  # This gives us:
+  # - JupyterLab 4.5.0+ (from nixpkgs-unstable)
+  # - PyTorch and TorchVision for ML workloads
+  # - Common data science packages (numpy, pandas, matplotlib, scipy, etc.)
+  # Uses unstable's Python to avoid version mismatch issues
+  jupyterEnv = pkgs.jupyterlab-env;
 in
 {
   # SOPS secrets for JupyterLab
@@ -14,7 +22,7 @@ in
 
   # JupyterLab service configuration
   systemd.services.jupyterlab = {
-    description = "JupyterLab Server with SageMath Kernel";
+    description = "JupyterLab Server with SageMath Kernel and PyTorch";
     after = [ "network-online.target" "sops-install-secrets.service" ];
     wants = [ "network-online.target" "sops-install-secrets.service" ];
     wantedBy = [ "multi-user.target" ];
@@ -126,7 +134,7 @@ EOFPY
       # Create notebooks directory
       mkdir -p /var/lib/jupyter/notebooks
 
-      # Create a welcome notebook
+      # Create a welcome notebook with PyTorch examples
       cat > /var/lib/jupyter/notebooks/Welcome.ipynb <<'NOTEBOOK'
 {
  "cells": [
@@ -135,18 +143,18 @@ EOFPY
    "id": "welcome",
    "metadata": {},
    "source": [
-    "# Welcome to JupyterLab with SageMath\\n",
-    "\\n",
-    "This JupyterLab instance is running on vulcan with SageMath kernel support.\\n",
-    "\\n",
-    "## Available Kernels\\n",
-    "\\n",
-    "- **Python 3**: Standard Python kernel\\n",
-    "- **SageMath**: Mathematical computation system (use \\`Kernel > Change Kernel\\` to switch)\\n",
-    "\\n",
-    "## Quick Start\\n",
-    "\\n",
-    "### Python Example\\n"
+    "# Welcome to JupyterLab\n",
+    "\n",
+    "This JupyterLab instance is running on vulcan with SageMath kernel support and PyTorch.\n",
+    "\n",
+    "## Available Kernels\n",
+    "\n",
+    "- **Python 3**: Standard Python kernel with PyTorch, TorchVision, NumPy, Pandas, etc.\n",
+    "- **SageMath**: Mathematical computation system (use `Kernel > Change Kernel` to switch)\n",
+    "\n",
+    "## Quick Start\n",
+    "\n",
+    "### Python + PyTorch Example\n"
    ]
   },
   {
@@ -156,10 +164,32 @@ EOFPY
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Simple Python example\\n",
-    "import sys\\n",
-    "print(f\\"Python version: {sys.version}\\")\\n",
-    "print(f\\"Hello from JupyterLab!\\")\\n"
+    "# Check Python and PyTorch versions\n",
+    "import sys\n",
+    "import torch\n",
+    "import torchvision\n",
+    "import numpy as np\n",
+    "\n",
+    "print(f\"Python version: {sys.version}\")\n",
+    "print(f\"PyTorch version: {torch.__version__}\")\n",
+    "print(f\"TorchVision version: {torchvision.__version__}\")\n",
+    "print(f\"NumPy version: {np.__version__}\")\n",
+    "print(f\"CUDA available: {torch.cuda.is_available()}\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "torch-example",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Simple PyTorch tensor operations\n",
+    "x = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)\n",
+    "y = torch.tensor([[5, 6], [7, 8]], dtype=torch.float32)\n",
+    "\n",
+    "print(\"Matrix multiplication:\")\n",
+    "print(torch.matmul(x, y))\n"
    ]
   },
   {
@@ -167,24 +197,24 @@ EOFPY
    "id": "sage-info",
    "metadata": {},
    "source": [
-    "### SageMath Example\\n",
-    "\\n",
-    "To use SageMath, change the kernel to \\"SageMath\\" using the menu:\\n",
-    "\\`Kernel > Change Kernel > SageMath\\`\\n",
-    "\\n",
-    "Then you can use SageMath commands like:\\n",
-    "\\n",
-    "\\`\\`\\`python\\n",
-    "# Factor a number\\n",
-    "factor(2^157 - 1)\\n",
-    "\\n",
-    "# Solve equations\\n",
-    "x = var('x')\\n",
-    "solve(x^2 - 4 == 0, x)\\n",
-    "\\n",
-    "# Plot functions\\n",
-    "plot(sin(x), (x, -pi, pi))\\n",
-    "\\`\\`\\`\\n"
+    "### SageMath Example\n",
+    "\n",
+    "To use SageMath, change the kernel to \"SageMath\" using the menu:\n",
+    "`Kernel > Change Kernel > SageMath`\n",
+    "\n",
+    "Then you can use SageMath commands like:\n",
+    "\n",
+    "```python\n",
+    "# Factor a number\n",
+    "factor(2^157 - 1)\n",
+    "\n",
+    "# Solve equations\n",
+    "x = var('x')\n",
+    "solve(x^2 - 4 == 0, x)\n",
+    "\n",
+    "# Plot functions\n",
+    "plot(sin(x), (x, -pi, pi))\n",
+    "```\n"
    ]
   }
  ],
@@ -204,32 +234,54 @@ EOFPY
 }
 NOTEBOOK
 
-      # SageMath comes with its own Jupyter kernel pre-installed
-      # Just need to ensure directories exist
+      # Set up kernel directories
       mkdir -p /var/lib/jupyter/data/kernels
       mkdir -p /var/lib/jupyter/.sage
 
+      # Install the SageMath kernel spec for our JupyterLab instance
+      # Copy sage's kernel spec to our data directory
+      SAGE_KERNEL_SRC="${sage}/share/jupyter/kernels/sagemath"
+      if [ -d "$SAGE_KERNEL_SRC" ]; then
+        cp -r "$SAGE_KERNEL_SRC" /var/lib/jupyter/data/kernels/sagemath
+        echo "Installed SageMath kernel from: $SAGE_KERNEL_SRC"
+      else
+        # Fallback: create kernel spec manually
+        mkdir -p /var/lib/jupyter/data/kernels/sagemath
+        cat > /var/lib/jupyter/data/kernels/sagemath/kernel.json <<KERNELEOF
+{
+  "display_name": "SageMath",
+  "language": "sage",
+  "argv": [
+    "${sage}/bin/sage",
+    "--python",
+    "-m",
+    "sage.repl.ipython_kernel",
+    "-f",
+    "{connection_file}"
+  ]
+}
+KERNELEOF
+        echo "Created SageMath kernel spec manually"
+      fi
+
       # List available kernels (for logging/debugging)
       echo "Available Jupyter kernels:"
-      ${sage}/bin/sage -sh -c "jupyter kernelspec list" || true
+      ${jupyterEnv}/bin/jupyter kernelspec list || true
 
       # Set permissions
       chmod 600 /var/lib/jupyter/config/jupyter_lab_config.py
     '';
 
-    # Start JupyterLab server using sage's built-in jupyterlab
-    # This automatically includes the SageMath kernel
+    # Start JupyterLab server using our custom Python environment
+    # with PyTorch, TorchVision, and other ML packages
     script = ''
-      exec ${sage}/bin/sage --notebook=jupyterlab \
-        --no-browser \
-        --ServerApp.config_file=/var/lib/jupyter/config/jupyter_lab_config.py \
-        --ServerApp.root_dir=/var/lib/jupyter/notebooks \
-        --ServerApp.ip=127.0.0.1 \
-        --ServerApp.port=8888
+      exec ${jupyterEnv}/bin/jupyter lab \
+        --config=/var/lib/jupyter/config/jupyter_lab_config.py
     '';
 
-    # Build Python environment with sage (includes everything)
+    # Build environment with our custom Python env and sage for the kernel
     path = [
+      jupyterEnv
       sage
       pkgs.coreutils
       pkgs.bash

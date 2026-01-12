@@ -55,6 +55,12 @@
     nixpkgs-immich = {
       url = "github:NixOS/nixpkgs/nixos-unstable";
     };
+
+    # nixpkgs unstable for packages that need newer versions
+    # Used for: JupyterLab (4.5.0+), and other packages needing unstable
+    nixpkgs-unstable = {
+      url = "github:NixOS/nixpkgs/nixos-unstable";
+    };
   };
 
   outputs = inputs: let system = "aarch64-linux"; in {

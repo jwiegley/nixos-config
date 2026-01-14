@@ -2033,6 +2033,9 @@ in
     "d /run/nagios/spool 0755 nagios nagios -"
     "d /run/nagios/spool/checkresults 0755 nagios nagios -"
 
+    # Archives directory for rotated logs (using 'd' to preserve contents)
+    "d /var/log/nagios/archives 0755 nagios nagios -"
+
     # Allow nagios user to traverse /tank/Backups to check backup timestamps
     # Mode 0711 allows owner (johnw) full access, group and others can traverse (execute)
     # This enables nagios (member of johnw group) to access specific files like

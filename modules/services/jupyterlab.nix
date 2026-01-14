@@ -303,6 +303,7 @@ KERNELEOF
 
   # Nginx virtual host for JupyterLab
   services.nginx.virtualHosts."jupyter.vulcan.lan" = {
+    serverAliases = [ "notebook.vulcan.lan" ];
     forceSSL = true;
     sslCertificate = "/var/lib/nginx-certs/jupyter.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/jupyter.vulcan.lan.key";

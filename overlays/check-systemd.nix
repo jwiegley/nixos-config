@@ -18,14 +18,14 @@ final: prev: {
     # Add patch to insert 'reload-notify' into the SubState Literal type
     # The state should be added after 'reload' at line 171
     postPatch = (oldAttrs.postPatch or "") + ''
-      echo "Patching check_systemd.py to add 'reload-notify' sub-state support"
+        echo "Patching check_systemd.py to add 'reload-notify' sub-state support"
 
-      # Add 'reload-notify' after 'reload' in the SubState Literal type
-      # Line 171 contains: "reload",
-      # We insert: "reload-notify", after it
-      substituteInPlace check_systemd.py \
-        --replace-fail '"reload",' '"reload",
-    "reload-notify",'
+        # Add 'reload-notify' after 'reload' in the SubState Literal type
+        # Line 171 contains: "reload",
+        # We insert: "reload-notify", after it
+        substituteInPlace check_systemd.py \
+          --replace-fail '"reload",' '"reload",
+      "reload-notify",'
     '';
 
     meta = oldAttrs.meta // {

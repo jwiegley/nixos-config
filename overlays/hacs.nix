@@ -1,4 +1,10 @@
-{ lib, buildHomeAssistantComponent, fetchFromGitHub, python3Packages, hacs-frontend }:
+{
+  lib,
+  buildHomeAssistantComponent,
+  fetchFromGitHub,
+  python3Packages,
+  hacs-frontend,
+}:
 
 buildHomeAssistantComponent rec {
   owner = "hacs";

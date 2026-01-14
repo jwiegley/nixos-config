@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Nginx monitoring with stub_status and prometheus exporter
@@ -10,10 +15,12 @@
 
     # Add a virtual host for stub_status (localhost only)
     virtualHosts."localhost" = {
-      listen = [{
-        addr = "127.0.0.1";
-        port = 80;
-      }];
+      listen = [
+        {
+          addr = "127.0.0.1";
+          port = 80;
+        }
+      ];
 
       locations."/nginx_status" = {
         extraConfig = ''
@@ -41,9 +48,11 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "nginx";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.nginx.port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.nginx.port}" ];
+        }
+      ];
       scrape_interval = "30s";
     }
   ];

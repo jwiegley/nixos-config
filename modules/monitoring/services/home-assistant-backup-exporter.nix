@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Script to monitor Home Assistant backups and export metrics
@@ -108,7 +113,7 @@ in
 
     timerConfig = {
       OnBootSec = "1min";
-      OnCalendar = "*:0/5";  # Every 5 minutes on the clock
+      OnCalendar = "*:0/5"; # Every 5 minutes on the clock
       Persistent = true;
     };
   };

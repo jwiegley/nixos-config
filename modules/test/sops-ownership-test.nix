@@ -1,4 +1,10 @@
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Test module to validate per-user SOPS secrets ownership configuration
@@ -13,7 +19,7 @@
 
   sops.secrets."litellm-secrets-test" = {
     sopsFile = secrets.outPath + "/secrets.yaml";
-    key = "litellm-secrets";  # Reuse existing secret for testing
+    key = "litellm-secrets"; # Reuse existing secret for testing
     owner = "container-db";
     group = "container-db";
     mode = "0400";

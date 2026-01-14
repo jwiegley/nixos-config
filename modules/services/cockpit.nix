@@ -1,11 +1,16 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Cockpit web-based server management interface
   # Provides system administration through a modern web interface
   services.cockpit = {
     enable = true;
-    port = 9099;  # Use 9099 to avoid conflict with Prometheus on 9090
+    port = 9099; # Use 9099 to avoid conflict with Prometheus on 9090
 
     # Configure Cockpit settings
     settings = {
@@ -36,7 +41,10 @@
   # The empty string "" clears the upstream ListenStream before adding ours
   systemd.sockets.cockpit = {
     wantedBy = [ "sockets.target" ];
-    listenStreams = lib.mkForce [ "" "127.0.0.1:${toString config.services.cockpit.port}" ];
+    listenStreams = lib.mkForce [
+      ""
+      "127.0.0.1:${toString config.services.cockpit.port}"
+    ];
   };
 
   # Nginx reverse proxy configuration
@@ -76,7 +84,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";

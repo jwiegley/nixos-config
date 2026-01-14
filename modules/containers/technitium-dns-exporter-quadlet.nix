@@ -16,10 +16,23 @@
 #
 # GitHub: https://github.com/brioche-works/technitium-dns-prometheus-exporter
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
+  mkQuadletLib = import ../lib/mkQuadletService.nix {
+    inherit
+      config
+      lib
+      pkgs
+      secrets
+      ;
+  };
   inherit (mkQuadletLib) mkQuadletService;
 in
 {
@@ -80,7 +93,7 @@ in
         echo "technitium-dns-exporter image already exists"
       fi
     '';
-    deps = [];
+    deps = [ ];
   };
 
   # Note: SOPS secrets automatically configured by mkQuadletService

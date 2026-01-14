@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ============================================================================
@@ -126,21 +131,21 @@
   # Install additional diagnostic tools
   environment.systemPackages = with pkgs; [
     # System monitoring and diagnostics
-    sysstat     # sar, iostat, mpstat, pidstat, etc.
-    procps      # ps, top, vmstat, free, etc. (includes dmesg)
-    lsof        # List open files
-    strace      # System call tracer
-    htop        # Interactive process viewer
-    iotop       # I/O monitoring
-    atop        # Advanced system monitor with logging
+    sysstat # sar, iostat, mpstat, pidstat, etc.
+    procps # ps, top, vmstat, free, etc. (includes dmesg)
+    lsof # List open files
+    strace # System call tracer
+    htop # Interactive process viewer
+    iotop # I/O monitoring
+    atop # Advanced system monitor with logging
 
     # Memory analysis
-    numactl     # NUMA policy control
+    numactl # NUMA policy control
 
     # Hardware diagnostics
-    lshw        # Hardware lister
-    pciutils    # lspci
-    usbutils    # lsusb
+    lshw # Hardware lister
+    pciutils # lspci
+    usbutils # lsusb
   ];
 
   # --------------------------------------------------------------------------
@@ -321,4 +326,3 @@
     };
   };
 }
-

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # SOPS secrets for Node-RED
@@ -56,7 +61,9 @@
 
     # Deploy custom settings.js with authentication configuration
     # This file loads secrets from /run/secrets/ for secure authentication
-    configFile = pkgs.writeText "node-red-settings.js" (builtins.readFile ../../config/node-red-settings.js);
+    configFile = pkgs.writeText "node-red-settings.js" (
+      builtins.readFile ../../config/node-red-settings.js
+    );
   };
 
   # Ensure Node-RED starts after secrets are available

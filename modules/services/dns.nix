@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   systemd.services.technitium-dns-server.serviceConfig = {
@@ -22,9 +27,10 @@
   };
 
   networking.firewall = {
-    allowedTCPPorts =
-      lib.mkIf config.services.technitium-dns-server.enable [ 53 853 ];
-    allowedUDPPorts =
-      lib.mkIf config.services.technitium-dns-server.enable [ 53 ];
+    allowedTCPPorts = lib.mkIf config.services.technitium-dns-server.enable [
+      53
+      853
+    ];
+    allowedUDPPorts = lib.mkIf config.services.technitium-dns-server.enable [ 53 ];
   };
 }

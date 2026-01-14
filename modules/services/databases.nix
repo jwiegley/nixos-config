@@ -1,4 +1,10 @@
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
   # Import helper functions
@@ -64,7 +70,7 @@ in
         port = 5432;
 
         # Connection settings
-        max_connections = 200;  # Increased from default 100 to handle bulk operations
+        max_connections = 200; # Increased from default 100 to handle bulk operations
 
         # Network Security - Listen on all interfaces (auth rules control access)
         listen_addresses = lib.mkForce "*";
@@ -83,24 +89,24 @@ in
         # Session timeouts
         # Automatically terminate connections that are idle in a transaction for too long
         # This prevents locks from being held indefinitely by abandoned transactions
-        idle_in_transaction_session_timeout = "10min";  # 10 minutes
+        idle_in_transaction_session_timeout = "10min"; # 10 minutes
 
         # Logging configuration for troubleshooting
         # Log slow queries (longer than 1 second)
-        log_min_duration_statement = 1000;  # milliseconds
+        log_min_duration_statement = 1000; # milliseconds
 
         # Log lock waits that take longer than deadlock_timeout
         log_lock_waits = true;
-        deadlock_timeout = "1s";  # How long to wait before checking for deadlock
+        deadlock_timeout = "1s"; # How long to wait before checking for deadlock
 
         # Log checkpoints (helps identify I/O bottlenecks)
         log_checkpoints = true;
 
         # Log autovacuum activity (only log runs taking longer than 10 seconds)
-        log_autovacuum_min_duration = 10000;  # Log autovacuum runs > 10s to reduce noise
+        log_autovacuum_min_duration = 10000; # Log autovacuum runs > 10s to reduce noise
 
         # Include more context in logs
-        log_line_prefix = "%m [%p] %q%u@%d ";  # timestamp [pid] app_name user@database
+        log_line_prefix = "%m [%p] %q%u@%d "; # timestamp [pid] app_name user@database
       };
 
       ensureDatabases = [
@@ -270,14 +276,18 @@ in
   # - podman0: PostgreSQL fails to bind to 10.88.0.1 (causes litellm/wallabag to fail pg_isready)
   # - end0: PostgreSQL fails to bind to 192.168.1.2 (causes external postgres.vulcan.lan connections to fail)
   systemd.services.postgresql = {
-    after = [ "sys-subsystem-net-devices-podman0.device" "sys-subsystem-net-devices-end0.device" ];
-    requires = [ "sys-subsystem-net-devices-podman0.device" "sys-subsystem-net-devices-end0.device" ];
+    after = [
+      "sys-subsystem-net-devices-podman0.device"
+      "sys-subsystem-net-devices-end0.device"
+    ];
+    requires = [
+      "sys-subsystem-net-devices-podman0.device"
+      "sys-subsystem-net-devices-end0.device"
+    ];
   };
 
   networking.firewall = {
-    allowedTCPPorts =
-      lib.mkIf config.services.postgresql.enable [ 5432 ];
-    interfaces.podman0.allowedTCPPorts =
-      lib.mkIf config.services.postgresql.enable [ 5432 ];
+    allowedTCPPorts = lib.mkIf config.services.postgresql.enable [ 5432 ];
+    interfaces.podman0.allowedTCPPorts = lib.mkIf config.services.postgresql.enable [ 5432 ];
   };
 }

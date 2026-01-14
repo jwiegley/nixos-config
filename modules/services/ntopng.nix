@@ -1,4 +1,10 @@
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
   # Import helper functions
@@ -87,12 +93,16 @@ in
     createHome = true;
   };
 
-  users.groups.ntopng = {};
+  users.groups.ntopng = { };
 
   # ntopng systemd service
   systemd.services.ntopng = {
     description = "ntopng Network Traffic Monitoring";
-    after = [ "network.target" "postgresql.service" "redis-ntopng.service" ];
+    after = [
+      "network.target"
+      "postgresql.service"
+      "redis-ntopng.service"
+    ];
     requires = [ "redis-ntopng.service" ];
     wants = [ "postgresql.service" ];
     wantedBy = [ "multi-user.target" ];
@@ -113,8 +123,14 @@ in
       ReadWritePaths = [ ntopngDataDir ];
 
       # Network capabilities (required for packet capture)
-      AmbientCapabilities = [ "CAP_NET_RAW" "CAP_NET_ADMIN" ];
-      CapabilityBoundingSet = [ "CAP_NET_RAW" "CAP_NET_ADMIN" ];
+      AmbientCapabilities = [
+        "CAP_NET_RAW"
+        "CAP_NET_ADMIN"
+      ];
+      CapabilityBoundingSet = [
+        "CAP_NET_RAW"
+        "CAP_NET_ADMIN"
+      ];
     };
 
     # Environment with database password

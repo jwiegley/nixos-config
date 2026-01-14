@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   services.prometheus.alertmanager = {
@@ -18,7 +23,11 @@
       # Route configuration
       route = {
         receiver = "default-receiver";
-        group_by = [ "alertname" "cluster" "service" ];
+        group_by = [
+          "alertname"
+          "cluster"
+          "service"
+        ];
         group_wait = "10s";
         group_interval = "10m";
         repeat_interval = "4h";
@@ -31,7 +40,11 @@
               category = "storage";
             };
             receiver = "storage-receiver";
-            group_by = [ "alertname" "category" "repository" ];
+            group_by = [
+              "alertname"
+              "category"
+              "repository"
+            ];
             group_wait = "30s";
             group_interval = "30m";
             repeat_interval = "12h";
@@ -42,7 +55,12 @@
               severity = "critical";
             };
             receiver = "critical-receiver";
-            group_by = [ "alertname" "severity" "service" "repository" ];
+            group_by = [
+              "alertname"
+              "severity"
+              "service"
+              "repository"
+            ];
             group_wait = "30s";
             group_interval = "5m";
             repeat_interval = "4h";
@@ -150,7 +168,10 @@
           target_match = {
             severity = "warning";
           };
-          equal = [ "alertname" "instance" ];
+          equal = [
+            "alertname"
+            "instance"
+          ];
         }
         # Suppress warning backup alerts when critical backup alerts are firing for same repo
         {
@@ -205,7 +226,6 @@
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
   };
-
 
   # Alertmanager nginx upstream with retry logic
   # Prevents 502 errors during service restarts

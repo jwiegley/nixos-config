@@ -1,11 +1,20 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.github-gitea-mirror;
 
   mirrorScript = pkgs.writeShellApplication {
     name = "github-gitea-mirror";
-    runtimeInputs = with pkgs; [ curl jq coreutils ];
+    runtimeInputs = with pkgs; [
+      curl
+      jq
+      coreutils
+    ];
     text = ''
       set -euo pipefail
 
@@ -263,7 +272,11 @@ in
         MIRROR_INTERVAL = cfg.mirrorInterval;
       };
 
-      path = with pkgs; [ curl jq coreutils ];
+      path = with pkgs; [
+        curl
+        jq
+        coreutils
+      ];
 
       # Ensure network is available
       after = [ "network-online.target" ];

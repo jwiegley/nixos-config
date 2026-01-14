@@ -294,8 +294,14 @@ in
   # Set PostgreSQL password for hass user from SOPS secret
   systemd.services.postgresql-hass-password = {
     description = "Set PostgreSQL password for Home Assistant user";
-    after = [ "postgresql.service" "sops-install-secrets.service" ];
-    requires = [ "postgresql.service" "sops-install-secrets.service" ];
+    after = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
+    requires = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
@@ -304,7 +310,9 @@ in
     };
     script = ''
       # Read password (file is owned by hass, so we need to use runuser)
-      PASSWORD=$(${pkgs.util-linux}/bin/runuser -u hass -- cat ${config.sops.secrets."home-assistant/postgres-password".path})
+      PASSWORD=$(${pkgs.util-linux}/bin/runuser -u hass -- cat ${
+        config.sops.secrets."home-assistant/postgres-password".path
+      })
       ${config.services.postgresql.package}/bin/psql -c "ALTER USER hass WITH PASSWORD '$PASSWORD';"
     '';
   };
@@ -362,7 +370,7 @@ in
       "analytics"
       "default_config"
       "met"
-      "mqtt"  # MQTT broker for HASS.Agent and other IoT devices
+      "mqtt" # MQTT broker for HASS.Agent and other IoT devices
 
       # Calendar and scheduling
       "google" # Google Calendar integration (requires gcal_sync)
@@ -800,7 +808,7 @@ in
       influxdb = {
         host = "127.0.0.1";
         port = 8428;
-        database = "homeassistant";  # Required for compatibility, ignored by VictoriaMetrics
+        database = "homeassistant"; # Required for compatibility, ignored by VictoriaMetrics
 
         # Push metrics every 60 seconds (aligned with VictoriaMetrics scrape interval)
         max_retries = 3;
@@ -819,11 +827,11 @@ in
             "fan"
             "person"
             "device_tracker"
-            "media_player"  # Bose speaker, LG webOS TV, etc.
-            "vacuum"        # Dreame robot vacuum
-            "camera"        # Ring doorbell cameras
-            "update"        # Integration and device updates
-            "button"        # Device buttons
+            "media_player" # Bose speaker, LG webOS TV, etc.
+            "vacuum" # Dreame robot vacuum
+            "camera" # Ring doorbell cameras
+            "update" # Integration and device updates
+            "button" # Device buttons
           ];
         };
 
@@ -921,42 +929,44 @@ in
 
     # Generate secrets.yaml and inject database URL into configuration.yaml
     preStart = ''
-      # Generate secrets.yaml with location data and database URL
-      # Location coordinates for Sacramento, CA area
-      cat > /var/lib/hass/secrets.yaml << 'EOF'
-# Auto-generated secrets file - location data
-# Update with your actual coordinates if needed
-latitude: 38.5816
-longitude: -121.4944
-elevation: 30
-EOF
+            # Generate secrets.yaml with location data and database URL
+            # Location coordinates for Sacramento, CA area
+            cat > /var/lib/hass/secrets.yaml << 'EOF'
+      # Auto-generated secrets file - location data
+      # Update with your actual coordinates if needed
+      latitude: 38.5816
+      longitude: -121.4944
+      elevation: 30
+      EOF
 
-      # Add PostgreSQL database URL if SOPS secret exists
-      if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ]; then
-        POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
-        echo "postgres_db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" >> /var/lib/hass/secrets.yaml
-      fi
+            # Add PostgreSQL database URL if SOPS secret exists
+            if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ]; then
+              POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
+              echo "postgres_db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" >> /var/lib/hass/secrets.yaml
+            fi
 
-      chmod 600 /var/lib/hass/secrets.yaml
+            chmod 600 /var/lib/hass/secrets.yaml
 
-      # Inject database URL directly into configuration.yaml
-      if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ] && [ -f /var/lib/hass/configuration.yaml ]; then
-        POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
+            # Inject database URL directly into configuration.yaml
+            if [ -f ${
+              config.sops.secrets."home-assistant/postgres-password".path
+            } ] && [ -f /var/lib/hass/configuration.yaml ]; then
+              POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
 
-        # Remove any existing db_url line first
-        grep -v "^  db_url:" /var/lib/hass/configuration.yaml > /var/lib/hass/configuration.yaml.tmp || true
+              # Remove any existing db_url line first
+              grep -v "^  db_url:" /var/lib/hass/configuration.yaml > /var/lib/hass/configuration.yaml.tmp || true
 
-        # Find the line number of "recorder:" and insert db_url after it
-        ${pkgs.gawk}/bin/awk -v db_url="  db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" \
-          '/^recorder:/ { print; print db_url; next } { print }' \
-          /var/lib/hass/configuration.yaml.tmp > /var/lib/hass/configuration.yaml.new
+              # Find the line number of "recorder:" and insert db_url after it
+              ${pkgs.gawk}/bin/awk -v db_url="  db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" \
+                '/^recorder:/ { print; print db_url; next } { print }' \
+                /var/lib/hass/configuration.yaml.tmp > /var/lib/hass/configuration.yaml.new
 
-        # Replace original file
-        mv /var/lib/hass/configuration.yaml.new /var/lib/hass/configuration.yaml
-        rm -f /var/lib/hass/configuration.yaml.tmp
+              # Replace original file
+              mv /var/lib/hass/configuration.yaml.new /var/lib/hass/configuration.yaml
+              rm -f /var/lib/hass/configuration.yaml.tmp
 
-        chmod 600 /var/lib/hass/configuration.yaml
-      fi
+              chmod 600 /var/lib/hass/configuration.yaml
+            fi
     '';
 
     # Inject credentials as environment variables
@@ -995,7 +1005,7 @@ EOF
   services.nginx.upstreams."home-assistant" = {
     servers = {
       "127.0.0.1:8123" = {
-        max_fails = 0;  # Don't mark backend as failed during temporary unavailability
+        max_fails = 0; # Don't mark backend as failed during temporary unavailability
       };
     };
     extraConfig = ''
@@ -1012,7 +1022,7 @@ EOF
     sslCertificateKey = "/var/lib/nginx-certs/hass.vulcan.lan.key";
 
     locations."/" = {
-      proxyPass = "http://home-assistant/";  # Use upstream instead of direct connection
+      proxyPass = "http://home-assistant/"; # Use upstream instead of direct connection
       proxyWebsockets = true;
       extraConfig = ''
         # Retry logic for temporary backend failures (service restarts)

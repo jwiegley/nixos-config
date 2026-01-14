@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Enable Immich service with native NixOS module
@@ -8,8 +13,8 @@
     enable = true;
 
     # Network configuration
-    host = "127.0.0.1";  # Listen on localhost only, nginx will proxy
-    port = 2283;         # Default Immich port
+    host = "127.0.0.1"; # Listen on localhost only, nginx will proxy
+    port = 2283; # Default Immich port
 
     # Media storage location on ZFS
     mediaLocation = "/tank/Photos/Immich";
@@ -41,14 +46,20 @@
 
   # Ensure Immich service waits for ZFS mount
   systemd.services.immich-server = {
-    after = [ "zfs.target" "tank-Photos-Immich.mount" ];
+    after = [
+      "zfs.target"
+      "tank-Photos-Immich.mount"
+    ];
     unitConfig = {
       RequiresMountsFor = [ "/tank/Photos/Immich" ];
     };
   };
 
   systemd.services.immich-machine-learning = {
-    after = [ "zfs.target" "tank-Photos-Immich.mount" ];
+    after = [
+      "zfs.target"
+      "tank-Photos-Immich.mount"
+    ];
     unitConfig = {
       RequiresMountsFor = [ "/tank/Photos/Immich" ];
     };
@@ -99,8 +110,8 @@
 
   # Firewall - only allow localhost access (nginx proxies)
   networking.firewall.interfaces."lo".allowedTCPPorts = [
-    2283  # Immich web interface
-    9283  # Immich API metrics
-    9284  # Immich microservices metrics
+    2283 # Immich web interface
+    9283 # Immich API metrics
+    9284 # Immich microservices metrics
   ];
 }

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Read the root CA certificate from a separate file
@@ -43,8 +48,8 @@ in
       authority = {
         enableAdmin = true;
         # Provisioners will be created by the init script
-        provisioners = [];
-        template = {};
+        provisioners = [ ];
+        template = { };
         claims = {
           minTLSCertDuration = "5m";
           maxTLSCertDuration = "8760h";
@@ -118,8 +123,9 @@ in
     '')
   ];
 
-  networking.firewall.interfaces."lo".allowedTCPPorts =
-    lib.mkIf config.services.step-ca.enable [ 8443 ];
+  networking.firewall.interfaces."lo".allowedTCPPorts = lib.mkIf config.services.step-ca.enable [
+    8443
+  ];
 
   # Override step-ca service to use correct directories
   systemd.services.step-ca = {
@@ -142,7 +148,12 @@ in
       StateDirectory = "step-ca-state";
       WorkingDirectory = "/var/lib/step-ca-state";
     };
-    path = [ pkgs.step-cli pkgs.step-ca pkgs.coreutils pkgs.openssl ];
+    path = [
+      pkgs.step-cli
+      pkgs.step-ca
+      pkgs.coreutils
+      pkgs.openssl
+    ];
     script = ''
       set -euo pipefail
 

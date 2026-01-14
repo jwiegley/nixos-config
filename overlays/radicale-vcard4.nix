@@ -4,10 +4,11 @@
 # This fork uses a custom vobject with vCard 4.0 support.
 # The vobject dependency is provided through pythonPackagesExtensions
 # in the overlays/default.nix, so we don't need to patch pyproject.toml.
-{ fetchFromGitHub
-, lib
-, nixosTests
-, python3
+{
+  fetchFromGitHub,
+  lib,
+  nixosTests,
+  python3,
 }:
 
 python3.pkgs.buildPythonApplication rec {
@@ -31,7 +32,7 @@ python3.pkgs.buildPythonApplication rec {
     [
       defusedxml
       passlib
-      vobject  # Uses our overlayed vobject with vCard 4.0 support
+      vobject # Uses our overlayed vobject with vCard 4.0 support
       pika
       requests
       pytz

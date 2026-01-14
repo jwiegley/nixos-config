@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   services = {
@@ -28,55 +33,55 @@
     serviceConfig.UMask = lib.mkForce "0027";
 
     preStart = ''
-    # Ensure config directory exists
-    mkdir -p ${config.services.jellyfin.configDir}
+      # Ensure config directory exists
+      mkdir -p ${config.services.jellyfin.configDir}
 
-    # Ensure jellyfin data directory is traversable by group (for promtail to reach log/)
-    chmod 750 /var/lib/jellyfin
+      # Ensure jellyfin data directory is traversable by group (for promtail to reach log/)
+      chmod 750 /var/lib/jellyfin
 
-    # Ensure log directory has group read permissions for promtail
-    mkdir -p /var/lib/jellyfin/log
-    chmod 750 /var/lib/jellyfin/log
-    find /var/lib/jellyfin/log -type f -name "*.log" -exec chmod 640 {} \;
+      # Ensure log directory has group read permissions for promtail
+      mkdir -p /var/lib/jellyfin/log
+      chmod 750 /var/lib/jellyfin/log
+      find /var/lib/jellyfin/log -type f -name "*.log" -exec chmod 640 {} \;
 
-    # Create or update network.xml to add localhost and server IP as known proxies
-    NETWORK_XML="${config.services.jellyfin.configDir}/network.xml"
+      # Create or update network.xml to add localhost and server IP as known proxies
+      NETWORK_XML="${config.services.jellyfin.configDir}/network.xml"
 
-    if [ ! -f "$NETWORK_XML" ]; then
-      # Create new network.xml with minimal configuration
-      cat > "$NETWORK_XML" << 'EOF'
-    <?xml version="1.0" encoding="utf-8"?>
-    <NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-      <KnownProxies>
-        <string>127.0.0.1</string>
-        <string>192.168.1.2</string>
-      </KnownProxies>
-    </NetworkConfiguration>
-    EOF
-    else
-      # Update existing network.xml using xmlstarlet
-      # Ensure KnownProxies element exists
-      if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies" "$NETWORK_XML" &>/dev/null; then
-        # Create KnownProxies element
-        ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
-          -s "//NetworkConfiguration" -t elem -n "KnownProxies" \
-          "$NETWORK_XML"
+      if [ ! -f "$NETWORK_XML" ]; then
+        # Create new network.xml with minimal configuration
+        cat > "$NETWORK_XML" << 'EOF'
+      <?xml version="1.0" encoding="utf-8"?>
+      <NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <KnownProxies>
+          <string>127.0.0.1</string>
+          <string>192.168.1.2</string>
+        </KnownProxies>
+      </NetworkConfiguration>
+      EOF
+      else
+        # Update existing network.xml using xmlstarlet
+        # Ensure KnownProxies element exists
+        if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies" "$NETWORK_XML" &>/dev/null; then
+          # Create KnownProxies element
+          ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
+            -s "//NetworkConfiguration" -t elem -n "KnownProxies" \
+            "$NETWORK_XML"
+        fi
+
+        # Add 127.0.0.1 if not present
+        if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='127.0.0.1']" "$NETWORK_XML" &>/dev/null; then
+          ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
+            -s "//KnownProxies" -t elem -n "string" -v "127.0.0.1" \
+            "$NETWORK_XML"
+        fi
+
+        # Add 192.168.1.2 if not present
+        if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='192.168.1.2']" "$NETWORK_XML" &>/dev/null; then
+          ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
+            -s "//KnownProxies" -t elem -n "string" -v "192.168.1.2" \
+            "$NETWORK_XML"
+        fi
       fi
-
-      # Add 127.0.0.1 if not present
-      if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='127.0.0.1']" "$NETWORK_XML" &>/dev/null; then
-        ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
-          -s "//KnownProxies" -t elem -n "string" -v "127.0.0.1" \
-          "$NETWORK_XML"
-      fi
-
-      # Add 192.168.1.2 if not present
-      if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='192.168.1.2']" "$NETWORK_XML" &>/dev/null; then
-        ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
-          -s "//KnownProxies" -t elem -n "string" -v "192.168.1.2" \
-          "$NETWORK_XML"
-      fi
-    fi
     '';
   };
 
@@ -100,6 +105,5 @@
     };
   };
 
-  networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.jellyfin.enable [ 8096 ];
+  networking.firewall.allowedTCPPorts = lib.mkIf config.services.jellyfin.enable [ 8096 ];
 }

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Script that tests LiteLLM availability by making a simple query
@@ -128,7 +133,8 @@ in
 
   # Link to existing litellm-secrets for the API key
   systemd.services.litellm-exporter.serviceConfig.EnvironmentFile =
-    lib.mkForce config.sops.secrets."litellm-secrets".path;
+    lib.mkForce
+      config.sops.secrets."litellm-secrets".path;
 
   # Ensure prometheus-node-exporter textfile directory exists and is writable
   # Directory is already created by node-exporter.nix with 1777 permissions

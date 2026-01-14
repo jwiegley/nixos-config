@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
@@ -19,12 +24,12 @@ in
   # Note: n8n uses DynamicUser, so secrets are owned by root and accessed via LoadCredential
   sops.secrets = {
     "n8n-db-password" = {
-      owner = "postgres";  # Postgres setup script needs to read this
+      owner = "postgres"; # Postgres setup script needs to read this
       mode = "0440";
     };
 
     "n8n-encryption-key" = {
-      owner = "root";  # DynamicUser will access via systemd LoadCredential
+      owner = "root"; # DynamicUser will access via systemd LoadCredential
       mode = "0400";
       restartUnits = [ "n8n.service" ];
     };
@@ -45,8 +50,8 @@ in
   # Using TCP on localhost - n8n doesn't support Unix sockets via env vars
   services.redis.servers.n8n = {
     enable = true;
-    port = 6382;  # Use non-default port (6380, 6381 already in use)
-    bind = "127.0.0.1";  # Localhost only for security
+    port = 6382; # Use non-default port (6380, 6381 already in use)
+    bind = "127.0.0.1"; # Localhost only for security
     user = "redis-n8n";
   };
 
@@ -110,11 +115,11 @@ in
       # N8N_DISABLE_PRODUCTION_MAIN_PROCESS removed - may block executions in regular mode
 
       # Task runners configuration
-      N8N_RUNNERS_ENABLED = "true";  # Enabled with nodejs in PATH for Code node execution
+      N8N_RUNNERS_ENABLED = "true"; # Enabled with nodejs in PATH for Code node execution
 
       # Security settings
-      N8N_BLOCK_ENV_ACCESS_IN_NODE = "false";  # Allow env var access from Code Node
-      N8N_GIT_NODE_DISABLE_BARE_REPOS = "true";  # Disable bare repos for security
+      N8N_BLOCK_ENV_ACCESS_IN_NODE = "false"; # Allow env var access from Code Node
+      N8N_GIT_NODE_DISABLE_BARE_REPOS = "true"; # Disable bare repos for security
 
       # Trust Step-CA root certificate for webhook HTTPS connections
       NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/vulcan-ca.crt";
@@ -123,8 +128,15 @@ in
 
   # Ensure n8n starts after PostgreSQL and Redis with proper secret access
   systemd.services.n8n = {
-    after = [ "redis-n8n.service" "postgresql-n8n-setup.service" "sops-install-secrets.service" ];
-    requires = [ "redis-n8n.service" "postgresql-n8n-setup.service" ];
+    after = [
+      "redis-n8n.service"
+      "postgresql-n8n-setup.service"
+      "sops-install-secrets.service"
+    ];
+    requires = [
+      "redis-n8n.service"
+      "postgresql-n8n-setup.service"
+    ];
     wants = [ "sops-install-secrets.service" ];
 
     # Add nodejs to PATH so task runners can spawn node processes
@@ -221,15 +233,22 @@ in
   # In queue mode, the main process enqueues jobs and the worker(s) execute them
   systemd.services.n8n-worker = {
     description = "n8n worker - executes queued jobs";
-    after = [ "redis-n8n.service" "postgresql.service" "n8n.service" ];
-    requires = [ "redis-n8n.service" "postgresql.service" ];
+    after = [
+      "redis-n8n.service"
+      "postgresql.service"
+      "n8n.service"
+    ];
+    requires = [
+      "redis-n8n.service"
+      "postgresql.service"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     # Use the same environment as the main n8n service, but override settings for workers
     # Workers should not run their own task broker (port conflict) and need a different port
     environment = config.services.n8n.environment // {
-      N8N_RUNNERS_ENABLED = "false";  # Task runners only in main process
-      QUEUE_HEALTH_CHECK_PORT = "5677";  # Worker health/metrics port (main uses 5678)
+      N8N_RUNNERS_ENABLED = "false"; # Task runners only in main process
+      QUEUE_HEALTH_CHECK_PORT = "5677"; # Worker health/metrics port (main uses 5678)
     };
 
     serviceConfig = {
@@ -286,7 +305,11 @@ in
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+      ];
       RestrictNamespaces = true;
       LockPersonality = true;
       RestrictRealtime = true;

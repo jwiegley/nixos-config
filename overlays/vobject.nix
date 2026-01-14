@@ -1,14 +1,15 @@
 # Override vobject with jwiegley's fork that adds vCard 4.0 support
 # https://github.com/jwiegley/vobject
-{ lib
-, buildPythonPackage
-, fetchFromGitHub
-, isPyPy
-, setuptools
-, python-dateutil
-, pytz
-, six
-, pytestCheckHook
+{
+  lib,
+  buildPythonPackage,
+  fetchFromGitHub,
+  isPyPy,
+  setuptools,
+  python-dateutil,
+  pytz,
+  six,
+  pytestCheckHook,
 }:
 
 buildPythonPackage rec {

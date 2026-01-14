@@ -38,7 +38,7 @@
 
     # No automatic restart (for oneshot services)
     none = {
-      unit = {};
+      unit = { };
       service = {
         Restart = "no";
       };

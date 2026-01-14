@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Modular monitoring configuration
@@ -8,8 +13,8 @@
     # Core monitoring infrastructure
     ./prometheus-server.nix
     ./victoriametrics.nix
-    ./alerting.nix  # Auto-discovers alert rules from alerts/
-    ./system-exporters.nix  # Consolidated: node, systemd, zfs
+    ./alerting.nix # Auto-discovers alert rules from alerts/
+    ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters
     ./postgres-exporter.nix

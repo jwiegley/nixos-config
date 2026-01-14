@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Enable ZFS support with 16K page size (Apple Silicon / Asahi Linux)
@@ -7,7 +12,10 @@
     zfs = {
       forceImportAll = false;
       forceImportRoot = false;
-      extraPools = [ "tank" "gdrive" ];
+      extraPools = [
+        "tank"
+        "gdrive"
+      ];
       # Don't request encryption credentials during boot
       # Encrypted datasets with canmount=noauto must be loaded manually
       requestEncryptionCredentials = false;
@@ -26,15 +34,24 @@
 
   # Ensure zfs-mount waits for pool imports to complete
   systemd.services.zfs-mount = {
-    after = [ "zfs-import-tank.service" "zfs-import-gdrive.service" ];
-    requires = [ "zfs-import-tank.service" "zfs-import-gdrive.service" ];
+    after = [
+      "zfs-import-tank.service"
+      "zfs-import-gdrive.service"
+    ];
+    requires = [
+      "zfs-import-tank.service"
+      "zfs-import-gdrive.service"
+    ];
   };
 
   services.zfs = {
     autoScrub = {
       enable = true;
       interval = "monthly";
-      pools = [ "tank" "gdrive" ];
+      pools = [
+        "tank"
+        "gdrive"
+      ];
     };
   };
 

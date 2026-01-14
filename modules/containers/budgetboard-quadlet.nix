@@ -1,4 +1,10 @@
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
   common = import ../lib/common.nix { inherit secrets; };
@@ -44,7 +50,9 @@ in
 
     script = ''
       # Create environment file with database password
-      echo "POSTGRES_PASSWORD=$(cat ${config.sops.secrets."budgetboard/database-password".path})" > /run/budgetboard/server.env
+      echo "POSTGRES_PASSWORD=$(cat ${
+        config.sops.secrets."budgetboard/database-password".path
+      })" > /run/budgetboard/server.env
       chmod 600 /run/budgetboard/server.env
     '';
   };
@@ -96,8 +104,8 @@ in
       healthCmd = "CMD-SHELL timeout 5 bash -c '</dev/tcp/localhost/8080' || exit 1";
       healthInterval = "30s";
       healthTimeout = "15s";
-      healthStartPeriod = "120s";  # Give 2 minutes for DB migrations
-      healthRetries = 5;  # More retries before marking unhealthy
+      healthStartPeriod = "120s"; # Give 2 minutes for DB migrations
+      healthRetries = 5; # More retries before marking unhealthy
 
       environments = {
         # Logging configuration
@@ -134,9 +142,23 @@ in
     };
 
     unitConfig = {
-      After = [ "sops-nix.service" "podman.service" "postgresql.service" "budgetboard-env-setup.service" "budget-board-pod.service" ];
-      Wants = [ "sops-nix.service" "postgresql.service" "budgetboard-env-setup.service" ];
-      Requires = [ "postgresql.service" "budgetboard-env-setup.service" "budget-board-pod.service" ];
+      After = [
+        "sops-nix.service"
+        "podman.service"
+        "postgresql.service"
+        "budgetboard-env-setup.service"
+        "budget-board-pod.service"
+      ];
+      Wants = [
+        "sops-nix.service"
+        "postgresql.service"
+        "budgetboard-env-setup.service"
+      ];
+      Requires = [
+        "postgresql.service"
+        "budgetboard-env-setup.service"
+        "budget-board-pod.service"
+      ];
       StartLimitIntervalSec = "300";
       StartLimitBurst = "5";
     };
@@ -146,8 +168,8 @@ in
       # pg_isready doesn't require authentication, perfect for pre-start checks
       ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 60";
       Restart = "always";
-      RestartSec = "15s";  # Wait longer between restart attempts
-      TimeoutStartSec = "180s";  # Allow up to 3 minutes for startup (includes DB migrations)
+      RestartSec = "15s"; # Wait longer between restart attempts
+      TimeoutStartSec = "180s"; # Allow up to 3 minutes for startup (includes DB migrations)
       # NOTE: StartLimitBurst/StartLimitIntervalSec are in unitConfig (belong in [Unit], not [Service])
     };
   };
@@ -189,7 +211,11 @@ in
     };
 
     unitConfig = {
-      After = [ "podman.service" "budget-board-server.service" "budget-board-pod.service" ];
+      After = [
+        "podman.service"
+        "budget-board-server.service"
+        "budget-board-pod.service"
+      ];
       Wants = [ "budget-board-server.service" ];
       Requires = [ "budget-board-pod.service" ];
       StartLimitIntervalSec = "300";
@@ -220,7 +246,10 @@ in
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -270,6 +299,6 @@ in
 
   # Firewall configuration
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    6253  # budgetboard-client
+    6253 # budgetboard-client
   ];
 }

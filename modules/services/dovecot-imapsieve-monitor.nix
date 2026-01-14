@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Script to monitor imapsieve health by checking Dovecot logs
@@ -116,7 +121,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${imapsieveHealthCheckScript}";
-      User = "root";  # Need root to read journalctl
+      User = "root"; # Need root to read journalctl
       Group = "root";
 
       # Don't fail the service on exit codes 1 or 2 (warnings/critical)
@@ -124,7 +129,10 @@ in
       SuccessExitStatus = "0 1 2";
     };
 
-    path = with pkgs; [ systemd coreutils ];
+    path = with pkgs; [
+      systemd
+      coreutils
+    ];
   };
 
   # Timer to run health check every 5 minutes

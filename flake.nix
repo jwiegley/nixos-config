@@ -11,17 +11,17 @@
 
     firmware = {
       url = "git+file:///etc/nixos/firmware";
-      flake = false;  # It's just data, not a flake
+      flake = false; # It's just data, not a flake
     };
 
     secrets = {
       url = "git+file:///etc/nixos/secrets";
-      flake = false;  # It's just data, not a flake
+      flake = false; # It's just data, not a flake
     };
 
     nagios = {
       url = "git+file:///etc/nixos/nagios";
-      flake = false;  # It's just data, not a flake
+      flake = false; # It's just data, not a flake
     };
 
     sops-nix = {
@@ -63,29 +63,33 @@
     };
   };
 
-  outputs = inputs: let system = "aarch64-linux"; in {
-    formatter.aarch64-linux =
-      inputs.nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
+  outputs =
+    inputs:
+    let
+      system = "aarch64-linux";
+    in
+    {
+      formatter.aarch64-linux = inputs.nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
 
-    nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {
-        inherit system inputs;
-        inherit (inputs) firmware secrets nagios;
+      nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit system inputs;
+          inherit (inputs) firmware secrets nagios;
+        };
+        modules = [
+          inputs.nixos-apple-silicon.nixosModules.default
+          inputs.sops-nix.nixosModules.sops
+          inputs.quadlet-nix.nixosModules.quadlet
+          inputs.nixos-logwatch.nixosModules.logwatch
+          inputs.home-manager.nixosModules.home-manager
+          {
+            nixpkgs.overlays = [
+              (import ./overlays inputs system)
+            ];
+          }
+          ./hosts/vulcan
+        ];
       };
-      modules = [
-        inputs.nixos-apple-silicon.nixosModules.default
-        inputs.sops-nix.nixosModules.sops
-        inputs.quadlet-nix.nixosModules.quadlet
-        inputs.nixos-logwatch.nixosModules.logwatch
-        inputs.home-manager.nixosModules.home-manager
-        {
-          nixpkgs.overlays = [
-            (import ./overlays inputs system)
-          ];
-        }
-        ./hosts/vulcan
-      ];
     };
-  };
 }

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Shell script to call rspamc learn_spam
@@ -460,7 +465,7 @@ in
 
       # Custom TLD file - includes .lan for internal domain URLs
       # This file supplements the default public suffix list
-      "maps.d/effective_tld_names.dat".source = pkgs.runCommand "custom-tlds" {} ''
+      "maps.d/effective_tld_names.dat".source = pkgs.runCommand "custom-tlds" { } ''
         # Copy the default TLD list
         cat ${pkgs.rspamd}/share/rspamd/effective_tld_names.dat > $out
         # Add custom local TLDs
@@ -787,11 +792,20 @@ in
     enable = true;
     port = 6381;
     bind = "127.0.0.1";
-    requirePass = null;  # No password for local-only access
+    requirePass = null; # No password for local-only access
     save = [
-      [900 1]    # Save after 900 sec if at least 1 key changed
-      [300 10]   # Save after 300 sec if at least 10 keys changed
-      [60 10000] # Save after 60 sec if at least 10000 keys changed
+      [
+        900
+        1
+      ] # Save after 900 sec if at least 1 key changed
+      [
+        300
+        10
+      ] # Save after 300 sec if at least 10 keys changed
+      [
+        60
+        10000
+      ] # Save after 60 sec if at least 10000 keys changed
     ];
   };
 
@@ -862,9 +876,11 @@ in
     {
       job_name = "rspamd";
       scrape_interval = "60s";
-      static_configs = [{
-        targets = [ "localhost:11334" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:11334" ];
+        }
+      ];
       metrics_path = "/metrics";
     }
   ];

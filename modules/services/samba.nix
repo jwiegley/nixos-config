@@ -1,67 +1,191 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # List of ZFS filesystems to create Samba shares for
   # Generated from: zfs list -t filesystem -H -o name,mountpoint | grep '^tank' | grep -v 'none\|legacy'
   zfsFilesystems = [
-    { name = "tank";                          mountpoint = "/tank"; }
-    { name = "tank/Audio";                    mountpoint = "/tank/Audio"; }
-    { name = "tank/Backups";                  mountpoint = "/tank/Backups"; }
-    { name = "tank/Backups/Assembly";         mountpoint = "/tank/Backups/Assembly"; }
-    { name = "tank/Backups/Assembly/Drive";   mountpoint = "/tank/Backups/Assembly/Drive"; }
-    { name = "tank/Backups/Git";              mountpoint = "/tank/Backups/Git"; }
-    { name = "tank/Backups/Images";           mountpoint = "/tank/Backups/Images"; }
-    { name = "tank/Backups/Contracts";        mountpoint = "/tank/Backups/Contracts"; }
-    { name = "tank/Backups/Contracts/Kadena"; mountpoint = "/tank/Backups/Contracts/Kadena"; }
-    { name = "tank/Backups/Machines";         mountpoint = "/tank/Backups/Machines"; }
-    { name = "tank/Backups/Machines/Hera";    mountpoint = "/tank/Backups/Machines/Hera"; }
-    { name = "tank/Backups/Machines/Clio";    mountpoint = "/tank/Backups/Machines/Clio"; }
-    { name = "tank/Backups/Machines/Vulcan";  mountpoint = "/tank/Backups/Machines/Vulcan"; }
-    { name = "tank/Backups/Machines/Athena";  mountpoint = "/tank/Backups/Machines/Athena"; }
-    { name = "tank/Games";                    mountpoint = "/tank/Games"; }
-    { name = "tank/Databases";                mountpoint = "/tank/Databases"; }
-    { name = "tank/Desktop";                  mountpoint = "/tank/Desktop"; }
-    { name = "tank/Documents";                mountpoint = "/tank/Documents"; }
-    { name = "tank/Downloads";                mountpoint = "/tank/Downloads"; }
-    { name = "tank/Home";                     mountpoint = "/tank/Home"; }
-    { name = "tank/Machines";                 mountpoint = "/tank/Machines"; }
-    { name = "tank/Media";                    mountpoint = "/tank/Media"; }
-    { name = "tank/Models";                   mountpoint = "/tank/Models"; }
-    { name = "tank/Models/HuggingFace";       mountpoint = "/tank/Models/HuggingFace"; }
-    { name = "tank/Models/Llama.cpp";         mountpoint = "/tank/Models/Llama.cpp"; }
-    { name = "tank/Movies";                   mountpoint = "/tank/Movies"; }
-    { name = "tank/Music";                    mountpoint = "/tank/Music"; }
-    { name = "tank/Photos";                   mountpoint = "/tank/Photos"; }
-    { name = "tank/Photos/Immich";            mountpoint = "/tank/Photos/Immich"; }
-    { name = "tank/Pictures";                 mountpoint = "/tank/Pictures"; }
-    { name = "tank/Public";                   mountpoint = "/tank/Public"; }
-    { name = "tank/Public/download";          mountpoint = "/tank/Public/download"; }
-    { name = "tank/Video";                    mountpoint = "/tank/Video"; }
-    { name = "tank/Video/Zoom";               mountpoint = "/tank/Video/Zoom"; }
-    { name = "tank/doc";                      mountpoint = "/tank/doc"; }
-    { name = "tank/iCloud";                   mountpoint = "/tank/iCloud"; }
-    { name = "tank/src";                      mountpoint = "/tank/src"; }
-    { name = "tank/Archives";                 mountpoint = "/tank/Archives"; }
-    { name = "tank/Archives/ZIM";             mountpoint = "/tank/Archives/ZIM"; }
+    {
+      name = "tank";
+      mountpoint = "/tank";
+    }
+    {
+      name = "tank/Audio";
+      mountpoint = "/tank/Audio";
+    }
+    {
+      name = "tank/Backups";
+      mountpoint = "/tank/Backups";
+    }
+    {
+      name = "tank/Backups/Assembly";
+      mountpoint = "/tank/Backups/Assembly";
+    }
+    {
+      name = "tank/Backups/Assembly/Drive";
+      mountpoint = "/tank/Backups/Assembly/Drive";
+    }
+    {
+      name = "tank/Backups/Git";
+      mountpoint = "/tank/Backups/Git";
+    }
+    {
+      name = "tank/Backups/Images";
+      mountpoint = "/tank/Backups/Images";
+    }
+    {
+      name = "tank/Backups/Contracts";
+      mountpoint = "/tank/Backups/Contracts";
+    }
+    {
+      name = "tank/Backups/Contracts/Kadena";
+      mountpoint = "/tank/Backups/Contracts/Kadena";
+    }
+    {
+      name = "tank/Backups/Machines";
+      mountpoint = "/tank/Backups/Machines";
+    }
+    {
+      name = "tank/Backups/Machines/Hera";
+      mountpoint = "/tank/Backups/Machines/Hera";
+    }
+    {
+      name = "tank/Backups/Machines/Clio";
+      mountpoint = "/tank/Backups/Machines/Clio";
+    }
+    {
+      name = "tank/Backups/Machines/Vulcan";
+      mountpoint = "/tank/Backups/Machines/Vulcan";
+    }
+    {
+      name = "tank/Backups/Machines/Athena";
+      mountpoint = "/tank/Backups/Machines/Athena";
+    }
+    {
+      name = "tank/Games";
+      mountpoint = "/tank/Games";
+    }
+    {
+      name = "tank/Databases";
+      mountpoint = "/tank/Databases";
+    }
+    {
+      name = "tank/Desktop";
+      mountpoint = "/tank/Desktop";
+    }
+    {
+      name = "tank/Documents";
+      mountpoint = "/tank/Documents";
+    }
+    {
+      name = "tank/Downloads";
+      mountpoint = "/tank/Downloads";
+    }
+    {
+      name = "tank/Home";
+      mountpoint = "/tank/Home";
+    }
+    {
+      name = "tank/Machines";
+      mountpoint = "/tank/Machines";
+    }
+    {
+      name = "tank/Media";
+      mountpoint = "/tank/Media";
+    }
+    {
+      name = "tank/Models";
+      mountpoint = "/tank/Models";
+    }
+    {
+      name = "tank/Models/HuggingFace";
+      mountpoint = "/tank/Models/HuggingFace";
+    }
+    {
+      name = "tank/Models/Llama.cpp";
+      mountpoint = "/tank/Models/Llama.cpp";
+    }
+    {
+      name = "tank/Movies";
+      mountpoint = "/tank/Movies";
+    }
+    {
+      name = "tank/Music";
+      mountpoint = "/tank/Music";
+    }
+    {
+      name = "tank/Photos";
+      mountpoint = "/tank/Photos";
+    }
+    {
+      name = "tank/Photos/Immich";
+      mountpoint = "/tank/Photos/Immich";
+    }
+    {
+      name = "tank/Pictures";
+      mountpoint = "/tank/Pictures";
+    }
+    {
+      name = "tank/Public";
+      mountpoint = "/tank/Public";
+    }
+    {
+      name = "tank/Public/download";
+      mountpoint = "/tank/Public/download";
+    }
+    {
+      name = "tank/Video";
+      mountpoint = "/tank/Video";
+    }
+    {
+      name = "tank/Video/Zoom";
+      mountpoint = "/tank/Video/Zoom";
+    }
+    {
+      name = "tank/doc";
+      mountpoint = "/tank/doc";
+    }
+    {
+      name = "tank/iCloud";
+      mountpoint = "/tank/iCloud";
+    }
+    {
+      name = "tank/src";
+      mountpoint = "/tank/src";
+    }
+    {
+      name = "tank/Archives";
+      mountpoint = "/tank/Archives";
+    }
+    {
+      name = "tank/Archives/ZIM";
+      mountpoint = "/tank/Archives/ZIM";
+    }
   ];
 
   # Function to generate a Samba share name from ZFS dataset name
   # Replaces "/" with "-" in the dataset name
-  mkShareName = name: builtins.replaceStrings ["/"] ["-"] name;
+  mkShareName = name: builtins.replaceStrings [ "/" ] [ "-" ] name;
 
   # Generate Samba share configurations for all ZFS filesystems
-  zfsShares = lib.listToAttrs (map (fs: {
-    name = mkShareName fs.name;
-    value = {
-      path = fs.mountpoint;
-      comment = "ZFS: ${fs.name}";
-      "valid users" = "johnw assembly";
-      "read only" = "no";
-      browseable = "yes";
-      "create mask" = "0664";
-      "directory mask" = "0775";
-    };
-  }) zfsFilesystems);
+  zfsShares = lib.listToAttrs (
+    map (fs: {
+      name = mkShareName fs.name;
+      value = {
+        path = fs.mountpoint;
+        comment = "ZFS: ${fs.name}";
+        "valid users" = "johnw assembly";
+        "read only" = "no";
+        browseable = "yes";
+        "create mask" = "0664";
+        "directory mask" = "0775";
+      };
+    }) zfsFilesystems
+  );
 
 in
 {
@@ -96,11 +220,11 @@ in
     # Main Samba service
     samba = {
       enable = true;
-      openFirewall = true;  # Opens ports 139, 445, 137, 138
+      openFirewall = true; # Opens ports 139, 445, 137, 138
 
       # Enable Samba daemons
-      smbd.enable = true;   # SMB/CIFS file sharing daemon
-      nmbd.enable = true;   # NetBIOS name service (for network browsing)
+      smbd.enable = true; # SMB/CIFS file sharing daemon
+      nmbd.enable = true; # NetBIOS name service (for network browsing)
 
       settings = {
         global = {
@@ -157,7 +281,8 @@ in
           "create mask" = "0644";
           "directory mask" = "0755";
         };
-      } // zfsShares;
+      }
+      // zfsShares;
     };
 
     # Web Services Dynamic Discovery (helps Windows 10+ discover the server)
@@ -171,7 +296,10 @@ in
   # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services = {
     samba-nmbd = {
-      after = [ "zfs.target" "zfs-import-tank.service" ];
+      after = [
+        "zfs.target"
+        "zfs-import-tank.service"
+      ];
       wantedBy = [ "tank.mount" ];
       unitConfig = {
         RequiresMountsFor = [ "/tank" ];
@@ -183,7 +311,10 @@ in
       };
     };
     samba-smbd = {
-      after = [ "zfs.target" "zfs-import-tank.service" ];
+      after = [
+        "zfs.target"
+        "zfs-import-tank.service"
+      ];
       wantedBy = [ "tank.mount" ];
       unitConfig = {
         RequiresMountsFor = [ "/tank" ];
@@ -195,7 +326,10 @@ in
       };
     };
     samba-winbindd = {
-      after = [ "zfs.target" "zfs-import-tank.service" ];
+      after = [
+        "zfs.target"
+        "zfs-import-tank.service"
+      ];
       wantedBy = [ "tank.mount" ];
       unitConfig = {
         RequiresMountsFor = [ "/tank" ];

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ACME configuration for Let's Encrypt certificates
@@ -36,7 +41,10 @@
         "redirect-http" = {
           serverName = "_";
           listen = [
-            { addr = "0.0.0.0"; port = 80; }
+            {
+              addr = "0.0.0.0";
+              port = 80;
+            }
           ];
           locations."/".return = "301 https://$host$request_uri";
         };
@@ -52,6 +60,8 @@
     };
   };
 
-  networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.nginx.enable [ 80 443 ];
+  networking.firewall.allowedTCPPorts = lib.mkIf config.services.nginx.enable [
+    80
+    443
+  ];
 }

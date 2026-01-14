@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -11,7 +16,8 @@ let
   wifiIP = "192.168.3.16";
   wifiGateway = "192.168.3.1";
 
-in {
+in
+{
   # Temporarily swap interface route metrics during Home Assistant startup
   # This tricks python-zeroconf into selecting WiFi interface (lowest metric)
   # After HA starts and binds sockets, metrics are restored for normal operation
@@ -23,14 +29,20 @@ in {
       before = [ "home-assistant.service" ];
 
       # Ensure network interfaces and NetworkManager are ready
-      after = [ "network-online.target" "NetworkManager.service" ];
+      after = [
+        "network-online.target"
+        "NetworkManager.service"
+      ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
 
       # Ensure this service stops AFTER home-assistant stops
       requiredBy = [ "home-assistant.service" ];
 
-      path = with pkgs; [ iproute2 coreutils ];
+      path = with pkgs; [
+        iproute2
+        coreutils
+      ];
 
       serviceConfig = {
         Type = "oneshot";

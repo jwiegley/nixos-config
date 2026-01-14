@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Fetchmail configuration template for Good folder (IDLE mode)
@@ -82,7 +87,10 @@ in
 {
   # SOPS secret for Fastmail password (already exists, just declare usage)
   sops.secrets."johnw-fastmail-password" = {
-    restartUnits = [ "fetchmail-good.service" "fetchmail-spam.service" ];
+    restartUnits = [
+      "fetchmail-good.service"
+      "fetchmail-spam.service"
+    ];
   };
 
   # Fetchmail user and group
@@ -93,7 +101,7 @@ in
     home = "/var/lib/fetchmail";
     createHome = true;
   };
-  users.groups.fetchmail = {};
+  users.groups.fetchmail = { };
 
   # Log directories and files
   systemd.tmpfiles.rules = [
@@ -106,13 +114,16 @@ in
   # Fetchmail systemd service for Good folder (IDLE mode)
   systemd.services.fetchmail-good = {
     description = "Fetchmail daemon for Good folder (IDLE mode)";
-    after = [ "network-online.target" "dovecot.service" ];
+    after = [
+      "network-online.target"
+      "dovecot.service"
+    ];
     wants = [ "network-online.target" ];
     requires = [ "dovecot.service" ];
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
-      Type = "simple";  # IDLE mode runs in foreground
+      Type = "simple"; # IDLE mode runs in foreground
       User = "fetchmail";
       Group = "fetchmail";
 
@@ -139,7 +150,11 @@ in
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
-      ReadWritePaths = [ "/var/log/fetchmail-good" "/run/dovecot2" "/var/lib/fetchmail" ];
+      ReadWritePaths = [
+        "/var/log/fetchmail-good"
+        "/run/dovecot2"
+        "/var/lib/fetchmail"
+      ];
 
       # Allow access to Dovecot LMTP socket
       SupplementaryGroups = [ "dovecot2" ];

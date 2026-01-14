@@ -5,7 +5,12 @@
 #
 # The system user definitions are in /etc/nixos/modules/users/container-users-dedicated.nix
 
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # All container users have individual Home Manager modules

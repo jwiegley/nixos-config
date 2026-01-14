@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/teable.nix)
 # This file: Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager
@@ -59,7 +65,7 @@
 
   # Firewall rules
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    3001  # teable
+    3001 # teable
   ];
 
   # tmpfiles rules

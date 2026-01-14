@@ -1,8 +1,15 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Package the Python script
-  dns-query-log-exporter = pkgs.writeScriptBin "dns-query-log-exporter" (builtins.readFile ../scripts/dns-query-log-exporter.py);
+  dns-query-log-exporter = pkgs.writeScriptBin "dns-query-log-exporter" (
+    builtins.readFile ../scripts/dns-query-log-exporter.py
+  );
 in
 {
   # DNS Query Log Exporter - pushes Technitium DNS query logs to Loki
@@ -10,7 +17,10 @@ in
   systemd.services.dns-query-log-exporter = {
     description = "Technitium DNS Query Log Exporter for Loki and Prometheus";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" "loki.service" ];
+    after = [
+      "network.target"
+      "loki.service"
+    ];
     wants = [ "loki.service" ];
 
     # Restart on failure
@@ -49,7 +59,12 @@ in
     # Use Python script we created
     script = ''
       export TECHNITIUM_TOKEN="$TECHNITIUM_API_DNS_TOKEN"
-      exec ${pkgs.python3.withPackages (ps: [ ps.requests ps.prometheus-client ])}/bin/python3 \
+      exec ${
+        pkgs.python3.withPackages (ps: [
+          ps.requests
+          ps.prometheus-client
+        ])
+      }/bin/python3 \
         ${dns-query-log-exporter}/bin/dns-query-log-exporter
     '';
   };
@@ -63,20 +78,23 @@ in
     extraGroups = [ "technitium-readers" ];
   };
 
-  users.groups.dns-query-exporter = {};
+  users.groups.dns-query-exporter = { };
 
   # Shared group for Technitium DNS secret access
   # Both dns-query-exporter and container-monitor need to read technitium-dns-exporter-env
-  users.groups.technitium-readers = {};
+  users.groups.technitium-readers = { };
 
   # SOPS secret configuration
   # Shared secret between dns-query-log-exporter and technitium-dns-exporter container
   # Both services need API token to access Technitium DNS Server
   sops.secrets."technitium-dns-exporter-env" = lib.mkForce {
     owner = "dns-query-exporter";
-    group = "technitium-readers";  # Shared group for both services
-    mode = "0440";  # Owner and group can read
-    restartUnits = [ "dns-query-log-exporter.service" "technitium-dns-exporter.service" ];
+    group = "technitium-readers"; # Shared group for both services
+    mode = "0440"; # Owner and group can read
+    restartUnits = [
+      "dns-query-log-exporter.service"
+      "technitium-dns-exporter.service"
+    ];
   };
 
   # Prometheus scrape configuration for DNS query log metrics
@@ -84,14 +102,16 @@ in
   services.prometheus.scrapeConfigs = [
     {
       job_name = "dns_query_logs";
-      static_configs = [{
-        targets = [ "localhost:9275" ];
-        labels = {
-          alias = "vulcan-dns-queries";
-          role = "dns-logs";
-          service = "dns-query-exporter";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:9275" ];
+          labels = {
+            alias = "vulcan-dns-queries";
+            role = "dns-logs";
+            service = "dns-query-exporter";
+          };
+        }
+      ];
       # Scrape frequently to track query patterns
       scrape_interval = "15s";
       scrape_timeout = "10s";

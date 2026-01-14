@@ -83,12 +83,12 @@ in
       ps.tqdm
 
       # Deep Learning books/tutorials
-      d2l  # Dive into Deep Learning companion library
+      d2l # Dive into Deep Learning companion library
     ]);
 
   # Extend Python package sets system-wide using pythonPackagesExtensions
   # This ensures all Python derivations (including Home Assistant's) get our custom packages
-  pythonPackagesExtensions = prev.pythonPackagesExtensions or [] ++ [
+  pythonPackagesExtensions = prev.pythonPackagesExtensions or [ ] ++ [
     (pyfinal: pyprev: {
       # HACS frontend package
       hacs-frontend = pyfinal.callPackage hacsFrontendDef { };
@@ -120,7 +120,7 @@ in
     })
   ];
 
-  home-assistant-custom-components = prev.home-assistant-custom-components or {} // {
+  home-assistant-custom-components = prev.home-assistant-custom-components or { } // {
     # HACS - Home Assistant Community Store
     hacs = final.callPackage ./hacs.nix {
       hacs-frontend = final.python3Packages.hacs-frontend;
@@ -130,73 +130,78 @@ in
     intellicenter = final.callPackage ./intellicenter.nix { };
   };
 
-  llama-cpp = (prev.llama-cpp.override {
-    vulkanSupport = true;  # Compiled but buggy on Asahi - don't use -ngl flag
-    blasSupport = true;    # Enable BLAS for optimized CPU inference
-  }).overrideAttrs(attrs: rec {
-    version = "6721";
-    src = prev.fetchFromGitHub {
-      owner = "ggml-org";
-      repo = "llama.cpp";
-      tag = "b${version}";
-      hash = "sha256-saqnRL04KZSMAdoo1AuqoivmN4kG5Lfaxg4AYk24JJg=";
-    };
-  });
+  llama-cpp =
+    (prev.llama-cpp.override {
+      vulkanSupport = true; # Compiled but buggy on Asahi - don't use -ngl flag
+      blasSupport = true; # Enable BLAS for optimized CPU inference
+    }).overrideAttrs
+      (attrs: rec {
+        version = "6721";
+        src = prev.fetchFromGitHub {
+          owner = "ggml-org";
+          repo = "llama.cpp";
+          tag = "b${version}";
+          hash = "sha256-saqnRL04KZSMAdoo1AuqoivmN4kG5Lfaxg4AYk24JJg=";
+        };
+      });
 
   llama-swap =
-  let
-    version = "164";
+    let
+      version = "164";
 
-    src = prev.fetchFromGitHub {
-      owner = "mostlygeek";
-      repo = "llama-swap";
-      rev = "v${version}";
-      hash = "sha256-Br3CES4j78nev858qw+TeTSJ74kjKAErHFCMg9cAZSc=";
-    };
+      src = prev.fetchFromGitHub {
+        owner = "mostlygeek";
+        repo = "llama-swap";
+        rev = "v${version}";
+        hash = "sha256-Br3CES4j78nev858qw+TeTSJ74kjKAErHFCMg9cAZSc=";
+      };
 
-    ui = with prev; buildNpmPackage (finalAttrs: {
-      pname = "llama-swap-ui";
+      ui =
+        with prev;
+        buildNpmPackage (finalAttrs: {
+          pname = "llama-swap-ui";
+          inherit version src;
+
+          postPatch = ''
+            substituteInPlace vite.config.ts \
+            --replace '../proxy/ui_dist' '${placeholder "out"}/ui_dist'
+          '';
+
+          sourceRoot = "source/ui";
+
+          npmDepsHash = "sha256-F6izMZY4554M6PqPYjKcjNol3A6BZHHYA0CIcNrU5JA=";
+
+          postInstall = ''
+            rm -rf $out/lib
+          '';
+
+          meta = {
+            description = "llama-swap - UI";
+            license = lib.licenses.mit;
+            platforms = lib.platforms.unix;
+          };
+        });
+    in
+    with prev;
+    llama-swap.overrideAttrs (attrs: rec {
       inherit version src;
-
-      postPatch = ''
-        substituteInPlace vite.config.ts \
-        --replace '../proxy/ui_dist' '${placeholder "out"}/ui_dist'
+      vendorHash = "sha256-5mmciFAGe8ZEIQvXejhYN+ocJL3wOVwevIieDuokhGU=";
+      preBuild = ''
+        cp -r ${ui}/ui_dist proxy/
       '';
-
-      sourceRoot = "source/ui";
-
-      npmDepsHash = "sha256-F6izMZY4554M6PqPYjKcjNol3A6BZHHYA0CIcNrU5JA=";
-
-      postInstall = ''
-        rm -rf $out/lib
-      '';
-
+      ldflags = [
+        "-X main.version=${version}"
+        "-X main.date=unknown"
+        "-X main.commit=v${version}"
+      ];
+      doCheck = false;
       meta = {
-        description = "llama-swap - UI";
+        description = "Model swapping for llama.cpp (or any local OpenAPI compatible server)";
         license = lib.licenses.mit;
         platforms = lib.platforms.unix;
+        mainProgram = "llama-swap";
       };
     });
-  in
-  with prev; llama-swap.overrideAttrs(attrs: rec {
-    inherit version src;
-    vendorHash = "sha256-5mmciFAGe8ZEIQvXejhYN+ocJL3wOVwevIieDuokhGU=";
-    preBuild = ''
-      cp -r ${ui}/ui_dist proxy/
-    '';
-    ldflags = [
-      "-X main.version=${version}"
-      "-X main.date=unknown"
-      "-X main.commit=v${version}"
-    ];
-    doCheck = false;
-    meta = {
-      description = "Model swapping for llama.cpp (or any local OpenAPI compatible server)";
-      license = lib.licenses.mit;
-      platforms = lib.platforms.unix;
-      mainProgram = "llama-swap";
-    };
-  });
 
   claude-code = inputs.llm-agents.packages.${system}.claude-code;
   claude-code-acp = inputs.llm-agents.packages.${system}.claude-code-acp;
@@ -227,7 +232,7 @@ in
       hash = "sha256-lfMU9o/wnHHAnfRUUNto1edZjXI32q847ZQkSoekg5o=";
     };
     # Remove patches that are already included in 3.13.2
-    patches = [];
+    patches = [ ];
   });
 
   # n8n - Update to 1.120.3 to fix workflow execution bug in 1.118.2
@@ -260,7 +265,7 @@ in
   zfs_unstable = prev.zfs_unstable.overrideAttrs (oldAttrs: {
     meta = oldAttrs.meta // {
       description = oldAttrs.meta.description + " (patched for 16K page size)";
-      broken = false;  # Un-break if marked broken on aarch64 with 16K pages
+      broken = false; # Un-break if marked broken on aarch64 with 16K pages
     };
 
     # Note: If build fails with PAGE_SIZE errors, we'll need to add patches here

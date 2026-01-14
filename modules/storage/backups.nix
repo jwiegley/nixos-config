@@ -1,35 +1,42 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Helper function to create a backup configuration
-  mkBackup = {
-    name,
-    path ? "/tank/${name}",
-    bucket ? name,
-    exclude ? []
-  }: {
-    "${name}" = {
-      paths = [ "${path}" ];
-      inherit exclude;
-      repository = "s3:s3.us-west-001.backblazeb2.com/jwiegley-${bucket}";
-      initialize = true;
-      passwordFile = "/run/secrets/restic-password";
-      environmentFile = "/run/secrets/aws-keys";
-      timerConfig = {
-        OnCalendar = "*-*-* 02:00:00";  # Daily at 2AM
-        Persistent = true;
+  mkBackup =
+    {
+      name,
+      path ? "/tank/${name}",
+      bucket ? name,
+      exclude ? [ ],
+    }:
+    {
+      "${name}" = {
+        paths = [ "${path}" ];
+        inherit exclude;
+        repository = "s3:s3.us-west-001.backblazeb2.com/jwiegley-${bucket}";
+        initialize = true;
+        passwordFile = "/run/secrets/restic-password";
+        environmentFile = "/run/secrets/aws-keys";
+        timerConfig = {
+          OnCalendar = "*-*-* 02:00:00"; # Daily at 2AM
+          Persistent = true;
+        };
+        pruneOpts = [
+          "--keep-daily 7"
+          "--keep-weekly 5"
+          "--keep-yearly 3"
+        ];
+        # Wait up to 5 minutes if repository is locked (prevents immediate failures)
+        extraBackupArgs = [ "--retry-lock=5m" ];
+        # Clean up any stale locks before starting backup
+        backupPrepareCommand = "${pkgs.restic}/bin/restic unlock || true";
       };
-      pruneOpts = [
-        "--keep-daily 7"
-        "--keep-weekly 5"
-        "--keep-yearly 3"
-      ];
-      # Wait up to 5 minutes if repository is locked (prevents immediate failures)
-      extraBackupArgs = [ "--retry-lock=5m" ];
-      # Clean up any stale locks before starting backup
-      backupPrepareCommand = "${pkgs.restic}/bin/restic unlock || true";
     };
-  };
 
   # Common exclude patterns for source code
   sourceExcludes = [
@@ -115,42 +122,43 @@ let
     "rpool"
   ];
 
-  attrNameList = attrs:
-    builtins.concatStringsSep " " (builtins.attrNames attrs);
+  attrNameList = attrs: builtins.concatStringsSep " " (builtins.attrNames attrs);
 
   # Restic operations script
-  resticOperations = backups: pkgs.writeShellApplication {
-    name = "restic-operations";
-    text = ''
-      operation="''${1:-check}"
-      shift || true
+  resticOperations =
+    backups:
+    pkgs.writeShellApplication {
+      name = "restic-operations";
+      text = ''
+        operation="''${1:-check}"
+        shift || true
 
-      for fileset in ${attrNameList backups} ; do
-        echo "=== $fileset ==="
-        case "$operation" in
-          check)
-            # Unlock any stale locks before starting check operations
-            /run/current-system/sw/bin/restic-$fileset unlock || true
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h check
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h prune
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h repair snapshots
-            ;;
-          snapshots)
-            /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-              ${pkgs.jq}/bin/jq -r \
-                'sort_by(.time) | reverse | .[:4][] | .time'
-            ;;
-          *)
-            echo "Unknown operation: $operation"
-            exit 1
-            ;;
-        esac
-      done
-    '';
-  };
+        for fileset in ${attrNameList backups} ; do
+          echo "=== $fileset ==="
+          case "$operation" in
+            check)
+              # Unlock any stale locks before starting check operations
+              /run/current-system/sw/bin/restic-$fileset unlock || true
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h check
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h prune
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h repair snapshots
+              ;;
+            snapshots)
+              /run/current-system/sw/bin/restic-$fileset snapshots --json | \
+                ${pkgs.jq}/bin/jq -r \
+                  'sort_by(.time) | reverse | .[:4][] | .time'
+              ;;
+            *)
+              echo "Unknown operation: $operation"
+              exit 1
+              ;;
+          esac
+        done
+      '';
+    };
 in
 {
   # List snapshots to verify backups are being created:
@@ -173,8 +181,8 @@ in
   # mkBackup { path = "Pictures"; }
 
   sops.secrets = {
-    aws-keys = {};
-    restic-password = {};
+    aws-keys = { };
+    restic-password = { };
     # Note: Restic metrics collection uses aws-keys and restic-password
     # via the textfile collector approach (see prometheus-monitoring.nix)
   };
@@ -226,27 +234,35 @@ in
   # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services = lib.mkMerge [
     # Override each individual restic-backups-* service
-    (lib.mkMerge (map (name: {
-      "restic-backups-${name}" = {
-        after = [ "zfs.target" "zfs-import-tank.service" ];
-        wantedBy = [ "tank.mount" ];
-        unitConfig = {
-          RequiresMountsFor = [ "/tank" ];
-          ConditionPathIsMountPoint = "/tank";
+    (lib.mkMerge (
+      map (name: {
+        "restic-backups-${name}" = {
+          after = [
+            "zfs.target"
+            "zfs-import-tank.service"
+          ];
+          wantedBy = [ "tank.mount" ];
+          unitConfig = {
+            RequiresMountsFor = [ "/tank" ];
+            ConditionPathIsMountPoint = "/tank";
+          };
+          # Prevent restart during system reconfiguration if backup is running
+          # This avoids repository lock conflicts when nixos-rebuild runs during a backup
+          serviceConfig = {
+            X-RestartIfChanged = false;
+          };
         };
-        # Prevent restart during system reconfiguration if backup is running
-        # This avoids repository lock conflicts when nixos-rebuild runs during a backup
-        serviceConfig = {
-          X-RestartIfChanged = false;
-        };
-      };
-    }) (builtins.attrNames config.services.restic.backups)))
+      }) (builtins.attrNames config.services.restic.backups)
+    ))
 
     # restic-check service
     {
       restic-check = {
         description = "Run restic check on backup repository";
-        after = [ "zfs.target" "zfs-import-tank.service" ];
+        after = [
+          "zfs.target"
+          "zfs-import-tank.service"
+        ];
         wantedBy = [ "tank.mount" ];
         unitConfig = {
           RequiresMountsFor = [ "/tank" ];
@@ -263,7 +279,10 @@ in
   systemd.timers = {
     restic-check = {
       description = "Timer for restic check";
-      wantedBy = [ "timers.target" "tank.mount" ];
+      wantedBy = [
+        "timers.target"
+        "tank.mount"
+      ];
       timerConfig = {
         OnCalendar = "weekly";
         Persistent = true;

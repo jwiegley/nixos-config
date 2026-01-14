@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Core Prometheus server configuration
@@ -39,9 +44,11 @@
     # Alertmanager configuration
     alertmanagers = lib.mkIf config.services.prometheus.alertmanager.enable [
       {
-        static_configs = [{
-          targets = [ "localhost:9093" ];
-        }];
+        static_configs = [
+          {
+            targets = [ "localhost:9093" ];
+          }
+        ];
       }
     ];
   };
@@ -65,7 +72,11 @@
     description = "Create Prometheus TSDB snapshot for disaster recovery";
     after = [ "prometheus.service" ];
     requires = [ "prometheus.service" ];
-    path = [ pkgs.curl pkgs.jq pkgs.coreutils ];
+    path = [
+      pkgs.curl
+      pkgs.jq
+      pkgs.coreutils
+    ];
 
     serviceConfig = {
       Type = "oneshot";

@@ -5,7 +5,12 @@
 # - gitea.newartisans.com → localhost:3005 (Gitea)
 # - s.newartisans.com → localhost:8580 (Shlink)
 
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 {
   # Ensure cloudflared user and group exist
@@ -46,7 +51,10 @@
   # Added resilience for boot timing: delays between restarts and higher burst limit
   systemd.services."cloudflared-tunnel-data" = {
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "nss-lookup.target" ];
+    after = [
+      "network-online.target"
+      "nss-lookup.target"
+    ];
     wants = [ "network-online.target" ];
     requires = [ "network-online.target" ];
     description = "CloudFlare Tunnel for data.newartisans.com";

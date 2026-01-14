@@ -1,4 +1,11 @@
-{ inputs, config, lib, pkgs, system, ... }:
+{
+  inputs,
+  config,
+  lib,
+  pkgs,
+  system,
+  ...
+}:
 
 {
   # Create a static gitea-runner user and add to keys group
@@ -7,7 +14,7 @@
     group = "gitea-runner";
     extraGroups = [ "keys" ];
   };
-  users.groups.gitea-runner = {};
+  users.groups.gitea-runner = { };
 
   # SOPS secrets for Gitea Actions Runner
   sops.secrets = {
@@ -20,7 +27,7 @@
     "rclone-config" = {
       owner = "root";
       group = "keys";
-      mode = "0440";  # Restricted to root and keys group (gitea-runner is a member)
+      mode = "0440"; # Restricted to root and keys group (gitea-runner is a member)
     };
   };
 
@@ -45,7 +52,7 @@
         bash
         coreutils
         curl
-        diffutils  # Provides diff command
+        diffutils # Provides diff command
         gawk
         git
         gnugrep
@@ -53,17 +60,17 @@
         gnutar
         gzip
         nix
-        nodejs  # Required for actions/checkout and other GitHub Actions
+        nodejs # Required for actions/checkout and other GitHub Actions
         rclone
         stdenv.cc
         which
-        yuicompressor  # Required for org-jw CSS/JS minification
+        yuicompressor # Required for org-jw CSS/JS minification
         inputs.org-jw.packages.${system}.default
       ];
 
       # Additional settings
       # With :host labels, jobs run directly on the host, so no container settings needed
-      settings = {};
+      settings = { };
     };
   };
 

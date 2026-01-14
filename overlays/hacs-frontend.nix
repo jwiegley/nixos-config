@@ -1,4 +1,8 @@
-{ lib, buildPythonPackage, fetchurl }:
+{
+  lib,
+  buildPythonPackage,
+  fetchurl,
+}:
 
 buildPythonPackage rec {
   pname = "hacs-frontend";

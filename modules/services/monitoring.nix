@@ -1,39 +1,45 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
-  attrNameList = attrs:
-    builtins.concatStringsSep " " (builtins.attrNames attrs);
+  attrNameList = attrs: builtins.concatStringsSep " " (builtins.attrNames attrs);
 
-  resticOperations = backups: pkgs.writeShellApplication {
-    name = "restic-operations";
-    text = ''
-      operation="''${1:-check}"
-      shift || true
+  resticOperations =
+    backups:
+    pkgs.writeShellApplication {
+      name = "restic-operations";
+      text = ''
+        operation="''${1:-check}"
+        shift || true
 
-      for fileset in ${attrNameList backups} ; do
-        echo "=== $fileset ==="
-        case "$operation" in
-          check)
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h check
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h prune
-            /run/current-system/sw/bin/restic-$fileset \
-              --retry-lock=1h repair snapshots
-            ;;
-          snapshots)
-            /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-              ${pkgs.jq}/bin/jq -r \
-                'sort_by(.time) | reverse | .[:4][] | .time'
-            ;;
-          *)
-            echo "Unknown operation: $operation"
-            exit 1
-            ;;
-        esac
-      done
-    '';
-  };
+        for fileset in ${attrNameList backups} ; do
+          echo "=== $fileset ==="
+          case "$operation" in
+            check)
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h check
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h prune
+              /run/current-system/sw/bin/restic-$fileset \
+                --retry-lock=1h repair snapshots
+              ;;
+            snapshots)
+              /run/current-system/sw/bin/restic-$fileset snapshots --json | \
+                ${pkgs.jq}/bin/jq -r \
+                  'sort_by(.time) | reverse | .[:4][] | .time'
+              ;;
+            *)
+              echo "Unknown operation: $operation"
+              exit 1
+              ;;
+          esac
+        done
+      '';
+    };
 
   resticSnapshots = pkgs.writeShellApplication {
     name = "restic-snapshots";
@@ -63,7 +69,13 @@ let
 
   certificateValidationScript = pkgs.writeShellApplication {
     name = "logwatch-certificate-validation";
-    runtimeInputs = with pkgs; [ bash openssl coreutils gawk gnugrep ];
+    runtimeInputs = with pkgs; [
+      bash
+      openssl
+      coreutils
+      gawk
+      gnugrep
+    ];
     text = ''
       /etc/nixos/certs/validate-certificates-concise.sh || true
     '';
@@ -72,7 +84,10 @@ let
   # AI log analysis script (used by both logwatch and command-line)
   analyzeLogsScript = pkgs.writeShellApplication {
     name = "analyze-logs";
-    runtimeInputs = with pkgs; [ python3 systemd ];
+    runtimeInputs = with pkgs; [
+      python3
+      systemd
+    ];
     text = ''
       # Read LiteLLM API key from SOPS secret
       if [ -f "/run/secrets/litellm-vulcan-lan-logwatch" ]; then
@@ -99,7 +114,7 @@ in
 {
   # SOPS secret for LiteLLM API key (accessible by logwatch service which runs as root)
   sops.secrets."litellm-vulcan-lan-logwatch" = {
-    key = "litellm-vulcan-lan";  # Same key in secrets.yaml
+    key = "litellm-vulcan-lan"; # Same key in secrets.yaml
     owner = "root";
     mode = "0400";
   };

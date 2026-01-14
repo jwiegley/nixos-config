@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Global Sieve script that runs BEFORE personal filters (sieve_before)
@@ -48,15 +53,15 @@ in
   ];
 
   # Create dovecot2 and mail groups for Dovecot
-  users.groups.dovecot2 = {};
-  users.groups.mail = {};
+  users.groups.dovecot2 = { };
+  users.groups.mail = { };
 
   # Create dovecot-exporter user for Prometheus monitoring
   users.users.dovecot-exporter = {
     isSystemUser = true;
     group = "dovecot-exporter";
   };
-  users.groups.dovecot-exporter = {};
+  users.groups.dovecot-exporter = { };
 
   # Users do NOT need dovecot2 group membership
   # Global Sieve scripts are pre-compiled by root during system activation
@@ -88,7 +93,11 @@ in
     # Enable mail plugins globally for old_stats (required for Prometheus exporter)
     # FTS (full-text search) with Xapian-based Flatcurve backend
     # Note: sieve is protocol-specific, not global - configured in LDA protocol below
-    mailPlugins.globally.enable = [ "old_stats" "fts" "fts_flatcurve" ];
+    mailPlugins.globally.enable = [
+      "old_stats"
+      "fts"
+      "fts_flatcurve"
+    ];
 
     # Extra configuration for advanced settings
     extraConfig = ''
@@ -455,7 +464,10 @@ in
   systemd.services.dovecot-sieve-compile = {
     description = "Pre-compile Dovecot global Sieve scripts";
     wantedBy = [ "dovecot2.service" ];
-    after = [ "systemd-tmpfiles-setup.service" "systemd-tmpfiles-resetup.service" ];
+    after = [
+      "systemd-tmpfiles-setup.service"
+      "systemd-tmpfiles-resetup.service"
+    ];
     before = [ "dovecot2.service" ];
     restartIfChanged = true;
     # Restart whenever tmpfiles configuration changes (includes Sieve script paths)
@@ -464,7 +476,10 @@ in
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = with pkgs; [ dovecot_pigeonhole coreutils ];
+    path = with pkgs; [
+      dovecot_pigeonhole
+      coreutils
+    ];
     script = ''
       # Pre-compile all global Sieve scripts so users don't need write permission
       # Scripts are symlinks to Nix store (read-only), so we must use explicit output paths
@@ -521,14 +536,18 @@ in
   services.prometheus.scrapeConfigs = [
     {
       job_name = "dovecot";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.dovecot.port}" ];
+        }
+      ];
     }
   ];
 
-  networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.dovecot2.enable [ 993 4190 ];
+  networking.firewall.allowedTCPPorts = lib.mkIf config.services.dovecot2.enable [
+    993
+    4190
+  ];
 
   # Increase file descriptor limit for Dovecot to accommodate auth client_limit
   # client_limit=1500 requires fd limit >= 1500

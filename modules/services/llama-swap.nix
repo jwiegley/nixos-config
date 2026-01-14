@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Main llama-swap service on port 8080
@@ -7,7 +12,10 @@
     documentation = [ "https://github.com/mostlygeek/llama-swap" ];
 
     # Ensure network is fully ready before starting
-    after = [ "network-online.target" "multi-user.target" ];
+    after = [
+      "network-online.target"
+      "multi-user.target"
+    ];
     wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
 

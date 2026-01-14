@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   users = {
@@ -14,7 +19,7 @@
       extraGroups = [ ];
       home = "/home/nasimw";
       shell = pkgs.bash;
-      packages = with pkgs; [];
+      packages = with pkgs; [ ];
     };
   };
 }

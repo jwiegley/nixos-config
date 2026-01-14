@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Define git-workspace monitoring rules as a separate file
@@ -154,5 +159,7 @@ let
 in
 {
   # Prometheus alert rules for git-workspace-archive monitoring
-  services.prometheus.ruleFiles = lib.mkIf config.services.prometheus.enable [ gitWorkspaceRulesFile ];
+  services.prometheus.ruleFiles = lib.mkIf config.services.prometheus.enable [
+    gitWorkspaceRulesFile
+  ];
 }

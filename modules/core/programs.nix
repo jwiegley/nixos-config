@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   programs = {
@@ -25,7 +30,7 @@
     nix-ld = {
       enable = true;
       libraries = with pkgs; [
-        stdenv.cc.cc.lib  # libstdc++, libm, libc
+        stdenv.cc.cc.lib # libstdc++, libm, libc
         zlib
         openssl
       ];

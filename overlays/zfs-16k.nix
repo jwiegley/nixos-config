@@ -14,7 +14,7 @@ final: prev: {
     # Add metadata about this overlay
     meta = oldAttrs.meta // {
       description = oldAttrs.meta.description + " (patched for 16K page size)";
-      broken = false;  # Un-break if marked broken on aarch64
+      broken = false; # Un-break if marked broken on aarch64
     };
 
     # The main issue on Asahi Linux is that ZFS build system may check for
@@ -22,7 +22,7 @@ final: prev: {
     # For now, let's try building against the Asahi kernel directly.
 
     # Add any necessary patches here
-    patches = (oldAttrs.patches or []) ++ [
+    patches = (oldAttrs.patches or [ ]) ++ [
       # We'll add patches if needed after seeing build errors
     ];
 
@@ -37,7 +37,7 @@ final: prev: {
       broken = false;
     };
 
-    patches = (oldAttrs.patches or []) ++ [
+    patches = (oldAttrs.patches or [ ]) ++ [
       # Patches will be added here if needed
     ];
   });

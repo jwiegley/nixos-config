@@ -1,13 +1,18 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Alert rules directory
   alertRulesDir = ../alerts;
 
   # Auto-discover all .yaml alert files in the alerts directory
-  alertFiles = builtins.filter
-    (name: lib.hasSuffix ".yaml" name)
-    (builtins.attrNames (builtins.readDir alertRulesDir));
+  alertFiles = builtins.filter (name: lib.hasSuffix ".yaml" name) (
+    builtins.attrNames (builtins.readDir alertRulesDir)
+  );
 
   alertRuleFiles = builtins.map (file: "${alertRulesDir}/${file}") alertFiles;
 in

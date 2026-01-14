@@ -2,7 +2,12 @@
 # Manually controlled - does NOT auto-start
 # Usage: sudo systemctl start cloudflared-tunnel-n8n-webhook
 
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 {
   # Create cloudflared user and group for SOPS secret ownership
@@ -66,7 +71,7 @@
 
   # Override cloudflared service to prevent auto-start
   systemd.services."cloudflared-tunnel-n8n-webhook" = {
-    wantedBy = lib.mkForce [];  # Manual start only
+    wantedBy = lib.mkForce [ ]; # Manual start only
     after = [ "nginx.service" ];
     wants = [ "nginx.service" ];
   };

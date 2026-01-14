@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Nagios check script
@@ -45,7 +50,10 @@ in
   # Example systemd timer for periodic checks (optional - can be used without Nagios)
   systemd.services.homeassistant-health-check = {
     description = "Home Assistant Integration Health Check";
-    after = [ "home-assistant.service" "sops-nix.service" ];
+    after = [
+      "home-assistant.service"
+      "sops-nix.service"
+    ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${checkScriptWithToken}/bin/check_homeassistant_integrations_wrapper -H 127.0.0.1:8123 -I -i august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws";

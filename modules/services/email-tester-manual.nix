@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 # Email testing script for manual execution
 # Does NOT include automated monitoring (timer, Prometheus, Nagios)

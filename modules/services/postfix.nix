@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   sops.secrets."postfix-secrets" = {
@@ -21,8 +26,8 @@
     '';
 
     # Enable submission services for encrypted mail submission
-    enableSubmission = true;   # Port 587 with STARTTLS
-    enableSubmissions = true;  # Port 465 with implicit TLS (recommended)
+    enableSubmission = true; # Port 587 with STARTTLS
+    enableSubmissions = true; # Port 465 with implicit TLS (recommended)
 
     # TLS configuration for submission services
     submissionOptions = {
@@ -60,12 +65,15 @@
     '';
 
     settings.main = {
-      sender_canonical_classes = [ "envelope_sender" "header_sender" ];
+      sender_canonical_classes = [
+        "envelope_sender"
+        "header_sender"
+      ];
       sender_canonical_maps = "regexp:/var/lib/postfix/conf/sender_canonical_regexp";
 
       # Message size limits (100 MB)
-      message_size_limit = 104857600;  # 100 MB
-      mailbox_size_limit = 104857600;  # 100 MB (must be >= message_size_limit)
+      message_size_limit = 104857600; # 100 MB
+      mailbox_size_limit = 104857600; # 100 MB (must be >= message_size_limit)
 
       # Disable SMTPUTF8 support - not needed for ASCII-only email addresses
       # UTF-8 in message headers/body is handled via standard MIME encoding
@@ -96,8 +104,8 @@
       ];
 
       # TLS parameters
-      smtpd_tls_security_level = "may";  # Allow TLS on port 25 but don't require it
-      smtpd_tls_auth_only = "yes";       # Require TLS for authentication
+      smtpd_tls_security_level = "may"; # Allow TLS on port 25 but don't require it
+      smtpd_tls_auth_only = "yes"; # Require TLS for authentication
       smtpd_tls_loglevel = "1";
       smtpd_tls_received_header = "yes";
       smtpd_tls_session_cache_database = "btree:\${data_directory}/smtpd_scache";
@@ -124,6 +132,8 @@
     };
   };
 
-  networking.firewall.allowedTCPPorts =
-    lib.mkIf config.services.postfix.enable [ 465 587 ];
+  networking.firewall.allowedTCPPorts = lib.mkIf config.services.postfix.enable [
+    465
+    587
+  ];
 }

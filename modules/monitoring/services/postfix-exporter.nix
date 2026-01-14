@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Postfix exporter
@@ -13,16 +18,24 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "postfix";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.postfix.port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.postfix.port}" ];
+        }
+      ];
     }
   ];
 
   # Service hardening and reliability
   systemd.services."prometheus-postfix-exporter" = {
-    wants = [ "network-online.target" "postfix.service" ];
-    after = [ "network-online.target" "postfix.service" ];
+    wants = [
+      "network-online.target"
+      "postfix.service"
+    ];
+    after = [
+      "network-online.target"
+      "postfix.service"
+    ];
     startLimitIntervalSec = 0;
     startLimitBurst = 0;
     serviceConfig = {

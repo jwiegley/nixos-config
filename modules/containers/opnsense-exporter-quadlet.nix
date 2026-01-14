@@ -17,7 +17,13 @@
 #   5. Re-enable the volume mounts for CA certificates
 #   6. Re-enable SSL_CERT_FILE environment variable
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager
@@ -44,10 +50,10 @@
   # Open firewall port on podman0 interface for container access
   networking.firewall.interfaces = {
     "lo".allowedTCPPorts = [
-      9273  # opnsense-exporter
+      9273 # opnsense-exporter
     ];
     podman0.allowedTCPPorts = [
-      9273  # opnsense-exporter
+      9273 # opnsense-exporter
     ];
   };
 }

@@ -18,7 +18,7 @@ final: prev: {
         pkg = "sizes";
         ver = "2.4.1";
         sha256 = "1cmfwfa8x2r0big4f646f8h2rfnwjwlhjyvidnw8b71g04swqld1";
-      } {};
+      } { };
     };
   };
 }

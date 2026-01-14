@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   authorizedKeys = [
@@ -26,7 +31,7 @@ in
       # Packages that need to be available during system boot or are not
       # managed by home-manager are kept here. User-specific packages
       # are now managed through home-manager configuration.
-      packages = with pkgs; [];
+      packages = with pkgs; [ ];
     };
   };
 

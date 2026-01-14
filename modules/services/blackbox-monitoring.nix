@@ -1,22 +1,27 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Define host groups for better organization and configuration
   hostGroups = {
     # Local infrastructure hosts
     local = [
-      "192.168.1.1"      # Router/Gateway
-      "192.168.1.2"      # Vulcan
-      "192.168.1.4"      # Hera
+      "192.168.1.1" # Router/Gateway
+      "192.168.1.2" # Vulcan
+      "192.168.1.4" # Hera
     ];
 
     # DNS servers
     dns = [
-      "8.8.8.8"          # Google DNS Primary
-      "8.8.4.4"          # Google DNS Secondary
-      "1.1.1.1"          # Cloudflare DNS Primary
-      "1.0.0.1"          # Cloudflare DNS Secondary
-      "208.67.222.222"   # OpenDNS
+      "8.8.8.8" # Google DNS Primary
+      "8.8.4.4" # Google DNS Secondary
+      "1.1.1.1" # Cloudflare DNS Primary
+      "1.0.0.1" # Cloudflare DNS Secondary
+      "208.67.222.222" # OpenDNS
     ];
 
     # Internet backbone/CDN
@@ -145,7 +150,7 @@ in
       configFile = blackboxConfig;
 
       # Open firewall port for scraping (only on localhost interface)
-      openFirewall = false;  # We'll handle this manually for localhost only
+      openFirewall = false; # We'll handle this manually for localhost only
     };
 
     # Configure firewall to allow blackbox exporter access only from localhost
@@ -178,8 +183,14 @@ in
 
     # Ensure blackbox exporter runs with appropriate capabilities for ICMP
     systemd.services.prometheus-blackbox-exporter = {
-      wants = [ "network-online.target" "setup-blackbox-ca.service" ];
-      after = [ "network-online.target" "setup-blackbox-ca.service" ];
+      wants = [
+        "network-online.target"
+        "setup-blackbox-ca.service"
+      ];
+      after = [
+        "network-online.target"
+        "setup-blackbox-ca.service"
+      ];
       startLimitIntervalSec = 0;
       startLimitBurst = 0;
 
@@ -286,276 +297,288 @@ in
     };
 
     # Prometheus scrape configurations for blackbox exporter
-    services.prometheus.scrapeConfigs = lib.optionals config.services.prometheus.exporters.blackbox.enable [
-      # ICMP monitoring for all configured hosts
-      {
-        job_name = "blackbox_icmp";
-        metrics_path = "/probe";
-        params = {
-          module = [ "icmp_ping" ];
-        };
-        static_configs = [{
-          targets = [
-            "vulcan.lan"                        # 192.168.1.2
-            "hera.lan"                          # 192.168.1.4
-            # "clio.lan"                          # 192.168.1.5
+    services.prometheus.scrapeConfigs =
+      lib.optionals config.services.prometheus.exporters.blackbox.enable
+        [
+          # ICMP monitoring for all configured hosts
+          {
+            job_name = "blackbox_icmp";
+            metrics_path = "/probe";
+            params = {
+              module = [ "icmp_ping" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "vulcan.lan" # 192.168.1.2
+                  "hera.lan" # 192.168.1.4
+                  # "clio.lan"                          # 192.168.1.5
 
-            # "adt-home-security.lan"             # 192.168.3.118
-            "asus-bq16-pro-ap.lan"              # 192.168.3.2
-            "asus-bq16-pro-node.lan"            # 192.168.3.3
-            "asus-rt-ax88u.lan"                 # 192.168.3.8
-            # "august-lock-front-door.lan"        # 192.168.3.12
-            # "august-lock-garage-door.lan"       # 192.168.3.14
-            # "august-lock-side-door.lan"         # 192.168.3.173
-            # "b-hyve-sprinkler.lan"              # 192.168.3.89
-            # "dreamebot-vacuum.lan"              # 192.168.3.195
-            # "enphase-solar-inverter.lan"        # 192.168.3.26
-            # "flume-water-meter.lan"             # 192.168.3.183
-            "google-home-hub.lan"               # 192.168.3.106
-            "hera-wifi.lan"                     # 192.168.3.6
-            # "hubspace-porch-light.lan"          # 192.168.3.178
-            "miele-dishwasher.lan"              # 192.168.3.98
-            "myq-garage-door.lan"               # 192.168.3.99
-            # "nest-downstairs.lan"               # 192.168.3.57
-            # "nest-family-room.lan"              # 192.168.3.83
-            # "nest-upstairs.lan"                 # 192.168.3.161
-            "pentair-intellicenter.lan"         # 192.168.3.115
-            # "pentair-intelliflo.lan"            # 192.168.3.23
-            # "ring-chime-kitchen.lan"            # 192.168.3.163
-            # "ring-chime-office.lan"             # 192.168.3.88
-            # "ring-doorbell.lan"                 # 192.168.3.185
-            # "tesla-wall-connector.lan"          # 192.168.3.119
-            # "traeger-grill.lan"                 # 192.168.3.196
+                  # "adt-home-security.lan"             # 192.168.3.118
+                  "asus-bq16-pro-ap.lan" # 192.168.3.2
+                  "asus-bq16-pro-node.lan" # 192.168.3.3
+                  "asus-rt-ax88u.lan" # 192.168.3.8
+                  # "august-lock-front-door.lan"        # 192.168.3.12
+                  # "august-lock-garage-door.lan"       # 192.168.3.14
+                  # "august-lock-side-door.lan"         # 192.168.3.173
+                  # "b-hyve-sprinkler.lan"              # 192.168.3.89
+                  # "dreamebot-vacuum.lan"              # 192.168.3.195
+                  # "enphase-solar-inverter.lan"        # 192.168.3.26
+                  # "flume-water-meter.lan"             # 192.168.3.183
+                  "google-home-hub.lan" # 192.168.3.106
+                  "hera-wifi.lan" # 192.168.3.6
+                  # "hubspace-porch-light.lan"          # 192.168.3.178
+                  "miele-dishwasher.lan" # 192.168.3.98
+                  "myq-garage-door.lan" # 192.168.3.99
+                  # "nest-downstairs.lan"               # 192.168.3.57
+                  # "nest-family-room.lan"              # 192.168.3.83
+                  # "nest-upstairs.lan"                 # 192.168.3.161
+                  "pentair-intellicenter.lan" # 192.168.3.115
+                  # "pentair-intelliflo.lan"            # 192.168.3.23
+                  # "ring-chime-kitchen.lan"            # 192.168.3.163
+                  # "ring-chime-office.lan"             # 192.168.3.88
+                  # "ring-doorbell.lan"                 # 192.168.3.185
+                  # "tesla-wall-connector.lan"          # 192.168.3.119
+                  # "traeger-grill.lan"                 # 192.168.3.196
 
-            "TL-WPA8630.lan"                    # 192.168.30.49
+                  "TL-WPA8630.lan" # 192.168.30.49
 
-            "9.9.9.9"
-            "149.112.112.112"
-            "1.1.1.1"
-            "1.0.0.1"
-            "208.67.222.222"
-            "208.67.220.220"
+                  "9.9.9.9"
+                  "149.112.112.112"
+                  "1.1.1.1"
+                  "1.0.0.1"
+                  "208.67.222.222"
+                  "208.67.220.220"
 
-            "google.com"
-            "cloudflare.com"
-            # "amazon.com"
-            # "github.com"
+                  "google.com"
+                  "cloudflare.com"
+                  # "amazon.com"
+                  # "github.com"
 
-            "web.mit.edu"
-            "www.berkeley.edu"
-            "ucsd.edu"
-            "twin-cities.umn.edu"
-            "osuosl.org"
-          ];
-        }];
-        relabel_configs = [
-          {
-            source_labels = [ "__address__" ];
-            target_label = "__param_target";
+                  "web.mit.edu"
+                  "www.berkeley.edu"
+                  "ucsd.edu"
+                  "twin-cities.umn.edu"
+                  "osuosl.org"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              # Add host group labels based on target
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "host_group";
+                regex = "(192\\.168\\..*)|(127\\.0\\.0\\.1)|(localhost)";
+                replacement = "local";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "host_group";
+                regex = "(8\\.8\\.[48]\\.[48])|(1\\.[01]\\.0\\.[01])|(208\\.67\\.222\\.222)";
+                replacement = "dns";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "host_group";
+                regex = ".+\\.(com|org|net|edu)";
+                replacement = "backbone";
+              }
+            ];
+            scrape_interval = "30s";
+            scrape_timeout = "10s";
           }
+
+          # HTTP monitoring for web services
           {
-            source_labels = [ "__param_target" ];
-            target_label = "instance";
+            job_name = "blackbox_http";
+            metrics_path = "/probe";
+            params = {
+              module = [ "http_2xx" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "http://google.com"
+                  # "http://github.com"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "http";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
           }
+
+          # HTTPS monitoring for public web services
           {
-            target_label = "__address__";
-            replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+            job_name = "blackbox_https";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_2xx" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "https://google.com"
+                  # "https://github.com"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
           }
-          # Add host group labels based on target
+
+          # HTTPS monitoring for local services with step-ca certificates
           {
-            source_labels = [ "__param_target" ];
-            target_label = "host_group";
-            regex = "(192\\.168\\..*)|(127\\.0\\.0\\.1)|(localhost)";
-            replacement = "local";
+            job_name = "blackbox_https_local";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_2xx_local" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "https://glance.vulcan.lan"
+                  "https://cockpit.vulcan.lan"
+                  "https://192.168.1.1"
+                  "https://dns.vulcan.lan"
+                  "https://postgres.vulcan.lan"
+                  "https://hass.vulcan.lan"
+                  "https://nodered.vulcan.lan"
+                  "https://nocobase.vulcan.lan"
+                  "https://ntopng.vulcan.lan"
+                  "https://wallabag.vulcan.lan"
+                  "https://jellyfin.vulcan.lan"
+                  "https://silly-tavern.vulcan.lan"
+                  "https://prometheus.vulcan.lan"
+                  "https://victoriametrics.vulcan.lan"
+                  "https://grafana.vulcan.lan"
+                  "https://glances.vulcan.lan"
+                  "https://alertmanager.vulcan.lan"
+                  "https://speedtest.vulcan.lan"
+                  "https://litellm.vulcan.lan"
+                  "https://mailarchiver.vulcan.lan"
+                  "https://teable.vulcan.lan"
+                  "https://budget.vulcan.lan"
+                  "https://changes.vulcan.lan"
+                  "https://aria.vulcan.lan"
+                  "https://openproject.vulcan.lan"
+                  "https://shlink.vulcan.lan"
+                  "https://shlink-api.vulcan.lan/rest/health"
+                  "https://chat.vulcan.lan"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https_local";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
           }
+
+          # DNS query monitoring
           {
-            source_labels = [ "__param_target" ];
-            target_label = "host_group";
-            regex = "(8\\.8\\.[48]\\.[48])|(1\\.[01]\\.0\\.[01])|(208\\.67\\.222\\.222)";
-            replacement = "dns";
-          }
-          {
-            source_labels = [ "__param_target" ];
-            target_label = "host_group";
-            regex = ".+\\.(com|org|net|edu)";
-            replacement = "backbone";
+            job_name = "blackbox_dns";
+            metrics_path = "/probe";
+            params = {
+              module = [ "dns_query" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "192.168.1.1"
+                  "192.168.1.2"
+                  "9.9.9.9"
+                  "149.112.112.112"
+                  "1.1.1.1"
+                  "1.0.0.1"
+                  "208.67.222.222"
+                  "208.67.220.220"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "dns";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "10s";
           }
         ];
-        scrape_interval = "30s";
-        scrape_timeout = "10s";
-      }
-
-      # HTTP monitoring for web services
-      {
-        job_name = "blackbox_http";
-        metrics_path = "/probe";
-        params = {
-          module = [ "http_2xx" ];
-        };
-        static_configs = [{
-          targets = [
-            "http://google.com"
-            # "http://github.com"
-          ];
-        }];
-        relabel_configs = [
-          {
-            source_labels = [ "__address__" ];
-            target_label = "__param_target";
-          }
-          {
-            source_labels = [ "__param_target" ];
-            target_label = "instance";
-          }
-          {
-            target_label = "__address__";
-            replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-          }
-          {
-            target_label = "probe_type";
-            replacement = "http";
-          }
-        ];
-        scrape_interval = "60s";
-        scrape_timeout = "15s";
-      }
-
-      # HTTPS monitoring for public web services
-      {
-        job_name = "blackbox_https";
-        metrics_path = "/probe";
-        params = {
-          module = [ "https_2xx" ];
-        };
-        static_configs = [{
-          targets = [
-            "https://google.com"
-            # "https://github.com"
-          ];
-        }];
-        relabel_configs = [
-          {
-            source_labels = [ "__address__" ];
-            target_label = "__param_target";
-          }
-          {
-            source_labels = [ "__param_target" ];
-            target_label = "instance";
-          }
-          {
-            target_label = "__address__";
-            replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-          }
-          {
-            target_label = "probe_type";
-            replacement = "https";
-          }
-        ];
-        scrape_interval = "60s";
-        scrape_timeout = "15s";
-      }
-
-      # HTTPS monitoring for local services with step-ca certificates
-      {
-        job_name = "blackbox_https_local";
-        metrics_path = "/probe";
-        params = {
-          module = [ "https_2xx_local" ];
-        };
-        static_configs = [{
-          targets = [
-            "https://glance.vulcan.lan"
-            "https://cockpit.vulcan.lan"
-            "https://192.168.1.1"
-            "https://dns.vulcan.lan"
-            "https://postgres.vulcan.lan"
-            "https://hass.vulcan.lan"
-            "https://nodered.vulcan.lan"
-            "https://nocobase.vulcan.lan"
-            "https://ntopng.vulcan.lan"
-            "https://wallabag.vulcan.lan"
-            "https://jellyfin.vulcan.lan"
-            "https://silly-tavern.vulcan.lan"
-            "https://prometheus.vulcan.lan"
-            "https://victoriametrics.vulcan.lan"
-            "https://grafana.vulcan.lan"
-            "https://glances.vulcan.lan"
-            "https://alertmanager.vulcan.lan"
-            "https://speedtest.vulcan.lan"
-            "https://litellm.vulcan.lan"
-            "https://mailarchiver.vulcan.lan"
-            "https://teable.vulcan.lan"
-            "https://budget.vulcan.lan"
-            "https://changes.vulcan.lan"
-            "https://aria.vulcan.lan"
-            "https://openproject.vulcan.lan"
-            "https://shlink.vulcan.lan"
-            "https://shlink-api.vulcan.lan/rest/health"
-            "https://chat.vulcan.lan"
-          ];
-        }];
-        relabel_configs = [
-          {
-            source_labels = [ "__address__" ];
-            target_label = "__param_target";
-          }
-          {
-            source_labels = [ "__param_target" ];
-            target_label = "instance";
-          }
-          {
-            target_label = "__address__";
-            replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-          }
-          {
-            target_label = "probe_type";
-            replacement = "https_local";
-          }
-        ];
-        scrape_interval = "60s";
-        scrape_timeout = "15s";
-      }
-
-      # DNS query monitoring
-      {
-        job_name = "blackbox_dns";
-        metrics_path = "/probe";
-        params = {
-          module = [ "dns_query" ];
-        };
-        static_configs = [{
-          targets = [
-            "192.168.1.1"
-            "192.168.1.2"
-            "9.9.9.9"
-            "149.112.112.112"
-            "1.1.1.1"
-            "1.0.0.1"
-            "208.67.222.222"
-            "208.67.220.220"
-          ];
-        }];
-        relabel_configs = [
-          {
-            source_labels = [ "__address__" ];
-            target_label = "__param_target";
-          }
-          {
-            source_labels = [ "__param_target" ];
-            target_label = "instance";
-          }
-          {
-            target_label = "__address__";
-            replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-          }
-          {
-            target_label = "probe_type";
-            replacement = "dns";
-          }
-        ];
-        scrape_interval = "60s";
-        scrape_timeout = "10s";
-      }
-    ];
   };
 }

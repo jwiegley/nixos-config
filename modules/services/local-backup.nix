@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Backup directories configuration with exclusions
@@ -22,7 +27,7 @@ let
         "johnw/.cache/"
         "johnw/.npm/"
         # Exclude large data directories (backed up separately or not needed)
-        "johnw/node_modules/"        # Development dependencies - 784MB
+        "johnw/node_modules/" # Development dependencies - 784MB
       ];
     }
     {
@@ -44,51 +49,51 @@ let
 
         # === LARGE ARCHIVE/BACKUP DATA (30GB+) ===
         # Already backed up or archived elsewhere
-        "lib/git-workspace-archive/"     # 23GB - Git archives
-        "lib/windows/"                    # 9.5GB - VM images
-        "lib/postgresql-backup/"          # 7.5GB - Already backed up dumps
-        "lib/technitium-dns-backup/"      # 1.2GB - DNS backups
+        "lib/git-workspace-archive/" # 23GB - Git archives
+        "lib/windows/" # 9.5GB - VM images
+        "lib/postgresql-backup/" # 7.5GB - Already backed up dumps
+        "lib/technitium-dns-backup/" # 1.2GB - DNS backups
 
         # === ACTIVE DATABASES (Need special handling) ===
         # These should use proper dump commands, not file copies
-        "lib/postgresql/"                 # 9.3GB - Use pg_dump (already done)
-        "lib/mongodb/"                    # MongoDB files
-        "lib/elasticsearch/"              # 406MB - Search indices, recreatable
+        "lib/postgresql/" # 9.3GB - Use pg_dump (already done)
+        "lib/mongodb/" # MongoDB files
+        "lib/elasticsearch/" # 406MB - Search indices, recreatable
 
         # === HIGH-CHURN MONITORING DATA ===
         # Constantly changing, causes I/O storms
-        "lib/loki/"                       # 9.7GB - Log chunks
-        "lib/prometheus2/"                # 5.7GB - Time-series data
-        "lib/ntopng/"                     # 1.7GB - 517 files/hour!
-        "lib/victoria-metrics/"           # Time-series data
-        "lib/private/victoriametrics/"    # 122 files/hour
-        "lib/grafana/dashboards/"         # Temporary dashboard data
-        "lib/influxdb/"                   # Time-series data
+        "lib/loki/" # 9.7GB - Log chunks
+        "lib/prometheus2/" # 5.7GB - Time-series data
+        "lib/ntopng/" # 1.7GB - 517 files/hour!
+        "lib/victoria-metrics/" # Time-series data
+        "lib/private/victoriametrics/" # 122 files/hour
+        "lib/grafana/dashboards/" # Temporary dashboard data
+        "lib/influxdb/" # Time-series data
 
         # === GIT REPOSITORIES (Use git bundle) ===
-        "lib/gitea/repositories/"         # Use git bundle instead
-        "lib/gitlab/"                     # GitLab repos
+        "lib/gitea/repositories/" # Use git bundle instead
+        "lib/gitlab/" # GitLab repos
 
         # === MEDIA & TEMPORARY FILES ===
-        "lib/jellyfin/transcodes/"        # Temporary transcoding
-        "lib/jellyfin/metadata/"          # Can be regenerated
-        "lib/plex/"                       # Media server data
+        "lib/jellyfin/transcodes/" # Temporary transcoding
+        "lib/jellyfin/metadata/" # Can be regenerated
+        "lib/plex/" # Media server data
 
         # === MAIL INDICES (Recreatable) ===
-        "spool/mail/*/fts-flatcurve/"     # Mail search indices
-        "spool/mail/*/.notmuch/"          # Notmuch indices
-        "lib/dovecot/indices/"            # Dovecot indices
+        "spool/mail/*/fts-flatcurve/" # Mail search indices
+        "spool/mail/*/.notmuch/" # Notmuch indices
+        "lib/dovecot/indices/" # Dovecot indices
 
         # === SYSTEM FILES ===
-        "lib/systemd/coredump/"           # Core dumps
-        "lib/systemd/catalog/"            # System catalogs
-        "crash/"                          # Crash dumps
+        "lib/systemd/coredump/" # Core dumps
+        "lib/systemd/catalog/" # System catalogs
+        "crash/" # Crash dumps
 
         # === CACHE & TEMP DATA ===
-        "lib/redis/"                      # Redis persistence files
-        "lib/memcached/"                  # Memcached data
-        "lib/snapd/"                      # Snap data
-        "lib/flatpak/"                    # Flatpak data
+        "lib/redis/" # Redis persistence files
+        "lib/memcached/" # Memcached data
+        "lib/snapd/" # Snap data
+        "lib/flatpak/" # Flatpak data
 
         # === DATABASE FILES (Need special handling) ===
         "**/*.sqlite"
@@ -96,11 +101,11 @@ let
         "**/*.sqlite-wal"
         "**/*.sqlite-shm"
         "**/*.db"
-        "**/*.mdb"                        # LMDB files
-        "**/*.ldb"                        # LevelDB files
+        "**/*.mdb" # LMDB files
+        "**/*.ldb" # LevelDB files
 
         # === SWAP FILES ===
-        "swap/"                           # 17GB swap files
+        "swap/" # 17GB swap files
       ];
     }
   ];
@@ -165,7 +170,7 @@ let
       exclude_args=""
       ${lib.concatMapStringsSep "\n" (exclude: ''
         exclude_args="$exclude_args --exclude='${exclude}'"
-      '') (backup.excludes or [])}
+      '') (backup.excludes or [ ])}
 
       # Run rsync and capture exit code
       # Enhanced rsync options to prevent I/O overload:
@@ -256,19 +261,19 @@ in
 
         # I/O limits: Use best-effort scheduling to minimize impact on other services
         IOSchedulingClass = "best-effort";
-        IOSchedulingPriority = 7;  # Lowest priority (0=highest, 7=lowest)
-        IOWeight = 10;  # Low I/O weight (10-1000 scale)
+        IOSchedulingPriority = 7; # Lowest priority (0=highest, 7=lowest)
+        IOWeight = 10; # Low I/O weight (10-1000 scale)
 
         # Enhanced I/O throttling with cgroup v2 bandwidth limits
         # Limit read speed from source drive to prevent I/O saturation
-        IOReadBandwidthMax = "/dev/nvme0n1 50M";  # 50MB/s read limit
+        IOReadBandwidthMax = "/dev/nvme0n1 50M"; # 50MB/s read limit
 
         # Limit write speed to backup destination
-        IOWriteBandwidthMax = "/dev/nvme0n1 30M";  # 30MB/s write limit
+        IOWriteBandwidthMax = "/dev/nvme0n1 30M"; # 30MB/s write limit
 
         # CPU priority: Run at lower priority
         CPUSchedulingPolicy = "batch";
-        Nice = 19;  # Lowest CPU priority
+        Nice = 19; # Lowest CPU priority
 
         # Timeout and logging
         # Increased from 1h to 2h to accommodate slow backups with many changed files
@@ -314,15 +319,13 @@ in
       Hourly backups of critical system directories to /tank/Backups/Machines/Vulcan using rsync.
 
       ## Backed Up Directories
-      ${lib.concatMapStringsSep "\n" (backup:
-        "- ${backup.source} -> ${backupBaseDir}/${backup.name}"
+      ${lib.concatMapStringsSep "\n" (
+        backup: "- ${backup.source} -> ${backupBaseDir}/${backup.name}"
       ) backupSources}
 
       ## Timestamp Files
       After each successful backup, a timestamp file is created:
-      ${lib.concatMapStringsSep "\n" (backup:
-        "- ${backupBaseDir}/.${backup.name}.latest"
-      ) backupSources}
+      ${lib.concatMapStringsSep "\n" (backup: "- ${backupBaseDir}/.${backup.name}.latest") backupSources}
 
       ## Monitoring
 

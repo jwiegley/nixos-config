@@ -1,8 +1,13 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Copy the imapdedup.py Python script to the Nix store
-  imapdedupPython = pkgs.runCommand "imapdedup-python" {} ''
+  imapdedupPython = pkgs.runCommand "imapdedup-python" { } ''
     mkdir -p $out/bin
     cp ${../../scripts/imapdedup.py} $out/bin/imapdedup.py
     chmod +x $out/bin/imapdedup.py

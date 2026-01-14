@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ============================================================================
@@ -58,7 +63,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";

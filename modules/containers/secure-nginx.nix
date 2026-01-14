@@ -1,4 +1,11 @@
-{ inputs, system, config, lib, pkgs, ... }:
+{
+  inputs,
+  system,
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
@@ -104,188 +111,198 @@ in
     autoStart = true;
 
     # Container configuration
-    config = { config, pkgs, lib, ... }: {
-      # Import copyparty module
-      imports = [
-        ../../modules/services/copyparty.nix
-      ];
+    config =
+      {
+        config,
+        pkgs,
+        lib,
+        ...
+      }:
+      {
+        # Import copyparty module
+        imports = [
+          ../../modules/services/copyparty.nix
+        ];
 
-      # Apply host overlays to container nixpkgs
-      nixpkgs.overlays = [
-        (import ../../overlays inputs system)
-      ];
+        # Apply host overlays to container nixpkgs
+        nixpkgs.overlays = [
+          (import ../../overlays inputs system)
+        ];
 
-      # Basic system configuration
-      system.stateVersion = "25.05";
+        # Basic system configuration
+        system.stateVersion = "25.05";
 
-      # Networking configuration
-      networking = {
-        firewall = {
-          enable = true;
-          # Allow HTTP, copyparty metrics
-          allowedTCPPorts = [
-            80
-            3923
-          ];
-        };
-      };
-
-      # Time zone (match host)
-      time.timeZone = "America/Los_Angeles";
-
-      # Force DNS to point to host (works around resolvconf issues in
-      # containers)
-      environment.etc."resolv.conf".text = lib.mkForce ''
-        nameserver 10.233.1.1
-        options edns0
-      '';
-
-      # Nginx configuration
-      services.nginx = {
-        enable = true;
-
-        # Recommended settings
-        recommendedGzipSettings = true;
-        recommendedOptimisation = true;
-        recommendedProxySettings = true;
-
-        virtualHosts."data.newartisans.com" = {
-          default = true;
-          listen = [
-            {
-              addr = "0.0.0.0";
-              port = 80;
-            }
-          ];
-
-          # Container identifier header
-          extraConfig = ''
-            add_header X-Served-By "secure-nginx-container" always;
-          '';
-
-          # Reverse proxy to copyparty (replacing static file serving)
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:3923/";
-            extraConfig = ''
-              # WebSocket support for real-time updates
-              proxy_http_version 1.1;
-              proxy_set_header Upgrade $http_upgrade;
-              proxy_set_header Connection "upgrade";
-
-              # Large file upload support (up to 10GB)
-              client_max_body_size 10G;
-              proxy_request_buffering off;
-
-              # Proxy headers
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto https;
-
-              # Timeouts for large uploads
-              proxy_connect_timeout 300;
-              proxy_send_timeout 300;
-              proxy_read_timeout 300;
-              send_timeout 300;
-            '';
-          };
-
-          # Health check endpoint
-          locations."/health" = {
-            extraConfig = ''
-              access_log off;
-              return 200 "healthy\n";
-              default_type text/plain;
-            '';
-          };
-
-          # Status endpoint for monitoring
-          locations."/status" = {
-            extraConfig = ''
-              stub_status on;
-              access_log off;
-              allow 10.233.1.1;  # Allow host only
-              deny all;
-            '';
-          };
-        };
-      };
-
-      # Ensure nginx user exists
-      users.users.nginx = {
-        group = "nginx";
-        isSystemUser = true;
-        uid = 60;
-      };
-      users.groups.nginx.gid = 60;
-
-      # Enable copyparty service with password files
-      services.copyparty = {
-        enable = true;
-        port = 3923;
-        domain = "home.newartisans.com";
-        shareDir = "/var/www/home.newartisans.com";
-
-        # Use password files instead of SOPS
-        passwordFiles = {
-          admin = "/var/lib/copyparty-passwords/admin";
-          johnw = "/var/lib/copyparty-passwords/johnw";
-          friend = "/var/lib/copyparty-passwords/friend";
-          nasimw = "/var/lib/copyparty-passwords/nasimw";
-        };
-      };
-
-      systemd.services = {
-        nginx = {
-          after = [
-            "var-www-home.newartisans.com.mount"
-            "copyparty.service"
-          ];
-          wants = [ "copyparty.service" ];
-
-          # Systemd hardening
-          serviceConfig = {
-            # Filesystem hardening
-            ProtectSystem = "strict";
-            ProtectHome = true;
-            PrivateTmp = true;
-            ReadWritePaths = [ "/var/log/nginx" ];
-
-            # Privilege restrictions
-            NoNewPrivileges = true;
-            PrivateDevices = true;
-
-            # Kernel hardening
-            ProtectKernelModules = true;
-            ProtectKernelTunables = true;
-            ProtectKernelLogs = true;
-            ProtectControlGroups = true;
-
-            # Capabilities
-            CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
-            AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
-
-            # Syscall filtering
-            SystemCallFilter = [
-              "@system-service"
-              "~@privileged"
-              "~@resources"
+        # Networking configuration
+        networking = {
+          firewall = {
+            enable = true;
+            # Allow HTTP, copyparty metrics
+            allowedTCPPorts = [
+              80
+              3923
             ];
-            SystemCallArchitectures = "native";
+          };
+        };
 
-            # Network restrictions
-            RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+        # Time zone (match host)
+        time.timeZone = "America/Los_Angeles";
 
-            # Misc hardening
-            LockPersonality = true;
-            RestrictNamespaces = true;
-            RestrictRealtime = true;
-            RestrictSUIDSGID = true;
-            RemoveIPC = true;
+        # Force DNS to point to host (works around resolvconf issues in
+        # containers)
+        environment.etc."resolv.conf".text = lib.mkForce ''
+          nameserver 10.233.1.1
+          options edns0
+        '';
+
+        # Nginx configuration
+        services.nginx = {
+          enable = true;
+
+          # Recommended settings
+          recommendedGzipSettings = true;
+          recommendedOptimisation = true;
+          recommendedProxySettings = true;
+
+          virtualHosts."data.newartisans.com" = {
+            default = true;
+            listen = [
+              {
+                addr = "0.0.0.0";
+                port = 80;
+              }
+            ];
+
+            # Container identifier header
+            extraConfig = ''
+              add_header X-Served-By "secure-nginx-container" always;
+            '';
+
+            # Reverse proxy to copyparty (replacing static file serving)
+            locations."/" = {
+              proxyPass = "http://127.0.0.1:3923/";
+              extraConfig = ''
+                # WebSocket support for real-time updates
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+
+                # Large file upload support (up to 10GB)
+                client_max_body_size 10G;
+                proxy_request_buffering off;
+
+                # Proxy headers
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto https;
+
+                # Timeouts for large uploads
+                proxy_connect_timeout 300;
+                proxy_send_timeout 300;
+                proxy_read_timeout 300;
+                send_timeout 300;
+              '';
+            };
+
+            # Health check endpoint
+            locations."/health" = {
+              extraConfig = ''
+                access_log off;
+                return 200 "healthy\n";
+                default_type text/plain;
+              '';
+            };
+
+            # Status endpoint for monitoring
+            locations."/status" = {
+              extraConfig = ''
+                stub_status on;
+                access_log off;
+                allow 10.233.1.1;  # Allow host only
+                deny all;
+              '';
+            };
+          };
+        };
+
+        # Ensure nginx user exists
+        users.users.nginx = {
+          group = "nginx";
+          isSystemUser = true;
+          uid = 60;
+        };
+        users.groups.nginx.gid = 60;
+
+        # Enable copyparty service with password files
+        services.copyparty = {
+          enable = true;
+          port = 3923;
+          domain = "home.newartisans.com";
+          shareDir = "/var/www/home.newartisans.com";
+
+          # Use password files instead of SOPS
+          passwordFiles = {
+            admin = "/var/lib/copyparty-passwords/admin";
+            johnw = "/var/lib/copyparty-passwords/johnw";
+            friend = "/var/lib/copyparty-passwords/friend";
+            nasimw = "/var/lib/copyparty-passwords/nasimw";
+          };
+        };
+
+        systemd.services = {
+          nginx = {
+            after = [
+              "var-www-home.newartisans.com.mount"
+              "copyparty.service"
+            ];
+            wants = [ "copyparty.service" ];
+
+            # Systemd hardening
+            serviceConfig = {
+              # Filesystem hardening
+              ProtectSystem = "strict";
+              ProtectHome = true;
+              PrivateTmp = true;
+              ReadWritePaths = [ "/var/log/nginx" ];
+
+              # Privilege restrictions
+              NoNewPrivileges = true;
+              PrivateDevices = true;
+
+              # Kernel hardening
+              ProtectKernelModules = true;
+              ProtectKernelTunables = true;
+              ProtectKernelLogs = true;
+              ProtectControlGroups = true;
+
+              # Capabilities
+              CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
+              AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
+
+              # Syscall filtering
+              SystemCallFilter = [
+                "@system-service"
+                "~@privileged"
+                "~@resources"
+              ];
+              SystemCallArchitectures = "native";
+
+              # Network restrictions
+              RestrictAddressFamilies = [
+                "AF_INET"
+                "AF_INET6"
+              ];
+
+              # Misc hardening
+              LockPersonality = true;
+              RestrictNamespaces = true;
+              RestrictRealtime = true;
+              RestrictSUIDSGID = true;
+              RemoveIPC = true;
+            };
           };
         };
       };
-    };
   };
 
   # Systemd socket units for localhost-only port forwarding to container

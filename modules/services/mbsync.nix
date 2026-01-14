@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   mkMbsyncLib = import ../lib/mkMbsyncModule.nix { inherit config lib pkgs; };
@@ -42,7 +47,7 @@ in
 
       # Don't use RemainAfterExit with OnUnitActiveSec timer
       # The service needs to become inactive for the timer to schedule the next run
-      extraServiceConfig = {};
+      extraServiceConfig = { };
     })
 
     # Assembly configuration
@@ -79,7 +84,7 @@ in
 
       # Don't use RemainAfterExit with OnUnitActiveSec timer
       # The service needs to become inactive for the timer to schedule the next run
-      extraServiceConfig = {};
+      extraServiceConfig = { };
     })
   ];
 

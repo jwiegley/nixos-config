@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Simple web interface to display atd queue status and job history
@@ -331,7 +336,10 @@ in
 
   systemd.services."atd-web" = {
     description = "ATD Web Status Interface";
-    after = [ "network.target" "atd.service" ];
+    after = [
+      "network.target"
+      "atd.service"
+    ];
     wants = [ "atd.service" ];
     wantedBy = [ "multi-user.target" ];
 

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Get list of all backup names
@@ -74,7 +79,10 @@ in
     {
       "backup-alert@" = {
         description = "Backup failure alert for %i";
-        after = [ "zfs.target" "zfs-import-tank.service" ];
+        after = [
+          "zfs.target"
+          "zfs-import-tank.service"
+        ];
         # NOTE: Template units should not have wantedBy - they are instantiated on-demand
         # via OnFailure=backup-alert@%n.service from restic backup services
         unitConfig = {

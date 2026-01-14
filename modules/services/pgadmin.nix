@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   services.pgadmin = {
@@ -39,7 +44,13 @@
 
   # Ensure pgAdmin starts after PostgreSQL and SOPS
   systemd.services.pgadmin = {
-    after = [ "postgresql.service" "sops-install-secrets.service" ];
-    wants = [ "postgresql.service" "sops-install-secrets.service" ];
+    after = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
+    wants = [
+      "postgresql.service"
+      "sops-install-secrets.service"
+    ];
   };
 }

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # vdirsyncer Prometheus metrics monitoring
@@ -9,15 +14,17 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "vdirsyncer";
-      static_configs = [{
-        targets = [ "localhost:8089" ];
-        labels = {
-          service = "vdirsyncer";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:8089" ];
+          labels = {
+            service = "vdirsyncer";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/metrics";
-      scrape_interval = "60s";  # Scrape every minute
+      scrape_interval = "60s"; # Scrape every minute
       scrape_timeout = "10s";
     }
   ];

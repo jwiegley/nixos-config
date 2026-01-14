@@ -1,14 +1,15 @@
-{ lib
-, buildPythonPackage
-, fetchPypi
-, setuptools
-, jinja2
-, pillow
-, mutagen
-, argon2-cffi
-, pyftpdlib
-, pyopenssl
-, pyzmq
+{
+  lib,
+  buildPythonPackage,
+  fetchPypi,
+  setuptools,
+  jinja2,
+  pillow,
+  mutagen,
+  argon2-cffi,
+  pyftpdlib,
+  pyopenssl,
+  pyzmq,
 }:
 
 buildPythonPackage rec {
@@ -35,7 +36,10 @@ buildPythonPackage rec {
     thumbnails = [ pillow ];
     audiotags = [ mutagen ];
     pwhash = [ argon2-cffi ];
-    ftps = [ pyftpdlib pyopenssl ];
+    ftps = [
+      pyftpdlib
+      pyopenssl
+    ];
     zeromq = [ pyzmq ];
   };
 

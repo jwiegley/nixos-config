@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Glances system monitoring service
@@ -101,7 +106,11 @@
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      RestrictAddressFamilies = [
+        "AF_INET"
+        "AF_INET6"
+        "AF_UNIX"
+      ];
       RestrictNamespaces = true;
       RestrictRealtime = true;
       RestrictSUIDSGID = true;
@@ -128,7 +137,7 @@
     createHome = true;
   };
 
-  users.groups.glances = {};
+  users.groups.glances = { };
 
   # Create state directory
   systemd.tmpfiles.rules = [
@@ -188,7 +197,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";

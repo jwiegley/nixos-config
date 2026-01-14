@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   downloadDir = "/tank/Public/download";
@@ -12,37 +17,37 @@ let
   };
 
   # Create pre-configured AriaNG with RPC settings
-  ariang = pkgs.runCommand "ariang-configured" {} ''
-    cp -r ${ariangSource} $out
-    chmod -R u+w $out
+  ariang = pkgs.runCommand "ariang-configured" { } ''
+        cp -r ${ariangSource} $out
+        chmod -R u+w $out
 
-    # Create configuration script that will be injected
-    cat > $out/config.js << 'EOF'
-// Auto-configuration for aria2 RPC
-(function() {
-  var storageKey = 'AriaNg.RpcSettings';
-  var defaultConfig = {
-    "rpcAlias": "vulcan",
-    "rpcHost": "aria.vulcan.lan",
-    "rpcPort": "443",
-    "rpcInterface": "https",
-    "protocol": "jsonrpc",
-    "httpMethod": "POST",
-    "secret": "",
-    "path": "/jsonrpc",
-    "isDefault": true
-  };
+        # Create configuration script that will be injected
+        cat > $out/config.js << 'EOF'
+    // Auto-configuration for aria2 RPC
+    (function() {
+      var storageKey = 'AriaNg.RpcSettings';
+      var defaultConfig = {
+        "rpcAlias": "vulcan",
+        "rpcHost": "aria.vulcan.lan",
+        "rpcPort": "443",
+        "rpcInterface": "https",
+        "protocol": "jsonrpc",
+        "httpMethod": "POST",
+        "secret": "",
+        "path": "/jsonrpc",
+        "isDefault": true
+      };
 
-  // Only set if not already configured
-  if (!localStorage.getItem(storageKey)) {
-    localStorage.setItem(storageKey, JSON.stringify([defaultConfig]));
-    console.log('AriaNG: Auto-configured RPC settings');
-  }
-})();
-EOF
+      // Only set if not already configured
+      if (!localStorage.getItem(storageKey)) {
+        localStorage.setItem(storageKey, JSON.stringify([defaultConfig]));
+        console.log('AriaNG: Auto-configured RPC settings');
+      }
+    })();
+    EOF
 
-    # Inject the configuration into index.html
-    sed -i 's|<head>|<head><script src="config.js"></script>|' $out/index.html
+        # Inject the configuration into index.html
+        sed -i 's|<head>|<head><script src="config.js"></script>|' $out/index.html
   '';
 
 in
@@ -56,7 +61,7 @@ in
     createHome = true;
   };
 
-  users.groups.aria2 = {};
+  users.groups.aria2 = { };
 
   # SOPS secret for RPC authentication
   sops.secrets.aria2_rpc_secret = {
@@ -69,7 +74,10 @@ in
   # aria2 systemd service
   systemd.services.aria2 = {
     description = "aria2 Download Manager";
-    after = [ "network.target" "zfs-import-tank.service" ];
+    after = [
+      "network.target"
+      "zfs-import-tank.service"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     unitConfig = {
@@ -89,22 +97,30 @@ in
 
       # Security hardening
       PrivateTmp = true;
-      ProtectSystem = "full";  # Changed from "strict" to allow DNS resolution
+      ProtectSystem = "full"; # Changed from "strict" to allow DNS resolution
       ProtectHome = true;
       NoNewPrivileges = true;
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" "AF_NETLINK" ];
+      RestrictAddressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+        "AF_NETLINK"
+      ];
       RestrictNamespaces = true;
       LockPersonality = true;
       RestrictRealtime = true;
       RestrictSUIDSGID = true;
       RemoveIPC = true;
-      PrivateMounts = false;  # Need access to ZFS mounts
+      PrivateMounts = false; # Need access to ZFS mounts
 
       # Read/write access to download directory and state directory
-      ReadWritePaths = [ downloadDir "/var/lib/aria2" ];
+      ReadWritePaths = [
+        downloadDir
+        "/var/lib/aria2"
+      ];
     };
 
     script = ''

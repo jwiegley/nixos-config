@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Enable iproute2 with custom routing table for asymmetric routing fix
@@ -15,7 +20,10 @@
     domain = "lan";
 
     # Hard-code DNS servers to prevent DHCP from adding extras
-    nameservers = [ "127.0.0.1" "192.168.1.1" ];
+    nameservers = [
+      "127.0.0.1"
+      "192.168.1.1"
+    ];
 
     # Disable reverse path filtering in firewall
     # Required for asymmetric routing between WiFi (192.168.3.x) and Ethernet
@@ -23,8 +31,11 @@
     # firewall.checkReversePath = false;
 
     hosts = {
-      "127.0.0.2" = [];
-      "192.168.1.2" = [ "vulcan.lan" "vulcan" ];
+      "127.0.0.2" = [ ];
+      "192.168.1.2" = [
+        "vulcan.lan"
+        "vulcan"
+      ];
       "192.168.1.4" = [ "Hera.local" ];
     };
 
@@ -38,7 +49,10 @@
       # Ensure WiFi is enabled
       wifi.backend = "wpa_supplicant";
       # Ignore DHCP-provided DNS servers
-      insertNameservers = [ "127.0.0.1" "192.168.1.1" ];
+      insertNameservers = [
+        "127.0.0.1"
+        "192.168.1.1"
+      ];
     };
 
     # Note: When NetworkManager is enabled, per-interface useDHCP is managed
@@ -84,7 +98,10 @@
   systemd.services.asymmetric-routing = {
     description = "Configure policy routing for cross-subnet DNS and NTP access";
     wantedBy = [ "network-online.target" ];
-    after = [ "network-online.target" "NetworkManager.service" ];
+    after = [
+      "network-online.target"
+      "NetworkManager.service"
+    ];
     wants = [ "network-online.target" ];
 
     serviceConfig = {

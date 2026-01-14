@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   transformerScript = pkgs.writeScriptBin "opnsense-api-transformer" ''
@@ -173,6 +178,6 @@ in
   # Open firewall ports for the transformer
   networking.firewall.interfaces = {
     lo.allowedTCPPorts = [ 8444 ];
-    podman0.allowedTCPPorts = [ 8444 ];  # Allow containers to access the transformer
+    podman0.allowedTCPPorts = [ 8444 ]; # Allow containers to access the transformer
   };
 }

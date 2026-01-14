@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Declare SOPS secrets for WiFi credentials
@@ -21,7 +26,11 @@
     description = "Prepare WiFi credentials for NetworkManager";
     wantedBy = [ "multi-user.target" ];
     wants = [ "network-pre.target" ];
-    before = [ "NetworkManager.service" "NetworkManager-ensure-profiles.service" "network-pre.target" ];
+    before = [
+      "NetworkManager.service"
+      "NetworkManager-ensure-profiles.service"
+      "network-pre.target"
+    ];
     after = [ "local-fs.target" ];
 
     serviceConfig = {
@@ -64,25 +73,25 @@
             uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
             type = "wifi";
             autoconnect = true;
-            autoconnect-priority = 10;  # Lower than Ethernet (default 0), but will auto-connect
+            autoconnect-priority = 10; # Lower than Ethernet (default 0), but will auto-connect
           };
           wifi = {
             mode = "infrastructure";
-            ssid = "$WIFI_SSID";  # Variable substituted from environment file
+            ssid = "$WIFI_SSID"; # Variable substituted from environment file
           };
           wifi-security = {
             auth-alg = "open";
             key-mgmt = "wpa-psk";
-            psk = "$WIFI_PSK";  # Variable substituted from environment file
+            psk = "$WIFI_PSK"; # Variable substituted from environment file
           };
           ipv4 = {
-            method = "auto";  # DHCP
-            never-default = true;  # Never use WiFi for internet (Ethernet only)
+            method = "auto"; # DHCP
+            never-default = true; # Never use WiFi for internet (Ethernet only)
           };
           ipv6 = {
             method = "auto";
             addr-gen-mode = "stable-privacy";
-            never-default = true;  # Never use WiFi for internet (Ethernet only)
+            never-default = true; # Never use WiFi for internet (Ethernet only)
           };
         };
       };

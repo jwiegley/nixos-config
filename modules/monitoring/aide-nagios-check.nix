@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 # Nagios check for AIDE file integrity monitoring
 # Monitors AIDE check results and alerts on changes or failures

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   exporterPort = 9374;
@@ -156,7 +161,10 @@ in
   # aria2 Prometheus exporter service
   systemd.services.aria2-exporter = {
     description = "aria2 Prometheus Metrics Exporter";
-    after = [ "network.target" "aria2.service" ];
+    after = [
+      "network.target"
+      "aria2.service"
+    ];
     wantedBy = [ "multi-user.target" ];
     wants = [ "aria2.service" ];
 
@@ -176,7 +184,11 @@ in
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+      ];
       RestrictNamespaces = true;
       LockPersonality = true;
       RestrictRealtime = true;
@@ -193,13 +205,15 @@ in
   services.prometheus.scrapeConfigs = [
     {
       job_name = "aria2";
-      static_configs = [{
-        targets = [ "127.0.0.1:${toString exporterPort}" ];
-        labels = {
-          instance = "vulcan";
-          service = "aria2";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "127.0.0.1:${toString exporterPort}" ];
+          labels = {
+            instance = "vulcan";
+            service = "aria2";
+          };
+        }
+      ];
       scrape_interval = "15s";
     }
   ];

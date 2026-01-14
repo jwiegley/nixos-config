@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Redis exporter for multiple Redis instances
@@ -13,7 +18,7 @@
     # Export metrics for all Redis instances
     # Format: redis://host:port or unix:///path/to/socket
     extraFlags = [
-      "-redis.addr=redis://10.88.0.1:8085"  # litellm
+      "-redis.addr=redis://10.88.0.1:8085" # litellm
     ];
   };
 
@@ -26,15 +31,17 @@
     group = "redis-exporter";
   };
 
-  users.groups.redis-exporter = {};
+  users.groups.redis-exporter = { };
 
   # Prometheus scrape configuration
   services.prometheus.scrapeConfigs = [
     {
       job_name = "redis";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.redis.port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.redis.port}" ];
+        }
+      ];
       scrape_interval = "30s";
     }
   ];

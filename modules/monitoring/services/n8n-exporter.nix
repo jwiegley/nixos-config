@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # n8n Prometheus metrics monitoring
@@ -9,13 +14,15 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "n8n";
-      static_configs = [{
-        targets = [ "localhost:5678" ];
-        labels = {
-          service = "n8n";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:5678" ];
+          labels = {
+            service = "n8n";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/metrics";
       scrape_interval = "15s";
       scrape_timeout = "10s";

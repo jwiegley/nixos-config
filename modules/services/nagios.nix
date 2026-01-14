@@ -1,4 +1,11 @@
-{ config, lib, pkgs, secrets, nagios, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  nagios,
+  ...
+}:
 
 let
   # Common helper functions
@@ -14,7 +21,12 @@ let
     buildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/check_ssl_cert \
-        --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.bind.host pkgs.bc ]}
+        --prefix PATH : ${
+          pkgs.lib.makeBinPath [
+            pkgs.bind.host
+            pkgs.bc
+          ]
+        }
     '';
   };
 
@@ -256,7 +268,9 @@ let
       use                     ${template}
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_systemd_service!${serviceName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service!${serviceName}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -267,7 +281,9 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service_conditional!${serviceName}!${mountPoint}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -277,14 +293,18 @@ let
       use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
-      check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service!${timerName}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
 
     define service {
       use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Service)
-      check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service!${lib.removeSuffix ".timer" timerName}.service${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -294,14 +314,18 @@ let
       use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Timer)
-      check_command           check_systemd_service!${timerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service!${timerName}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
 
     define service {
       use                     low-priority-service
       host_name               vulcan
       service_description     ${displayName} (Service)
-      check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service_conditional!${lib.removeSuffix ".timer" timerName}.service!${mountPoint}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -311,7 +335,9 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_podman_container!${containerName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_podman_container!${containerName}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -321,7 +347,9 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_podman_container_rootless!${containerName}!${runAsUser}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_podman_container_rootless!${containerName}!${runAsUser}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
@@ -331,28 +359,41 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     ${displayName}
-      check_command           check_systemd_service_ondemand!${serviceName}${if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""}
+      check_command           check_systemd_service_ondemand!${serviceName}${
+        if servicegroups != "" then "\n      service_groups          ${servicegroups}" else ""
+      }
     }
   '';
 
   # Helper function to generate monitored host with ping check and optional parent
   # Usage: mkMonitoredHost { hostname = "router"; address = "192.168.1.1"; alias = "Main Router"; parent = null; pingWarn = "100.0,20%"; pingCrit = "500.0,60%"; }
-  mkMonitoredHost = { hostname, address, alias, parent ? null, pingWarn ? "100.0,20%", pingCrit ? "500.0,60%" }: ''
-    define host {
-      use                     linux-server
-      host_name               ${hostname}
-      alias                   ${alias}
-      address                 ${address}${lib.optionalString (parent != null) "\n      parents                 ${parent}"}
-    }
+  mkMonitoredHost =
+    {
+      hostname,
+      address,
+      alias,
+      parent ? null,
+      pingWarn ? "100.0,20%",
+      pingCrit ? "500.0,60%",
+    }:
+    ''
+      define host {
+        use                     linux-server
+        host_name               ${hostname}
+        alias                   ${alias}
+        address                 ${address}${
+          lib.optionalString (parent != null) "\n      parents                 ${parent}"
+        }
+      }
 
-    define service {
-      use                     generic-service
-      host_name               ${hostname}
-      service_description     PING
-      check_command           check_ping!${pingWarn}!${pingCrit}
-      service_groups          network-hosts
-    }
-  '';
+      define service {
+        use                     generic-service
+        host_name               ${hostname}
+        service_description     PING
+        check_command           check_ping!${pingWarn}!${pingCrit}
+        service_groups          network-hosts
+      }
+    '';
 
   # List of monitored hosts with parent relationships for network topology
   # IMPORTANT: Host definitions are now stored in a separate private file: /etc/nixos/nagios-hosts.nix
@@ -376,119 +417,365 @@ let
   # Service categories for organized monitoring
   # Critical Infrastructure Services (no mount dependencies)
   criticalServices = [
-    { name = "postgresql.service"; display = "PostgreSQL Database"; }
-    { name = "nginx.service"; display = "Nginx Web Server"; }
-    { name = "dovecot.service"; display = "Dovecot IMAP Server"; }
-    { name = "postfix.service"; display = "Postfix Mail Server"; }
-    { name = "rspamd.service"; display = "Rspamd Spam Filter"; }
-    { name = "radicale.service"; display = "Radicale CalDAV/CardDAV Server"; }
-    { name = "vdirsyncer-status.service"; display = "vdirsyncer Status Dashboard"; }
-    { name = "step-ca.service"; display = "Step-CA Certificate Authority"; }
-    { name = "samba-wsdd.service"; display = "Samba Web Service Discovery"; }
-    { name = "technitium-dns-server.service"; display = "Technitium DNS Server"; }
+    {
+      name = "postgresql.service";
+      display = "PostgreSQL Database";
+    }
+    {
+      name = "nginx.service";
+      display = "Nginx Web Server";
+    }
+    {
+      name = "dovecot.service";
+      display = "Dovecot IMAP Server";
+    }
+    {
+      name = "postfix.service";
+      display = "Postfix Mail Server";
+    }
+    {
+      name = "rspamd.service";
+      display = "Rspamd Spam Filter";
+    }
+    {
+      name = "radicale.service";
+      display = "Radicale CalDAV/CardDAV Server";
+    }
+    {
+      name = "vdirsyncer-status.service";
+      display = "vdirsyncer Status Dashboard";
+    }
+    {
+      name = "step-ca.service";
+      display = "Step-CA Certificate Authority";
+    }
+    {
+      name = "samba-wsdd.service";
+      display = "Samba Web Service Discovery";
+    }
+    {
+      name = "technitium-dns-server.service";
+      display = "Technitium DNS Server";
+    }
   ];
 
   # Critical Services that depend on /tank mount
   tankDependentServices = [
-    { name = "samba-smbd.service"; display = "Samba SMB Daemon"; mount = "/tank"; }
-    { name = "samba-nmbd.service"; display = "Samba NetBIOS Name Server"; mount = "/tank"; }
-    { name = "samba-winbindd.service"; display = "Samba Winbind Daemon"; mount = "/tank"; }
-    { name = "prometheus-zfs-exporter.service"; display = "ZFS Metrics Exporter"; mount = "/tank"; }
-    { name = "aria2.service"; display = "aria2 Download Manager"; mount = "/tank"; }
+    {
+      name = "samba-smbd.service";
+      display = "Samba SMB Daemon";
+      mount = "/tank";
+    }
+    {
+      name = "samba-nmbd.service";
+      display = "Samba NetBIOS Name Server";
+      mount = "/tank";
+    }
+    {
+      name = "samba-winbindd.service";
+      display = "Samba Winbind Daemon";
+      mount = "/tank";
+    }
+    {
+      name = "prometheus-zfs-exporter.service";
+      display = "ZFS Metrics Exporter";
+      mount = "/tank";
+    }
+    {
+      name = "aria2.service";
+      display = "aria2 Download Manager";
+      mount = "/tank";
+    }
   ];
 
   # Monitoring Stack Services
   monitoringServices = [
-    { name = "prometheus.service"; display = "Prometheus Metrics Server"; }
-    { name = "grafana.service"; display = "Grafana Dashboard"; }
-    { name = "loki.service"; display = "Loki Log Aggregation"; }
-    { name = "promtail.service"; display = "Promtail Log Collector"; }
-    { name = "alertmanager.service"; display = "Alertmanager"; }
-    { name = "victoriametrics.service"; display = "VictoriaMetrics"; }
-    { name = "nagios.service"; display = "Nagios Monitoring"; }
-    { name = "critical-services-exporter.service"; display = "Critical Services Exporter"; }
-    { name = "dns-query-log-exporter.service"; display = "DNS Query Log Exporter"; }
-    { name = "aria2-exporter.service"; display = "aria2 Metrics Exporter"; }
+    {
+      name = "prometheus.service";
+      display = "Prometheus Metrics Server";
+    }
+    {
+      name = "grafana.service";
+      display = "Grafana Dashboard";
+    }
+    {
+      name = "loki.service";
+      display = "Loki Log Aggregation";
+    }
+    {
+      name = "promtail.service";
+      display = "Promtail Log Collector";
+    }
+    {
+      name = "alertmanager.service";
+      display = "Alertmanager";
+    }
+    {
+      name = "victoriametrics.service";
+      display = "VictoriaMetrics";
+    }
+    {
+      name = "nagios.service";
+      display = "Nagios Monitoring";
+    }
+    {
+      name = "critical-services-exporter.service";
+      display = "Critical Services Exporter";
+    }
+    {
+      name = "dns-query-log-exporter.service";
+      display = "DNS Query Log Exporter";
+    }
+    {
+      name = "aria2-exporter.service";
+      display = "aria2 Metrics Exporter";
+    }
   ];
 
   # Home Automation Services
   homeAutomationServices = [
-    { name = "home-assistant.service"; display = "Home Assistant"; }
-    { name = "node-red.service"; display = "Node-RED Automation"; }
+    {
+      name = "home-assistant.service";
+      display = "Home Assistant";
+    }
+    {
+      name = "node-red.service";
+      display = "Node-RED Automation";
+    }
   ];
 
   # Application Services
   applicationServices = [
-    { name = "jellyfin.service"; display = "Jellyfin Media Server"; }
-    { name = "glance.service"; display = "Glance Dashboard"; }
-    { name = "glance-github-extension.service"; display = "Glance GitHub Extension"; }
-    { name = "cockpit.service"; display = "Cockpit Web Console"; }
-    { name = "ntopng.service"; display = "ntopng Network Monitor"; }
-    { name = "copyparty.service"; display = "Copyparty File Server"; }
-    { name = "gitea.service"; display = "Gitea Git Server"; }
-    { name = "immich-server.service"; display = "Immich Photo Server"; }
-    { name = "immich-machine-learning.service"; display = "Immich Machine Learning"; }
-    { name = "redis-immich.service"; display = "Redis (Immich)"; }
-    { name = "n8n.service"; display = "n8n Workflow Automation"; }
-    { name = "redis-gitea.service"; display = "Redis (Gitea)"; }
-    { name = "redis-litellm.service"; display = "Redis (LiteLLM)"; }
-    { name = "redis-n8n.service"; display = "Redis (n8n)"; }
-    { name = "redis-ntopng.service"; display = "Redis (ntopng)"; }
-    { name = "changedetection.service"; display = "ChangeDetection"; }
-    { name = "zimit-web-ui.service"; display = "Zimit Web UI"; }
-    { name = "kiwix-serve.service"; display = "Kiwix ZIM Server"; }
+    {
+      name = "jellyfin.service";
+      display = "Jellyfin Media Server";
+    }
+    {
+      name = "glance.service";
+      display = "Glance Dashboard";
+    }
+    {
+      name = "glance-github-extension.service";
+      display = "Glance GitHub Extension";
+    }
+    {
+      name = "cockpit.service";
+      display = "Cockpit Web Console";
+    }
+    {
+      name = "ntopng.service";
+      display = "ntopng Network Monitor";
+    }
+    {
+      name = "copyparty.service";
+      display = "Copyparty File Server";
+    }
+    {
+      name = "gitea.service";
+      display = "Gitea Git Server";
+    }
+    {
+      name = "immich-server.service";
+      display = "Immich Photo Server";
+    }
+    {
+      name = "immich-machine-learning.service";
+      display = "Immich Machine Learning";
+    }
+    {
+      name = "redis-immich.service";
+      display = "Redis (Immich)";
+    }
+    {
+      name = "n8n.service";
+      display = "n8n Workflow Automation";
+    }
+    {
+      name = "redis-gitea.service";
+      display = "Redis (Gitea)";
+    }
+    {
+      name = "redis-litellm.service";
+      display = "Redis (LiteLLM)";
+    }
+    {
+      name = "redis-n8n.service";
+      display = "Redis (n8n)";
+    }
+    {
+      name = "redis-ntopng.service";
+      display = "Redis (ntopng)";
+    }
+    {
+      name = "changedetection.service";
+      display = "ChangeDetection";
+    }
+    {
+      name = "zimit-web-ui.service";
+      display = "Zimit Web UI";
+    }
+    {
+      name = "kiwix-serve.service";
+      display = "Kiwix ZIM Server";
+    }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)
   resticBackupServices = [
-    { name = "restic-backups-Audio.service"; display = "Restic Backup: Audio"; mount = "/tank"; }
-    { name = "restic-backups-Backups.service"; display = "Restic Backup: Backups"; mount = "/tank"; }
-    { name = "restic-backups-Databases.service"; display = "Restic Backup: Databases"; mount = "/tank"; }
-    { name = "restic-backups-doc.service"; display = "Restic Backup: doc"; mount = "/tank"; }
-    { name = "restic-backups-Home.service"; display = "Restic Backup: Home"; mount = "/tank"; }
-    { name = "restic-backups-Photos.service"; display = "Restic Backup: Photos"; mount = "/tank"; }
-    { name = "restic-backups-src.service"; display = "Restic Backup: src"; mount = "/tank"; }
-    { name = "restic-backups-Video.service"; display = "Restic Backup: Video"; mount = "/tank"; }
+    {
+      name = "restic-backups-Audio.service";
+      display = "Restic Backup: Audio";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Backups.service";
+      display = "Restic Backup: Backups";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Databases.service";
+      display = "Restic Backup: Databases";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-doc.service";
+      display = "Restic Backup: doc";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Home.service";
+      display = "Restic Backup: Home";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Photos.service";
+      display = "Restic Backup: Photos";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-src.service";
+      display = "Restic Backup: src";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Video.service";
+      display = "Restic Backup: Video";
+      mount = "/tank";
+    }
   ];
 
   # Backup and Maintenance Timers
   maintenanceTimers = [
-    { name = "git-workspace-archive.timer"; display = "Git Workspace Archive"; }
-    { name = "update-containers.timer"; display = "Container Updates"; }
-    { name = "postgresql-backup.timer"; display = "PostgreSQL Backup"; }
-    { name = "backup-status-exporter.timer"; display = "Backup Status Exporter"; }
-    { name = "certificate-exporter.timer"; display = "Certificate Exporter"; }
-    { name = "certificate-validation.timer"; display = "Certificate Validation"; }
-    { name = "logwatch.timer"; display = "Logwatch Log Analysis"; }
-    { name = "logrotate.timer"; display = "Log Rotation"; }
-    { name = "fstrim.timer"; display = "Filesystem Trim"; }
-    { name = "podman-prune.timer"; display = "Podman Cleanup"; }
-    { name = "zimit-job-runner.timer"; display = "Zimit Job Runner"; }
+    {
+      name = "git-workspace-archive.timer";
+      display = "Git Workspace Archive";
+    }
+    {
+      name = "update-containers.timer";
+      display = "Container Updates";
+    }
+    {
+      name = "postgresql-backup.timer";
+      display = "PostgreSQL Backup";
+    }
+    {
+      name = "backup-status-exporter.timer";
+      display = "Backup Status Exporter";
+    }
+    {
+      name = "certificate-exporter.timer";
+      display = "Certificate Exporter";
+    }
+    {
+      name = "certificate-validation.timer";
+      display = "Certificate Validation";
+    }
+    {
+      name = "logwatch.timer";
+      display = "Logwatch Log Analysis";
+    }
+    {
+      name = "logrotate.timer";
+      display = "Log Rotation";
+    }
+    {
+      name = "fstrim.timer";
+      display = "Filesystem Trim";
+    }
+    {
+      name = "podman-prune.timer";
+      display = "Podman Cleanup";
+    }
+    {
+      name = "zimit-job-runner.timer";
+      display = "Zimit Job Runner";
+    }
   ];
 
   # Timers whose services depend on /tank mount
   tankDependentTimers = [
-    { name = "restic-check.timer"; display = "Restic Repository Check"; mount = "/tank"; }
-    { name = "restic-metrics.timer"; display = "Restic Metrics Collection"; mount = "/tank"; }
+    {
+      name = "restic-check.timer";
+      display = "Restic Repository Check";
+      mount = "/tank";
+    }
+    {
+      name = "restic-metrics.timer";
+      display = "Restic Metrics Collection";
+      mount = "/tank";
+    }
   ];
 
   # Email Sync Timers
   emailTimers = [
-    { name = "mbsync-johnw.timer"; display = "Email Sync (johnw)"; }
-    { name = "mbsync-assembly.timer"; display = "Email Sync (assembly)"; }
-    { name = "mbsync-johnw-health-check.timer"; display = "Email Sync Health Check (johnw)"; }
-    { name = "mbsync-assembly-health-check.timer"; display = "Email Sync Health Check (assembly)"; }
-    { name = "imapdedup.timer"; display = "IMAP Deduplication"; }
-    { name = "rspamd-scan-mailboxes.timer"; display = "Rspamd Mailbox Scanning"; }
-    { name = "vdirsyncer.timer"; display = "Contact/Calendar Sync (vdirsyncer)"; }
+    {
+      name = "mbsync-johnw.timer";
+      display = "Email Sync (johnw)";
+    }
+    {
+      name = "mbsync-assembly.timer";
+      display = "Email Sync (assembly)";
+    }
+    {
+      name = "mbsync-johnw-health-check.timer";
+      display = "Email Sync Health Check (johnw)";
+    }
+    {
+      name = "mbsync-assembly-health-check.timer";
+      display = "Email Sync Health Check (assembly)";
+    }
+    {
+      name = "imapdedup.timer";
+      display = "IMAP Deduplication";
+    }
+    {
+      name = "rspamd-scan-mailboxes.timer";
+      display = "Rspamd Mailbox Scanning";
+    }
+    {
+      name = "vdirsyncer.timer";
+      display = "Contact/Calendar Sync (vdirsyncer)";
+    }
   ];
 
   # Certificate Renewal Timers
   certRenewalTimers = [
-    { name = "dovecot-cert-renewal.timer"; display = "Dovecot Cert Renewal"; }
-    { name = "nginx-cert-renewal.timer"; display = "Nginx Cert Renewal"; }
-    { name = "postgresql-cert-renewal.timer"; display = "PostgreSQL Cert Renewal"; }
-    { name = "postfix-cert-renewal.timer"; display = "Postfix Cert Renewal"; }
+    {
+      name = "dovecot-cert-renewal.timer";
+      display = "Dovecot Cert Renewal";
+    }
+    {
+      name = "nginx-cert-renewal.timer";
+      display = "Nginx Cert Renewal";
+    }
+    {
+      name = "postgresql-cert-renewal.timer";
+      display = "PostgreSQL Cert Renewal";
+    }
+    {
+      name = "postfix-cert-renewal.timer";
+      display = "Postfix Cert Renewal";
+    }
   ];
 
   # Podman Containers
@@ -496,53 +783,124 @@ let
   # root containers (no runAs) run in the root namespace via system services
   # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
   containers = [
-    { name = "litellm"; display = "LiteLLM API Proxy"; runAs = "litellm"; }
-    { name = "mailarchiver"; display = "Mail Archiver"; runAs = "mailarchiver"; }
-    { name = "nocobase"; display = "NocoBase No-Code Platform"; runAs = "nocobase"; }
-    { name = "openproject"; display = "OpenProject Project Management"; runAs = "openproject"; }
-    { name = "opnsense-exporter"; display = "OPNsense Metrics Exporter"; runAs = "opnsense-exporter"; }
-    { name = "shlink"; display = "Shlink URL Shortener API"; runAs = "shlink"; }
-    { name = "shlink-web-client"; display = "Shlink Web Client"; runAs = "shlink-web-client"; }
-    { name = "speedtest"; display = "Open SpeedTest"; runAs = "openspeedtest"; }
-    { name = "silly-tavern"; display = "Silly Tavern"; runAs = "sillytavern"; }
-    { name = "teable"; display = "Teable Database Platform"; runAs = "teable"; }
-    { name = "wallabag"; display = "Wallabag Read-Later"; runAs = "wallabag"; }
-    { name = "open-webui"; display = "Open WebUI AI Chat"; runAs = "open-webui"; }
+    {
+      name = "litellm";
+      display = "LiteLLM API Proxy";
+      runAs = "litellm";
+    }
+    {
+      name = "mailarchiver";
+      display = "Mail Archiver";
+      runAs = "mailarchiver";
+    }
+    {
+      name = "nocobase";
+      display = "NocoBase No-Code Platform";
+      runAs = "nocobase";
+    }
+    {
+      name = "openproject";
+      display = "OpenProject Project Management";
+      runAs = "openproject";
+    }
+    {
+      name = "opnsense-exporter";
+      display = "OPNsense Metrics Exporter";
+      runAs = "opnsense-exporter";
+    }
+    {
+      name = "shlink";
+      display = "Shlink URL Shortener API";
+      runAs = "shlink";
+    }
+    {
+      name = "shlink-web-client";
+      display = "Shlink Web Client";
+      runAs = "shlink-web-client";
+    }
+    {
+      name = "speedtest";
+      display = "Open SpeedTest";
+      runAs = "openspeedtest";
+    }
+    {
+      name = "silly-tavern";
+      display = "Silly Tavern";
+      runAs = "sillytavern";
+    }
+    {
+      name = "teable";
+      display = "Teable Database Platform";
+      runAs = "teable";
+    }
+    {
+      name = "wallabag";
+      display = "Wallabag Read-Later";
+      runAs = "wallabag";
+    }
+    {
+      name = "open-webui";
+      display = "Open WebUI AI Chat";
+      runAs = "open-webui";
+    }
   ];
 
   # Container systemd services (for Quadlet-managed containers)
   containerSystemdServices = [
-    { name = "container@secure-nginx.service"; display = "Secure Nginx Container"; }
-    { name = "technitium-dns-exporter.service"; display = "Technitium DNS Exporter"; }
+    {
+      name = "container@secure-nginx.service";
+      display = "Secure Nginx Container";
+    }
+    {
+      name = "technitium-dns-exporter.service";
+      display = "Technitium DNS Exporter";
+    }
   ];
 
   # On-demand services (manually started/stopped, only alert on failures)
   onDemandServices = [
-    { name = "windows11.service"; display = "Windows 11 Container"; }
+    {
+      name = "windows11.service";
+      display = "Windows 11 Container";
+    }
   ];
 
   # Generate all service checks
   allServiceChecks = lib.concatStrings [
     # Critical Infrastructure - check every 2 minutes
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "critical-infrastructure" "critical-service") criticalServices)
+    (lib.concatMapStrings (
+      s: mkServiceCheck s.name s.display "critical-infrastructure" "critical-service"
+    ) criticalServices)
 
     # Tank-Dependent Services (use conditional check)
-    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "tank-dependent-services") tankDependentServices)
+    (lib.concatMapStrings (
+      s: mkConditionalServiceCheck s.name s.display s.mount "tank-dependent-services"
+    ) tankDependentServices)
 
     # Monitoring Stack - check every 5 minutes
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "monitoring-stack" "standard-service") monitoringServices)
+    (lib.concatMapStrings (
+      s: mkServiceCheck s.name s.display "monitoring-stack" "standard-service"
+    ) monitoringServices)
 
     # Home Automation - check every 5 minutes
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "home-automation" "standard-service") homeAutomationServices)
+    (lib.concatMapStrings (
+      s: mkServiceCheck s.name s.display "home-automation" "standard-service"
+    ) homeAutomationServices)
 
     # Applications - check every 5 minutes
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "application-services" "standard-service") applicationServices)
+    (lib.concatMapStrings (
+      s: mkServiceCheck s.name s.display "application-services" "standard-service"
+    ) applicationServices)
 
     # Restic Backup Services (use conditional check)
-    (lib.concatMapStrings (s: mkConditionalServiceCheck s.name s.display s.mount "backup-services") resticBackupServices)
+    (lib.concatMapStrings (
+      s: mkConditionalServiceCheck s.name s.display s.mount "backup-services"
+    ) resticBackupServices)
 
     # Container Services - check every 5 minutes
-    (lib.concatMapStrings (s: mkServiceCheck s.name s.display "containers" "standard-service") containerSystemdServices)
+    (lib.concatMapStrings (
+      s: mkServiceCheck s.name s.display "containers" "standard-service"
+    ) containerSystemdServices)
 
     # On-Demand Services - only alert on failures
     (lib.concatMapStrings (s: mkOnDemandServiceCheck s.name s.display "containers") onDemandServices)
@@ -551,7 +909,9 @@ let
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "maintenance-timers") maintenanceTimers)
 
     # Tank-Dependent Timers (use conditional check for services)
-    (lib.concatMapStrings (t: mkConditionalTimerCheck t.name t.display t.mount "maintenance-timers") tankDependentTimers)
+    (lib.concatMapStrings (
+      t: mkConditionalTimerCheck t.name t.display t.mount "maintenance-timers"
+    ) tankDependentTimers)
 
     # Email Timers - check every 15 minutes
     (lib.concatMapStrings (t: mkTimerCheck t.name t.display "email-services") emailTimers)
@@ -561,7 +921,8 @@ let
 
     # Podman Containers - check every 5 minutes
     # Use appropriate check based on whether container is rootless (has runAs user)
-    (lib.concatMapStrings (c:
+    (lib.concatMapStrings (
+      c:
       if c ? runAs then
         mkRootlessContainerCheck c.name c.display c.runAs "containers"
       else
@@ -1734,12 +2095,12 @@ in
       curl
       openssl
       perl
-      bind.host  # for host command (DNS lookup)
-      inetutils  # for hostname
-      bc  # calculator for check_ssl_cert
-      gawk  # required by check_ssl_cert for certificate parsing
-      jq  # required by check_git_workspace_sync for JSON parsing
-      findutils  # required by check_git_workspace_stale for find command
+      bind.host # for host command (DNS lookup)
+      inetutils # for hostname
+      bc # calculator for check_ssl_cert
+      gawk # required by check_ssl_cert for certificate parsing
+      jq # required by check_git_workspace_sync for JSON parsing
+      findutils # required by check_git_workspace_stale for find command
     ];
 
     # Validate configuration at build time
@@ -1821,8 +2182,14 @@ in
   # Create htpasswd file for Nagios web interface
   systemd.services.nagios-htpasswd = {
     description = "Generate Nagios htpasswd file";
-    wantedBy = [ "nagios.service" "nginx.service" ];
-    before = [ "nagios.service" "nginx.service" ];
+    wantedBy = [
+      "nagios.service"
+      "nginx.service"
+    ];
+    before = [
+      "nagios.service"
+      "nginx.service"
+    ];
     after = [ "sops-nix.service" ];
 
     serviceConfig = {
@@ -1932,7 +2299,10 @@ in
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -1981,10 +2351,13 @@ in
     '';
   };
 
-
   # Ensure Nagios starts after required services
   systemd.services.nagios = {
-    after = [ "network.target" "postgresql.service" "nagios-rw-directory.service" ];
+    after = [
+      "network.target"
+      "postgresql.service"
+      "nagios-rw-directory.service"
+    ];
     wants = [ "postgresql.service" ];
     requires = [ "nagios-rw-directory.service" ];
   };
@@ -1994,7 +2367,10 @@ in
 
   # Ensure nagios user is in podman group for container monitoring
   # and johnw group for accessing git-workspace-archive
-  users.users.nagios.extraGroups = [ "podman" "johnw" ];
+  users.users.nagios.extraGroups = [
+    "podman"
+    "johnw"
+  ];
 
   # Create command file directory with proper permissions
   systemd.services.nagios-rw-directory = {
@@ -2064,55 +2440,67 @@ in
     # Allow nagios to run podman as root (for root-level containers)
     {
       users = [ "nagios" ];
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
     # Allow nagios to run podman as container-db (for database-backed rootless containers)
     {
       users = [ "nagios" ];
       runAs = "container-db";
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
     # Allow nagios to run podman as container-monitor (for monitoring rootless containers)
     {
       users = [ "nagios" ];
       runAs = "container-monitor";
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
     # Allow nagios to run podman as container-misc (for miscellaneous rootless containers)
     {
       users = [ "nagios" ];
       runAs = "container-misc";
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
     # Allow nagios to run podman as container-web (for web application rootless containers)
     {
       users = [ "nagios" ];
       runAs = "container-web";
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
     # Allow nagios to run podman as open-webui (for Open WebUI rootless container)
     {
       users = [ "nagios" ];
       runAs = "open-webui";
-      commands = [{
-        command = "${pkgs.podman}/bin/podman";
-        options = [ "NOPASSWD" ];
-      }];
+      commands = [
+        {
+          command = "${pkgs.podman}/bin/podman";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     }
   ];
 
@@ -2121,6 +2509,6 @@ in
     enable = true;
     toEmail = "johnw@vulcan.lan";
     fromEmail = "nagios@vulcan.lan";
-    schedule = "08:00";  # Send daily at 8:00 AM
+    schedule = "08:00"; # Send daily at 8:00 AM
   };
 }

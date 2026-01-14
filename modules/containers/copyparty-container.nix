@@ -1,4 +1,11 @@
-{ inputs, system, config, lib, pkgs, ... }:
+{
+  inputs,
+  system,
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
@@ -101,60 +108,67 @@ in
     autoStart = true;
 
     # Container configuration
-    config = { config, pkgs, lib, ... }: {
-      # Import copyparty module
-      imports = [
-        ../../modules/services/copyparty.nix
-      ];
+    config =
+      {
+        config,
+        pkgs,
+        lib,
+        ...
+      }:
+      {
+        # Import copyparty module
+        imports = [
+          ../../modules/services/copyparty.nix
+        ];
 
-      # Apply host overlays to container nixpkgs
-      nixpkgs.overlays = [
-        (import ../../overlays inputs system)
-      ];
+        # Apply host overlays to container nixpkgs
+        nixpkgs.overlays = [
+          (import ../../overlays inputs system)
+        ];
 
-      # Basic system configuration
-      system.stateVersion = "25.05";
+        # Basic system configuration
+        system.stateVersion = "25.05";
 
-      # Networking configuration
-      networking = {
-        firewall = {
+        # Networking configuration
+        networking = {
+          firewall = {
+            enable = true;
+            # Allow copyparty port
+            allowedTCPPorts = [ 3923 ];
+          };
+        };
+
+        # Time zone (match host)
+        time.timeZone = "America/Los_Angeles";
+
+        # Force DNS to point to host (works around resolvconf issues in containers)
+        environment.etc."resolv.conf".text = lib.mkForce ''
+          nameserver 10.233.2.1
+          options edns0
+        '';
+
+        # Enable copyparty service with password files
+        services.copyparty = {
           enable = true;
-          # Allow copyparty port
-          allowedTCPPorts = [ 3923 ];
+          port = 3923;
+          domain = "data.newartisans.com";
+          shareDir = "/var/www/home.newartisans.com";
+
+          # Use password files instead of SOPS
+          passwordFiles = {
+            admin = "/var/lib/copyparty-passwords/admin";
+            johnw = "/var/lib/copyparty-passwords/johnw";
+            friend = "/var/lib/copyparty-passwords/friend";
+            nasimw = "/var/lib/copyparty-passwords/nasimw";
+          };
+        };
+
+        systemd.services = {
+          copyparty = {
+            after = [ "var-www-home.newartisans.com.mount" ];
+          };
         };
       };
-
-      # Time zone (match host)
-      time.timeZone = "America/Los_Angeles";
-
-      # Force DNS to point to host (works around resolvconf issues in containers)
-      environment.etc."resolv.conf".text = lib.mkForce ''
-        nameserver 10.233.2.1
-        options edns0
-      '';
-
-      # Enable copyparty service with password files
-      services.copyparty = {
-        enable = true;
-        port = 3923;
-        domain = "data.newartisans.com";
-        shareDir = "/var/www/home.newartisans.com";
-
-        # Use password files instead of SOPS
-        passwordFiles = {
-          admin = "/var/lib/copyparty-passwords/admin";
-          johnw = "/var/lib/copyparty-passwords/johnw";
-          friend = "/var/lib/copyparty-passwords/friend";
-          nasimw = "/var/lib/copyparty-passwords/nasimw";
-        };
-      };
-
-      systemd.services = {
-        copyparty = {
-          after = [ "var-www-home.newartisans.com.mount" ];
-        };
-      };
-    };
   };
 
   # Systemd socket unit for localhost-only port forwarding to container

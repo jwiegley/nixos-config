@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Import all container service modules
@@ -26,7 +31,7 @@
   # Configure container storage for rootless support
   virtualisation.containers.storage.settings = {
     storage = {
-      driver = "overlay";  # Using overlay for compatibility with ext4/zfs
+      driver = "overlay"; # Using overlay for compatibility with ext4/zfs
       runroot = "/run/containers/storage";
       graphroot = "/var/lib/containers/storage";
       options.overlay.mount_program = "${pkgs.fuse-overlayfs}/bin/fuse-overlayfs";
@@ -82,7 +87,17 @@
     # 8085: Redis
     # 9182: mssql-exporter
     # 13000: nocobase
-    allowedTCPPorts = [ 1433 3001 4000 5380 5432 6253 8085 9182 13000 ];
+    allowedTCPPorts = [
+      1433
+      3001
+      4000
+      5380
+      5432
+      6253
+      8085
+      9182
+      13000
+    ];
     allowedUDPPorts = [ 53 ];
   };
 
@@ -90,14 +105,20 @@
   environment.systemPackages = with pkgs; [
     lazydocker
     podman-tui
-    slirp4netns  # Required for rootless networking
+    slirp4netns # Required for rootless networking
   ];
 
   # Ensure podman service starts early and creates network properly
   systemd.services.podman = {
-    wantedBy = [ "multi-user.target" "network-online.target" ];
+    wantedBy = [
+      "multi-user.target"
+      "network-online.target"
+    ];
     after = [ "network.target" ];
-    before = [ "redis-litellm.service" "litellm.service" ];
+    before = [
+      "redis-litellm.service"
+      "litellm.service"
+    ];
 
     # Ensure podman network is created and interface is up
     postStart = ''

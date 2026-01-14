@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/openproject.nix)
 # This file: Redis service, Nginx virtual host, SOPS secrets, PostgreSQL setup, firewall rules, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
   # Import helper functions
@@ -56,9 +62,11 @@ in
     # OpenProject Prometheus metrics
     {
       job_name = "openproject";
-      static_configs = [{
-        targets = [ "127.0.0.1:9394" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "127.0.0.1:9394" ];
+        }
+      ];
       scrape_interval = "30s";
       scrape_timeout = "10s";
     }
@@ -107,22 +115,22 @@ in
   services.redis.servers.openproject = {
     enable = true;
     port = 6383;
-    bind = "0.0.0.0";  # Allow access from container via host.containers.internal
+    bind = "0.0.0.0"; # Allow access from container via host.containers.internal
     settings = {
-      protected-mode = "no";  # Required for non-localhost access (no auth configured)
+      protected-mode = "no"; # Required for non-localhost access (no auth configured)
       maxmemory = "256mb";
-      maxmemory-policy = "allkeys-lru";  # Required for Rails cache - expire old entries
+      maxmemory-policy = "allkeys-lru"; # Required for Rails cache - expire old entries
     };
   };
 
   # Firewall rules for podman network access
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    8180  # OpenProject web
-    6383  # Redis for OpenProject
-    9394  # OpenProject Prometheus metrics
+    8180 # OpenProject web
+    6383 # Redis for OpenProject
+    9394 # OpenProject Prometheus metrics
   ];
 
   networking.firewall.interfaces."lo".allowedTCPPorts = [
-    9394  # OpenProject Prometheus metrics (local scraping)
+    9394 # OpenProject Prometheus metrics (local scraping)
   ];
 }

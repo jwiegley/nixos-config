@@ -18,7 +18,13 @@
 #
 # Access: https://mailarchiver.vulcan.lan
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager
@@ -76,7 +82,7 @@
 
   # Firewall rules
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    9097  # mailarchiver
+    9097 # mailarchiver
   ];
 
   # tmpfiles rules

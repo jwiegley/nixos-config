@@ -1,4 +1,10 @@
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Increase D-Bus pending replies limit for systemd_exporter
@@ -55,19 +61,21 @@
   zramSwap = {
     enable = true;
     memoryPercent = 50;
-    algorithm = "zstd";  # Best compression ratio and performance
-    priority = 5;         # Higher priority = used first
+    algorithm = "zstd"; # Best compression ratio and performance
+    priority = 5; # Higher priority = used first
   };
 
   # Physical swap file configuration
   # Provides additional 16GB swap on disk as overflow when RAM + zram are exhausted
   # This acts as a safety net for extreme memory pressure situations
   # Priority -2 (lower than zram) ensures disk swap is only used when zram is full
-  swapDevices = [{
-    device = "/var/swap";
-    size = 16 * 1024; # 16GB in MB
-    priority = -2;    # Lower priority = used last (overflow only)
-  }];
+  swapDevices = [
+    {
+      device = "/var/swap";
+      size = 16 * 1024; # 16GB in MB
+      priority = -2; # Lower priority = used last (overflow only)
+    }
+  ];
 
   # Kernel memory management tuning
   # Optimized for systems with zram + disk swap hybrid configuration

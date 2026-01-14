@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/open-webui.nix)
 # This file: Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 let
   common = import ../lib/common.nix { inherit secrets; };

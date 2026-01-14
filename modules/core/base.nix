@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ============================================================================
@@ -12,7 +17,7 @@
   boot = {
     loader = {
       systemd-boot.enable = true;
-      systemd-boot.configurationLimit = 10;  # Keep only 10 boot entries to save /boot space
+      systemd-boot.configurationLimit = 10; # Keep only 10 boot entries to save /boot space
       efi.canTouchEfiVariables = false;
     };
 
@@ -48,8 +53,8 @@
   # Limit build parallelism to prevent WiFi driver crashes on Asahi Linux
   # The brcmfmac driver becomes unstable under high CPU + network load
   # Reducing parallelism prevents kernel panics during nixos-rebuild
-  nix.settings.max-jobs = 4;  # Limit concurrent builds (default: auto = 10 cores)
-  nix.settings.cores = 2;     # Limit cores per build job (default: 0 = all cores)
+  nix.settings.max-jobs = 4; # Limit concurrent builds (default: auto = 10 cores)
+  nix.settings.cores = 2; # Limit cores per build job (default: 0 = all cores)
 
   # Also set NIX_SSL_CERT_FILE environment variable for all users
   # This ensures git operations invoked by Nix use the correct CA bundle
@@ -101,7 +106,7 @@
   hardware.graphics = {
     enable = true;
     # Enable 32-bit support for compatibility (if needed)
-    enable32Bit = false;  # Not needed on aarch64
+    enable32Bit = false; # Not needed on aarch64
   };
 
   # Use modesetting driver for Apple Silicon GPU
@@ -113,15 +118,17 @@
   # --------------------------------------------------------------------------
   # NetworkManager dispatcher script to clear DHCP-provided DNS servers
   # This ensures only hard-coded DNS servers from networking.nameservers are used
-  networking.networkmanager.dispatcherScripts = [{
-    source = pkgs.writeText "clear-dhcp-dns" ''
-      #!/bin/sh
-      # Clear DNS servers from NetworkManager connections
-      # Only runs on DHCP events
-      if [ "$2" = "dhcp4-change" ] || [ "$2" = "dhcp6-change" ] || [ "$2" = "up" ]; then
-        ${pkgs.systemd}/bin/resolvectl dns "$1" ""
-      fi
-    '';
-    type = "basic";
-  }];
+  networking.networkmanager.dispatcherScripts = [
+    {
+      source = pkgs.writeText "clear-dhcp-dns" ''
+        #!/bin/sh
+        # Clear DNS servers from NetworkManager connections
+        # Only runs on DHCP events
+        if [ "$2" = "dhcp4-change" ] || [ "$2" = "dhcp6-change" ] || [ "$2" = "up" ]; then
+          ${pkgs.systemd}/bin/resolvectl dns "$1" ""
+        fi
+      '';
+      type = "basic";
+    }
+  ];
 }

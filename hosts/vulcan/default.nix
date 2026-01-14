@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   imports = [
@@ -151,8 +156,8 @@
     githubUser = "jwiegley";
     giteaUser = "johnw";
     giteaUrl = "https://gitea.vulcan.lan";
-    mirrorInterval = "8h";  # 8 hours (Go duration format)
-    schedule = "*-*-* 03:00:00";  # Daily at 3 AM
+    mirrorInterval = "8h"; # 8 hours (Go duration format)
+    schedule = "*-*-* 03:00:00"; # Daily at 3 AM
   };
 
   # This option defines the first version of NixOS you have installed on this

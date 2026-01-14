@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   security = {
@@ -43,7 +48,7 @@
   };
 
   # Create adm group for log file access
-  users.groups.adm = {};
+  users.groups.adm = { };
 
   system.activationScripts.sudoLogs = ''
     mkdir -p /var/log

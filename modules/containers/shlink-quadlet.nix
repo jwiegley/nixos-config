@@ -14,7 +14,13 @@
 # Database: PostgreSQL (shlink database, shlink user) - configured in databases.nix
 # Cache: Redis on port 6385
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # ============================================================================
@@ -132,9 +138,9 @@
     port = 6385;
     # Bind to all interfaces so rootless containers can access via host.containers.internal
     # Similar to PostgreSQL which also binds to 0.0.0.0
-    bind = null;  # null means bind to all interfaces
+    bind = null; # null means bind to all interfaces
     settings = {
-      protected-mode = "no";  # Disabled since we use firewall rules for access control
+      protected-mode = "no"; # Disabled since we use firewall rules for access control
       maxmemory = "128mb";
       maxmemory-policy = "allkeys-lru";
     };
@@ -187,9 +193,9 @@
   # ============================================================================
 
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    8580  # shlink API
-    8581  # shlink web client
-    6385  # redis[shlink]
+    8580 # shlink API
+    8581 # shlink web client
+    6385 # redis[shlink]
   ];
 
   # Note: User secrets directories (/run/secrets-shlink, /run/secrets-shlink-web-client) are created by

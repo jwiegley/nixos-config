@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # ============================================================================
@@ -69,7 +74,11 @@
   # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services."prometheus-zfs-exporter" = {
     wants = [ "network-online.target" ];
-    after = [ "network-online.target" "zfs.target" "zfs-import-tank.service" ];
+    after = [
+      "network-online.target"
+      "zfs.target"
+      "zfs-import-tank.service"
+    ];
     wantedBy = [ "tank.mount" ];
     unitConfig = {
       RequiresMountsFor = [ "/tank" ];
@@ -90,20 +99,24 @@
     # Node exporter (includes systemd metrics)
     {
       job_name = "node";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.node.port}" ];
-        labels = {
-          alias = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.node.port}" ];
+          labels = {
+            alias = "vulcan";
+          };
+        }
+      ];
     }
 
     # ZFS exporter
     {
       job_name = "zfs";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.prometheus.exporters.zfs.port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.prometheus.exporters.zfs.port}" ];
+        }
+      ];
     }
   ];
 

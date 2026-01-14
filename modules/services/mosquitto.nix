@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # SOPS secrets for MQTT broker authentication
@@ -38,8 +43,8 @@
             # Password from SOPS secret
             passwordFile = config.sops.secrets."mqtt/hass-agent-password".path;
             acl = [
-              "readwrite hass.agent/#"  # HASS.Agent device topics
-              "readwrite homeassistant/#"  # Home Assistant topics
+              "readwrite hass.agent/#" # HASS.Agent device topics
+              "readwrite homeassistant/#" # Home Assistant topics
             ];
           };
         };
@@ -62,7 +67,11 @@
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+      ];
       RestrictNamespaces = true;
       LockPersonality = true;
       RestrictRealtime = true;
@@ -71,7 +80,11 @@
       PrivateMounts = true;
 
       # System call filtering
-      SystemCallFilter = [ "@system-service" "~@privileged" "~@resources" ];
+      SystemCallFilter = [
+        "@system-service"
+        "~@privileged"
+        "~@resources"
+      ];
       SystemCallErrorNumber = "EPERM";
       SystemCallArchitectures = "native";
 
@@ -90,7 +103,7 @@
   # Open firewall for MQTT broker
   networking.firewall = {
     allowedTCPPorts = [
-      1883  # MQTT (unencrypted, LAN only)
+      1883 # MQTT (unencrypted, LAN only)
     ];
   };
 }

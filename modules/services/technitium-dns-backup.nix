@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };

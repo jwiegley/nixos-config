@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Copyparty Prometheus metrics monitoring
@@ -22,13 +27,15 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "copyparty";
-      static_configs = [{
-        targets = [ "10.233.2.2:3923" ];  # Container IP:port
-        labels = {
-          service = "copyparty";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "10.233.2.2:3923" ]; # Container IP:port
+          labels = {
+            service = "copyparty";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/.cpr/metrics";
       scrape_interval = "30s";
       scrape_timeout = "10s";

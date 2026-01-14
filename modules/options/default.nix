@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -65,43 +70,45 @@ in
         };
 
         users = mkOption {
-          type = types.attrsOf (types.submodule {
-            options = {
-              enable = mkOption {
-                type = types.bool;
-                default = true;
-                description = "Enable mbsync for this user";
-              };
+          type = types.attrsOf (
+            types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Enable mbsync for this user";
+                };
 
-              interval = mkOption {
-                type = types.str;
-                default = "15min";
-                description = "Sync interval";
-              };
+                interval = mkOption {
+                  type = types.str;
+                  default = "15min";
+                  description = "Sync interval";
+                };
 
-              remoteHost = mkOption {
-                type = types.str;
-                description = "Remote IMAP server hostname";
-              };
+                remoteHost = mkOption {
+                  type = types.str;
+                  description = "Remote IMAP server hostname";
+                };
 
-              remoteUser = mkOption {
-                type = types.str;
-                description = "Remote IMAP username";
-              };
+                remoteUser = mkOption {
+                  type = types.str;
+                  description = "Remote IMAP username";
+                };
 
-              secretName = mkOption {
-                type = types.str;
-                description = "Name of SOPS secret containing password";
-              };
+                secretName = mkOption {
+                  type = types.str;
+                  description = "Name of SOPS secret containing password";
+                };
 
-              patterns = mkOption {
-                type = types.listOf types.str;
-                default = [ "*" ];
-                description = "Folder patterns to sync";
+                patterns = mkOption {
+                  type = types.listOf types.str;
+                  default = [ "*" ];
+                  description = "Folder patterns to sync";
+                };
               };
-            };
-          });
-          default = {};
+            }
+          );
+          default = { };
           description = "mbsync user configurations";
         };
       };
@@ -163,7 +170,7 @@ in
 
       datasets = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         description = "List of ZFS datasets to backup";
       };
     };
@@ -177,14 +184,18 @@ in
       };
 
       provider = mkOption {
-        type = types.enum [ "step-ca" "letsencrypt" "self-signed" ];
+        type = types.enum [
+          "step-ca"
+          "letsencrypt"
+          "self-signed"
+        ];
         default = "step-ca";
         description = "Certificate provider to use";
       };
 
       domains = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         description = "List of domains to manage certificates for";
       };
 
@@ -204,7 +215,10 @@ in
       };
 
       runtime = mkOption {
-        type = types.enum [ "podman" "docker" ];
+        type = types.enum [
+          "podman"
+          "docker"
+        ];
         default = "podman";
         description = "Container runtime to use";
       };
@@ -321,29 +335,34 @@ in
 
     # Configure backups if enabled
     services.restic.backups = mkIf cfg.backups.enable (
-      lib.listToAttrs (map (dataset: {
-        name = "zfs-${lib.replaceStrings ["/"] ["-"] dataset}";
-        value = {
-          paths = [ "/tank/${dataset}" ];
-          repository = "${cfg.backups.repository}/jwiegley-${dataset}";
-          timerConfig.OnCalendar = cfg.backups.schedule;
-          pruneOpts = [
-            "--keep-daily ${toString cfg.backups.retention.daily}"
-            "--keep-weekly ${toString cfg.backups.retention.weekly}"
-            "--keep-yearly ${toString cfg.backups.retention.yearly}"
-          ];
-        };
-      }) cfg.backups.datasets)
+      lib.listToAttrs (
+        map (dataset: {
+          name = "zfs-${lib.replaceStrings [ "/" ] [ "-" ] dataset}";
+          value = {
+            paths = [ "/tank/${dataset}" ];
+            repository = "${cfg.backups.repository}/jwiegley-${dataset}";
+            timerConfig.OnCalendar = cfg.backups.schedule;
+            pruneOpts = [
+              "--keep-daily ${toString cfg.backups.retention.daily}"
+              "--keep-weekly ${toString cfg.backups.retention.weekly}"
+              "--keep-yearly ${toString cfg.backups.retention.yearly}"
+            ];
+          };
+        }) cfg.backups.datasets
+      )
     );
 
     # Container runtime setup
     virtualisation = mkIf cfg.containers.enable (
-      if cfg.containers.runtime == "podman" then {
-        podman.enable = true;
-        podman.dockerCompat = true;
-      } else {
-        docker.enable = true;
-      }
+      if cfg.containers.runtime == "podman" then
+        {
+          podman.enable = true;
+          podman.dockerCompat = true;
+        }
+      else
+        {
+          docker.enable = true;
+        }
     );
   };
 }

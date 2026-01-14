@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
@@ -40,7 +45,7 @@ in
   };
 
   # Redis instance for Gitea (cache and sessions)
-  users.groups.redis-gitea = {};
+  users.groups.redis-gitea = { };
 
   services.redis.servers.gitea = {
     enable = true;
@@ -169,8 +174,14 @@ in
 
   # Ensure Gitea starts after Redis
   systemd.services.gitea = {
-    after = [ "redis-gitea.service" "postgresql-gitea-setup.service" ];
-    requires = [ "redis-gitea.service" "postgresql-gitea-setup.service" ];
+    after = [
+      "redis-gitea.service"
+      "postgresql-gitea-setup.service"
+    ];
+    requires = [
+      "redis-gitea.service"
+      "postgresql-gitea-setup.service"
+    ];
   };
 
   # Open firewall for Gitea SSH

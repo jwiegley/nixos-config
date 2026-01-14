@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -78,9 +83,12 @@ in
 
     extraArgs = mkOption {
       type = types.listOf types.str;
-      default = [ "-v" ];  # Verbose by default for debugging
+      default = [ "-v" ]; # Verbose by default for debugging
       description = "Additional arguments to pass to share.py";
-      example = [ "-v" "--dry-run" ];
+      example = [
+        "-v"
+        "--dry-run"
+      ];
     };
 
     sourceOwner = mkOption {
@@ -109,12 +117,12 @@ in
 
     timerInterval = mkOption {
       type = types.str;
-      default = "*:0/15";  # Every 15 minutes
+      default = "*:0/15"; # Every 15 minutes
       description = ''
         Systemd timer interval for periodic execution as fallback.
         Uses systemd calendar event format.
       '';
-      example = "*:0/15";  # Every 15 minutes
+      example = "*:0/15"; # Every 15 minutes
     };
   };
 
@@ -122,7 +130,10 @@ in
     # Main service that runs share.py
     systemd.services.dirscan-share = {
       description = "Dirscan share.py - sync shared files";
-      after = [ "network.target" "local-fs.target" ];
+      after = [
+        "network.target"
+        "local-fs.target"
+      ];
 
       # Allow both path and timer to trigger this service
       unitConfig = {
@@ -147,7 +158,7 @@ in
 
         # Security hardening
         PrivateTmp = true;
-        NoNewPrivileges = false;  # May need privileges for file operations
+        NoNewPrivileges = false; # May need privileges for file operations
 
         # Timeout and logging
         TimeoutStartSec = "10m";
@@ -176,7 +187,7 @@ in
 
         # Coalesce multiple rapid changes into single trigger
         # Wait 10 seconds of inactivity before triggering
-        MakeDirectory = false;  # Don't create the directory
+        MakeDirectory = false; # Don't create the directory
       };
     };
 

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 # AIDE (Advanced Intrusion Detection Environment)
 # File integrity monitoring for critical system files and backups
@@ -204,7 +209,16 @@
       ExecStartPost = "${pkgs.coreutils}/bin/mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db";
       # AIDE exit codes: 0=no changes, 1-7=changes detected (all valid for update)
       # 1=new, 2=removed, 3=changed, 4=new+removed, 5=new+changed, 6=removed+changed, 7=all
-      SuccessExitStatus = [ 0 1 2 3 4 5 6 7 ];
+      SuccessExitStatus = [
+        0
+        1
+        2
+        3
+        4
+        5
+        6
+        7
+      ];
     };
   };
 
@@ -216,7 +230,7 @@
     timerConfig = {
       OnCalendar = "daily";
       Persistent = true;
-      RandomizedDelaySec = "30min";  # Prevent all systems from checking at once
+      RandomizedDelaySec = "30min"; # Prevent all systems from checking at once
     };
   };
 

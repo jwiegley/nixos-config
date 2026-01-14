@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/wallabag.nix)
 # This file: Nginx virtual host and SOPS secrets
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager

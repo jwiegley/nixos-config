@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Grafana visualization server for Prometheus metrics
@@ -36,7 +41,7 @@
 
       # Anonymous access for read-only viewing (optional)
       "auth.anonymous" = {
-        enabled = false;  # Set to true if you want read-only public access
+        enabled = false; # Set to true if you want read-only public access
         org_name = "Main Org.";
         org_role = "Viewer";
       };
@@ -66,7 +71,7 @@
           {
             name = "Prometheus";
             type = "prometheus";
-            uid = "prometheus";  # Fixed UID for dashboard references
+            uid = "prometheus"; # Fixed UID for dashboard references
             access = "proxy";
             url = "http://localhost:${toString config.services.prometheus.port}";
             isDefault = true;
@@ -80,7 +85,7 @@
           {
             name = "VictoriaMetrics";
             type = "prometheus";
-            uid = "victoriametrics";  # Fixed UID for VictoriaMetrics datasource
+            uid = "victoriametrics"; # Fixed UID for VictoriaMetrics datasource
             access = "proxy";
             url = "http://localhost:8428";
             isDefault = false;
@@ -96,7 +101,7 @@
           {
             name = "Loki";
             type = "loki";
-            uid = "loki";  # Fixed UID for Loki datasource
+            uid = "loki"; # Fixed UID for Loki datasource
             access = "proxy";
             url = "http://localhost:3100";
             isDefault = false;
@@ -121,7 +126,7 @@
         ];
 
         # Clean up removed data sources
-        deleteDatasources = [];
+        deleteDatasources = [ ];
       };
 
       # Dashboard provisioning
@@ -275,7 +280,7 @@
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';
-    deps = [];
+    deps = [ ];
   };
 
   # Grafana nginx upstream with retry logic
@@ -321,7 +326,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -376,9 +384,11 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "grafana";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.grafana.settings.server.http_port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.grafana.settings.server.http_port}" ];
+        }
+      ];
       scrape_interval = "30s";
     }
   ];

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # VictoriaMetrics time-series database
@@ -20,7 +25,7 @@
     listenAddress = "127.0.0.1:8428";
 
     # Data retention period (infinite - retain all Home Assistant historical data)
-    retentionPeriod = "100y";  # effectively infinite retention
+    retentionPeriod = "100y"; # effectively infinite retention
 
     # Storage directory
     stateDir = "victoriametrics";
@@ -51,14 +56,16 @@
             credentials_file = "/run/credentials/victoriametrics.service/ha-token";
           };
 
-          static_configs = [{
-            targets = [ "hass.vulcan.lan:443" ];
-            labels = {
-              instance = "vulcan";
-              service = "home-assistant";
-              collector = "victoriametrics";
-            };
-          }];
+          static_configs = [
+            {
+              targets = [ "hass.vulcan.lan:443" ];
+              labels = {
+                instance = "vulcan";
+                service = "home-assistant";
+                collector = "victoriametrics";
+              };
+            }
+          ];
 
           # TLS configuration to trust step-ca certificates
           tls_config = {
@@ -114,7 +121,11 @@
     description = "Create VictoriaMetrics snapshot for disaster recovery";
     after = [ "victoriametrics.service" ];
     requires = [ "victoriametrics.service" ];
-    path = [ pkgs.curl pkgs.jq pkgs.coreutils ];
+    path = [
+      pkgs.curl
+      pkgs.jq
+      pkgs.coreutils
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -201,7 +212,10 @@
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     after = [ "step-ca.service" ];
-    path = [ pkgs.openssl pkgs.step-cli ];
+    path = [
+      pkgs.openssl
+      pkgs.step-cli
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -247,7 +261,7 @@
 
   # Firewall configuration
   networking.firewall.interfaces."lo".allowedTCPPorts = [
-    8428  # VictoriaMetrics
+    8428 # VictoriaMetrics
   ];
 
   # Add helper scripts for VictoriaMetrics management

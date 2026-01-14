@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/nocobase.nix)
 # This file: Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager
@@ -57,7 +63,7 @@
 
   # Firewall rules for podman0 interface
   networking.firewall.interfaces.podman0.allowedTCPPorts = [
-    13000  # nocobase
+    13000 # nocobase
   ];
 
   # tmpfiles rules

@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/litellm.nix)
 # This file: Redis service, Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager
@@ -54,9 +60,9 @@
   services.redis.servers.litellm = {
     enable = true;
     port = 8085;
-    bind = "127.0.0.1";  # Rootless containers access via host.containers.internal → 127.0.0.1
+    bind = "127.0.0.1"; # Rootless containers access via host.containers.internal → 127.0.0.1
     settings = {
-      protected-mode = "yes";  # Re-enable since only localhost
+      protected-mode = "yes"; # Re-enable since only localhost
     };
   };
 

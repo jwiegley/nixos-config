@@ -1,9 +1,18 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   postgresqlRenewalScript = pkgs.writeShellApplication {
     name = "postgresql-cert-renewal";
-    runtimeInputs = with pkgs; [ bash coreutils systemd ];
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      systemd
+    ];
     text = ''
       exec /etc/nixos/certs/postgresql-cert-renew.sh
     '';
@@ -11,7 +20,11 @@ let
 
   nginxRenewalScript = pkgs.writeShellApplication {
     name = "nginx-cert-renewal";
-    runtimeInputs = with pkgs; [ bash coreutils systemd ];
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      systemd
+    ];
     text = ''
       exec /etc/nixos/certs/renew-nginx-certs.sh
     '';
@@ -19,7 +32,11 @@ let
 
   postfixRenewalScript = pkgs.writeShellApplication {
     name = "postfix-cert-renewal";
-    runtimeInputs = with pkgs; [ bash coreutils systemd ];
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      systemd
+    ];
     text = ''
       exec /etc/nixos/certs/postfix-cert-renew.sh
     '';
@@ -27,7 +44,11 @@ let
 
   dovecotRenewalScript = pkgs.writeShellApplication {
     name = "dovecot-cert-renewal";
-    runtimeInputs = with pkgs; [ bash coreutils systemd ];
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      systemd
+    ];
     text = ''
       exec /etc/nixos/certs/dovecot-cert-renew.sh
     '';
@@ -35,7 +56,13 @@ let
 
   certificateValidationScript = pkgs.writeShellApplication {
     name = "certificate-validation-concise";
-    runtimeInputs = with pkgs; [ bash openssl coreutils gawk gnugrep ];
+    runtimeInputs = with pkgs; [
+      bash
+      openssl
+      coreutils
+      gawk
+      gnugrep
+    ];
     text = ''
       exec /etc/nixos/certs/validate-certificates-concise.sh
     '';
@@ -52,7 +79,16 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
+      path = with pkgs; [
+        bash
+        openssl
+        step-cli
+        systemd
+        sudo
+        sops
+        gnugrep
+        gawk
+      ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -66,7 +102,16 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
+      path = with pkgs; [
+        bash
+        openssl
+        step-cli
+        systemd
+        sudo
+        sops
+        gnugrep
+        gawk
+      ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -80,7 +125,16 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
+      path = with pkgs; [
+        bash
+        openssl
+        step-cli
+        systemd
+        sudo
+        sops
+        gnugrep
+        gawk
+      ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -94,7 +148,16 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ bash openssl step-cli systemd sudo sops gnugrep gawk ];
+      path = with pkgs; [
+        bash
+        openssl
+        step-cli
+        systemd
+        sudo
+        sops
+        gnugrep
+        gawk
+      ];
       after = [ "step-ca.service" ];
       wants = [ "step-ca.service" ];
     };
@@ -108,7 +171,11 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
       };
-      path = with pkgs; [ openssl dnsutils nmap ];
+      path = with pkgs; [
+        openssl
+        dnsutils
+        nmap
+      ];
     };
   };
 
@@ -116,7 +183,7 @@ in
     postgresql-cert-renewal = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-01 03:00:00";  # First day of month at 3 AM
+        OnCalendar = "*-*-01 03:00:00"; # First day of month at 3 AM
         Persistent = true;
         RandomizedDelaySec = "30min";
       };
@@ -125,7 +192,7 @@ in
     nginx-cert-renewal = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-01 03:30:00";  # First day of month at 3:30 AM
+        OnCalendar = "*-*-01 03:30:00"; # First day of month at 3:30 AM
         Persistent = true;
         RandomizedDelaySec = "30min";
       };
@@ -134,7 +201,7 @@ in
     postfix-cert-renewal = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-01 04:00:00";  # First day of month at 4 AM
+        OnCalendar = "*-*-01 04:00:00"; # First day of month at 4 AM
         Persistent = true;
         RandomizedDelaySec = "30min";
       };
@@ -143,7 +210,7 @@ in
     dovecot-cert-renewal = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-01 04:30:00";  # First day of month at 4:30 AM
+        OnCalendar = "*-*-01 04:30:00"; # First day of month at 4:30 AM
         Persistent = true;
         RandomizedDelaySec = "30min";
       };
@@ -152,7 +219,7 @@ in
     certificate-validation = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-* 06:00:00";  # Daily at 6 AM
+        OnCalendar = "*-*-* 06:00:00"; # Daily at 6 AM
         Persistent = true;
       };
     };

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Gitea Prometheus metrics monitoring
@@ -9,13 +14,15 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "gitea";
-      static_configs = [{
-        targets = [ "localhost:3005" ];
-        labels = {
-          service = "gitea";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:3005" ];
+          labels = {
+            service = "gitea";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/metrics";
       scrape_interval = "30s";
       scrape_timeout = "10s";

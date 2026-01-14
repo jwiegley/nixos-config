@@ -1,11 +1,16 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
 let
   cfg = config.services.copyparty;
   dataDir = "/var/lib/copyparty";
-  shareDir = cfg.shareDir;  # Main share directory
+  shareDir = cfg.shareDir; # Main share directory
 
   # Determine if using SOPS or password files
   useSOPS = cfg.passwordFiles == null;
@@ -19,140 +24,155 @@ let
         "NASIMW_PASS=$(cat ${config.sops.secrets."copyparty/nasimw-password".path})";
 
   configGenerator = pkgs.writeShellScript "copyparty-config-generator" (
-    (if cfg.passwordFiles != null then ''
-      # Read passwords from password files
-      ADMIN_PASS=$(cat ${cfg.passwordFiles.admin})
-      JOHNW_PASS=$(cat ${cfg.passwordFiles.johnw})
-      FRIEND_PASS=$(cat ${cfg.passwordFiles.friend})
-      ${nasimwPasswordLine}
-    '' else ''
-      # Read passwords from SOPS secrets
-      ADMIN_PASS=$(cat ${config.sops.secrets."copyparty/admin-password".path})
-      JOHNW_PASS=$(cat ${config.sops.secrets."copyparty/johnw-password".path})
-      FRIEND_PASS=$(cat ${config.sops.secrets."copyparty/friend-password".path})
-      ${nasimwPasswordLine}
-    '') + ''
+    (
+      if cfg.passwordFiles != null then
+        ''
+          # Read passwords from password files
+          ADMIN_PASS=$(cat ${cfg.passwordFiles.admin})
+          JOHNW_PASS=$(cat ${cfg.passwordFiles.johnw})
+          FRIEND_PASS=$(cat ${cfg.passwordFiles.friend})
+          ${nasimwPasswordLine}
+        ''
+      else
+        ''
+          # Read passwords from SOPS secrets
+          ADMIN_PASS=$(cat ${config.sops.secrets."copyparty/admin-password".path})
+          JOHNW_PASS=$(cat ${config.sops.secrets."copyparty/johnw-password".path})
+          FRIEND_PASS=$(cat ${config.sops.secrets."copyparty/friend-password".path})
+          ${nasimwPasswordLine}
+        ''
+    )
+    + ''
 
-    # Generate configuration file
-    cat > ${dataDir}/copyparty.conf <<EOF
-    [global]
-      # Listen on all interfaces for container port forwarding
-      i: 0.0.0.0
-      # Port configuration
-      p: ${toString cfg.port}
-      # Reverse proxy configuration - required to detect real client IPs
-      rproxy: -1
-      xff-hdr: x-forwarded-for
-      # Enable Prometheus metrics
-      stats
-      # Enable media indexing and search
-      e2dsa
-      # Enable audio metadata
-      e2ts
-      # Generate QR codes for mobile access
-      qr
-      # Theme
-      theme: 3
-      ups-when    # everyone can see upload times
-      ups-who: 1  # but only admins can see the list,
-                  # so ups-when doesn't take effect
+      # Generate configuration file
+      cat > ${dataDir}/copyparty.conf <<EOF
+      [global]
+        # Listen on all interfaces for container port forwarding
+        i: 0.0.0.0
+        # Port configuration
+        p: ${toString cfg.port}
+        # Reverse proxy configuration - required to detect real client IPs
+        rproxy: -1
+        xff-hdr: x-forwarded-for
+        # Enable Prometheus metrics
+        stats
+        # Enable media indexing and search
+        e2dsa
+        # Enable audio metadata
+        e2ts
+        # Generate QR codes for mobile access
+        qr
+        # Theme
+        theme: 3
+        ups-when    # everyone can see upload times
+        ups-who: 1  # but only admins can see the list,
+                    # so ups-when doesn't take effect
 
-    [accounts]
-      johnw: $JOHNW_PASS
-      friend: $FRIEND_PASS
-      ${if cfg.passwordFiles ? nasimw || config.sops.secrets ? "copyparty/nasimw-password" then "nasimw: $NASIMW_PASS" else ""}
+      [accounts]
+        johnw: $JOHNW_PASS
+        friend: $FRIEND_PASS
+        ${
+          if cfg.passwordFiles ? nasimw || config.sops.secrets ? "copyparty/nasimw-password" then
+            "nasimw: $NASIMW_PASS"
+          else
+            ""
+        }
 
-    # Personal directory for johnw
-    [/johnw]
-      ${shareDir}/johnw
-      accs:
-        rwmda: johnw
-      flags:
-        nodupe
-        e2d
-        d2t
+      # Personal directory for johnw
+      [/johnw]
+        ${shareDir}/johnw
+        accs:
+          rwmda: johnw
+        flags:
+          nodupe
+          e2d
+          d2t
 
-    # Shared directory for nasimw and johnw
-    [/nasimw]
-      ${shareDir}/nasimw
-      accs:
-        rwmda: nasimw,johnw
-      flags:
-        nodupe
-        e2d
-        d2t
+      # Shared directory for nasimw and johnw
+      [/nasimw]
+        ${shareDir}/nasimw
+        accs:
+          rwmda: nasimw,johnw
+        flags:
+          nodupe
+          e2d
+          d2t
 
-    [/pub]
-      ${shareDir}/pub
-      accs:
-        r: *
-        rwmda: johnw
-      flags:
-        # Enable deduplication
-        nodupe
-        # Enable media indexing
-        e2d
-        # Enable directory tags
-        d2t
+      [/pub]
+        ${shareDir}/pub
+        accs:
+          r: *
+          rwmda: johnw
+        flags:
+          # Enable deduplication
+          nodupe
+          # Enable media indexing
+          e2d
+          # Enable directory tags
+          d2t
 
-    [/share]
-      ${shareDir}/share
-      accs:
-        g: *
-        rwmda: johnw
-      flags:
-        # Enable deduplication
-        nodupe
-        # Enable media indexing
-        e2d
-        # Enable directory tags
-        d2t
+      [/share]
+        ${shareDir}/share
+        accs:
+          g: *
+          rwmda: johnw
+        flags:
+          # Enable deduplication
+          nodupe
+          # Enable media indexing
+          e2d
+          # Enable directory tags
+          d2t
 
-    [/files]
-      ${shareDir}/files
-      accs:
-        r: friend
-        rwmda: johnw
-      flags:
-        # Enable deduplication
-        nodupe
-        # Enable media indexing
-        e2d
-        # Enable directory tags
-        d2t
+      [/files]
+        ${shareDir}/files
+        accs:
+          r: friend
+          rwmda: johnw
+        flags:
+          # Enable deduplication
+          nodupe
+          # Enable media indexing
+          e2d
+          # Enable directory tags
+          d2t
 
-    [/private]
-      ${shareDir}/private
-      accs:
-        g: friend
-        rwmda: johnw
-      flags:
-        # Enable deduplication
-        nodupe
-        # Enable media indexing
-        e2d
-        # Enable directory tags
-        d2t
+      [/private]
+        ${shareDir}/private
+        accs:
+          g: friend
+          rwmda: johnw
+        flags:
+          # Enable deduplication
+          nodupe
+          # Enable media indexing
+          e2d
+          # Enable directory tags
+          d2t
 
-    [/upload]
-      ${shareDir}/upload
-      accs:
-        w: friend      # anyone can upload (but not browse)
-        rwmda: johnw   # admin can browse and manage
+      [/upload]
+        ${shareDir}/upload
+        accs:
+          w: friend      # anyone can upload (but not browse)
+          rwmda: johnw   # admin can browse and manage
 
-    ${cfg.extraConfig}
-    EOF
-  '');
+      ${cfg.extraConfig}
+      EOF
+    ''
+  );
 
   # Python environment with copyparty and optional dependencies
-  copypartyEnv = pkgs.python3.withPackages (ps: with ps; [
-    copyparty
-    pillow  # For thumbnails
-    mutagen  # For audio metadata
-    jinja2  # Core dependency
-  ]);
+  copypartyEnv = pkgs.python3.withPackages (
+    ps: with ps; [
+      copyparty
+      pillow # For thumbnails
+      mutagen # For audio metadata
+      jinja2 # Core dependency
+    ]
+  );
 
-in {
+in
+{
   options.services.copyparty = {
     enable = mkEnableOption "copyparty file server";
 
@@ -181,15 +201,21 @@ in {
 
     accounts = mkOption {
       type = types.attrsOf types.str;
-      default = {};
-      example = { alice = "password123"; bob = "secret456"; };
+      default = { };
+      example = {
+        alice = "password123";
+        bob = "secret456";
+      };
       description = "User accounts for authentication. Format: username = password. Passwords can be plaintext or hashed.";
     };
 
     writeUsers = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = [ "alice" "bob" ];
+      example = [
+        "alice"
+        "bob"
+      ];
       description = "List of users who have write access to shares";
     };
 
@@ -218,7 +244,7 @@ in {
     };
 
     users.groups.copyparty = {
-      members = [ "prometheus" ];  # Allow Prometheus to read secrets
+      members = [ "prometheus" ]; # Allow Prometheus to read secrets
     };
 
     # Ensure share directory exists and has correct permissions
@@ -251,7 +277,10 @@ in {
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [ dataDir shareDir ];
+        ReadWritePaths = [
+          dataDir
+          shareDir
+        ];
         PrivateDevices = true;
 
         # Kernel hardening
@@ -268,7 +297,10 @@ in {
         SystemCallArchitectures = "native";
 
         # Network restrictions
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+        ];
 
         # Misc hardening
         LockPersonality = true;

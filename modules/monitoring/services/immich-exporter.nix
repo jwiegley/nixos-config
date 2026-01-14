@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Immich Prometheus metrics monitoring
@@ -10,28 +15,32 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "immich-api";
-      static_configs = [{
-        targets = [ "localhost:9283" ];
-        labels = {
-          service = "immich";
-          component = "api";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:9283" ];
+          labels = {
+            service = "immich";
+            component = "api";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/metrics";
       scrape_interval = "30s";
       scrape_timeout = "10s";
     }
     {
       job_name = "immich-microservices";
-      static_configs = [{
-        targets = [ "localhost:9284" ];
-        labels = {
-          service = "immich";
-          component = "microservices";
-          instance = "vulcan";
-        };
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:9284" ];
+          labels = {
+            service = "immich";
+            component = "microservices";
+            instance = "vulcan";
+          };
+        }
+      ];
       metrics_path = "/metrics";
       scrape_interval = "30s";
       scrape_timeout = "10s";

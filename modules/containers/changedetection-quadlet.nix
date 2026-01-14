@@ -3,7 +3,13 @@
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/changedetection.nix)
 # This file: Nginx virtual host, SOPS secrets, and tmpfiles
 
-{ config, lib, pkgs, secrets, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  secrets,
+  ...
+}:
 
 {
   # Quadlet container configuration moved to Home Manager

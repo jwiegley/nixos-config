@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Loki log aggregation service - Minimal monolithic configuration
@@ -78,7 +83,7 @@
         retention_period = "720h"; # 30 days
         max_streams_per_user = 10000;
         max_global_streams_per_user = 10000;
-        volume_enabled = true;  # Enable volume API for Grafana Logs section
+        volume_enabled = true; # Enable volume API for Grafana Logs section
       };
 
       # Compactor configuration for managing retention
@@ -171,9 +176,11 @@
   services.prometheus.scrapeConfigs = [
     {
       job_name = "loki";
-      static_configs = [{
-        targets = [ "localhost:${toString config.services.loki.configuration.server.http_listen_port}" ];
-      }];
+      static_configs = [
+        {
+          targets = [ "localhost:${toString config.services.loki.configuration.server.http_listen_port}" ];
+        }
+      ];
       scrape_interval = "15s";
     }
   ];

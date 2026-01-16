@@ -22,6 +22,11 @@
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
       recommendedOptimisation = true;
+      # Increase map_hash settings to handle many virtual hosts and the large zimit URL map
+      # Default values (16384/256) are insufficient for ~8000+ URL map entries
+      # lib.mkForce needed to override conflicting definitions in zimit.nix
+      mapHashMaxSize = lib.mkForce 65536;
+      mapHashBucketSize = lib.mkForce 512;
       # logError = "/var/log/nginx/error.log debug";
 
       appendHttpConfig = ''

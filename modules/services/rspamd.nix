@@ -619,8 +619,9 @@ in
           }
         };
 
-        # Request timeout
-        timeout = 15s;
+        # Request timeout - increased from 15s to 30s to handle occasional LLM slowdowns
+        # and prevent IO timeout alerts when model inference takes longer
+        timeout = 30s;
 
         # Spam classification prompt - must return JSON with probability and reason fields
         prompt = "Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";

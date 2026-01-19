@@ -117,6 +117,7 @@
     ../../modules/services/dns.nix
     ../../modules/services/glance.nix
     ../../modules/services/glances.nix
+    ../../modules/services/searxng.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix

@@ -618,6 +618,14 @@ let
       name = "kiwix-serve.service";
       display = "Kiwix ZIM Server";
     }
+    {
+      name = "uwsgi.service";
+      display = "SearXNG Search Engine";
+    }
+    {
+      name = "redis-searxng.service";
+      display = "Redis (SearXNG)";
+    }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)

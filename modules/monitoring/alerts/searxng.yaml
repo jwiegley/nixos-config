@@ -1,0 +1,109 @@
+groups:
+  - name: searxng_alerts
+    interval: 60s
+    rules:
+      # SearXNG uWSGI Service Alerts
+      - alert: SearXNGServiceDown
+        expr: |
+          systemd_unit_state{
+            name="uwsgi.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: search
+          service: searxng
+        annotations:
+          summary: "SearXNG service is down"
+          description: "SearXNG uWSGI service is not active. Metasearch engine is unavailable."
+
+      - alert: SearXNGServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="uwsgi.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: search
+          service: searxng
+        annotations:
+          summary: "SearXNG service has failed"
+          description: "SearXNG uWSGI service is in failed state. Check logs with: journalctl -u uwsgi"
+
+      # SearXNG Redis Instance Alerts
+      - alert: SearXNGRedisDown
+        expr: |
+          systemd_unit_state{
+            name="redis-searxng.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 2m
+        labels:
+          severity: warning
+          category: search
+          service: searxng
+        annotations:
+          summary: "SearXNG Redis instance is down"
+          description: "Redis instance for SearXNG rate limiting is not active. Rate limiting and bot protection may not work."
+
+      - alert: SearXNGRedisServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="redis-searxng.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: warning
+          category: search
+          service: searxng
+        annotations:
+          summary: "SearXNG Redis service has failed"
+          description: "Redis service for SearXNG is in failed state. Rate limiting disabled."
+
+      # HTTP Health Check (via blackbox exporter if configured)
+      - alert: SearXNGHTTPDown
+        expr: |
+          probe_success{job="blackbox-http", instance=~".*searxng.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: search
+          service: searxng
+        annotations:
+          summary: "SearXNG HTTP endpoint is unreachable"
+          description: "SearXNG web interface at {{ $labels.instance }} has been unreachable for more than 5 minutes."
+
+      # SSL Certificate Alerts (specific to SearXNG)
+      - alert: SearXNGCertificateExpiringSoon
+        expr: |
+          certificate_days_until_expiry{name="searxng.vulcan.lan"} <= 30
+          and
+          certificate_days_until_expiry{name="searxng.vulcan.lan"} > 7
+        for: 1h
+        labels:
+          severity: warning
+          category: certificates
+          service: searxng
+        annotations:
+          summary: "SearXNG SSL certificate expiring soon"
+          description: "SSL certificate for searxng.vulcan.lan expires in {{ $value }} days. Run certificate renewal."
+
+      - alert: SearXNGCertificateExpiryCritical
+        expr: |
+          certificate_days_until_expiry{name="searxng.vulcan.lan"} <= 7
+        for: 30m
+        labels:
+          severity: critical
+          category: certificates
+          service: searxng
+        annotations:
+          summary: "SearXNG SSL certificate expiring very soon"
+          description: "SSL certificate for searxng.vulcan.lan expires in {{ $value }} days. Immediate renewal required."

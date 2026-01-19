@@ -861,11 +861,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1768006874,
-        "narHash": "sha256-8fxAZS4/BrzTPEIigSaDSigKS+MUMHCvn+nQs/VMDqQ=",
+        "lastModified": 1768851496,
+        "narHash": "sha256-6jsRyvILp3218+S5mPDj1HrwmtTbws7sRjh9EoOfkMw=",
         "ref": "refs/heads/main",
-        "rev": "164b1157f53734001d08e0e33fa5309fb7047c88",
-        "revCount": 102,
+        "rev": "6ac7a62f9f3f22b681183ccb4b08b9a56e5886fe",
+        "revCount": 103,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

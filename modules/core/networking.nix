@@ -36,7 +36,9 @@
         "vulcan.lan"
         "vulcan"
       ];
-      "192.168.1.4" = [ "Hera.local" ];
+      # Hera.local - Apple device, IP discovered via mDNS/Bonjour
+      # This entry silences Postfix reverse DNS warnings when Hera connects
+      "192.168.3.6" = [ "Hera.local" ];
     };
 
     # Enable NetworkManager for WiFi and Ethernet management

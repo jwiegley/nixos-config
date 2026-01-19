@@ -51,7 +51,8 @@
             MAIL_PORT = "25";
             MAIL_FROM_ADDRESS = "mailarchiver@vulcan.lan";
             MailSync__IgnoreSelfSignedCert = "true";
-            Logging__LogLevel__Default = "Information";
+            # Reduced from Information to Warning to decrease log volume (~7,500 lines/day saved)
+            Logging__LogLevel__Default = "Warning";
             Logging__LogLevel__Microsoft_AspNetCore = "Warning";
           };
 

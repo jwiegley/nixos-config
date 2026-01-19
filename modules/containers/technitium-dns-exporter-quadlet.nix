@@ -52,11 +52,20 @@ in
         technitiumEnv = "technitium-dns-exporter-env";
       };
 
-      exec = "--log.level=info --log.format=json";
+      # Note: The --log.level flag doesn't work because the Node.js app uses console.log directly
+      # Log filtering is handled at the systemd level via extraServiceConfig below
+      exec = null;
 
       extraUnitConfig = {
         After = [ "technitium-dns-server.service" ];
         Wants = [ "technitium-dns-server.service" ];
+      };
+
+      # Suppress info-level logs at the systemd/journald level
+      # The Node.js exporter uses console.log for everything (no log level support)
+      # LogLevelMax=warning filters out info/debug messages (~4k lines/day saved)
+      extraServiceConfig = {
+        LogLevelMax = "warning";
       };
 
       healthCheck = {

@@ -21,6 +21,18 @@
 
   time.timeZone = "America/Los_Angeles";
 
+  # Configure timesyncd to use local router as NTP server
+  # This prevents ~2,600 timeout log entries/day from trying to reach external NTP servers
+  # The router (OPNsense) provides NTP service and has reliable upstream connectivity
+  services.timesyncd = {
+    enable = true;
+    servers = [ "192.168.1.1" ]; # OPNsense router
+    extraConfig = ''
+      # Only poll local NTP server - it handles upstream synchronization
+      FallbackNTP=
+    '';
+  };
+
   i18n.defaultLocale = "en_US.UTF-8";
 
   console = {

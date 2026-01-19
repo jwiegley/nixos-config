@@ -121,6 +121,10 @@
           Restart = "always";
           RestartSec = "15s";
           TimeoutStartSec = "900"; # OpenProject can take a while to start on first run
+
+          # Filter out info-level HTTP access logs to reduce log volume
+          # Saves ~4,200 lines/day by only logging warnings and above
+          LogLevelMax = "warning";
         };
       };
     };

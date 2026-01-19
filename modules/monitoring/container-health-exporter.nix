@@ -128,13 +128,16 @@
     };
   };
 
-  # Timer to run exporter every 30 seconds
+  # Timer to run exporter every 2 minutes
+  # Reduced from 30s to 120s to decrease systemd-logind session creation
+  # Each run creates a session per rootless user (~3 log lines each)
+  # At 30s: ~12,960 lines/day; At 120s: ~3,240 lines/day
   systemd.timers.container-health-exporter = {
     description = "Container Health Exporter Timer";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "30s";
-      OnUnitActiveSec = "30s";
+      OnUnitActiveSec = "120s"; # 2 minutes - balances monitoring vs log volume
       AccuracySec = "5s";
     };
   };

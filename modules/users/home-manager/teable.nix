@@ -70,6 +70,9 @@
           Restart = "always";
           RestartSec = "10s";
           TimeoutStartSec = "900";
+          # Filter out info-level HTTP access logs to reduce log volume
+          # Saves ~8,760 lines/day by only logging warnings and above
+          LogLevelMax = "warning";
         };
       };
     };

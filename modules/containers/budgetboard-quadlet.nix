@@ -171,6 +171,8 @@ in
       RestartSec = "15s"; # Wait longer between restart attempts
       TimeoutStartSec = "180s"; # Allow up to 3 minutes for startup (includes DB migrations)
       # NOTE: StartLimitBurst/StartLimitIntervalSec are in unitConfig (belong in [Unit], not [Service])
+      # Filter out info-level logs to reduce log volume
+      LogLevelMax = "warning";
     };
   };
 
@@ -225,6 +227,9 @@ in
     serviceConfig = {
       Restart = "always";
       RestartSec = "10s";
+      # Filter out info-level HTTP access logs to reduce log volume
+      # Saves ~4,272 lines/day by only logging warnings and above
+      LogLevelMax = "warning";
     };
   };
 

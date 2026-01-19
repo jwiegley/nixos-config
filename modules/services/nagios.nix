@@ -2436,6 +2436,8 @@ in
 
   # Grant nagios user sudo access to podman for container monitoring
   # Note: ZFS monitoring uses --nosudo flag since /dev/zfs is world-readable/writable
+  # Using NOLOG_OUTPUT to suppress sudo logging - these health checks run every few seconds
+  # and would otherwise generate ~17,000 log entries per day
   security.sudo.extraRules = [
     # Allow nagios to run podman as root (for root-level containers)
     {
@@ -2443,7 +2445,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }
@@ -2454,7 +2459,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }
@@ -2465,7 +2473,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }
@@ -2476,7 +2487,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }
@@ -2487,7 +2501,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }
@@ -2498,7 +2515,10 @@ in
       commands = [
         {
           command = "${pkgs.podman}/bin/podman";
-          options = [ "NOPASSWD" ];
+          options = [
+            "NOPASSWD"
+            "NOLOG_OUTPUT"
+          ];
         }
       ];
     }

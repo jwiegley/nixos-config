@@ -378,6 +378,9 @@
   systemd.services.grafana = {
     after = [ "prometheus.service" ];
     wants = [ "prometheus.service" ];
+    # Filter out info-level logs to reduce log volume
+    # Saves ~1,776 lines/day by only logging warnings and above
+    serviceConfig.LogLevelMax = "warning";
   };
 
   # Prometheus scrape configuration for Grafana metrics

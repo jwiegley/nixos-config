@@ -33,6 +33,10 @@
 
   users.groups.redis-exporter = { };
 
+  # Filter out info-level logs from redis exporter to reduce log volume
+  # Saves ~2,880 lines/day by only logging warnings and above
+  systemd.services.prometheus-redis-exporter.serviceConfig.LogLevelMax = "warning";
+
   # Prometheus scrape configuration
   services.prometheus.scrapeConfigs = [
     {

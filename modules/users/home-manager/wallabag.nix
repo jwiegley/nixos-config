@@ -72,6 +72,9 @@
           Restart = "always";
           RestartSec = "10s";
           TimeoutStartSec = "900";
+          # Filter out info-level logs to reduce log volume
+          # Saves ~3,000 lines/day by only logging warnings and above
+          LogLevelMax = "warning";
         };
       };
     };

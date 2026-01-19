@@ -49,6 +49,7 @@
 6382 127.0.0.1 Redis - n8n
 6383 127.0.0.1 Redis - OpenProject
 6385 127.0.0.1 Redis - Shlink
+6386 127.0.0.1 Redis - SearXNG
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
@@ -87,6 +88,7 @@
 8443 127.0.0.1 Step-CA
 8444 0.0.0.0 (Unknown)
 8888 127.0.0.1 JupyterLab
+8890 127.0.0.1 SearXNG metasearch engine
 9080 127.0.0.1 Promtail
 9091 127.0.0.1 Wallabag container
 9095 127.0.0.1 (Unknown)

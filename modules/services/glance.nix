@@ -191,6 +191,10 @@ with lib;
                           title = "Shlink";
                           url = "https://shlink.vulcan.lan";
                         }
+                        {
+                          title = "SearXNG";
+                          url = "https://searxng.vulcan.lan";
+                        }
                       ];
                     }
                     {

@@ -512,6 +512,7 @@ in
                   "https://shlink.vulcan.lan"
                   "https://shlink-api.vulcan.lan/rest/health"
                   "https://chat.vulcan.lan"
+                  "https://searxng.vulcan.lan"
                 ];
               }
             ];

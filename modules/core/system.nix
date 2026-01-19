@@ -43,6 +43,28 @@
   security = {
     polkit.enable = true;
     sudo.wheelNeedsPassword = false;
+
+    # Suppress sudo logging for nagios health checks
+    # Nagios runs podman commands every few seconds to check container health
+    # Without this, generates ~5,800 sudo log entries per day
+    sudo.extraConfig = ''
+      # Disable syslog logging for nagios user
+      # The !syslog tag prevents sudo from logging to syslog
+      Defaults:nagios !syslog
+
+      # Also disable for root running container health checks (systemd watchdog)
+      # These run every 30 seconds per container
+      Defaults:root !syslog
+    '';
+
+    # Disable systemd-logind session creation for sudo
+    # This prevents ~3,200 logind session log entries per day
+    # Sessions were being created/destroyed for every sudo health check
+    pam.services.sudo.startSession = false;
+
+    # Suppress pam_unix session logging for sudo
+    # Add 'quiet' option to prevent "session opened/closed" log spam
+    pam.services.sudo.rules.session.unix.args = lib.mkForce [ "quiet" ];
   };
 
   sops = {

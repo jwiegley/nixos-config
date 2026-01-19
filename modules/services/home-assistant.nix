@@ -720,8 +720,19 @@ in
 
           # Suppress integration-specific errors (Phase 4 optimization)
           "homeassistant.components.miele" = "error"; # Miele ValueError with unavailable states
-          "kasa.smart.smartdevice" = "error"; # TP-Link Kasa session closed errors
+
+          # TP-Link Kasa smart plug timeout errors (192.168.3.25, 192.168.3.177)
+          # Devices intermittently timeout - suppress to critical to reduce log noise
+          "kasa.smart.smartdevice" = "critical";
+          "kasa" = "error"; # Other Kasa module errors
+
+          # Ring doorbell subscription warnings (~15/hour without subscription)
+          "ring_doorbell.doorbot" = "error"; # Subscription warning spam
           "pubnub" = "error"; # Ring doorbell PubNub connector errors
+
+          # Template warnings for weather forecasts
+          # NWS doesn't provide detailed_description field
+          "homeassistant.helpers.template" = "error";
         };
       };
 

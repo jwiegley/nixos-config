@@ -302,6 +302,22 @@ in
       '';
     };
 
+    # Log search queries to a dedicated file for personal search history
+    locations."/search" = {
+      proxyPass = "http://127.0.0.1:${toString searxngPort}";
+      recommendedProxySettings = true;
+      extraConfig = ''
+        # Log queries using custom format (timestamp, IP, query, full request)
+        access_log /var/log/nginx/searxng-queries.log searxng_queries;
+
+        # Same proxy settings as main location
+        proxy_read_timeout 60;
+        proxy_connect_timeout 60;
+        proxy_send_timeout 60;
+        proxy_buffering off;
+      '';
+    };
+
     # Static files served directly
     locations."/static/" = {
       alias = "${pkgs.searxng}/share/static/";

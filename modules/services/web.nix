@@ -29,6 +29,13 @@
       mapHashBucketSize = lib.mkForce 512;
       # logError = "/var/log/nginx/error.log debug";
 
+      # commonHttpConfig is placed BEFORE server blocks (needed for log_format definitions)
+      commonHttpConfig = ''
+        # Custom log format for SearXNG query logging
+        # Captures: timestamp, client IP, query parameter, full request
+        log_format searxng_queries '$time_iso8601 $remote_addr "$arg_q" "$request"';
+      '';
+
       appendHttpConfig = ''
         large_client_header_buffers 4 16k;
         proxy_headers_hash_max_size 1024;

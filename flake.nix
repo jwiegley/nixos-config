@@ -5,7 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nixos-apple-silicon = {
-      url = "github:nix-community/nixos-apple-silicon";
+      # Pinned to kernel 6.17.12 for ZFS compatibility
+      # ZFS 2.3.x doesn't support kernel 6.18+ yet
+      # Remove pin once ZFS supports newer kernels
+      url = "github:nix-community/nixos-apple-silicon/f94f4496775f9ca6e8a9e9e83f5aa4e4210fbb5d";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

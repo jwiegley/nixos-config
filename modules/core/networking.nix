@@ -131,8 +131,11 @@
       # This is critical: rule 51 routes traffic from 192.168.1.2 to 10.0.0.0/8 through this table
       # Without this, DNS responses being de-NAT'd to container IPs would be routed to the gateway
       # instead of to podman0, causing container DNS to fail
-      ${pkgs.iproute2}/bin/ip route add 10.88.0.0/16 dev podman0 table end0_return 2>/dev/null || \
-        ${pkgs.iproute2}/bin/ip route replace 10.88.0.0/16 dev podman0 table end0_return
+      # Only add if podman0 exists - it won't exist if no containers are running
+      if ${pkgs.iproute2}/bin/ip link show podman0 &>/dev/null; then
+        ${pkgs.iproute2}/bin/ip route add 10.88.0.0/16 dev podman0 table end0_return 2>/dev/null || \
+          ${pkgs.iproute2}/bin/ip route replace 10.88.0.0/16 dev podman0 table end0_return
+      fi
 
       # Then add default route via gateway for cross-subnet traffic (e.g., to 192.168.3.x)
       ${pkgs.iproute2}/bin/ip route add default via $GATEWAY table end0_return 2>/dev/null || \

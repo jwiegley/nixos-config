@@ -110,6 +110,14 @@ in
 
       # Engine settings - enable popular engines
       engines = [
+        # Explicitly disable wikidata - its init fails if network is unavailable at startup
+        # and causes KeyError when searching (processor not registered but engine enabled)
+        {
+          name = "wikidata";
+          engine = "wikidata";
+          shortcut = "wd";
+          disabled = true;
+        }
         # General search engines
         {
           name = "duckduckgo";
@@ -133,7 +141,8 @@ in
           name = "brave";
           engine = "brave";
           shortcut = "br";
-          disabled = false;
+          # Disabled: Brave's anti-bot measures cause brotli decompression failures
+          disabled = true;
         }
         # Wikipedia
         {
@@ -285,9 +294,8 @@ in
         proxy_connect_timeout 60;
         proxy_send_timeout 60;
 
-        # Pass real IP for rate limiting
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Real-IP $remote_addr;
+        # Note: X-Forwarded-For and X-Real-IP are already set by recommendedProxySettings
+        # Don't duplicate them here as it causes invalid header values like "192.168.1.2, 192.168.1.2"
 
         # Buffering settings
         proxy_buffering off;

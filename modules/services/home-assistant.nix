@@ -623,84 +623,10 @@ in
         };
       };
 
-      # History - controls what entities are shown in UI history
-      # This should generally match recorder exclusions for consistency
-      history = {
-        use_include_order = true;
-
-        # Include important domains for UI history
-        include = {
-          domains = [
-            "lock" # Door locks
-            "binary_sensor" # Motion, door/window sensors
-            "sensor" # Most sensors
-            "climate" # Thermostats
-            "light" # Lights
-            "switch" # Switches
-            "cover" # Garage doors, blinds
-            "fan" # Fans
-            "person" # Person presence
-            "device_tracker" # Location tracking (filtered below)
-            "media_player" # Media devices
-            "vacuum" # Vacuum cleaners
-            "camera" # Cameras
-            "weather" # Weather (aggregate only)
-          ];
-        };
-
-        # Exclude the same noisy entities as recorder for UI performance
-        exclude = {
-          # Explicit entity exclusions (same as recorder)
-          entities = [
-            "sensor.john_iphone_info"
-            "sensor.john_iphone_next_update"
-            "sensor.john_iphone_last_update"
-            "sensor.nasim_iphone_info"
-            "sensor.nasim_iphone_next_update"
-            "sensor.nasim_iphone_last_update"
-            "sensor.johns_mac_studio_frontmost_app"
-            "sensor.clio_2_frontmost_app"
-            "sensor.smart_plug_tv_voltage"
-            "device_tracker.asus_john_iphone"
-            "device_tracker.asus_nasim_iphone"
-          ];
-
-          entity_globs = [
-            # Same exclusions as recorder to keep UI responsive
-            "sensor.weather_*" # Weather detail sensors (keep weather.* entity)
-            "sensor.*_info" # High-frequency info sensors
-            "sensor.*_next_update"
-            "sensor.*_last_update"
-            "sensor.*_last_located"
-            "sensor.*_voltage" # Voltage sensors
-            "sensor.router_cpu_*" # Router monitoring
-            "sensor.router_temp_*"
-            "sensor.router_system_load_*"
-            "sensor.*_frontmost_app" # Mac Studio app tracking
-            "sensor.*_storage" # Storage sensors
-            "device_tracker.enphase_*" # Network device trackers
-            "device_tracker.dreame_*"
-            "device_tracker.espressif_*"
-            "device_tracker.98_03_8e_*" # MAC address trackers
-
-            # Dreame Vacuum: Exclude cameras, maps, and non-essential sensors (battery optimization)
-            "camera.*dreame*" # All map cameras
-            "sensor.*dreame*map*" # Map-related sensors
-            "sensor.*dreame*_last_clean*" # Cleaning history timestamps
-            "sensor.*dreame*_total_clean*" # Cumulative statistics
-            "sensor.*dreame*_cleaning_time*" # Time statistics
-            "sensor.*dreame*_cleaning_area*" # Area statistics
-            "sensor.*dreame*_main_brush*" # Consumable sensors
-            "sensor.*dreame*_side_brush*" # Consumable sensors
-            "sensor.*dreame*_filter*" # Consumable sensors
-            "sensor.*dreame*_sensor_dirty*" # Consumable sensors
-            "sensor.*dreame*_mop*" # Mop-related sensors
-            "binary_sensor.*dreame*_mop*" # Mop-related binary sensors
-            "select.*dreame*_room_*" # Per-room configuration
-            "switch.*dreame*_room_*" # Per-room switches
-          ];
-        };
-      };
+      # History - inherits entity filter from recorder automatically
+      # The deprecated include/exclude/use_include_order options have been removed
+      # History now uses recorder's exclusions, so no separate filtering is needed
+      history = { };
 
       # Logger - reduce logging verbosity to minimize I/O and memory overhead
       logger = {
@@ -940,6 +866,12 @@ in
 
     # Generate secrets.yaml and inject database URL into configuration.yaml
     preStart = ''
+            # Remove HACS internal frontend symlinks that incorrectly appear in custom_components
+            # These cause "Error loading integration" with KeyError: 'domain' because they
+            # have manifest.json files without proper HA integration format
+            rm -f /var/lib/hass/custom_components/frontend_es5
+            rm -f /var/lib/hass/custom_components/frontend_latest
+
             # Generate secrets.yaml with location data and database URL
             # Location coordinates for Sacramento, CA area
             cat > /var/lib/hass/secrets.yaml << 'EOF'

@@ -72,7 +72,7 @@ groups:
             Check database connection: podman exec budget-board-server pg_isready -h 192.168.1.2
 
       - alert: BudgetBoardContainerRestarts
-        expr: rate(systemd_unit_state{name=~"budget-board-(server|client).service",state="failed"}[15m]) > 0
+        expr: changes(systemd_unit_state{name=~"budget-board-(server|client).service",state="failed"}[30m]) > 2
         for: 5m
         labels:
           severity: warning

@@ -185,10 +185,7 @@ in
 
       # Port exposed via pod configuration above
       # Client's nginx proxies to localhost:8080 (server in same pod)
-      #
-      # NOTE: The official image has nginx config hardcoded to "budget-board-server:8080"
-      # We override it with a custom config that uses "localhost:8080" instead
-      # This works because containers in a pod share network namespace
+      # VITE_SERVER_ADDRESS=localhost makes the entrypoint script generate correct backend config
 
       # Health check configuration
       healthCmd = "CMD-SHELL curl -f http://localhost:6253/ || exit 1";
@@ -200,12 +197,12 @@ in
       environments = {
         # Client listening port
         "PORT" = "6253";
+        # Backend address - uses localhost since containers share network namespace in pod
+        "VITE_SERVER_ADDRESS" = "localhost";
       };
 
       volumes = [
         "/var/lib/budgetboard-client:/app/data:rw"
-        # Override nginx config to use localhost:8080 backend
-        "/etc/nixos/configs/budgetboard-nginx.conf:/etc/nginx/conf.d/default.conf:ro"
       ];
 
       # Join the budget-board pod (shares network with server)

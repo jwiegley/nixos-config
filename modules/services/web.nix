@@ -22,6 +22,13 @@
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
       recommendedOptimisation = true;
+
+      # Force-close old worker processes after 5 minutes during config reloads.
+      # Prevents workers from lingering indefinitely due to long-lived WebSocket
+      # connections (e.g., Home Assistant). Clients reconnect automatically.
+      appendConfig = ''
+        worker_shutdown_timeout 300s;
+      '';
       # Increase map_hash settings to handle many virtual hosts and the large zimit URL map
       # Default values (16384/256) are insufficient for ~8000+ URL map entries
       # lib.mkForce needed to override conflicting definitions in zimit.nix

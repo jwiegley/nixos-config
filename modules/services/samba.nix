@@ -7,7 +7,7 @@
 
 let
   # List of ZFS filesystems to create Samba shares for
-  # Generated from: zfs list -t filesystem -H -o name,mountpoint | grep '^tank' | grep -v 'none\|legacy'
+  # Based on: zfs list -t filesystem -H -o name,mountpoint | grep -v 'none\|legacy'
   zfsFilesystems = [
     {
       name = "tank";
@@ -50,20 +50,8 @@ let
       mountpoint = "/tank/Backups/Machines";
     }
     {
-      name = "tank/Backups/Machines/Hera";
-      mountpoint = "/tank/Backups/Machines/Hera";
-    }
-    {
-      name = "tank/Backups/Machines/Clio";
-      mountpoint = "/tank/Backups/Machines/Clio";
-    }
-    {
       name = "tank/Backups/Machines/Vulcan";
       mountpoint = "/tank/Backups/Machines/Vulcan";
-    }
-    {
-      name = "tank/Backups/Machines/Athena";
-      mountpoint = "/tank/Backups/Machines/Athena";
     }
     {
       name = "tank/Games";
@@ -98,16 +86,16 @@ let
       mountpoint = "/tank/Media";
     }
     {
-      name = "tank/Models";
-      mountpoint = "/tank/Models";
+      name = "gdrive/Models";
+      mountpoint = "/gdrive/Models";
     }
     {
-      name = "tank/Models/HuggingFace";
-      mountpoint = "/tank/Models/HuggingFace";
+      name = "gdrive/Models/HuggingFace";
+      mountpoint = "/gdrive/Models/HuggingFace";
     }
     {
-      name = "tank/Models/Llama.cpp";
-      mountpoint = "/tank/Models/Llama.cpp";
+      name = "gdrive/Models/Llama.cpp";
+      mountpoint = "/gdrive/Models/Llama.cpp";
     }
     {
       name = "tank/Movies";

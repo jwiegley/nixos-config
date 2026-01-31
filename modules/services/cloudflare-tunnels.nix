@@ -62,6 +62,8 @@
     serviceConfig = {
       # Wait 10 seconds between restart attempts to allow network to stabilize
       RestartSec = 10;
+    };
+    unitConfig = {
       # Allow up to 10 restarts within a 5-minute window before giving up
       StartLimitIntervalSec = 300;
       StartLimitBurst = 10;

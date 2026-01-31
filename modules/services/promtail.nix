@@ -305,7 +305,7 @@
             }
             {
               regex = {
-                expression = ''^(?P<message>.*)$'';
+                expression = "^(?P<message>.*)$";
               };
             }
           ];
@@ -332,7 +332,7 @@
             }
             {
               regex = {
-                expression = ''^(?P<message>.*)$'';
+                expression = "^(?P<message>.*)$";
               };
             }
           ];

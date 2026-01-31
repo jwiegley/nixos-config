@@ -234,16 +234,14 @@
     };
   };
 
-  # Weekly database update timer (optional, use manually after approved changes)
-  # Uncomment to enable automatic database updates
-  # WARNING: This will accept all changes! Only use in dynamic environments.
-  # systemd.timers.aide-update = {
-  #   description = "Weekly AIDE database update";
-  #   wantedBy = [ "timers.target" ];
-  #
-  #   timerConfig = {
-  #     OnCalendar = "weekly";
-  #     Persistent = true;
-  #   };
-  # };
+  # Auto-update AIDE database after nixos-rebuild
+  # Since all system changes are applied via Nix, the rebuild itself is the
+  # approval of changes. This prevents false-positive integrity alerts from
+  # expected NixOS store path changes after each rebuild.
+  system.activationScripts.aide-post-rebuild = lib.stringAfter [ "etc" ] ''
+    if [ -f /var/lib/aide/aide.db ]; then
+      # Schedule AIDE database update in background so it doesn't slow activation
+      ${pkgs.systemd}/bin/systemctl start --no-block aide-update.service 2>/dev/null || true
+    fi
+  '';
 }

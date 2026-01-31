@@ -40,6 +40,7 @@ groups:
             |~ "level=error|ERROR"
             | json
             | unit != ""
+            | unit != "user@948.service"
             [10m])) > 10
         for: 5m
         labels:

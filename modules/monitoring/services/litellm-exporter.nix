@@ -18,26 +18,36 @@ let
     fi
 
     # Test query to hera/gpt-oss-120b
-    RESPONSE=$(${pkgs.curl}/bin/curl -s -w "\n%{http_code}" -X POST \
-      http://127.0.0.1:4000/v1/chat/completions \
-      -H "x-api-key: $API_KEY" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "model": "hera/gpt-oss-120b",
-        "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
-        "max_tokens": 10,
-        "temperature": 0
-      }' \
-      --max-time 30)
+    # Retry once after 30s on failure to handle transient unavailability
+    # during container restarts (e.g., after nixos-rebuild switch)
+    for attempt in 1 2; do
+      RESPONSE=$(${pkgs.curl}/bin/curl -s -w "\n%{http_code}" -X POST \
+        http://127.0.0.1:4000/v1/chat/completions \
+        -H "x-api-key: $API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "hera/gpt-oss-120b",
+          "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
+          "max_tokens": 10,
+          "temperature": 0
+        }' \
+        --max-time 30)
 
-    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-    BODY=$(echo "$RESPONSE" | head -n-1)
+      HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+      BODY=$(echo "$RESPONSE" | head -n-1)
+
+      if [ "$HTTP_CODE" = "200" ]; then
+        break
+      elif [ "$attempt" -eq 1 ]; then
+        sleep 30
+      fi
+    done
 
     # Check HTTP status
     if [ "$HTTP_CODE" != "200" ]; then
       echo "litellm_availability 0"
       echo "litellm_response_time_seconds 0"
-      echo "# HTTP error: $HTTP_CODE"
+      echo "# HTTP error: $HTTP_CODE (after 2 attempts)"
       exit 0
     fi
 

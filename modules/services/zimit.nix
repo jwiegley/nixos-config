@@ -1081,10 +1081,11 @@ in
   };
 
   # Regenerate URL map when ZIM files change (after new archives are created)
-  systemd.services.zimit-job-runner.postStop = ''
-    # Trigger URL map regeneration after a crawl job completes
-    ${pkgs.systemd}/bin/systemctl start --no-block kiwix-url-map-generator.service || true
-  '';
+  # Use ExecStopPost with "+" prefix to run as root, since zimit-job-runner runs
+  # as the unprivileged "zimit" user and cannot start system-level services.
+  systemd.services.zimit-job-runner.serviceConfig.ExecStopPost = [
+    "+${pkgs.systemd}/bin/systemctl start --no-block kiwix-url-map-generator.service"
+  ];
 
   # Nginx configuration for Kiwix URL rewriting
   # Increase hash sizes for the large URL map (8000+ entries)

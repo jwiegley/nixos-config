@@ -36,6 +36,17 @@ groups:
           summary: "ZFS pool capacity critical"
           description: "ZFS pool {{ $labels.pool }} is at {{ $value }}% capacity"
 
+      - alert: ZFSPoolFreeSpaceLow
+        expr: zfs_dataset_available_bytes{name=~"^(tank|gdrive)$",type="filesystem"} < 500 * 1024 * 1024 * 1024
+        for: 1h
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} has less than 500GB free"
+          description: "Pool {{ $labels.pool }} has {{ $value | humanize1024 }}B available"
+
       - alert: ZFSSnapshotAgeTooOld
         expr: (time() - node_zfs_snapshot_timestamp) > 86400
         for: 5m

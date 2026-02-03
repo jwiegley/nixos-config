@@ -118,10 +118,9 @@ in
     };
   };
 
-  # Ensure node_exporter textfile collector directory exists
-  systemd.tmpfiles.rules = [
-    "d /var/lib/prometheus-node-exporter-textfiles 0755 node-exporter node-exporter -"
-  ];
+  # Note: The textfile collector directory /var/lib/prometheus-node-exporter-textfiles
+  # is created and managed in system-exporters.nix with 1777 permissions so that
+  # multiple services (mbsync, restic, this exporter, etc.) can write metrics files.
 
   # Documentation
   environment.etc."prometheus/home-assistant-backup-exporter-README.md" = {

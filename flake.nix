@@ -1,7 +1,5 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nixos-apple-silicon = {
@@ -54,13 +52,8 @@
       url = "github:jwiegley/org-jw";
     };
 
-    # Newer nixpkgs for Immich 2.4.1 (CR3 thumbnail fix in PR #24587)
-    nixpkgs-immich = {
-      url = "github:NixOS/nixpkgs/nixos-unstable";
-    };
-
     # nixpkgs unstable for packages that need newer versions
-    # Used for: JupyterLab (4.5.0+), and other packages needing unstable
+    # Used for: JupyterLab (4.5.0+), Immich 2.4.1 (CR3 fix), and other packages needing unstable
     nixpkgs-unstable = {
       url = "github:NixOS/nixpkgs/nixos-unstable";
     };

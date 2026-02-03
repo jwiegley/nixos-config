@@ -36,6 +36,10 @@ in
         cat ${config.sops.secrets."copyparty/nasimw-password".path} > /var/lib/copyparty-passwords/nasimw
       ''}
 
+      # Note: 644 is required here because these files are bind-mounted into a
+      # NixOS container where the copyparty user (with a container-allocated UID)
+      # needs to read them. The files are owned by root:root on the host, so
+      # world-readable is the only way the container user can access them.
       chmod 644 /var/lib/copyparty-passwords/admin
       chmod 644 /var/lib/copyparty-passwords/johnw
       chmod 644 /var/lib/copyparty-passwords/friend

@@ -289,7 +289,7 @@ in
 
       # Set proper permissions for nginx
       chmod 644 "$CERT_FILE"
-      chmod 640 "$KEY_FILE"
+      chmod 600 "$KEY_FILE"
       chown root:nginx "$CERT_FILE" "$KEY_FILE"
 
       echo "Certificate generated successfully"

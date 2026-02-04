@@ -12,86 +12,144 @@ let
   updateContainersScript = pkgs.writeShellScript "update-containers" ''
     set -euo pipefail
 
-    export PATH=${pkgs.iptables}/bin:$PATH
+    export PATH=${
+      lib.makeBinPath (
+        with pkgs;
+        [
+          coreutils
+          podman
+          systemd
+          iptables
+          gnugrep
+          util-linux
+        ]
+      )
+    }
 
     # Function to log with timestamp
     log() {
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
     }
 
-    log "Starting container update process"
+    # Update containers for a given podman invocation and restart method
+    # Args: $1 = label (e.g. "root" or username), $2+ = podman command prefix
+    update_images_for() {
+      local label="$1"
+      shift
+      local podman_cmd=("$@")
 
-    # Get unique images from all containers
-    images=$(${pkgs.podman}/bin/podman ps -a --format='{{.Image}}' | sort -u)
+      log "[$label] Discovering containers..."
 
-    if [ -z "$images" ]; then
-      log "No containers found"
-      exit 0
-    fi
+      local images
+      images=$("''${podman_cmd[@]}" ps -a --format='{{.Image}}' 2>/dev/null | sort -u) || true
 
-    # Track which images were updated
-    updated_images=""
-
-    # Pull each image and track updates
-    while IFS= read -r image; do
-      [ -z "$image" ] && continue
-
-      log "Checking image: $image"
-
-      # Capture the pull output to detect if image was updated
-      if output=$(${pkgs.podman}/bin/podman pull "$image" 2>&1); then
-        if echo "$output" | grep -q "Downloading\|Copying\|Getting image"; then
-          log "Updated: $image"
-          updated_images="$updated_images $image"
-        else
-          log "Already up-to-date: $image"
-        fi
-      else
-        log "ERROR: Failed to pull $image"
-        # Continue with other images even if one fails
+      if [ -z "$images" ]; then
+        log "[$label] No containers found"
+        return
       fi
-    done <<< "$images"
 
-    # Only restart containers with updated images
-    if [ -n "$updated_images" ]; then
-      log "Restarting containers with updated images..."
+      local updated_images=""
+
+      while IFS= read -r image; do
+        [ -z "$image" ] && continue
+
+        # Skip locally-built images (cannot be pulled from a registry)
+        if [[ "$image" == localhost/* ]]; then
+          log "[$label] Skipping local image: $image"
+          continue
+        fi
+
+        log "[$label] Checking image: $image"
+
+        if output=$("''${podman_cmd[@]}" pull "$image" 2>&1); then
+          if echo "$output" | grep -q "Downloading\|Copying\|Getting image"; then
+            log "[$label] Updated: $image"
+            updated_images="$updated_images $image"
+          else
+            log "[$label] Already up-to-date: $image"
+          fi
+        else
+          log "[$label] ERROR: Failed to pull $image"
+        fi
+      done <<< "$images"
+
+      if [ -z "$updated_images" ]; then
+        log "[$label] No updates found"
+        return
+      fi
+
+      log "[$label] Restarting containers with updated images..."
 
       for image in $updated_images; do
-        # Find containers using this image
-        containers=$(${pkgs.podman}/bin/podman ps -a --filter "ancestor=$image" --format='{{.ID}}')
+        local containers
+        containers=$("''${podman_cmd[@]}" ps -a --filter "ancestor=$image" --format='{{.ID}}') || true
 
-        if [ -n "$containers" ]; then
-          while IFS= read -r container; do
-            [ -z "$container" ] && continue
+        [ -z "$containers" ] && continue
 
-            # Get container name for logging
-            name=$(${pkgs.podman}/bin/podman ps -a --filter "id=$container" --format='{{.Names}}')
+        while IFS= read -r container; do
+          [ -z "$container" ] && continue
 
-            # Check if container is managed by systemd (quadlet)
-            # If so, use systemctl restart for proper container recreation
-            systemd_unit=$(${pkgs.podman}/bin/podman inspect "$container" --format='{{index .Config.Labels "PODMAN_SYSTEMD_UNIT"}}' 2>/dev/null || echo "")
+          local name
+          name=$("''${podman_cmd[@]}" ps -a --filter "id=$container" --format='{{.Names}}')
 
-            if [ -n "$systemd_unit" ] && [ "$systemd_unit" != "<no value>" ]; then
-              log "Container $name is managed by systemd ($systemd_unit), using systemctl restart"
-              if ${pkgs.systemd}/bin/systemctl restart "$systemd_unit" 2>&1; then
-                log "Restarted service: $systemd_unit (container: $name)"
-              else
-                log "ERROR: Failed to restart service: $systemd_unit"
-              fi
+          local systemd_unit
+          systemd_unit=$("''${podman_cmd[@]}" inspect "$container" --format='{{index .Config.Labels "PODMAN_SYSTEMD_UNIT"}}' 2>/dev/null || echo "")
+
+          if [ -n "$systemd_unit" ] && [ "$systemd_unit" != "<no value>" ]; then
+            if [ "$label" = "root" ]; then
+              log "[$label] Restarting system service: $systemd_unit (container: $name)"
+              systemctl restart "$systemd_unit" 2>&1 || log "[$label] ERROR: Failed to restart $systemd_unit"
             else
-              # Fallback to podman restart for non-quadlet containers
-              if ${pkgs.podman}/bin/podman restart "$container" >/dev/null 2>&1; then
-                log "Restarted container: $name ($container)"
-              else
-                log "ERROR: Failed to restart container: $name ($container)"
-              fi
+              log "[$label] Restarting user service: $systemd_unit (container: $name)"
+              systemctl --user --machine="$label@" restart "$systemd_unit" 2>&1 || log "[$label] ERROR: Failed to restart $systemd_unit"
             fi
-          done <<< "$containers"
-        fi
+          else
+            log "[$label] Restarting container directly: $name ($container)"
+            "''${podman_cmd[@]}" restart "$container" >/dev/null 2>&1 || log "[$label] ERROR: Failed to restart $name"
+          fi
+        done <<< "$containers"
       done
-    else
-      log "No updates found, skipping container restarts"
-    fi
+    }
+
+    log "Starting container update process"
+
+    # --- Root containers ---
+    update_images_for "root" podman
+
+    # --- Rootless containers (dedicated users) ---
+    # Each user has linger enabled so their XDG_RUNTIME_DIR exists at /run/user/<uid>
+    CONTAINER_USERS=(
+      changedetection
+      lastsignal
+      litellm
+      mailarchiver
+      nocobase
+      open-webui
+      openproject
+      openspeedtest
+      opnsense-exporter
+      shlink
+      shlink-web-client
+      sillytavern
+      teable
+      wallabag
+    )
+
+    for user in "''${CONTAINER_USERS[@]}"; do
+      uid=$(id -u "$user" 2>/dev/null || echo "")
+      if [ -z "$uid" ]; then
+        log "[$user] User not found, skipping"
+        continue
+      fi
+
+      export XDG_RUNTIME_DIR="/run/user/$uid"
+      if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+        log "[$user] Runtime dir missing (not lingering?), skipping"
+        continue
+      fi
+
+      update_images_for "$user" runuser -u "$user" -- podman
+    done
 
     log "Container update process completed"
   '';
@@ -311,13 +369,13 @@ in
 
     # Update containers
     services.update-containers = {
-      description = "Update and restart Podman containers";
+      description = "Update and restart Podman containers (root and rootless)";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = updateContainersScript;
         User = "root";
         RemainAfterExit = false;
-        TimeoutStartSec = "10m";
+        TimeoutStartSec = "30m";
         KillMode = "process"; # Only kill main script, not restarted containers
         StandardOutput = "journal";
         StandardError = "journal";

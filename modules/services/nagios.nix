@@ -851,6 +851,11 @@ let
       display = "Open WebUI AI Chat";
       runAs = "open-webui";
     }
+    {
+      name = "lastsignal";
+      display = "LastSignal Dead Man's Switch";
+      runAs = "lastsignal";
+    }
   ];
 
   # Container systemd services (for Quadlet-managed containers)

@@ -75,6 +75,7 @@
 8080 127.0.0.1 llama-swap (user johnw)
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
 8180 127.0.0.1 OpenProject web interface
+8190 127.0.0.1 LastSignal dead man's switch
 8081 0.0.0.0 :: ntopng
 8082 127.0.0.1 (Unknown)
 8083 127.0.0.1 Silly Tavern container

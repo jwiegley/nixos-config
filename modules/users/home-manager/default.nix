@@ -47,6 +47,7 @@
         "opnsense-exporter"
         "technitium-dns-exporter"
         "openspeedtest"
+        "lastsignal"
         "container-db"
         "container-web"
         "container-misc"

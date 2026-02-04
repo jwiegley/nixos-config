@@ -5,6 +5,7 @@ Collects logs from journalctl and uses LiteLLM for intelligent summarization.
 """
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -14,7 +15,14 @@ import urllib.request
 import urllib.error
 from collections import defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+
+# Directory for storing AI analysis history
+DEFAULT_HISTORY_DIR = "/var/log/logwatch-ai"
+HISTORY_RETENTION_DAYS = 14
+WISDOM_FILENAME = "known-conditions.prompt"
+WISDOM_DELIMITER = "===NEW_KNOWN_CONDITIONS==="
 
 
 # Service groups to monitor
@@ -238,10 +246,15 @@ class AIAnalyzer:
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
     def analyze_logs(self, grouped_logs: Dict[str, List[LogEntry]], stats: Dict,
-                     time_range: str = "24 hours") -> str:
+                     time_range: str = "24 hours",
+                     recent_history: str = "",
+                     wisdom: str = "") -> str:
         """Analyze logs using AI and generate summary"""
 
         self.time_range = time_range
+        self.recent_history = recent_history
+        self.wisdom = wisdom
+        self.new_wisdom = ""  # populated after AI call
 
         # Prepare log context for AI
         log_context = self._prepare_log_context(grouped_logs, stats)
@@ -252,9 +265,16 @@ class AIAnalyzer:
 
         # Try AI analysis
         try:
-            ai_summary = self._call_ai_api(log_context, stats)
-            if ai_summary:
-                return ai_summary
+            ai_response = self._call_ai_api(log_context, stats)
+            if ai_response:
+                # Split report from new wisdom entries
+                if WISDOM_DELIMITER in ai_response:
+                    parts = ai_response.split(WISDOM_DELIMITER, 1)
+                    report = parts[0].strip()
+                    self.new_wisdom = parts[1].strip()
+                else:
+                    report = ai_response
+                return report
         except Exception as e:
             print(f"AI analysis failed: {e}", file=sys.stderr)
 
@@ -304,6 +324,54 @@ Output plain ASCII text only. Do NOT use:
 Use simple dashes (-) for bullet points. Be factual and concise.
 Report what happened and what to do about it, without dramatization."""
 
+        if self.wisdom:
+            system_prompt += """
+
+You are given a "known conditions" list describing conditions that are normal
+for this system. ALWAYS omit these from the report entirely. They are known,
+accepted, and do not need to be mentioned again."""
+
+        if self.recent_history:
+            system_prompt += """
+
+You are also given analyses from previous days. If an issue has already been
+reported in previous reports and appears to be a recurring, known condition
+(not a new incident), omit it from today's report entirely. Only include
+issues that are genuinely new or have materially changed (e.g., increased
+frequency, new error messages, escalated severity). The goal is to avoid
+repeating the same harmless warnings day after day."""
+
+        system_prompt += f"""
+
+After your report, if you identify any log items that appear to be harmless,
+recurring conditions that are normal for this system and should be permanently
+suppressed from future reports, output the following delimiter on its own line:
+
+{WISDOM_DELIMITER}
+
+Then list each new known condition as a dash-prefixed line, e.g.:
+- service-name: brief description of the normal condition
+
+Only add entries for conditions you are confident are harmless and recurring.
+Do NOT repeat entries already in the known conditions list.
+If there are no new conditions to add, do not output the delimiter at all."""
+
+        wisdom_section = ""
+        if self.wisdom:
+            wisdom_section = f"""
+
+Known conditions (ALWAYS omit these from the report):
+{self.wisdom}
+"""
+
+        history_section = ""
+        if self.recent_history:
+            history_section = f"""
+
+Previous analyses for context (omit recurring items from today's report):
+{self.recent_history}
+"""
+
         user_prompt = f"""Analyze these system logs from the past {self.time_range}:
 
 {log_context}
@@ -314,8 +382,8 @@ Statistics:
 - Critical: {stats['critical']}
 - Errors: {stats['error']}
 - Warnings: {stats['warning']}
-
-Provide a clear, actionable summary."""
+{wisdom_section}{history_section}
+Provide a clear, actionable summary. Omit known conditions and recurring harmless items."""
 
         payload = {
             "model": self.model,
@@ -324,7 +392,7 @@ Provide a clear, actionable summary."""
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.3,
-            "max_tokens": 1000,
+            "max_tokens": 1500,
         }
 
         headers = {
@@ -445,6 +513,109 @@ containers, and file sharing) are functioning within normal parameters.
         return "\n".join(lines)
 
 
+class AnalysisHistory:
+    """Manages saved AI analysis history for deduplication"""
+
+    def __init__(self, history_dir: str = DEFAULT_HISTORY_DIR):
+        self.history_dir = Path(history_dir)
+
+    def save(self, analysis: str) -> None:
+        """Save today's analysis to a dated log file"""
+        try:
+            self.history_dir.mkdir(parents=True, exist_ok=True)
+            filepath = self.history_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+            filepath.write_text(analysis)
+        except Exception as e:
+            print(f"Warning: Failed to save analysis history: {e}", file=sys.stderr)
+
+    def load_recent(self, days: int = HISTORY_RETENTION_DAYS) -> str:
+        """Load analyses from the last N days, excluding today"""
+        if not self.history_dir.exists():
+            return ""
+
+        today = datetime.now().date()
+        cutoff = today - timedelta(days=days)
+        entries = []
+
+        for filepath in sorted(self.history_dir.glob("*.log")):
+            try:
+                date_str = filepath.stem  # e.g. "2026-02-03"
+                file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                if cutoff <= file_date < today:
+                    content = filepath.read_text().strip()
+                    if content:
+                        entries.append(f"=== Report from {date_str} ===\n{content}")
+            except (ValueError, OSError):
+                continue
+
+        return "\n\n".join(entries)
+
+    def cleanup(self) -> None:
+        """Remove analysis files older than retention period"""
+        if not self.history_dir.exists():
+            return
+
+        cutoff = datetime.now().date() - timedelta(days=HISTORY_RETENTION_DAYS)
+        for filepath in self.history_dir.glob("*.log"):
+            try:
+                file_date = datetime.strptime(filepath.stem, "%Y-%m-%d").date()
+                if file_date < cutoff:
+                    filepath.unlink()
+            except (ValueError, OSError):
+                continue
+
+    @property
+    def wisdom_path(self) -> Path:
+        return self.history_dir / WISDOM_FILENAME
+
+    def load_wisdom(self) -> str:
+        """Load the accumulated known-conditions wisdom file"""
+        if not self.wisdom_path.exists():
+            return ""
+        try:
+            return self.wisdom_path.read_text().strip()
+        except OSError:
+            return ""
+
+    def append_wisdom(self, new_entries: str) -> None:
+        """Append newly discovered known conditions to the wisdom file"""
+        new_entries = new_entries.strip()
+        if not new_entries:
+            return
+
+        try:
+            self.history_dir.mkdir(parents=True, exist_ok=True)
+
+            # Read existing content to check for duplicates
+            existing = ""
+            if self.wisdom_path.exists():
+                existing = self.wisdom_path.read_text()
+
+            # Filter out entries that already exist (by stripping and comparing)
+            existing_lines = {line.strip().lower() for line in existing.splitlines()
+                             if line.strip() and not line.strip().startswith("#")}
+            new_lines = []
+            for line in new_entries.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    if stripped.lower() not in existing_lines:
+                        new_lines.append(stripped)
+
+            if not new_lines:
+                return
+
+            with open(self.wisdom_path, "a") as f:
+                if not existing or not existing.endswith("\n"):
+                    f.write("\n")
+                for line in new_lines:
+                    # Ensure dash prefix for consistency
+                    if not line.startswith("- "):
+                        line = f"- {line}"
+                    f.write(f"{line}\n")
+        except Exception as e:
+            print(f"Warning: Failed to append to wisdom file: {e}", file=sys.stderr)
+
+
 def parse_time_range(time_str: str) -> Tuple[str, str]:
     """
     Parse user-friendly time range into journalctl --since format.
@@ -532,6 +703,16 @@ Examples:
         action='store_true',
         help='Suppress progress messages to stderr'
     )
+    parser.add_argument(
+        '--history-dir',
+        default=DEFAULT_HISTORY_DIR,
+        help=f'Directory for saving/loading analysis history (default: {DEFAULT_HISTORY_DIR})'
+    )
+    parser.add_argument(
+        '--no-history',
+        action='store_true',
+        help='Disable history save/load (useful for one-off runs)'
+    )
 
     args = parser.parse_args()
 
@@ -554,11 +735,39 @@ Examples:
     # Group logs
     grouped_logs = collector.get_grouped_logs()
 
+    # Load recent analysis history and wisdom for deduplication
+    history = AnalysisHistory(args.history_dir)
+    recent_history = ""
+    wisdom = ""
+    if not args.no_history:
+        recent_history = history.load_recent()
+        wisdom = history.load_wisdom()
+        if recent_history and not args.quiet:
+            print("Loaded recent analysis history for deduplication", file=sys.stderr)
+        if wisdom and not args.quiet:
+            print("Loaded known-conditions wisdom file", file=sys.stderr)
+
     # Analyze with AI
     if not args.quiet:
         print("Analyzing logs...", file=sys.stderr)
     analyzer = AIAnalyzer()
-    summary = analyzer.analyze_logs(grouped_logs, collector.stats, time_range=time_description)
+    summary = analyzer.analyze_logs(
+        grouped_logs, collector.stats,
+        time_range=time_description,
+        recent_history=recent_history,
+        wisdom=wisdom,
+    )
+
+    # Save today's analysis and any new wisdom
+    if not args.no_history:
+        history.save(summary)
+        history.cleanup()
+        if analyzer.new_wisdom:
+            history.append_wisdom(analyzer.new_wisdom)
+            if not args.quiet:
+                print(f"Added new entries to {history.wisdom_path}", file=sys.stderr)
+        if not args.quiet:
+            print(f"Saved analysis to {args.history_dir}/", file=sys.stderr)
 
     # Output summary
     print(summary)

@@ -165,6 +165,11 @@ in
     };
   };
 
+  # Create history directory for AI analysis deduplication (d = create only, never empties)
+  systemd.tmpfiles.rules = [
+    "d /var/log/logwatch-ai 0755 root root -"
+  ];
+
   # Make analyze-logs available in PATH
   environment.systemPackages = [ analyzeLogsScript ];
 }

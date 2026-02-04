@@ -54,6 +54,7 @@
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/openspeedtest.nix
+    ../../modules/users/home-manager/lastsignal.nix
 
     # Services
     ../../modules/services/alertmanager.nix

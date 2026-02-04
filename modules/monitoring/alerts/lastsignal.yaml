@@ -1,0 +1,64 @@
+groups:
+  - name: lastsignal_service
+    interval: 60s
+    rules:
+      - alert: LastSignalContainerDown
+        expr: systemd_unit_state{name="lastsignal.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: lastsignal
+        annotations:
+          summary: "LastSignal container is down"
+          description: |
+            LastSignal dead man's switch container has been down for {{ $value }} minutes.
+
+            Check service status: systemctl --user -M lastsignal@ status podman-lastsignal
+            View logs: journalctl --user -M lastsignal@ -u podman-lastsignal -f
+            Check podman: sudo -u lastsignal podman ps -a
+
+      - alert: LastSignalHTTPSProbeFailed
+        expr: probe_success{job="blackbox_https_local",instance="https://lastsignal.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: lastsignal
+        annotations:
+          summary: "LastSignal HTTPS probe failed"
+          description: |
+            LastSignal web interface at https://lastsignal.vulcan.lan is not responding.
+            The dead man's switch service may be unable to send alerts.
+
+            Check nginx: systemctl status nginx
+            Check container: sudo -u lastsignal podman ps -a
+            Check logs: sudo -u lastsignal podman logs lastsignal
+            Test health: curl -k https://lastsignal.vulcan.lan/up
+
+      - alert: LastSignalSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://lastsignal.vulcan.lan"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: lastsignal
+        annotations:
+          summary: "LastSignal is responding slowly"
+          description: |
+            LastSignal response time is {{ $value }}s (threshold: 10s).
+            This may indicate resource constraints or database issues.
+
+            Check container resources: sudo -u lastsignal podman stats lastsignal
+            Check logs: sudo -u lastsignal podman logs --tail 50 lastsignal
+
+      - alert: LastSignalContainerRestarts
+        expr: rate(systemd_unit_state{name="lastsignal.service",state="failed"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: lastsignal
+        annotations:
+          summary: "LastSignal container is restarting frequently"
+          description: |
+            LastSignal container has restarted {{ $value }} times in the last 15 minutes.
+
+            Check logs: sudo -u lastsignal podman logs --tail 100 lastsignal
+            Check events: sudo -u lastsignal podman events --filter container=lastsignal

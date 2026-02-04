@@ -195,6 +195,18 @@
         description = "Container user for Open WebUI AI chat interface";
       };
 
+      lastsignal = {
+        isSystemUser = true;
+        group = "lastsignal";
+        home = "/var/lib/containers/lastsignal";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for LastSignal dead man's switch";
+      };
+
     };
 
     # Create corresponding groups for each container user
@@ -213,6 +225,7 @@
       shlink = { };
       shlink-web-client = { };
       open-webui = { };
+      lastsignal = { };
       podman = { };
     };
   };
@@ -233,6 +246,7 @@
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
+    "lastsignal"
   ];
 
   # Grant full Nix daemon access to wheel group (admin users like johnw)
@@ -278,5 +292,7 @@
     "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
     "L+ /run/secrets-open-webui/open-webui-secrets - - - - /run/secrets/open-webui-secrets"
+    "d /run/secrets-lastsignal 0750 lastsignal lastsignal - -"
+    "L+ /run/secrets-lastsignal/lastsignal-env - - - - /run/secrets/lastsignal-env"
   ];
 }

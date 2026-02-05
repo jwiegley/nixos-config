@@ -23,7 +23,6 @@
     ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix
-    ./lastsignal-quadlet.nix
   ];
 
   # Enable container runtime support (required for rootless containers)

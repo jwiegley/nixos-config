@@ -42,17 +42,11 @@
 
         containerConfig = {
           image = "localhost/lastsignal:latest";
-          userns = "keep-id:uid=1000,gid=1000";
-          publishPorts = [ "127.0.0.1:8190:3000/tcp" ];
+          publishPorts = [ "127.0.0.1:8190:80/tcp" ];
           networks = [ "slirp4netns:allow_host_loopback=true" ];
 
           environments = {
             RAILS_ENV = "production";
-            HTTP_PORT = "3000";
-            HTTPS_PORT = "3443";
-            TARGET_PORT = "3001";
-            SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
-            SMTP_HOST = "smtp.vulcan.lan";
             APP_BASE_URL = "https://lastsignal.vulcan.lan";
             APP_HOST = "lastsignal.vulcan.lan";
             SOLID_QUEUE_IN_PUMA = "true";
@@ -63,8 +57,6 @@
 
           volumes = [
             "/var/lib/containers/lastsignal/storage:/rails/storage:Z"
-            "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro"
-            "/var/lib/containers/lastsignal/config-overrides/smtp_local_relay.rb:/rails/config/initializers/zzz_smtp_local_relay.rb:ro"
           ];
         };
 

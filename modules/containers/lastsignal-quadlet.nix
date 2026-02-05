@@ -53,6 +53,10 @@ in
       extraConfig = ''
         proxy_read_timeout 1h;
         proxy_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
       '';
     };
   };
@@ -68,7 +72,6 @@ in
   # tmpfiles rules for container data directory
   systemd.tmpfiles.rules = [
     "d /var/lib/containers/lastsignal/storage 0755 lastsignal lastsignal -"
-    "d /var/lib/containers/lastsignal/config-overrides 0755 lastsignal lastsignal -"
   ];
 
   # Automatically build the container image if it doesn't exist

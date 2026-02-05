@@ -120,7 +120,6 @@ let
     # Each user has linger enabled so their XDG_RUNTIME_DIR exists at /run/user/<uid>
     CONTAINER_USERS=(
       changedetection
-      lastsignal
       litellm
       mailarchiver
       nocobase

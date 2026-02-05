@@ -45,7 +45,6 @@ DOMAINS=(
     "wallabag.vulcan.lan"
     "zimit.vulcan.lan"
     "kiwix.vulcan.lan"
-    "lastsignal.vulcan.lan"
     "searxng.vulcan.lan"
 )
 

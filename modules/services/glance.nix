@@ -195,10 +195,6 @@ with lib;
                           title = "SearXNG";
                           url = "https://searxng.vulcan.lan";
                         }
-                        {
-                          title = "LastSignal";
-                          url = "https://lastsignal.vulcan.lan";
-                        }
                       ];
                     }
                     {

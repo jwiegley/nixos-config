@@ -7,16 +7,8 @@
 
 {
   # VictoriaMetrics time-series database
-  # Scrapes Home Assistant Prometheus endpoint for push-based metrics collection
-  # Provides high-performance alternative storage for HA metrics
-
-  # SOPS secret for Home Assistant authentication token
-  sops.secrets."prometheus/home-assistant-token" = {
-    owner = "prometheus";
-    group = "prometheus";
-    mode = "0440";
-    restartUnits = [ "victoriametrics.service" ];
-  };
+  # Receives Home Assistant metrics via InfluxDB line protocol (push-based)
+  # Provides high-performance storage for HA metrics
 
   services.victoriametrics = {
     enable = true;
@@ -29,52 +21,6 @@
 
     # Storage directory
     stateDir = "victoriametrics";
-
-    # Prometheus-compatible scrape configuration
-    prometheusConfig = {
-      global = {
-        scrape_interval = "60s";
-        scrape_timeout = "30s";
-        external_labels = {
-          monitor = "vulcan";
-          environment = "production";
-          source = "victoriametrics";
-        };
-      };
-
-      scrape_configs = [
-        {
-          job_name = "home_assistant";
-          scrape_interval = "60s";
-          scrape_timeout = "30s";
-          metrics_path = "/api/prometheus";
-          scheme = "https";
-
-          # Authentication using long-lived access token via systemd credentials
-          authorization = {
-            type = "Bearer";
-            credentials_file = "/run/credentials/victoriametrics.service/ha-token";
-          };
-
-          static_configs = [
-            {
-              targets = [ "hass.vulcan.lan:443" ];
-              labels = {
-                instance = "vulcan";
-                service = "home-assistant";
-                collector = "victoriametrics";
-              };
-            }
-          ];
-
-          # TLS configuration to trust step-ca certificates
-          tls_config = {
-            ca_file = "/etc/ssl/certs/ca-bundle.crt";
-            insecure_skip_verify = false;
-          };
-        }
-      ];
-    };
 
     # Additional VictoriaMetrics flags for optimization
     extraOptions = [
@@ -93,23 +39,11 @@
     ];
   };
 
-  # Ensure VictoriaMetrics can access the Home Assistant token
+  # VictoriaMetrics receives metrics via InfluxDB push from Home Assistant,
+  # no scrape credentials needed
   systemd.services.victoriametrics = {
-    after = [
-      "sops-install-secrets.service"
-      "home-assistant.service"
-    ];
-    wants = [
-      "sops-install-secrets.service"
-      "home-assistant.service"
-    ];
-
     serviceConfig = {
-      # Use systemd LoadCredential to make token available
-      LoadCredential = "ha-token:${config.sops.secrets."prometheus/home-assistant-token".path}";
       # OOM protection - make VictoriaMetrics less likely to be killed
-      # VictoriaMetrics doesn't have Prometheus's WAL replay memory spike,
-      # but still benefits from OOM protection for data integrity
       OOMScoreAdjust = -500;
       # Memory limits are set in memory-limits.nix (2.5G max, 2G high)
     };
@@ -182,7 +116,7 @@
     };
   };
 
-  # Token is managed via systemd LoadCredential, no tmpfiles needed
+  # Metrics are pushed from Home Assistant via InfluxDB line protocol
 
   # Nginx reverse proxy for VictoriaMetrics
   services.nginx.virtualHosts."victoriametrics.vulcan.lan" = {
@@ -284,8 +218,8 @@
       # VictoriaMetrics Configuration
 
       ## Overview
-      VictoriaMetrics is configured to scrape Home Assistant metrics from the
-      Prometheus endpoint for high-performance, push-based metrics collection.
+      VictoriaMetrics receives Home Assistant metrics via InfluxDB line protocol
+      (push-based) for high-performance metrics storage.
 
       ## Access
       - Web UI: https://victoriametrics.vulcan.lan
@@ -300,15 +234,10 @@
       - Storage Stats: http://localhost:8428/api/v1/status/tsdb
 
       ## Configuration
-      - Scrape interval: 60 seconds
-      - Retention: 12 months
+      - Metrics ingestion: InfluxDB line protocol (push from Home Assistant)
+      - Retention: infinite (100y)
       - Storage: /var/lib/victoriametrics
       - Listen address: 127.0.0.1:8428
-
-      ## Authentication
-      VictoriaMetrics uses the Home Assistant long-lived access token via systemd
-      LoadCredential. The token is securely loaded from SOPS secrets at service
-      startup and made available at: /run/credentials/victoriametrics.service/ha-token
 
       ## Useful Commands
 
@@ -360,40 +289,28 @@
       ## Troubleshooting
 
       ### Metrics not appearing
-      1. Verify SOPS secret exists:
+      1. Check Home Assistant InfluxDB integration is configured and pushing:
          ```bash
-         sudo ls -la /run/secrets/prometheus/home-assistant-token
+         sudo journalctl -u home-assistant -f | grep influx
          ```
 
-      2. Test Home Assistant endpoint (requires root to read credential):
+      2. Verify VictoriaMetrics is receiving data:
          ```bash
-         sudo systemctl show victoriametrics.service -p LoadCredential
-         # Token is securely loaded into service credentials directory
+         curl http://localhost:8428/api/v1/label/__name__/values | jq '.data | length'
          ```
 
-      3. Check VictoriaMetrics scrape targets:
-         ```bash
-         curl http://localhost:8428/api/v1/targets | jq '.data.activeTargets'
-         ```
-
-      4. View VictoriaMetrics logs:
+      3. View VictoriaMetrics logs:
          ```bash
          sudo journalctl -u victoriametrics -f
          ```
 
       ### Service fails to start
-      1. Check if SOPS secret is deployed:
+      1. Check service status:
          ```bash
-         sudo ls -la /run/secrets/prometheus/home-assistant-token
-         systemctl status sops-install-secrets.service
+         systemctl status victoriametrics
          ```
 
-      2. Verify LoadCredential is configured:
-         ```bash
-         systemctl show victoriametrics.service -p LoadCredential
-         ```
-
-      3. Rebuild configuration:
+      2. Rebuild configuration:
          ```bash
          sudo nixos-rebuild switch --flake '.#vulcan'
          ```

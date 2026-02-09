@@ -67,7 +67,7 @@
   networking.firewall = {
     enable = true;
     logRefusedConnections = true;
-    logRefusedPackets = true;
+    logRefusedPackets = false;
     logRefusedUnicastsOnly = true;
     logReversePathDrops = true;
 

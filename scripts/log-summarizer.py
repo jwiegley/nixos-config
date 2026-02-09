@@ -39,6 +39,7 @@ SERVICE_GROUPS = {
 
 # Patterns to filter out routine noise
 NOISE_PATTERNS = [
+    # Session/slice lifecycle (systemd-logind)
     r"Started Session \d+ of User",
     r"Removed slice .+\.slice",
     r"Created slice .+\.slice",
@@ -47,21 +48,52 @@ NOISE_PATTERNS = [
     r"session-\d+\.scope: Deactivated successfully",
     r"session-\d+\.scope: Consumed",
     r"New session \d+ of user",
+    r"Removed session \d+",
+    r"Session \d+ logged out",
     r"Finished Clean up.+",
     r"Started Clean up.+",
     r"daily update check",
     r"Got automount request",
     r"Mounted \/run\/user",
     r"Unmounted \/run\/user",
+    # Metrics scraping (Prometheus, Blackbox Exporter, VictoriaMetrics)
     r"prometheus.+: GET \/metrics",
     r"node_exporter.+: GET \/metrics",
     r"nginx.+: \d+\.\d+\.\d+\.\d+.+GET \/metrics",
+    r"GET \/metrics HTTP\/",
+    r"Blackbox Exporter\/",
+    # Health checks and heartbeats
     r"TICK: \d+",
     r"Health check",
     r"health_check",
+    r"health_status",
     r"heartbeat",
     r"PING",
     r"PONG",
+    # Podman container runtime noise
+    r"Started podman-\d+\.scope",
+    r"container (start|die|attach|init|create|remove|cleanup)",
+    # Firewall refused packets (handled at kernel level, not actionable per-entry)
+    r"refused packet: IN=",
+    # Redis background save (routine persistence)
+    r"\d+ changes in \d+ seconds\. Saving",
+    r"Background saving (started|terminated)",
+    r"DB saved on disk",
+    r"Fork CoW for RDB:",
+    # systemd-timesyncd routine chatter
+    r"Network configuration changed, trying to establish connection",
+    r"Contacted time server",
+    r"Timed out waiting for reply from .+:\d+",
+    # ZFS pool event history (routine)
+    r"class=history_event pool=",
+    # Exporter service start/stop cycles (run every minute)
+    r"Starting .+ Exporter",
+    r"Finished .+ Exporter",
+    r"exporter\.service: Deactivated successfully",
+    # PAM session open/close from runuser (container management)
+    r"pam_unix\(runuser:session\): session (opened|closed)",
+    # systemd-run stdio-bridge
+    r"Started \[systemd-run\] systemd-stdio-bridge",
 ]
 
 # Severity keywords
@@ -239,9 +271,18 @@ class LogCollector:
 class AIAnalyzer:
     """AI-powered log analysis using LiteLLM"""
 
+    # Models to try in order of preference
+    MODELS = [
+        "hera/gpt-oss-120b",
+        "hera/Qwen3-32B",
+    ]
+
+    MAX_RETRIES = 2
+    RETRY_DELAY = 10  # seconds
+
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions"):
         self.api_url = api_url
-        self.model = "hera/gpt-oss-120b"
+        self.model = self.MODELS[0]
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
@@ -263,20 +304,30 @@ class AIAnalyzer:
         if not log_context.strip():
             return self._generate_simple_summary(stats)
 
-        # Try AI analysis
-        try:
-            ai_response = self._call_ai_api(log_context, stats)
-            if ai_response:
-                # Split report from new wisdom entries
-                if WISDOM_DELIMITER in ai_response:
-                    parts = ai_response.split(WISDOM_DELIMITER, 1)
-                    report = parts[0].strip()
-                    self.new_wisdom = parts[1].strip()
-                else:
-                    report = ai_response
-                return report
-        except Exception as e:
-            print(f"AI analysis failed: {e}", file=sys.stderr)
+        # Try AI analysis with retries and fallback models
+        import time
+        for model in self.MODELS:
+            self.model = model
+            for attempt in range(1, self.MAX_RETRIES + 1):
+                try:
+                    ai_response = self._call_ai_api(log_context, stats)
+                    if ai_response:
+                        # Split report from new wisdom entries
+                        if WISDOM_DELIMITER in ai_response:
+                            parts = ai_response.split(WISDOM_DELIMITER, 1)
+                            report = parts[0].strip()
+                            self.new_wisdom = parts[1].strip()
+                        else:
+                            report = ai_response
+                        return report
+                except Exception as e:
+                    print(f"AI analysis failed (model={model}, attempt {attempt}/{self.MAX_RETRIES}): {e}",
+                          file=sys.stderr)
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(self.RETRY_DELAY)
+            print(f"All retries exhausted for model {model}, trying next model...", file=sys.stderr)
+
+        print("All models failed, falling back to manual summary", file=sys.stderr)
 
         # Fallback to manual summary
         return self._generate_fallback_summary(grouped_logs, stats)

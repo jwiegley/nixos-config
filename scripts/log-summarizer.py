@@ -271,18 +271,23 @@ class LogCollector:
 class AIAnalyzer:
     """AI-powered log analysis using LiteLLM"""
 
-    # Models to try in order of preference
+    # Models to try in order of preference with retry budgets.
+    # Each tuple: (model_name, max_seconds, initial_delay, max_delay)
+    #   - max_seconds: total wall-clock budget for this model
+    #   - initial_delay: seconds before first retry (doubles each attempt)
+    #   - max_delay: cap on per-retry delay
     MODELS = [
-        "hera/gpt-oss-120b",
-        "hera/Qwen3-32B",
+        # Primary: 10 min budget with exponential backoff (lets Hera wake up / warm model)
+        ("hera/gpt-oss-120b", 600, 5, 60),
+        # Secondary: 1 min budget (Hera should be awake by now)
+        ("hera/Qwen3-32B", 60, 5, 30),
+        # Cloud fallback: does not depend on llama-swap
+        ("hera/claude-opus-4-6-thinking-32000", 60, 5, 15),
     ]
-
-    MAX_RETRIES = 2
-    RETRY_DELAY = 10  # seconds
 
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions"):
         self.api_url = api_url
-        self.model = self.MODELS[0]
+        self.model = self.MODELS[0][0]
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
@@ -304,11 +309,18 @@ class AIAnalyzer:
         if not log_context.strip():
             return self._generate_simple_summary(stats)
 
-        # Try AI analysis with retries and fallback models
+        # Try AI analysis with exponential backoff per model
         import time
-        for model in self.MODELS:
-            self.model = model
-            for attempt in range(1, self.MAX_RETRIES + 1):
+        for model_name, max_seconds, initial_delay, max_delay in self.MODELS:
+            self.model = model_name
+            start_time = time.monotonic()
+            delay = initial_delay
+            attempt = 0
+
+            while True:
+                attempt += 1
+                elapsed = time.monotonic() - start_time
+
                 try:
                     ai_response = self._call_ai_api(log_context, stats)
                     if ai_response:
@@ -321,11 +333,21 @@ class AIAnalyzer:
                             report = ai_response
                         return report
                 except Exception as e:
-                    print(f"AI analysis failed (model={model}, attempt {attempt}/{self.MAX_RETRIES}): {e}",
-                          file=sys.stderr)
-                if attempt < self.MAX_RETRIES:
-                    time.sleep(self.RETRY_DELAY)
-            print(f"All retries exhausted for model {model}, trying next model...", file=sys.stderr)
+                    print(f"AI analysis failed (model={model_name}, attempt {attempt}, "
+                          f"{elapsed:.0f}s elapsed): {e}", file=sys.stderr)
+
+                # Check if we have time for another retry
+                remaining = max_seconds - (time.monotonic() - start_time)
+                if remaining <= 0:
+                    break
+
+                sleep_time = min(delay, remaining)
+                time.sleep(sleep_time)
+                delay = min(delay * 2, max_delay)  # Exponential backoff with cap
+
+            total = time.monotonic() - start_time
+            print(f"Retries exhausted for {model_name} after {total:.0f}s "
+                  f"({attempt} attempts), trying next model...", file=sys.stderr)
 
         print("All models failed, falling back to manual summary", file=sys.stderr)
 

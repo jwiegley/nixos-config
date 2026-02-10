@@ -57,6 +57,44 @@ let
     '';
   };
 
+  databaseSizesScript = pkgs.writeShellApplication {
+    name = "logwatch-database-sizes";
+    runtimeInputs = [
+      config.services.postgresql.package
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.sudo
+    ];
+    text = ''
+      echo "PostgreSQL Databases"
+      echo "--------------------"
+      sudo -u postgres psql -t -A -F '|' -c \
+        "SELECT datname, pg_database_size(datname) as raw_size,
+                pg_size_pretty(pg_database_size(datname)) as size
+         FROM pg_database
+         WHERE datistemplate = false
+         ORDER BY pg_database_size(datname) DESC;" 2>/dev/null | \
+      while IFS='|' read -r name _raw_size pretty_size; do
+        printf "  %-20s %10s\n" "$name" "$pretty_size"
+      done
+      echo ""
+      total=$(sudo -u postgres psql -t -A -c \
+        "SELECT pg_size_pretty(sum(pg_database_size(datname)))
+         FROM pg_database WHERE datistemplate = false;" 2>/dev/null)
+      printf "  %-20s %10s\n" "TOTAL" "$total"
+      echo ""
+
+      echo "Time-Series Databases"
+      echo "---------------------"
+      prom_size=$(du -sh /var/lib/prometheus2/data/ 2>/dev/null | awk '{print $1}')
+      prom_dr_size=$(du -sh /var/lib/prometheus2/disaster-recovery/ 2>/dev/null | awk '{print $1}')
+      vm_size=$(du -sh /var/lib/private/victoriametrics/ 2>/dev/null | awk '{print $1}')
+      printf "  %-20s %10s\n" "Prometheus TSDB" "''${prom_size:-N/A}"
+      printf "  %-20s %10s\n" "Prometheus DR" "''${prom_dr_size:-N/A}"
+      printf "  %-20s %10s\n" "VictoriaMetrics" "''${vm_size:-N/A}"
+    '';
+  };
+
   zpoolScript = pkgs.writeShellApplication {
     name = "logwatch-zpool";
     text = "${pkgs.zfs}/bin/zpool status";
@@ -145,6 +183,11 @@ in
           name = "certificate-validation";
           title = "Certificate Validation Report";
           script = lib.getExe certificateValidationScript;
+        }
+        {
+          name = "database-sizes";
+          title = "Database Storage Sizes";
+          script = lib.getExe databaseSizesScript;
         }
         {
           name = "zpool";

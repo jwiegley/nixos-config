@@ -49,7 +49,7 @@ in
 
       retention = mkOption {
         type = types.str;
-        default = "30d";
+        default = "100y";
         description = "How long to retain metrics data";
       };
 

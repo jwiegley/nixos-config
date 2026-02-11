@@ -62,6 +62,8 @@
         nix
         nodejs # Required for actions/checkout and other GitHub Actions
         rclone
+        rsync
+        openssh
         stdenv.cc
         which
         yuicompressor # Required for org-jw CSS/JS minification

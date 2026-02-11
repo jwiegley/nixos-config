@@ -78,4 +78,13 @@
 
   # Allow the gitea-runner user to access the Nix daemon
   nix.settings.trusted-users = [ "gitea-runner" ];
+
+  # Disable DynamicUser for the runner: pnpm/node_modules binaries need
+  # normal exec permissions that DynamicUser's private mount namespace breaks.
+  systemd.services."gitea-runner-org\\x2dbuilder" = {
+    serviceConfig.DynamicUser = lib.mkForce false;
+    serviceConfig.User = "gitea-runner";
+    serviceConfig.Group = "gitea-runner";
+    serviceConfig.StateDirectory = lib.mkForce "gitea-runner";
+  };
 }

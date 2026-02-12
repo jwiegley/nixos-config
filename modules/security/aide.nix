@@ -238,10 +238,17 @@
   # Since all system changes are applied via Nix, the rebuild itself is the
   # approval of changes. This prevents false-positive integrity alerts from
   # expected NixOS store path changes after each rebuild.
+  #
+  # We delay the update by 60s because some system changes (e.g. /usr/bin/env
+  # symlink recreation) happen after activation scripts complete. Without the
+  # delay, aide-update can finish before all changes land, causing the next
+  # aide-check to report false positives.
   system.activationScripts.aide-post-rebuild = lib.stringAfter [ "etc" ] ''
     if [ -f /var/lib/aide/aide.db ]; then
-      # Schedule AIDE database update in background so it doesn't slow activation
-      ${pkgs.systemd}/bin/systemctl start --no-block aide-update.service 2>/dev/null || true
+      ${pkgs.systemd}/bin/systemd-run --on-active=60 \
+        --timer-property=AccuracySec=1 \
+        --description="Post-rebuild AIDE database update" \
+        ${pkgs.systemd}/bin/systemctl start aide-update.service 2>/dev/null || true
     fi
   '';
 }

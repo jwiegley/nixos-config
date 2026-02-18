@@ -278,7 +278,7 @@ class AIAnalyzer:
     #   - max_delay: cap on per-retry delay
     MODELS = [
         # Primary: 10 min budget with exponential backoff (lets Hera wake up / warm model)
-        ("hera/gpt-oss-120b", 600, 5, 60),
+        ("hera/GLM-4.7-Flash", 600, 5, 60),
         # Secondary: 1 min budget (Hera should be awake by now)
         ("hera/Qwen3-32B", 60, 5, 30),
         # Cloud fallback: does not depend on llama-swap

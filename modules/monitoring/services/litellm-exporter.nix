@@ -17,7 +17,7 @@ let
       exit 1
     fi
 
-    # Test query to hera/GLM-4.7-Flash
+    # Test query to hera/Qwen3-Coder-Next
     # Retry once after 30s on failure to handle transient unavailability
     # during container restarts (e.g., after nixos-rebuild switch)
     for attempt in 1 2; do
@@ -26,7 +26,7 @@ let
         -H "x-api-key: $API_KEY" \
         -H "Content-Type: application/json" \
         -d '{
-          "model": "hera/GLM-4.7-Flash",
+          "model": "hera/Qwen3-Coder-Next",
           "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
           "max_tokens": 10,
           "temperature": 0

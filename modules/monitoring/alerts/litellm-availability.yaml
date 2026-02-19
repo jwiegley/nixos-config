@@ -8,11 +8,11 @@ groups:
         labels:
           severity: critical
           component: litellm
-          model: hera/GLM-4.7-Flash
+          model: hera/Qwen3-Coder-Next
         annotations:
-          summary: "LiteLLM model hera/GLM-4.7-Flash is unavailable"
+          summary: "LiteLLM model hera/Qwen3-Coder-Next is unavailable"
           description: |
-            LiteLLM model hera/GLM-4.7-Flash has been unavailable for {{ $value }} checks.
+            LiteLLM model hera/Qwen3-Coder-Next has been unavailable for {{ $value }} checks.
             This indicates the model is not responding to simple queries.
 
             Check LiteLLM service status: systemctl status litellm
@@ -25,11 +25,11 @@ groups:
         labels:
           severity: warning
           component: litellm
-          model: hera/GLM-4.7-Flash
+          model: hera/Qwen3-Coder-Next
         annotations:
-          summary: "LiteLLM model hera/GLM-4.7-Flash is responding slowly"
+          summary: "LiteLLM model hera/Qwen3-Coder-Next is responding slowly"
           description: |
-            LiteLLM model hera/GLM-4.7-Flash response time is {{ $value }}s (threshold: 30s).
+            LiteLLM model hera/Qwen3-Coder-Next response time is {{ $value }}s (threshold: 30s).
             This may indicate backend performance issues.
 
       - alert: LiteLLMExporterDown

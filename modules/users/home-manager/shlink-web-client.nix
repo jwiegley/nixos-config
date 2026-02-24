@@ -60,7 +60,7 @@
           # The container expects environment variables for server configuration
           # We use the internal vulcan.lan API URL since we're on the same network
           # Note: Using default pasta network instead of slirp4netns for better compatibility
-          ExecStart = "${pkgs.podman}/bin/podman run --rm --name shlink-web-client --replace -p 127.0.0.1:8581:8080 --env-file /run/secrets-shlink-web-client/shlink-web-client docker.io/shlinkio/shlink-web-client:stable";
+          ExecStart = "${pkgs.podman}/bin/podman run --rm --name shlink-web-client --replace --label PODMAN_SYSTEMD_UNIT=shlink-web-client.service -p 127.0.0.1:8581:8080 --env-file /run/secrets-shlink-web-client/shlink-web-client docker.io/shlinkio/shlink-web-client:stable";
 
           # Stop the container
           ExecStop = "${pkgs.podman}/bin/podman stop -t 10 shlink-web-client";

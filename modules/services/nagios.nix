@@ -626,6 +626,46 @@ let
       name = "redis-searxng.service";
       display = "Redis (SearXNG)";
     }
+    {
+      name = "redis-shlink.service";
+      display = "Redis (Shlink)";
+    }
+    {
+      name = "redis-openproject.service";
+      display = "Redis (OpenProject)";
+    }
+    {
+      name = "cloudflared-tunnel-data.service";
+      display = "Cloudflare Data Tunnel";
+    }
+    {
+      name = "llama-swap.service";
+      display = "LLaMA Swap Model Server";
+    }
+    {
+      name = "mosquitto.service";
+      display = "Mosquitto MQTT Broker";
+    }
+    {
+      name = "n8n-worker.service";
+      display = "n8n Worker";
+    }
+    {
+      name = "glances.service";
+      display = "Glances System Monitor";
+    }
+    {
+      name = "jupyterlab.service";
+      display = "JupyterLab";
+    }
+    {
+      name = "pgadmin.service";
+      display = "pgAdmin";
+    }
+    {
+      name = "opnsense-api-transformer.service";
+      display = "OPNsense API Transformer";
+    }
   ];
 
   # Backup Services - Restic (all depend on /tank mount)
@@ -668,6 +708,11 @@ let
     {
       name = "restic-backups-Video.service";
       display = "Restic Backup: Video";
+      mount = "/tank";
+    }
+    {
+      name = "restic-backups-Public.service";
+      display = "Restic Backup: Public";
       mount = "/tank";
     }
   ];
@@ -717,6 +762,30 @@ let
     {
       name = "zimit-job-runner.timer";
       display = "Zimit Job Runner";
+    }
+    {
+      name = "sanoid.timer";
+      display = "ZFS Snapshots (Sanoid)";
+    }
+    {
+      name = "local-backup.timer";
+      display = "Local Backup";
+    }
+    {
+      name = "github-mirror.timer";
+      display = "GitHub Mirror";
+    }
+    {
+      name = "technitium-dns-backup.timer";
+      display = "Technitium DNS Backup";
+    }
+    {
+      name = "aide-check.timer";
+      display = "AIDE Security Check";
+    }
+    {
+      name = "victoriametrics-snapshot.timer";
+      display = "VictoriaMetrics Snapshot";
     }
   ];
 
@@ -851,13 +920,26 @@ let
       display = "Open WebUI AI Chat";
       runAs = "open-webui";
     }
+    {
+      name = "changedetection";
+      display = "ChangeDetection";
+      runAs = "changedetection";
+    }
+    {
+      name = "budget-board-client";
+      display = "BudgetBoard Client";
+    }
+    {
+      name = "budget-board-server";
+      display = "BudgetBoard Server";
+    }
   ];
 
   # Container systemd services (for Quadlet-managed containers)
   containerSystemdServices = [
     {
-      name = "container@secure-nginx.service";
-      display = "Secure Nginx Container";
+      name = "container@static-nginx.service";
+      display = "Static Nginx Container";
     }
     {
       name = "technitium-dns-exporter.service";
@@ -1526,6 +1608,106 @@ let
     }
 
     ###############################################################################
+    # SERVICES - APPLICATION HTTP HEALTH CHECKS
+    ###############################################################################
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Shlink API Health
+      check_command           check_http!-p 8580 -u /rest/health -s "pass"
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Shlink Web Client HTTP
+      check_command           check_http!-p 8581 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Teable HTTP
+      check_command           check_http!-p 3004 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Nocobase HTTP
+      check_command           check_http!-p 13000 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenSpeedTest HTTP
+      check_command           check_http!-p 3002 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     BudgetBoard HTTP
+      check_command           check_http!-p 6253 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     LiteLLM HTTP
+      check_command           check_http!-p 4000 -u /health
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     MailArchiver HTTP
+      check_command           check_http!-p 9097 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenProject HTTP
+      check_command           check_http!-p 8180 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Wallabag HTTP
+      check_command           check_http!-p 9091 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     SillyTavern HTTP
+      check_command           check_http!-p 8083 -u /
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     ChangeDetection HTTP
+      check_command           check_http!-p 5055 -u /
+      service_groups          application-services
+    }
+
+    ###############################################################################
     # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
     ###############################################################################
 
@@ -1851,6 +2033,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: shlink-api.vulcan.lan
       check_command           check_ssl_cert!shlink-api.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: shlink.vulcan.lan
+      check_command           check_ssl_cert!shlink.vulcan.lan
       service_groups          ssl-certificates
     }
 

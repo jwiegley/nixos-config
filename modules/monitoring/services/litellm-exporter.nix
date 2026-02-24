@@ -17,7 +17,7 @@ let
       exit 1
     fi
 
-    # Test query to hera/Qwen3-Coder-Next
+    # Test query to hera/Qwen3.5-122B-A10B
     # Retry once after 30s on failure to handle transient unavailability
     # during container restarts (e.g., after nixos-rebuild switch)
     for attempt in 1 2; do
@@ -26,7 +26,7 @@ let
         -H "x-api-key: $API_KEY" \
         -H "Content-Type: application/json" \
         -d '{
-          "model": "hera/Qwen3-Coder-Next",
+          "model": "hera/Qwen3.5-122B-A10B",
           "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
           "max_tokens": 10,
           "temperature": 0

@@ -606,7 +606,7 @@ in
         url = "http://127.0.0.1:4000/v1/chat/completions";
         # Using MLX quantized model with Harmony filter for efficient inference
         # LiteLLM harmony_filter guardrail strips analysis channel markers
-        model = "hera/Qwen3-Coder-Next";
+        model = "hera/Qwen3.5-122B-A10B";
 
         # Enable GPT analysis for ham messages (default is false)
         # Without this, GPT is skipped for messages with negative scores
@@ -614,7 +614,7 @@ in
 
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
-          "hera/Qwen3-Coder-Next" = {
+          "hera/Qwen3.5-122B-A10B" = {
             max_completion_tokens = 500;
           }
         };

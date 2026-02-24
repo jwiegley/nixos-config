@@ -203,7 +203,16 @@ in
       };
     });
 
-  claude-code = inputs.llm-agents.packages.${system}.claude-code;
+  # Claude Code - Disable bundled ripgrep for 16K page size (Apple Silicon / Asahi Linux)
+  # The bundled ripgrep (inside the Bun SEA binary) crashes on 16K page systems due to
+  # jemalloc/mmap assumptions about 4K pages. Setting USE_BUILTIN_RIPGREP=1 forces
+  # Claude Code to use the system rg from PATH instead.
+  # Note: despite the name, '1' triggers the system-rg path; '0'/unset uses embedded.
+  claude-code = inputs.llm-agents.packages.${system}.claude-code.overrideAttrs (oldAttrs: {
+    postFixup = (oldAttrs.postFixup or "") + ''
+      sed -i '/^#!.*bash/a export USE_BUILTIN_RIPGREP=1' "$out/bin/claude"
+    '';
+  });
   claude-code-acp = inputs.llm-agents.packages.${system}.claude-code-acp;
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;

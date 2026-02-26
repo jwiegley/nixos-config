@@ -1663,7 +1663,7 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     LiteLLM HTTP
-      check_command           check_http!-p 4000 -u /health
+      check_command           check_http!-p 4000 -u /health/liveliness
       service_groups          application-services
     }
 
@@ -1679,7 +1679,7 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     OpenProject HTTP
-      check_command           check_http!-p 8180 -u /
+      check_command           check_http!-I 127.0.0.1 -p 8180 -H openproject.vulcan.lan -u /health_checks/
       service_groups          application-services
     }
 

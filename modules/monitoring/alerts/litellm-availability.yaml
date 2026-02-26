@@ -8,11 +8,11 @@ groups:
         labels:
           severity: critical
           component: litellm
-          model: hera/Qwen3.5-122B-A10B
+          model: hera/Qwen3.5-27B
         annotations:
-          summary: "LiteLLM model hera/Qwen3.5-122B-A10B is unavailable"
+          summary: "LiteLLM model hera/Qwen3.5-27B is unavailable"
           description: |
-            LiteLLM model hera/Qwen3.5-122B-A10B has been unavailable for {{ $value }} checks.
+            LiteLLM model hera/Qwen3.5-27B has been unavailable for {{ $value }} checks.
             This indicates the model is not responding to simple queries.
 
             Check LiteLLM service status: systemctl status litellm
@@ -25,11 +25,11 @@ groups:
         labels:
           severity: warning
           component: litellm
-          model: hera/Qwen3.5-122B-A10B
+          model: hera/Qwen3.5-27B
         annotations:
-          summary: "LiteLLM model hera/Qwen3.5-122B-A10B is responding slowly"
+          summary: "LiteLLM model hera/Qwen3.5-27B is responding slowly"
           description: |
-            LiteLLM model hera/Qwen3.5-122B-A10B response time is {{ $value }}s (threshold: 30s).
+            LiteLLM model hera/Qwen3.5-27B response time is {{ $value }}s (threshold: 30s).
             This may indicate backend performance issues.
 
       - alert: LiteLLMExporterDown

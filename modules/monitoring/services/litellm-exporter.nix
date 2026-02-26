@@ -8,7 +8,7 @@
 let
   # Script that tests LiteLLM availability by making a simple query
   litellmHealthCheck = pkgs.writeShellScript "litellm-health-check" ''
-    set -euo pipefail
+    set -uo pipefail
 
     # Get API key from environment (use LITELLM_MASTER_KEY if available)
     API_KEY="''${LITELLM_API_KEY:-''${LITELLM_MASTER_KEY:-}}"
@@ -17,21 +17,23 @@ let
       exit 1
     fi
 
-    # Test query to hera/Qwen3.5-122B-A10B
-    # Retry once after 30s on failure to handle transient unavailability
-    # during container restarts (e.g., after nixos-rebuild switch)
+    # Test query to hera/Qwen3.5-27B
+    # Retry once after 60s on failure to handle transient unavailability
+    # (model loading on hera can take 1-3 minutes for large models).
+    # Note: curl exit code 28 = timeout; captured via || to avoid set -e abort.
+    HTTP_CODE="000"
     for attempt in 1 2; do
       RESPONSE=$(${pkgs.curl}/bin/curl -s -w "\n%{http_code}" -X POST \
         http://127.0.0.1:4000/v1/chat/completions \
         -H "x-api-key: $API_KEY" \
         -H "Content-Type: application/json" \
         -d '{
-          "model": "hera/Qwen3.5-122B-A10B",
+          "model": "hera/Qwen3.5-27B",
           "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
           "max_tokens": 10,
           "temperature": 0
         }' \
-        --max-time 30)
+        --max-time 180) || true
 
       HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
       BODY=$(echo "$RESPONSE" | head -n-1)
@@ -39,7 +41,7 @@ let
       if [ "$HTTP_CODE" = "200" ]; then
         break
       elif [ "$attempt" -eq 1 ]; then
-        sleep 30
+        sleep 60
       fi
     done
 
@@ -116,20 +118,21 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = exporterScript;
+      TimeoutStartSec = "12min";
       # EnvironmentFile will be set below to use litellm-secrets
       User = "node-exporter";
       Group = "node-exporter";
     };
   };
 
-  # Timer to run every hour
+  # Timer to run every 20 minutes so failures recover quickly
   systemd.timers.litellm-exporter = {
     description = "LiteLLM Prometheus Exporter Timer";
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
       OnBootSec = "2min";
-      OnUnitActiveSec = "1h";
+      OnUnitActiveSec = "20min";
       Unit = "litellm-exporter.service";
     };
   };

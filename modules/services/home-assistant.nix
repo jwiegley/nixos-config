@@ -457,6 +457,9 @@ in
 
       # Metrics export
       "influxdb" # InfluxDB integration for pushing metrics to VictoriaMetrics
+
+      # AI / MCP
+      "mcp_server" # Model Context Protocol Server (exposes HA to AI assistants like Claude)
     ];
 
     # Home Assistant configuration (YAML format)

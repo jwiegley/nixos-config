@@ -36,7 +36,8 @@
       smtpd_client_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_recipient_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_relay_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
-      milter_macro_daemon_name = "ORIGINATING";
+      # Disable milter for outbound submission - only the owner sends mail from here
+      smtpd_milters = "";
     };
 
     submissionsOptions = {
@@ -46,7 +47,8 @@
       smtpd_client_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_recipient_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
       smtpd_relay_restrictions = "permit_mynetworks,permit_sasl_authenticated,reject";
-      milter_macro_daemon_name = "ORIGINATING";
+      # Disable milter for outbound submission - only the owner sends mail from here
+      smtpd_milters = "";
     };
 
     # Virtual alias maps for rewrites that MUST happen before LMTP delivery
@@ -116,10 +118,14 @@
       # Additional security
       tls_preempt_cipherlist = "yes";
 
-      # Rspamd milter integration for spam filtering
-      # Rspamd will scan messages and add X-Spam headers
+      # No reverse DNS lookups needed for LAN-only senders
+      smtpd_peername_lookup = false;
+
+      # Rspamd milter for spam filtering on incoming and locally-injected mail.
+      # Submission ports (465/587) override smtpd_milters = "" to skip this for
+      # outbound mail submitted by the owner's machines.
       smtpd_milters = [ "inet:localhost:11332" ];
-      non_smtpd_milters = [ "inet:localhost:11332" ];
+      non_smtpd_milters = [ "inet:localhost:11332" ]; # catches mbsync/sendmail delivery
       milter_protocol = "6";
       milter_mail_macros = "i {mail_addr} {client_addr} {client_name} {auth_authen}";
       milter_default_action = "accept";

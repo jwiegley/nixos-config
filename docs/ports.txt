@@ -43,6 +43,10 @@
 # Databases
 5432 0.0.0.0 :: PostgreSQL
 
+# Qdrant Vector Database
+6333 127.0.0.1 Qdrant HTTP REST API
+6334 127.0.0.1 Qdrant gRPC API
+
 # Redis Instances
 6380 127.0.0.1 Redis - ntopng
 6381 127.0.0.1 Redis - rspamd

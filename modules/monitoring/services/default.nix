@@ -37,6 +37,7 @@
     ./gitea-exporter.nix
     ./aria2-exporter.nix
     ./aria2-alerts.nix
+    ./qdrant-exporter.nix
 
     # Infrastructure monitoring
     ./certificate-exporter.nix

@@ -46,6 +46,7 @@ DOMAINS=(
     "zimit.vulcan.lan"
     "kiwix.vulcan.lan"
     "searxng.vulcan.lan"
+    "qdrant.vulcan.lan"
 )
 
 # Check if the general renewal script exists

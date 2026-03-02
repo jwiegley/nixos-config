@@ -195,6 +195,10 @@ with lib;
                           title = "SearXNG";
                           url = "https://searxng.vulcan.lan";
                         }
+                        {
+                          title = "Qdrant";
+                          url = "https://qdrant.vulcan.lan";
+                        }
                       ];
                     }
                     {

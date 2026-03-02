@@ -277,6 +277,14 @@
           -o "$DASHBOARD_DIR/immich.json" || true
       fi
 
+      # Qdrant Vector Database Dashboard (ID: 24074 from Grafana.com)
+      if [ ! -f "$DASHBOARD_DIR/qdrant.json" ]; then
+        echo "Downloading Qdrant dashboard..."
+        ${pkgs.curl}/bin/curl -sSL \
+          "https://grafana.com/api/dashboards/24074/revisions/latest/download" \
+          -o "$DASHBOARD_DIR/qdrant.json" || true
+      fi
+
       # Set proper ownership
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';

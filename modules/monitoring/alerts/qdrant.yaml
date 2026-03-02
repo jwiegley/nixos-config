@@ -1,0 +1,61 @@
+groups:
+  - name: qdrant_alerts
+    interval: 60s
+    rules:
+      # Qdrant service availability
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: vector-database
+          service: qdrant
+        annotations:
+          summary: "Qdrant vector database is unreachable"
+          description: "Qdrant metrics endpoint (localhost:6333/metrics) has been unreachable for more than 3 minutes. Vector search may be unavailable."
+
+      - alert: QdrantServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="qdrant.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: vector-database
+          service: qdrant
+        annotations:
+          summary: "Qdrant service has failed"
+          description: "Qdrant systemd service is in failed state. Check logs: journalctl -u qdrant"
+
+      # Memory usage (Qdrant loads HNSW index graphs into memory)
+      # Metric: memory_resident_bytes (jemalloc resident pages)
+      - alert: QdrantHighMemoryUsage
+        expr: |
+          memory_resident_bytes{job="qdrant"} > 4 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+          category: vector-database
+          service: qdrant
+        annotations:
+          summary: "Qdrant memory usage is high"
+          description: "Qdrant resident memory is {{ $value | humanize1024 }}B (threshold: 4 GiB). Consider enabling on-disk HNSW indexing."
+
+      # Alert when Qdrant has collections but vector count drops to zero
+      # (may indicate data loss or misconfiguration)
+      - alert: QdrantCollectionsEmptyUnexpectedly
+        expr: |
+          (collections_total{job="qdrant"} > 0)
+          and
+          (collections_vector_total{job="qdrant"} == 0)
+        for: 15m
+        labels:
+          severity: warning
+          category: vector-database
+          service: qdrant
+        annotations:
+          summary: "Qdrant has collections but no vectors"
+          description: "Qdrant has {{ $value }} collection(s) but reports 0 total vectors for >15 minutes. Possible data issue."

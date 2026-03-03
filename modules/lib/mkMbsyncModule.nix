@@ -161,6 +161,7 @@
               "/var/mail/${name}"
               "/var/lib/prometheus-node-exporter-textfiles"
               "/var/lib/dovecot" # Allow Dovecot IMAP tunnel to compile Sieve scripts
+              "/home/${user}" # Allow Dovecot IMAP tunnel to create autoexpunge lock files
             ];
             NoNewPrivileges = true;
 

@@ -6,10 +6,11 @@ groups:
       # Triggers if more than 10 errors in 10 minutes (excluding known transient issues)
       - alert: SystemdJournalHighErrorRate
         expr: |
-          sum(rate({job="systemd-journal"} |~ "level=error|ERROR|failed"
+          sum(rate({job="systemd-journal", unit!="user@948.service"} |~ "level=error|ERROR|failed"
             != "connection refused"
             != "max retries"
             != "Temporary failure in name resolution"
+            != "No Sieve errors"
             [10m])) * 600 > 10
         for: 5m
         labels:

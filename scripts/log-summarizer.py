@@ -278,11 +278,12 @@ class AIAnalyzer:
     #   - max_delay: cap on per-retry delay
     MODELS = [
         # Primary: 10 min budget with exponential backoff (lets Hera wake up / warm model)
-        ("hera/Qwen3.5-27B", 600, 5, 60),
+        # Use Instruct variant to avoid thinking-only models that return empty content
+        ("hera/Qwen3.5-27B-Instruct", 600, 5, 60),
         # Secondary: 1 min budget (Hera should be awake by now)
-        ("hera/Qwen3.5-9B", 60, 5, 30),
-        # Secondary: 1 min budget (Hera should be awake by now)
-        ("clio/Qwen3.5-9B", 60, 5, 30),
+        ("hera/Qwen3.5-35B-A3B", 60, 5, 30),
+        # Secondary: 1 min budget (clio machine)
+        ("clio/Qwen3.5-35B-A3B", 60, 5, 30),
         # Cloud fallback: does not depend on llama-swap
         ("hera/claude-sonnet-4-6-thinking-32000", 60, 5, 15),
     ]
@@ -489,7 +490,13 @@ Provide a clear, actionable summary. Omit known conditions and recurring harmles
                 result = json.loads(response.read().decode('utf-8'))
 
                 if "choices" in result and len(result["choices"]) > 0:
-                    return result["choices"][0]["message"]["content"]
+                    msg = result["choices"][0]["message"]
+                    content = msg.get("content", "")
+                    # Thinking/reasoning models return empty content with output in
+                    # reasoning_content. Fall back to reasoning_content if content is empty.
+                    if not content:
+                        content = msg.get("reasoning_content", "")
+                    return content if content else None
 
         except urllib.error.URLError as e:
             print(f"API connection error: {e}", file=sys.stderr)

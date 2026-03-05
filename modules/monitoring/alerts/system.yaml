@@ -46,19 +46,6 @@ groups:
           summary: "Critical memory pressure on {{ $labels.instance }}"
           description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
 
-      - alert: HighMajorPageFaultRate
-        # Threshold raised from 25k to 75k because vulcan uses zram swap.
-        # With zram, major page faults are fast RAM-to-RAM decompression, not slow disk I/O.
-        # The combined HighMajorPageFaultWithMemoryPressure alert catches real issues.
-        expr: increase(node_vmstat_pgmajfault[5m]) > 75000
-        for: 5m
-        labels:
-          severity: warning
-          category: system
-        annotations:
-          summary: "High major page fault rate on {{ $labels.instance }}"
-          description: "Major page faults exceed 75000 per 5 minutes ({{ $value | humanize }}). With zram swap, moderate fault rates are normal. Check if combined with memory pressure."
-
       - alert: HighMajorPageFaultWithMemoryPressure
         expr: increase(node_vmstat_pgmajfault[5m]) > 10000 and ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.75 or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.50)
         for: 5m

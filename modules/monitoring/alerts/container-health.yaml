@@ -13,12 +13,12 @@ groups:
 
       - alert: ContainerDown
         expr: container_running{name!=""} == 0
-        for: 1m
+        for: 3m
         labels:
           severity: critical
         annotations:
           summary: "Container {{ $labels.name }} is not running"
-          description: "Container {{ $labels.name }} has been stopped for 1 minute"
+          description: "Container {{ $labels.name }} has been stopped for 3 minutes"
 
       - alert: ContainerRestarting
         expr: rate(container_restart_count[5m]) > 0.1

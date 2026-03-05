@@ -281,9 +281,9 @@ class AIAnalyzer:
         # Use Instruct variant to avoid thinking-only models that return empty content
         ("hera/Qwen3.5-27B-Instruct", 600, 5, 60),
         # Secondary: 1 min budget (Hera should be awake by now)
-        ("hera/Qwen3.5-35B-A3B", 60, 5, 30),
+        ("hera/Qwen3.5-9B", 60, 5, 30),
         # Secondary: 1 min budget (clio machine)
-        ("clio/Qwen3.5-35B-A3B", 60, 5, 30),
+        ("clio/Qwen3.5-9B", 60, 5, 30),
         # Cloud fallback: does not depend on llama-swap
         ("hera/claude-sonnet-4-6-thinking-32000", 60, 5, 15),
     ]

@@ -89,7 +89,7 @@
 
       SNAPSHOT_DIR="/var/lib/prometheus2/disaster-recovery"
       TSDB_DIR="/var/lib/prometheus2/data"
-      RETENTION_DAYS=7
+      RETENTION_DAYS=2
 
       # Create snapshot via admin API
       echo "Creating TSDB snapshot..."

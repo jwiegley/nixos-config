@@ -196,6 +196,10 @@ with lib;
                           url = "https://searxng.vulcan.lan";
                         }
                         {
+                          title = "Perplexica";
+                          url = "https://perplexica.vulcan.lan";
+                        }
+                        {
                           title = "Qdrant";
                           url = "https://qdrant.vulcan.lan";
                         }

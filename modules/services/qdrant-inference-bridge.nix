@@ -5,7 +5,7 @@
 
 let
   bridgePort = 6335;
-  upstreamUrl = "http://hera.lan:8080/v1/embeddings";
+  upstreamUrl = "http://127.0.0.1:4000/v1/embeddings";
 
   bridgeScript = pkgs.writeText "qdrant-inference-bridge.py" ''
     #!/usr/bin/env python3
@@ -17,8 +17,12 @@ let
        "inference": "update", "token": "..."}
 
     This bridge translates that to OpenAI-compatible:
-      {"model": "bge-m3", "input": ["..."]}
-    and returns Qdrant's expected {"embeddings": [[...], ...]} format.
+      {"model": "hera/bge-m3", "input": ["..."]}
+    forwarded to LiteLLM with Authorization: Bearer <token>, and returns
+    Qdrant's expected {"embeddings": [[...], ...]} format.
+
+    Model names without a provider prefix (e.g. "bge-m3") are automatically
+    prefixed with "hera/" to match LiteLLM's routing convention.
     """
     import json
     import logging
@@ -38,12 +42,21 @@ let
     log = logging.getLogger(__name__)
 
 
-    def embed(model: str, texts: list) -> tuple:
-        payload = json.dumps({"model": model, "input": texts}).encode()
+    def resolve_model(model: str) -> str:
+        """Prefix bare model names with 'hera/' to match LiteLLM routing."""
+        return model if "/" in model else f"hera/{model}"
+
+
+    def embed(model: str, texts: list, token: str = None) -> tuple:
+        upstream_model = resolve_model(model)
+        payload = json.dumps({"model": upstream_model, "input": texts}).encode()
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(
             UPSTREAM_URL,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -80,6 +93,7 @@ let
                 return
 
             inputs = body.get("inputs", [])
+            token = body.get("token")
             if not inputs:
                 self.send_json(200, {"embeddings": [], "usage": None})
                 return
@@ -97,7 +111,7 @@ let
                     positions = [pos for pos, _ in group_list]
                     texts = [inp["data"] for _, inp in group_list]
 
-                    embeddings, usage = embed(model, texts)
+                    embeddings, usage = embed(model, texts, token=token)
 
                     for pos, embedding in zip(positions, embeddings):
                         result_embeddings[pos] = embedding
@@ -130,8 +144,8 @@ in
   # Qdrant Inference Bridge
   # ============================================================================
   # Translates Qdrant's native inference protocol to OpenAI-compatible
-  # embeddings API so Qdrant can use local embedding models via llama-swap.
-  # Qdrant -> bridge (127.0.0.1:6335) -> hera.lan:8080/v1/embeddings
+  # embeddings API, routing through LiteLLM like all other LLM consumers.
+  # Qdrant -> bridge (127.0.0.1:6335) -> LiteLLM (127.0.0.1:4000) -> hera
 
   systemd.services.qdrant-inference-bridge = {
     description = "Qdrant-to-OpenAI inference bridge";

@@ -27,8 +27,12 @@ let
       exit "$STATE_CRITICAL"
     }
 
-    # /healthz returns JSON {"title":"qdrant - version x.y.z"} when healthy
-    if echo "$RESPONSE" | ${pkgs.gnugrep}/bin/grep -q '"title"'; then
+    # /healthz returns plain text "healthz check passed" (Qdrant >= 1.x)
+    # Older versions returned JSON {"title":"qdrant - version x.y.z"}
+    if echo "$RESPONSE" | ${pkgs.gnugrep}/bin/grep -q 'healthz check passed'; then
+      echo "OK: Qdrant is healthy"
+      exit "$STATE_OK"
+    elif echo "$RESPONSE" | ${pkgs.gnugrep}/bin/grep -q '"title"'; then
       VERSION=$(echo "$RESPONSE" | ${pkgs.gnused}/bin/sed 's/.*"title":"\([^"]*\)".*/\1/')
       echo "OK: Qdrant is healthy ($VERSION)"
       exit "$STATE_OK"

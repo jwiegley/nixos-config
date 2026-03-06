@@ -195,6 +195,18 @@
         description = "Container user for Open WebUI AI chat interface";
       };
 
+      perplexica = {
+        isSystemUser = true;
+        group = "perplexica";
+        home = "/var/lib/containers/perplexica";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Perplexica AI search engine";
+      };
+
     };
 
     # Create corresponding groups for each container user
@@ -213,6 +225,7 @@
       shlink = { };
       shlink-web-client = { };
       open-webui = { };
+      perplexica = { };
       podman = { };
     };
   };
@@ -225,6 +238,7 @@
     "nocobase"
     "open-webui"
     "openproject"
+    "perplexica"
     "shlink"
     "shlink-web-client"
     "wallabag"
@@ -279,4 +293,6 @@
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
     "L+ /run/secrets-open-webui/open-webui-secrets - - - - /run/secrets/open-webui-secrets"
   ];
+  # Note: perplexica currently has no SOPS secrets (configured via web UI)
+  # Add secret entries here if/when API keys are managed via SOPS
 }

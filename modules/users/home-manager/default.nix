@@ -41,6 +41,7 @@
         "litellm"
         "nocobase"
         "open-webui"
+        "perplexica"
         "wallabag"
         "teable"
         "sillytavern"

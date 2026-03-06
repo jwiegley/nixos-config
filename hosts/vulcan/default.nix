@@ -54,6 +54,7 @@
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/openspeedtest.nix
+    ../../modules/users/home-manager/perplexica.nix
 
     # Services
     ../../modules/services/alertmanager.nix
@@ -118,6 +119,7 @@
     ../../modules/services/glance.nix
     ../../modules/services/glances.nix
     ../../modules/services/searxng.nix
+    ../../modules/services/perplexica.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix

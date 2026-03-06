@@ -1707,6 +1707,14 @@ let
       service_groups          application-services
     }
 
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Perplexica HTTP
+      check_command           check_http!-p 3007 -u /
+      service_groups          application-services
+    }
+
     ###############################################################################
     # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
     ###############################################################################
@@ -2049,6 +2057,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: chat.vulcan.lan
       check_command           check_ssl_cert!chat.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: perplexica.vulcan.lan
+      check_command           check_ssl_cert!perplexica.vulcan.lan
       service_groups          ssl-certificates
     }
 

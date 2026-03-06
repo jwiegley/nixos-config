@@ -96,6 +96,11 @@ in
         ];
         ban_time_on_fail = 5;
         max_ban_time_on_fail = 120;
+        # Enable JSON output format so Perplexica can use SearXNG as its search backend
+        formats = [
+          "html"
+          "json"
+        ];
       };
 
       # Outgoing request settings

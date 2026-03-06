@@ -210,7 +210,7 @@
             LAST_SYNC_TIMESTAMP=""
 
             if [ -f "$METRICS_FILE" ]; then
-              LAST_SYNC_TIMESTAMP=$(grep "mbsync_last_sync_timestamp_seconds" "$METRICS_FILE" | awk '{print $2}')
+              LAST_SYNC_TIMESTAMP=$(grep "^mbsync_last_sync_timestamp_seconds" "$METRICS_FILE" | awk '{print $2}')
             fi
 
             if [ -z "$LAST_SYNC_TIMESTAMP" ]; then

@@ -132,6 +132,7 @@
     ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
     ../../modules/services/qdrant.nix
+    ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
 
     # Containers

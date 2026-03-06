@@ -42,6 +42,10 @@
         disabled = true;
       };
       log_level = "INFO";
+      inference = {
+        address = "http://localhost:6335";
+        token = "sk-1234";
+      };
     };
   };
 

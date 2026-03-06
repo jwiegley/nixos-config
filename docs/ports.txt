@@ -46,6 +46,7 @@
 # Qdrant Vector Database
 6333 127.0.0.1 Qdrant HTTP REST API
 6334 127.0.0.1 Qdrant gRPC API
+6335 127.0.0.1 Qdrant inference bridge (Qdrant-to-OpenAI protocol translator)
 
 # Redis Instances
 6380 127.0.0.1 Redis - ntopng

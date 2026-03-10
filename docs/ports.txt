@@ -110,6 +110,10 @@
 20242 127.0.0.1 (Unknown)
 40293 127.0.0.1 (Unknown)
 
+# Matter Server
+5540 0.0.0.0 :: Matter operational messaging (UDP - CASE sessions, cluster communication)
+5580 127.0.0.1 python-matter-server WebSocket API (consumed by Home Assistant)
+
 # Home Assistant Additional Ports
 21063 192.168.3.16 Home Assistant (interface-specific)
 21065 0.0.0.0 :: Home Assistant

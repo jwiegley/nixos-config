@@ -137,6 +137,7 @@
 
     # Containers
     ../../modules/containers/default.nix
+    ../../modules/containers/matter-server-quadlet.nix
     ../../modules/containers/openproject-quadlet.nix
     ../../modules/containers/teable-quadlet.nix
     ../../modules/containers/windows11-quadlet.nix

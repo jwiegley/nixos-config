@@ -237,7 +237,7 @@ in
     mode = "0400";
   };
 
-  # Avahi service for mDNS/Bonjour discovery (required for HomeKit)
+  # Avahi service for mDNS/Bonjour discovery (required for HomeKit and Matter)
   services.avahi = {
     enable = true;
     nssmdns4 = true; # Enable NSS mDNS support for hostname resolution
@@ -460,6 +460,9 @@ in
 
       # AI / MCP
       "mcp_server" # Model Context Protocol Server (exposes HA to AI assistants like Claude)
+
+      # Matter
+      "matter" # Matter/CHIP SDK device integration (via python-matter-server)
     ];
 
     # Home Assistant configuration (YAML format)

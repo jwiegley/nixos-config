@@ -14,8 +14,9 @@ groups:
           description: "Host {{ $labels.instance }} has been unreachable for more than 2 minutes via {{ $labels.job }} probe."
 
       # High latency warning for ICMP probes
+      # TL-WPA8630 is a powerline adapter with inherently higher latency - excluded
       - alert: HighLatency
-        expr: probe_duration_seconds{job="blackbox_icmp"} > 5
+        expr: probe_duration_seconds{job="blackbox_icmp",instance!="TL-WPA8630.lan"} > 5
         for: 5m
         labels:
           severity: warning
@@ -27,7 +28,7 @@ groups:
 
       # Critical latency for ICMP probes
       - alert: CriticalLatency
-        expr: probe_duration_seconds{job="blackbox_icmp"} > 10
+        expr: probe_duration_seconds{job="blackbox_icmp",instance!="TL-WPA8630.lan"} > 10
         for: 2m
         labels:
           severity: critical

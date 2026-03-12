@@ -1,0 +1,22 @@
+--- a/src/opower/utilities/smud.py
++++ b/src/opower/utilities/smud.py
+@@ -196,9 +196,17 @@
+
+         await self.log_response(energyusage_response, session)
+
+-        okta_login_2_url = self.get_okta_url_from_response_redirect(energyusage_response)
++        # SMUD changed their Okta SSO redirect flow in 2025/2026.
++        # The energy usage page may no longer redirect through
++        # sessionCookieRedirect?redirectUrl=... and instead the redirect chain
++        # sets opower cookies directly. Check for that before trying the
++        # legacy Okta redirect extraction.
++        if len(session.cookie_jar.filter_cookies(URL("https://smud.opower.com/ei"))) > 0:
++            _LOGGER.debug("SMUD: opower session established via energy usage page redirects")
++            return
+
+-        _LOGGER.debug("Fetching second OKTA login page: %s", okta_login_2_url)
++        okta_login_2_url = self.get_okta_url_from_response_redirect(energyusage_response)
++        _LOGGER.debug("Fetching second OKTA login page (legacy flow): %s", okta_login_2_url)
+
+         smud_okta_response = await session.get(
+             okta_login_2_url,

@@ -36,32 +36,61 @@ in
     in
     let
       # d2l (Dive into Deep Learning) - not in nixpkgs, build from PyPI
-      d2l = unstable.python3Packages.buildPythonPackage rec {
-        pname = "d2l";
-        version = "1.0.3";
-        format = "wheel";
+      d2l =
+        let
+          # The pythonRuntimeDepsCheckHook reads $src (the wheel zip) directly
+          # and checks pinned Requires-Dist entries. d2l-1.0.3 has very old pins
+          # (numpy==1.23.5, matplotlib==3.7.2, etc.) that fail against current
+          # nixpkgs. Create a patched wheel with relaxed pins so the check passes.
+          originalWheel = unstable.fetchurl {
+            url = "https://files.pythonhosted.org/packages/8b/39/418ef003ed7ec0f2a071e24ec3f58c7b1f179ef44bec5224dcca276876e3/d2l-1.0.3-py3-none-any.whl";
+            hash = "sha256-xiWgHmbrXXk6fgpvhYKx4eNd+tArXnfz0qspnQcXe6Y=";
+          };
+          patchedWheel =
+            unstable.runCommand "d2l-1.0.3-py3-none-any.whl"
+              {
+                nativeBuildInputs = [
+                  unstable.unzip
+                  unstable.zip
+                ];
+              }
+              ''
+                unzip -q ${originalWheel} -d wheel-contents
+                sed -i -E \
+                  -e 's/^(Requires-Dist: numpy).*/\1/' \
+                  -e 's/^(Requires-Dist: matplotlib).*/\1/' \
+                  -e 's/^(Requires-Dist: requests).*/\1/' \
+                  -e 's/^(Requires-Dist: pandas).*/\1/' \
+                  -e '/^Requires-Dist: jupyter/d' \
+                  -e '/^Requires-Dist: matplotlib-inline/d' \
+                  -e '/^Requires-Dist: scipy/d' \
+                  wheel-contents/d2l-1.0.3.dist-info/METADATA
+                cd wheel-contents
+                zip -qr $out .
+              '';
+        in
+        unstable.python3Packages.buildPythonPackage rec {
+          pname = "d2l";
+          version = "1.0.3";
+          format = "wheel";
 
-        src = unstable.fetchurl {
-          url = "https://files.pythonhosted.org/packages/8b/39/418ef003ed7ec0f2a071e24ec3f58c7b1f179ef44bec5224dcca276876e3/d2l-1.0.3-py3-none-any.whl";
-          hash = "sha256-xiWgHmbrXXk6fgpvhYKx4eNd+tArXnfz0qspnQcXe6Y=";
+          src = patchedWheel;
+
+          dependencies = with unstable.python3Packages; [
+            numpy
+            matplotlib
+            requests
+            pandas
+          ];
+
+          doCheck = false;
+
+          meta = {
+            description = "Dive into Deep Learning - interactive book companion library";
+            homepage = "https://d2l.ai";
+            license = unstable.lib.licenses.mit;
+          };
         };
-
-        dependencies = with unstable.python3Packages; [
-          numpy
-          matplotlib
-          requests
-          pandas
-        ];
-
-        # Skip tests - package doesn't include test suite
-        doCheck = false;
-
-        meta = {
-          description = "Dive into Deep Learning - interactive book companion library";
-          homepage = "https://d2l.ai";
-          license = unstable.lib.licenses.mit;
-        };
-      };
     in
     unstable.python3.withPackages (ps: [
       ps.jupyterlab
@@ -116,6 +145,16 @@ in
           rev = version;
           hash = "sha256-yElmh+ajNVbjhsnNsUtQ3mJw9fvJtXqgS58iow+Nwi8=";
         };
+      });
+
+      # Opower SMUD login fix: SMUD changed their Okta SSO redirect flow.
+      # The energy usage page no longer provides redirectUrl in query params.
+      # Check for opower cookies after redirect chain before trying legacy flow.
+      # See: https://github.com/tronikos/opower/issues/97
+      opower = pyprev.opower.overridePythonAttrs (oldAttrs: {
+        patches = (oldAttrs.patches or [ ]) ++ [
+          ./opower-smud-fix.patch
+        ];
       });
     })
   ];

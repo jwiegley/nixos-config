@@ -1,22 +1,108 @@
---- a/src/opower/utilities/smud.py
-+++ b/src/opower/utilities/smud.py
-@@ -196,9 +196,17 @@
-
+diff --git i/src/opower/utilities/smud.py w/src/opower/utilities/smud.py
+index 07536ed..e077a4a 100644
+--- i/src/opower/utilities/smud.py
++++ w/src/opower/utilities/smud.py
+@@ -21,6 +21,7 @@
+ # `python src/demo.py --utility smud --username mysmudloginemail@example.com --password "mypassword" -v`
+ 
+ import logging
++import re
+ from html.parser import HTMLParser
+ from typing import Any
+ from urllib.parse import parse_qs
+@@ -86,6 +87,28 @@ class SMUDLoginParser(HTMLParser):
+             self.relay_state = token
+ 
+ 
++class SMUDAccountSelectionParser(HTMLParser):
++    """HTML parser to extract account numbers from the SMUD account selection page."""
++
++    def __init__(self) -> None:
++        """Initialize."""
++        super().__init__()
++        self.account_numbers: list[str] = []
++        self.verification_token: str | None = None
++
++    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
++        """Extract account numbers and verification token."""
++        attrs_dict = dict(attrs)
++        if tag == "div" and "data-account-number" in attrs_dict:
++            acct = attrs_dict["data-account-number"]
++            if acct and acct not in self.account_numbers:
++                self.account_numbers.append(acct)
++        if tag == "input" and ("name", "__RequestVerificationToken") in attrs:
++            _, token = next(filter(lambda attr: attr[0] == "value", attrs))
++            if token is not None:
++                self.verification_token = token
++
++
+ class SMUDOktaResponseSamlResponseValueParser(HTMLParser):
+     """HTML parser to extract SAMLResponse token from OKTA response for Opower SSO."""
+ 
+@@ -183,6 +206,41 @@ class SMUD(UtilityBase):
+         if "could not be authenticated" in login_response_body:
+             raise opower.InvalidAuth
+ 
++        # Handle account selection for multi-property accounts.
++        # After login, SMUD may redirect to /signin/accountselection if the user
++        # has multiple properties. We need to select the first account to proceed.
++        if "accountselection" in str(login_response.url).lower():
++            _LOGGER.debug("SMUD account selection page detected, selecting first account")
++            acct_parser = SMUDAccountSelectionParser()
++            acct_parser.feed(login_response_body)
++
++            if not acct_parser.account_numbers:
++                raise Exception("SMUD account selection page found but no accounts listed")
++
++            selected_account = acct_parser.account_numbers[0]
++            _LOGGER.debug(
++                "SMUD: found %d accounts, selecting first: %s",
++                len(acct_parser.account_numbers),
++                selected_account,
++            )
++
++            account_selection_response = await session.post(
++                "https://myaccount.smud.org/signin/accountselection?Length=0",
++                data={
++                    "__RequestVerificationToken": acct_parser.verification_token,
++                    "SelectedAccountNumber": selected_account,
++                    "SelectedAccountType": "Residential",
++                },
++                headers={"User-Agent": USER_AGENT},
++                raise_for_status=True,
++            )
++            await self.log_response(account_selection_response, session)
++            _LOGGER.debug(
++                "SMUD account selection result: status=%s, url=%s",
++                account_selection_response.status,
++                account_selection_response.url,
++            )
++
+         smud_energyusage_page_url = "https://myaccount.smud.org/manage/opowerresidential/energyusage"
+ 
+         _LOGGER.debug("Opening SMUD energy usage page: %s", smud_energyusage_page_url)
+@@ -196,9 +254,21 @@ class SMUD(UtilityBase):
+ 
          await self.log_response(energyusage_response, session)
-
+ 
 -        okta_login_2_url = self.get_okta_url_from_response_redirect(energyusage_response)
+-
+-        _LOGGER.debug("Fetching second OKTA login page: %s", okta_login_2_url)
 +        # SMUD changed their Okta SSO redirect flow in 2025/2026.
-+        # The energy usage page may no longer redirect through
-+        # sessionCookieRedirect?redirectUrl=... and instead the redirect chain
-+        # sets opower cookies directly. Check for that before trying the
-+        # legacy Okta redirect extraction.
++        # Check if opower cookies are already set after the redirect chain.
 +        if len(session.cookie_jar.filter_cookies(URL("https://smud.opower.com/ei"))) > 0:
 +            _LOGGER.debug("SMUD: opower session established via energy usage page redirects")
 +            return
-
--        _LOGGER.debug("Fetching second OKTA login page: %s", okta_login_2_url)
-+        okta_login_2_url = self.get_okta_url_from_response_redirect(energyusage_response)
++
++        # Try the legacy Okta redirect extraction, with fallback
++        try:
++            okta_login_2_url = self.get_okta_url_from_response_redirect(energyusage_response)
++        except (KeyError, IndexError) as exc:
++            _LOGGER.warning("SMUD: legacy redirectUrl extraction failed: %s", exc)
++            _LOGGER.warning("SMUD: attempting direct opower access without Okta redirect")
++            return
++
 +        _LOGGER.debug("Fetching second OKTA login page (legacy flow): %s", okta_login_2_url)
-
+ 
          smud_okta_response = await session.get(
              okta_login_2_url,

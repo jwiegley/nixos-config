@@ -489,6 +489,9 @@ in
 
       for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/global/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
         if [ -f "$script" ] || [ -L "$script" ]; then
+          # Skip process-good.sieve: uses "include :personal" which requires user
+          # context unavailable at compile time (compiled at runtime by Dovecot)
+          case "$script" in */process-good.sieve) echo "  Skipping: $script (requires user context)"; continue ;; esac
           binary="''${script%.sieve}.svbin"
           echo "  Compiling: $script -> $binary"
           # Use explicit output path because source is a symlink to read-only Nix store
@@ -568,6 +571,9 @@ in
     # Recompile all Sieve scripts
     for script in /var/lib/dovecot/sieve/global/*.sieve /var/lib/dovecot/sieve/global/rspamd/*.sieve /var/lib/dovecot/sieve/*.sieve; do
       if [ -f "$script" ] || [ -L "$script" ]; then
+        # Skip process-good.sieve: uses "include :personal" which requires user
+        # context unavailable during preStart (compiled at runtime by Dovecot)
+        case "$script" in */process-good.sieve) continue ;; esac
         binary="''${script%.sieve}.svbin"
         # Suppress stats socket errors (dovecot not running yet during preStart)
         ${pkgs.dovecot_pigeonhole}/bin/sievec "$script" "$binary" 2>&1 | \

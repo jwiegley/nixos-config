@@ -116,6 +116,9 @@ in
 
       # Task runners configuration
       N8N_RUNNERS_ENABLED = "true"; # Enabled with nodejs in PATH for Code node execution
+      # Disable Python runner - nixpkgs enables it for CVE-2026-0863 but the nix
+      # package doesn't include the required Python venv. JS runner covers the main risk.
+      N8N_NATIVE_PYTHON_RUNNER = lib.mkForce "false";
 
       # Security settings
       N8N_BLOCK_ENV_ACCESS_IN_NODE = "false"; # Allow env var access from Code Node

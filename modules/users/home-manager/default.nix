@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 
@@ -15,6 +16,13 @@
 
     # Backup existing files when they conflict with home-manager files
     backupFileExtension = "hm-bak";
+
+    # Pass hostname and inputs to home-manager modules so they can be used
+    # by the shared johnw.nix cross-platform module
+    extraSpecialArgs = {
+      hostname = config.networking.hostName;
+      inherit inputs;
+    };
   };
 
   # Fix Home Manager services to wait for nix-daemon

@@ -52,6 +52,18 @@
       url = "github:jwiegley/org-jw";
     };
 
+    git-ai = {
+      url = "github:jwiegley/git-ai";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Shared home-manager configuration from the Darwin nix-config repo.
+    # Imported as non-flake to avoid evaluating Darwin's local git+file inputs.
+    nix-config = {
+      url = "git+ssh://gitea/johnw/nix-config";
+      flake = false;
+    };
+
     # nixpkgs unstable for packages that need newer versions
     # Used for: JupyterLab (4.5.0+), Immich 2.4.1 (CR3 fix), and other packages needing unstable
     nixpkgs-unstable = {

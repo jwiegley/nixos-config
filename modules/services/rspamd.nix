@@ -615,7 +615,7 @@ in
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
           "hera/Qwen3.5-27B-Instruct" = {
-            max_completion_tokens = 500;
+            max_completion_tokens = 8192;
           }
         };
 
@@ -624,7 +624,10 @@ in
         timeout = 30s;
 
         # Spam classification prompt - must return JSON with probability and reason fields
-        prompt = "Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";
+        # /no_think disables Qwen3.5 thinking/reasoning mode to prevent token budget exhaustion
+        # Without it, the model generates hundreds of thinking tokens before JSON output,
+        # causing max_completion_tokens to be hit mid-response, producing truncated JSON.
+        prompt = "/no_think Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";
 
         # Enable JSON mode - this selects the JSON conversion function
         json = true;

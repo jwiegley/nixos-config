@@ -33,6 +33,21 @@
       # This allows the QEMU wrapper (wrapQemuBinfmtP) to work correctly in
       # containers
     };
+
+    # nixpkgs common kernel config includes NOVA_CORE (added in 25.11 cycle)
+    # but the pinned asahi kernel 6.17.12 doesn't have this Kconfig option.
+    # Mark it optional so the kernel build doesn't fail with "unused option".
+    # Remove this patch once nixos-apple-silicon is updated to a kernel that
+    # includes NOVA_CORE, or once nixpkgs marks it optional upstream.
+    kernelPatches = [
+      {
+        name = "nova-core-compat";
+        patch = null;
+        structuredExtraConfig = with lib.kernel; {
+          NOVA_CORE = lib.mkForce (option no);
+        };
+      }
+    ];
   };
 
   # --------------------------------------------------------------------------

@@ -577,6 +577,7 @@
         # claude-code-acp
         ccusage
         droid
+        opencode
         vips # needed by fetch mcp server
 
         # Shell enhancements

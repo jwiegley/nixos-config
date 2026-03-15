@@ -8,11 +8,11 @@ groups:
         labels:
           severity: critical
           component: litellm
-          model: hera/Qwen3.5-27B-Instruct
+          model: hera/gpt-oss-120b
         annotations:
-          summary: "LiteLLM model hera/Qwen3.5-27B-Instruct is unavailable"
+          summary: "LiteLLM model hera/gpt-oss-120b is unavailable"
           description: |
-            LiteLLM model hera/Qwen3.5-27B-Instruct has been unavailable for {{ $value }} checks.
+            LiteLLM model hera/gpt-oss-120b has been unavailable for {{ $value }} checks.
             This indicates the model is not responding to simple queries.
 
             Check LiteLLM service status: systemctl status litellm
@@ -25,11 +25,11 @@ groups:
         labels:
           severity: warning
           component: litellm
-          model: hera/Qwen3.5-27B-Instruct
+          model: hera/gpt-oss-120b
         annotations:
-          summary: "LiteLLM model hera/Qwen3.5-27B-Instruct is responding slowly"
+          summary: "LiteLLM model hera/gpt-oss-120b is responding slowly"
           description: |
-            LiteLLM model hera/Qwen3.5-27B-Instruct response time is {{ $value }}s (threshold: 30s).
+            LiteLLM model hera/gpt-oss-120b response time is {{ $value }}s (threshold: 30s).
             This may indicate backend performance issues.
 
       - alert: LiteLLMExporterDown

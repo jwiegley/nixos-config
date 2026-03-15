@@ -279,7 +279,7 @@ class AIAnalyzer:
     MODELS = [
         # Primary: 10 min budget with exponential backoff (lets Hera wake up / warm model)
         # Use Instruct variant to avoid thinking-only models that return empty content
-        ("hera/Qwen3.5-27B-Instruct", 600, 5, 60),
+        ("hera/gpt-oss-120b", 600, 5, 60),
         # Secondary: 1 min budget (Hera should be awake by now)
         ("hera/Qwen3.5-9B", 60, 5, 30),
         # Secondary: 1 min budget (clio machine)

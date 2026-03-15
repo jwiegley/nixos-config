@@ -12,7 +12,6 @@
     ./changedetection-quadlet.nix
     ./litellm-quadlet.nix
     ./mailarchiver-quadlet.nix
-    ./nocobase-quadlet.nix
     ./open-webui-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
     ./opnsense-api-transformer.nix
@@ -86,7 +85,6 @@
     # 6253: budgetboard-client
     # 8085: Redis
     # 9182: mssql-exporter
-    # 13000: nocobase
     allowedTCPPorts = [
       1433
       3001
@@ -96,7 +94,6 @@
       6253
       8085
       9182
-      13000
     ];
     allowedUDPPorts = [ 53 ];
   };

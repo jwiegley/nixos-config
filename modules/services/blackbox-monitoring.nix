@@ -491,8 +491,6 @@ in
                   "https://postgres.vulcan.lan"
                   "https://hass.vulcan.lan"
                   "https://nodered.vulcan.lan"
-                  "https://nocobase.vulcan.lan"
-                  "https://ntopng.vulcan.lan"
                   "https://wallabag.vulcan.lan"
                   "https://jellyfin.vulcan.lan"
                   "https://silly-tavern.vulcan.lan"

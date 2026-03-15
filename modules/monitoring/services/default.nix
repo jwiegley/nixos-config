@@ -22,7 +22,6 @@
     ./prometheus-nginx.nix
     ./nginx-exporter.nix
     ./redis-exporter.nix
-    ./windows-exporter.nix
     ./git-workspace-exporter.nix
 
     # Application-specific exporters
@@ -30,8 +29,6 @@
     ./immich-exporter.nix
     ./litellm-exporter.nix
     ./node-red-exporter.nix
-    ./n8n-exporter.nix
-    ./n8n-alerts.nix
     ./jupyterlab-alerts.nix
     ./vdirsyncer-exporter.nix
     ./gitea-exporter.nix

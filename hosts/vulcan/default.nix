@@ -43,7 +43,6 @@
     ../../modules/users/home-manager/litellm.nix
     ../../modules/users/home-manager/changedetection.nix
     ../../modules/users/home-manager/mailarchiver.nix
-    ../../modules/users/home-manager/nocobase.nix
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
     ../../modules/users/home-manager/shlink.nix
@@ -82,12 +81,9 @@
     ../../modules/services/media.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/mosquitto.nix
-    ../../modules/services/n8n.nix
     ../../modules/services/nagios.nix
     ../../modules/services/network-services.nix
-    ../../modules/services/nginx-n8n-webhook.nix
     ../../modules/services/node-red.nix
-    ../../modules/services/ntopng.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/postfix.nix
     ../../modules/services/postgresql-backup.nix
@@ -140,7 +136,6 @@
     ../../modules/containers/matter-server-quadlet.nix
     ../../modules/containers/openproject-quadlet.nix
     ../../modules/containers/teable-quadlet.nix
-    ../../modules/containers/windows11-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

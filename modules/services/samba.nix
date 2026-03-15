@@ -259,16 +259,6 @@ in
           "log level" = "1";
         };
 
-        # Windows 11 Container Shared Folder
-        windows-shared = {
-          path = "/var/lib/windows/shared";
-          comment = "Windows 11 Container Shared Files";
-          "valid users" = "johnw";
-          "read only" = "no";
-          browseable = "yes";
-          "create mask" = "0644";
-          "directory mask" = "0755";
-        };
       }
       // zfsShares;
     };

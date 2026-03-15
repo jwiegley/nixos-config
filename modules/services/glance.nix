@@ -156,10 +156,6 @@ with lib;
                           url = "https://nodered.vulcan.lan";
                         }
                         {
-                          title = "n8n";
-                          url = "https://n8n.vulcan.lan";
-                        }
-                        {
                           title = "LiteLLM Proxy";
                           url = "https://litellm.vulcan.lan/ui";
                         }
@@ -174,10 +170,6 @@ with lib;
                         {
                           title = "ATD Scheduler";
                           url = "https://atd.vulcan.lan";
-                        }
-                        {
-                          title = "Windows 11";
-                          url = "https://windows.vulcan.lan";
                         }
                         {
                           title = "Zimit";
@@ -284,10 +276,6 @@ with lib;
                           url = "https://rspamd.vulcan.lan";
                         }
                         {
-                          title = "ntopng";
-                          url = "https://ntopng.vulcan.lan";
-                        }
-                        {
                           title = "OpenSpeedTest";
                           url = "https://speedtest.vulcan.lan";
                         }
@@ -308,10 +296,6 @@ with lib;
                         {
                           title = "Teable";
                           url = "https://teable.vulcan.lan";
-                        }
-                        {
-                          title = "NocoBase";
-                          url = "https://nocobase.vulcan.lan";
                         }
                         {
                           title = "BudgetBoard";

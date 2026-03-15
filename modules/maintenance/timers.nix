@@ -122,7 +122,6 @@ let
       changedetection
       litellm
       mailarchiver
-      nocobase
       open-webui
       openproject
       openspeedtest

@@ -10,7 +10,7 @@ final: prev: {
   # reload-notify"
 
   #
-  # Issue: redis-n8n service (Type=notify) enters reload-notify during reloads
+  # Issue: Type=notify services enter reload-notify during reloads
   # Solution: Add 'reload-notify' to the SubState type definition
   #
   # Reference: https://github.com/Josef-Friedrich/check_systemd/issues

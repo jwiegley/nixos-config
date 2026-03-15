@@ -33,18 +33,6 @@
         description = "Container user for LiteLLM proxy service";
       };
 
-      nocobase = {
-        isSystemUser = true;
-        group = "nocobase";
-        home = "/var/lib/containers/nocobase";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for NocoDB database service";
-      };
-
       wallabag = {
         isSystemUser = true;
         group = "wallabag";
@@ -212,7 +200,6 @@
     # Create corresponding groups for each container user
     groups = {
       litellm = { };
-      nocobase = { };
       wallabag = { };
       teable = { };
       sillytavern = { };
@@ -235,7 +222,6 @@
     "changedetection"
     "litellm"
     "mailarchiver"
-    "nocobase"
     "open-webui"
     "openproject"
     "perplexica"
@@ -270,8 +256,6 @@
     "L+ /run/secrets-litellm/litellm - - - - /run/secrets/litellm"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
     "L+ /run/secrets-mailarchiver/mailarchiver - - - - /run/secrets/mailarchiver"
-    "d /run/secrets-nocobase 0750 nocobase nocobase - -"
-    "L+ /run/secrets-nocobase/nocobase - - - - /run/secrets/nocobase"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
     "L+ /run/secrets-wallabag/wallabag - - - - /run/secrets/wallabag"
     "d /run/secrets-teable 0750 teable teable - -"

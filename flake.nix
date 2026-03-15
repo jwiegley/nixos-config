@@ -53,14 +53,24 @@
     };
 
     git-ai = {
-      url = "github:jwiegley/git-ai";
+      url = "github:git-ai-project/git-ai";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    promptdeploy = {
+      url = "git+ssh://gitea/johnw/promptdeploy";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    git-scripts = {
+      url = "git+ssh://gitea/johnw/git-scripts";
+      flake = false;
     };
 
     # Shared home-manager configuration from the Darwin nix-config repo.
     # Imported as non-flake to avoid evaluating Darwin's local git+file inputs.
     nix-config = {
-      url = "git+ssh://gitea/johnw/nix-config";
+      url = "git+ssh://gitea/johnw/nix-config?ref=main";
       flake = false;
     };
 

@@ -22,6 +22,24 @@ in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
+  # John Wiegley's git helper scripts (provides git-merge-changelog, etc.)
+  git-scripts =
+    with prev;
+    stdenv.mkDerivation {
+      name = "git-scripts";
+      src = inputs.git-scripts;
+      installPhase = ''
+        mkdir -p $out/bin
+        find . -maxdepth 1 \( -type f -o -type l \) -executable \
+            -exec cp -pL {} $out/bin \;
+      '';
+      meta = with lib; {
+        description = "John Wiegley's git scripts";
+        license = licenses.mit;
+        platforms = platforms.unix;
+      };
+    };
+
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
 

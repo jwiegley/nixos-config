@@ -21,7 +21,7 @@
   # - Services gradually migrated to use user-specific paths
   #
   # Container user assignments:
-  # - container-db: Database-dependent services (litellm, wallabag, teable, nocobase)
+  # - container-db: Database-dependent services (litellm, wallabag, teable)
   # - container-web: Web services (changedetection, openspeedtest, silly-tavern)
   # - container-monitor: Monitoring (opnsense-exporter, technitium-dns-exporter)
   # - container-misc: Miscellaneous services (budgetboard)
@@ -58,23 +58,6 @@
         group = "container-db";
         mode = "0400";
         path = "/run/secrets-container-db/teable-env";
-      };
-
-      # Nocobase secrets
-      "nocobase-db-password-container-db" = {
-        key = "nocobase-db-password";
-        owner = "container-db";
-        group = "container-db";
-        mode = "0400";
-        path = "/run/secrets-container-db/nocobase-db-password";
-      };
-
-      "nocobase-secrets-container-db" = {
-        key = "nocobase-secrets";
-        owner = "container-db";
-        group = "container-db";
-        mode = "0400";
-        path = "/run/secrets-container-db/nocobase-secrets";
       };
 
       # === container-monitor secrets (monitoring services) ===

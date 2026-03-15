@@ -50,7 +50,6 @@ let
         # === LARGE ARCHIVE/BACKUP DATA (30GB+) ===
         # Already backed up or archived elsewhere
         "lib/git-workspace-archive/" # 23GB - Git archives
-        "lib/windows/" # 9.5GB - VM images
         "lib/postgresql-backup/" # 7.5GB - Already backed up dumps
         "lib/technitium-dns-backup/" # 1.2GB - DNS backups
 
@@ -64,7 +63,6 @@ let
         # Constantly changing, causes I/O storms
         "lib/loki/" # 9.7GB - Log chunks
         "lib/prometheus2/" # 5.7GB - Time-series data
-        "lib/ntopng/" # 1.7GB - 517 files/hour!
         "lib/victoria-metrics/" # Time-series data
         "lib/private/victoriametrics/" # 122 files/hour
         "lib/grafana/dashboards/" # Temporary dashboard data

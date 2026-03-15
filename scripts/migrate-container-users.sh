@@ -49,7 +49,6 @@ fi
 # Migration mappings: service_name:old_user:new_user
 declare -A migrations=(
     ["litellm"]="container-db:litellm"
-    ["nocobase"]="container-db:nocobase"
     ["wallabag"]="container-db:wallabag"
     ["teable"]="container-db:teable"
     ["silly-tavern"]="container-web:sillytavern"

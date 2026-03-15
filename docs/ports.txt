@@ -5,8 +5,6 @@
 # SSH & Remote Access
 22 0.0.0.0 :: SSH
 2222 * :: Gitea SSH
-3389 0.0.0.0 :: Windows 11 RDP (nginx stream proxy)
-13389 127.0.0.1 Windows 11 RDP internal (container port, proxied by nginx)
 
 # DNS Services
 53 0.0.0.0 :: Technitium DNS
@@ -49,9 +47,7 @@
 6335 127.0.0.1 Qdrant inference bridge (Qdrant-to-OpenAI protocol translator)
 
 # Redis Instances
-6380 127.0.0.1 Redis - ntopng
 6381 127.0.0.1 Redis - rspamd
-6382 127.0.0.1 Redis - n8n
 6383 127.0.0.1 Redis - OpenProject
 6385 127.0.0.1 Redis - Shlink
 6386 127.0.0.1 Redis - SearXNG
@@ -73,15 +69,12 @@
 5060 127.0.0.1 Zimit Web UI (archive job management)
 5061 127.0.0.1 Kiwix-serve (ZIM file browser)
 5232 127.0.0.1 ::1 Radicale CalDAV/CardDAV
-5678 * :: n8n main web interface
-5677 * :: n8n worker health check
 5679 127.0.0.1 (Unknown)
 6253 127.0.0.1 (Unknown)
 6800 127.0.0.1 ::1 (Unknown)
 8080 127.0.0.1 llama-swap (user johnw)
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
 8180 127.0.0.1 OpenProject web interface
-8081 0.0.0.0 :: ntopng
 8082 127.0.0.1 (Unknown)
 8083 127.0.0.1 Silly Tavern container
 8085 127.0.0.1 LiteLLM proxy
@@ -102,7 +95,6 @@
 9099 127.0.0.1 Cockpit
 11332 127.0.0.1 ::1 rspamd
 11334 127.0.0.1 ::1 rspamd
-13000 127.0.0.1 10.88.0.1 Nocobase
 13923 127.0.0.1 Copyparty container
 18080 127.0.0.1 Static nginx container
 18873 127.0.0.1 rsync Cloudflare tunnel backend

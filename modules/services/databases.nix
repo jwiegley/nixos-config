@@ -28,12 +28,6 @@ in
       dependentService = "podman-budget-board-server.service";
     })
     (mkPostgresUserSetup {
-      user = "nocobase";
-      database = "nocobase";
-      secretPath = config.sops.secrets."nocobase-db-password".path;
-      dependentService = "podman-nocobase.service";
-    })
-    (mkPostgresUserSetup {
       user = "rspamd";
       database = "rspamd";
       secretPath = config.sops.secrets."rspamd-db-password".path;
@@ -115,7 +109,6 @@ in
         "wallabag"
         "teable"
         "budgetboard"
-        "nocobase"
         "gitea"
         "mailarchiver"
         "openproject"
@@ -132,10 +125,6 @@ in
         }
         {
           name = "budgetboard";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "nocobase";
           ensureDBOwnership = true;
         }
         {

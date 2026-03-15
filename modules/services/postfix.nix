@@ -21,7 +21,6 @@
     extraAliases = ''
       root: johnw
       postmaster: johnw
-      ntopng: johnw
       gitea: johnw
     '';
 

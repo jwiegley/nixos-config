@@ -47,7 +47,6 @@
       [
         "changedetection"
         "litellm"
-        "nocobase"
         "open-webui"
         "perplexica"
         "wallabag"

@@ -563,10 +563,6 @@ let
       display = "Cockpit Web Console";
     }
     {
-      name = "ntopng.service";
-      display = "ntopng Network Monitor";
-    }
-    {
       name = "copyparty.service";
       display = "Copyparty File Server";
     }
@@ -587,24 +583,12 @@ let
       display = "Redis (Immich)";
     }
     {
-      name = "n8n.service";
-      display = "n8n Workflow Automation";
-    }
-    {
       name = "redis-gitea.service";
       display = "Redis (Gitea)";
     }
     {
       name = "redis-litellm.service";
       display = "Redis (LiteLLM)";
-    }
-    {
-      name = "redis-n8n.service";
-      display = "Redis (n8n)";
-    }
-    {
-      name = "redis-ntopng.service";
-      display = "Redis (ntopng)";
     }
     {
       name = "changedetection.service";
@@ -645,10 +629,6 @@ let
     {
       name = "mosquitto.service";
       display = "Mosquitto MQTT Broker";
-    }
-    {
-      name = "n8n-worker.service";
-      display = "n8n Worker";
     }
     {
       name = "glances.service";
@@ -871,11 +851,6 @@ let
       runAs = "mailarchiver";
     }
     {
-      name = "nocobase";
-      display = "NocoBase No-Code Platform";
-      runAs = "nocobase";
-    }
-    {
       name = "openproject";
       display = "OpenProject Project Management";
       runAs = "openproject";
@@ -948,12 +923,7 @@ let
   ];
 
   # On-demand services (manually started/stopped, only alert on failures)
-  onDemandServices = [
-    {
-      name = "windows11.service";
-      display = "Windows 11 Container";
-    }
-  ];
+  onDemandServices = [ ];
 
   # Generate all service checks
   allServiceChecks = lib.concatStrings [
@@ -1879,24 +1849,8 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
-      service_description     SSL Cert: n8n.vulcan.lan
-      check_command           check_ssl_cert!n8n.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
       service_description     SSL Cert: nodered.vulcan.lan
       check_command           check_ssl_cert!nodered.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: ntopng.vulcan.lan
-      check_command           check_ssl_cert!ntopng.vulcan.lan
       service_groups          ssl-certificates
     }
 
@@ -1945,14 +1899,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: mailarchiver.vulcan.lan
       check_command           check_ssl_cert!mailarchiver.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: nocobase.vulcan.lan
-      check_command           check_ssl_cert!nocobase.vulcan.lan
       service_groups          ssl-certificates
     }
 
@@ -2009,14 +1955,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: budget.vulcan.lan
       check_command           check_ssl_cert!budget.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: windows.vulcan.lan
-      check_command           check_ssl_cert!windows.vulcan.lan
       service_groups          ssl-certificates
     }
 

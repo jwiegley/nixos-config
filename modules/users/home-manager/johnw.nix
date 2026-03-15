@@ -55,5 +55,13 @@
 
       # Override git core editor to vim on NixOS
       programs.git.settings.core.editor = lib.mkForce "vim";
+
+      # Disable commit/tag GPG signing on this headless NixOS host.
+      # The shared Darwin module enables signing by default (for macOS with
+      # YubiKey), but this machine's GPG keybox is not populated and pcscd
+      # is not configured here.
+      programs.git.signing.signByDefault = lib.mkForce false;
+      programs.git.settings.commit.gpgsign = lib.mkForce false;
+      programs.git.settings.tag.gpgsign = lib.mkForce false;
     };
 }

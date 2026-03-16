@@ -97,6 +97,7 @@
 11334 127.0.0.1 ::1 rspamd
 13923 127.0.0.1 Copyparty container
 18080 127.0.0.1 Static nginx container
+18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
 18873 127.0.0.1 rsync Cloudflare tunnel backend
 20241 127.0.0.1 (Unknown)
 20242 127.0.0.1 (Unknown)

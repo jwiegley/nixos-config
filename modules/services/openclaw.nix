@@ -173,10 +173,15 @@ in
       # ==================================================================
       # Syscall Filtering
       # ==================================================================
+      # @system-service covers most legitimate service syscalls.
+      # ~@privileged blocks dangerous calls (reboot, module load, raw I/O)
+      #   but we must allow @chown back: Node.js calls fchown when managing
+      #   session/credential files copied from the previous host.
+      # ~@resources removed: V8 uses prlimit64 for memory management.
       SystemCallFilter = [
         "@system-service"
         "~@privileged"
-        "~@resources"
+        "@chown"
       ];
       SystemCallArchitectures = "native";
 

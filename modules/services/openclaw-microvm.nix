@@ -49,12 +49,13 @@ let
   #           host  PREROUTING DNAT 10.99.0.1:port -> 127.0.0.1:port on br-openclaw
   #           host  route_localnet=1 on br-openclaw
   dnatPorts = [
+    143 # Dovecot IMAP (plain, loopback)
+    4000 # LiteLLM
     6333 # Qdrant HTTP REST API
     6334 # Qdrant gRPC API
     6335 # Qdrant inference bridge
-    4000 # LiteLLM
     8080 # llama-swap
-    9993 # Dovecot IMAP
+    8123 # Home Assistant
   ];
 
   # Helper: format a list of ports for nftables "dnat to" rules

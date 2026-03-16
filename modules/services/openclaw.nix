@@ -145,6 +145,19 @@ in
       ];
 
       # ==================================================================
+      # Block access to data filesystems
+      # ==================================================================
+      # ProtectSystem=strict only covers /usr, /boot, /etc.
+      # Custom mount points like /tank (ZFS pool) are unprotected.
+      # InaccessiblePaths renders them completely invisible to the
+      # process — attempts to access them get EACCES.
+      InaccessiblePaths = [
+        "/tank"
+        "-/srv"
+        "-/root"
+      ];
+
+      # ==================================================================
       # Kernel Protection
       # ==================================================================
       ProtectKernelTunables = true;

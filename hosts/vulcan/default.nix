@@ -127,6 +127,7 @@
     ../../modules/monitoring/services/atd-alerts.nix
     ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
+    ../../modules/services/openclaw.nix
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix

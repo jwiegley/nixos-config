@@ -48,6 +48,11 @@
       url = "github:numtide/llm-agents.nix";
     };
 
+    microvm = {
+      url = "github:astro/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     org-jw = {
       url = "github:jwiegley/org-jw";
     };
@@ -100,6 +105,7 @@
           inputs.sops-nix.nixosModules.sops
           inputs.quadlet-nix.nixosModules.quadlet
           inputs.nixos-logwatch.nixosModules.logwatch
+          inputs.microvm.nixosModules.host
           inputs.home-manager.nixosModules.home-manager
           {
             nixpkgs.overlays = [

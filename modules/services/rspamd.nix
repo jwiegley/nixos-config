@@ -631,8 +631,12 @@ in
 
         # Enable JSON mode - this selects the JSON conversion function
         json = true;
-        # Request JSON response format from the API
-        include_response_format = true;
+        # Do NOT request JSON response format from the API for gpt-oss models.
+        # gpt-oss-120b wraps output in Harmony channel tokens (<|channel|>final<|message|>)
+        # before the JSON content. When response_format is set, the backend (llama.cpp)
+        # enforces JSON grammar and rejects the output due to these tokens.
+        # The HarmonyResponseFilter guardrail strips the tokens in post_call instead.
+        include_response_format = false;
 
         # Feed GPT results back to Bayes classifier for learning
         autolearn = false;

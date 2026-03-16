@@ -133,7 +133,13 @@ in
       PrivateDevices = true;
       ProtectProc = "invisible";
       ProcSubset = "pid";
-      TemporaryFileSystem = "/var/lib:ro";
+      # Hide /var/lib (other services' state) and /run (runtime
+      # secrets, sockets, PID files for every service on the system).
+      # Only our state dir and specific /run paths are bound back in.
+      TemporaryFileSystem = [
+        "/var/lib:ro"
+        "/run:ro"
+      ];
       BindPaths = [ stateDir ];
       BindReadOnlyPaths = [
         "/nix/store"
@@ -141,20 +147,36 @@ in
         "-/etc/ssl/certs"
         "-/etc/hosts"
         "-/etc/nsswitch.conf"
+        # DNS resolution
         "-/run/systemd/resolve"
+        # SOPS secret (read by preStart, copied to state dir)
+        "${config.sops.secrets."openclaw/config".path}"
       ];
 
       # ==================================================================
       # Block access to data filesystems
       # ==================================================================
       # ProtectSystem=strict only covers /usr, /boot, /etc.
-      # Custom mount points like /tank (ZFS pool) are unprotected.
-      # InaccessiblePaths renders them completely invisible to the
-      # process — attempts to access them get EACCES.
+      # Custom mount points like /tank (ZFS pool) and other top-level
+      # directories need explicit blocking via InaccessiblePaths.
       InaccessiblePaths = [
         "/tank"
+        "/secrets"
+        "-/gdrive"
+        "-/usb"
+        "-/mnt"
         "-/srv"
         "-/root"
+        "-/lost+found"
+        "-/stderr"
+        # /var/www has a ZFS bind mount that bypasses /var/lib tmpfs
+        "-/var/www"
+        "-/var/spool"
+        "-/var/log"
+        "-/var/db"
+        # Block sensitive /etc subdirectories (read-only but readable)
+        "/etc/nixos"
+        "/etc/ssh"
       ];
 
       # ==================================================================

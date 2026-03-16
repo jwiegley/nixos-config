@@ -19,8 +19,14 @@
       config,
       lib,
       pkgs,
+      hostname,
       ...
     }:
+    let
+      packages = import "${inputs.nix-config}/config/packages.nix" {
+        inherit hostname inputs pkgs;
+      };
+    in
     {
       imports = [ "${inputs.nix-config}/config/johnw.nix" ];
 
@@ -32,22 +38,21 @@
         # Override EDITOR to vim on headless NixOS hosts
         sessionVariables.EDITOR = lib.mkForce "vim";
 
-        # NixOS-specific packages
-        packages = with pkgs; [
-          inputs.org-jw.packages.${system}.default
+        # NixOS-specific packages: shared cross-platform list + NixOS extras
+        packages =
+          packages.package-list
+          ++ (with pkgs; [
+            # Development tools
+            apacheHttpd
+            gcc
+            gnumake
+            nodejs
+            python3
+            uv
 
-          # Development tools
-          apacheHttpd
-          gcc
-          gnumake
-          nodejs
-          python3
-          uv
-
-          # AI tools (droid/factory needs vips)
-          opencode
-          vips
-        ];
+            # AI tools (droid/factory needs vips)
+            vips
+          ]);
       };
 
       # Override gh editor to vim on NixOS

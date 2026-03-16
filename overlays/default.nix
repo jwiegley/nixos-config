@@ -22,6 +22,26 @@ in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
+  # Import package definitions from nix-config overlays
+  inherit
+    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final prev)
+    hammer
+    linkdups
+    lipotell
+    ;
+  inherit
+    (import "${inputs.nix-config}/overlays/30-markless.nix" final prev)
+    markless
+    ;
+  inherit
+    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final prev)
+    tsvutils
+    ;
+  inherit
+    (import "${inputs.nix-config}/overlays/30-text-tools.nix" final prev)
+    filetags
+    ;
+
   # John Wiegley's git helper scripts (provides git-merge-changelog, etc.)
   git-scripts =
     with prev;

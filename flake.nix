@@ -57,6 +57,21 @@
       url = "github:jwiegley/org-jw";
     };
 
+    una = {
+      url = "github:jwiegley/una";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    sizes = {
+      url = "github:jwiegley/sizes";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    pushme = {
+      url = "github:jwiegley/pushme";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     git-ai = {
       url = "github:git-ai-project/git-ai";
       inputs.nixpkgs.follows = "nixpkgs";

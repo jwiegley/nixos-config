@@ -83,6 +83,20 @@ in
     isReadOnly = false;
   };
 
+  # Persistent networkd config for the container veth — prevents systemd-networkd's
+  # default 80-container-ve.network from overriding the address set by the
+  # container post-start script.
+  systemd.network.networks."40-ve-secure-nginx" = {
+    matchConfig.Name = "ve-secure-n*";
+    address = [ "10.233.1.1/32" ];
+    routes = [ { Destination = "10.233.1.2/32"; } ];
+    networkConfig = {
+      IPMasquerade = "both";
+      LinkLocalAddressing = "yes";
+    };
+    linkConfig.RequiredForOnline = false;
+  };
+
   # NixOS container for nginx with copyparty (HTTP-only, localhost access)
   containers.secure-nginx = {
 

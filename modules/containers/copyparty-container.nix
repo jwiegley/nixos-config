@@ -82,6 +82,21 @@ in
     isReadOnly = false;
   };
 
+  # Persistent networkd config for the container veth — prevents systemd-networkd's
+  # default 80-container-ve.network from overriding the address set by the
+  # container post-start script (which uses `ip addr add` and gets lost on
+  # networkd reconfiguration, e.g. during nixos-rebuild).
+  systemd.network.networks."40-ve-copyparty" = {
+    matchConfig.Name = "ve-copyparty";
+    address = [ "10.233.2.1/32" ];
+    routes = [ { Destination = "10.233.2.2/32"; } ];
+    networkConfig = {
+      IPMasquerade = "both";
+      LinkLocalAddressing = "yes";
+    };
+    linkConfig.RequiredForOnline = false;
+  };
+
   # NixOS container for copyparty (HTTP-only, localhost access)
   containers.copyparty = {
 

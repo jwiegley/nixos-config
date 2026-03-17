@@ -37,6 +37,7 @@ DOMAINS=(
     "rspamd.vulcan.lan"
     "silly-tavern.vulcan.lan"
     "speedtest.vulcan.lan"
+    "speedtracker.vulcan.lan"
     "teable.vulcan.lan"
     "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"

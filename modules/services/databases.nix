@@ -51,6 +51,11 @@ in
       secretPath = config.sops.secrets."shlink-db-password".path;
       dependentService = "podman-shlink.service";
     })
+    (mkPostgresUserSetup {
+      user = "speedtest_tracker";
+      database = "speedtest_tracker";
+      secretPath = config.sops.secrets."speedtest-tracker-db-password".path;
+    })
   ];
 
   services = {
@@ -113,6 +118,7 @@ in
         "mailarchiver"
         "openproject"
         "shlink"
+        "speedtest_tracker"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -141,6 +147,10 @@ in
         }
         {
           name = "open_webui";
+          ensureDBOwnership = true;
+        }
+        {
+          name = "speedtest_tracker";
           ensureDBOwnership = true;
         }
       ];

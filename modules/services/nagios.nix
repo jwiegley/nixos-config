@@ -876,6 +876,11 @@ let
       runAs = "openspeedtest";
     }
     {
+      name = "speedtest-tracker";
+      display = "Speedtest Tracker";
+      runAs = "speedtest-tracker";
+    }
+    {
       name = "silly-tavern";
       display = "Silly Tavern";
       runAs = "sillytavern";
@@ -1908,6 +1913,14 @@ let
       host_name               vulcan
       service_description     SSL Cert: speedtest.vulcan.lan
       check_command           check_ssl_cert!speedtest.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: speedtracker.vulcan.lan
+      check_command           check_ssl_cert!speedtracker.vulcan.lan
       service_groups          ssl-certificates
     }
 

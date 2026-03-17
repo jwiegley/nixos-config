@@ -280,6 +280,10 @@ with lib;
                           url = "https://speedtest.vulcan.lan";
                         }
                         {
+                          title = "Speedtest Tracker";
+                          url = "https://speedtracker.vulcan.lan";
+                        }
+                        {
                           title = "ChangeDetection";
                           url = "https://changes.vulcan.lan";
                         }

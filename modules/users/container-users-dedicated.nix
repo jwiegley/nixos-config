@@ -195,6 +195,18 @@
         description = "Container user for Perplexica AI search engine";
       };
 
+      speedtest-tracker = {
+        isSystemUser = true;
+        group = "speedtest-tracker";
+        home = "/var/lib/containers/speedtest-tracker";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Speedtest Tracker service";
+      };
+
     };
 
     # Create corresponding groups for each container user
@@ -213,6 +225,7 @@
       shlink-web-client = { };
       open-webui = { };
       perplexica = { };
+      speedtest-tracker = { };
       podman = { };
     };
   };
@@ -233,6 +246,7 @@
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
+    "speedtest-tracker"
   ];
 
   # Grant full Nix daemon access to wheel group (admin users like johnw)
@@ -276,6 +290,8 @@
     "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
     "L+ /run/secrets-open-webui/open-webui-secrets - - - - /run/secrets/open-webui-secrets"
+    "d /run/secrets-speedtest-tracker 0750 speedtest-tracker speedtest-tracker - -"
+    "L+ /run/secrets-speedtest-tracker/speedtest-tracker-secrets - - - - /run/secrets/speedtest-tracker-secrets"
   ];
   # Note: perplexica currently has no SOPS secrets (configured via web UI)
   # Add secret entries here if/when API keys are managed via SOPS

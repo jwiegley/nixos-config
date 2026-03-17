@@ -19,6 +19,7 @@
     ./openspeedtest-quadlet.nix
     ./shlink-quadlet.nix
     ./silly-tavern-quadlet.nix
+    ./speedtest-tracker-quadlet.nix
     ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix

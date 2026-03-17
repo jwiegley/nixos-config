@@ -512,6 +512,7 @@ in
                   "https://chat.vulcan.lan"
                   "https://searxng.vulcan.lan"
                   "https://perplexica.vulcan.lan"
+                  "https://speedtracker.vulcan.lan"
                 ];
               }
             ];

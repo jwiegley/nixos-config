@@ -1,0 +1,49 @@
+groups:
+  - name: speedtest_tracker_service
+    interval: 60s
+    rules:
+      - alert: SpeedtestTrackerDown
+        expr: probe_success{job="blackbox_https_local",instance="https://speedtracker.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: speedtest-tracker
+        annotations:
+          summary: "Speedtest Tracker is down"
+          description: |
+            Speedtest Tracker at https://speedtracker.vulcan.lan is not responding.
+
+            Check container: sudo -u speedtest-tracker podman ps -a
+            Check service: systemctl --user -M speedtest-tracker@ status speedtest-tracker.service
+            View logs: sudo -u speedtest-tracker podman logs speedtest-tracker --tail 50
+            Check nginx: systemctl status nginx
+            Test local endpoint: curl -I http://127.0.0.1:8765
+
+      - alert: SpeedtestTrackerSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local",instance="https://speedtracker.vulcan.lan"} > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: speedtest-tracker
+        annotations:
+          summary: "Speedtest Tracker is responding slowly"
+          description: |
+            Speedtest Tracker response time is {{ $value }}s (threshold: 10s).
+
+            Check container resources: sudo -u speedtest-tracker podman stats speedtest-tracker
+            View logs: sudo -u speedtest-tracker podman logs speedtest-tracker --tail 50
+            Check database: pg_isready -h 127.0.0.1 -p 5432
+
+      - alert: SpeedtestTrackerSSLExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https_local",instance="https://speedtracker.vulcan.lan"} - time() < 30 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          component: speedtest-tracker
+        annotations:
+          summary: "Speedtest Tracker SSL certificate expiring soon"
+          description: |
+            SSL certificate for speedtracker.vulcan.lan expires in less than 30 days.
+
+            Renew with: sudo /etc/nixos/certs/renew-certificate.sh speedtracker.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner root:nginx
+            Then reload: sudo systemctl reload nginx

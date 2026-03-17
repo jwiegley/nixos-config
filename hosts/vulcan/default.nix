@@ -54,6 +54,7 @@
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/openspeedtest.nix
     ../../modules/users/home-manager/perplexica.nix
+    ../../modules/users/home-manager/speedtest-tracker.nix
 
     # Services
     ../../modules/services/alertmanager.nix

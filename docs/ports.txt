@@ -51,6 +51,7 @@
 6383 127.0.0.1 Redis - OpenProject
 6385 127.0.0.1 Redis - Shlink
 6386 127.0.0.1 Redis - SearXNG
+6387 127.0.0.1 Redis - Speedtest Tracker
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
@@ -81,6 +82,7 @@
 8580 127.0.0.1 Shlink API (URL shortener backend)
 8581 127.0.0.1 Shlink Web Client (management UI)
 8089 127.0.0.1 (Unknown)
+8765 127.0.0.1 Speedtest Tracker web interface
 8096 0.0.0.0 (Unknown - possibly Jellyfin or similar)
 8123 127.0.0.1 Home Assistant
 8428 127.0.0.1 VictoriaMetrics

@@ -122,35 +122,6 @@ let
             201)
               echo "  ✓ Created pull mirror: $repo_name"
               created_count=$((created_count + 1))
-
-              # Also add push mirror for bidirectional sync
-              push_payload=$(jq -n \
-                --arg remote_address "$clone_url" \
-                --arg remote_username "$GITHUB_USER" \
-                --arg remote_password "$GITHUB_TOKEN" \
-                --arg interval "$MIRROR_INTERVAL" \
-                '{
-                  remote_address: $remote_address,
-                  remote_username: $remote_username,
-                  remote_password: $remote_password,
-                  interval: $interval,
-                  sync_on_commit: false
-                }')
-
-              push_result=$(curl -sS -w "\n%{http_code}" \
-                -X POST \
-                -H "Authorization: token $GITEA_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$push_payload" \
-                "$GITEA_URL/api/v1/repos/$GITEA_USER/$repo_name/push_mirrors" 2>&1)
-
-              push_http_code=$(echo "$push_result" | tail -n1)
-
-              if [ "$push_http_code" = "200" ]; then
-                echo "    ✓ Added push mirror: $repo_name"
-              else
-                echo "    ✗ Failed to add push mirror: $repo_name (HTTP $push_http_code)" >&2
-              fi
               ;;
             409)
               echo "  → Already exists: $repo_name"

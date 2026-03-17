@@ -1605,13 +1605,6 @@ let
       service_groups          application-services
     }
 
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Nocobase HTTP
-      check_command           check_http!-p 13000 -u /
-      service_groups          application-services
-    }
 
     define service {
       use                     standard-service

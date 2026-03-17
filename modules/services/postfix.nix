@@ -22,6 +22,7 @@
       root: johnw
       postmaster: johnw
       gitea: johnw
+      changedetection: johnw
     '';
 
     # Enable submission services for encrypted mail submission
@@ -56,6 +57,8 @@
     virtual = ''
       gitea@vulcan.lan    johnw@vulcan.lan
       gitea@localhost     johnw@localhost
+      changedetection@vulcan.lan    johnw@vulcan.lan
+      changedetection@localhost     johnw@localhost
     '';
 
     # Sender address rewriting for external mail relay

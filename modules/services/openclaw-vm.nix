@@ -171,7 +171,6 @@ in
       pnpm
       git
       curl
-      himalaya
       mcporterPkg
       coreutils
       bashInteractive
@@ -233,13 +232,6 @@ in
       mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 
       chmod 600 ${openclawDir}/openclaw.json
-
-      # Set up himalaya config symlink if present
-      if [ -d "${openclawDir}/.himalaya" ]; then
-        mkdir -p ${stateDir}/.config/himalaya
-        ln -sf ${openclawDir}/.himalaya/config.toml \
-          ${stateDir}/.config/himalaya/config.toml
-      fi
 
       # Set up mcporter config symlink if present
       if [ -d "${openclawDir}/.mcporter" ]; then

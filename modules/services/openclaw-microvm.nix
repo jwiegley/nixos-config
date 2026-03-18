@@ -246,10 +246,38 @@ in
   # host's iptables-nft backend.
 
   networking.firewall.extraCommands = ''
-    # OpenClaw VM egress logging — log new outbound connections from the bridge
+    # ── OpenClaw network isolation ──
+    # Allow internet but block all private-network access except the
+    # explicitly allowed host services (DNS + DNAT ports).
+
+    # Custom chain: whitelist allowed ports, drop everything else.
+    # Inserted into nixos-fw so it intercepts br-openclaw INPUT traffic
+    # before the global accept rules (which would allow 993, 587, etc.).
+    iptables -N openclaw-isolate 2>/dev/null || iptables -F openclaw-isolate
+    iptables -A openclaw-isolate -p tcp --dport 53 -j RETURN
+    iptables -A openclaw-isolate -p udp --dport 53 -j RETURN
+    ${lib.concatMapStringsSep "\n    " (
+      port: "iptables -A openclaw-isolate -p tcp --dport ${toString port} -j RETURN"
+    ) dnatPorts}
+    iptables -A openclaw-isolate -j DROP
+    iptables -I nixos-fw 3 -i ${bridgeName} -j openclaw-isolate
+
+    # FORWARD chain: block private-network-bound traffic (NAT path).
+    # The VM can still reach the public internet via masquerade.
+    iptables -A FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP
+    iptables -A FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP
+    iptables -A FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP
+
+    # Egress logging — log new outbound connections from the bridge
     iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "openclaw-egress: " --log-level info
   '';
   networking.firewall.extraStopCommands = ''
+    iptables -D nixos-fw -i ${bridgeName} -j openclaw-isolate 2>/dev/null || true
+    iptables -F openclaw-isolate 2>/dev/null || true
+    iptables -X openclaw-isolate 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "openclaw-egress: " --log-level info 2>/dev/null || true
   '';
 

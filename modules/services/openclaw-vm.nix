@@ -112,6 +112,9 @@ in
   # so that OpenClaw's existing config (which uses localhost) works unchanged.
 
   networking.nftables.enable = true;
+
+  # NAT table: rewrite localhost connections to the host bridge IP so
+  # OpenClaw's existing 127.0.0.1 config works unchanged.
   networking.nftables.tables.openclaw-dnat = {
     family = "ip";
     content = ''
@@ -126,6 +129,32 @@ in
         # Without this, Linux refuses to route loopback-sourced packets
         # out of a non-loopback interface.
         oifname "e*" ip saddr 127.0.0.0/8 masquerade
+      }
+    '';
+  };
+
+  # Filter table: block all private-network access except the explicitly
+  # allowed host services (DNS + DNAT ports). Internet access is preserved.
+  networking.nftables.tables.openclaw-egress = {
+    family = "ip";
+    content = ''
+      chain output {
+        type filter hook output priority 0; policy accept;
+
+        # Allow established/related traffic
+        ct state established,related accept
+
+        # Allow DNS (UDP+TCP) to bridge gateway
+        ip daddr ${bridgeAddr} udp dport 53 accept
+        ip daddr ${bridgeAddr} tcp dport 53 accept
+
+        # Allow DNAT service ports to bridge gateway
+        ip daddr ${bridgeAddr} tcp dport { ${dnatPortList} } accept
+
+        # Block all other traffic to RFC 1918 private networks
+        ip daddr 10.0.0.0/8 drop
+        ip daddr 172.16.0.0/12 drop
+        ip daddr 192.168.0.0/16 drop
       }
     '';
   };

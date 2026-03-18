@@ -83,7 +83,7 @@
             "-e PUBLIC_DASHBOARD=false"
             "-e MAIL_MAILER=smtp"
             "-e MAIL_HOST=host.containers.internal"
-            "-e MAIL_PORT=25"
+            "-e MAIL_PORT=2525"
             "-e MAIL_ENCRYPTION=null"
             "-e MAIL_FROM_ADDRESS=speedtest-tracker@vulcan.lan"
             "-e MAIL_FROM_NAME=\"Speedtest Tracker\""

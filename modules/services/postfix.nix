@@ -140,6 +140,24 @@
     };
   };
 
+  # Plain SMTP listener for containers (no TLS, mynetworks only).
+  # Containers can't verify the Step-CA cert hostname, so STARTTLS
+  # on port 25 causes connection failures. Port 2525 advertises
+  # no TLS at all, avoiding the issue entirely.
+  services.postfix.masterConfig."2525" = {
+    type = "inet";
+    private = false;
+    command = "smtpd";
+    args = [
+      "-o"
+      "smtpd_tls_security_level=none"
+      "-o"
+      "smtpd_client_restrictions=permit_mynetworks,reject"
+      "-o"
+      "smtpd_milters="
+    ];
+  };
+
   networking.firewall.allowedTCPPorts = lib.mkIf config.services.postfix.enable [
     465
     587

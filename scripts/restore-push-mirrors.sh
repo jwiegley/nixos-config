@@ -22,7 +22,7 @@ GITEA_URL="${GITEA_URL:-https://gitea.vulcan.lan}"
 GITEA_USER="${GITEA_USER:-johnw}"
 GITHUB_USER="${GITHUB_USER:-jwiegley}"
 MIRROR_INTERVAL="${MIRROR_INTERVAL:-8h}"
-SYNC_ON_COMMIT=false
+SYNC_ON_COMMIT=true
 
 if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITEA_TOKEN" ]; then
   echo "ERROR: GITHUB_TOKEN and GITEA_TOKEN must be set" >&2

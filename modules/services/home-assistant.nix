@@ -508,8 +508,11 @@ in
           "192.168.3.16" # vulcan's WiFi IP
         ];
 
-        # Disable direct HTTP access (use nginx proxy)
-        server_host = "127.0.0.1";
+        # Bind to loopback (nginx proxy) and OpenClaw VM bridge
+        server_host = [
+          "127.0.0.1"
+          "10.99.0.1" # OpenClaw microVM bridge gateway
+        ];
         server_port = 8123;
       };
 

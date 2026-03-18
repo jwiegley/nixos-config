@@ -22,23 +22,24 @@ in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
-  # Import package definitions from nix-config overlays
+  # Import package definitions from nix-config overlays.
+  # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
+  # can resolve flake input sources.
   inherit
-    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final prev)
+    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final (prev // { inherit inputs; }))
     hammer
     linkdups
     lipotell
     ;
-  inherit
-    (import "${inputs.nix-config}/overlays/30-markless.nix" final prev)
+  inherit (import "${inputs.nix-config}/overlays/30-markless.nix" final (prev // { inherit inputs; }))
     markless
     ;
   inherit
-    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final prev)
+    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final (prev // { inherit inputs; }))
     tsvutils
     ;
   inherit
-    (import "${inputs.nix-config}/overlays/30-text-tools.nix" final prev)
+    (import "${inputs.nix-config}/overlays/30-text-tools.nix" final (prev // { inherit inputs; }))
     filetags
     ;
 

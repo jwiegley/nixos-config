@@ -49,6 +49,7 @@
           environments = {
             PORT = "5000";
             BASE_URL = "https://changes.vulcan.lan";
+            PLAYWRIGHT_DRIVER_URL = "ws://10.0.2.2:3008";
             FETCH_WORKERS = "10";
             LOGGER_LEVEL = "INFO";
             TZ = "America/Los_Angeles";
@@ -62,7 +63,11 @@
         };
 
         unitConfig = {
-          After = [ "network-online.target" ];
+          After = [
+            "network-online.target"
+            "sockpuppetbrowser.service"
+          ];
+          Requires = [ "sockpuppetbrowser.service" ];
           StartLimitIntervalSec = "300";
           StartLimitBurst = "5";
         };
@@ -71,6 +76,37 @@
           Restart = "always";
           RestartSec = "10s";
           TimeoutStartSec = "900";
+        };
+      };
+
+      virtualisation.quadlet.containers.sockpuppetbrowser = {
+        autoStart = true;
+
+        containerConfig = {
+          image = "dgtlmoon/sockpuppetbrowser:latest";
+          publishPorts = [ "127.0.0.1:3008:3000/tcp" ];
+          networks = [ "slirp4netns" ];
+
+          logDriver = "json-file";
+
+          environments = {
+            SCREEN_WIDTH = "1920";
+            SCREEN_HEIGHT = "1024";
+            SCREEN_DEPTH = "16";
+            MAX_CONCURRENT_CHROME_PROCESSES = "10";
+          };
+        };
+
+        unitConfig = {
+          After = [ "network-online.target" ];
+          StartLimitIntervalSec = "300";
+          StartLimitBurst = "5";
+        };
+
+        serviceConfig = {
+          Restart = "always";
+          RestartSec = "10s";
+          TimeoutStartSec = "300";
         };
       };
     };

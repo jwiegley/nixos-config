@@ -49,11 +49,12 @@ let
   #           host  PREROUTING DNAT 10.99.0.1:port -> 127.0.0.1:port on br-openclaw
   #           host  route_localnet=1 on br-openclaw
   dnatPorts = [
+    443 # nginx (HTTPS) — needed for HA and other proxied services
     4000 # LiteLLM
     6333 # Qdrant HTTP REST API
     6334 # Qdrant gRPC API
     6335 # Qdrant inference bridge
-    8123 # Home Assistant
+    8123 # Home Assistant (direct HTTP)
   ];
 
   # Helper: format a list of ports for nftables "dnat to" rules
@@ -247,23 +248,28 @@ in
 
   networking.firewall.extraCommands = ''
     # ── OpenClaw network isolation ──
-    # Allow internet but block all private-network access except the
-    # explicitly allowed host services (DNS + DNAT ports).
+    # Only allow VM traffic to the bridge gateway (${bridgeAddr}) or
+    # loopback (127.0.0.1, post-DNAT rewrite) on explicitly allowed ports.
+    # All other destinations — including other hosts on 192.168.0.0/16 —
+    # are dropped.
 
-    # Custom chain: whitelist allowed ports, drop everything else.
-    # Inserted into nixos-fw so it intercepts br-openclaw INPUT traffic
-    # before the global accept rules (which would allow 993, 587, etc.).
     iptables -N openclaw-isolate 2>/dev/null || iptables -F openclaw-isolate
-    iptables -A openclaw-isolate -p tcp --dport 53 -j RETURN
-    iptables -A openclaw-isolate -p udp --dport 53 -j RETURN
+
+    # DNS to bridge gateway (Technitium binds to 0.0.0.0:53)
+    iptables -A openclaw-isolate -d ${bridgeAddr} -p tcp --dport 53 -j RETURN
+    iptables -A openclaw-isolate -d ${bridgeAddr} -p udp --dport 53 -j RETURN
+
+    # DNAT service ports — allow to bridge (direct) and loopback (post-DNAT)
     ${lib.concatMapStringsSep "\n    " (
-      port: "iptables -A openclaw-isolate -p tcp --dport ${toString port} -j RETURN"
+      port:
+      "iptables -A openclaw-isolate -d ${bridgeAddr} -p tcp --dport ${toString port} -j RETURN\n    iptables -A openclaw-isolate -d 127.0.0.1 -p tcp --dport ${toString port} -j RETURN"
     ) dnatPorts}
+
+    # Drop everything else from the VM
     iptables -A openclaw-isolate -j DROP
     iptables -I nixos-fw 3 -i ${bridgeName} -j openclaw-isolate
 
-    # FORWARD chain: block private-network-bound traffic (NAT path).
-    # The VM can still reach the public internet via masquerade.
+    # FORWARD chain: block private-network-bound traffic (NAT/routing path).
     iptables -A FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP
     iptables -A FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP
     iptables -A FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP

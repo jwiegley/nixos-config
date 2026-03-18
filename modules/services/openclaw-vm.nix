@@ -105,6 +105,17 @@ in
   # DNS: use the host bridge IP (Technitium on host binds to 0.0.0.0:53)
   networking.nameservers = [ bridgeAddr ];
 
+  # Override *.vulcan.lan hostnames to point to the bridge gateway so the
+  # AI agent reaches host services directly. The egress filter blocks
+  # 192.168.0.0/16, so normal DNS resolution (192.168.1.2) is unreachable.
+  networking.hosts = {
+    ${bridgeAddr} = [
+      "hass.vulcan.lan"
+      "qdrant.vulcan.lan"
+      "litellm.vulcan.lan"
+    ];
+  };
+
   # ========================================================================
   # Guest-side DNAT (stage 1 of two-stage DNAT)
   # ========================================================================
@@ -253,11 +264,13 @@ in
       # Copy secret from virtiofs-mounted staging directory
       cp -f /run/openclaw-secrets/openclaw-config ${openclawDir}/openclaw.json
 
-      # When binding to LAN (non-loopback), the Control UI requires explicit
-      # CORS origins. Since the VM is the isolation boundary and only the
-      # host's nginx proxy reaches this port, the host-header fallback is safe.
-      ${pkgs.jq}/bin/jq '.gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}' \
-        ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
+      # Patch runtime config for the VM environment:
+      #  - CORS: allow host-header origin fallback (VM is the isolation boundary)
+      #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
+      ${pkgs.jq}/bin/jq '
+        .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
+        | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
+      ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
       mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 
       chmod 600 ${openclawDir}/openclaw.json
@@ -286,6 +299,122 @@ in
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [ servicePort ];
+  };
+
+  # ========================================================================
+  # Network isolation diagnostic (runs once at boot, writes to shared dir)
+  # ========================================================================
+
+  systemd.services.network-diag = {
+    description = "Network isolation connectivity test";
+    after = [
+      "network-online.target"
+      "nftables.service"
+    ];
+    wants = [ "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = with pkgs; [
+      curl
+      nftables
+      iproute2
+      coreutils
+    ];
+    script = ''
+      OUT="${stateDir}/.openclaw/netdiag.txt"
+      echo "=== Network Isolation Diagnostic ===" > "$OUT"
+      echo "Time: $(date -u)" >> "$OUT"
+      echo "" >> "$OUT"
+
+      # Dump guest nftables rules
+      echo "--- Guest nftables rules ---" >> "$OUT"
+      nft list ruleset >> "$OUT" 2>&1
+      echo "" >> "$OUT"
+
+      # Dump guest routing table
+      echo "--- Guest routes ---" >> "$OUT"
+      ip route >> "$OUT" 2>&1
+      echo "" >> "$OUT"
+
+      # Dump /etc/hosts
+      echo "--- Guest /etc/hosts ---" >> "$OUT"
+      cat /etc/hosts >> "$OUT" 2>&1
+      echo "" >> "$OUT"
+
+      echo "--- Connectivity Tests ---" >> "$OUT"
+
+      # MUST BE BLOCKED: 192.168.1.2 (any port)
+      for port in 443 993 25 80 22; do
+        if curl -sk --connect-timeout 3 "https://192.168.1.2:$port/" >/dev/null 2>&1; then
+          echo "FAIL: 192.168.1.2:$port REACHABLE (should be blocked)" >> "$OUT"
+        else
+          echo "PASS: 192.168.1.2:$port blocked" >> "$OUT"
+        fi
+      done
+
+      # MUST BE BLOCKED: other 192.168.x.x hosts
+      for host in 192.168.1.4 192.168.1.5 192.168.3.16; do
+        if curl -sk --connect-timeout 3 "https://$host:443/" >/dev/null 2>&1; then
+          echo "FAIL: $host:443 REACHABLE (should be blocked)" >> "$OUT"
+        else
+          echo "PASS: $host:443 blocked" >> "$OUT"
+        fi
+      done
+
+      # MUST WORK: DNS resolution
+      echo "--- DNS Tests ---" >> "$OUT"
+      DNS_RESULT=$(${pkgs.dig}/bin/dig +short +timeout=3 @${bridgeAddr} example.com A 2>&1)
+      if [ -n "$DNS_RESULT" ] && echo "$DNS_RESULT" | grep -qE '^[0-9]+\.[0-9]+'; then
+        echo "PASS: DNS resolution works (example.com -> $DNS_RESULT)" >> "$OUT"
+      else
+        echo "FAIL: DNS resolution broken (result: $DNS_RESULT)" >> "$OUT"
+      fi
+
+      # MUST WORK: bridge gateway services (TCP connect test)
+      echo "--- Bridge Gateway Services ---" >> "$OUT"
+      for port in 443 4000 6333 8123; do
+        if curl -sk --connect-timeout 3 "https://${bridgeAddr}:$port/" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 3 "http://${bridgeAddr}:$port/" >/dev/null 2>&1; then
+          echo "PASS: ${bridgeAddr}:$port reachable (HTTP)" >> "$OUT"
+        else
+          # Raw TCP connect test using /dev/tcp
+          if (echo > /dev/tcp/${bridgeAddr}/$port) 2>/dev/null; then
+            echo "PASS: ${bridgeAddr}:$port reachable (TCP)" >> "$OUT"
+          else
+            echo "WARN: ${bridgeAddr}:$port not reachable" >> "$OUT"
+          fi
+        fi
+      done
+
+      # MUST WORK: internet by IP (bypasses DNS)
+      echo "--- Internet Tests ---" >> "$OUT"
+      if curl -s --connect-timeout 5 "http://93.184.215.14/" >/dev/null 2>&1; then
+        echo "PASS: Internet by IP (93.184.215.14) reachable" >> "$OUT"
+      else
+        echo "FAIL: Internet by IP (93.184.215.14) NOT reachable" >> "$OUT"
+      fi
+
+      # Internet by name (tests DNS + connectivity)
+      if curl -s --connect-timeout 5 "https://example.com" >/dev/null 2>&1; then
+        echo "PASS: Internet by name (example.com) reachable" >> "$OUT"
+      else
+        echo "FAIL: Internet by name (example.com) NOT reachable" >> "$OUT"
+      fi
+
+      # MUST NOT WORK: localhost:8080 (old embedding server)
+      echo "--- Negative Tests ---" >> "$OUT"
+      if curl -s --connect-timeout 3 "http://127.0.0.1:8080/" >/dev/null 2>&1; then
+        echo "INFO: 127.0.0.1:8080 reachable (unexpected)" >> "$OUT"
+      else
+        echo "PASS: 127.0.0.1:8080 not reachable (correct)" >> "$OUT"
+      fi
+
+      echo "" >> "$OUT"
+      echo "=== Done ===" >> "$OUT"
+    '';
   };
 
   # Allow password-less root login on serial console for debugging.

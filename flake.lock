@@ -560,11 +560,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1773856444,
-        "narHash": "sha256-Zpck/seb0XCYpUJ+r22PrVPCHD2AOwHcaIJ2ubFx2Gw=",
+        "lastModified": 1773898487,
+        "narHash": "sha256-uQlQwrfpzE6wtGBRe2T5VkEGuoOHxl40UuiFdPf2k7A=",
         "owner": "git-ai-project",
         "repo": "git-ai",
-        "rev": "d9ac9fdad200ba1acdfead6a584c22e4c4a8307c",
+        "rev": "b51acb567679a802c78fd6772178ab493a05a22c",
         "type": "github"
       },
       "original": {
@@ -2131,11 +2131,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1773871378,
-        "narHash": "sha256-qPw/zWyyYuFRxbP6rb9EOUy0hi//j9gYvqTFFo8PU7c=",
+        "lastModified": 1773890325,
+        "narHash": "sha256-a+dGcpr6+LX2XKcFR5n2soeS2oS9w7zTTxb3m5a3cwY=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "682dad9a17726b61a297ed42f5064cb93b4fff59",
+        "rev": "1b0a1d7396b2d3999b8ebe9246d97db8741438fb",
         "type": "github"
       },
       "original": {
@@ -2184,11 +2184,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1773877728,
-        "narHash": "sha256-cOD2IgdhDyBVHNoP3sOK3tiI3tGP0FE/E7vDnPhD+dY=",
+        "lastModified": 1773902596,
+        "narHash": "sha256-+hY/1meNLxfiULf5WlCrXzVvQ77kjt2qk6wUKCQej3M=",
         "ref": "main",
-        "rev": "a9b965509ea61758c03a4f8ccbd47c1b10683a2a",
-        "revCount": 1561,
+        "rev": "6ed8b7b637e2810bda1e1904372f0c298c3523c0",
+        "revCount": 1567,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2642,11 +2642,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1773734432,
-        "narHash": "sha256-IF5ppUWh6gHGHYDbtVUyhwy/i7D261P7fWD1bPefOsw=",
+        "lastModified": 1773821835,
+        "narHash": "sha256-TJ3lSQtW0E2JrznGVm8hOQGVpXjJyXY2guAxku2O9A4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "cda48547b432e8d3b18b4180ba07473762ec8558",
+        "rev": "b40629efe5d6ec48dd1efba650c797ddbd39ace0",
         "type": "github"
       },
       "original": {
@@ -2836,11 +2836,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1773878550,
-        "narHash": "sha256-S9mVvZ24OBjSo+dEFS6l6i5o9GQi1GuhozH/68sZxqA=",
+        "lastModified": 1773902571,
+        "narHash": "sha256-P+rc+vHFoSq+a3Wv9nEVWUq47VszN7SEWfcnnsnUKyU=",
         "ref": "refs/heads/main",
-        "rev": "65a9b7258530482128ef98a7eebcc56f354b159a",
-        "revCount": 192,
+        "rev": "6239bdb64f763a91faa19cbe3c7270781310affd",
+        "revCount": 193,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },
@@ -2858,11 +2858,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1773872592,
-        "narHash": "sha256-7JV/DCJUrlFFDhGcWwCSqs0aK/c2CQWTYkld+paGKnw=",
+        "lastModified": 1773880694,
+        "narHash": "sha256-pPQTG+PoiZ7nkFYUEeMnubwk6A+KLio59FcSjzsflNY=",
         "owner": "jwiegley",
         "repo": "pushme",
-        "rev": "0df031d630c10584aa624fe3a0084312747ad09a",
+        "rev": "fe5b1238153d5c313a88fb739413fc6fea045371",
         "type": "github"
       },
       "original": {
@@ -2976,11 +2976,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1773698643,
-        "narHash": "sha256-VCiDjE8kNs8uCAK73Ezk1r3fFuc4JepvW07YFqaN968=",
+        "lastModified": 1773889674,
+        "narHash": "sha256-+ycaiVAk3MEshJTg35cBTUa0MizGiS+bgpYw/f8ohkg=",
         "owner": "Mic92",
         "repo": "sops-nix",
-        "rev": "8237de83e8200d16fe0c4467b02a1c608ff28044",
+        "rev": "29b6519f3e0780452bca0ac0be4584f04ac16cc5",
         "type": "github"
       },
       "original": {

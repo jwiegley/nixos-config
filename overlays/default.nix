@@ -393,4 +393,6 @@ in
         platforms = [ "aarch64-linux" ];
       };
     };
+  # claude-vault: Archive Claude Code conversations into searchable SQLite
+  inherit (import "${inputs.nix-config}/overlays/30-claude-vault.nix" final prev) claude-vault;
 }

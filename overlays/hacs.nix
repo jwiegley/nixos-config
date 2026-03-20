@@ -23,6 +23,10 @@ buildHomeAssistantComponent rec {
     cp -r ${hacs-frontend}/${python3Packages.python.sitePackages}/hacs_frontend custom_components/hacs/
     # Remove hacs_frontend's own dist-info to avoid manifest check issues
     rm -f custom_components/hacs/hacs_frontend/*.dist-info 2>/dev/null || true
+    # Fix version: HACS source has "0.0.0" placeholder; their release CI substitutes
+    # the real version, but we build from the raw tag source
+    substituteInPlace custom_components/hacs/manifest.json \
+      --replace-fail '"version": "0.0.0"' '"version": "${version}"'
   '';
 
   dependencies = [

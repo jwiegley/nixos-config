@@ -90,6 +90,26 @@ let
     doCheck = false; # Skip tests for simplicity
   };
 
+  # Custom Python package for Kumo Cloud integration (Mitsubishi mini-splits)
+  pykumo = pkgs.python3Packages.buildPythonPackage rec {
+    pname = "pykumo";
+    version = "0.3.10";
+    format = "wheel";
+
+    src = pkgs.fetchPypi {
+      inherit pname version format;
+      dist = "py3";
+      python = "py3";
+      sha256 = "sha256-I1bIGd1YEtSJHhCLBh2brQtugJhjTmSGKoJpwPBBr2g=";
+    };
+
+    dependencies = with pkgs.python3Packages; [
+      requests
+    ];
+
+    doCheck = false;
+  };
+
   # Custom Home Assistant component: Multiscrape
   # Advanced web scraping for Home Assistant with multiple sensors per page
   # GitHub: https://github.com/danieldotnl/ha-multiscrape
@@ -362,6 +382,7 @@ in
       ps.wakeonlan # Required for Wake on LAN integration
       pywaze # Required for Waze Travel Time integration
       ps.pydub # Required for Chime TTS audio processing
+      pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
     ];
 
     # Components that don't require YAML configuration

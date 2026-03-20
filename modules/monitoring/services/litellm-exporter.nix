@@ -17,7 +17,7 @@ let
       exit 1
     fi
 
-    # Test query to hera/gpt-oss-120b
+    # Test query to hera/Qwen3.5-27B-Instruct
     # Retry once after 60s on failure to handle transient unavailability
     # (model loading on hera can take 1-3 minutes for large models).
     # Note: curl exit code 28 = timeout; captured via || to avoid set -e abort.
@@ -28,7 +28,7 @@ let
         -H "x-api-key: $API_KEY" \
         -H "Content-Type: application/json" \
         -d '{
-          "model": "hera/gpt-oss-120b",
+          "model": "hera/Qwen3.5-27B-Instruct",
           "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
           "max_tokens": 10,
           "temperature": 0

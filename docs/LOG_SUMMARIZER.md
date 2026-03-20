@@ -89,7 +89,7 @@ systemd.timers.log-summarizer = {
 
 Default configuration (modify in script if needed):
 - **API URL**: `http://127.0.0.1:4000/v1/chat/completions`
-- **Model**: `hera/gpt-oss-120b`
+- **Model**: `hera/Qwen3.5-27B-Instruct`
 - **Timeout**: 45 seconds
 - **Max Tokens**: 1000
 

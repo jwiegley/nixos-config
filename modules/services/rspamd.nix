@@ -606,7 +606,7 @@ in
         url = "http://127.0.0.1:4000/v1/chat/completions";
         # Using MLX quantized model with Harmony filter for efficient inference
         # LiteLLM harmony_filter guardrail strips analysis channel markers
-        model = "hera/gpt-oss-120b";
+        model = "hera/Qwen3.5-27B-Instruct";
 
         # Enable GPT analysis for ham messages (default is false)
         # Without this, GPT is skipped for messages with negative scores
@@ -614,7 +614,7 @@ in
 
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
-          "hera/gpt-oss-120b" = {
+          "hera/Qwen3.5-27B-Instruct" = {
             max_completion_tokens = 8192;
           }
         };
@@ -632,7 +632,7 @@ in
         # Enable JSON mode - this selects the JSON conversion function
         json = true;
         # Do NOT request JSON response format from the API for gpt-oss models.
-        # gpt-oss-120b wraps output in Harmony channel tokens (<|channel|>final<|message|>)
+        # Qwen3.5-27B-Instruct wraps output in Harmony channel tokens (<|channel|>final<|message|>)
         # before the JSON content. When response_format is set, the backend (llama.cpp)
         # enforces JSON grammar and rejects the output due to these tokens.
         # The HarmonyResponseFilter guardrail strips the tokens in post_call instead.

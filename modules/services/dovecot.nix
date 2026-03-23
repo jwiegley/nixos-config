@@ -12,6 +12,11 @@ let
   defaultSieveScript = pkgs.writeText "default.sieve" ''
     require ["fileinto", "envelope", "relational", "comparator-i;ascii-numeric"];
 
+    # Never spam-file mail from local senders (monitoring, Nagios, system services)
+    if address :domain :is "from" "vulcan.lan" {
+      stop;
+    }
+
     # Check if rspamd marked this message as spam
     if anyof (
       header :contains "X-Spam" "Yes",

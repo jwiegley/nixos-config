@@ -22,7 +22,6 @@
     # Hard-code DNS servers to prevent DHCP from adding extras
     nameservers = [
       "127.0.0.1"
-      "192.168.1.1"
     ];
 
     # Disable reverse path filtering in firewall
@@ -53,7 +52,6 @@
       # Ignore DHCP-provided DNS servers
       insertNameservers = [
         "127.0.0.1"
-        "192.168.1.1"
       ];
     };
 
@@ -72,7 +70,7 @@
     # Point directly to Technitium on localhost and ignore DHCP-provided DNS
     # Route .lan domains specifically to Technitium for local name resolution
     extraConfig = ''
-      DNS=127.0.0.1 192.168.1.1
+      DNS=127.0.0.1
       Domains=~lan
       DNSStubListener=no
     '';

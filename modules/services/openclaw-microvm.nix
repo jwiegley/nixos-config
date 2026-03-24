@@ -50,7 +50,10 @@ let
   #           host  route_localnet=1 on br-openclaw
   dnatPorts = [
     443 # nginx (HTTPS) — needed for HA and other proxied services
+    993 # Dovecot IMAPS — VM accesses host Dovecot via DNAT
+    2525 # Postfix plain SMTP — VM sends mail (mynetworks, no TLS)
     4000 # LiteLLM
+    5232 # Radicale CardDAV — VM accesses host Radicale via DNAT
     6333 # Qdrant HTTP REST API
     6334 # Qdrant gRPC API
     6335 # Qdrant inference bridge
@@ -130,6 +133,13 @@ in
   # directory for virtiofs sharing into the VM.
 
   sops.secrets."openclaw/config" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [ "microvm@openclaw.service" ];
+  };
+
+  sops.secrets."openclaw/gcp-oauth-keys" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
@@ -330,6 +340,33 @@ in
       cp -f "${config.sops.secrets."openclaw/config".path}" "${secretsStagingDir}/openclaw-config"
       chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/openclaw-config"
       chmod 0400 "${secretsStagingDir}/openclaw-config"
+
+      # Copy Google Calendar OAuth credentials
+      GCP_OAUTH_SRC="${config.sops.secrets."openclaw/gcp-oauth-keys".path}"
+      if [ -f "$GCP_OAUTH_SRC" ]; then
+        cp -f "$GCP_OAUTH_SRC" "${secretsStagingDir}/gcp-oauth.keys.json"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/gcp-oauth.keys.json"
+        chmod 0400 "${secretsStagingDir}/gcp-oauth.keys.json"
+        echo "Google Calendar OAuth credentials staged"
+      fi
+
+      # Stage IMAP password (reuse email-tester-imap-password — same Dovecot passdb)
+      IMAP_PASS_SRC="${config.sops.secrets."email-tester-imap-password".path}"
+      if [ -f "$IMAP_PASS_SRC" ]; then
+        cp -f "$IMAP_PASS_SRC" "${secretsStagingDir}/imap-password"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/imap-password"
+        chmod 0400 "${secretsStagingDir}/imap-password"
+        echo "IMAP credentials staged"
+      fi
+
+      # Stage Radicale CardDAV password (reuse vdirsyncer-johnw radicale credentials)
+      RADICALE_PASS_SRC="${config.sops.secrets."vdirsyncer-johnw/radicale-password".path}"
+      if [ -f "$RADICALE_PASS_SRC" ]; then
+        cp -f "$RADICALE_PASS_SRC" "${secretsStagingDir}/radicale-password"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/radicale-password"
+        chmod 0400 "${secretsStagingDir}/radicale-password"
+        echo "Radicale CardDAV credentials staged"
+      fi
 
       echo "OpenClaw secrets staged to ${secretsStagingDir}"
     '';

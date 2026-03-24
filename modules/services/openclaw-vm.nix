@@ -13,6 +13,7 @@ let
   inherit (openclawVmArgs)
     openclawPkg
     mcporterPkg
+    claudeCodePkg
     bridgeAddr
     vmCidr
     stateDir
@@ -87,6 +88,7 @@ in
 
   environment.systemPackages = with pkgs; [
     mcporterPkg
+    claudeCodePkg
     nodejs_22
     pnpm
     git
@@ -126,6 +128,12 @@ in
         tag = "secrets";
         source = secretsStagingDir;
         mountPoint = "/run/openclaw-secrets";
+      }
+      {
+        proto = "virtiofs";
+        tag = "claude-config";
+        source = "/home/johnw/.claude";
+        mountPoint = "/run/claude-host-config";
       }
     ];
 
@@ -279,6 +287,7 @@ in
       git
       curl
       mcporterPkg
+      claudeCodePkg
       coreutils
       bashInteractive
       gnugrep
@@ -339,6 +348,42 @@ in
             mkdir -p ${openclawDir}/contacts
             mkdir -p ${openclawDir}/contacts/contacts
 
+            # ────────────────────────────────────────────────────────────────
+            # Claude Code: set up ~/.claude for the openclaw user
+            # ────────────────────────────────────────────────────────────────
+            # /run/claude-host-config is a read-only virtiofs mount of the
+            # host user's ~/.claude directory.  We symlink the read-only
+            # content (commands, agents, skills) and copy writable state
+            # (credentials, settings) from the secrets staging area.
+            CLAUDE_DIR="${stateDir}/.claude"
+            mkdir -p "$CLAUDE_DIR"
+
+            # Symlink read-only content from the host's ~/.claude
+            for subdir in commands agents skills; do
+              if [ -d "/run/claude-host-config/$subdir" ]; then
+                ln -sfn "/run/claude-host-config/$subdir" "$CLAUDE_DIR/$subdir"
+              fi
+            done
+
+            # Copy private files from secrets staging (host prepare-secrets stages
+            # these because the originals are mode 0600 on the host, not readable
+            # through the virtiofs share).
+            for pair in \
+              "claude-credentials.json:.credentials.json" \
+              "claude-config.json:.claude.json" \
+              "claude-settings.json:settings.json"; do
+              src="/run/openclaw-secrets/''${pair%%:*}"
+              dst="$CLAUDE_DIR/''${pair##*:}"
+              if [ -f "$src" ]; then
+                cp -f "$src" "$dst"
+                chmod 600 "$dst"
+              fi
+            done
+
+            # Create writable directories that Claude Code expects
+            mkdir -p "$CLAUDE_DIR/projects"
+            mkdir -p "$CLAUDE_DIR/todos"
+
             # Copy secret from virtiofs-mounted staging directory
             cp -f /run/openclaw-secrets/openclaw-config ${openclawDir}/openclaw.json
 
@@ -348,6 +393,7 @@ in
             ${pkgs.jq}/bin/jq '
               .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
               | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
+              | .acp = {"enabled": true, "backend": "acpx", "defaultAgent": "claude", "allowedAgents": ["claude"]}
             ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
             mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 
@@ -493,6 +539,30 @@ in
             else
               echo "Radicale credentials not staged; skipping contact sync" | tee -a "$VDIR_LOG"
             fi
+
+            # ────────────────────────────────────────────────────────────────
+            # Install acpx plugin to a writable location
+            # ────────────────────────────────────────────────────────────────
+            # The stock extensions live in the read-only nix store; npm install
+            # fails there. Copy the extension to the writable state dir so
+            # OpenClaw can install its npm dependencies.
+            ACPX_SRC="${openclawPkg}/lib/openclaw/extensions/acpx"
+            ACPX_DST="${openclawDir}/plugins/acpx"
+            if [ -d "$ACPX_SRC" ] && [ ! -d "$ACPX_DST/node_modules/acpx/node_modules" ]; then
+              echo "Installing acpx plugin to writable location..."
+              mkdir -p "${openclawDir}/plugins"
+              rm -rf "$ACPX_DST"
+              cp -a "$ACPX_SRC" "$ACPX_DST"
+              chmod -R u+w "$ACPX_DST"
+              cd "$ACPX_DST"
+              ${pkgs.nodejs_22}/bin/npm install --omit=dev 2>&1 || echo "acpx npm install failed (non-fatal)"
+              cd "${stateDir}"
+            fi
+
+            # Register the writable acpx plugin with OpenClaw's plugin system
+            cd "${stateDir}"
+            ${openclawPkg}/bin/openclaw plugins install --link "${openclawDir}/plugins/acpx" 2>&1 || \
+              echo "acpx plugin registration failed (non-fatal)"
 
             # Rebuild sharp native module for aarch64-linux if needed
             SHARP_REL="${openclawDir}/workspace/skills/memory-qdrant/node_modules/sharp/build/Release"

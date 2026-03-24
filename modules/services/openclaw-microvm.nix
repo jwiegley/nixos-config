@@ -43,6 +43,7 @@ let
   # -- Packages from llm-agents flake input --
   openclawPkg = inputs.llm-agents.packages.${system}.openclaw;
   mcporterPkg = inputs.llm-agents.packages.${system}.mcporter;
+  claudeCodePkg = pkgs.claude-code; # from overlay (llm-agents + USE_BUILTIN_RIPGREP patch)
 
   # -- Host-side loopback services that the VM needs to reach --
   # Strategy: guest OUTPUT DNAT 127.0.0.1:port -> 10.99.0.1:port
@@ -92,6 +93,7 @@ in
   #   Dovecot on 127.0.0.1                   /nix/.ro-store (ro-store)
   #         │                                 /var/lib/openclaw (state)
   #   nginx proxy ──> 10.99.0.2:18789        /run/openclaw-secrets (secrets)
+  #                                           /run/claude-host-config (claude-config, ro)
   #
   # The VM provides full kernel-level isolation: separate network namespace,
   # filesystem namespace, and process tree. No systemd hardening needed
@@ -368,6 +370,33 @@ in
         echo "Radicale CardDAV credentials staged"
       fi
 
+      # Stage Claude Code credentials (OAuth tokens for API auth)
+      CLAUDE_CREDS="/home/johnw/.claude/.credentials.json"
+      if [ -f "$CLAUDE_CREDS" ]; then
+        cp -f "$CLAUDE_CREDS" "${secretsStagingDir}/claude-credentials.json"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-credentials.json"
+        chmod 0400 "${secretsStagingDir}/claude-credentials.json"
+        echo "Claude Code credentials staged"
+      fi
+
+      # Stage Claude Code config (.claude.json — non-secret runtime config)
+      CLAUDE_CONFIG="/home/johnw/.claude/.claude.json"
+      if [ -f "$CLAUDE_CONFIG" ]; then
+        cp -f "$CLAUDE_CONFIG" "${secretsStagingDir}/claude-config.json"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-config.json"
+        chmod 0400 "${secretsStagingDir}/claude-config.json"
+        echo "Claude Code config staged"
+      fi
+
+      # Stage Claude Code settings.json (mode 0600 on host, not readable via virtiofs)
+      CLAUDE_SETTINGS="/home/johnw/.claude/settings.json"
+      if [ -f "$CLAUDE_SETTINGS" ]; then
+        cp -f "$CLAUDE_SETTINGS" "${secretsStagingDir}/claude-settings.json"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-settings.json"
+        chmod 0400 "${secretsStagingDir}/claude-settings.json"
+        echo "Claude Code settings staged"
+      fi
+
       echo "OpenClaw secrets staged to ${secretsStagingDir}"
     '';
   };
@@ -401,7 +430,7 @@ in
     # specialArgs.
     specialArgs = {
       openclawVmArgs = {
-        inherit openclawPkg mcporterPkg;
+        inherit openclawPkg mcporterPkg claudeCodePkg;
         inherit bridgeAddr vmCidr;
         inherit stateDir secretsStagingDir;
         inherit dnatPortList servicePort;

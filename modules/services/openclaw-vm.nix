@@ -28,10 +28,74 @@ let
     ;
 
   openclawDir = "${stateDir}/.openclaw";
+
+  # khard 0.20.0 in nixpkgs fails its runtime-deps check because it requires
+  # vobject~=0.9.7 but nixpkgs ships 0.9.6.1-vcard4.  In practice the nixpkgs
+  # vobject fork (0.9.6.1-vcard4) works at runtime; set dontCheckRuntimeDeps=1
+  # to skip the hook (see python-runtime-deps-check-hook.sh guard).
+  khardFixed = pkgs.khard.overrideAttrs (_: {
+    dontCheckRuntimeDeps = true;
+  });
+
+  # Python environment for the email-contacts MCP server.
+  emailMcpPython = pkgs.python312.withPackages (ps: [
+    ps.mcp
+  ]);
+
+  # The MCP script is referenced as a Nix path so it lands in the nix store
+  # (shared with the VM via virtiofs).
+  emailMcpScript = ../../scripts/email-contacts-mcp.py;
+
+  # Wrapper script that sets PATH and XDG_CONFIG_HOME so khard finds its
+  # config, then exec's the Python MCP server.
+  emailMcpServer = pkgs.writeShellScript "email-contacts-mcp" ''
+    export PATH="${khardFixed}/bin:$PATH"
+    export XDG_CONFIG_HOME="${stateDir}/.config"
+    exec ${emailMcpPython}/bin/python3 ${emailMcpScript}
+  '';
 in
 {
   networking.hostName = vmHostname;
   system.stateVersion = "25.11";
+
+  # ========================================================================
+  # Trust local Vulcan Certificate Authority
+  # ========================================================================
+  # The VM needs to trust the Vulcan Step-CA so that rustls (used by himalaya
+  # and other TLS clients) can verify certificates signed by it (e.g., the
+  # Dovecot IMAPS certificate at imap.vulcan.lan:993).
+  # The CA cert is public and tracked in git; it's safe to embed here.
+  security.pki.certificates = [
+    (builtins.readFile ../../certs/vulcan-root-ca.crt)
+  ];
+
+  # Explicitly export SSL_CERT_FILE and NIX_SSL_CERT_FILE system-wide so that
+  # rustls-platform-verifier (used by himalaya) and other TLS clients find the
+  # patched CA bundle that includes the Vulcan Root CA.
+  # security.pki.certificates patches the nss-cacert derivation but does NOT
+  # automatically add these env vars to the systemd service environment.
+  environment.variables = {
+    SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+    NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+  };
+
+  # ========================================================================
+  # System-wide packages (available in exec PATH for Claw agent commands)
+  # ========================================================================
+  # These must be in environment.systemPackages (not just the systemd service
+  # path) so that Claw's exec commands can find them via the default PATH.
+
+  environment.systemPackages = with pkgs; [
+    mcporterPkg
+    nodejs_22
+    pnpm
+    git
+    curl
+    jq
+    himalaya
+    vdirsyncer
+    khardFixed
+  ];
 
   # ========================================================================
   # microvm hardware configuration
@@ -113,6 +177,9 @@ in
       "hass.vulcan.lan"
       "qdrant.vulcan.lan"
       "litellm.vulcan.lan"
+      "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.0.1:993 → 127.0.0.1:993)
+      "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.0.1:2525 → 127.0.0.1:2525)
+      "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)
     ];
   };
 
@@ -218,6 +285,9 @@ in
       gnused
       jq
       socat
+      himalaya
+      vdirsyncer
+      khardFixed
     ];
 
     environment = {
@@ -226,6 +296,7 @@ in
       SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/ca-certificates.crt";
+      HIMALAYA_CONFIG = "${stateDir}/.config/himalaya/config.toml";
     };
 
     serviceConfig = {
@@ -254,41 +325,184 @@ in
     };
 
     preStart = ''
-      # Create directory structure for OpenClaw state
-      mkdir -p ${openclawDir}/agents/main/sessions
-      mkdir -p ${openclawDir}/logs
-      mkdir -p ${openclawDir}/cron
-      mkdir -p ${openclawDir}/delivery-queue
-      mkdir -p ${openclawDir}/workspace
+            # Create directory structure for OpenClaw state
+            mkdir -p ${openclawDir}/agents/main/sessions
+            mkdir -p ${openclawDir}/logs
+            mkdir -p ${openclawDir}/cron
+            mkdir -p ${openclawDir}/delivery-queue
+            mkdir -p ${openclawDir}/workspace
+            mkdir -p ${openclawDir}/.config/google-calendar-mcp
+            mkdir -p ${stateDir}/.config/himalaya
+            mkdir -p ${stateDir}/.config/vdirsyncer
+            mkdir -p ${stateDir}/.config/khard
+            mkdir -p ${openclawDir}/.vdirsyncer/status
+            mkdir -p ${openclawDir}/contacts
+            mkdir -p ${openclawDir}/contacts/contacts
 
-      # Copy secret from virtiofs-mounted staging directory
-      cp -f /run/openclaw-secrets/openclaw-config ${openclawDir}/openclaw.json
+            # Copy secret from virtiofs-mounted staging directory
+            cp -f /run/openclaw-secrets/openclaw-config ${openclawDir}/openclaw.json
 
-      # Patch runtime config for the VM environment:
-      #  - CORS: allow host-header origin fallback (VM is the isolation boundary)
-      #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
-      ${pkgs.jq}/bin/jq '
-        .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
-        | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
-      ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
-      mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
+            # Patch runtime config for the VM environment:
+            #  - CORS: allow host-header origin fallback (VM is the isolation boundary)
+            #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
+            ${pkgs.jq}/bin/jq '
+              .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
+              | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
+            ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
+            mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 
-      chmod 600 ${openclawDir}/openclaw.json
+            chmod 600 ${openclawDir}/openclaw.json
 
-      # Set up mcporter config symlink if present
-      if [ -d "${openclawDir}/.mcporter" ]; then
-        ln -sfn ${openclawDir}/.mcporter ${stateDir}/.mcporter
-      fi
+            # Set up mcporter config symlink if present
+            if [ -d "${openclawDir}/.mcporter" ]; then
+              ln -sfn ${openclawDir}/.mcporter ${stateDir}/.mcporter
+            fi
 
-      # Rebuild sharp native module for aarch64-linux if needed
-      SHARP_REL="${openclawDir}/workspace/skills/memory-qdrant/node_modules/sharp/build/Release"
-      if [ -d "$SHARP_REL" ] && \
-         [ ! -f "$SHARP_REL/sharp-linux-arm64v8.node" ]; then
-        echo "Installing sharp linux-arm64 binary..."
-        cd "${openclawDir}/workspace/skills/memory-qdrant"
-        ${pkgs.nodejs_22}/bin/npm rebuild sharp 2>&1 || true
-        cd "${stateDir}"
-      fi
+            # ────────────────────────────────────────────────────────────────
+            # Inject email-contacts MCP server into mcporter.json
+            # ────────────────────────────────────────────────────────────────
+            MCPORTER_JSON="${openclawDir}/.mcporter/mcporter.json"
+            if [ -f "$MCPORTER_JSON" ]; then
+              ${pkgs.jq}/bin/jq --arg cmd "${emailMcpServer}" '
+                .mcpServers["email-contacts"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "env": {
+                    "IMAP_HOST": "imap.vulcan.lan",
+                    "IMAP_PORT": "993",
+                    "SMTP_HOST": "smtp.vulcan.lan",
+                    "SMTP_PORT": "2525",
+                    "EMAIL_ADDRESS": "johnw@vulcan.lan",
+                    "EMAIL_USERNAME": "johnw",
+                    "EMAIL_PASSWORD_FILE": "/run/openclaw-secrets/imap-password",
+                    "KHARD_CONFIG": "${stateDir}/.config/khard/khard.conf"
+                  },
+                  "description": "Email (IMAP read/search, SMTP send) and contact lookup"
+                }
+              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
+              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
+              chmod 600 "$MCPORTER_JSON"
+            fi
+
+            # ────────────────────────────────────────────────────────────────
+            # Himalaya email client configuration
+            # ────────────────────────────────────────────────────────────────
+            # Config is written on every start so it reflects the current
+            # staging directory layout. Password is read at command time.
+            # Read IMAP password at preStart time so we can embed it as auth.raw.
+            # himalaya's process-lib hardcodes "sh -c" for auth.cmd which fails when sh
+            # is not in PATH; auth.raw avoids spawning a subprocess entirely.
+            IMAP_PASS=$(cat /run/openclaw-secrets/imap-password)
+            cat > ${stateDir}/.config/himalaya/config.toml << HIMALAYA_END
+      [accounts.johnw]
+      email = "johnw@vulcan.lan"
+      display-name = "John Wiegley"
+      default = true
+
+      # IMAP: Dovecot at imap.vulcan.lan:993 via two-stage DNAT
+      # TLS verified against Vulcan Step-CA (added to VM trust store via security.pki.certificates)
+      backend.type = "imap"
+      backend.host = "imap.vulcan.lan"
+      backend.port = 993
+      backend.encryption.type = "tls"
+      backend.login = "johnw"
+      backend.auth.type = "password"
+      backend.auth.raw = "$IMAP_PASS"
+
+      # SMTP: Postfix port 2525 via two-stage DNAT
+      # Plain/no-TLS, permit_mynetworks (VM IP 10.99.0.2 ∈ 10.0.0.0/8)
+      # Auth via Dovecot SASL (same credentials as IMAP)
+      message.send.backend.type = "smtp"
+      message.send.backend.host = "smtp.vulcan.lan"
+      message.send.backend.port = 2525
+      message.send.backend.encryption.type = "none"
+      message.send.backend.login = "johnw"
+      message.send.backend.auth.type = "password"
+      message.send.backend.auth.raw = "$IMAP_PASS"
+      message.send.save-copy = false
+      HIMALAYA_END
+            chmod 600 ${stateDir}/.config/himalaya/config.toml
+
+            # ────────────────────────────────────────────────────────────────
+            # vdirsyncer: sync Radicale contacts to local vCard files
+            # ────────────────────────────────────────────────────────────────
+            # Use root URL + explicit collection so vdirsyncer can discover it.
+            # Full cat path ensures the password.fetch command works regardless of PATH.
+            cat > ${stateDir}/.config/vdirsyncer/config << VDIRSYNCER_END
+      [general]
+      status_path = "${openclawDir}/.vdirsyncer/status"
+
+      [pair contacts]
+      a = "radicale"
+      b = "local"
+      collections = [["contacts", "contacts", "contacts"]]
+
+      [storage radicale]
+      type = "carddav"
+      url = "http://radicale.vulcan.lan:5232/"
+      username = "johnw"
+      password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "/run/openclaw-secrets/radicale-password"]
+
+      [storage local]
+      type = "filesystem"
+      path = "${openclawDir}/contacts/"
+      fileext = ".vcf"
+      VDIRSYNCER_END
+            chmod 600 ${stateDir}/.config/vdirsyncer/config
+
+            # ────────────────────────────────────────────────────────────────
+            # khard: CLI contact manager for vCard files
+            # contacts subdirectory is created by vdirsyncer for the "contacts" collection
+            # ────────────────────────────────────────────────────────────────
+            cat > ${stateDir}/.config/khard/khard.conf << KHARD_END
+      [addressbooks]
+      [[contacts]]
+      path = ${openclawDir}/contacts/contacts/
+
+      [general]
+      default_action = show
+      editor = cat
+      merge_editor = cat
+      KHARD_END
+            chmod 600 ${stateDir}/.config/khard/khard.conf
+
+            # ────────────────────────────────────────────────────────────────
+            # Sync contacts from Radicale (best-effort at service start)
+            # ────────────────────────────────────────────────────────────────
+            VDIR_LOG="${openclawDir}/logs/vdirsyncer-startup.log"
+            echo "=== vdirsyncer startup $(date -u) ===" | tee -a "$VDIR_LOG"
+            if [ -f /run/openclaw-secrets/radicale-password ]; then
+              # Test Radicale connectivity
+              echo "Testing Radicale at http://radicale.vulcan.lan:5232/ ..." | tee -a "$VDIR_LOG"
+              HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                --connect-timeout 5 "http://radicale.vulcan.lan:5232/" 2>&1 || echo "CURL_FAILED")
+              echo "Radicale HTTP response: $HTTP_CODE" | tee -a "$VDIR_LOG"
+
+              echo "Running vdirsyncer discover..." | tee -a "$VDIR_LOG"
+              ${pkgs.vdirsyncer}/bin/vdirsyncer \
+                --config ${stateDir}/.config/vdirsyncer/config \
+                discover contacts 2>&1 | tee -a "$VDIR_LOG" | head -20 || \
+                echo "vdirsyncer discover failed" | tee -a "$VDIR_LOG"
+
+              echo "Running vdirsyncer sync..." | tee -a "$VDIR_LOG"
+              ${pkgs.vdirsyncer}/bin/vdirsyncer \
+                --config ${stateDir}/.config/vdirsyncer/config \
+                sync 2>&1 | tee -a "$VDIR_LOG" | head -40 || \
+                echo "vdirsyncer sync failed; will use cached contacts if available" | tee -a "$VDIR_LOG"
+              echo "Contact count: $(ls ${openclawDir}/contacts/contacts/*.vcf 2>/dev/null | wc -l) vCards" | tee -a "$VDIR_LOG"
+            else
+              echo "Radicale credentials not staged; skipping contact sync" | tee -a "$VDIR_LOG"
+            fi
+
+            # Rebuild sharp native module for aarch64-linux if needed
+            SHARP_REL="${openclawDir}/workspace/skills/memory-qdrant/node_modules/sharp/build/Release"
+            if [ -d "$SHARP_REL" ] && \
+               [ ! -f "$SHARP_REL/sharp-linux-arm64v8.node" ]; then
+              echo "Installing sharp linux-arm64 binary..."
+              cd "${openclawDir}/workspace/skills/memory-qdrant"
+              ${pkgs.nodejs_22}/bin/npm rebuild sharp 2>&1 || true
+              cd "${stateDir}"
+            fi
     '';
   };
 
@@ -414,6 +628,188 @@ in
 
       echo "" >> "$OUT"
       echo "=== Done ===" >> "$OUT"
+    '';
+  };
+
+  # ========================================================================
+  # Email + Contacts tool integration test
+  # Runs after OpenClaw starts; writes results to shared state dir.
+  # ========================================================================
+
+  systemd.services.openclaw-tool-test = {
+    description = "OpenClaw email+contacts integration test";
+    after = [ "openclaw.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "openclaw";
+      Group = "openclaw";
+    };
+    environment = {
+      HOME = stateDir;
+      HIMALAYA_CONFIG = "${stateDir}/.config/himalaya/config.toml";
+      # rustls-platform-verifier needs SSL_CERT_FILE to find the Vulcan CA bundle
+      SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+      NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+    };
+    path = with pkgs; [
+      himalaya
+      khardFixed
+      curl
+      coreutils
+      gnugrep
+      socat
+    ];
+    script = ''
+      OUT="${openclawDir}/logs/tool-test.txt"
+      echo "=== OpenClaw Tool Integration Test ===" > "$OUT"
+      echo "Time: $(date -u)" >> "$OUT"
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 1: khard contact lookup
+      # ──────────────────────────────────────────
+      echo "--- khard: list contacts ---" >> "$OUT"
+      if khard list 2>&1 | head -5 >> "$OUT"; then
+        COUNT=$(khard list 2>/dev/null | wc -l)
+        echo "PASS: khard found $COUNT contacts" >> "$OUT"
+      else
+        echo "FAIL: khard list failed" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # khard email lookup for contacts named Wiegley
+      echo "--- khard: search 'Wiegley' ---" >> "$OUT"
+      khard email --search "Wiegley" 2>&1 >> "$OUT" || echo "(no results)" >> "$OUT"
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 2: SMTP connectivity + send
+      # ──────────────────────────────────────────
+      echo "--- SMTP: TCP connect to smtp.vulcan.lan:2525 ---" >> "$OUT"
+      # Use bash TCP redirect to read banner without sending data first
+      SMTP_BANNER=$(
+        (
+          exec 3<>/dev/tcp/smtp.vulcan.lan/2525
+          IFS= read -r -t 5 line <&3
+          echo "$line"
+          echo "QUIT" >&3
+          exec 3>&-
+        ) 2>&1 || echo "FAILED"
+      )
+      echo "$SMTP_BANNER" >> "$OUT"
+      if echo "$SMTP_BANNER" | grep -q "^220"; then
+        echo "PASS: SMTP banner received" >> "$OUT"
+      else
+        echo "FAIL: SMTP banner not received" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      echo "--- SMTP: himalaya send test message ---" >> "$OUT"
+      # send-copy = false is set in himalaya config so no IMAP save-copy attempt.
+      # Use || pattern to capture exit code without triggering set -e on failure.
+      SEND_EXIT=0
+      SEND_OUTPUT=$(printf "From: johnw@vulcan.lan\r\nTo: johnw@vulcan.lan\r\nSubject: OpenClaw SMTP send test\r\n\r\nThis is an automated SMTP send test from OpenClaw.\r\n" \
+        | timeout -k 5 30 himalaya message send --account johnw 2>&1) || SEND_EXIT=$?
+      echo "$SEND_OUTPUT" | head -5 >> "$OUT"
+      if [ "$SEND_EXIT" -eq 0 ]; then
+        echo "PASS: himalaya SMTP send succeeded" >> "$OUT"
+      elif [ "$SEND_EXIT" -eq 124 ] || [ "$SEND_EXIT" -eq 137 ]; then
+        echo "FAIL: himalaya SMTP send timed out (30s)" >> "$OUT"
+      else
+        echo "FAIL: himalaya SMTP send failed (exit $SEND_EXIT)" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 3: IMAP connectivity (himalaya list)
+      # ──────────────────────────────────────────
+      echo "--- IMAP: password command test ---" >> "$OUT"
+      # Use || pattern so set -e doesn't fire if cat fails
+      PW_EXIT=0
+      PW_OUT=$(cat /run/openclaw-secrets/imap-password 2>&1) || PW_EXIT=$?
+      if [ "$PW_EXIT" -eq 0 ] && [ -n "$PW_OUT" ]; then
+        echo "PASS: imap-password readable (''${#PW_OUT} chars)" >> "$OUT"
+      else
+        echo "FAIL: imap-password read failed (exit $PW_EXIT): $PW_OUT" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      echo "--- IMAP: TCP connect test (port 993) ---" >> "$OUT"
+      # IMAPS uses TLS immediately — bash /dev/tcp can't do TLS, so we just
+      # test that the TCP 3-way handshake completes (connection refused = DNAT broken).
+      if (exec 3<>/dev/tcp/imap.vulcan.lan/993) 2>/dev/null; then
+        echo "PASS: IMAP TCP port 993 reachable (DNAT working)" >> "$OUT"
+      else
+        echo "FAIL: IMAP TCP port 993 unreachable" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      echo "--- IMAP: himalaya envelope list (INBOX, page-size 10) ---" >> "$OUT"
+      # -s 10 -p 1: only fetch 10 envelopes (avoids scanning huge INBOX).
+      # Use || to capture exit code without triggering set -e on timeout/failure.
+      IMAP_EXIT=0
+      IMAP_OUTPUT=$(timeout -k 5 30 himalaya envelope list --account johnw \
+        --folder INBOX -s 10 -p 1 2>&1) || IMAP_EXIT=$?
+      echo "$IMAP_OUTPUT" | head -15 >> "$OUT"
+      if [ "$IMAP_EXIT" -eq 0 ]; then
+        echo "PASS: himalaya IMAP list succeeded" >> "$OUT"
+      elif [ "$IMAP_EXIT" -eq 124 ] || [ "$IMAP_EXIT" -eq 137 ]; then
+        echo "FAIL: himalaya IMAP timed out (30s)" >> "$OUT"
+      else
+        echo "FAIL: himalaya IMAP list failed (exit $IMAP_EXIT)" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 4: himalaya IMAP search
+      # ──────────────────────────────────────────
+      echo "--- IMAP: himalaya search (from wiegley) ---" >> "$OUT"
+      # In himalaya 1.x the query is a POSITIONAL argument (not --query).
+      # Syntax: <condition> = "from <pattern>", "subject <pattern>", etc.
+      SEARCH_EXIT=0
+      SEARCH_OUTPUT=$(timeout -k 5 30 himalaya envelope list --account johnw \
+        --folder INBOX -s 10 "from wiegley" 2>&1) || SEARCH_EXIT=$?
+      echo "$SEARCH_OUTPUT" | head -10 >> "$OUT"
+      if [ "$SEARCH_EXIT" -eq 0 ]; then
+        echo "PASS: himalaya search succeeded" >> "$OUT"
+      elif [ "$SEARCH_EXIT" -eq 124 ] || [ "$SEARCH_EXIT" -eq 137 ]; then
+        echo "FAIL: himalaya search timed out (30s)" >> "$OUT"
+      else
+        echo "FAIL: himalaya search failed (exit $SEARCH_EXIT)" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 5: CardDAV (Radicale PROPFIND)
+      # ──────────────────────────────────────────
+      echo "--- CardDAV: Radicale PROPFIND connectivity ---" >> "$OUT"
+      RADICALE_PASS=$(cat /run/openclaw-secrets/radicale-password 2>/dev/null || echo "")
+      if [ -n "$RADICALE_PASS" ]; then
+        # CalDAV/CardDAV uses PROPFIND; plain GET returns 403 on collection paths.
+        CARDDAV_CODE=""
+        CARDDAV_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          --connect-timeout 5 \
+          -X PROPFIND \
+          -H "Depth: 0" \
+          -H "Content-Type: application/xml" \
+          -u "johnw:$RADICALE_PASS" \
+          "http://radicale.vulcan.lan:5232/johnw/" 2>&1) || true
+        echo "HTTP response: $CARDDAV_CODE" >> "$OUT"
+        if echo "$CARDDAV_CODE" | grep -qE "^207$"; then
+          echo "PASS: Radicale CardDAV PROPFIND succeeded (HTTP 207 Multi-Status)" >> "$OUT"
+        elif echo "$CARDDAV_CODE" | grep -qE "^(401|403)$"; then
+          echo "FAIL: Radicale CardDAV auth/access denied (HTTP $CARDDAV_CODE)" >> "$OUT"
+        else
+          echo "FAIL: Radicale CardDAV not accessible (HTTP $CARDDAV_CODE)" >> "$OUT"
+        fi
+      else
+        echo "SKIP: radicale-password not readable" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      echo "=== Test Complete ===" >> "$OUT"
     '';
   };
 

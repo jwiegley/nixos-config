@@ -183,6 +183,14 @@ in
           user = dovecot2
           group = dovecot2
         }
+        # Postfix SASL auth socket (Dovecot → Postfix SASL integration)
+        # Allows Postfix to authenticate users via Dovecot credentials
+        # Path is relative to Postfix queue_directory (/var/lib/postfix/queue)
+        unix_listener /var/lib/postfix/queue/private/auth {
+          mode = 0660
+          user = postfix
+          group = postfix
+        }
         # Increase client_limit to accommodate all protocol services
         # Calculated: managesieve-login(100) + lmtp(1024) + imap-urlauth-login(100) + imap-login(100) = 1324
         client_limit = 1500

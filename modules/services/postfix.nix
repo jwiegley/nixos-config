@@ -75,6 +75,13 @@
       ];
       sender_canonical_maps = "regexp:/var/lib/postfix/conf/sender_canonical_regexp";
 
+      # Dovecot SASL integration for smtpd authentication
+      # Allows Postfix to authenticate users against Dovecot credentials
+      # The auth socket is at queue_directory/private/auth
+      smtpd_sasl_type = "dovecot";
+      smtpd_sasl_path = "private/auth";
+      smtpd_sasl_security_options = "noanonymous";
+
       # Message size limits (100 MB)
       message_size_limit = 104857600; # 100 MB
       mailbox_size_limit = 104857600; # 100 MB (must be >= message_size_limit)
@@ -152,7 +159,13 @@
       "-o"
       "smtpd_tls_security_level=none"
       "-o"
-      "smtpd_client_restrictions=permit_mynetworks,reject"
+      # smtpd_tls_auth_only=yes (set globally) would suppress AUTH on plaintext
+      # connections; override it here so AUTH is advertised on this no-TLS port.
+      "smtpd_tls_auth_only=no"
+      "-o"
+      "smtpd_sasl_auth_enable=yes"
+      "-o"
+      "smtpd_client_restrictions=permit_mynetworks,permit_sasl_authenticated,reject"
       "-o"
       "smtpd_milters="
     ];

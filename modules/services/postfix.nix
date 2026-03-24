@@ -63,17 +63,14 @@
 
     # Sender address rewriting for external mail relay
     # Fastmail only accepts mail from authorized sender addresses
-    # Rewrite ALL @vulcan.lan addresses to authorized Fastmail sender when relaying
-    mapFiles."sender_canonical_regexp" = pkgs.writeText "sender_canonical_regexp" ''
+    # smtp_generic_maps only applies to outbound SMTP (Fastmail relay), NOT local LMTP delivery.
+    # This preserves @vulcan.lan From headers for local mail so Sieve whitelisting works.
+    mapFiles."smtp_generic_regexp" = pkgs.writeText "smtp_generic_regexp" ''
       /^.*@vulcan\.lan$/    jwiegley@gmail.com
     '';
 
     settings.main = {
-      sender_canonical_classes = [
-        "envelope_sender"
-        "header_sender"
-      ];
-      sender_canonical_maps = "regexp:/var/lib/postfix/conf/sender_canonical_regexp";
+      smtp_generic_maps = "regexp:/var/lib/postfix/conf/smtp_generic_regexp";
 
       # Dovecot SASL integration for smtpd authentication
       # Allows Postfix to authenticate users against Dovecot credentials

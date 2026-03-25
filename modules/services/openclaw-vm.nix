@@ -306,6 +306,13 @@ in
       NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/ca-certificates.crt";
       HIMALAYA_CONFIG = "${stateDir}/.config/himalaya/config.toml";
+      # Point bundled plugin discovery at the full source checkout so that
+      # plugins like whatsapp expose their complete runtime files (e.g.
+      # light-runtime-api.ts).  In openclaw >=2026.3.23 the dist-runtime stub
+      # only ships index.js + setup-entry.js; the actual runtime modules live
+      # in extensions/.  Without this override the whatsapp plugin fails with
+      # "missing light-runtime-api for plugin 'whatsapp'".
+      OPENCLAW_BUNDLED_PLUGINS_DIR = "${openclawPkg}/lib/openclaw/extensions";
     };
 
     serviceConfig = {

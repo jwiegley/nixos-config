@@ -319,6 +319,8 @@ in
       User = "openclaw";
       Group = "openclaw";
       Type = "simple";
+      # Load ANTHROPIC_API_KEY written by preStart from the SOPS-staged token
+      EnvironmentFiles = [ "/run/openclaw/claude.env" ];
       Restart = "always";
       RestartSec = "10s";
 
@@ -376,7 +378,6 @@ in
             # these because the originals are mode 0600 on the host, not readable
             # through the virtiofs share).
             for pair in \
-              "claude-credentials.json:.credentials.json" \
               "claude-config.json:.claude.json" \
               "claude-settings.json:settings.json"; do
               src="/run/openclaw-secrets/''${pair%%:*}"
@@ -386,6 +387,18 @@ in
                 chmod 600 "$dst"
               fi
             done
+
+            # Write ANTHROPIC_API_KEY env file from SOPS-staged token.
+            # This file is loaded by EnvironmentFiles in the service config.
+            # Using an env file (rather than the environment block) keeps the
+            # secret out of the nix store and the systemd unit.
+            CLAUDE_TOKEN="/run/openclaw-secrets/claude-code-token"
+            if [ -f "$CLAUDE_TOKEN" ]; then
+              mkdir -p /run/openclaw
+              printf 'ANTHROPIC_API_KEY=%s\n' "$(cat "$CLAUDE_TOKEN")" \
+                > /run/openclaw/claude.env
+              chmod 0400 /run/openclaw/claude.env
+            fi
 
             # Create writable directories that Claude Code expects
             mkdir -p "$CLAUDE_DIR/projects"

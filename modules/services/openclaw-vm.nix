@@ -319,7 +319,9 @@ in
       User = "openclaw";
       Group = "openclaw";
       Type = "simple";
-      # Load ANTHROPIC_API_KEY written by preStart from the SOPS-staged token
+      # systemd creates /run/openclaw (owned by openclaw) before preStart runs
+      RuntimeDirectory = "openclaw";
+      # Load secrets env file written by preStart from the SOPS-staged tokens
       EnvironmentFiles = [ "/run/openclaw/claude.env" ];
       Restart = "always";
       RestartSec = "10s";
@@ -388,17 +390,26 @@ in
               fi
             done
 
-            # Write ANTHROPIC_API_KEY env file from SOPS-staged token.
+            # Write secrets env file from SOPS-staged tokens.
             # This file is loaded by EnvironmentFiles in the service config.
-            # Using an env file (rather than the environment block) keeps the
-            # secret out of the nix store and the systemd unit.
+            # Using an env file (rather than the environment block) keeps
+            # secrets out of the nix store and the systemd unit.
+            mkdir -p /run/openclaw
+            : > /run/openclaw/claude.env
+
             CLAUDE_TOKEN="/run/openclaw-secrets/claude-code-token"
             if [ -f "$CLAUDE_TOKEN" ]; then
-              mkdir -p /run/openclaw
               printf 'ANTHROPIC_API_KEY=%s\n' "$(cat "$CLAUDE_TOKEN")" \
-                > /run/openclaw/claude.env
-              chmod 0400 /run/openclaw/claude.env
+                >> /run/openclaw/claude.env
             fi
+
+            PERPLEXITY_TOKEN="/run/openclaw-secrets/perplexity-api-key"
+            if [ -f "$PERPLEXITY_TOKEN" ]; then
+              printf 'PERPLEXITY_API_KEY=%s\n' "$(cat "$PERPLEXITY_TOKEN")" \
+                >> /run/openclaw/claude.env
+            fi
+
+            chmod 0400 /run/openclaw/claude.env
 
             # Create writable directories that Claude Code expects
             mkdir -p "$CLAUDE_DIR/projects"

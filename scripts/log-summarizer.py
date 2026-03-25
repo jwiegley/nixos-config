@@ -288,9 +288,11 @@ class AIAnalyzer:
         ("hera/claude-sonnet-4-6-thinking-32000", 600, 5, 15),
     ]
 
-    def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions"):
+    def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions",
+                 model: Optional[str] = None):
         self.api_url = api_url
-        self.model = self.MODELS[0][0]
+        self.override_model = model
+        self.model = model if model else self.MODELS[0][0]
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
@@ -314,7 +316,9 @@ class AIAnalyzer:
 
         # Try AI analysis with exponential backoff per model
         import time
-        for model_name, max_seconds, initial_delay, max_delay in self.MODELS:
+        models = ([(self.override_model, 7200, 5, 60)] if self.override_model
+                  else self.MODELS)
+        for model_name, max_seconds, initial_delay, max_delay in models:
             self.model = model_name
             start_time = time.monotonic()
             delay = initial_delay
@@ -492,10 +496,8 @@ Provide a clear, actionable summary. Omit known conditions and recurring harmles
                 if "choices" in result and len(result["choices"]) > 0:
                     msg = result["choices"][0]["message"]
                     content = msg.get("content", "")
-                    # Thinking/reasoning models return empty content with output in
-                    # reasoning_content. Fall back to reasoning_content if content is empty.
-                    if not content:
-                        content = msg.get("reasoning_content", "")
+                    # reasoning_content holds internal thinking/chain-of-thought from
+                    # reasoning models — never include it in the report.
                     return content if content else None
 
         except urllib.error.URLError as e:
@@ -795,6 +797,13 @@ Examples:
         action='store_true',
         help='Disable history save/load (useful for one-off runs)'
     )
+    parser.add_argument(
+        '--model', '-m',
+        default=None,
+        metavar='MODEL',
+        help='Override model (e.g. "hera/claude-sonnet-4-6-thinking-32000"). '
+             'Bypasses the model cascade and uses only this model.'
+    )
 
     args = parser.parse_args()
 
@@ -832,7 +841,9 @@ Examples:
     # Analyze with AI
     if not args.quiet:
         print("Analyzing logs...", file=sys.stderr)
-    analyzer = AIAnalyzer()
+    analyzer = AIAnalyzer(model=args.model)
+    if args.model and not args.quiet:
+        print(f"Using model: {args.model}", file=sys.stderr)
     summary = analyzer.analyze_logs(
         grouped_logs, collector.stats,
         time_range=time_description,

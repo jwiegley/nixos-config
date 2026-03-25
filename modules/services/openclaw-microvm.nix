@@ -155,6 +155,13 @@ in
     restartUnits = [ "microvm@openclaw.service" ];
   };
 
+  sops.secrets."openclaw/perplexity-api-key" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [ "microvm@openclaw.service" ];
+  };
+
   # ============================================================================
   # Section 3: Host Networking — Bridge, TAP, NetworkManager coexistence
   # ============================================================================
@@ -385,6 +392,14 @@ in
       chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-code-token"
       chmod 0400 "${secretsStagingDir}/claude-code-token"
       echo "Claude Code API token staged"
+
+      # Stage Perplexity API key from SOPS secret
+      cp -f "${
+        config.sops.secrets."openclaw/perplexity-api-key".path
+      }" "${secretsStagingDir}/perplexity-api-key"
+      chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/perplexity-api-key"
+      chmod 0400 "${secretsStagingDir}/perplexity-api-key"
+      echo "Perplexity API key staged"
 
       # Stage Claude Code config (.claude.json — non-secret runtime config)
       CLAUDE_CONFIG="/home/johnw/.claude/.claude.json"

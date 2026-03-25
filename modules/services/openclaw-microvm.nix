@@ -148,6 +148,13 @@ in
     restartUnits = [ "microvm@openclaw.service" ];
   };
 
+  sops.secrets."openclaw/claude-code-token" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [ "microvm@openclaw.service" ];
+  };
+
   # ============================================================================
   # Section 3: Host Networking — Bridge, TAP, NetworkManager coexistence
   # ============================================================================
@@ -370,14 +377,14 @@ in
         echo "Radicale CardDAV credentials staged"
       fi
 
-      # Stage Claude Code credentials (OAuth tokens for API auth)
-      CLAUDE_CREDS="/home/johnw/.claude/.credentials.json"
-      if [ -f "$CLAUDE_CREDS" ]; then
-        cp -f "$CLAUDE_CREDS" "${secretsStagingDir}/claude-credentials.json"
-        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-credentials.json"
-        chmod 0400 "${secretsStagingDir}/claude-credentials.json"
-        echo "Claude Code credentials staged"
-      fi
+      # Stage Claude Code API token from SOPS secret
+      # (replaces the old approach of copying ~/.claude/.credentials.json from the host)
+      cp -f "${
+        config.sops.secrets."openclaw/claude-code-token".path
+      }" "${secretsStagingDir}/claude-code-token"
+      chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/claude-code-token"
+      chmod 0400 "${secretsStagingDir}/claude-code-token"
+      echo "Claude Code API token staged"
 
       # Stage Claude Code config (.claude.json — non-secret runtime config)
       CLAUDE_CONFIG="/home/johnw/.claude/.claude.json"

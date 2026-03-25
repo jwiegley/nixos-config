@@ -281,11 +281,13 @@ class AIAnalyzer:
         # Use Instruct variant to avoid thinking-only models that return empty content
         ("hera/Qwen3.5-27B-Instruct", 3600, 5, 60),
         # Secondary: 1 min budget (Hera should be awake by now)
-        ("hera/Qwen3.5-9B", 3600, 5, 30),
+        ("hera/gpt-oss-120b", 3600, 5, 60),
+        # Secondary: 1 min budget (Hera should be awake by now)
+        ("hera/Qwen3.5-9B-Instruct", 3600, 5, 30),
         # Secondary: 1 min budget (clio machine)
-        ("clio/Qwen3.5-9B", 3600, 5, 30),
+        ("clio/Qwen3.5-9B-Instruct", 3600, 5, 30),
         # Cloud fallback: does not depend on llama-swap
-        ("hera/claude-sonnet-4-6-thinking-32000", 600, 5, 15),
+        ("hera/claude-sonnet-4-6", 600, 5, 15),
     ]
 
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions",

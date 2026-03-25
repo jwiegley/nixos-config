@@ -2184,11 +2184,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1774376804,
-        "narHash": "sha256-oF0oO1egNFqeol0LZunSiAtmDVSJZg/bmT1ZqDuUROo=",
+        "lastModified": 1774459064,
+        "narHash": "sha256-gWCzBq0+cWrCQBFZ30kO6RUsklXCt4C1ZWya+mZq8KU=",
         "ref": "main",
-        "rev": "17f6380a4d0328f07ec537e459197f6cac3c3f9b",
-        "revCount": 1589,
+        "rev": "e64414d19f5800c1c2850ca8aaf876e4a4df171d",
+        "revCount": 1591,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

@@ -1,0 +1,64 @@
+groups:
+  - name: security_aide
+    interval: 5m
+    rules:
+      - alert: AIDEChangesDetected
+        expr: aide_check_status == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "AIDE detected filesystem changes"
+          description: |
+            AIDE file integrity check found changes ({{ with query "aide_added_files" }}{{ . | first | value }}{{ end }} added,
+            {{ with query "aide_removed_files" }}{{ . | first | value }}{{ end }} removed,
+            {{ with query "aide_changed_files" }}{{ . | first | value }}{{ end }} changed).
+
+            Review changes: journalctl -u aide-check --since "1 day ago"
+            If changes are expected (e.g. after nixos-rebuild), update the database:
+              sudo systemctl start aide-update.service
+
+      - alert: AIDECheckError
+        expr: aide_check_status == 2
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "AIDE check encountered an error"
+          description: |
+            AIDE file integrity check failed with an error (exit code >= 14).
+            The integrity database may be corrupted or inaccessible.
+
+            Check AIDE status: systemctl status aide-check
+            View logs: journalctl -u aide-check -f
+            Re-initialize if needed: systemctl start aide-init.service
+
+      - alert: AIDEDatabaseStale
+        expr: aide_database_age_seconds > 172800
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "AIDE database is more than 48 hours old"
+          description: |
+            AIDE integrity database is {{ $value | humanizeDuration }} old.
+            Daily checks may not be running correctly.
+
+            Check timer: systemctl status aide-check.timer
+            Run manually: systemctl start aide-check.service
+
+      - alert: AIDEDatabaseMissing
+        expr: aide_database_exists == 0
+        for: 10m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "AIDE database does not exist"
+          description: |
+            AIDE integrity database is missing - file integrity monitoring is not active.
+
+            Initialize database: systemctl start aide-init.service

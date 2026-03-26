@@ -189,13 +189,19 @@
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${pkgs.aide}/bin/aide --check";
-
-      # Send email on changes (optional, requires mail setup)
-      # ExecStartPost = ''
-      #   ${pkgs.bash}/bin/bash -c 'if [ $EXIT_STATUS -ne 0 ]; then \
-      #     ${pkgs.mailutils}/bin/mail -s "AIDE Alert: File integrity violations detected" admin@example.com < /var/log/aide/aide.log; \
-      #   fi'
-      # '';
+      # AIDE exit codes: 0=no changes, 1-7=changes detected (all informational)
+      # Treat changes as success so systemd doesn't enter "failed" state and trigger
+      # SystemdServiceFailed alerts. Changes are tracked via aide_check_status Prometheus metric.
+      SuccessExitStatus = [
+        0
+        1
+        2
+        3
+        4
+        5
+        6
+        7
+      ];
     };
   };
 

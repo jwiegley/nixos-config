@@ -205,6 +205,7 @@ in
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.0.1:993 → 127.0.0.1:993)
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.0.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)
+      "drafts-mcp.vulcan.lan" # Drafts MCP (via nginx → hera:8808)
     ];
   };
 
@@ -473,6 +474,18 @@ in
                     "KHARD_CONFIG": "${stateDir}/.config/khard/khard.conf"
                   },
                   "description": "Email (IMAP read/search, SMTP send) and contact lookup"
+                }
+              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
+              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
+              chmod 600 "$MCPORTER_JSON"
+
+              # ──────────────────────────────────────────────────────────────
+              # Inject Drafts MCP server (remote, on hera via nginx proxy)
+              # ──────────────────────────────────────────────────────────────
+              ${pkgs.jq}/bin/jq '
+                .mcpServers["drafts"] = {
+                  "url": "https://drafts-mcp.vulcan.lan/sse",
+                  "description": "Create and manage Drafts notes (Drafts app on hera)"
                 }
               ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
               mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"

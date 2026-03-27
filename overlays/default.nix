@@ -5,6 +5,8 @@ let
   miniRacerDef = import ./mini-racer.nix;
   copypartyDef = import ./copyparty.nix;
   vobjectDef = import ./vobject.nix;
+  pyLetsBeRationalDef = import ./py-lets-be-rational.nix;
+  pyVollibDef = import ./py-vollib.nix;
   radicaleVcard4Def = import ./radicale-vcard4.nix;
 
   # Import Haskell overlay to fix broken packages
@@ -171,6 +173,12 @@ in
       # vobject: Override with jwiegley's fork for vCard 4.0 support
       # https://github.com/jwiegley/vobject
       vobject = pyfinal.callPackage vobjectDef { };
+
+      # py_lets_be_rational: IV algorithm for py_vollib (financial analysis)
+      py_lets_be_rational = pyfinal.callPackage pyLetsBeRationalDef { };
+
+      # py_vollib: Options pricing and implied volatility
+      py_vollib = pyfinal.callPackage pyVollibDef { };
 
       # Google Nest SDM - Update to 9.1.2 to fix datetime comparison errors
       # Version 9.1.0 has a bug comparing offset-naive and offset-aware datetimes

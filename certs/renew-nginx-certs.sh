@@ -48,6 +48,7 @@ DOMAINS=(
     "qdrant.vulcan.lan"
     "perplexica.vulcan.lan"
     "openclaw.vulcan.lan"
+    "drafts-mcp.vulcan.lan"
 )
 
 # Check if the general renewal script exists

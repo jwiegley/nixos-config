@@ -38,9 +38,25 @@ let
     dontCheckRuntimeDeps = true;
   });
 
-  # Python environment for the email-contacts MCP server.
-  emailMcpPython = pkgs.python312.withPackages (ps: [
+  # Python environment for financial analysis and MCP servers.
+  # Phase 1 packages: core scientific stack + market data + IV/options pricing.
+  financialPython = pkgs.python312.withPackages (ps: [
+    # MCP server (existing)
     ps.mcp
+
+    # Core scientific stack (P0)
+    ps.pandas
+    ps.numpy
+    ps.scipy
+    ps.matplotlib
+    ps.requests
+
+    # Market data (P0)
+    ps.yfinance
+
+    # Options pricing / IV (P0)
+    ps.py_vollib
+    ps.simplejson
   ]);
 
   # The MCP script is referenced as a Nix path so it lands in the nix store
@@ -52,7 +68,7 @@ let
   emailMcpServer = pkgs.writeShellScript "email-contacts-mcp" ''
     export PATH="${khardFixed}/bin:$PATH"
     export XDG_CONFIG_HOME="${stateDir}/.config"
-    exec ${emailMcpPython}/bin/python3 ${emailMcpScript}
+    exec ${financialPython}/bin/python3 ${emailMcpScript}
   '';
 in
 {
@@ -89,6 +105,7 @@ in
   environment.systemPackages = with pkgs; [
     mcporterPkg
     claudeCodePkg
+    financialPython
     nodejs_22
     pnpm
     git
@@ -286,6 +303,7 @@ in
       pnpm
       git
       curl
+      financialPython
       mcporterPkg
       claudeCodePkg
       coreutils

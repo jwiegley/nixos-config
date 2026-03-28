@@ -560,11 +560,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1774652584,
-        "narHash": "sha256-5cXyphIBS/kAQ+Yg66kNEoeKeknRDcLDLyAD7gjp85A=",
+        "lastModified": 1774668512,
+        "narHash": "sha256-Mtrw/i7ICX27UUaWslv261ZEMmJTLTa/A3KdLLfIK0U=",
         "owner": "git-ai-project",
         "repo": "git-ai",
-        "rev": "4cd269fe4ac872cadfb6f05bce3731b465de4508",
+        "rev": "a84f302e7fe2956fd3cb39c038c924d9abbbe176",
         "type": "github"
       },
       "original": {
@@ -2131,11 +2131,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1774623710,
-        "narHash": "sha256-UVVA1OCUeDm7fnH98G+Okfb6vUuA1in89LZGDgVWR/4=",
+        "lastModified": 1774684080,
+        "narHash": "sha256-eJIUxivNSrQG8XSdr5L1Wd22D4rk7tBFe9cu232Ko24=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "4814adf48100a2138b02591e6a7e000c106887b1",
+        "rev": "7176adaf9eff4f30fc4ec1c635da530c083cd52e",
         "type": "github"
       },
       "original": {
@@ -2184,11 +2184,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1774645855,
-        "narHash": "sha256-fgyDDUHTxNaySIOWIoIbM65pRLdHmEYuQYjjkO99zho=",
+        "lastModified": 1774662179,
+        "narHash": "sha256-0ASGEOULynSWtKIaiN3JjxUuz8Gq2UYdINNeh8JpUYg=",
         "ref": "main",
-        "rev": "318b89f026244f09aaafbdf98896b1be9e3aa62c",
-        "revCount": 1599,
+        "rev": "44c3c12d6840c0207b2658206037baf9c51fb5e9",
+        "revCount": 1604,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

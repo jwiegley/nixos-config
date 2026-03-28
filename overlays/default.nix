@@ -7,6 +7,9 @@ let
   vobjectDef = import ./vobject.nix;
   pyLetsBeRationalDef = import ./py-lets-be-rational.nix;
   pyVollibDef = import ./py-vollib.nix;
+  curlCffiDef = import ./curl-cffi.nix;
+  requestsFuturesDef = import ./requests-futures.nix;
+  yahooqueryDef = import ./yahooquery.nix;
   radicaleVcard4Def = import ./radicale-vcard4.nix;
 
   # Import Haskell overlay to fix broken packages
@@ -179,6 +182,24 @@ in
 
       # py_vollib: Options pricing and implied volatility
       py_vollib = pyfinal.callPackage pyVollibDef { };
+
+      # curl-cffi: libcurl bindings with browser impersonation (yahooquery dep)
+      curl_cffi = pyfinal.callPackage curlCffiDef { };
+
+      # requests-futures: Async HTTP requests (yahooquery dep)
+      requests-futures = pyfinal.callPackage requestsFuturesDef { };
+
+      # yahooquery: Yahoo Finance API wrapper (replaces broken yfinance)
+      yahooquery = pyfinal.callPackage yahooqueryDef { };
+
+      # psycopg: Skip flaky pool tests that fail in sandbox
+      # test_stats_connect and test_reconnect_after_grow_failed are timing-sensitive
+      psycopg = pyprev.psycopg.overridePythonAttrs (oldAttrs: {
+        disabledTests = (oldAttrs.disabledTests or [ ]) ++ [
+          "test_stats_connect"
+          "test_reconnect_after_grow_failed"
+        ];
+      });
 
       # Google Nest SDM - Update to 9.1.2 to fix datetime comparison errors
       # Version 9.1.0 has a bug comparing offset-naive and offset-aware datetimes

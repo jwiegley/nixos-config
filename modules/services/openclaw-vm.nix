@@ -52,7 +52,7 @@ let
     ps.requests
 
     # Market data (P0)
-    ps.yfinance
+    ps.yahooquery
 
     # Options pricing / IV (P0)
     ps.py_vollib

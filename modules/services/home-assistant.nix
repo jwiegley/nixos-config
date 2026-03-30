@@ -164,6 +164,121 @@ let
     };
   };
 
+  # Python dependency for OPNsense integration
+  # aiopnsense 1.0.4 has Python 2-style except clauses (broken on Python 3.13)
+  # and declares requires-python>=3.14; fixed via postPatch below.
+  aiopnsense =
+    let
+      fixExceptSyntax = pkgs.writeText "fix-aiopnsense-py2-except.py" ''
+        import re, os
+
+        pattern = re.compile(
+            r"^(\s*)except ([A-Za-z][A-Za-z0-9_.]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_.]*)+)\s*:",
+            re.MULTILINE
+        )
+
+        for root, dirs, files in os.walk("."):
+            for name in files:
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(root, name)
+                with open(path) as f:
+                    content = f.read()
+                new_content = pattern.sub(
+                    lambda m: m.group(1) + "except (" + m.group(2) + "):",
+                    content
+                )
+                if new_content != content:
+                    with open(path, "w") as f:
+                        f.write(new_content)
+      '';
+    in
+    pkgs.python3Packages.buildPythonPackage rec {
+      pname = "aiopnsense";
+      version = "1.0.4";
+      pyproject = true;
+
+      src = pkgs.fetchPypi {
+        inherit pname version;
+        hash = "sha256-jNsdOy5JjRqJefXgF2OZzCyokXaU07wAg22MnnRn5FE=";
+      };
+
+      build-system = with pkgs.python3Packages; [
+        setuptools
+      ];
+
+      postPatch = ''
+        python3 ${fixExceptSyntax}
+        # Relax requires-python: package requires >=3.14 but works on 3.13
+        substituteInPlace pyproject.toml \
+          --replace-fail 'requires-python = ">=3.14"' 'requires-python = ">=3.13"'
+      '';
+
+      dependencies = with pkgs.python3Packages; [
+        aiohttp
+        awesomeversion
+        python-dateutil
+      ];
+
+      doCheck = false;
+    };
+
+  # Custom Home Assistant component: OPNsense
+  # OPNsense firewall integration (HACS: travisghansen/hass-opnsense)
+  # Note: v0.6.4 has 40+ Python 2-style "except A, B:" clauses (invalid in Python 3.13);
+  # all are fixed via postPatch until corrected upstream.
+  hass-opnsense =
+    let
+      # Script to fix Python 2-style "except A, B:" -> "except (A, B):" across all files
+      fixExceptSyntax = pkgs.writeText "fix-py2-except.py" ''
+        import re, os
+
+        pattern = re.compile(
+            r"^(\s*)except ([A-Za-z][A-Za-z0-9_.]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_.]*)+)\s*:",
+            re.MULTILINE
+        )
+
+        for root, dirs, files in os.walk("custom_components/opnsense"):
+            for name in files:
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(root, name)
+                with open(path) as f:
+                    content = f.read()
+                new_content = pattern.sub(
+                    lambda m: m.group(1) + "except (" + m.group(2) + "):",
+                    content
+                )
+                if new_content != content:
+                    with open(path, "w") as f:
+                        f.write(new_content)
+      '';
+    in
+    pkgs.buildHomeAssistantComponent rec {
+      owner = "travisghansen";
+      domain = "opnsense";
+      version = "0.6.4";
+
+      src = pkgs.fetchFromGitHub {
+        owner = "travisghansen";
+        repo = "hass-opnsense";
+        rev = "v${version}";
+        hash = "sha256-Mvvmrq2YiulWTJhyj6wHCrUAAPhwn87LTAfdJaD1MX0=";
+      };
+
+      postPatch = ''
+        python3 ${fixExceptSyntax}
+      '';
+
+      dependencies = [ aiopnsense ];
+
+      meta = with pkgs.lib; {
+        description = "Home Assistant custom integration for OPNsense firewall";
+        homepage = "https://github.com/travisghansen/hass-opnsense";
+        license = licenses.mit;
+      };
+    };
+
   # Custom Home Assistant component: Presence Simulation
   # Simulate presence by replaying historical entity states
   # GitHub: https://github.com/slashback100/presence_simulation
@@ -357,6 +472,7 @@ in
       multiscrape # Advanced web scraping with multiple sensors per page
       chime-tts # Play chime sounds before TTS announcements
       presence-simulation # Simulate presence by replaying historical entity states
+      hass-opnsense # OPNsense firewall integration (with Python 3.13 syntax fix)
     ];
 
     # Use PostgreSQL for better performance
@@ -383,6 +499,7 @@ in
       pywaze # Required for Waze Travel Time integration
       ps.pydub # Required for Chime TTS audio processing
       pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
+      aiopnsense # Required for OPNsense integration
     ];
 
     # Components that don't require YAML configuration
@@ -694,11 +811,8 @@ in
 
       # OPNsense firewall integration
       # The built-in integration has issues with newer OPNsense versions (25.7+)
-      # Use the HACS custom component "travisghansen/hass-opnsense" instead:
-      # 1. Install HACS: https://hacs.xyz/docs/setup/download
-      # 2. Add custom repository in HACS: https://github.com/travisghansen/hass-opnsense
-      # 3. Install the integration via HACS
-      # 4. Configure via UI: Settings > Devices & Services > Add Integration > OPNsense
+      # Using the custom component "travisghansen/hass-opnsense" managed via Nix (see customComponents above)
+      # Configure via UI: Settings > Devices & Services > Add Integration > OPNsense
 
       # Enable automation UI
       automation = "!include automations.yaml";

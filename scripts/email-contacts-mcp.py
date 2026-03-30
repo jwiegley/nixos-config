@@ -65,6 +65,36 @@ def _imap_connect() -> imaplib.IMAP4_SSL:
     return mail
 
 
+def _select_folder(mail: imaplib.IMAP4_SSL, folder: str) -> None:
+    """SELECT a folder, raising on failure."""
+    status, data = mail.select(folder, readonly=True)
+    if status != "OK":
+        raise imaplib.IMAP4.error(
+            f"Cannot select folder '{folder}': {data}"
+        )
+
+
+def _list_folders(mail: imaplib.IMAP4_SSL) -> list[str]:
+    """Return sorted list of folder names from an IMAP connection."""
+    status, data = mail.list()
+    if status != "OK":
+        return []
+    folders = []
+    for item in data:
+        if item is None:
+            continue
+        line = item.decode() if isinstance(item, bytes) else item
+        # IMAP LIST response: (\\flags) "delimiter" "name"
+        # Extract the folder name (last quoted string, or after last space)
+        parts = line.rsplit('" ', 1)
+        if len(parts) == 2:
+            name = parts[1].strip().strip('"')
+        else:
+            name = line.rsplit(" ", 1)[-1].strip('"')
+        folders.append(name)
+    return sorted(folders)
+
+
 def _smtp_connect() -> smtplib.SMTP:
     s = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
     s.ehlo()
@@ -107,38 +137,65 @@ mcp = FastMCP("email-contacts")
 
 
 @mcp.tool()
+def list_folders() -> str:
+    """List all available IMAP mail folders."""
+    try:
+        mail = _imap_connect()
+        folders = _list_folders(mail)
+        mail.logout()
+        if not folders:
+            return "No folders found."
+        return "Available folders:\n" + "\n".join(f"  {f}" for f in folders)
+    except Exception as e:
+        return f"Error listing folders: {e}"
+
+
+@mcp.tool()
 def check_email(num_emails: int = 10, folder: str = "INBOX") -> str:
     """Retrieve recent emails.
 
     Args:
         num_emails: How many recent messages to return (default 10, max 50).
-        folder: IMAP folder to read (default INBOX).
+        folder: IMAP folder to read (default INBOX). Use "ALL" to check all folders.
     """
     num_emails = min(num_emails, 50)
     try:
         mail = _imap_connect()
-        mail.select(folder, readonly=True)
-        _, data = mail.search(None, "ALL")
-        ids = data[0].split()
-        if not ids:
-            mail.logout()
-            return "No emails found."
+        if folder.upper() == "ALL":
+            folders = _list_folders(mail)
+        else:
+            folders = [folder]
 
-        results = []
-        for eid in reversed(ids[-num_emails:]):
-            _, msg_data = mail.fetch(eid, "(RFC822)")
-            msg = email_mod.message_from_bytes(msg_data[0][1])
-            body = _body_text(msg)
-            results.append(
-                f"ID: {eid.decode()}\n"
-                f"From: {_decode_header(msg['From'])}\n"
-                f"Date: {msg['Date']}\n"
-                f"Subject: {_decode_header(msg['Subject'])}\n"
-                f"Body: {body[:800]}\n"
-                f"{'=' * 60}"
-            )
+        results: list[str] = []
+        remaining = num_emails
+        for f in folders:
+            if remaining <= 0:
+                break
+            try:
+                _select_folder(mail, f)
+            except imaplib.IMAP4.error:
+                continue
+            _, data = mail.search(None, "ALL")
+            ids = data[0].split()
+            if not ids:
+                continue
+            for eid in reversed(ids[-remaining:]):
+                _, msg_data = mail.fetch(eid, "(RFC822)")
+                msg = email_mod.message_from_bytes(msg_data[0][1])
+                body = _body_text(msg)
+                results.append(
+                    f"Folder: {f}\n"
+                    f"ID: {eid.decode()}\n"
+                    f"From: {_decode_header(msg['From'])}\n"
+                    f"Date: {msg['Date']}\n"
+                    f"Subject: {_decode_header(msg['Subject'])}\n"
+                    f"Body: {body[:800]}\n"
+                    f"{'=' * 60}"
+                )
+            remaining = num_emails - len(results)
+
         mail.logout()
-        return "\n".join(results)
+        return "\n".join(results) if results else "No emails found."
     except Exception as e:
         return f"Error checking email: {e}"
 
@@ -161,7 +218,7 @@ def search_email(
         since_date: Emails since this date (DD-Mon-YYYY, e.g. 01-Mar-2026).
         before_date: Emails before this date (DD-Mon-YYYY).
         body: Search in message body.
-        folder: IMAP folder (default INBOX).
+        folder: IMAP folder (default INBOX). Use "ALL" to search all folders.
         max_results: Maximum results to return (default 20, max 50).
     """
     max_results = min(max_results, 50)
@@ -180,28 +237,41 @@ def search_email(
     search_str = " ".join(criteria) if criteria else "ALL"
     try:
         mail = _imap_connect()
-        mail.select(folder, readonly=True)
-        _, data = mail.search(None, search_str)
-        ids = data[0].split()
-        if not ids:
-            mail.logout()
-            return "No emails found matching the criteria."
+        if folder.upper() == "ALL":
+            folders = _list_folders(mail)
+        else:
+            folders = [folder]
 
-        results = []
-        for eid in reversed(ids[-max_results:]):
-            _, msg_data = mail.fetch(eid, "(RFC822)")
-            msg = email_mod.message_from_bytes(msg_data[0][1])
-            body_text = _body_text(msg)
-            results.append(
-                f"ID: {eid.decode()}\n"
-                f"From: {_decode_header(msg['From'])}\n"
-                f"Date: {msg['Date']}\n"
-                f"Subject: {_decode_header(msg['Subject'])}\n"
-                f"Body: {body_text[:800]}\n"
-                f"{'=' * 60}"
-            )
+        results: list[str] = []
+        remaining = max_results
+        for f in folders:
+            if remaining <= 0:
+                break
+            try:
+                _select_folder(mail, f)
+            except imaplib.IMAP4.error:
+                continue
+            _, data = mail.search(None, search_str)
+            ids = data[0].split()
+            if not ids:
+                continue
+            for eid in reversed(ids[-remaining:]):
+                _, msg_data = mail.fetch(eid, "(RFC822)")
+                msg = email_mod.message_from_bytes(msg_data[0][1])
+                body_text = _body_text(msg)
+                results.append(
+                    f"Folder: {f}\n"
+                    f"ID: {eid.decode()}\n"
+                    f"From: {_decode_header(msg['From'])}\n"
+                    f"Date: {msg['Date']}\n"
+                    f"Subject: {_decode_header(msg['Subject'])}\n"
+                    f"Body: {body_text[:800]}\n"
+                    f"{'=' * 60}"
+                )
+            remaining = max_results - len(results)
+
         mail.logout()
-        return "\n".join(results)
+        return "\n".join(results) if results else "No emails found matching the criteria."
     except Exception as e:
         return f"Error searching email: {e}"
 
@@ -216,7 +286,7 @@ def read_email(message_id: str, folder: str = "INBOX") -> str:
     """
     try:
         mail = _imap_connect()
-        mail.select(folder, readonly=True)
+        _select_folder(mail, folder)
         _, msg_data = mail.fetch(message_id.encode(), "(RFC822)")
         if not msg_data or not msg_data[0]:
             mail.logout()

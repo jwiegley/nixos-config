@@ -198,13 +198,13 @@ let
               </div>
               <div class="form-group">
                   <label for="title">Title</label>
-                  <input type="text" id="title" name="title" required placeholder="Example Site Documentation">
-                  <p class="help-text">Display title shown in Kiwix library. Make it descriptive!</p>
+                  <input type="text" id="title" name="title" required placeholder="Example Site Documentation" maxlength="30">
+                  <p class="help-text">Display title shown in Kiwix library (max 30 chars).</p>
               </div>
               <div class="form-group">
                   <label for="description">Description (optional)</label>
-                  <input type="text" id="description" name="description" placeholder="Official documentation for Example" maxlength="30">
-                  <p class="help-text">Short description (max 30 chars) shown in Kiwix library.</p>
+                  <input type="text" id="description" name="description" placeholder="Official documentation for Example" maxlength="80">
+                  <p class="help-text">Short description (max 80 chars) shown in Kiwix library.</p>
               </div>
               <div class="form-group">
                   <label for="favicon">Favicon URL (optional)</label>
@@ -354,8 +354,8 @@ let
       def submit_job():
           url = request.form.get("url", "").strip()
           name = request.form.get("name", "").strip().lower().replace(" ", "-")
-          title = request.form.get("title", "").strip()
-          description = request.form.get("description", "").strip()[:30]  # Max 30 chars
+          title = request.form.get("title", "").strip()[:30]  # Max 30 chars for ZIM metadata
+          description = request.form.get("description", "").strip()[:80]  # Max 80 chars
           favicon = request.form.get("favicon", "").strip()
           scope_type = request.form.get("scope_type", "host").strip()
           workers = int(request.form.get("workers", 2))
@@ -564,16 +564,23 @@ let
           "--behaviorTimeout" "180"
         )
 
-        # Title is required for proper Kiwix display
+        # Title is required for proper Kiwix display (max 30 chars for ZIM metadata)
         if [ -n "$title" ] && [ "$title" != "null" ]; then
+          if [ ''${#title} -gt 30 ]; then
+            log "WARNING: Title '$title' exceeds 30 chars (''${#title}), truncating"
+            title="''${title:0:30}"
+          fi
           zimit_args+=("--title" "$title")
         else
           # Fallback to name if no title provided
           zimit_args+=("--title" "$name")
         fi
 
-        # Description (max 30 chars) for Kiwix library
+        # Description (max 80 chars) for Kiwix library
         if [ -n "$description" ] && [ "$description" != "null" ]; then
+          if [ ''${#description} -gt 80 ]; then
+            description="''${description:0:80}"
+          fi
           zimit_args+=("--description" "$description")
         fi
 

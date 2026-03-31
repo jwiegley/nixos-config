@@ -505,6 +505,26 @@ let
       # Ensure directories exist
       mkdir -p "$JOBS_DIR" "$ZIM_DIR" "$WORK_DIR"
 
+      # Ensure podman storage uses /run/user/<uid> (not /tmp/storage-run-<uid>)
+      # so it works from a system service where /tmp may be isolated.
+      storage_conf="$HOME/.config/containers/storage.conf"
+      mkdir -p "$(dirname "$storage_conf")"
+      if [ ! -f "$storage_conf" ]; then
+        cat > "$storage_conf" << STORAGEEOF
+      [storage]
+      driver = "overlay"
+      runroot = "/run/user/$(id -u)/containers"
+      STORAGEEOF
+        log "Created podman storage.conf at $storage_conf"
+      fi
+
+      # Pre-flight: verify podman is functional before processing jobs
+      if ! podman info >/dev/null 2>&1; then
+        log "ERROR: podman is not functional, skipping job processing"
+        log "$(podman info 2>&1 | tail -5)"
+        exit 1
+      fi
+
       # Find pending jobs
       for job_file in "$JOBS_DIR"/*.json; do
         [ -f "$job_file" ] || continue
@@ -584,7 +604,12 @@ let
         # Run Zimit container (using locally-built ARM64 image)
         # Note: shm-size increased to 16GB to prevent browser crashes on large crawls
         # CHROME_FLAGS increases V8 heap for MathJax-heavy sites like ncatlab
+        # --network=host: Required because the job runner runs as a system service,
+        # not a user service, so pasta/slirp4netns can't create their sandboxed
+        # network namespaces. Host networking is fine since zimit only needs
+        # outbound internet access for crawling.
         if podman run --rm \
+          --network=host \
           -v "$job_work_dir:/output" \
           --shm-size=16gb \
           -e "CHROME_FLAGS=--max-old-space-size=8192 --disable-dev-shm-usage" \
@@ -847,6 +872,17 @@ in
   # Add zimit to nix allowed-users for container operations
   nix.settings.allowed-users = lib.mkAfter [ "zimit" ];
 
+  # Ensure podman storage config directory exists for zimit user
+  systemd.tmpfiles.settings."10-zimit-podman" = {
+    "/var/lib/zimit/.config/containers" = {
+      d = {
+        user = "zimit";
+        group = "zimit";
+        mode = "0700";
+      };
+    };
+  };
+
   # Zimit Web UI service
   systemd.services.zimit-web-ui = {
     description = "Zimit Web UI for managing archive jobs";
@@ -920,8 +956,8 @@ in
         workDir
       ];
 
-      # Note: NoNewPrivileges disabled - required for podman user namespace mapping
-      PrivateTmp = true;
+      # Note: PrivateTmp disabled - conflicts with podman storage paths.
+      # NoNewPrivileges disabled - required for podman user namespace mapping.
     };
   };
 
@@ -968,7 +1004,7 @@ in
         jobQueueDir
         workDir
       ];
-      PrivateTmp = true;
+      # PrivateTmp disabled - podman needs real /tmp for storage paths
     };
   };
 

@@ -29,6 +29,7 @@
     extraModprobeConfig = ''
       options zfs zfs_arc_max=17179869184
       options zfs zfs_arc_min=2147483648
+      options zfs zfs_vdev_scrub_max_active=1
     '';
   };
 

@@ -3,6 +3,28 @@ groups:
     interval: 30s
     rules:
       # ZFS alerts
+      - alert: ZFSPoolDataErrors
+        expr: zfs_pool_data_errors > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} has permanent data errors"
+          description: "Pool {{ $labels.pool }} has {{ $value }} permanent data error(s). Data may be corrupted and unrecoverable on a single-device pool. Backup data immediately and investigate hardware."
+
+      - alert: ZFSPoolDeviceErrors
+        expr: zfs_pool_device_read_errors > 10 or zfs_pool_device_checksum_errors > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} device has I/O errors"
+          description: "Pool {{ $labels.pool }} has accumulated read or checksum errors on a device, indicating hardware degradation."
+
       - alert: ZFSPoolDegraded
         expr: node_zfs_zpool_health{state!="online"} > 0
         for: 1m

@@ -264,7 +264,7 @@ in
       job_name = "critical-services-health";
       static_configs = [
         {
-          targets = [ "localhost:9221" ];
+          targets = [ "127.0.0.1:9221" ];
         }
       ];
       scrape_interval = "10s"; # Check every 10 seconds for quick detection

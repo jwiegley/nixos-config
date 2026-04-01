@@ -54,7 +54,7 @@ groups:
           category: system
         annotations:
           summary: "High major page faults with memory pressure on {{ $labels.instance }}"
-          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing!"
+          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing! Note: ZFS scrubs running on large pools can cause this alert due to aggressive page cache eviction. Check zfs_pool_scrub_active metric and zpool status."
 
       # Swap monitoring
       - alert: SwapUsageHigh

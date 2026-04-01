@@ -39,6 +39,7 @@
     # Infrastructure monitoring
     ./certificate-exporter.nix
     ./restic-metrics.nix
+    ./zfs-pool-health-exporter.nix
     ./health-check-exporters.nix
     ./git-workspace-alerts.nix
     ./aide-metrics.nix

@@ -2815,11 +2815,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775239209,
-        "narHash": "sha256-YtSV0E0b5DRecFdnxjcXcmG75PKljxADCC2cAKV6Dp4=",
+        "lastModified": 1775241149,
+        "narHash": "sha256-EB2v1bAoE3ygwKNRZmlR4W8qIt6mki4/OVqicUrYkO0=",
         "owner": "jwiegley",
         "repo": "org-jw",
-        "rev": "ddb7ae0fa3f1033011ff17afae1b3f261bb75db3",
+        "rev": "0fb9993387ee48d4fdca9ab639fcc9924dc69ea3",
         "type": "github"
       },
       "original": {

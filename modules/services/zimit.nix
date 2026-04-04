@@ -911,6 +911,7 @@ in
       ExecStart = "${zimitWebUI}/bin/zimit-web-ui";
       Restart = "always";
       RestartSec = 5;
+      Nice = 15;
 
       # Security hardening
       PrivateTmp = true;
@@ -957,6 +958,7 @@ in
       Group = "zimit";
       ExecStart = lib.getExe zimitJobRunner;
       TimeoutStartSec = "30d"; # Allow up to 30 days for very large sites
+      Nice = 15;
       ReadWritePaths = [
         jobQueueDir
         zimDir

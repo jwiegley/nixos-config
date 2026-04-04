@@ -25,6 +25,7 @@
     let
       packages = import "${inputs.nix-config}/config/packages.nix" {
         inherit hostname inputs pkgs;
+        isClientMachine = false;
       };
     in
     {

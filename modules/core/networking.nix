@@ -90,6 +90,55 @@
     # "net.ipv4.conf.wlp1s0f0.rp_filter" = 0;
   };
 
+  # NetworkManager dispatcher script: re-apply asymmetric routing rules whenever
+  # end0 comes up or DHCP renews (NetworkManager wipes ip rules on interface events)
+  networking.networkmanager.dispatcherScripts = [
+    {
+      source = pkgs.writeShellScript "re-apply-asymmetric-routing" ''
+        IFACE="$1"
+        ACTION="$2"
+        case "$ACTION" in
+          up|dhcp4-change|dhcp6-change|connectivity-change)
+            if [ "$IFACE" = "end0" ]; then
+              systemctl restart asymmetric-routing
+            fi
+            ;;
+        esac
+      '';
+      type = "basic";
+    }
+  ];
+
+  # Declarative NM connection profile for end0 with embedded routing rules
+  # NM re-applies these ip rules on every connection activation, making them
+  # survive NM restarts, DHCP renewals, and all interface events natively
+  networking.networkmanager.ensureProfiles.profiles = {
+    "end0-wired" = {
+      connection = {
+        id = "end0-wired";
+        type = "ethernet";
+        "interface-name" = "end0";
+        autoconnect = "true";
+        "autoconnect-priority" = "10";
+        uuid = "a3f1d2e4-5b6c-7d8e-9f0a-1b2c3d4e5f6a";
+      };
+      ethernet = { };
+      ipv4 = {
+        method = "auto";
+        "route-metric" = "100";
+        # Force all traffic from 192.168.1.2 destined for 192.168.x.x back via
+        # the wired gateway (192.168.1.1) so asymmetric replies use correct source IP
+        "routing-rule1" = "priority 50 from 192.168.1.2/32 to 192.168.0.0/16 table 200";
+        # Same fix for container network range (10.x.x.x)
+        "routing-rule2" = "priority 51 from 192.168.1.2/32 to 10.0.0.0/8 table 200";
+      };
+      ipv6 = {
+        method = "auto";
+        "addr-gen-mode" = "default";
+      };
+    };
+  };
+
   # Policy routing for asymmetric routing support
   # Problem: Clients on 192.168.3.x reach 192.168.1.2 via router (arrives on end0),
   # but responses would go out via wlp1s0f0 with source IP 192.168.3.16 (wrong!)

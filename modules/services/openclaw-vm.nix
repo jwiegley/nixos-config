@@ -440,10 +440,22 @@ in
             # Patch runtime config for the VM environment:
             #  - CORS: allow host-header origin fallback (VM is the isolation boundary)
             #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
+            #  - Schema migration: flatten tools.web.search.<provider>.apiKey → tools.web.search.apiKey
+            #    (openclaw >=2026.3.28 rejects nested provider config as "Unrecognized key")
             ${pkgs.jq}/bin/jq '
               .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
               | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
               | .acp = {"enabled": true, "backend": "acpx", "defaultAgent": "claude", "allowedAgents": ["claude"]}
+              | if (.tools.web.search.provider // null) != null then
+                  .tools.web.search |= (
+                    . as $s |
+                    ($s[$s.provider] | if type == "object" then .apiKey else null end) as $nestedKey |
+                    if $nestedKey != null then
+                      .apiKey = ($s.apiKey // $nestedKey)
+                      | del(.[$s.provider])
+                    else . end
+                  )
+                else . end
             ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
             mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 

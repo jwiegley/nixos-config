@@ -225,7 +225,7 @@ let
 
   # Custom Home Assistant component: OPNsense
   # OPNsense firewall integration (HACS: travisghansen/hass-opnsense)
-  # Note: v0.6.4 has 40+ Python 2-style "except A, B:" clauses (invalid in Python 3.13);
+  # Note: v0.6.5 still has Python 2-style "except A, B:" clauses (invalid in Python 3.13);
   # all are fixed via postPatch until corrected upstream.
   hass-opnsense =
     let
@@ -257,13 +257,13 @@ let
     pkgs.buildHomeAssistantComponent rec {
       owner = "travisghansen";
       domain = "opnsense";
-      version = "0.6.4";
+      version = "0.6.5";
 
       src = pkgs.fetchFromGitHub {
         owner = "travisghansen";
         repo = "hass-opnsense";
         rev = "v${version}";
-        hash = "sha256-Mvvmrq2YiulWTJhyj6wHCrUAAPhwn87LTAfdJaD1MX0=";
+        hash = "sha256-OUFlROm1SC1Dy5aBzSG9RpQhRYeiWNKELTXG6UQHJFM=";
       };
 
       postPatch = ''
@@ -472,7 +472,7 @@ in
       multiscrape # Advanced web scraping with multiple sensors per page
       chime-tts # Play chime sounds before TTS announcements
       presence-simulation # Simulate presence by replaying historical entity states
-      hass-opnsense # OPNsense firewall integration (with Python 3.13 syntax fix)
+      hass-opnsense # OPNsense firewall integration v0.6.5 (with Python 3.13 syntax fix)
     ];
 
     # Use PostgreSQL for better performance

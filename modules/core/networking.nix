@@ -188,17 +188,11 @@
       ${pkgs.iproute2}/bin/ip route add default via $GATEWAY table end0_return 2>/dev/null || \
         ${pkgs.iproute2}/bin/ip route replace default via $GATEWAY table end0_return
 
-      # Route ALL traffic from 192.168.1.2 destined to non-local subnets via the ethernet gateway
+      # Route ALL traffic from 192.168.1.2 destined to non-local subnets via the ethernet gateway.
+      # Source-specific rules are critical: "from all" rules would intercept responses from
+      # wlp1s0f0 (192.168.3.16) and misroute them via end0, breaking WiFi-interface services.
       ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 192.168.0.0/16 table end0_return priority 50 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 10.0.0.0/8 table end0_return priority 51 2>/dev/null || true
-
-      # Keep specific port rules as fallback (lower priority) for any edge cases
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 53 to 192.168.0.0/16 table end0_return priority 60 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto tcp sport 53 to 192.168.0.0/16 table end0_return priority 61 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 123 to 192.168.0.0/16 table end0_return priority 62 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 53 to 10.0.0.0/8 table end0_return priority 60 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto tcp sport 53 to 10.0.0.0/8 table end0_return priority 61 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add ipproto udp sport 123 to 10.0.0.0/8 table end0_return priority 62 2>/dev/null || true
 
       echo "Asymmetric routing configured: all traffic from 192.168.1.2 routes via $GATEWAY"
     '';
@@ -206,12 +200,6 @@
     preStop = ''
       ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 192.168.0.0/16 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 10.0.0.0/8 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 192.168.0.0/16 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 192.168.0.0/16 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 192.168.0.0/16 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto tcp sport 53 to 10.0.0.0/8 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del ipproto udp sport 123 to 10.0.0.0/8 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del 10.88.0.0/16 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del 192.168.1.0/24 table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del default table end0_return 2>/dev/null || true

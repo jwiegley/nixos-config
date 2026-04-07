@@ -90,6 +90,12 @@ in
         ${pkgs.git}/bin/git clone https://github.com/brioche-works/technitium-dns-prometheus-exporter.git
         cd technitium-dns-prometheus-exporter
 
+        # Patch: remove the per-scrape checkForUpdate API call.
+        # The exporter calls api/user/checkForUpdate on every Prometheus scrape,
+        # generating ~5,760 external HTTP requests and log entries per day.
+        # The update_available metric keeps its default value of -1 (unknown).
+        ${pkgs.gnused}/bin/sed -i '/get_raw_update/,/^    }/d' src/technitium-dns/requests.ts
+
         # Build the container image
         ${pkgs.podman}/bin/podman build -t localhost/technitium-dns-exporter:latest .
 

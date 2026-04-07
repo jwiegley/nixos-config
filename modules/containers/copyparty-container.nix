@@ -190,6 +190,24 @@ in
       };
   };
 
+  # Override the auto-generated container post-start script to use idempotent
+  # ip commands. The networkd config (40-ve-copyparty) may already have assigned
+  # the address, so `ip addr add` fails with "Address already assigned" on
+  # container restart. Using `replace` is idempotent and works either way.
+  systemd.services."container@copyparty".serviceConfig.ExecStartPost = lib.mkForce [
+    (pkgs.writeScript "copyparty-post-start" ''
+      #!${pkgs.bash}/bin/bash
+      set -o errexit
+      set -o nounset
+      set -o pipefail
+
+      ifaceHost=ve-copyparty
+      ${pkgs.iproute2}/bin/ip link set dev "$ifaceHost" up
+      ${pkgs.iproute2}/bin/ip addr replace 10.233.2.1/32 dev "$ifaceHost"
+      ${pkgs.iproute2}/bin/ip route replace 10.233.2.2/32 dev "$ifaceHost"
+    '')
+  ];
+
   # Systemd socket unit for localhost-only port forwarding to container
   systemd.sockets = {
     "copyparty-http" = {

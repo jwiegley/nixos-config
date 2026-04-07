@@ -20,8 +20,7 @@
           };
         }
       ];
-      # DNS queries happen frequently, so scrape every 15 seconds
-      scrape_interval = "15s";
+      scrape_interval = "60s";
       scrape_timeout = "10s";
     }
   ];

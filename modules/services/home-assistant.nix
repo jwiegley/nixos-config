@@ -363,6 +363,7 @@ in
       ps.pydub # Required for Chime TTS audio processing
       ps.pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
       ps.aiopnsense # Required for OPNsense integration
+      ps."homekit-audio-proxy" # Required for HomeKit Bridge (missing from nixpkgs)
     ];
 
     # Components that don't require YAML configuration

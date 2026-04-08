@@ -32,6 +32,7 @@ let
         pruneOpts = [
           "--keep-daily 7"
           "--keep-weekly 5"
+          "--keep-monthly 12"
           "--keep-yearly 3"
         ];
         # Wait up to 5 minutes if repository is locked (prevents immediate failures)

@@ -757,11 +757,9 @@ in
 
       # InfluxDB integration for pushing metrics to VictoriaMetrics
       # VictoriaMetrics accepts InfluxDB line protocol via /write endpoint
+      # Connection/auth keys (host, port, database) are managed via UI after
+      # HA 2026.4+ deprecation of YAML connection config (removed in 2026.9.0)
       influxdb = {
-        host = "127.0.0.1";
-        port = 8428;
-        database = "homeassistant"; # Required for compatibility, ignored by VictoriaMetrics
-
         # Push metrics every 60 seconds (aligned with VictoriaMetrics scrape interval)
         max_retries = 3;
         default_measurement = "state";

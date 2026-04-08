@@ -23,6 +23,172 @@ let
 
   # Apply check-systemd overlay
   prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
+
+  # Fix script for aiopnsense Python 2-style except clauses (used in haPackageOverrides)
+  aiopnsenseFixScript = prev.writeText "fix-aiopnsense-py2-except.py" ''
+    import re, os
+
+    pattern = re.compile(
+        r"^(\s*)except ([A-Za-z][A-Za-z0-9_.]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_.]*)+)\s*:",
+        re.MULTILINE
+    )
+
+    for root, dirs, files in os.walk("."):
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            path = os.path.join(root, name)
+            with open(path) as f:
+                content = f.read()
+            new_content = pattern.sub(
+                lambda m: m.group(1) + "except (" + m.group(2) + "):",
+                content
+            )
+            if new_content != content:
+                with open(path, "w") as f:
+                    f.write(new_content)
+  '';
+
+  # Custom Python packages for Home Assistant (Python 3.14 from nixpkgs-unstable).
+  # These are not in nixpkgs, so injected via HA's packageOverrides.
+  # After injection: accessible as ps.xxx in extraPackages and as
+  # pkgs.home-assistant.python.pkgs.xxx for buildHomeAssistantComponent dependencies.
+  haPackageOverrides = hasPy: hasPyPrev: {
+    # Several packages mark disabled=true for Python 3.14 in nixpkgs-unstable,
+    # but they work fine at runtime. HA 2026.x requires Python 3.14 and uses these.
+    # Tests fail: asyncio.get_event_loop() raises RuntimeError in Python 3.14;
+    # skip tests, the library itself functions correctly at runtime.
+    reactivex = hasPyPrev.reactivex.overridePythonAttrs (_: {
+      disabled = false;
+      doCheck = false;
+    });
+    # aiounittest: redundant in Python 3.10+ (stdlib has IsolatedAsyncioTestCase)
+    # but still works; needed as nativeBuildInput by yalexs (august/yale integration).
+    # Test failures: asyncio.get_event_loop() raises RuntimeError in Python 3.14
+    # without active event loop. Skip tests; the library itself is fine.
+    aiounittest = hasPyPrev.aiounittest.overridePythonAttrs (_: {
+      disabled = false;
+      doCheck = false;
+    });
+
+    # HACS frontend (JS/HTML data package for the HACS custom component)
+    hacs-frontend = hasPy.callPackage hacsFrontendDef { };
+    hacs_frontend = hasPy.callPackage hacsFrontendDef { };
+
+    # mini-racer: V8 JavaScript engine (required by Dreame Vacuum integration)
+    mini_racer = hasPy.callPackage miniRacerDef { };
+
+    # securelogging: Hubspace integration dependency
+    securelogging = hasPy.buildPythonPackage rec {
+      pname = "securelogging";
+      version = "1.0.1";
+      format = "wheel";
+      src = prev.fetchPypi {
+        inherit pname version format;
+        dist = "py3";
+        python = "py3";
+        sha256 = "sha256-0URfkqVVXZRwLuwH/yU+4XvWOrpb3T5q8ew/eynhpQw=";
+      };
+      doCheck = false;
+    };
+
+    # aioafero: Hubspace (Afero cloud) async client
+    aioafero = hasPy.buildPythonPackage rec {
+      pname = "aioafero";
+      version = "6.0.1";
+      pyproject = true;
+      src = prev.fetchPypi {
+        inherit pname version;
+        sha256 = "1a66e3e4e9dae32295b136e5ca87536e73f5143c16dae8bbebe421f0e895e7ac";
+      };
+      build-system = with hasPy; [ hatchling ];
+      dependencies = with hasPy; [
+        aiohttp
+        beautifulsoup4
+        securelogging
+      ];
+      doCheck = false;
+    };
+
+    # pybose: Bose SoundTouch async client
+    pybose = hasPy.buildPythonPackage rec {
+      pname = "pybose";
+      version = "2025.8.2";
+      pyproject = true;
+      src = prev.fetchPypi {
+        inherit pname version;
+        sha256 = "47c2a4c96b9c8ca59d0f275e6feaef30bb641b4c11c97d65d8c5f036d558f28a";
+      };
+      build-system = with hasPy; [ setuptools ];
+      dependencies = with hasPy; [
+        zeroconf
+        websockets
+      ];
+      doCheck = false;
+    };
+
+    # pywaze: Waze travel time async client
+    pywaze = hasPy.buildPythonPackage rec {
+      pname = "pywaze";
+      version = "1.1.1";
+      format = "wheel";
+      src = prev.fetchPypi {
+        inherit pname version format;
+        dist = "py3";
+        python = "py3";
+        sha256 = "0hil7r00ifbyg57hgbfziv3ra25g036aph53975ny17wifq211j0";
+      };
+      dependencies = with hasPy; [ httpx ];
+      doCheck = false;
+    };
+
+    # pykumo: Mitsubishi Kumo Cloud (mini-split AC) client
+    pykumo = hasPy.buildPythonPackage rec {
+      pname = "pykumo";
+      version = "0.3.10";
+      format = "wheel";
+      src = prev.fetchPypi {
+        inherit pname version format;
+        dist = "py3";
+        python = "py3";
+        sha256 = "sha256-I1bIGd1YEtSJHhCLBh2brQtugJhjTmSGKoJpwPBBr2g=";
+      };
+      dependencies = with hasPy; [ requests ];
+      doCheck = false;
+    };
+
+    # opower: SMUD Okta SSO redirect fix (same patch as pythonPackagesExtensions).
+    # HA 2026.x uses unstable's opower 0.18.0; the SMUD redirectUrl KeyError
+    # still exists in 0.18.0, so we apply the same patch here.
+    opower = hasPyPrev.opower.overridePythonAttrs (oldAttrs: {
+      patches = (oldAttrs.patches or [ ]) ++ [
+        ./opower-smud-fix.patch
+      ];
+    });
+
+    # aiopnsense: OPNsense API client (patched: Python 2-style except → Python 3)
+    aiopnsense = hasPy.buildPythonPackage rec {
+      pname = "aiopnsense";
+      version = "1.0.4";
+      pyproject = true;
+      src = prev.fetchPypi {
+        inherit pname version;
+        hash = "sha256-jNsdOy5JjRqJefXgF2OZzCyokXaU07wAg22MnnRn5FE=";
+      };
+      build-system = with hasPy; [ setuptools ];
+      postPatch = ''
+        python3 ${aiopnsenseFixScript}
+        substituteInPlace pyproject.toml \
+          --replace-fail 'requires-python = ">=3.14"' 'requires-python = ">=3.13"'
+      '';
+      dependencies = with hasPy; [
+        aiohttp
+        awesomeversion
+        python-dateutil
+      ];
+      doCheck = false;
+    };
+  };
 in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;

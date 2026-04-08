@@ -123,10 +123,6 @@
     };
   };
 
-  # Open firewall for local network access
-  # Allow direct access to Node-RED on port 1880 (HTTP)
-  # HTTPS access via nginx on port 443 (already open globally in web.nix)
-  networking.firewall.interfaces."end0".allowedTCPPorts = [
-    1880 # Node-RED web interface
-  ];
+  # Node-RED is accessed via nginx HTTPS proxy only (nodered.vulcan.lan)
+  # No direct HTTP port exposed on the LAN interface
 }

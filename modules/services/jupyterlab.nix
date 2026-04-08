@@ -341,9 +341,6 @@ in
     };
   };
 
-  # Open firewall for local network access
-  # HTTPS access via nginx on port 443 (already open globally in web.nix)
-  networking.firewall.interfaces."end0".allowedTCPPorts = [
-    8888 # JupyterLab web interface (for direct local access if needed)
-  ];
+  # JupyterLab is accessed via nginx HTTPS proxy only (jupyter.vulcan.lan)
+  # No direct HTTP port exposed on the LAN interface
 }

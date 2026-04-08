@@ -60,6 +60,13 @@
     "flakes"
   ];
 
+  # Automatic garbage collection to prevent unbounded Nix store growth
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
+  };
+
   # Configure Nix to use system CA bundle (includes step-ca root certificate)
   # This allows git+https:// flake inputs to work with internal services
   # using certificates signed by step-ca

@@ -166,6 +166,19 @@ let
       ];
     });
 
+    # homekit-audio-proxy: Audio proxy for HomeKit integrations (missing from nixpkgs)
+    homekit-audio-proxy = hasPy.buildPythonPackage rec {
+      pname = "homekit-audio-proxy";
+      version = "1.2.1";
+      format = "wheel";
+      src = prev.fetchurl {
+        url = "https://files.pythonhosted.org/packages/3f/f1/a44abfc486b5e7feccfbf4d7ec85421d5465b1fcc42416df8c5039dae222/homekit_audio_proxy-1.2.1-py3-none-any.whl";
+        hash = "sha256-sa8Z6JeyZRIa71I7+r9dJH2w0AJxXc1RrVidddAIFOo=";
+      };
+      dependencies = with hasPy; [ cryptography ];
+      doCheck = false;
+    };
+
     # aiopnsense: OPNsense API client (patched: Python 2-style except → Python 3)
     aiopnsense = hasPy.buildPythonPackage rec {
       pname = "aiopnsense";

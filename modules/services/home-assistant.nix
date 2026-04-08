@@ -449,6 +449,7 @@ in
 
       # HomeKit Bridge
       "homekit" # Expose Home Assistant entities to Apple HomeKit/Siri
+      "infrared" # Infrared remote control support (provides infrared_protocols)
 
       # Utility Data
       "opower" # Energy usage from utility companies (SMUD)

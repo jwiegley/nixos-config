@@ -5,6 +5,67 @@
   ...
 }:
 
+let
+  # Prefetched Grafana community dashboards (reproducible, available offline)
+  grafanaDashboards = {
+    "node-exporter-full.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/1860/revisions/latest/download";
+      sha256 = "0yjcsqm9js676s299ccnpgpsrr0n82w58p18281wkdb14vc3pr11";
+      name = "node-exporter-full.json";
+    };
+    "node-exporter-11074.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/11074/revisions/latest/download";
+      sha256 = "0r8hpmxxzn6nsbg2i3q79pnidxcdgga9v65dxfbhfglvxqll0gw9";
+      name = "node-exporter-11074.json";
+    };
+    "postgresql.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/9628/revisions/latest/download";
+      sha256 = "1iwwqglszdl3wmsl86z9fjd8wlp019aq9hsz4pgxxjjv0qsaq6sj";
+      name = "postgresql.json";
+    };
+    "loki-promtail.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/10880/revisions/latest/download";
+      sha256 = "0rknq2ax0j9r6gk5bf4p1xxbs0r4vjwdi74gn6nvfa1g0qxs8126";
+      name = "loki-promtail.json";
+    };
+    "logs-app.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/13639/revisions/latest/download";
+      sha256 = "101lai075g45sspbnik2drdqinzmgv1yfq6888s520q8ia959m6r";
+      name = "logs-app.json";
+    };
+    "immich.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/22555/revisions/latest/download";
+      sha256 = "1yl967jmjgf4a2vrmxr83iaa9pllcd0r2cxhqby6qxlggy6dqvwj";
+      name = "immich.json";
+    };
+    "qdrant.json" = pkgs.fetchurl {
+      url = "https://grafana.com/api/dashboards/24074/revisions/latest/download";
+      sha256 = "0skw1vzi5cmq74w7qq6zkarcrpdxxjki33agjhqvhi4pq2gnmg0p";
+      name = "qdrant.json";
+    };
+  };
+
+  # Local dashboards from the NixOS config repo
+  localDashboards = {
+    "dns-query-logs.json" = ../../modules/storage/dns-query-logs-dashboard.json;
+    "home-assistant.json" = ../monitoring/dashboards/home-assistant.json;
+    "systemd-services-enhanced.json" = ../monitoring/dashboards/systemd-services-enhanced.json;
+    "mac-studio-power.json" = ../monitoring/dashboards/mac-studio-power.json;
+    "copyparty.json" = ../monitoring/dashboards/copyparty.json;
+    "atd-dashboard.json" = ../monitoring/grafana-dashboards/atd-dashboard.json;
+  };
+
+  # Combined derivation containing all dashboards
+  dashboardDir = pkgs.runCommand "grafana-dashboards" { } ''
+    mkdir -p $out
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (name: src: "cp ${src} $out/${name}") grafanaDashboards
+    )}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (name: src: "cp ${src} $out/${name}") localDashboards
+    )}
+  '';
+in
 {
   # Grafana visualization server for Prometheus metrics
   services.grafana = {
@@ -155,134 +216,29 @@
     "d /var/lib/grafana/dashboards 0755 grafana grafana -"
   ];
 
-  # Download and install popular dashboards
-  system.activationScripts.grafana-dashboards = {
-    text = ''
-      DASHBOARD_DIR="/var/lib/grafana/dashboards"
+  # Install dashboards from Nix store (reproducible, available offline)
+  # Dashboards are prefetched at build time via pkgs.fetchurl or referenced
+  # as local paths, then assembled into a single derivation (dashboardDir).
+  systemd.services.grafana-install-dashboards = {
+    description = "Install Grafana dashboards from Nix store";
+    wantedBy = [ "grafana.service" ];
+    before = [ "grafana.service" ];
 
-      # Create directory if it doesn't exist
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      DASHBOARD_DIR="/var/lib/grafana/dashboards"
       mkdir -p "$DASHBOARD_DIR"
 
-      # Node Exporter Full dashboard (ID: 1860)
-      if [ ! -f "$DASHBOARD_DIR/node-exporter-full.json" ]; then
-        echo "Downloading Node Exporter Full dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/1860/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/node-exporter-full.json" || true
-      fi
+      # Copy all dashboards from the Nix store derivation
+      cp -f ${dashboardDir}/*.json "$DASHBOARD_DIR/"
 
-      # Node Exporter Dashboard (ID: 11074) - comprehensive system metrics
-      if [ ! -f "$DASHBOARD_DIR/node-exporter-11074.json" ]; then
-        echo "Downloading Node Exporter dashboard 11074..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/11074/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/node-exporter-11074.json" || true
-      fi
-
-      # Note: Glances metrics can be viewed using Node Exporter dashboards above
-      # or directly via the Glances web UI at https://glances.vulcan.lan
-      # For custom Glances dashboard, panels can query glances_* metrics from Prometheus
-
-      # PostgreSQL Database dashboard (ID: 9628)
-      if [ ! -f "$DASHBOARD_DIR/postgresql.json" ]; then
-        echo "Downloading PostgreSQL dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/9628/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/postgresql.json" || true
-      fi
-
-      # Loki & Promtail Dashboard (ID: 10880) - comprehensive log analysis
-      if [ ! -f "$DASHBOARD_DIR/loki-promtail.json" ]; then
-        echo "Downloading Loki & Promtail dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/10880/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/loki-promtail.json" || true
-      fi
-
-      # Logs / App Dashboard (ID: 13639) - application logs overview
-      if [ ! -f "$DASHBOARD_DIR/logs-app.json" ]; then
-        echo "Downloading Logs App dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/13639/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/logs-app.json" || true
-      fi
-
-      # Copy DNS Query Logs Dashboard
-      if [ ! -f "$DASHBOARD_DIR/dns-query-logs.json" ]; then
-        echo "Installing DNS Query Logs dashboard..."
-        if [ -f "/etc/nixos/modules/storage/dns-query-logs-dashboard.json" ]; then
-          cp /etc/nixos/modules/storage/dns-query-logs-dashboard.json "$DASHBOARD_DIR/dns-query-logs.json"
-        fi
-      fi
-
-      # Technitium DNS Dashboard from GitHub
-      # Note: The dashboard must be manually copied from the cloned repository
-      # or downloaded directly using the correct path
-      if [ ! -f "$DASHBOARD_DIR/technitium-dns.json" ]; then
-        echo "Downloading Technitium DNS dashboard..."
-        # The dashboard is at the root of the repository, not in a subdirectory
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://raw.githubusercontent.com/brioche-works/technitium-dns-prometheus-exporter/main/grafana-dashboard.json" \
-          -o "$DASHBOARD_DIR/technitium-dns.json" 2>&1 | grep -v "404" || \
-        echo "Dashboard download may have failed - manually copy from /tmp/technitium-dns-prometheus-exporter/grafana-dashboard.json if needed"
-      fi
-
-      # Copy Home Assistant Security & Safety Dashboard (always update)
-      echo "Installing Home Assistant Security & Safety dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/dashboards/home-assistant.json" ]; then
-        cp /etc/nixos/modules/monitoring/dashboards/home-assistant.json "$DASHBOARD_DIR/home-assistant.json"
-      fi
-
-      # Copy Enhanced Systemd Services Dashboard (always update)
-      echo "Installing Enhanced Systemd Services dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/dashboards/systemd-services-enhanced.json" ]; then
-        cp /etc/nixos/modules/monitoring/dashboards/systemd-services-enhanced.json "$DASHBOARD_DIR/systemd-services-enhanced.json"
-      fi
-
-      # Copy Mac Studio Power Monitoring Dashboard (always update)
-      echo "Installing Mac Studio Power Monitoring dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/dashboards/mac-studio-power.json" ]; then
-        cp /etc/nixos/modules/monitoring/dashboards/mac-studio-power.json "$DASHBOARD_DIR/mac-studio-power.json"
-      fi
-
-      # Copy Copyparty File Server Dashboard (always update)
-      echo "Installing Copyparty File Server dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/dashboards/copyparty.json" ]; then
-        cp /etc/nixos/modules/monitoring/dashboards/copyparty.json "$DASHBOARD_DIR/copyparty.json"
-      fi
-
-      # Copy Windows Container Monitoring Dashboard (always update)
-      echo "Installing Windows Container Monitoring dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/dashboards/windows-container.json" ]; then
-        cp /etc/nixos/modules/monitoring/dashboards/windows-container.json "$DASHBOARD_DIR/windows-container.json"
-      fi
-
-      # Copy ATD Job Scheduler Dashboard (always update)
-      echo "Installing ATD Job Scheduler dashboard..."
-      if [ -f "/etc/nixos/modules/monitoring/grafana-dashboards/atd-dashboard.json" ]; then
-        cp /etc/nixos/modules/monitoring/grafana-dashboards/atd-dashboard.json "$DASHBOARD_DIR/atd-dashboard.json"
-      fi
-
-      # Immich Photo Management Dashboard (ID: 22555 from Grafana.com)
-      if [ ! -f "$DASHBOARD_DIR/immich.json" ]; then
-        echo "Downloading Immich dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/22555/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/immich.json" || true
-      fi
-
-      # Qdrant Vector Database Dashboard (ID: 24074 from Grafana.com)
-      if [ ! -f "$DASHBOARD_DIR/qdrant.json" ]; then
-        echo "Downloading Qdrant dashboard..."
-        ${pkgs.curl}/bin/curl -sSL \
-          "https://grafana.com/api/dashboards/24074/revisions/latest/download" \
-          -o "$DASHBOARD_DIR/qdrant.json" || true
-      fi
-
-      # Set proper ownership
+      # Preserve any manually-added dashboards (e.g. technitium-dns.json)
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';
-    deps = [ ];
   };
 
   # Grafana nginx upstream with retry logic

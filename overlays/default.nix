@@ -395,8 +395,10 @@ in
 
   home-assistant-custom-components = prev.home-assistant-custom-components or { } // {
     # HACS - Home Assistant Community Store
+    # Use HA's own Python package set so sitePackages path and all deps match.
     hacs = final.callPackage ./hacs.nix {
-      hacs-frontend = final.python3Packages.hacs-frontend;
+      hacs-frontend = final.home-assistant.python.pkgs."hacs-frontend";
+      python3Packages = final.home-assistant.python.pkgs;
     };
 
     # Pentair IntelliCenter Integration
@@ -495,6 +497,14 @@ in
   # causing them to be treated as animated GIFs and displaying "Error loading image"
   # https://github.com/immich-app/immich/issues/24559
   immich = inputs.nixpkgs-unstable.legacyPackages.${system}.immich;
+
+  # Home Assistant - Update to latest (2026.4.1+) from nixpkgs-unstable
+  # Stable nixpkgs-25.11 lags behind; unstable tracks HA releases closely.
+  # HA 2026.x requires Python 3.14. Use packageOverrides to inject custom
+  # packages (aiopnsense, pybose, pywaze, etc.) into HA's own Python 3.14 set.
+  home-assistant = inputs.nixpkgs-unstable.legacyPackages.${system}.home-assistant.override {
+    packageOverrides = haPackageOverrides;
+  };
 
   # Radicale - Override with jwiegley's fork for vCard 4.0 support
   # https://github.com/jwiegley/Radicale

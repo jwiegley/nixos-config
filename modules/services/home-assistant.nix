@@ -6,8 +6,6 @@
 }:
 
 let
-  hacs-frontend-pkg = pkgs.python3Packages.hacs-frontend;
-
   # Script to remove Nix-managed integrations from HACS installed tracking.
   # HACS cannot update Nix store symlinks: shutil.rmtree fails on symlinks in
   # Python 3.12+ and Nix store files are read-only (causing backup failures).
@@ -34,108 +32,6 @@ let
         pass
   '';
 
-  # Custom Python packages for Hubspace integration
-  securelogging = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "securelogging";
-    version = "1.0.1";
-    format = "wheel";
-
-    src = pkgs.fetchPypi {
-      inherit pname version format;
-      dist = "py3";
-      python = "py3";
-      sha256 = "sha256-0URfkqVVXZRwLuwH/yU+4XvWOrpb3T5q8ew/eynhpQw=";
-    };
-
-    doCheck = false; # Skip tests for simplicity
-  };
-
-  aioafero = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "aioafero";
-    version = "6.0.1";
-    pyproject = true;
-
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "1a66e3e4e9dae32295b136e5ca87536e73f5143c16dae8bbebe421f0e895e7ac";
-    };
-
-    build-system = with pkgs.python3Packages; [
-      hatchling
-    ];
-
-    dependencies = with pkgs.python3Packages; [
-      aiohttp
-      beautifulsoup4
-      securelogging
-    ];
-
-    doCheck = false; # Skip tests to avoid test dependencies
-  };
-
-  # Custom Python package for Bose integration
-  pybose = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "pybose";
-    version = "2025.8.2";
-    pyproject = true;
-
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "47c2a4c96b9c8ca59d0f275e6feaef30bb641b4c11c97d65d8c5f036d558f28a";
-    };
-
-    build-system = with pkgs.python3Packages; [
-      setuptools
-    ];
-
-    dependencies = with pkgs.python3Packages; [
-      zeroconf
-      websockets
-    ];
-
-    doCheck = false; # Skip tests to avoid test dependencies
-  };
-
-  # Custom Python package for Waze Travel Time integration
-  pywaze = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "pywaze";
-    version = "1.1.1";
-    format = "wheel";
-
-    src = pkgs.fetchPypi {
-      inherit pname version format;
-      dist = "py3";
-      python = "py3";
-      sha256 = "0hil7r00ifbyg57hgbfziv3ra25g036aph53975ny17wifq211j0";
-    };
-
-    dependencies = with pkgs.python3Packages; [
-      httpx
-    ];
-
-    doCheck = false; # Skip tests for simplicity
-  };
-
-  # Custom Python package for Kumo Cloud integration (Mitsubishi mini-splits)
-  pykumo = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "pykumo";
-    version = "0.3.10";
-    format = "wheel";
-
-    src = pkgs.fetchPypi {
-      inherit pname version format;
-      dist = "py3";
-      python = "py3";
-      sha256 = "sha256-I1bIGd1YEtSJHhCLBh2brQtugJhjTmSGKoJpwPBBr2g=";
-    };
-
-    dependencies = with pkgs.python3Packages; [
-      requests
-    ];
-
-    doCheck = false;
-  };
-
   # Custom Home Assistant component: Multiscrape
   # Advanced web scraping for Home Assistant with multiple sensors per page
   # GitHub: https://github.com/danieldotnl/ha-multiscrape
@@ -151,7 +47,7 @@ let
       hash = "sha256-J0LeQq31zQsBnVl6X2WJTJXK6D+k9kzFgwmbCH/VTiU=";
     };
 
-    dependencies = with pkgs.python3Packages; [
+    dependencies = with pkgs.home-assistant.python.pkgs; [
       lxml
       beautifulsoup4
     ];
@@ -178,7 +74,7 @@ let
       hash = "sha256-PoAblubm3TPZ9LAYmkEEEcuND6VWnGyx2T6btgDMsDQ=";
     };
 
-    dependencies = with pkgs.python3Packages; [
+    dependencies = with pkgs.home-assistant.python.pkgs; [
       pydub
       aiofiles
     ];
@@ -189,65 +85,6 @@ let
       license = licenses.mit;
     };
   };
-
-  # Python dependency for OPNsense integration
-  # aiopnsense 1.0.4 has Python 2-style except clauses (broken on Python 3.13)
-  # and declares requires-python>=3.14; fixed via postPatch below.
-  aiopnsense =
-    let
-      fixExceptSyntax = pkgs.writeText "fix-aiopnsense-py2-except.py" ''
-        import re, os
-
-        pattern = re.compile(
-            r"^(\s*)except ([A-Za-z][A-Za-z0-9_.]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_.]*)+)\s*:",
-            re.MULTILINE
-        )
-
-        for root, dirs, files in os.walk("."):
-            for name in files:
-                if not name.endswith(".py"):
-                    continue
-                path = os.path.join(root, name)
-                with open(path) as f:
-                    content = f.read()
-                new_content = pattern.sub(
-                    lambda m: m.group(1) + "except (" + m.group(2) + "):",
-                    content
-                )
-                if new_content != content:
-                    with open(path, "w") as f:
-                        f.write(new_content)
-      '';
-    in
-    pkgs.python3Packages.buildPythonPackage rec {
-      pname = "aiopnsense";
-      version = "1.0.4";
-      pyproject = true;
-
-      src = pkgs.fetchPypi {
-        inherit pname version;
-        hash = "sha256-jNsdOy5JjRqJefXgF2OZzCyokXaU07wAg22MnnRn5FE=";
-      };
-
-      build-system = with pkgs.python3Packages; [
-        setuptools
-      ];
-
-      postPatch = ''
-        python3 ${fixExceptSyntax}
-        # Relax requires-python: package requires >=3.14 but works on 3.13
-        substituteInPlace pyproject.toml \
-          --replace-fail 'requires-python = ">=3.14"' 'requires-python = ">=3.13"'
-      '';
-
-      dependencies = with pkgs.python3Packages; [
-        aiohttp
-        awesomeversion
-        python-dateutil
-      ];
-
-      doCheck = false;
-    };
 
   # Custom Home Assistant component: OPNsense
   # OPNsense firewall integration (HACS: travisghansen/hass-opnsense)
@@ -296,7 +133,7 @@ let
         python3 ${fixExceptSyntax}
       '';
 
-      dependencies = [ aiopnsense ];
+      dependencies = [ pkgs.home-assistant.python.pkgs.aiopnsense ];
 
       meta = with pkgs.lib; {
         description = "Home Assistant custom integration for OPNsense firewall";
@@ -515,17 +352,17 @@ in
       ps.mini_racer # Required for Dreame Vacuum integration (V8 JavaScript engine)
       ps.aiofiles # Required for Hubspace integration
       ps.packaging # Required for Hubspace integration
-      aioafero # Custom package for Hubspace integration
+      ps.aioafero # Custom package for Hubspace integration
       ps.pychromecast # Required for Bose integration
-      pybose # Custom package for Bose integration
+      ps.pybose # Custom package for Bose integration
       ps.pyicloud # Required for Apple iCloud integration
       ps.pyatv # Required for Apple TV integration
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
       ps.wakeonlan # Required for Wake on LAN integration
-      pywaze # Required for Waze Travel Time integration
+      ps.pywaze # Required for Waze Travel Time integration
       ps.pydub # Required for Chime TTS audio processing
-      pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
-      aiopnsense # Required for OPNsense integration
+      ps.pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
+      ps.aiopnsense # Required for OPNsense integration
     ];
 
     # Components that don't require YAML configuration
@@ -540,8 +377,8 @@ in
       "google" # Google Calendar integration (requires gcal_sync)
       "workday" # Binary sensor for workday/holiday detection
 
-      # Yale/August lock integration
-      "yale_home"
+      # Yale/August lock integration (renamed from yale_home in HA 2026.x)
+      "yale"
       "august"
 
       # Useful utilities

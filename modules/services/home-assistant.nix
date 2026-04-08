@@ -8,6 +8,32 @@
 let
   hacs-frontend-pkg = pkgs.python3Packages.hacs-frontend;
 
+  # Script to remove Nix-managed integrations from HACS installed tracking.
+  # HACS cannot update Nix store symlinks: shutil.rmtree fails on symlinks in
+  # Python 3.12+ and Nix store files are read-only (causing backup failures).
+  # opnsense stays Nix-managed because upstream lacks Python 3.13 syntax fixes.
+  hacsUntrackNixManaged = pkgs.writeText "hacs-untrack-nix-managed.py" ''
+    import json
+    NIX_MANAGED = {"travisghansen/hass-opnsense"}
+    fpath = "/var/lib/hass/.storage/hacs.repositories"
+    try:
+        with open(fpath) as f:
+            data = json.load(f)
+        repos = data.get("data", {})
+        changed = False
+        for repo in repos.values():
+            if isinstance(repo, dict) and repo.get("full_name", "") in NIX_MANAGED:
+                if repo.get("installed", False):
+                    repo["installed"] = False
+                    repo["version_installed"] = None
+                    changed = True
+        if changed:
+            with open(fpath, "w") as f:
+                json.dump(data, f, indent=4)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+  '';
+
   # Custom Python packages for Hubspace integration
   securelogging = pkgs.python3Packages.buildPythonPackage rec {
     pname = "securelogging";
@@ -1021,6 +1047,15 @@ in
             # have manifest.json files without proper HA integration format
             rm -f /var/lib/hass/custom_components/frontend_es5
             rm -f /var/lib/hass/custom_components/frontend_latest
+
+            # Ensure Nix-managed integrations are not tracked as HACS-installed.
+            # HACS cannot update Nix store symlinks (shutil.rmtree fails on symlinks in
+            # Python 3.12+, and Nix store files are read-only causing backup failures).
+            # opnsense (travisghansen/hass-opnsense) is managed by Nix with Python 3.13
+            # syntax patches that have not yet been merged upstream.
+            if [ -f /var/lib/hass/.storage/hacs.repositories ]; then
+              ${pkgs.python3}/bin/python3 ${hacsUntrackNixManaged}
+            fi
 
             # Generate secrets.yaml with location data and database URL
             # Location coordinates for Sacramento, CA area

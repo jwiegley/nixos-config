@@ -11,8 +11,9 @@
     enable = true;
     port = 9090;
 
-    # Disable config check since token files may not exist at build time
-    checkConfig = false;
+    # Validate config syntax at build time without checking file existence
+    # (token files referenced in scrape configs may not exist during build)
+    checkConfig = "syntax-only";
 
     # Only listen on localhost for now
     listenAddress = "127.0.0.1";

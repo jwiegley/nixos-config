@@ -8,6 +8,56 @@
 let
   cfg = config.services.github-gitea-mirror;
 
+  updateTokenScript = pkgs.writeText "update-github-tokens.py" (
+    builtins.readFile ../../scripts/update-github-tokens.py
+  );
+
+  syncPushMirrorsScript = pkgs.writeShellApplication {
+    name = "sync-push-mirrors";
+    runtimeInputs = with pkgs; [
+      curl
+      jq
+    ];
+    text = ''
+      set -euo pipefail
+
+      GITEA_TOKEN="$(cat /run/secrets/gitea-mirror-token)"
+      GITEA_URL="''${GITEA_URL:-https://gitea.vulcan.lan}"
+      GITEA_USER="''${GITEA_USER:-johnw}"
+
+      echo "Triggering push mirror sync for all $GITEA_USER repos..."
+
+      page=1
+      synced=0
+      while true; do
+        repos=$(curl -sSf \
+          -H "Authorization: token $GITEA_TOKEN" \
+          "$GITEA_URL/api/v1/repos/search?owner=$GITEA_USER&limit=50&page=$page" \
+          | jq -r '.data[].name // empty')
+
+        if [ -z "$repos" ]; then
+          break
+        fi
+
+        while read -r repo; do
+          if curl -sSf -X POST \
+            -H "Authorization: token $GITEA_TOKEN" \
+            "$GITEA_URL/api/v1/repos/$GITEA_USER/$repo/push_mirrors-sync" \
+            >/dev/null 2>&1; then
+            echo "  ✓ $repo"
+            synced=$((synced + 1))
+          else
+            echo "  → $repo (no push mirrors or error)"
+          fi
+        done <<< "$repos"
+
+        page=$((page + 1))
+      done
+
+      echo "Push mirror sync triggered for $synced repositories"
+    '';
+  };
+
   mirrorScript = pkgs.writeShellApplication {
     name = "github-gitea-mirror";
     runtimeInputs = with pkgs; [
@@ -264,6 +314,69 @@ in
         Persistent = true;
         RandomizedDelaySec = "30min";
       };
+    };
+
+    # Service to propagate rotated GitHub tokens into Gitea push/pull mirrors
+    systemd.services.update-github-mirror-tokens = {
+      description = "Update GitHub tokens in Gitea push and pull mirrors";
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeShellScript "update-github-mirror-tokens" ''
+          ${pkgs.python3}/bin/python3 ${updateTokenScript} --stdin --verbose \
+            < /run/secrets/github-mirror-token
+        '';
+        ExecStartPost = lib.getExe syncPushMirrorsScript;
+        User = "root";
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+
+      environment = {
+        GITEA_URL = cfg.giteaUrl;
+        GITEA_USER = cfg.giteaUser;
+      };
+
+      path = with pkgs; [
+        curl
+        jq
+      ];
+
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+    };
+
+    # Run token update daily so rotated secrets propagate automatically
+    systemd.timers.update-github-mirror-tokens = {
+      description = "Timer for GitHub mirror token propagation";
+      wantedBy = [ "timers.target" ];
+
+      timerConfig = {
+        OnCalendar = "*-*-* 04:00:00";
+        Persistent = true;
+        RandomizedDelaySec = "15min";
+      };
+    };
+
+    # Standalone service to trigger push mirror sync on all repos
+    systemd.services.sync-push-mirrors = {
+      description = "Trigger push mirror sync for all Gitea repositories";
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe syncPushMirrorsScript;
+        User = "root";
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+
+      environment = {
+        GITEA_URL = cfg.giteaUrl;
+        GITEA_USER = cfg.giteaUser;
+      };
+
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
     };
   };
 }

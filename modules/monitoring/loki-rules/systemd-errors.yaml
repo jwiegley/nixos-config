@@ -11,6 +11,9 @@ groups:
             != "max retries"
             != "Temporary failure in name resolution"
             != "No Sieve errors"
+            != "CHIP_ERROR"
+            != "SearxEngineAccessDeniedException"
+            != "Timeout fetching miele data"
             [10m])) * 600 > 10
         for: 5m
         labels:
@@ -39,6 +42,8 @@ groups:
         expr: |
           sum by (unit) (count_over_time({job="systemd-journal"}
             |~ "level=error|ERROR"
+            != "connection refused"
+            != "database system is shutting down"
             | json
             | unit != ""
             | unit != "user@948.service"

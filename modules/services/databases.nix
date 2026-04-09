@@ -68,6 +68,11 @@ in
       settings = {
         port = 5432;
 
+        # Memory settings - system has 62GB RAM; larger shared_buffers reduces disk reads
+        shared_buffers = "2GB"; # Increased from 256MB to cache working set across all databases
+        effective_cache_size = "16GB"; # Hint to planner about total available cache
+        work_mem = "32MB"; # Per-sort/hash, 200 connections * ~3 = ~19GB worst case
+
         # Connection settings
         max_connections = 200; # Increased from default 100 to handle bulk operations
 
@@ -266,6 +271,41 @@ in
         ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \
           'ANALYZE mail_archiver."ArchivedEmails";'
       fi
+    '';
+  };
+
+  # Optimize org database with performance indexes
+  # Fixes PostgreSQLSlowQueries alert caused by sequential scans on entry_log_entries
+  # Queries by time_day (date-based agenda lookups) had no index, causing 1307-block seqscans
+  systemd.services.postgresql-org-optimize = {
+    description = "Create performance indexes for org database";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d org -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      # Index on time_day for date-based agenda queries
+      # Without this, every date lookup scans all 71k rows (1307 buffers)
+      ${config.services.postgresql.package}/bin/psql -d org -c \
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_log_entries_time_day ON entry_log_entries (time_day) WHERE time_day IS NOT NULL;'
+
+      # Composite index for log_type + time_day queries (e.g. clock entries in a date range)
+      ${config.services.postgresql.package}/bin/psql -d org -c \
+        'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_log_entries_type_time_day ON entry_log_entries (log_type, time_day) WHERE time_day IS NOT NULL;'
+
+      ${config.services.postgresql.package}/bin/psql -d org -c \
+        'ANALYZE entry_log_entries;'
     '';
   };
 

@@ -259,10 +259,7 @@ in
 
     # Performance tuning for Home Assistant workload
     settings = {
-      # Memory settings - tune for time-series data
-      shared_buffers = "256MB"; # Increased from 128MB default for better caching
-      effective_cache_size = "1GB"; # Hint to query planner about available cache
-      work_mem = "16MB"; # Increased for better sort/hash operations
+      # Memory settings moved to databases.nix for consolidation
       maintenance_work_mem = "1GB"; # For VACUUM, CREATE INDEX on large vector tables
 
       # WAL (Write-Ahead Logging) settings for better write performance

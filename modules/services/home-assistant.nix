@@ -263,7 +263,7 @@ in
       shared_buffers = "256MB"; # Increased from 128MB default for better caching
       effective_cache_size = "1GB"; # Hint to query planner about available cache
       work_mem = "16MB"; # Increased for better sort/hash operations
-      maintenance_work_mem = "128MB"; # For VACUUM, CREATE INDEX, etc.
+      maintenance_work_mem = "1GB"; # For VACUUM, CREATE INDEX on large vector tables
 
       # WAL (Write-Ahead Logging) settings for better write performance
       wal_buffers = "8MB";

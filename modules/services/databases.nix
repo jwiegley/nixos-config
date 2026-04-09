@@ -70,7 +70,7 @@ in
 
         # Memory settings - system has 62GB RAM; larger shared_buffers reduces disk reads
         shared_buffers = "2GB"; # Increased from 256MB to cache working set across all databases
-        effective_cache_size = "16GB"; # Hint to planner about total available cache
+        effective_cache_size = "4GB"; # Hint to planner about total available cache
         work_mem = "32MB"; # Per-sort/hash, 200 connections * ~3 = ~19GB worst case
 
         # Connection settings

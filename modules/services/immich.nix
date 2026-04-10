@@ -5,6 +5,32 @@
   ...
 }:
 
+let
+  # Fix permissions on Immich external library directories so the immich
+  # user can read files via group membership.  New photos imported by the
+  # user sometimes land with owner-only permissions (e.g. 0400 johnw:johnw).
+  immichFixPermsScript = pkgs.writeShellScript "immich-fix-permissions" ''
+    set -euo pipefail
+
+    PHOTO_DIR="/tank/Photos"
+    IMMICH_DIR="$PHOTO_DIR/Immich"
+
+    # Fix group ownership: anything not already group immich
+    ${pkgs.findutils}/bin/find "$PHOTO_DIR" -path "$IMMICH_DIR" -prune \
+      -o -not -group immich -print0 \
+      | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.coreutils}/bin/chgrp immich
+
+    # Fix group-read on files
+    ${pkgs.findutils}/bin/find "$PHOTO_DIR" -path "$IMMICH_DIR" -prune \
+      -o -type f -not -perm -g=r -print0 \
+      | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.coreutils}/bin/chmod g+r
+
+    # Fix group-read+execute on directories
+    ${pkgs.findutils}/bin/find "$PHOTO_DIR" -path "$IMMICH_DIR" -prune \
+      -o -type d -not -perm -g=rx -print0 \
+      | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.coreutils}/bin/chmod g+rx
+  '';
+in
 {
   # Enable Immich service with native NixOS module
   # Note: Using socket authentication for PostgreSQL (no password needed)
@@ -105,6 +131,27 @@
         # Connection pooling
         proxy_set_header Connection "";
       '';
+    };
+  };
+
+  # Daily job to fix permissions on external photo libraries
+  systemd.services.immich-fix-permissions = {
+    description = "Fix permissions on Immich external photo libraries";
+    after = [ "zfs.target" ];
+    unitConfig.RequiresMountsFor = [ "/tank/Photos" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = immichFixPermsScript;
+      User = "root";
+    };
+  };
+
+  systemd.timers.immich-fix-permissions = {
+    description = "Daily Immich photo permissions fix";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:30:00";
+      Persistent = true;
     };
   };
 

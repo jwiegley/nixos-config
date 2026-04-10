@@ -29,11 +29,11 @@
     # podmanArgs = [ "--memory=1.8g" "--memory-reservation=1.5g" ]
 
     # Home Assistant memory limits
-    # Typically uses ~600MB, limit to 1.2GB for integrations and automations
+    # Observed ~825MB steady-state, peaks at 1GB with all integrations loaded
     home-assistant = {
       serviceConfig = {
-        MemoryMax = "1.2G";
-        MemoryHigh = "1G";
+        MemoryMax = "1.8G";
+        MemoryHigh = "1.5G";
       };
     };
 

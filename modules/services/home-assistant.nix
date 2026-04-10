@@ -745,7 +745,7 @@ in
             {
               name = "Office Vacant and Closed";
               unique_id = "office_vacant_and_closed";
-              state = "{{ is_state('binary_sensor.presence_multi_sensor_fp300_occupancy', 'off') and is_state('binary_sensor.office_door', 'off') }}";
+              state = "{{ is_state('binary_sensor.office_presence_sensor_fp300_occupancy', 'off') and is_state('binary_sensor.office_door_sensor_p2_office_door', 'off') }}";
               icon = "mdi:door-closed-lock";
             }
           ];

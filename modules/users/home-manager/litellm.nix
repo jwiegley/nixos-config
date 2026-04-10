@@ -102,6 +102,9 @@
           Restart = "always";
           RestartSec = "10s";
           TimeoutStartSec = "900";
+
+          # Suppress INFO/DEBUG journal noise (only store warning and above)
+          LogLevelMax = "warning";
         };
       };
     };

@@ -872,6 +872,9 @@ in
       "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
+    # Restart HA when PostgreSQL restarts (e.g. during nixos-rebuild) so the
+    # recorder reconnects cleanly instead of dropping state changes for hours.
+    partOf = [ "postgresql.service" ];
     # Note: metric-manager dependency is handled via home-assistant-metric-trick.nix
 
     # Generate secrets.yaml and inject database URL into configuration.yaml

@@ -56,6 +56,12 @@ in
       database = "speedtest_tracker";
       secretPath = config.sops.secrets."speedtest-tracker-db-password".path;
     })
+    (mkPostgresUserSetup {
+      user = "openclaw";
+      database = "org";
+      secretPath = config.sops.secrets."openclaw/org-db-password".path;
+      dependentService = "microvm@openclaw.service";
+    })
   ];
 
   services = {
@@ -158,6 +164,10 @@ in
           name = "speedtest_tracker";
           ensureDBOwnership = true;
         }
+        {
+          name = "openclaw";
+          # No ensureDBOwnership — openclaw gets read-only access to org, not ownership
+        }
       ];
 
       authentication = lib.mkOverride 10 ''
@@ -176,6 +186,9 @@ in
 
         # Podman network - require password (containers should use passwords)
         host    all       all        10.88.0.0/16    scram-sha-256
+
+        # OpenClaw microVM bridge network — Sherlock queries org database
+        host    org       openclaw   10.99.0.0/30    scram-sha-256
 
         # Local networks - SSL required with client certificate verification
         hostssl all       postgres   192.168.0.0/16  scram-sha-256
@@ -271,6 +284,39 @@ in
         ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \
           'ANALYZE mail_archiver."ArchivedEmails";'
       fi
+    '';
+  };
+
+  # Grant read-only access on the org database to the openclaw user.
+  # This runs after mkPostgresUserSetup creates the user and sets its password.
+  systemd.services.postgresql-openclaw-org-grants = {
+    description = "Grant read-only access on org database to openclaw user";
+    after = [
+      "postgresql.service"
+      "postgresql-openclaw-setup.service"
+    ];
+    wants = [
+      "postgresql.service"
+      "postgresql-openclaw-setup.service"
+    ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d org -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      ${config.services.postgresql.package}/bin/psql -d org -c "GRANT CONNECT ON DATABASE org TO openclaw;"
+      ${config.services.postgresql.package}/bin/psql -d org -c "GRANT USAGE ON SCHEMA public TO openclaw;"
+      ${config.services.postgresql.package}/bin/psql -d org -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO openclaw;"
+      ${config.services.postgresql.package}/bin/psql -d org -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO openclaw;"
     '';
   };
 

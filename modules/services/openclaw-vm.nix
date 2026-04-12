@@ -70,6 +70,100 @@ let
     export XDG_CONFIG_HOME="${stateDir}/.config"
     exec ${financialPython}/bin/python3 ${emailMcpScript}
   '';
+
+  # TOOLS.MD content sections — kept as writeText derivations so they don't
+  # affect Nix's indentation stripping of the preStart ''...'' block.
+  toolsSherlockMd = pkgs.writeText "tools-sherlock.md" ''
+
+    ---
+
+    ## Sherlock Database Tool
+
+    You have read-only access to an Org-mode task database via `sherlock` (in PATH).
+
+    ### Quick Reference
+
+    ```bash
+    sherlock -c org tables               # List tables
+    sherlock -c org introspect           # Full schema (cached)
+    sherlock -c org describe <table>     # Table schema
+    sherlock -c org query "SELECT ..." -f markdown  # Run a query
+    sherlock -c org sample <table> -n 5  # Sample rows
+    sherlock -c org stats <table>        # Data profiling
+    ```
+
+    ### The `org` Database
+
+    Key tables: `entries`, `entry_tags`, `entry_stamps`, `entry_log_entries`, `entry_properties`, `entry_links`, `entry_embeddings`, `entry_body_blocks`, `entry_categories`, `entry_relationships`, `files`
+
+    - `entries.keyword_value` contains TODO state: TODO, DONE, CANCELED, TASK, DOING, WAIT, DEFER, etc.
+    - `entries.keyword_type` indicates state type: `open`, `closed`, or null
+    - **Timestamps are Modified Julian Day integers.** Convert with: `DATE '1858-11-17' + day` (e.g. today 2026-04-11 = MJD 61141)
+    - The `entries` table has a `tsv` column (tsvector) for full-text search
+    - The `entry_embeddings` table has an `embedding` column (pgvector) for semantic search
+    - Always use LIMIT to avoid large result sets
+    - Use `sherlock -c org introspect` first to learn the full schema
+  '';
+
+  toolsOrgSearchMd = pkgs.writeText "tools-org-search.md" ''
+
+    ---
+
+    ## Org Semantic Search
+
+    You can perform semantic (vector similarity) search over org-mode entries using `org-db-search`:
+
+    ```bash
+    org-db-search "QUERY" [-n LIMIT]
+    ```
+
+    This searches the `entry_embeddings` table using pgvector cosine similarity. The query text is embedded via the same model (bge-m3) used to generate the stored embeddings, so results are semantically relevant rather than keyword-matched.
+
+    ### Examples
+
+    ```bash
+    org-db-search "tax preparation deadlines"
+    org-db-search "home automation projects" -n 5
+    org-db-search "budget review meetings" -n 20
+    ```
+
+    ### Options
+
+    - First argument: the search query (required)
+    - `-n N`: maximum results (default: 10)
+    - `-f FORMAT`: output format — `text` (default), `json`, `csv`
+
+    ### When to use Sherlock vs org-db-search
+
+    - **Sherlock**: SQL queries — filtering by date, keyword state, tags, properties, exact matches
+    - **org-db-search**: Finding entries by meaning — "tasks about home renovation", "meetings with accountant"
+
+    Combine both: use `org-db-search` to find relevant entries, then use Sherlock SQL to get detailed properties, timestamps, or related data for those entries.
+  '';
+
+  # Wrapper for `org db search` that reads database and API credentials
+  # from files at runtime, so secrets never land in the nix store.
+  orgDbSearch = pkgs.writeShellScriptBin "org-db-search" ''
+    export PGHOST=127.0.0.1
+    export PGPORT=5432
+    export PGDATABASE=org
+    export PGUSER=openclaw
+    if [ -f /run/openclaw-secrets/org-db-password ]; then
+      export PGPASSWORD="$(cat /run/openclaw-secrets/org-db-password)"
+    fi
+    LITELLM_KEY=""
+    if [ -f "${openclawDir}/openclaw.json" ]; then
+      LITELLM_KEY="$(${pkgs.jq}/bin/jq -r '.models.providers.vulcan.apiKey // empty' \
+        "${openclawDir}/openclaw.json" 2>/dev/null || true)"
+    fi
+    exec ${pkgs.org-jw}/bin/org \
+      -c "${stateDir}/.config/org/config.yaml" \
+      db search \
+      --base-url "http://127.0.0.1:4000" \
+      -m "hera/bge-m3" \
+      --api-key "''${LITELLM_KEY:-unused}" \
+      "$@"
+  '';
 in
 {
   networking.hostName = vmHostname;
@@ -114,6 +208,9 @@ in
     himalaya
     vdirsyncer
     khardFixed
+    sherlock-db
+    org-jw
+    orgDbSearch
   ];
 
   # ========================================================================
@@ -316,6 +413,9 @@ in
       himalaya
       vdirsyncer
       khardFixed
+      sherlock-db
+      org-jw
+      orgDbSearch
     ];
 
     environment = {
@@ -341,9 +441,11 @@ in
       # systemd creates /run/openclaw (owned by openclaw) before preStart runs
       RuntimeDirectory = "openclaw";
       # Load secrets env file written by preStart from the SOPS-staged tokens
-      EnvironmentFiles = [ "/run/openclaw/claude.env" ];
+      EnvironmentFile = [ "-/run/openclaw/claude.env" ];
       Restart = "always";
       RestartSec = "10s";
+      # preStart syncs contacts via vdirsyncer + registers plugins (~2-3 min)
+      TimeoutStartSec = "5min";
 
       WorkingDirectory = stateDir;
 
@@ -456,6 +558,7 @@ in
                     else . end
                   )
                 else . end
+              | del(.agents.defaults.instructions)
             ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
             mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 
@@ -585,6 +688,69 @@ in
       merge_editor = cat
       KHARD_END
             chmod 600 ${stateDir}/.config/khard/khard.conf
+
+            # ────────────────────────────────────────────────────────────────
+            # Sherlock: read-only database query tool configuration
+            # ────────────────────────────────────────────────────────────────
+            # Sherlock connects to PostgreSQL on host via two-stage DNAT
+            # (127.0.0.1:5432 → 10.99.0.1:5432 → host 127.0.0.1:5432).
+            # Password is read from the SOPS-staged secret at preStart time.
+            SHERLOCK_DIR="${stateDir}/.config/sherlock"
+            mkdir -p "$SHERLOCK_DIR"
+            ORG_DB_PASS=""
+            if [ -f /run/openclaw-secrets/org-db-password ]; then
+              ORG_DB_PASS=$(cat /run/openclaw-secrets/org-db-password)
+            fi
+            cat > "$SHERLOCK_DIR/config.json" <<'SHERLOCK_END'
+      {
+        "version": "2.0",
+        "connections": {
+          "org": {
+            "type": "postgres",
+            "host": "127.0.0.1",
+            "port": 5432,
+            "database": "org",
+            "username": "openclaw",
+            "password": "PLACEHOLDER"
+          }
+        }
+      }
+      SHERLOCK_END
+            # Inject the actual password (avoids shell quoting issues in heredoc)
+            ${pkgs.jq}/bin/jq --arg pass "$ORG_DB_PASS" '.connections.org.password = $pass' \
+              "$SHERLOCK_DIR/config.json" > "$SHERLOCK_DIR/config.json.tmp"
+            mv "$SHERLOCK_DIR/config.json.tmp" "$SHERLOCK_DIR/config.json"
+            chmod 600 "$SHERLOCK_DIR/config.json"
+
+            # Append Sherlock section to TOOLS.md (idempotent)
+            TOOLS_MD="${openclawDir}/workspace/TOOLS.md"
+            if [ -f "$TOOLS_MD" ] && ! grep -q '## Sherlock Database Tool' "$TOOLS_MD"; then
+              cat ${toolsSherlockMd} >> "$TOOLS_MD"
+            fi
+
+            # ────────────────────────────────────────────────────────────────
+            # org db search: semantic search over org-mode entries
+            # ────────────────────────────────────────────────────────────────
+            # Minimal config.yaml required by the org CLI even for db commands.
+            ORG_CONF_DIR="${stateDir}/.config/org"
+            mkdir -p "$ORG_CONF_DIR"
+            cat > "$ORG_CONF_DIR/config.yaml" << 'ORG_CONFIG_END'
+      startKeywords: ["TODO", "TASK"]
+      openKeywords: ["TODO", "DOING", "WAIT", "DEFER", "TASK"]
+      closedKeywords: ["DONE", "CANCELED", "NOTE"]
+      keywordTransitions: []
+      checkFiles: false
+      priorities: ["A", "B", "C"]
+      propertyColumn: 11
+      tagsColumn: 97
+      attachmentsDir: "/tmp/org-attach"
+      ORG_CONFIG_END
+            chmod 644 "$ORG_CONF_DIR/config.yaml"
+
+            # Append org db search section to TOOLS.md (idempotent)
+            if [ -f "$TOOLS_MD" ] && ! grep -q '## Org Semantic Search' "$TOOLS_MD"; then
+              cat ${toolsOrgSearchMd} >> "$TOOLS_MD"
+            fi
 
             # ────────────────────────────────────────────────────────────────
             # Sync contacts from Radicale (best-effort at service start)
@@ -804,6 +970,9 @@ in
       coreutils
       gnugrep
       socat
+      sherlock-db
+      orgDbSearch
+      jq
     ];
     script = ''
       OUT="${openclawDir}/logs/tool-test.txt"
@@ -950,6 +1119,35 @@ in
         fi
       else
         echo "SKIP: radicale-password not readable" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 6: Sherlock database query
+      # ──────────────────────────────────────────
+      echo "--- Sherlock: org database query ---" >> "$OUT"
+      SHERLOCK_EXIT=0
+      SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
+        sherlock -c org query "SELECT count(*) as cnt FROM entries" -f markdown 2>&1) || SHERLOCK_EXIT=$?
+      echo "$SHERLOCK_OUTPUT" | head -10 >> "$OUT"
+      if [ "$SHERLOCK_EXIT" -eq 0 ]; then
+        echo "PASS: sherlock query succeeded" >> "$OUT"
+      else
+        echo "FAIL: sherlock query failed (exit $SHERLOCK_EXIT)" >> "$OUT"
+      fi
+      echo "" >> "$OUT"
+
+      # ──────────────────────────────────────────
+      # Test 7: org-db-search semantic search
+      # ──────────────────────────────────────────
+      echo "--- org-db-search: semantic search ---" >> "$OUT"
+      ORGSEARCH_EXIT=0
+      ORGSEARCH_OUTPUT=$(org-db-search "home automation projects" -n 3 2>&1) || ORGSEARCH_EXIT=$?
+      echo "$ORGSEARCH_OUTPUT" | head -15 >> "$OUT"
+      if [ "$ORGSEARCH_EXIT" -eq 0 ]; then
+        echo "PASS: org-db-search succeeded" >> "$OUT"
+      else
+        echo "FAIL: org-db-search failed (exit $ORGSEARCH_EXIT)" >> "$OUT"
       fi
       echo "" >> "$OUT"
 

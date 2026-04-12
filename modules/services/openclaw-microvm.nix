@@ -55,6 +55,7 @@ let
     2525 # Postfix plain SMTP — VM sends mail (mynetworks, no TLS)
     4000 # LiteLLM
     5232 # Radicale CardDAV — VM accesses host Radicale via DNAT
+    5432 # PostgreSQL — Sherlock queries the org database
     6333 # Qdrant HTTP REST API
     6334 # Qdrant gRPC API
     6335 # Qdrant inference bridge
@@ -156,6 +157,13 @@ in
   };
 
   sops.secrets."openclaw/perplexity-api-key" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [ "microvm@openclaw.service" ];
+  };
+
+  sops.secrets."openclaw/org-db-password" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
@@ -400,6 +408,15 @@ in
       chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/perplexity-api-key"
       chmod 0400 "${secretsStagingDir}/perplexity-api-key"
       echo "Perplexity API key staged"
+
+      # Stage org database password for Sherlock
+      ORG_DB_PASS_SRC="${config.sops.secrets."openclaw/org-db-password".path}"
+      if [ -f "$ORG_DB_PASS_SRC" ]; then
+        cp -f "$ORG_DB_PASS_SRC" "${secretsStagingDir}/org-db-password"
+        chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/org-db-password"
+        chmod 0400 "${secretsStagingDir}/org-db-password"
+        echo "Org database password staged"
+      fi
 
       # Stage Claude Code config (.claude.json — non-secret runtime config)
       CLAUDE_CONFIG="/home/johnw/.claude/.claude.json"

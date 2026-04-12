@@ -206,6 +206,12 @@ in
 {
   inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
 
+  # Sherlock — read-only database query tool for AI assistants
+  inherit (import ./sherlock.nix final prev) sherlock-db;
+
+  # org-jw — Org-mode data tools (semantic search via `org db search`)
+  org-jw = inputs.org-jw.packages.${system}.default;
+
   # Import package definitions from nix-config overlays.
   # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
   # can resolve flake input sources.

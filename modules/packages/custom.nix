@@ -89,8 +89,10 @@ in
   environment.systemPackages =
     (with pkgs; [
       b3sum
+      bun
       btop
       cloudflared
+      cozempic
       dh
       dig
       dirscan

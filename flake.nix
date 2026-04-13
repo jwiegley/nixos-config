@@ -90,7 +90,7 @@
     # Shared home-manager configuration from the Darwin nix-config repo.
     # Imported as non-flake to avoid evaluating Darwin's local git+file inputs.
     nix-config = {
-      url = "git+ssh://gitea/johnw/nix-config?ref=main";
+      url = "git+ssh://gitea/johnw/nix-config";
       flake = false;
     };
 

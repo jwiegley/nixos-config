@@ -122,8 +122,8 @@ let
     "Git"
     "Images"
     "Machines"
-    "pair"
-    "rpool"
+    "PostgreSQL"
+    "TechnitiumDNS"
   ];
 
 in

@@ -619,4 +619,7 @@ in
     };
   # claude-vault: Archive Claude Code conversations into searchable SQLite
   inherit (import "${inputs.nix-config}/overlays/30-claude-vault.nix" final prev) claude-vault;
+
+  # cozempic: Context cleaning for Claude Code
+  inherit (import ./30-cozempic.nix final prev) cozempic;
 }

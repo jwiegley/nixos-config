@@ -44,6 +44,7 @@ groups:
             |~ "level=error|ERROR"
             != "connection refused"
             != "database system is shutting down"
+            != "CHIP_ERROR"
             | json
             | unit != ""
             | unit != "user@948.service"

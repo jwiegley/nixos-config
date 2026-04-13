@@ -45,6 +45,46 @@ let
   mcporterPkg = inputs.llm-agents.packages.${system}.mcporter;
   claudeCodePkg = pkgs.claude-code; # from overlay (llm-agents + USE_BUILTIN_RIPGREP patch)
 
+  # -- Packages defined here for sharing with health check module --
+  khardFixed = pkgs.khard.overrideAttrs (_: {
+    dontCheckRuntimeDeps = true;
+  });
+
+  financialPython = pkgs.python312.withPackages (ps: [
+    ps.mcp
+    ps.pandas
+    ps.numpy
+    ps.scipy
+    ps.matplotlib
+    ps.requests
+    ps.yahooquery
+    ps.py_vollib
+    ps.simplejson
+  ]);
+
+  # org-db-search wrapper (defined here so it can be shared with health check module)
+  orgDbSearch = pkgs.writeShellScriptBin "org-db-search" ''
+    export PGHOST=127.0.0.1
+    export PGPORT=5432
+    export PGDATABASE=org
+    export PGUSER=openclaw
+    if [ -f "${stateDir}/.openclaw/secrets/org-db-password" ]; then
+      export PGPASSWORD="$(cat ${stateDir}/.openclaw/secrets/org-db-password)"
+    fi
+    LITELLM_KEY=""
+    if [ -f "${stateDir}/.openclaw/openclaw.json" ]; then
+      LITELLM_KEY="$(${pkgs.jq}/bin/jq -r '.models.providers.vulcan.apiKey // empty' \
+        "${stateDir}/.openclaw/openclaw.json" 2>/dev/null || true)"
+    fi
+    exec ${pkgs.org-jw}/bin/org \
+      -c "${stateDir}/.config/org/config.yaml" \
+      db search \
+      --base-url "http://127.0.0.1:4000" \
+      -m "hera/bge-m3" \
+      --api-key "''${LITELLM_KEY:-unused}" \
+      "$@"
+  '';
+
   # -- Host-side loopback services that the VM needs to reach --
   # Strategy: guest OUTPUT DNAT 127.0.0.1:port -> 10.99.0.1:port
   #           host  PREROUTING DNAT 10.99.0.1:port -> 127.0.0.1:port on br-openclaw
@@ -169,6 +209,58 @@ in
     mode = "0400";
     restartUnits = [ "microvm@openclaw.service" ];
   };
+
+  # ============================================================================
+  # Section 2b: Build-Time Assertions
+  # ============================================================================
+  # Catch configuration errors before deploy.
+
+  assertions = [
+    {
+      assertion = config.services.qdrant.enable;
+      message = "OpenClaw requires Qdrant to be enabled";
+    }
+    {
+      assertion = config.services.postgresql.enable;
+      message = "OpenClaw requires PostgreSQL to be enabled";
+    }
+    {
+      assertion = builtins.elem 6333 dnatPorts;
+      message = "OpenClaw DNAT ports must include 6333 (Qdrant HTTP)";
+    }
+    {
+      assertion = builtins.elem 6334 dnatPorts;
+      message = "OpenClaw DNAT ports must include 6334 (Qdrant gRPC)";
+    }
+    {
+      assertion = builtins.elem 4000 dnatPorts;
+      message = "OpenClaw DNAT ports must include 4000 (LiteLLM)";
+    }
+    {
+      assertion = builtins.elem 5432 dnatPorts;
+      message = "OpenClaw DNAT ports must include 5432 (PostgreSQL)";
+    }
+    {
+      assertion = builtins.elem 993 dnatPorts;
+      message = "OpenClaw DNAT ports must include 993 (Dovecot IMAPS)";
+    }
+    {
+      assertion = builtins.elem 2525 dnatPorts;
+      message = "OpenClaw DNAT ports must include 2525 (Postfix SMTP)";
+    }
+    {
+      assertion = config.sops.secrets ? "qdrant/api-key";
+      message = "OpenClaw requires SOPS secret 'qdrant/api-key'";
+    }
+    {
+      assertion = config.sops.secrets ? "openclaw/org-db-password";
+      message = "OpenClaw requires SOPS secret 'openclaw/org-db-password'";
+    }
+    {
+      assertion = config.sops.secrets ? "openclaw/perplexity-api-key";
+      message = "OpenClaw requires SOPS secret 'openclaw/perplexity-api-key'";
+    }
+  ];
 
   # ============================================================================
   # Section 3: Host Networking — Bridge, TAP, NetworkManager coexistence
@@ -468,6 +560,8 @@ in
     # (inline configs can inherit host modules). Variables are passed via
     # specialArgs.
     specialArgs = {
+      inherit khardFixed financialPython orgDbSearch;
+
       openclawVmArgs = {
         inherit openclawPkg mcporterPkg claudeCodePkg;
         inherit bridgeAddr vmCidr;
@@ -602,4 +696,15 @@ in
       '';
     };
   };
+
+  # ============================================================================
+  # Section 15: Health Check Script
+  # ============================================================================
+  # Install the host-side wrapper script to system PATH.
+
+  environment.systemPackages = [
+    (pkgs.writeShellScriptBin "openclaw-health" ''
+      exec ${../../scripts/openclaw-health} "$@"
+    '')
+  ];
 }

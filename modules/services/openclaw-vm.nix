@@ -6,6 +6,9 @@
   pkgs,
   lib,
   openclawVmArgs,
+  khardFixed,
+  financialPython,
+  orgDbSearch,
   ...
 }:
 
@@ -29,35 +32,6 @@ let
     ;
 
   openclawDir = "${stateDir}/.openclaw";
-
-  # khard 0.20.0 in nixpkgs fails its runtime-deps check because it requires
-  # vobject~=0.9.7 but nixpkgs ships 0.9.6.1-vcard4.  In practice the nixpkgs
-  # vobject fork (0.9.6.1-vcard4) works at runtime; set dontCheckRuntimeDeps=1
-  # to skip the hook (see python-runtime-deps-check-hook.sh guard).
-  khardFixed = pkgs.khard.overrideAttrs (_: {
-    dontCheckRuntimeDeps = true;
-  });
-
-  # Python environment for financial analysis and MCP servers.
-  # Phase 1 packages: core scientific stack + market data + IV/options pricing.
-  financialPython = pkgs.python312.withPackages (ps: [
-    # MCP server (existing)
-    ps.mcp
-
-    # Core scientific stack (P0)
-    ps.pandas
-    ps.numpy
-    ps.scipy
-    ps.matplotlib
-    ps.requests
-
-    # Market data (P0)
-    ps.yahooquery
-
-    # Options pricing / IV (P0)
-    ps.py_vollib
-    ps.simplejson
-  ]);
 
   # The MCP script is referenced as a Nix path so it lands in the nix store
   # (shared with the VM via virtiofs).
@@ -141,29 +115,6 @@ let
     Combine both: use `org-db-search` to find relevant entries, then use Sherlock SQL to get detailed properties, timestamps, or related data for those entries.
   '';
 
-  # Wrapper for `org db search` that reads database and API credentials
-  # from files at runtime, so secrets never land in the nix store.
-  orgDbSearch = pkgs.writeShellScriptBin "org-db-search" ''
-    export PGHOST=127.0.0.1
-    export PGPORT=5432
-    export PGDATABASE=org
-    export PGUSER=openclaw
-    if [ -f /run/openclaw-secrets/org-db-password ]; then
-      export PGPASSWORD="$(cat /run/openclaw-secrets/org-db-password)"
-    fi
-    LITELLM_KEY=""
-    if [ -f "${openclawDir}/openclaw.json" ]; then
-      LITELLM_KEY="$(${pkgs.jq}/bin/jq -r '.models.providers.vulcan.apiKey // empty' \
-        "${openclawDir}/openclaw.json" 2>/dev/null || true)"
-    fi
-    exec ${pkgs.org-jw}/bin/org \
-      -c "${stateDir}/.config/org/config.yaml" \
-      db search \
-      --base-url "http://127.0.0.1:4000" \
-      -m "hera/bge-m3" \
-      --api-key "''${LITELLM_KEY:-unused}" \
-      "$@"
-  '';
 in
 {
   networking.hostName = vmHostname;
@@ -189,6 +140,14 @@ in
     SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
     NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
   };
+
+  # ========================================================================
+  # Imports
+  # ========================================================================
+
+  imports = [
+    ./openclaw-health-check.nix
+  ];
 
   # ========================================================================
   # System-wide packages (available in exec PATH for Claw agent commands)
@@ -938,220 +897,6 @@ in
 
       echo "" >> "$OUT"
       echo "=== Done ===" >> "$OUT"
-    '';
-  };
-
-  # ========================================================================
-  # Email + Contacts tool integration test
-  # Runs after OpenClaw starts; writes results to shared state dir.
-  # ========================================================================
-
-  systemd.services.openclaw-tool-test = {
-    description = "OpenClaw email+contacts integration test";
-    after = [ "openclaw.service" ];
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "openclaw";
-      Group = "openclaw";
-    };
-    environment = {
-      HOME = stateDir;
-      HIMALAYA_CONFIG = "${stateDir}/.config/himalaya/config.toml";
-      # rustls-platform-verifier needs SSL_CERT_FILE to find the Vulcan CA bundle
-      SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
-      NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
-    };
-    path = with pkgs; [
-      himalaya
-      khardFixed
-      curl
-      coreutils
-      gnugrep
-      socat
-      sherlock-db
-      orgDbSearch
-      jq
-    ];
-    script = ''
-      OUT="${openclawDir}/logs/tool-test.txt"
-      echo "=== OpenClaw Tool Integration Test ===" > "$OUT"
-      echo "Time: $(date -u)" >> "$OUT"
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 1: khard contact lookup
-      # ──────────────────────────────────────────
-      echo "--- khard: list contacts ---" >> "$OUT"
-      if khard list 2>&1 | head -5 >> "$OUT"; then
-        COUNT=$(khard list 2>/dev/null | wc -l)
-        echo "PASS: khard found $COUNT contacts" >> "$OUT"
-      else
-        echo "FAIL: khard list failed" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # khard email lookup for contacts named Wiegley
-      echo "--- khard: search 'Wiegley' ---" >> "$OUT"
-      khard email --search "Wiegley" 2>&1 >> "$OUT" || echo "(no results)" >> "$OUT"
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 2: SMTP connectivity + send
-      # ──────────────────────────────────────────
-      echo "--- SMTP: TCP connect to smtp.vulcan.lan:2525 ---" >> "$OUT"
-      # Use bash TCP redirect to read banner without sending data first
-      SMTP_BANNER=$(
-        (
-          exec 3<>/dev/tcp/smtp.vulcan.lan/2525
-          IFS= read -r -t 5 line <&3
-          echo "$line"
-          echo "QUIT" >&3
-          exec 3>&-
-        ) 2>&1 || echo "FAILED"
-      )
-      echo "$SMTP_BANNER" >> "$OUT"
-      if echo "$SMTP_BANNER" | grep -q "^220"; then
-        echo "PASS: SMTP banner received" >> "$OUT"
-      else
-        echo "FAIL: SMTP banner not received" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      echo "--- SMTP: himalaya send test message ---" >> "$OUT"
-      # send-copy = false is set in himalaya config so no IMAP save-copy attempt.
-      # Use || pattern to capture exit code without triggering set -e on failure.
-      SEND_EXIT=0
-      SEND_OUTPUT=$(printf "From: johnw@vulcan.lan\r\nTo: johnw@vulcan.lan\r\nSubject: OpenClaw SMTP send test\r\n\r\nThis is an automated SMTP send test from OpenClaw.\r\n" \
-        | timeout -k 5 30 himalaya message send --account johnw 2>&1) || SEND_EXIT=$?
-      echo "$SEND_OUTPUT" | head -5 >> "$OUT"
-      if [ "$SEND_EXIT" -eq 0 ]; then
-        echo "PASS: himalaya SMTP send succeeded" >> "$OUT"
-      elif [ "$SEND_EXIT" -eq 124 ] || [ "$SEND_EXIT" -eq 137 ]; then
-        echo "FAIL: himalaya SMTP send timed out (30s)" >> "$OUT"
-      else
-        echo "FAIL: himalaya SMTP send failed (exit $SEND_EXIT)" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 3: IMAP connectivity (himalaya list)
-      # ──────────────────────────────────────────
-      echo "--- IMAP: password command test ---" >> "$OUT"
-      # Use || pattern so set -e doesn't fire if cat fails
-      PW_EXIT=0
-      PW_OUT=$(cat /run/openclaw-secrets/imap-password 2>&1) || PW_EXIT=$?
-      if [ "$PW_EXIT" -eq 0 ] && [ -n "$PW_OUT" ]; then
-        echo "PASS: imap-password readable (''${#PW_OUT} chars)" >> "$OUT"
-      else
-        echo "FAIL: imap-password read failed (exit $PW_EXIT): $PW_OUT" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      echo "--- IMAP: TCP connect test (port 993) ---" >> "$OUT"
-      # IMAPS uses TLS immediately — bash /dev/tcp can't do TLS, so we just
-      # test that the TCP 3-way handshake completes (connection refused = DNAT broken).
-      if (exec 3<>/dev/tcp/imap.vulcan.lan/993) 2>/dev/null; then
-        echo "PASS: IMAP TCP port 993 reachable (DNAT working)" >> "$OUT"
-      else
-        echo "FAIL: IMAP TCP port 993 unreachable" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      echo "--- IMAP: himalaya envelope list (INBOX, page-size 10) ---" >> "$OUT"
-      # -s 10 -p 1: only fetch 10 envelopes (avoids scanning huge INBOX).
-      # Use || to capture exit code without triggering set -e on timeout/failure.
-      IMAP_EXIT=0
-      IMAP_OUTPUT=$(timeout -k 5 30 himalaya envelope list --account johnw \
-        --folder INBOX -s 10 -p 1 2>&1) || IMAP_EXIT=$?
-      echo "$IMAP_OUTPUT" | head -15 >> "$OUT"
-      if [ "$IMAP_EXIT" -eq 0 ]; then
-        echo "PASS: himalaya IMAP list succeeded" >> "$OUT"
-      elif [ "$IMAP_EXIT" -eq 124 ] || [ "$IMAP_EXIT" -eq 137 ]; then
-        echo "FAIL: himalaya IMAP timed out (30s)" >> "$OUT"
-      else
-        echo "FAIL: himalaya IMAP list failed (exit $IMAP_EXIT)" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 4: himalaya IMAP search
-      # ──────────────────────────────────────────
-      echo "--- IMAP: himalaya search (from wiegley) ---" >> "$OUT"
-      # In himalaya 1.x the query is a POSITIONAL argument (not --query).
-      # Syntax: <condition> = "from <pattern>", "subject <pattern>", etc.
-      SEARCH_EXIT=0
-      SEARCH_OUTPUT=$(timeout -k 5 30 himalaya envelope list --account johnw \
-        --folder INBOX -s 10 "from wiegley" 2>&1) || SEARCH_EXIT=$?
-      echo "$SEARCH_OUTPUT" | head -10 >> "$OUT"
-      if [ "$SEARCH_EXIT" -eq 0 ]; then
-        echo "PASS: himalaya search succeeded" >> "$OUT"
-      elif [ "$SEARCH_EXIT" -eq 124 ] || [ "$SEARCH_EXIT" -eq 137 ]; then
-        echo "FAIL: himalaya search timed out (30s)" >> "$OUT"
-      else
-        echo "FAIL: himalaya search failed (exit $SEARCH_EXIT)" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 5: CardDAV (Radicale PROPFIND)
-      # ──────────────────────────────────────────
-      echo "--- CardDAV: Radicale PROPFIND connectivity ---" >> "$OUT"
-      RADICALE_PASS=$(cat /run/openclaw-secrets/radicale-password 2>/dev/null || echo "")
-      if [ -n "$RADICALE_PASS" ]; then
-        # CalDAV/CardDAV uses PROPFIND; plain GET returns 403 on collection paths.
-        CARDDAV_CODE=""
-        CARDDAV_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-          --connect-timeout 5 \
-          -X PROPFIND \
-          -H "Depth: 0" \
-          -H "Content-Type: application/xml" \
-          -u "johnw:$RADICALE_PASS" \
-          "http://radicale.vulcan.lan:5232/johnw/" 2>&1) || true
-        echo "HTTP response: $CARDDAV_CODE" >> "$OUT"
-        if echo "$CARDDAV_CODE" | grep -qE "^207$"; then
-          echo "PASS: Radicale CardDAV PROPFIND succeeded (HTTP 207 Multi-Status)" >> "$OUT"
-        elif echo "$CARDDAV_CODE" | grep -qE "^(401|403)$"; then
-          echo "FAIL: Radicale CardDAV auth/access denied (HTTP $CARDDAV_CODE)" >> "$OUT"
-        else
-          echo "FAIL: Radicale CardDAV not accessible (HTTP $CARDDAV_CODE)" >> "$OUT"
-        fi
-      else
-        echo "SKIP: radicale-password not readable" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 6: Sherlock database query
-      # ──────────────────────────────────────────
-      echo "--- Sherlock: org database query ---" >> "$OUT"
-      SHERLOCK_EXIT=0
-      SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        sherlock -c org query "SELECT count(*) as cnt FROM entries" -f markdown 2>&1) || SHERLOCK_EXIT=$?
-      echo "$SHERLOCK_OUTPUT" | head -10 >> "$OUT"
-      if [ "$SHERLOCK_EXIT" -eq 0 ]; then
-        echo "PASS: sherlock query succeeded" >> "$OUT"
-      else
-        echo "FAIL: sherlock query failed (exit $SHERLOCK_EXIT)" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      # ──────────────────────────────────────────
-      # Test 7: org-db-search semantic search
-      # ──────────────────────────────────────────
-      echo "--- org-db-search: semantic search ---" >> "$OUT"
-      ORGSEARCH_EXIT=0
-      ORGSEARCH_OUTPUT=$(org-db-search "home automation projects" -n 3 2>&1) || ORGSEARCH_EXIT=$?
-      echo "$ORGSEARCH_OUTPUT" | head -15 >> "$OUT"
-      if [ "$ORGSEARCH_EXIT" -eq 0 ]; then
-        echo "PASS: org-db-search succeeded" >> "$OUT"
-      else
-        echo "FAIL: org-db-search failed (exit $ORGSEARCH_EXIT)" >> "$OUT"
-      fi
-      echo "" >> "$OUT"
-
-      echo "=== Test Complete ===" >> "$OUT"
     '';
   };
 

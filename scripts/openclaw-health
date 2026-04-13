@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Usage: sudo openclaw-health [--full] [--quiet]
+#
+# Wrapper script for OpenClaw health checks.
+# Triggers the appropriate systemd service inside the VM and displays results.
+
+set -euo pipefail
+
+FULL=false
+QUIET=false
+for arg in "$@"; do
+  case "$arg" in
+    --full) FULL=true ;;
+    --quiet) QUIET=true ;;
+    -h|--help)
+      echo "Usage: openclaw-health [--full] [--quiet]"
+      echo ""
+      echo "Options:"
+      echo "  --full    Run full round-trip functional tests (default: connectivity only)"
+      echo "  --quiet   Show only PASS/FAIL summary (default: full output)"
+      echo "  --help    Show this help message"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg"
+      echo "Usage: openclaw-health [--full] [--quiet]"
+      exit 1
+      ;;
+  esac
+done
+
+VM_NAME="openclaw"
+
+# Check VM is running
+if ! systemctl is-active --quiet "microvm@${VM_NAME}"; then
+  echo "FAIL: microvm@${VM_NAME} is not running"
+  echo ""
+  echo "Start the VM with: sudo systemctl start microvm@openclaw"
+  exit 1
+fi
+
+if $FULL; then
+  SERVICE="openclaw-health-full"
+  LOG="/var/lib/openclaw/.openclaw/logs/health-check-full.txt"
+else
+  SERVICE="openclaw-health"
+  LOG="/var/lib/openclaw/.openclaw/logs/health-check.txt"
+fi
+
+echo "Triggering $SERVICE inside $VM_NAME VM..."
+
+# Trigger the test inside the VM
+# Try machinectl first, fall back to reading the log file directly
+if machinectl shell "${VM_NAME}" /run/current-system/sw/bin/systemctl start "${SERVICE}" 2>/dev/null; then
+  echo "Service triggered successfully via machinectl"
+else
+  # Fallback: the service may have already run on boot, just read the log
+  echo "Note: machinectl shell failed, checking if log exists from boot-time run..."
+fi
+
+# Wait a moment for the service to complete if it was just triggered
+sleep 2
+
+# Display results
+if [ -f "$LOG" ]; then
+  if $QUIET; then
+    # Just show PASS/FAIL summary
+    grep -E "^(PASS|FAIL|SKIP):" "$LOG" || echo "(no results found)"
+    echo ""
+    grep "^=== Summary:" "$LOG" || true
+  else
+    cat "$LOG"
+  fi
+
+  # Exit with failure if any FAIL lines exist
+  if grep -q "^FAIL:" "$LOG"; then
+    echo ""
+    echo "ERROR: One or more health checks failed. See log for details."
+    exit 1
+  fi
+else
+  echo "FAIL: Log file not found at $LOG"
+  echo ""
+  echo "The health check service may not have run yet."
+  echo "Try: sudo systemctl restart microvm@openclaw"
+  exit 1
+fi

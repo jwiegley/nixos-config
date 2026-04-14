@@ -30,36 +30,63 @@ for arg in "$@"; do
 done
 
 VM_NAME="openclaw"
-
-# Check VM is running
-if ! systemctl is-active --quiet "microvm@${VM_NAME}"; then
-  echo "FAIL: microvm@${VM_NAME} is not running"
-  echo ""
-  echo "Start the VM with: sudo systemctl start microvm@openclaw"
-  exit 1
-fi
+STATE_DIR="/var/lib/openclaw"
+OPENCLAW_DIR="${STATE_DIR}/.openclaw"
+TRIGGER_FILE="${OPENCLAW_DIR}/run-health-check-full"
 
 if $FULL; then
   SERVICE="openclaw-health-full"
-  LOG="/var/lib/openclaw/.openclaw/logs/health-check-full.txt"
+  LOG="${OPENCLAW_DIR}/logs/health-check-full.txt"
 else
   SERVICE="openclaw-health"
-  LOG="/var/lib/openclaw/.openclaw/logs/health-check.txt"
+  LOG="${OPENCLAW_DIR}/logs/health-check.txt"
 fi
 
-echo "Triggering $SERVICE inside $VM_NAME VM..."
+# Check VM is running
+if ! systemctl is-active --quiet "microvm@${VM_NAME}"; then
+  echo "VM microvm@${VM_NAME} is not running. Starting..."
+  systemctl start "microvm@${VM_NAME}"
+  echo "Waiting for VM to boot (30 seconds)..."
+  sleep 30
+fi
 
-# Trigger the test inside the VM
-# Try machinectl first, fall back to reading the log file directly
-if machinectl shell "${VM_NAME}" /run/current-system/sw/bin/systemctl start "${SERVICE}" 2>/dev/null; then
-  echo "Service triggered successfully via machinectl"
+echo "Checking OpenClaw health..."
+
+if $FULL; then
+  # For full tests, we need to trigger the service manually
+  # machinectl doesn't work with QEMU microVMs, so use a file-based trigger
+  
+  # Remove any existing trigger file
+  rm -f "$TRIGGER_FILE"
+  
+  # Create trigger file in shared virtiofs directory
+  touch "$TRIGGER_FILE"
+  chown openclaw:openclaw "$TRIGGER_FILE"
+  
+  echo "Trigger file created at $TRIGGER_FILE"
+  echo "Waiting for guest to detect and run health check (up to 60 seconds)..."
+  
+  # Wait for the guest to complete the test (max 60 seconds)
+  for i in {1..30}; do
+    sleep 2
+    if [ ! -f "$TRIGGER_FILE" ]; then
+      # Guest removed the trigger file, indicating it started processing
+      break
+    fi
+  done
+  
+  # Wait for the log file to be written
+  for i in {1..15}; do
+    sleep 2
+    if [ -f "$LOG" ]; then
+      break
+    fi
+  done
 else
-  # Fallback: the service may have already run on boot, just read the log
-  echo "Note: machinectl shell failed, checking if log exists from boot-time run..."
+  # For connectivity-only checks, the service runs on boot
+  # Just wait a moment to ensure the boot-time service has completed
+  sleep 5
 fi
-
-# Wait a moment for the service to complete if it was just triggered
-sleep 2
 
 # Display results
 if [ -f "$LOG" ]; then
@@ -81,7 +108,12 @@ if [ -f "$LOG" ]; then
 else
   echo "FAIL: Log file not found at $LOG"
   echo ""
-  echo "The health check service may not have run yet."
-  echo "Try: sudo systemctl restart microvm@openclaw"
+  if $FULL; then
+    echo "The full health check service may not have run yet."
+    echo "Check if the openclaw-vm guest is receiving the trigger file."
+  else
+    echo "The boot-time health check should have run automatically."
+    echo "Try: sudo systemctl restart microvm@openclaw"
+  fi
   exit 1
 fi

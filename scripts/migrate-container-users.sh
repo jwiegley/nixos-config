@@ -51,7 +51,6 @@ declare -A migrations=(
     ["litellm"]="container-db:litellm"
     ["wallabag"]="container-db:wallabag"
     ["teable"]="container-db:teable"
-    ["silly-tavern"]="container-web:sillytavern"
     ["opnsense-exporter"]="container-monitor:opnsense-exporter"
     ["technitium-dns-exporter"]="container-monitor:technitium-dns-exporter"
     ["openspeedtest"]="container-misc:openspeedtest"
@@ -153,16 +152,6 @@ log_info "Applying service-specific migrations..."
 if [[ -d "/etc/litellm" ]]; then
     log_info "  litellm: Migrating /etc/litellm ownership to litellm user"
     chown -R litellm:litellm /etc/litellm
-fi
-
-# silly-tavern: config and data subdirectories
-if [[ -d "/var/lib/silly-tavern" ]]; then
-    log_info "  silly-tavern: Migrating /var/lib/silly-tavern subdirectories to sillytavern user"
-    for subdir in config data; do
-        if [[ -d "/var/lib/silly-tavern/$subdir" ]]; then
-            chown -R sillytavern:sillytavern "/var/lib/silly-tavern/$subdir"
-        fi
-    done
 fi
 
 echo ""

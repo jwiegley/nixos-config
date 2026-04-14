@@ -99,7 +99,6 @@ imports = [
   ./litellm-quadlet.nix
   # Remove this line: ./opnsense-api-transformer.nix
   ./opnsense-exporter-quadlet.nix
-  ./silly-tavern-quadlet.nix
   ./wallabag-quadlet.nix
 ];
 ```

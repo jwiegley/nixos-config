@@ -112,7 +112,6 @@ All containers use Podman with Quadlet for systemd integration:
 
 - **LiteLLM**: LLM proxy and gateway
 - **Wallabag**: Article reading and archiving
-- **Silly Tavern**: AI chat interface
 - **OPNsense Exporter**: Firewall metrics (with custom API transformer)
 - **Secure Nginx**: Isolated nginx container for specific services
 

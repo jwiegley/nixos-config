@@ -51,7 +51,6 @@
         "perplexica"
         "wallabag"
         "teable"
-        "sillytavern"
         "opnsense-exporter"
         "technitium-dns-exporter"
         "openspeedtest"

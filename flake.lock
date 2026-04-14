@@ -2933,11 +2933,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1776014867,
-        "narHash": "sha256-94xnFAgtCf4eWh2P2qEScmucTXAanEMMId8Jm2dBMwk=",
+        "lastModified": 1776199170,
+        "narHash": "sha256-AogfCsfyErGhP/0gUIFzvHT6bRpxWW5s/311Z7zuhIw=",
         "ref": "refs/heads/main",
-        "rev": "f28fd7fd3d740b279281e23454a8991382794ee2",
-        "revCount": 116,
+        "rev": "cd794894b625fb98ad2f4d74a548c275e5a06114",
+        "revCount": 117,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

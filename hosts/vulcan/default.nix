@@ -49,7 +49,6 @@
     ../../modules/users/home-manager/shlink-web-client.nix
     ../../modules/users/home-manager/teable.nix
     ../../modules/users/home-manager/wallabag.nix
-    ../../modules/users/home-manager/sillytavern.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/openspeedtest.nix

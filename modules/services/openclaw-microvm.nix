@@ -703,8 +703,16 @@ in
   # Install the host-side wrapper script to system PATH.
 
   environment.systemPackages = [
-    (pkgs.writeShellScriptBin "openclaw-health" ''
-      exec ${../../scripts/openclaw-health} "$@"
-    '')
+    (pkgs.writeShellApplication {
+      name = "openclaw-health";
+      runtimeInputs = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.systemd
+      ];
+      text = ''
+        ${pkgs.bash}/bin/bash ${../../scripts/openclaw-health} "$@"
+      '';
+    })
   ];
 }

@@ -116,22 +116,34 @@ in
 
       echo "--- LiteLLM ---" >> "$OUT"
 
-      # Test 1: LiteLLM health endpoint
-      LITELLM_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:4000/health" 2>&1) || true
-      if echo "$LITELLM_HEALTH" | grep -q "^200$"; then
-        pass "LiteLLM health endpoint (HTTP 200)"
+      # Read LiteLLM key from openclaw.json
+      LITELLM_KEY=$(jq -r '.models.providers.vulcan.apiKey // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
+
+      # Test 1: LiteLLM liveliness (NOT /health which triggers full model health checks)
+      if [ -n "$LITELLM_KEY" ]; then
+        LITELLM_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 \
+          -H "Authorization: Bearer $LITELLM_KEY" \
+          "http://127.0.0.1:4000/health/liveliness" 2>&1) || true
+        if echo "$LITELLM_HEALTH" | grep -q "^200$"; then
+          pass "LiteLLM liveliness (HTTP 200)"
+        else
+          fail "LiteLLM liveliness (HTTP $LITELLM_HEALTH)"
+        fi
       else
-        fail "LiteLLM health endpoint (HTTP $LITELLM_HEALTH)"
+        fail "LiteLLM key not available"
       fi
 
-      # Test 2: LiteLLM models available
-      LITELLM_MODELS=$(curl -s --connect-timeout 5 "http://127.0.0.1:4000/v1/models" 2>&1)
-      if echo "$LITELLM_MODELS" | jq -e '.data | length > 0' >/dev/null 2>&1; then
-        MODEL_COUNT=$(echo "$LITELLM_MODELS" | jq '.data | length')
-        pass "LiteLLM models available ($MODEL_COUNT models)"
+      # Verify Qwen3.5-397B model is available
+      LITELLM_MODELS=$(curl -s --connect-timeout 5 \
+        -H "Authorization: Bearer $LITELLM_KEY" \
+        "http://127.0.0.1:4000/v1/models" 2>&1)
+      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit")' >/dev/null 2>&1; then
+        pass "Qwen3.5-397B model available"
       else
-        fail "LiteLLM models not available or empty"
+        fail "Qwen3.5-397B model not available"
       fi
+
+
 
       echo "" >> "$OUT"
 
@@ -141,8 +153,8 @@ in
 
       echo "--- Qdrant ---" >> "$OUT"
 
-      # Read Qdrant API key from openclaw.json
-      QDRANT_API_KEY=$(jq -r '.qdrant.api_key // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
+      # Read Qdrant API key from SOPS secret
+      QDRANT_API_KEY=$(cat /run/secrets/qdrant/api-key 2>/dev/null || echo "")
 
       # Test 3: Qdrant health endpoint
       QDRANT_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:6333/healthz" 2>&1) || true
@@ -211,12 +223,13 @@ in
       fi
 
       # Test 8: PostgreSQL org data
-      SHERLOCK_COUNT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1 | tail -1)
+      SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
+        sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1)
+      SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | tail -1)
       if echo "$SHERLOCK_COUNT" | grep -qE "^[0-9]+$" && [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
         pass "org database has entries (count: $SHERLOCK_COUNT)"
       else
-        fail "org database query failed or empty"
+        fail "org database query failed: $SHERLOCK_OUTPUT"
       fi
 
       echo "" >> "$OUT"
@@ -280,7 +293,7 @@ in
       echo "--- CardDAV ---" >> "$OUT"
 
       # Test 12: Radicale PROPFIND
-      RADICALE_PASS=$(cat /run/openclaw-secrets/radicale-password 2>/dev/null || echo "")
+      RADICALE_PASS=$(cat /run/secrets/radicale/users-htpasswd 2>/dev/null | cut -d: -f2 || echo "")
       if [ -n "$RADICALE_PASS" ]; then
         CARDDAV_CODE=""
         CARDDAV_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -324,7 +337,7 @@ in
       echo "--- Perplexity ---" >> "$OUT"
 
       # Test 14: Perplexity API key presence
-      PERPLEXITY_KEY=$(cat /run/openclaw-secrets/perplexity-api-key 2>/dev/null || echo "")
+      PERPLEXITY_KEY=$(cat /run/secrets/openclaw/perplexity-api-key 2>/dev/null || echo "")
       if [ -n "$PERPLEXITY_KEY" ]; then
         pass "PERPLEXITY_API_KEY is set (''${#PERPLEXITY_KEY} chars)"
       else
@@ -356,25 +369,32 @@ in
       echo "--- Chat Channels ---" >> "$OUT"
 
       # Test 16: WhatsApp plugin detection
-      if [ -f "$gatewayLog" ]; then
-        if grep -qE "\[whatsapp\].*Listening" "$gatewayLog" 2>/dev/null; then
-          pass "WhatsApp plugin active (listening for messages)"
-        else
-          skip "WhatsApp plugin not detected in logs (may still be initializing)"
+      # Try both log locations (gateway-vm.log is the current, gateway.log is legacy)
+      WHATSAPP_FOUND=false
+      for logFile in "${openclawDir}/logs/gateway-vm.log" "${openclawDir}/logs/gateway.log"; do
+        if [ -f "$logFile" ] && grep -qE "\[whatsapp\].*Listening" "$logFile" 2>/dev/null; then
+          WHATSAPP_FOUND=true
+          break
         fi
+      done
+      if $WHATSAPP_FOUND; then
+        pass "WhatsApp plugin active (listening for messages)"
       else
-        skip "Gateway log not found"
+        skip "WhatsApp plugin not detected in logs (may still be initializing)"
       fi
 
       # Test 17: Discord plugin detection
-      if [ -f "$gatewayLog" ]; then
-        if grep -qE "\[discord\].*client initialized" "$gatewayLog" 2>/dev/null; then
-          pass "Discord plugin active (client initialized)"
-        else
-          skip "Discord plugin not detected in logs (may still be initializing)"
+      DISCORD_FOUND=false
+      for logFile in "${openclawDir}/logs/gateway-vm.log" "${openclawDir}/logs/gateway.log"; do
+        if [ -f "$logFile" ] && grep -qE "\[discord\].*client initialized" "$logFile" 2>/dev/null; then
+          DISCORD_FOUND=true
+          break
         fi
+      done
+      if $DISCORD_FOUND; then
+        pass "Discord plugin active (client initialized)"
       else
-        skip "Gateway log not found"
+        skip "Discord plugin not detected in logs (may still be initializing)"
       fi
 
       echo "" >> "$OUT"
@@ -385,15 +405,11 @@ in
 
       echo "--- OpenClaw Gateway ---" >> "$OUT"
 
-      # Test 18: Gateway responding
-      GATEWAY_CODE=""
-      GATEWAY_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 \
-        "http://127.0.0.1:${toString servicePort}/health" 2>&1) || true
-      if echo "$GATEWAY_CODE" | grep -qE "^(200|404|503)$"; then
-        # 404/503 means server is running but no /health endpoint - still counts as reachable
-        pass "Gateway responding on :${toString servicePort} (HTTP $GATEWAY_CODE)"
+      # Test 18: Gateway TCP connectivity (gateway is WebSocket, not HTTP)
+      if (exec 3<>/dev/tcp/127.0.0.1/${toString servicePort}) 2>/dev/null; then
+        pass "Gateway TCP port ${toString servicePort} reachable"
       else
-        fail "Gateway not responding on :${toString servicePort} (HTTP $GATEWAY_CODE)"
+        fail "Gateway not responding on :${toString servicePort}"
       fi
 
       echo "" >> "$OUT"
@@ -494,9 +510,9 @@ in
       echo "" >> "$OUT"
 
       # Read API keys
-      QDRANT_API_KEY=$(jq -r '.qdrant.api_key // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
-      LITELLM_KEY=$(jq -r '.litellm.master_key // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
-      PERPLEXITY_KEY=$(cat /run/openclaw-secrets/perplexity-api-key 2>/dev/null || echo "")
+      QDRANT_API_KEY=$(cat /run/secrets/qdrant/api-key 2>/dev/null || echo "")
+      LITELLM_KEY=$(jq -r '.models.providers.vulcan.apiKey // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
+      PERPLEXITY_KEY=$(cat /run/secrets/openclaw/perplexity-api-key 2>/dev/null || echo "")
 
       # Test F1: LiteLLM completion
       echo "--- LiteLLM Completion ---" >> "$OUT"
@@ -505,9 +521,9 @@ in
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $LITELLM_KEY" \
           -d '{
-            "model": "hera/gpt-4o-mini",
-            "messages": [{"role": "user", "content": "Reply with the word PONG"}],
-            "max_tokens": 10
+            "model": "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit",
+            "messages": [{"role": "user", "content": "Reply PONG"}],
+            "max_tokens": 5
           }' \
           "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
         if echo "$LITELLM_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then
@@ -593,8 +609,8 @@ in
       echo "--- Sherlock Rich Query ---" >> "$OUT"
       SHERLOCK_JSON=$(XDG_CONFIG_HOME="${stateDir}/.config" \
         sherlock -c org query "SELECT id, title FROM entries LIMIT 5" -f json 2>&1)
-      if echo "$SHERLOCK_JSON" | jq -e 'type == "array"' >/dev/null 2>&1; then
-        ROW_COUNT=$(echo "$SHERLOCK_JSON" | jq 'length')
+      if echo "$SHERLOCK_JSON" | jq -e '.rows | type == "array"' >/dev/null 2>&1; then
+        ROW_COUNT=$(echo "$SHERLOCK_JSON" | jq '.rows | length')
         if [ "$ROW_COUNT" -gt 0 ]; then
           pass "Sherlock rich query ($ROW_COUNT rows returned)"
         else
@@ -712,6 +728,26 @@ in
       if [ "$FAIL_COUNT" -gt 0 ]; then
         exit 1
       fi
+
+      # Remove trigger file to signal completion to host
+      rm -f "${openclawDir}/run-health-check-full"
     '';
+  };
+
+  # ============================================================================
+  # Path Unit: Trigger for Full Health Check (file-based from host)
+  # ============================================================================
+  # The host writes a trigger file to the shared virtiofs directory.
+  # This path unit watches for it and starts the health-full service.
+
+  systemd.paths.openclaw-health-full-trigger = {
+    description = "Watch for OpenClaw full health check trigger file";
+    # DISABLED: causes kernel panic on hera system
+    # wantedBy = [ "multi-user.target" ];
+
+    pathConfig = {
+      PathExists = "${openclawDir}/run-health-check-full";
+      Unit = "openclaw-health-full.service";
+    };
   };
 }

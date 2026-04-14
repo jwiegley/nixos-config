@@ -229,10 +229,6 @@ with lib;
                           title = "AriaNG";
                           url = "https://aria.vulcan.lan";
                         }
-                        {
-                          title = "Silly Tavern";
-                          url = "https://silly-tavern.vulcan.lan";
-                        }
                       ];
                     }
                     {

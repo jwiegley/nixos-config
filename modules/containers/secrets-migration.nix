@@ -22,7 +22,7 @@
   #
   # Container user assignments:
   # - container-db: Database-dependent services (litellm, wallabag, teable)
-  # - container-web: Web services (changedetection, openspeedtest, silly-tavern)
+  # - container-web: Web services (changedetection, openspeedtest)
   # - container-monitor: Monitoring (opnsense-exporter, technitium-dns-exporter)
   # - container-misc: Miscellaneous services (budgetboard)
 

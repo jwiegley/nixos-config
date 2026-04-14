@@ -9,7 +9,7 @@
   # Create dedicated container users for rootless Podman operations
   # Each user manages a specific category of containers:
   # - container-db: Database-dependent services (litellm, wallabag, etc.)
-  # - container-web: Web services (changedetection, openspeedtest, silly-tavern)
+  # - container-web: Web services (changedetection, openspeedtest)
   # - container-monitor: Monitoring (opnsense-exporter, technitium-dns-exporter)
   # - container-misc: Miscellaneous services
 

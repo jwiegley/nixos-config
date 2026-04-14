@@ -41,7 +41,6 @@ sudo systemctl disable wallabag.service
 sudo journalctl -u litellm.service -f          # Follow logs
 sudo journalctl -u wallabag.service -n 50      # Last 50 lines
 sudo journalctl -u organizr.service --since "10 minutes ago"
-sudo journalctl -u silly-tavern.service -p err  # Only errors
 
 # Check dependencies
 systemctl list-dependencies litellm.service
@@ -144,7 +143,7 @@ sudo podman exec litellm nc -zv 10.88.0.1 5432
 ### View all Quadlet services at once
 ```bash
 # Status of all Quadlet containers
-for service in litellm organizr silly-tavern wallabag; do
+for service in litellm organizr wallabag; do
     echo "=== $service ==="
     sudo systemctl is-active $service.service
 done
@@ -167,7 +166,6 @@ sudo podman ps --format "table {{.Names}} {{.Status}} {{.Ports}}"
 |---------|------|-----|---------|
 | LiteLLM | 4000 | https://litellm.vulcan.lan | AI model proxy |
 | Organizr | 8080 | https://organizr.vulcan.lan | Dashboard |
-| SillyTavern | 8083 | https://silly-tavern.vulcan.lan | AI chat interface |
 | Wallabag | 9091 | https://wallabag.vulcan.lan | Read-it-later service |
 
 ## Pro Tips
@@ -198,7 +196,7 @@ Save this as `/usr/local/bin/container-status`:
 echo "=== Quadlet Container Status ==="
 printf "%-15s %-10s %-8s %s\n" "SERVICE" "STATUS" "UPTIME" "PORTS"
 echo "------------------------------------------------"
-for service in litellm organizr silly-tavern wallabag; do
+for service in litellm organizr wallabag; do
     status=$(systemctl is-active $service.service)
     if [ "$status" = "active" ]; then
         info=$(sudo podman ps --filter "name=$service" --format "{{.Status}}|{{.Ports}}" 2>/dev/null)

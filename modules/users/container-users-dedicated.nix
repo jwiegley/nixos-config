@@ -57,19 +57,6 @@
         description = "Container user for Teable database service";
       };
 
-      # Web services (formerly container-web)
-      sillytavern = {
-        isSystemUser = true;
-        group = "sillytavern";
-        home = "/var/lib/containers/sillytavern";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for SillyTavern AI chat service";
-      };
-
       # Monitoring services (formerly container-monitor)
       opnsense-exporter = {
         isSystemUser = true;
@@ -214,7 +201,6 @@
       litellm = { };
       wallabag = { };
       teable = { };
-      sillytavern = { };
       opnsense-exporter = { };
       technitium-dns-exporter = { };
       openspeedtest = { };
@@ -242,7 +228,6 @@
     "shlink-web-client"
     "wallabag"
     "teable"
-    "sillytavern"
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
@@ -274,8 +259,6 @@
     "L+ /run/secrets-wallabag/wallabag - - - - /run/secrets/wallabag"
     "d /run/secrets-teable 0750 teable teable - -"
     "L+ /run/secrets-teable/teable - - - - /run/secrets/teable"
-    "d /run/secrets-sillytavern 0750 sillytavern sillytavern - -"
-    "L+ /run/secrets-sillytavern/sillytavern - - - - /run/secrets/sillytavern"
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
     "L+ /run/secrets-opnsense-exporter/opnsense-exporter - - - - /run/secrets/opnsense-exporter"
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"

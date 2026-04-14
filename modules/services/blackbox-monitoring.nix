@@ -493,7 +493,6 @@ in
                   "https://nodered.vulcan.lan"
                   "https://wallabag.vulcan.lan"
                   "https://jellyfin.vulcan.lan"
-                  "https://silly-tavern.vulcan.lan"
                   "https://prometheus.vulcan.lan"
                   "https://victoriametrics.vulcan.lan"
                   "https://grafana.vulcan.lan"

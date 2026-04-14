@@ -60,7 +60,7 @@
       };
     };
 
-    # Note: Container services managed by Quadlet (litellm, wallabag, organizr, silly-tavern)
+    # Note: Container services managed by Quadlet (litellm, wallabag, organizr)
     # are excluded from restart policies here because Quadlet handles their lifecycle management
     # differently. Applying systemd service overrides causes conflicts with quadlet-nix's
     # overrideStrategy. These containers already have restart policies defined in their

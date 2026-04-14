@@ -128,7 +128,6 @@ let
       opnsense-exporter
       shlink
       shlink-web-client
-      sillytavern
       teable
       wallabag
     )

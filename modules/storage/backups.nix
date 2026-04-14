@@ -126,6 +126,11 @@ let
     "TechnitiumDNS"
   ];
 
+  # Photos excludes
+  photosExcludes = [
+    "Immich"
+  ];
+
 in
 {
   # List snapshots to verify backups are being created:
@@ -179,6 +184,7 @@ in
     })
     (mkBackup {
       name = "Photos";
+      exclude = photosExcludes;
     })
     (mkBackup {
       name = "Video";

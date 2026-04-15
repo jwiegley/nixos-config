@@ -54,6 +54,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      TimeoutStartSec = "5min";
       User = "openclaw";
       Group = "openclaw";
     };
@@ -80,7 +81,6 @@ in
         vdirsyncer
       ]
       ++ [ financialPythonPkgs ];
-
     script = ''
       OUT="${healthLog}"
       mkdir -p "$(dirname "$OUT")"
@@ -224,7 +224,8 @@ in
 
       # Test 8: PostgreSQL org data
       SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1)
+      echo "DEBUG: Starting test 8" >> "$OUT"
+        timeout 30 sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1)
       SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | tail -1)
       if echo "$SHERLOCK_COUNT" | grep -qE "^[0-9]+$" && [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
         pass "org database has entries (count: $SHERLOCK_COUNT)"
@@ -441,6 +442,7 @@ in
       Type = "oneshot";
       User = "openclaw";
       Group = "openclaw";
+      TimeoutStartSec = "5min";
     };
 
     environment = {

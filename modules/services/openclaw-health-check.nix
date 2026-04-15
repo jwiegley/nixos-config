@@ -49,7 +49,7 @@ in
   systemd.services.openclaw-health = {
     description = "OpenClaw connectivity health check";
     after = [ "openclaw.service" ];
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = [ "openclaw.service" ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -224,7 +224,6 @@ in
 
       # Test 8: PostgreSQL org data
       SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-      echo "DEBUG: Starting test 8" >> "$OUT"
         timeout 30 sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1)
       SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | tail -1)
       if echo "$SHERLOCK_COUNT" | grep -qE "^[0-9]+$" && [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
@@ -744,9 +743,7 @@ in
 
   systemd.paths.openclaw-health-full-trigger = {
     description = "Watch for OpenClaw full health check trigger file";
-    # DISABLED: causes kernel panic on hera system
-    # wantedBy = [ "multi-user.target" ];
-
+    wantedBy = [ "openclaw.service" ];
     pathConfig = {
       PathExists = "${openclawDir}/run-health-check-full";
       Unit = "openclaw-health-full.service";

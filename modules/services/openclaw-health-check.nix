@@ -138,7 +138,7 @@ in
       LITELLM_MODELS=$(curl -s --connect-timeout 5 \
         -H "Authorization: Bearer $LITELLM_KEY" \
         "http://127.0.0.1:4000/v1/models" 2>&1)
-      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit")' >/dev/null 2>&1; then
+      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "hera/omlx/Qwen3.5-9B-Instruct-unsloth-mlx")' >/dev/null 2>&1; then
         pass "Qwen3.5-397B model available"
       else
         fail "Qwen3.5-397B model not available"
@@ -523,9 +523,9 @@ in
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $LITELLM_KEY" \
           -d '{
-            "model": "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit",
-            "messages": [{"role": "user", "content": "Say PONG"}],
-            "max_tokens": 20
+            "model": "hera/omlx/Qwen3.5-9B-Instruct-unsloth-mlx",
+            "messages": [{"role": "user", "content": "Reply PONG"}],
+            "max_tokens": 5
           }' \
           "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
         if echo "$LITELLM_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then

@@ -510,6 +510,12 @@ in
         echo "Org database password staged"
       fi
 
+      cp -f "${config.sops.secrets."qdrant/api-key".path}" "${secretsStagingDir}/qdrant-api-key"
+      chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/qdrant-api-key"
+      chmod 0400 "${secretsStagingDir}/qdrant-api-key"
+      echo "Qdrant API key staged"
+
+
       # Stage Claude Code config (.claude.json — non-secret runtime config)
       CLAUDE_CONFIG="/home/johnw/.claude/.claude.json"
       if [ -f "$CLAUDE_CONFIG" ]; then

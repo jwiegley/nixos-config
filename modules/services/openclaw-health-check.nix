@@ -226,7 +226,7 @@ in
       # Test 8: PostgreSQL org data
       SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
         timeout 30 $SHERLOCK_BIN/sherlock -c org query "SELECT count(*) FROM entries" -f json 2>&1)
-      SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | jq -r ".rows[0].count // 0")
+      SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | jq -r ".rows[0].count // \"0\"")
       if [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
         pass "org database has entries (count: $SHERLOCK_COUNT)"
       else

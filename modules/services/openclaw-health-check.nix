@@ -83,6 +83,7 @@ in
       ++ [ financialPythonPkgs ];
     script = ''
       OUT="${healthLog}"
+      SHERLOCK_BIN="/nix/store/2j61bj67ffdaz38f1287zdgvlq76bqwi-sherlock-db-1.3.0/bin"
       mkdir -p "$(dirname "$OUT")"
 
       echo "=== OpenClaw Health Check (connectivity) ===" > "$OUT"
@@ -215,7 +216,7 @@ in
       # Test 7: PostgreSQL reachable
       SHERLOCK_EXIT=0
       SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        sherlock -c org query "SELECT 1" 2>&1) || SHERLOCK_EXIT=$?
+        $SHERLOCK_BIN/sherlock -c org query "SELECT 1" 2>&1) || SHERLOCK_EXIT=$?
       if [ "$SHERLOCK_EXIT" -eq 0 ]; then
         pass "PostgreSQL reachable (SELECT 1)"
       else
@@ -224,9 +225,9 @@ in
 
       # Test 8: PostgreSQL org data
       SHERLOCK_OUTPUT=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        timeout 30 sherlock -c org query "SELECT count(*) FROM entries" -f csv 2>&1)
-      SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | tail -1)
-      if echo "$SHERLOCK_COUNT" | grep -qE "^[0-9]+$" && [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
+        timeout 30 $SHERLOCK_BIN/sherlock -c org query "SELECT count(*) FROM entries" -f json 2>&1)
+      SHERLOCK_COUNT=$(echo "$SHERLOCK_OUTPUT" | jq -r ".rowCount // 0")
+      if [ "$SHERLOCK_COUNT" -gt 0 ] 2>/dev/null; then
         pass "org database has entries (count: $SHERLOCK_COUNT)"
       else
         fail "org database query failed: $SHERLOCK_OUTPUT"
@@ -523,8 +524,8 @@ in
           -H "Authorization: Bearer $LITELLM_KEY" \
           -d '{
             "model": "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit",
-            "messages": [{"role": "user", "content": "Reply PONG"}],
-            "max_tokens": 5
+            "messages": [{"role": "user", "content": "Say PONG"}],
+            "max_tokens": 20
           }' \
           "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
         if echo "$LITELLM_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then
@@ -609,7 +610,7 @@ in
       # Test F4: Sherlock rich query
       echo "--- Sherlock Rich Query ---" >> "$OUT"
       SHERLOCK_JSON=$(XDG_CONFIG_HOME="${stateDir}/.config" \
-        sherlock -c org query "SELECT id, title FROM entries LIMIT 5" -f json 2>&1)
+        $SHERLOCK_BIN/sherlock -c org query "SELECT id, title FROM entries LIMIT 5" -f json 2>&1)
       if echo "$SHERLOCK_JSON" | jq -e '.rows | type == "array"' >/dev/null 2>&1; then
         ROW_COUNT=$(echo "$SHERLOCK_JSON" | jq '.rows | length')
         if [ "$ROW_COUNT" -gt 0 ]; then
@@ -725,13 +726,13 @@ in
       TOTAL=$((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))
       echo "=== Summary: $PASS_COUNT/$TOTAL PASS, $FAIL_COUNT FAIL, $SKIP_COUNT SKIP ===" >> "$OUT"
 
+      # Always remove trigger file to prevent infinite re-triggering loop
+      rm -f "${openclawDir}/run-health-check-full"
+
       # Exit with failure if any tests failed
       if [ "$FAIL_COUNT" -gt 0 ]; then
         exit 1
       fi
-
-      # Remove trigger file to signal completion to host
-      rm -f "${openclawDir}/run-health-check-full"
     '';
   };
 

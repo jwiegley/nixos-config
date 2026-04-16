@@ -6,6 +6,8 @@
 }:
 
 let
+  models = import ../../models.nix;
+
   # Shell script to call rspamc learn_spam
   learnSpamShellScript = pkgs.writeShellScript "rspamd-learn-spam.sh" ''
     exec ${pkgs.rspamd}/bin/rspamc learn_spam
@@ -606,7 +608,7 @@ in
         url = "http://127.0.0.1:4000/v1/chat/completions";
         # Using MLX quantized model with Harmony filter for efficient inference
         # LiteLLM harmony_filter guardrail strips analysis channel markers
-        model = "hera/Qwen3.5-27B-Instruct";
+        model = "${models.llm.primary.name}";
 
         # Enable GPT analysis for ham messages (default is false)
         # Without this, GPT is skipped for messages with negative scores
@@ -614,7 +616,7 @@ in
 
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
-          "hera/Qwen3.5-27B-Instruct" = {
+          "${models.llm.primary.name}" = {
             max_completion_tokens = 8192;
           }
         };

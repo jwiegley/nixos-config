@@ -6,6 +6,8 @@
 }:
 
 let
+  models = import ../../../models.nix;
+
   # Script that tests LiteLLM availability by making a simple query
   litellmHealthCheck = pkgs.writeShellScript "litellm-health-check" ''
     set -uo pipefail
@@ -17,7 +19,7 @@ let
       exit 1
     fi
 
-    # Test query to hera/Qwen3.5-27B-Instruct
+    # Test query to ${models.llm.primary.name}
     # Retry once after 60s on failure to handle transient unavailability
     # (model loading on hera can take 1-3 minutes for large models).
     # Note: curl exit code 28 = timeout; captured via || to avoid set -e abort.
@@ -28,7 +30,7 @@ let
         -H "x-api-key: $API_KEY" \
         -H "Content-Type: application/json" \
         -d '{
-          "model": "hera/Qwen3.5-27B-Instruct",
+          "model": "${models.llm.primary.name}",
           "messages": [{"role": "user", "content": "What is 2+2? Answer with only the number."}],
           "max_tokens": 10,
           "temperature": 0

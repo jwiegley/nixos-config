@@ -6,6 +6,8 @@
 let
   bridgePort = 6335;
   upstreamUrl = "http://127.0.0.1:4000/v1/embeddings";
+  models = import ../../models.nix;
+  embeddingModel = models.embedding.primary.name;
 
   bridgeScript = pkgs.writeText "qdrant-inference-bridge.py" ''
     #!/usr/bin/env python3
@@ -17,12 +19,12 @@ let
        "inference": "update", "token": "..."}
 
     This bridge translates that to OpenAI-compatible:
-      {"model": "hera/bge-m3", "input": ["..."]}
+      {"model": "${embeddingModel}", "input": ["..."]}
     forwarded to LiteLLM with Authorization: Bearer <token>, and returns
     Qdrant's expected {"embeddings": [[...], ...]} format.
 
-    Model names without a provider prefix (e.g. "bge-m3") are automatically
-    prefixed with "hera/" to match LiteLLM's routing convention.
+    Model names without a provider prefix (e.g. "bge-m3") are resolved
+    using the configured default embedding model from models.nix.
     """
     import json
     import logging
@@ -42,9 +44,15 @@ let
     log = logging.getLogger(__name__)
 
 
+    DEFAULT_MODEL = "${embeddingModel}"
+
     def resolve_model(model: str) -> str:
-        """Prefix bare model names with 'hera/' to match LiteLLM routing."""
-        return model if "/" in model else f"hera/{model}"
+        """Resolve bare model names using the configured default embedding model."""
+        if "/" in model:
+            return model
+        # Derive prefix from configured model (e.g. "hera/bge-m3" -> "hera/")
+        prefix = DEFAULT_MODEL.rsplit("/", 1)[0] + "/"
+        return prefix + model
 
 
     def embed(model: str, texts: list, token: str = None) -> tuple:

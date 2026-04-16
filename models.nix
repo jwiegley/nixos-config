@@ -8,36 +8,37 @@
 {
   llm = {
     primary = {
-      name = "hera/Qwen3.5-27B-Instruct";
+      # name = "hera/Qwen3.5-27B-Instruct";
+      name = "hera/omlx/GLM-5.1-MXFP4-Q8";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
     };
     fallbacks = [
-      {
-        name = "hera/gpt-oss-120b";
-        maxSeconds = 3600;
-        initialDelay = 5;
-        maxDelay = 60;
-      }
-      {
-        name = "hera/Qwen3.5-9B-Instruct";
-        maxSeconds = 3600;
-        initialDelay = 5;
-        maxDelay = 30;
-      }
-      {
-        name = "clio/Qwen3.5-9B-Instruct";
-        maxSeconds = 3600;
-        initialDelay = 5;
-        maxDelay = 30;
-      }
-      {
-        name = "hera/claude-sonnet-4-6";
-        maxSeconds = 600;
-        initialDelay = 5;
-        maxDelay = 15;
-      }
+      # {
+      #   name = "hera/gpt-oss-120b";
+      #   maxSeconds = 3600;
+      #   initialDelay = 5;
+      #   maxDelay = 60;
+      # }
+      # {
+      #   name = "hera/Qwen3.5-9B-Instruct";
+      #   maxSeconds = 3600;
+      #   initialDelay = 5;
+      #   maxDelay = 30;
+      # }
+      # {
+      #   name = "clio/Qwen3.5-9B-Instruct";
+      #   maxSeconds = 3600;
+      #   initialDelay = 5;
+      #   maxDelay = 30;
+      # }
+      # {
+      #   name = "hera/claude-sonnet-4-6";
+      #   maxSeconds = 600;
+      #   initialDelay = 5;
+      #   maxDelay = 15;
+      # }
     ];
   };
 

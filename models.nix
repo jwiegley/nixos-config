@@ -8,8 +8,7 @@
 {
   llm = {
     primary = {
-      # name = "hera/Qwen3.5-27B-Instruct";
-      name = "hera/omlx/GLM-5.1-MXFP4-Q8";
+      name = "hera/Qwen3.5-27B-Instruct";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
@@ -17,7 +16,7 @@
     # Low-latency model for latency-sensitive callers (e.g. rspamd spam
     # classification, where Postfix is blocked on the milter response).
     fast = {
-      name = "hera/omlx/Qwen3.5-9B-Instruct-unsloth-mlx";
+      name = "hera/Qwen3.5-9B-Instruct";
       maxSeconds = 60;
       initialDelay = 2;
       maxDelay = 10;

@@ -8,6 +8,8 @@
 }:
 
 let
+  models = import ../../models.nix;
+
   # ============================================================================
   # Configuration Constants
   # ============================================================================
@@ -80,7 +82,7 @@ let
       -c "${stateDir}/.config/org/config.yaml" \
       db search \
       --base-url "http://127.0.0.1:4000" \
-      -m "hera/bge-m3" \
+      -m "${models.embedding.primary.name}" \
       --api-key "''${LITELLM_KEY:-unused}" \
       "$@"
   '';

@@ -618,6 +618,9 @@ in
         model_parameters = {
           "${models.llm.primary.name}" = {
             max_completion_tokens = 8192;
+            chat_template_kwargs = {
+              enable_thinking = false;
+            };
           }
         };
 
@@ -626,10 +629,9 @@ in
         timeout = 30s;
 
         # Spam classification prompt - must return JSON with probability and reason fields
-        # /no_think disables Qwen3.5 thinking/reasoning mode to prevent token budget exhaustion
-        # Without it, the model generates hundreds of thinking tokens before JSON output,
-        # causing max_completion_tokens to be hit mid-response, producing truncated JSON.
-        prompt = "/no_think Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";
+        # Thinking/reasoning mode is disabled via chat_template_kwargs in model_parameters
+        # to prevent token budget exhaustion from hundreds of thinking tokens before JSON output.
+        prompt = "Analyze this email for spam. Return JSON only with: {\"probability\": <number 0.0-1.0>, \"reason\": \"<brief explanation>\"}. No other text.";
 
         # Enable JSON mode - this selects the JSON conversion function
         json = true;

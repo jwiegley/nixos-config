@@ -14,6 +14,14 @@
       initialDelay = 5;
       maxDelay = 60;
     };
+    # Low-latency model for latency-sensitive callers (e.g. rspamd spam
+    # classification, where Postfix is blocked on the milter response).
+    fast = {
+      name = "hera/omlx/Qwen3.5-9B-Instruct-unsloth-mlx";
+      maxSeconds = 60;
+      initialDelay = 2;
+      maxDelay = 10;
+    };
     fallbacks = [
       # {
       #   name = "hera/gpt-oss-120b";

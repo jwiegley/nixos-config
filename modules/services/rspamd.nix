@@ -608,7 +608,7 @@ in
         url = "http://127.0.0.1:4000/v1/chat/completions";
         # Using MLX quantized model with Harmony filter for efficient inference
         # LiteLLM harmony_filter guardrail strips analysis channel markers
-        model = "${models.llm.primary.name}";
+        model = "${models.llm.fast.name}";
 
         # Enable GPT analysis for ham messages (default is false)
         # Without this, GPT is skipped for messages with negative scores
@@ -616,7 +616,7 @@ in
 
         # Model parameters (required for OpenAI-type endpoints)
         model_parameters = {
-          "${models.llm.primary.name}" = {
+          "${models.llm.fast.name}" = {
             max_completion_tokens = 8192;
             chat_template_kwargs = {
               enable_thinking = false;

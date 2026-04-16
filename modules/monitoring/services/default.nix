@@ -42,6 +42,7 @@
     ./zfs-pool-health-exporter.nix
     ./health-check-exporters.nix
     ./git-workspace-alerts.nix
+    ./litellm-availability-alerts.nix
     ./aide-metrics.nix
 
     # External systems monitoring

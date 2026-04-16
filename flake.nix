@@ -73,7 +73,7 @@
     };
 
     git-ai = {
-      url = "git+file:///tank/src/git-ai/nix-fix";
+      url = "git+file:///home/johnw/git-ai/nix-fix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

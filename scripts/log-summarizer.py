@@ -271,30 +271,37 @@ class LogCollector:
 class AIAnalyzer:
     """AI-powered log analysis using LiteLLM"""
 
-    # Models to try in order of preference with retry budgets.
-    # Each tuple: (model_name, max_seconds, initial_delay, max_delay)
-    #   - max_seconds: total wall-clock budget for this model
-    #   - initial_delay: seconds before first retry (doubles each attempt)
-    #   - max_delay: cap on per-retry delay
-    MODELS = [
-        # Primary: 10 min budget with exponential backoff (lets Hera wake up / warm model)
-        # Use Instruct variant to avoid thinking-only models that return empty content
-        ("hera/Qwen3.5-27B-Instruct", 3600, 5, 60),
-        # Secondary: 1 min budget (Hera should be awake by now)
-        ("hera/gpt-oss-120b", 3600, 5, 60),
-        # Secondary: 1 min budget (Hera should be awake by now)
-        ("hera/Qwen3.5-9B-Instruct", 3600, 5, 30),
-        # Secondary: 1 min budget (clio machine)
-        ("clio/Qwen3.5-9B-Instruct", 3600, 5, 30),
-        # Cloud fallback: does not depend on llama-swap
-        ("hera/claude-sonnet-4-6", 600, 5, 15),
-    ]
+    DEFAULT_MODELS_CONFIG = "/etc/models.json"
+
+    @staticmethod
+    def _load_models(config_path: str) -> list:
+        """Load model cascade from models.json (generated from models.nix)."""
+        try:
+            with open(config_path) as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            print(f"ERROR: Model config not found: {config_path}", file=sys.stderr)
+            print("Run 'sudo nixos-rebuild switch' to generate it from models.nix",
+                  file=sys.stderr)
+            sys.exit(1)
+        llm = data["llm"]
+        primary = llm["primary"]
+        cascade = [primary] + llm.get("fallbacks", [])
+        return [
+            (m["name"], m.get("maxSeconds", 3600),
+             m.get("initialDelay", 5), m.get("maxDelay", 60))
+            for m in cascade
+        ]
 
     def __init__(self, api_url: str = "http://127.0.0.1:4000/v1/chat/completions",
-                 model: Optional[str] = None):
+                 model: Optional[str] = None,
+                 models_config: Optional[str] = None):
         self.api_url = api_url
         self.override_model = model
-        self.model = model if model else self.MODELS[0][0]
+        config_path = models_config or os.environ.get(
+            "MODELS_CONFIG", self.DEFAULT_MODELS_CONFIG)
+        self.models = self._load_models(config_path)
+        self.model = model if model else self.models[0][0]
         self.api_key = os.environ.get("LITELLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
@@ -319,7 +326,7 @@ class AIAnalyzer:
         # Try AI analysis with exponential backoff per model
         import time
         models = ([(self.override_model, 7200, 5, 60)] if self.override_model
-                  else self.MODELS)
+                  else self.models)
         for model_name, max_seconds, initial_delay, max_delay in models:
             self.model = model_name
             start_time = time.monotonic()
@@ -806,6 +813,13 @@ Examples:
         help='Override model (e.g. "hera/claude-sonnet-4-6-thinking-32000"). '
              'Bypasses the model cascade and uses only this model.'
     )
+    parser.add_argument(
+        '--models-config',
+        default=None,
+        metavar='PATH',
+        help='Path to models.json config file (default: /etc/models.json). '
+             'Can also be set via MODELS_CONFIG env var.'
+    )
 
     args = parser.parse_args()
 
@@ -843,7 +857,7 @@ Examples:
     # Analyze with AI
     if not args.quiet:
         print("Analyzing logs...", file=sys.stderr)
-    analyzer = AIAnalyzer(model=args.model)
+    analyzer = AIAnalyzer(model=args.model, models_config=args.models_config)
     if args.model and not args.quiet:
         print(f"Using model: {args.model}", file=sys.stderr)
     summary = analyzer.analyze_logs(

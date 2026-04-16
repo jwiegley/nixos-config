@@ -1,0 +1,67 @@
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+
+let
+  models = import ../../../models.nix;
+  modelName = models.llm.primary.name;
+
+  litellmRulesFile = pkgs.writeText "litellm-availability.yaml" ''
+    groups:
+      - name: litellm_availability
+        interval: 60s
+        rules:
+          - alert: LiteLLMModelUnavailable
+            expr: litellm_availability == 0
+            for: 5m
+            labels:
+              severity: critical
+              component: litellm
+              model: ${modelName}
+            annotations:
+              summary: "LiteLLM model ${modelName} is unavailable"
+              description: |
+                LiteLLM model ${modelName} has been unavailable for {{ $value }} checks.
+                This indicates the model is not responding to simple queries.
+
+                Check LiteLLM service status: systemctl status litellm
+                Check LiteLLM logs: journalctl -u litellm -f
+                Check hera backend availability.
+
+          - alert: LiteLLMSlowResponse
+            expr: litellm_response_time_seconds > 30
+            for: 10m
+            labels:
+              severity: warning
+              component: litellm
+              model: ${modelName}
+            annotations:
+              summary: "LiteLLM model ${modelName} is responding slowly"
+              description: |
+                LiteLLM model ${modelName} response time is {{ $value }}s (threshold: 30s).
+                This may indicate backend performance issues.
+
+          - alert: LiteLLMExporterDown
+            expr: up{job="node"} == 1 unless litellm_availability
+            for: 1h
+            labels:
+              severity: warning
+              component: litellm-exporter
+            annotations:
+              summary: "LiteLLM Prometheus exporter is not producing metrics"
+              description: |
+                The LiteLLM availability exporter has not updated metrics in 1 hour.
+
+                Check exporter service: systemctl status litellm-exporter.service
+                Check exporter timer: systemctl status litellm-exporter.timer
+                View exporter logs: journalctl -u litellm-exporter -f
+  '';
+in
+{
+  services.prometheus.ruleFiles = lib.mkIf config.services.prometheus.enable [
+    litellmRulesFile
+  ];
+}

@@ -482,6 +482,7 @@ Provide a clear, actionable summary. Omit known conditions and recurring harmles
             ],
             "temperature": 0.3,
             "max_tokens": 1500,
+            "chat_template_kwargs": {"enable_thinking": False},
         }
 
         headers = {

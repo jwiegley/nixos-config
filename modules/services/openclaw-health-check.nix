@@ -10,6 +10,8 @@
 }:
 
 let
+  models = import ../../models.nix;
+
   # Extract arguments passed from openclaw-vm.nix
   stateDir = openclawVmArgs.stateDir or "/var/lib/openclaw";
   openclawDir = openclawVmArgs.openclawDir or "${stateDir}/.openclaw";
@@ -137,10 +139,10 @@ in
       LITELLM_MODELS=$(curl -s --connect-timeout 5 \
         -H "Authorization: Bearer $LITELLM_KEY" \
         "http://127.0.0.1:4000/v1/models" 2>&1)
-      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "hera/omlx/Qwen3.5-9B-unsloth-mlx")' >/dev/null 2>&1; then
-        pass "Qwen3.5-9B model available"
+      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "${models.llm.primary.name}")' >/dev/null 2>&1; then
+        pass "${models.llm.primary.name} model available"
       else
-        fail "Qwen3.5-9B model not available"
+        fail "${models.llm.primary.name} model not available"
       fi
 
 
@@ -541,7 +543,7 @@ in
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $LITELLM_KEY" \
           -d '{
-            "model": "hera/omlx/Qwen3.5-9B-unsloth-mlx",
+            "model": "${models.llm.primary.name}",
             "messages": [{"role": "user", "content": "Reply PONG"}],
             "max_tokens": 5
           }' \
@@ -564,7 +566,7 @@ in
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $LITELLM_KEY" \
           -d '{
-            "model": "hera/bge-m3",
+            "model": "${models.embedding.primary.name}",
             "input": "test"
           }' \
           "http://127.0.0.1:4000/v1/embeddings" 2>&1)

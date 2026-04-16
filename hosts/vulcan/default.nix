@@ -79,6 +79,7 @@
     ../../modules/services/local-backup.nix
     ../../modules/services/loki.nix
     ../../modules/services/media.nix
+    ../../modules/services/model-config.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/mosquitto.nix
     ../../modules/services/nagios.nix

@@ -33,6 +33,15 @@ let
 
   openclawDir = "${stateDir}/.openclaw";
 
+  # Model selection comes from models.nix so the SOPS-encrypted openclaw.json
+  # does not pin model IDs.  The preStart jq pipeline rewrites the relevant
+  # fields in the decrypted config before OpenClaw reads it.  OpenClaw is an
+  # agent runtime, so it uses the `agent` tier, which is tuned for
+  # long-running tool-using sessions.
+  models = import ../../models.nix;
+  agentModel = models.llm.agent.name;
+  embeddingModel = models.embedding.primary.name;
+
   # The MCP script is referenced as a Nix path so it lands in the nix store
   # (shared with the VM via virtiofs).
   emailMcpScript = ../../scripts/email-contacts-mcp.py;
@@ -503,7 +512,10 @@ in
             #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
             #  - Schema migration: flatten tools.web.search.<provider>.apiKey → tools.web.search.apiKey
             #    (openclaw >=2026.3.28 rejects nested provider config as "Unrecognized key")
-            ${pkgs.jq}/bin/jq '
+            ${pkgs.jq}/bin/jq \
+              --arg agent "${agentModel}" \
+              --arg agentRef "vulcan/${agentModel}" \
+              --arg embeddingRef "vulcan/${embeddingModel}" '
               .gateway.controlUi = {"dangerouslyAllowHostHeaderOriginFallback": true}
               | walk(if type == "string" then gsub("http://localhost:8080"; "http://127.0.0.1:4000") else . end)
               | .acp = {"enabled": true, "backend": "acpx", "defaultAgent": "claude", "allowedAgents": ["claude"]}
@@ -518,6 +530,14 @@ in
                   )
                 else . end
               | del(.agents.defaults.instructions)
+              | .agents.defaults.model.primary = $agentRef
+              | .agents.defaults.models = { ($agentRef): {} }
+              | .agents.defaults.memorySearch.model = $embeddingRef
+              | if (.models.providers.vulcan.models | type) == "array"
+                   and (.models.providers.vulcan.models | length) > 0 then
+                     .models.providers.vulcan.models[0].id = $agent
+                     | .models.providers.vulcan.models[0].name = $agent
+                 else . end
             ' ${openclawDir}/openclaw.json > ${openclawDir}/openclaw.json.tmp
             mv ${openclawDir}/openclaw.json.tmp ${openclawDir}/openclaw.json
 

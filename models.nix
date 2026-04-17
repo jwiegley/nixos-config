@@ -21,6 +21,15 @@
       initialDelay = 2;
       maxDelay = 10;
     };
+    # Agent-grade model for long-running, tool-using sessions (OpenClaw
+    # memory-qdrant, Discord/WhatsApp channels, ACP backend).  Kept separate
+    # from `primary` so summarizers / alert probes can move independently.
+    agent = {
+      name = "hera/omlx/Qwen3.5-397B-A17B-unsloth-mlx-4bit";
+      maxSeconds = 3600;
+      initialDelay = 5;
+      maxDelay = 60;
+    };
     fallbacks = [
       # {
       #   name = "hera/gpt-oss-120b";

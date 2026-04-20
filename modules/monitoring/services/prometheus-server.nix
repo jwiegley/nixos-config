@@ -90,7 +90,8 @@
 
       SNAPSHOT_DIR="/var/lib/prometheus2/disaster-recovery"
       TSDB_DIR="/var/lib/prometheus2/data"
-      RETENTION_DAYS=2
+      # Number of daily snapshots to retain
+      RETENTION_COUNT=2
 
       # Create snapshot via admin API
       echo "Creating TSDB snapshot..."
@@ -104,18 +105,25 @@
 
       echo "Snapshot created: $SNAPSHOT_NAME"
 
-      # Copy snapshot to disaster recovery location (separate from main TSDB)
+      # Hard-link the snapshot into the disaster-recovery directory.
+      # Prometheus TSDB blocks are immutable once written, so hard links
+      # across DR snapshots are safe and share the underlying chunks,
+      # reducing disk usage from N*TSDB_size to ~TSDB_size + deltas.
       mkdir -p "$SNAPSHOT_DIR"
       DEST="$SNAPSHOT_DIR/snapshot-$(date +%Y%m%d-%H%M%S)"
-      cp -a "$TSDB_DIR/snapshots/$SNAPSHOT_NAME" "$DEST"
-      echo "Copied to: $DEST"
+      cp -al "$TSDB_DIR/snapshots/$SNAPSHOT_NAME" "$DEST"
+      echo "Hard-linked to: $DEST"
 
-      # Clean up the in-TSDB snapshot (we have our copy)
+      # Clean up the in-TSDB snapshot (we retain the DR copy)
       rm -rf "$TSDB_DIR/snapshots/$SNAPSHOT_NAME"
 
-      # Remove snapshots older than retention period
-      echo "Cleaning snapshots older than $RETENTION_DAYS days..."
-      find "$SNAPSHOT_DIR" -maxdepth 1 -name "snapshot-*" -type d -mtime +$RETENTION_DAYS -exec rm -rf {} \; || true
+      # Keep only the $RETENTION_COUNT newest snapshots (deterministic,
+      # avoids off-by-one pitfalls of `find -mtime`).
+      echo "Retaining $RETENTION_COUNT newest snapshots..."
+      # shellcheck disable=SC2012
+      ls -1dt "$SNAPSHOT_DIR"/snapshot-* 2>/dev/null \
+        | tail -n +$((RETENTION_COUNT + 1)) \
+        | xargs -r rm -rf
 
       # Report current snapshots
       echo "Current snapshots:"

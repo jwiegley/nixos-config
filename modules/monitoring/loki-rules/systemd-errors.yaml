@@ -12,8 +12,12 @@ groups:
             != "Temporary failure in name resolution"
             != "No Sieve errors"
             != "CHIP_ERROR"
+            != "Subscription failed with CHIP"
             != "SearxEngineAccessDeniedException"
             != "Timeout fetching miele data"
+            != "Direct fetch of page URL timed out"
+            != "\"context\":\"crawlStatus\""
+            != "DNSSEC validation failed"
             [10m])) * 600 > 10
         for: 5m
         labels:
@@ -45,6 +49,10 @@ groups:
             != "connection refused"
             != "database system is shutting down"
             != "CHIP_ERROR"
+            != "Subscription failed with CHIP"
+            != "Direct fetch of page URL timed out"
+            != "\"context\":\"crawlStatus\""
+            != "DNSSEC validation failed"
             | json
             | unit != ""
             | unit != "user@948.service"

@@ -258,6 +258,98 @@ let
     exit "$STATE_OK"
   '';
 
+  # Check plugin for OpenClaw channel plugin availability.  Reads the
+  # textfile metric written by openclaw-canary and returns CRITICAL if the
+  # requested channel plugin is not in the most recent gateway ready list,
+  # or UNKNOWN if the metric file is missing or stale.
+  checkOpenClawPlugin = pkgs.writeShellScript "check_openclaw_plugin.sh" ''
+    set -euo pipefail
+
+    CHANNEL="''${1:-}"
+    STALE_SECONDS="''${2:-600}" # default: 10 min
+    METRIC_FILE="/var/lib/prometheus-node-exporter-textfiles/openclaw_canary.prom"
+
+    STATE_OK=0
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+
+    if [[ -z "$CHANNEL" ]]; then
+      echo "UNKNOWN: channel argument required"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    if [[ ! -f "$METRIC_FILE" ]]; then
+      echo "UNKNOWN: metric file missing: $METRIC_FILE"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    NOW=$(${pkgs.coreutils}/bin/date +%s)
+    MTIME=$(${pkgs.coreutils}/bin/stat -c %Y "$METRIC_FILE")
+    AGE=$((NOW - MTIME))
+    if [[ $AGE -gt $STALE_SECONDS ]]; then
+      echo "UNKNOWN: canary metric file is $((AGE / 60)) min stale (threshold: $((STALE_SECONDS / 60)) min)"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    LINE=$(${pkgs.gnugrep}/bin/grep -E "^openclaw_channel_plugin_loaded\\{channel=\"''${CHANNEL}\"\\} " "$METRIC_FILE" || true)
+    if [[ -z "$LINE" ]]; then
+      echo "UNKNOWN: no sample for channel=$CHANNEL"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    VALUE=$(echo "$LINE" | ${pkgs.gawk}/bin/awk '{print $NF}')
+    case "$VALUE" in
+      1|1.0)
+        echo "OK: $CHANNEL plugin loaded (metric age: ''${AGE}s)"
+        exit "$STATE_OK"
+        ;;
+    esac
+    echo "CRITICAL: $CHANNEL plugin not loaded (value=$VALUE)"
+    exit "$STATE_CRITICAL"
+  '';
+
+  # Check plugin for OpenClaw gateway readiness age.  Returns CRITICAL if
+  # the most recent `[gateway] ready` line is older than the threshold (default:
+  # 30 minutes) AND the microVM systemd unit is active — i.e. the VM is up but
+  # OpenClaw never reached the ready state (crash loop or wedged startup).
+  checkOpenClawReadyAge = pkgs.writeShellScript "check_openclaw_ready_age.sh" ''
+    set -euo pipefail
+
+    MAX_AGE_SECONDS="''${1:-1800}" # default: 30 min
+    METRIC_FILE="/var/lib/prometheus-node-exporter-textfiles/openclaw_canary.prom"
+
+    STATE_OK=0
+    STATE_WARNING=1
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+
+    if [[ ! -f "$METRIC_FILE" ]]; then
+      echo "UNKNOWN: metric file missing: $METRIC_FILE"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    # Gate on microVM being active — otherwise this just duplicates the
+    # systemd service check.
+    if ! ${pkgs.systemd}/bin/systemctl is-active --quiet microvm@openclaw.service; then
+      echo "OK: microvm@openclaw.service is not active; skipping ready-age check"
+      exit "$STATE_OK"
+    fi
+
+    AGE=$(${pkgs.gnugrep}/bin/grep -E '^openclaw_gateway_ready_age_seconds ' "$METRIC_FILE" | ${pkgs.gawk}/bin/awk '{print int($NF)}' || true)
+    if [[ -z "$AGE" ]]; then
+      echo "UNKNOWN: could not read openclaw_gateway_ready_age_seconds"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    if [[ $AGE -gt $MAX_AGE_SECONDS ]]; then
+      echo "CRITICAL: gateway ready line is $((AGE / 60)) min old (threshold: $((MAX_AGE_SECONDS / 60)) min)"
+      exit "$STATE_CRITICAL"
+    fi
+
+    echo "OK: gateway ready line is $((AGE / 60)) min old"
+    exit "$STATE_OK"
+  '';
+
   # Nagios configuration directory
   nagiosCfgDir = "/var/lib/nagios";
 
@@ -456,6 +548,10 @@ let
     {
       name = "technitium-dns-server.service";
       display = "Technitium DNS Server";
+    }
+    {
+      name = "microvm@openclaw.service";
+      display = "OpenClaw microVM";
     }
   ];
 
@@ -714,6 +810,10 @@ let
     {
       name = "backup-status-exporter.timer";
       display = "Backup Status Exporter";
+    }
+    {
+      name = "openclaw-canary.timer";
+      display = "OpenClaw Canary";
     }
     {
       name = "certificate-exporter.timer";
@@ -1352,6 +1452,16 @@ let
       command_line    ${checkGitWorkspaceStale} $ARG1$ $ARG2$ $ARG3$
     }
 
+    define command {
+      command_name    check_openclaw_plugin
+      command_line    ${checkOpenClawPlugin} $ARG1$ $ARG2$
+    }
+
+    define command {
+      command_name    check_openclaw_ready_age
+      command_line    ${checkOpenClawReadyAge} $ARG1$
+    }
+
     ###############################################################################
     # HOSTS
     ###############################################################################
@@ -1667,6 +1777,78 @@ let
       host_name               vulcan
       service_description     Perplexica HTTP
       check_command           check_http!-p 3007 -u /
+      service_groups          application-services
+    }
+
+    ###############################################################################
+    # SERVICES - OPENCLAW AVAILABILITY
+    ###############################################################################
+
+    # Gateway HTTP liveness via nginx (external viewpoint: what a real Discord
+    # user's bot-mesh sees if openclaw.vulcan.lan is down).
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw Gateway Health
+      check_command           check_https!-u /healthz -s "live"
+      service_groups          application-services
+    }
+
+    # Discord channel plugin must be in the most-recent gateway ready list.
+    # This is the load-bearing check for "Discord DMs are answered."
+    define service {
+      use                     critical-service
+      host_name               vulcan
+      service_description     OpenClaw Discord Plugin Loaded
+      check_command           check_openclaw_plugin!discord!600
+      service_groups          critical-infrastructure
+    }
+
+    # WhatsApp channel plugin must be in the most-recent ready list.  Less
+    # urgent than discord (warning vs critical).
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw WhatsApp Plugin Loaded
+      check_command           check_openclaw_plugin!whatsapp!600
+      service_groups          application-services
+    }
+
+    # ACPX channel plugin (Agent Client Protocol bridge).
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw ACPX Plugin Loaded
+      check_command           check_openclaw_plugin!acpx!600
+      service_groups          application-services
+    }
+
+    # Memory-qdrant plugin.  Without this OpenClaw can't remember anything
+    # between sessions.
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw Memory-Qdrant Plugin Loaded
+      check_command           check_openclaw_plugin!memory-qdrant!600
+      service_groups          application-services
+    }
+
+    # Lobster plugin.
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw Lobster Plugin Loaded
+      check_command           check_openclaw_plugin!lobster!600
+      service_groups          application-services
+    }
+
+    # Gateway-ready staleness: fires if the microVM is up but the gateway
+    # never becomes ready (crash loop or wedged start).
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     OpenClaw Gateway Ready Age
+      check_command           check_openclaw_ready_age!1800
       service_groups          application-services
     }
 

@@ -1,0 +1,116 @@
+groups:
+  - name: openclaw_availability
+    interval: 60s
+    rules:
+      # Today's regression symptom: the discord channel plugin isn't in
+      # the most-recent [gateway] ready line.
+      - alert: OpenClawDiscordPluginMissing
+        expr: openclaw_channel_plugin_loaded{channel="discord"} == 0
+        for: 10m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw discord plugin missing for 10 minutes"
+          description: |
+            The most recent [gateway] ready line did not include
+            `discord` in its plugin list. This is the 2026-04-22
+            regression pattern: DMs to the Claw bot will not get
+            answered. Check
+            /var/lib/openclaw/.openclaw/logs/gateway-vm.err.log.
+
+      # Any of the other expected channel plugins missing.
+      - alert: OpenClawChannelPluginMissing
+        expr: openclaw_channel_plugin_loaded{channel!="discord"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw {{ $labels.channel }} plugin missing for 15 minutes"
+          description: |
+            The most recent [gateway] ready line did not include
+            `{{ $labels.channel }}` in its plugin list.
+
+      # Plugin init failures since the last successful ready line.
+      - alert: OpenClawPluginInitFailuresPresent
+        expr: openclaw_plugin_init_failures_recent_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw plugin init failures after last ready"
+          description: |
+            {{ $value }} plugin init failure lines in gateway-vm.err.log
+            after the most recent [gateway] ready timestamp.
+
+      # The canary itself is broken or not firing.
+      - alert: OpenClawCanaryStale
+        expr: (time() - openclaw_canary_last_run_timestamp_seconds) > 600
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "OpenClaw canary has not run in >10 minutes"
+          description: |
+            openclaw-canary.timer is not firing or the script is
+            failing. `systemctl status openclaw-canary.service`.
+
+      # The VM is alive but the gateway's most-recent ready line is
+      # ancient — typically crash-loop-without-ready.
+      - alert: OpenClawGatewayReadyStale
+        expr: |
+          openclaw_gateway_ready_age_seconds > 1800
+          and on()
+          (systemd_unit_state{name="microvm@openclaw.service", state="active"} == 1)
+        for: 10m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw microVM active but gateway has not logged 'ready' in 30 minutes"
+          description: |
+            The microVM systemd unit is running but no `[gateway]
+            ready` line has been logged for >30 minutes.  OpenClaw
+            is either restarting in a loop or wedged during startup.
+
+      # The microVM systemd unit entered failed state.
+      - alert: OpenClawMicroVMDown
+        expr: |
+          systemd_unit_state{
+            name="microvm@openclaw.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw microVM systemd unit is failed"
+          description: "`systemctl status microvm@openclaw.service` for details."
+
+      # Generic absence alarm — if the textfile stops appearing entirely,
+      # none of the above fire.  This catches a deleted textfile dir, a
+      # node_exporter restart issue, or the canary being disabled.
+      - alert: OpenClawCanaryMetricAbsent
+        expr: absent(openclaw_canary_parse_ok)
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "OpenClaw canary metric series is missing from Prometheus"
+          description: |
+            No `openclaw_canary_parse_ok` sample in Prometheus for
+            15 minutes.  Check node_exporter --collector.textfile
+            and the canary systemd timer.

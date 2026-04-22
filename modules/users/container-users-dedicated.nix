@@ -170,16 +170,16 @@
         description = "Container user for Open WebUI AI chat interface";
       };
 
-      perplexica = {
+      vane = {
         isSystemUser = true;
-        group = "perplexica";
-        home = "/var/lib/containers/perplexica";
+        group = "vane";
+        home = "/var/lib/containers/vane";
         createHome = true;
         shell = pkgs.bash;
         autoSubUidGidRange = true;
         linger = true;
         extraGroups = [ "podman" ];
-        description = "Container user for Perplexica AI search engine";
+        description = "Container user for Vane AI answering engine";
       };
 
       speedtest-tracker = {
@@ -210,7 +210,7 @@
       shlink = { };
       shlink-web-client = { };
       open-webui = { };
-      perplexica = { };
+      vane = { };
       speedtest-tracker = { };
       podman = { };
     };
@@ -223,7 +223,7 @@
     "mailarchiver"
     "open-webui"
     "openproject"
-    "perplexica"
+    "vane"
     "shlink"
     "shlink-web-client"
     "wallabag"
@@ -276,6 +276,6 @@
     "d /run/secrets-speedtest-tracker 0750 speedtest-tracker speedtest-tracker - -"
     "L+ /run/secrets-speedtest-tracker/speedtest-tracker-secrets - - - - /run/secrets/speedtest-tracker-secrets"
   ];
-  # Note: perplexica currently has no SOPS secrets (configured via web UI)
+  # Note: vane currently has no SOPS secrets (configured via web UI)
   # Add secret entries here if/when API keys are managed via SOPS
 }

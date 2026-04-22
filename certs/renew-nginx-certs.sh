@@ -45,7 +45,7 @@ DOMAINS=(
     "kiwix.vulcan.lan"
     "searxng.vulcan.lan"
     "qdrant.vulcan.lan"
-    "perplexica.vulcan.lan"
+    "vane.vulcan.lan"
     "openclaw.vulcan.lan"
     "drafts-mcp.vulcan.lan"
 )

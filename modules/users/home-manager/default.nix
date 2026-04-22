@@ -48,7 +48,7 @@
         "changedetection"
         "litellm"
         "open-webui"
-        "perplexica"
+        "vane"
         "wallabag"
         "teable"
         "opnsense-exporter"

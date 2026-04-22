@@ -510,7 +510,7 @@ in
                   "https://shlink-api.vulcan.lan/rest/health"
                   "https://chat.vulcan.lan"
                   "https://searxng.vulcan.lan"
-                  "https://perplexica.vulcan.lan"
+                  "https://vane.vulcan.lan"
                   "https://speedtracker.vulcan.lan"
                 ];
               }

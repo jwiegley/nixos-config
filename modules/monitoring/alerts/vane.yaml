@@ -1,0 +1,76 @@
+groups:
+  - name: vane_alerts
+    interval: 60s
+    rules:
+      # Vane Container Service Alerts
+      - alert: VaneServiceDown
+        expr: |
+          systemd_unit_state{
+            name="vane.service",
+            state="active",
+            type="service"
+          } == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: ai-search
+          service: vane
+        annotations:
+          summary: "Vane service is down"
+          description: "Vane AI answering container is not active. Service is unavailable."
+
+      - alert: VaneServiceFailed
+        expr: |
+          systemd_unit_state{
+            name="vane.service",
+            state="failed",
+            type="service"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: ai-search
+          service: vane
+        annotations:
+          summary: "Vane service has failed"
+          description: "Vane container is in failed state. Check logs with: journalctl -u vane"
+
+      # HTTP Health Check (via blackbox exporter)
+      - alert: VaneHTTPDown
+        expr: |
+          probe_success{job="blackbox_https_local", instance=~".*vane.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: ai-search
+          service: vane
+        annotations:
+          summary: "Vane HTTP endpoint is unreachable"
+          description: "Vane web interface at {{ $labels.instance }} has been unreachable for more than 5 minutes."
+
+      # SSL Certificate Alerts
+      - alert: VaneCertificateExpiringSoon
+        expr: |
+          certificate_days_until_expiry{name="vane.vulcan.lan"} <= 30
+          and
+          certificate_days_until_expiry{name="vane.vulcan.lan"} > 7
+        for: 1h
+        labels:
+          severity: warning
+          category: certificates
+          service: vane
+        annotations:
+          summary: "Vane SSL certificate expiring soon"
+          description: "SSL certificate for vane.vulcan.lan expires in {{ $value }} days. Run certificate renewal."
+
+      - alert: VaneCertificateExpiryCritical
+        expr: |
+          certificate_days_until_expiry{name="vane.vulcan.lan"} <= 7
+        for: 30m
+        labels:
+          severity: critical
+          category: certificates
+          service: vane
+        annotations:
+          summary: "Vane SSL certificate expiring very soon"
+          description: "SSL certificate for vane.vulcan.lan expires in {{ $value }} days. Immediate renewal required."

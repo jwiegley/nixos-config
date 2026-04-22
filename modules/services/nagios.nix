@@ -1775,7 +1775,7 @@ let
     define service {
       use                     standard-service
       host_name               vulcan
-      service_description     Perplexica HTTP
+      service_description     Vane HTTP
       check_command           check_http!-p 3007 -u /
       service_groups          application-services
     }
@@ -2168,8 +2168,8 @@ let
     define service {
       use                     daily-service
       host_name               vulcan
-      service_description     SSL Cert: perplexica.vulcan.lan
-      check_command           check_ssl_cert!perplexica.vulcan.lan
+      service_description     SSL Cert: vane.vulcan.lan
+      check_command           check_ssl_cert!vane.vulcan.lan
       service_groups          ssl-certificates
     }
 

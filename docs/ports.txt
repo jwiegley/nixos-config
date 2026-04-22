@@ -61,7 +61,7 @@
 3004 127.0.0.1 (Unknown)
 3005 127.0.0.1 :: Gitea
 # 3006 - removed, Open WebUI uses host networking on port 8080
-3007 127.0.0.1 Perplexica AI search engine (host network)
+3007 127.0.0.1 Vane AI answering engine (host network)
 3008 127.0.0.1 sockpuppetbrowser (Chrome for ChangeDetection.io)
 3050 127.0.0.1 Glance
 3100 * :: Loki

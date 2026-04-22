@@ -44,6 +44,7 @@
     ./git-workspace-alerts.nix
     ./litellm-availability-alerts.nix
     ./aide-metrics.nix
+    ./openclaw-canary.nix
 
     # External systems monitoring
     ./opnsense-monitoring.nix

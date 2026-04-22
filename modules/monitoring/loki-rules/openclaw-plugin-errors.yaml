@@ -1,0 +1,81 @@
+groups:
+  - name: openclaw_plugin_errors
+    interval: 1m
+    rules:
+      # Fires when OpenClaw logs the `N plugin(s) failed to initialize` line
+      # inside the openclaw microVM journal.  This is the exact symptom of
+      # the 2026-04-22 break, and generally indicates at least one chat
+      # channel (Discord, WhatsApp, etc.) is not going to respond.
+      - alert: OpenClawPluginInitFailure
+        expr: |
+          sum(count_over_time(
+            {unit="microvm@openclaw.service"}
+            |~ "plugin\\(s\\) failed to initialize"
+            [5m]
+          )) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: logs
+          service: openclaw
+        annotations:
+          summary: "OpenClaw plugin initialization failed"
+          description: |
+            OpenClaw logged one or more plugin initialization failures in
+            the last 5 minutes. This usually means a chat channel plugin
+            (Discord, WhatsApp, acpx, lobster, brave) is not loaded and
+            the associated channel will not respond to user messages.
+            Check /var/lib/openclaw/.openclaw/logs/gateway-vm.err.log and
+            `systemctl status microvm@openclaw.service`.
+
+      # Fires on the exact EUNSUPPORTEDPROTOCOL regression we hit today
+      # — an OpenClaw build that ships `"workspace:*"` in plugin
+      # package.json files.  openclaw-microvm.nix already patches this at
+      # build time; the alert catches the regression if the patch ever
+      # fails to apply or the loader layout changes.
+      - alert: OpenClawNpmWorkspaceProtocolError
+        expr: |
+          sum(count_over_time(
+            {unit="microvm@openclaw.service"}
+            |~ "EUNSUPPORTEDPROTOCOL.*workspace"
+            [5m]
+          )) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: logs
+          service: openclaw
+        annotations:
+          summary: "OpenClaw regression: npm workspace:* protocol unsupported"
+          description: |
+            This is the 2026-04-22 regression pattern. Check the
+            `overrideAttrs` block for `openclawPkg` in
+            modules/services/openclaw-microvm.nix — the `jq
+            del(.devDependencies)` step or the source-checkout
+            marker dirs may no longer be applying to the current
+            OpenClaw build's layout.
+
+      # Fires when the loader can't write runtime deps into the read-only
+      # /nix/store path — the symptom that remained after the workspace:*
+      # strip and before the source-checkout-marker fix.  Same build-time
+      # mitigation in openclaw-microvm.nix should prevent it; alert if it
+      # ever leaks through.
+      - alert: OpenClawNpmReadOnlyFilesystem
+        expr: |
+          sum(count_over_time(
+            {unit="microvm@openclaw.service"}
+            |~ "npm error code EROFS"
+            [5m]
+          )) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: logs
+          service: openclaw
+        annotations:
+          summary: "OpenClaw runtime-deps installer hit read-only filesystem"
+          description: |
+            npm tried to write runtime deps into a /nix/store plugin
+            directory.  The source-checkout marker stub (`lib/openclaw/.git`
+            and `lib/openclaw/src`) in openclaw-microvm.nix should prevent
+            this.  Verify the current OpenClaw build has those markers.

@@ -123,6 +123,7 @@
     "d /var/lib/loki/rules/fake 0755 loki loki -"
     "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
     "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
+    "L+ /var/lib/loki/rules/fake/openclaw-plugin-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/openclaw-plugin-errors.yaml"
   ];
 
   # Loki nginx upstream with retry logic

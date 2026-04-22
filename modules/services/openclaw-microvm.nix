@@ -43,7 +43,32 @@ let
   secretsStagingDir = "${microvmBase}/secrets";
 
   # -- Packages from llm-agents flake input --
-  openclawPkg = inputs.llm-agents.packages.${system}.openclaw;
+  # Two independent mitigations for the plugin-init break introduced in
+  # OpenClaw 2026.4.21 (tracked in docs/superpowers/plans/2026-04-22-openclaw-hardening.md):
+  #
+  # 1. Stamp `.git/` and `src/` markers at lib/openclaw so the loader's
+  #    `isSourceCheckoutBundledPluginRoot()` returns true, skipping the
+  #    `npm install` inside each read-only /nix/store plugin dir entirely.
+  #    Without this, the loader raises EROFS.  With this, plugins load from
+  #    the pre-hoisted `lib/openclaw/node_modules/` like they did in 2026.4.15.
+  #
+  # 2. Strip `devDependencies` from every plugin package.json so that even if
+  #    a future refactor drops the source-checkout skip, npm still won't
+  #    choke on pnpm's `"workspace:*"` protocol (EUNSUPPORTEDPROTOCOL).
+  openclawPkg = (inputs.llm-agents.packages.${system}.openclaw).overrideAttrs (old: {
+    postFixup = (old.postFixup or "") + ''
+      if [ -d "$out/lib/openclaw" ]; then
+        mkdir -p "$out/lib/openclaw/.git" "$out/lib/openclaw/src"
+      fi
+      if [ -d "$out/lib/openclaw/extensions" ]; then
+        for pkg in "$out"/lib/openclaw/extensions/*/package.json; do
+          [ -f "$pkg" ] || continue
+          ${pkgs.jq}/bin/jq 'del(.devDependencies)' "$pkg" > "$pkg.new"
+          mv "$pkg.new" "$pkg"
+        done
+      fi
+    '';
+  });
   mcporterPkg = inputs.llm-agents.packages.${system}.mcporter;
   claudeCodePkg = pkgs.claude-code; # from overlay (llm-agents + USE_BUILTIN_RIPGREP patch)
 

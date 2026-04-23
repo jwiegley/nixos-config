@@ -308,10 +308,14 @@ let
     exit "$STATE_CRITICAL"
   '';
 
-  # Check plugin for OpenClaw gateway readiness age.  Returns CRITICAL if
-  # the most recent `[gateway] ready` line is older than the threshold (default:
-  # 30 minutes) AND the microVM systemd unit is active — i.e. the VM is up but
-  # OpenClaw never reached the ready state (crash loop or wedged startup).
+  # Check plugin for OpenClaw gateway readiness.  Returns CRITICAL only when
+  # the microVM has been up for longer than the threshold (default: 30 min)
+  # AND the most recent `[gateway] ready` log line was written *before* the
+  # current microVM boot — i.e. the VM is up but OpenClaw never reached
+  # ready this boot (crash loop or wedged startup).  After a stable boot
+  # the [gateway] ready line does not repeat, so comparing ready_ts against
+  # the VM ActiveEnterTimestamp avoids a false-positive that would otherwise
+  # fire on any VM kept running past the threshold.
   checkOpenClawReadyAge = pkgs.writeShellScript "check_openclaw_ready_age.sh" ''
     set -euo pipefail
 
@@ -335,19 +339,45 @@ let
       exit "$STATE_OK"
     fi
 
-    AGE=$(${pkgs.gnugrep}/bin/grep -E '^openclaw_gateway_ready_age_seconds ' "$METRIC_FILE" | ${pkgs.gawk}/bin/awk '{print int($NF)}' || true)
-    if [[ -z "$AGE" ]]; then
-      echo "UNKNOWN: could not read openclaw_gateway_ready_age_seconds"
+    # Microsecond monotonic timestamp of when the VM last entered active state.
+    # ActiveEnterTimestampMonotonic is stable across wall-clock adjustments
+    # and reads "0" if never active.
+    ACTIVE_ENTER_US=$(${pkgs.systemd}/bin/systemctl show -p ActiveEnterTimestampMonotonic --value microvm@openclaw.service 2>/dev/null || true)
+    NOW_MONO_US=$(${pkgs.coreutils}/bin/cat /proc/uptime | ${pkgs.gawk}/bin/awk '{printf "%d", $1 * 1000000}')
+    if [[ -z "$ACTIVE_ENTER_US" || "$ACTIVE_ENTER_US" == "0" ]]; then
+      echo "UNKNOWN: could not read ActiveEnterTimestampMonotonic for microvm@openclaw.service"
       exit "$STATE_UNKNOWN"
     fi
 
-    if [[ $AGE -gt $MAX_AGE_SECONDS ]]; then
-      echo "CRITICAL: gateway ready line is $((AGE / 60)) min old (threshold: $((MAX_AGE_SECONDS / 60)) min)"
-      exit "$STATE_CRITICAL"
+    UPTIME_SECONDS=$(( (NOW_MONO_US - ACTIVE_ENTER_US) / 1000000 ))
+    if [[ "$UPTIME_SECONDS" -lt "$MAX_AGE_SECONDS" ]]; then
+      echo "OK: microVM up for $((UPTIME_SECONDS / 60)) min; grace period is $((MAX_AGE_SECONDS / 60)) min"
+      exit "$STATE_OK"
     fi
 
-    echo "OK: gateway ready line is $((AGE / 60)) min old"
-    exit "$STATE_OK"
+    # Wall-clock timestamp of the VM boot, for comparing against ready_ts.
+    ACTIVE_ENTER_WALL_US=$(${pkgs.systemd}/bin/systemctl show -p ActiveEnterTimestamp --value --timestamp=unix microvm@openclaw.service 2>/dev/null | ${pkgs.gnused}/bin/sed 's/^@//' || true)
+    if [[ -z "$ACTIVE_ENTER_WALL_US" ]]; then
+      # Fallback: now - uptime
+      NOW_WALL=$(${pkgs.coreutils}/bin/date +%s)
+      ACTIVE_ENTER_WALL=$((NOW_WALL - UPTIME_SECONDS))
+    else
+      ACTIVE_ENTER_WALL="$ACTIVE_ENTER_WALL_US"
+    fi
+
+    READY_TS=$(${pkgs.gnugrep}/bin/grep -E '^openclaw_gateway_ready_timestamp_seconds ' "$METRIC_FILE" | ${pkgs.gawk}/bin/awk '{print int($NF)}' || true)
+    if [[ -z "$READY_TS" ]]; then
+      echo "UNKNOWN: could not read openclaw_gateway_ready_timestamp_seconds"
+      exit "$STATE_UNKNOWN"
+    fi
+
+    if [[ "$READY_TS" -ge "$ACTIVE_ENTER_WALL" ]]; then
+      echo "OK: gateway reached ready $((READY_TS - ACTIVE_ENTER_WALL)) s after microVM boot (VM up $((UPTIME_SECONDS / 60)) min)"
+      exit "$STATE_OK"
+    fi
+
+    echo "CRITICAL: microVM up $((UPTIME_SECONDS / 60)) min but [gateway] ready has not been logged since last boot"
+    exit "$STATE_CRITICAL"
   '';
 
   # Nagios configuration directory

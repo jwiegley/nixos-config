@@ -770,6 +770,12 @@ in
   # ============================================================================
   # The host writes a trigger file to the shared virtiofs directory.
   # This path unit watches for it and starts the health-full service.
+  #
+  # virtiofs does not propagate host-side inotify events to guest watchers,
+  # so this unit only fires if the trigger file is already present at path
+  # unit activation time (e.g. a VM boot while the file is staged).  It is
+  # retained as a fast path for that case; the poll timer below is the
+  # load-bearing detection mechanism for files created after boot.
 
   systemd.paths.openclaw-health-full-trigger = {
     description = "Watch for OpenClaw full health check trigger file";
@@ -777,6 +783,34 @@ in
     pathConfig = {
       PathExists = "${openclawDir}/run-health-check-full";
       Unit = "openclaw-health-full.service";
+    };
+  };
+
+  # Polling fallback: virtiofs does not surface host-created files to the
+  # guest's inotify subsystem, so the path unit above cannot detect trigger
+  # files created from the host after boot.  This timer + oneshot pair
+  # polls every 5 s and starts openclaw-health-full when the trigger is
+  # present and the service is not already running.
+  systemd.services.openclaw-health-full-poll = {
+    description = "Poll for OpenClaw full health check trigger";
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      if [ -e "${openclawDir}/run-health-check-full" ] \
+        && ! ${pkgs.systemd}/bin/systemctl is-active --quiet openclaw-health-full.service; then
+        ${pkgs.systemd}/bin/systemctl start --no-block openclaw-health-full.service
+      fi
+    '';
+  };
+
+  systemd.timers.openclaw-health-full-poll = {
+    description = "Poll for OpenClaw full health check trigger";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "15s";
+      OnUnitActiveSec = "5s";
+      AccuracySec = "1s";
     };
   };
 }

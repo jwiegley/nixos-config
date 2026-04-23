@@ -28,9 +28,9 @@ in
       proxyWebsockets = true;
       extraConfig = ''
         proxy_buffering off;
-        proxy_read_timeout 300s;
+        proxy_read_timeout 1800s;
         proxy_connect_timeout 60s;
-        proxy_send_timeout 300s;
+        proxy_send_timeout 1800s;
         client_max_body_size 50M;
       '';
     };

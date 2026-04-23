@@ -63,6 +63,8 @@ let
     OUT_FINAL = pathlib.Path("${textfileDir}/openclaw_canary.prom")
     OUT_TMP = OUT_FINAL.with_suffix(".prom.tmp")
     EXPECTED = ${builtins.toJSON expectedChannels}
+    SYSTEMCTL = "${pkgs.systemd}/bin/systemctl"
+    MICROVM_UNIT = "microvm@openclaw.service"
 
     READY_RE = re.compile(
         r"^(?P<ts>\S+)\s+\[gateway\]\s+ready\s+"
@@ -106,6 +108,27 @@ let
         return None
 
 
+    def microvm_active_enter_ts() -> float:
+        """Unix timestamp of when microvm@openclaw.service last entered active
+        state, or 0.0 if unavailable.  Used to distinguish "ready line is old
+        but this boot's ready was emitted" from "VM is up but never reached
+        ready this boot"."""
+        try:
+            out = subprocess.check_output(
+                [SYSTEMCTL, "show", "-p", "ActiveEnterTimestamp",
+                 "--value", "--timestamp=unix", MICROVM_UNIT],
+                text=True,
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return 0.0
+        if not out or not out.startswith("@"):
+            return 0.0
+        try:
+            return float(out[1:])
+        except ValueError:
+            return 0.0
+
+
     def write_metrics(payload: dict[str, float], channel_loaded: dict[str, float]) -> None:
         OUT_FINAL.parent.mkdir(parents=True, exist_ok=True)
         with OUT_TMP.open("w") as f:
@@ -128,6 +151,9 @@ let
                 "# HELP openclaw_canary_last_run_timestamp_seconds When the canary last ran\n"
                 "# TYPE openclaw_canary_last_run_timestamp_seconds gauge\n"
                 f"openclaw_canary_last_run_timestamp_seconds {time.time()}\n"
+                "# HELP openclaw_microvm_active_enter_timestamp_seconds Unix timestamp when microvm@openclaw.service last entered active state\n"
+                "# TYPE openclaw_microvm_active_enter_timestamp_seconds gauge\n"
+                f"openclaw_microvm_active_enter_timestamp_seconds {payload['vm_start_ts']}\n"
                 "# HELP openclaw_channel_plugin_loaded 1 if the plugin is present in the most recent [gateway] ready list\n"
                 "# TYPE openclaw_channel_plugin_loaded gauge\n"
             )
@@ -140,6 +166,7 @@ let
         now = time.time()
         lines = tail(LOG_PATH, 1200)
         err_lines = tail(ERR_PATH, 1200)
+        vm_start_ts = microvm_active_enter_ts()
 
         ready = find_last(READY_RE, lines)
         # Count any failure lines that are NEWER than the most recent ready
@@ -166,6 +193,7 @@ let
                 ready_age=max(0.0, now - ready_epoch) if ready_epoch else 0.0,
                 init_failures=float(fail_count),
                 parse_ok=1.0,
+                vm_start_ts=vm_start_ts,
             )
         else:
             payload = dict(
@@ -174,6 +202,7 @@ let
                 ready_age=0.0,
                 init_failures=float(fail_count),
                 parse_ok=0.0,
+                vm_start_ts=vm_start_ts,
             )
 
         write_metrics(payload, channel_loaded)

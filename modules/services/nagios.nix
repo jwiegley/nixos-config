@@ -1790,7 +1790,7 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     OpenClaw Gateway Health
-      check_command           check_https!-u /healthz -s "live"
+      check_command           check_https!-H openclaw.vulcan.lan -u /healthz -s "live"
       service_groups          application-services
     }
 

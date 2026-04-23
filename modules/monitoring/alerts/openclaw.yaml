@@ -62,11 +62,19 @@ groups:
             openclaw-canary.timer is not firing or the script is
             failing. `systemctl status openclaw-canary.service`.
 
-      # The VM is alive but the gateway's most-recent ready line is
-      # ancient — typically crash-loop-without-ready.
+      # The VM is alive and has been up long enough to reach ready, but
+      # the most-recent `[gateway] ready` log line was emitted *before*
+      # the current VM boot — typically crash-loop or wedged startup.
+      # Gates on VM uptime > 1800 s so that a fresh VM still in its boot
+      # window does not fire this alert.  The `[gateway] ready` line is
+      # only emitted once per gateway start, so raw ready_age would
+      # false-positive after any stable VM uptime > 30 min.
       - alert: OpenClawGatewayReadyStale
         expr: |
-          openclaw_gateway_ready_age_seconds > 1800
+          openclaw_microvm_active_enter_timestamp_seconds > 0
+          and (time() - openclaw_microvm_active_enter_timestamp_seconds) > 1800
+          and openclaw_gateway_ready_timestamp_seconds
+              < openclaw_microvm_active_enter_timestamp_seconds
           and on()
           (systemd_unit_state{name="microvm@openclaw.service", state="active"} == 1)
         for: 10m
@@ -75,11 +83,12 @@ groups:
           category: availability
           service: openclaw
         annotations:
-          summary: "OpenClaw microVM active but gateway has not logged 'ready' in 30 minutes"
+          summary: "OpenClaw microVM active but gateway has not reached ready since last boot"
           description: |
-            The microVM systemd unit is running but no `[gateway]
-            ready` line has been logged for >30 minutes.  OpenClaw
-            is either restarting in a loop or wedged during startup.
+            The microVM systemd unit has been running for >30 minutes
+            but no `[gateway] ready` line has been logged since the
+            current VM boot.  OpenClaw is either restarting in a loop
+            or wedged during startup.
 
       # The microVM systemd unit entered failed state.
       - alert: OpenClawMicroVMDown

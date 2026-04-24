@@ -105,6 +105,13 @@ in
         # Log slow queries (longer than 1 second)
         log_min_duration_statement = 1000; # milliseconds
 
+        # Suppress parameter-value dumps on slow-query LOG lines.
+        # Keeps timing and SQL text; drops the DETAIL Parameters: block
+        # that floods the error stream with e.g. large email bodies from
+        # mailarchiver INSERTs. Errors already elide parameters via
+        # log_parameter_max_length_on_error = 0 (default).
+        log_parameter_max_length = 0;
+
         # Log lock waits that take longer than deadlock_timeout
         log_lock_waits = true;
         deadlock_timeout = "1s"; # How long to wait before checking for deadlock

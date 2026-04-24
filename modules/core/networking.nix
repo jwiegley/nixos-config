@@ -64,7 +64,7 @@
   # Enable systemd-resolved for DNS management with NetworkManager
   services.resolved = {
     enable = true;
-    dnssec = "allow-downgrade";
+    dnssec = "false";
 
     # Disable stub listener to avoid conflict with Technitium DNS (0.0.0.0:53)
     # Point directly to Technitium on localhost and ignore DHCP-provided DNS

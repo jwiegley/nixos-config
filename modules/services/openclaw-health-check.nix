@@ -545,7 +545,7 @@ in
           -d '{
             "model": "${models.llm.agent.name}",
             "messages": [{"role": "user", "content": "Reply PONG"}],
-            "max_tokens": 5
+            "max_tokens": 8192
           }' \
           "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
         if echo "$LITELLM_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then

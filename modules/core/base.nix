@@ -118,6 +118,12 @@
   boot.kernel.sysctl = {
     "net.ipv4.conf.all.rp_filter" = 2;
     "net.ipv4.conf.default.rp_filter" = 2;
+
+    # Override nixpkgs default of 33. On aarch64 with 16K pages (Asahi Linux
+    # kernel), CONFIG_ARCH_MMAP_RND_BITS_MAX is lower than 33, so applying the
+    # default causes systemd-sysctl.service to fail with EINVAL. 28 is within
+    # the valid range on this kernel and preserves strong ASLR entropy.
+    "vm.mmap_rnd_bits" = 28;
   };
 
   # --------------------------------------------------------------------------

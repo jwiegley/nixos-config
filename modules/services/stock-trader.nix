@@ -179,6 +179,7 @@ in
         StateDirectory = "stock-trader";
         StateDirectoryMode = "0750";
         RuntimeDirectory = "stock-trader";
+        RuntimeDirectoryMode = "0750";
 
         LoadCredential = [
           "anthropic-api-key:${config.sops.secrets."stock-trader/anthropic-api-key".path}"

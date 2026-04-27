@@ -168,6 +168,10 @@ with lib;
                           url = "https://jupyter.vulcan.lan";
                         }
                         {
+                          title = "Stock Trader";
+                          url = "https://trader.vulcan.lan";
+                        }
+                        {
                           title = "ATD Scheduler";
                           url = "https://atd.vulcan.lan";
                         }

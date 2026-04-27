@@ -92,6 +92,7 @@
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/service-reliability.nix
+    ../../modules/services/stock-trader.nix
     ../../modules/services/technitium-dns-backup.nix
     ../../modules/services/web.nix
 
@@ -163,6 +164,8 @@
     mirrorInterval = "8h"; # 8 hours (Go duration format)
     schedule = "*-*-* 03:00:00"; # Daily at 3 AM
   };
+
+  services.stock-trader.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

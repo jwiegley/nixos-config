@@ -1781,6 +1781,14 @@ let
     define service {
       use                     standard-service
       host_name               vulcan
+      service_description     Stock Trader HTTPS
+      check_command           check_http!-I 127.0.0.1 -p 443 -S -H trader.vulcan.lan -u /api/config
+      service_groups          application-services
+    }
+
+    define service {
+      use                     standard-service
+      host_name               vulcan
       service_description     OpenProject HTTP
       check_command           check_http!-I 127.0.0.1 -p 8180 -H openproject.vulcan.lan -u /health_checks/
       service_groups          application-services

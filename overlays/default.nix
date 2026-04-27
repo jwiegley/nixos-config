@@ -632,4 +632,13 @@ in
     pkgs = final;
     python = final.python312;
   };
+
+  # stock-trader frontend bundle: React 19 + Vite SPA built from the
+  # laptop repo's web/ subdirectory. Consumed by the top-level
+  # stock-trader derivation as a sibling artifact under
+  # share/stock-trader/web/dist/.
+  stock-trader-frontend = final.callPackage ../pkgs/stock-trader-frontend.nix {
+    src = inputs.stock-trader;
+    version = "0.1.0";
+  };
 }

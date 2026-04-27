@@ -512,6 +512,7 @@ in
                   "https://searxng.vulcan.lan"
                   "https://vane.vulcan.lan"
                   "https://speedtracker.vulcan.lan"
+                  "https://trader.vulcan.lan"
                 ];
               }
             ];

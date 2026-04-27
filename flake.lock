@@ -3073,16 +3073,16 @@
     "stock-trader": {
       "flake": false,
       "locked": {
-        "lastModified": 1777249792,
-        "narHash": "sha256-t7pjpXCI4Mwks+gSHJJ9pJjuyJlJE9c3oKegvyO/W/Y=",
-        "ref": "refs/tags/v0.1.0",
-        "rev": "d6e342803b502d16b1c824c338bd7e2a60db2b8e",
-        "revCount": 112,
+        "lastModified": 1777327192,
+        "narHash": "sha256-InU/m4vDto4lusQ34++zi9g2syQ+ElxmoXWneyvqW44=",
+        "ref": "refs/tags/v0.1.1",
+        "rev": "866df6afae0e5e71d9abb02df7f007048034401b",
+        "revCount": 113,
         "type": "git",
         "url": "ssh://gitea/johnw/stock-trader"
       },
       "original": {
-        "ref": "refs/tags/v0.1.0",
+        "ref": "refs/tags/v0.1.1",
         "type": "git",
         "url": "ssh://gitea/johnw/stock-trader"
       }

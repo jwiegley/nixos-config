@@ -38,6 +38,7 @@ DOMAINS=(
     "speedtest.vulcan.lan"
     "speedtracker.vulcan.lan"
     "teable.vulcan.lan"
+    "trader.vulcan.lan"
     "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"
     "wallabag.vulcan.lan"

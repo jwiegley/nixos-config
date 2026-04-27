@@ -129,6 +129,14 @@ in
       ];
       wantedBy = [ "multi-user.target" ];
 
+      # The Claude Agent SDK shells out to a `claude` binary it
+      # locates via shutil.which("claude"). Without claude-code on
+      # the unit's PATH the SDK prints "Claude Code not found" and
+      # the chat panel hangs. Adding it here injects the package's
+      # bin/ into the unit's PATH (systemd composes `path` with the
+      # default, so coreutils etc. remain available).
+      path = [ pkgs.claude-code ];
+
       environment = {
         # Bind the uvicorn listener on loopback only; nginx
         # reverse-proxies to it from the LAN-facing :443.
@@ -154,6 +162,12 @@ in
         ANTHROPIC_MODEL = "hera/claude-opus-4-7";
 
         LOG_LEVEL = "INFO";
+
+        # claude-code persists session metadata under $HOME/.claude/.
+        # DynamicUser units default HOME to "/", which is read-only
+        # under ProtectSystem=strict. Point HOME at the writable
+        # StateDirectory so claude-code's session writes succeed.
+        HOME = "%S/stock-trader";
 
         # STOCK_TRADER_ALLOW_OAUTH_BOOTSTRAP is intentionally NOT
         # set here. The Schwab OAuth flow does not run on the server

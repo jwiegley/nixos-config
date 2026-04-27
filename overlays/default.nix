@@ -641,4 +641,15 @@ in
     src = inputs.stock-trader;
     version = "0.1.0";
   };
+
+  # stock-trader: top-level derivation. Composes the runtime Python env
+  # (with overrides), the frontend bundle, and a wrapped uvicorn entry
+  # point. The systemd unit in modules/services/stock-trader.nix runs
+  # this package's $out/bin/stock-trader.
+  stock-trader = final.callPackage ../pkgs/stock-trader.nix {
+    src = inputs.stock-trader;
+    version = "0.1.0";
+    frontend = final.stock-trader-frontend;
+    pythonOverrides = final.stock-trader-python-overrides;
+  };
 }

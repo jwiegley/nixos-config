@@ -1,0 +1,33 @@
+groups:
+  - name: stock_trader
+    interval: 60s
+    rules:
+      - alert: StockTraderEndpointDown
+        expr: |
+          probe_success{instance="https://trader.vulcan.lan"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: stock-trader
+        annotations:
+          summary: "stock-trader endpoint is down"
+          description: |
+            The HTTPS probe for trader.vulcan.lan has been failing for 5 minutes.
+
+            Check: systemctl status stock-trader
+            Logs:  journalctl -u stock-trader -n 100
+            nginx: systemctl status nginx
+
+      - alert: StockTraderCertificateExpiringSoon
+        expr: |
+          probe_ssl_earliest_cert_expiry{instance=~".*trader.vulcan.lan.*"} - time() < 86400 * 14
+        for: 1h
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "stock-trader SSL certificate expires in less than 14 days"
+          description: |
+            The SSL certificate for trader.vulcan.lan expires in {{ $value | humanizeDuration }}.
+            Run: sudo /etc/nixos/certs/renew-certificate.sh "trader.vulcan.lan" \
+              -o "/var/lib/nginx-certs" -d 365 --owner "nginx:nginx"

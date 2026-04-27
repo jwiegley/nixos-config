@@ -2907,6 +2907,7 @@
         "secrets": "secrets",
         "sizes": "sizes",
         "sops-nix": "sops-nix",
+        "stock-trader": "stock-trader",
         "una": "una"
       }
     },
@@ -3067,6 +3068,23 @@
         "owner": "input-output-hk",
         "repo": "stackage.nix",
         "type": "github"
+      }
+    },
+    "stock-trader": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777249792,
+        "narHash": "sha256-t7pjpXCI4Mwks+gSHJJ9pJjuyJlJE9c3oKegvyO/W/Y=",
+        "ref": "refs/tags/v0.1.0",
+        "rev": "d6e342803b502d16b1c824c338bd7e2a60db2b8e",
+        "revCount": 112,
+        "type": "git",
+        "url": "ssh://gitea/johnw/stock-trader"
+      },
+      "original": {
+        "ref": "refs/tags/v0.1.0",
+        "type": "git",
+        "url": "ssh://gitea/johnw/stock-trader"
       }
     },
     "systems": {

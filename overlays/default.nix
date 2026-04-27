@@ -622,4 +622,14 @@ in
 
   # cozempic: Context cleaning for Claude Code
   inherit (import ./30-cozempic.nix final prev) cozempic;
+
+  # stock-trader: Python overrides for pip-only deps not in nixpkgs.
+  # See pkgs/stock-trader.deps.md for the audit that drives this list.
+  # Scoped to the stock-trader derivation only — not injected into
+  # pythonPackagesExtensions (which would force every Python derivation
+  # on the system to recompile).
+  stock-trader-python-overrides = import ../pkgs/python-overrides {
+    pkgs = final;
+    python = final.python312;
+  };
 }

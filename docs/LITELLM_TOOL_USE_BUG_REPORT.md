@@ -221,11 +221,8 @@ The user branch has the same shape (`tool_result` appended eagerly while `user_p
 
 A unit test against `LiteLLMAnthropicToResponsesAPIAdapter.translate_messages_to_responses_input` that feeds an assistant turn with `[text, tool_use]` content and asserts that `input_items` ends with `[message(role=assistant), function_call]` in that order — not the reverse. Mirror the test for the user-side `[text, tool_result]` case.
 
-## Workaround (for users hitting this today)
+## Workarounds (for users hitting this today)
 
-Constrain the chat agent (via system prompt) to:
+**Prompt-only (fragile):** constrain the chat agent (via system prompt) to (1) call at most one tool per response and (2) emit the `tool_use` with no preamble text in the same response. This keeps each tool-calling assistant message a single `tool_use` block, so the converter's misorder never produces a misplaced `assistant(text)` between `function_call` and `function_call_output`. In practice the model frequently ignores this rule on naturalistic queries — fragile.
 
-1. Call at most one tool per response, and
-2. Emit the `tool_use` with **no** preamble text in the same response.
-
-This keeps each tool-calling assistant message a single `tool_use` block with no text, so the converter's misorder never produces a misplaced `assistant(text)` between `function_call` and `function_call_output`. We are running with this workaround in production while waiting for the upstream fix.
+**Sidecar fixup proxy (deterministic):** run a small forwarding proxy in front of LiteLLM that strips text blocks from any assistant message whose content also contains `tool_use` blocks, before forwarding the body. The user-visible client (e.g., the claude CLI) still streams the text to the SPA *before* the request body hits the proxy; we only sanitize the conversation-history snapshot sent upstream so the misorder converter produces a valid request. ~50 lines of Python; we are running this in production at `127.0.0.1:4001` → `127.0.0.1:4000` and the upstream-400 stopped firing immediately.

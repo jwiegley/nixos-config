@@ -8,7 +8,7 @@
 {
   llm = {
     primary = {
-      name = "hera/Qwen3.5-27B-Instruct";
+      name = "hera/Qwen3.6-27B-Instruct";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

@@ -636,7 +636,7 @@ in
         # Enable JSON mode - this selects the JSON conversion function
         json = true;
         # Do NOT request JSON response format from the API for gpt-oss models.
-        # Qwen3.5-27B-Instruct wraps output in Harmony channel tokens (<|channel|>final<|message|>)
+        # Qwen3.6-27B-Instruct wraps output in Harmony channel tokens (<|channel|>final<|message|>)
         # before the JSON content. When response_format is set, the backend (llama.cpp)
         # enforces JSON grammar and rejects the output due to these tokens.
         # The HarmonyResponseFilter guardrail strips the tokens in post_call instead.

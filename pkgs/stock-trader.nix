@@ -78,6 +78,9 @@ let
       # MCP server
       mcp
 
+      # Observability
+      prometheus-client
+
       # Misc
       asyncio-throttle
       python-dotenv

@@ -90,7 +90,7 @@
     # stock-trader: pinned source tree consumed by the Vulcan deployment.
     # Not a flake — the laptop repo's own flake.nix is for dev only.
     stock-trader = {
-      url = "git+ssh://gitea/johnw/stock-trader?ref=refs/tags/v0.1.3";
+      url = "git+ssh://gitea/johnw/stock-trader?ref=refs/tags/v0.1.5";
       flake = false;
     };
 

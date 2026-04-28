@@ -35,6 +35,7 @@
     ./aria2-exporter.nix
     ./aria2-alerts.nix
     ./qdrant-exporter.nix
+    ./stock-trader-exporter.nix
 
     # Infrastructure monitoring
     ./certificate-exporter.nix

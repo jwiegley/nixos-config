@@ -31,3 +31,34 @@ groups:
             The SSL certificate for trader.vulcan.lan expires in {{ $value | humanizeDuration }}.
             Run: sudo /etc/nixos/certs/renew-certificate.sh "trader.vulcan.lan" \
               -o "/var/lib/nginx-certs" -d 365 --owner "nginx:nginx"
+
+      # Fires when the WebSocket chat handler emits errors at a
+      # non-trivial rate. Most relevant trigger today: the LiteLLM
+      # Anthropic→Responses adapter misorder bug regressing (or the
+      # SYSTEM_PROMPT no-preamble/single-tool constraints drifting)
+      # would push `kind="upstream"` past the threshold quickly. See
+      # /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md for the full
+      # write-up and stock-trader's CLAUDE.md "Known hazards" for the
+      # workaround context.
+      - alert: StockTraderChatErrorRate
+        expr: |
+          sum(rate(stock_trader_chat_errors_total[5m])) by (kind) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "stock-trader chat errors elevated (kind={{ $labels.kind }})"
+          description: |
+            The chat WebSocket handler is emitting {{ $labels.kind }} errors at
+            {{ $value | humanize }} per second over the last 5 minutes. If
+            kind=upstream, the LiteLLM proxy/Anthropic round-trip is failing —
+            likely the misorder bug in
+            litellm/llms/anthropic/experimental_pass_through/responses_adapters/
+            transformation.py regressing (file at
+            /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md). Run:
+              tail -200 /tmp/stock-trader-chat-debug.log
+              journalctl -u stock-trader --since "10 min ago" | grep -i error
+              STOCK_TRADER_LIVE_CHAT_TESTS=1 \
+                pytest tests/test_chat_live.py -v --noconftest \
+                in /tmp/stock-trader-work to reproduce.

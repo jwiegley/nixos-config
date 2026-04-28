@@ -92,6 +92,7 @@
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/service-reliability.nix
+    ../../modules/services/litellm-anthropic-fixup.nix
     ../../modules/services/stock-trader.nix
     ../../modules/services/technitium-dns-backup.nix
     ../../modules/services/web.nix
@@ -165,6 +166,7 @@
     schedule = "*-*-* 03:00:00"; # Daily at 3 AM
   };
 
+  services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
 
   # This option defines the first version of NixOS you have installed on this

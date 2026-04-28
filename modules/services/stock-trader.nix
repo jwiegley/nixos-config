@@ -153,12 +153,17 @@ in
         # at the package's read-only share/ directory.
         STOCK_TRADER_STATIC_DIR = "${pkgs.stock-trader}/share/stock-trader/web/dist";
 
-        # The local litellm proxy on :4000 receives all Anthropic
-        # traffic; ANTHROPIC_BASE_URL is forwarded into the
-        # claude-agent-sdk subprocess by TradingChatEngine. The
-        # ANTHROPIC_MODEL "hera/claude-opus-4-7" is the litellm-side
-        # routing key for the Opus 4.7 deployment.
-        ANTHROPIC_BASE_URL = "http://127.0.0.1:4000";
+        # ANTHROPIC_BASE_URL points at the litellm-anthropic-fixup
+        # proxy on :4001, NOT directly at LiteLLM's :4000. The proxy
+        # strips text blocks from assistant messages that also
+        # contain tool_use blocks, working around LiteLLM's
+        # anthropic→responses-API converter misorder bug; see
+        # /etc/nixos/modules/services/litellm-anthropic-fixup.nix
+        # and /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md. The
+        # proxy forwards untouched everything else, so ANTHROPIC_MODEL
+        # "hera/claude-opus-4-7" still routes through the same
+        # LiteLLM model group as before.
+        ANTHROPIC_BASE_URL = "http://127.0.0.1:4001";
         ANTHROPIC_MODEL = "hera/claude-opus-4-7";
 
         LOG_LEVEL = "INFO";

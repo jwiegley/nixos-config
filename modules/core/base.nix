@@ -150,8 +150,13 @@
     {
       source = pkgs.writeText "clear-dhcp-dns" ''
         #!/bin/sh
-        # Clear DNS servers from NetworkManager connections
-        # Only runs on DHCP events
+        # Clear DNS servers from NetworkManager connections.
+        # Skip loopback: resolvectl cannot manage DNS on lo, so it exits 1
+        # there. NM fires this dispatcher on "lo up" during startup, and the
+        # resulting failed-script status stalls NetworkManager-wait-online
+        # for the full timeout when nixos-rebuild restarts NM.
+        [ "$1" = "lo" ] && exit 0
+        [ "$CONNECTION_TYPE" = "loopback" ] && exit 0
         if [ "$2" = "dhcp4-change" ] || [ "$2" = "dhcp6-change" ] || [ "$2" = "up" ]; then
           ${pkgs.systemd}/bin/resolvectl dns "$1" ""
         fi

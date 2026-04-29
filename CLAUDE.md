@@ -4,6 +4,65 @@ Guidance for Claude Code when working with this NixOS repository.
 
 ## ⚠️ CRITICAL SAFETY RULES ⚠️
 
+### 🛑 PRIMARY LENS — APPLY THIS BEFORE EVERY OPERATION
+
+**Security is the FIRST filter on every action. Not a backstop. Not a final check. The FIRST filter.**
+
+You have a recurring failure mode: tunnel-visioning on a diagnostic or implementation
+task and treating the rules below as a passive constraint. That has produced multiple
+violations (2025-10-27 OAuth tokens, 2026-04-29 WiFi PSK). It must stop.
+
+**Mandatory pre-flight check — run BEFORE any tool call that reads or displays file
+contents (`cat`, `head`, `tail`, `Read`, `less`, `more`, `awk`, `sed -n`, redirected
+`grep`, anything that prints file bytes):**
+
+1. **PATH CHECK** — Is the path on the FORBIDDEN-BY-DEFAULT list below, or in any
+   directory adjacent to one (network, auth, secrets, credential storage)?
+   - If yes: STOP. Use metadata-only commands (`ls -la`, `stat`, `wc -l`, `file`) or
+     service-aware tools (`nmcli` field selectors, `systemctl status`, `journalctl`,
+     `resolvectl`) instead.
+   - If unsure: STOP and ask the user. Asking is cheap. A leaked secret is not.
+
+2. **PURPOSE CHECK** — Will this command's output appear in the conversation?
+   - If yes AND the file may contain credentials, tokens, keys, SSIDs, IPs, or PII:
+     STOP. Use a field-targeted extractor (e.g. `nmcli -f connection.id,connection.type,connection.autoconnect`)
+     or pipe through redaction. Never `cat` "to see what's in there."
+
+3. **BATCH CHECK** — When dispatching parallel reads, apply checks 1–2 to EACH path
+   independently. Do NOT extrapolate from one safe read to others ("the wired profile
+   was just routing config, so the wifi profile is too" — wrong, and the exact path
+   that produced the 2026-04-29 violation).
+
+4. **GREP HIT CHECK** — If a `grep` shows that a file or module deals with credentials,
+   secrets, or auth (e.g. matches `credential`, `secret`, `token`, `psk`, `password`,
+   `api_key`, `oauth`), every nearby file is suspect until proven otherwise.
+
+**FORBIDDEN-BY-DEFAULT paths — no `cat`/`Read`/content display without explicit
+user approval, even with `sudo`:**
+
+- `/etc/NetworkManager/system-connections/*` — WiFi PSKs, VPN credentials, EAP keys
+- `/run/secrets/*` — SOPS-decrypted secrets at runtime
+- `/var/lib/hass/.storage/*` — OAuth tokens, refresh tokens, integration secrets
+- `*.age`, `*.key`, `*.pem`, `*.crt` private halves, `*credentials*`, `*.env`
+  when under `/etc`, `/var`, `/run`, or `/home/*/.config`
+- Any output of `sops -d` — that command itself is forbidden
+- `/var/lib/<service>/` files named `passwd`, `password`, `secret`, `token`, `key`,
+  `*.sqlite` for auth-bearing services
+- Home Assistant, Postfix, Dovecot, Samba, Step-CA, PostgreSQL data directories
+  beyond metadata
+
+**Adjacent / context-sensitive paths — apply Purpose Check rigorously:**
+
+- `/etc/nixos/secrets.yaml` — encrypted form is OK to view; never decrypt
+- `journalctl` output — usually safe, but redact if a service logs raw secrets
+- `nmcli connection show <name>` — fine for metadata; avoid full output for WiFi
+
+**If you violate these rules: STOP ALL WORK immediately. Apologize. Save a feedback
+memory describing the specific failure mode. Wait for explicit user acknowledgment
+before resuming. Do NOT "continue carefully" — STOP.**
+
+---
+
 ### SYSTEM OPERATIONS
 
 **NEVER reboot the machine:**
@@ -35,18 +94,32 @@ Guidance for Claude Code when working with this NixOS repository.
 
 ### SECURITY - NO SECRETS IN OUTPUT
 
+**This section is enforced by the PRIMARY LENS pre-flight check above.** Do not skip
+that check on the assumption that this list is exhaustive — it isn't. The PRIMARY
+LENS is the authoritative gate; this list is a non-exhaustive reminder.
+
 **NEVER reveal or display:**
 - Passwords, API keys, tokens, OAuth credentials
-- WiFi SSIDs/passwords, network topology, IP addresses
+- WiFi SSIDs/passwords, EAP credentials, VPN PSKs
+- Network topology, internal IP addresses, port mappings beyond what `docs/ports.txt` documents
+- Contents of any file under `/etc/NetworkManager/system-connections/` (WiFi/VPN profiles)
 - Contents from `/run/secrets/` or decrypted SOPS files
 - Home Assistant `.storage/*` files (contain OAuth tokens)
-- Certificate contents or private keys
+- Certificate private keys or full PEM bundles containing them
 
-**FORBIDDEN commands:**
+**FORBIDDEN commands (no exceptions, even with `sudo`):**
 - `sops -d` (decrypts secrets)
 - Any command reading `/run/secrets/*`
+- `cat`, `head`, `tail`, `less`, `Read`, `awk`, `sed -n`, redirected `grep` against
+  files under `/etc/NetworkManager/system-connections/`
 - Reading `/var/lib/hass/.storage/*` files
-- Commands showing `access_token`, `refresh_token`, `api_key` fields
+- Commands showing `access_token`, `refresh_token`, `api_key`, `psk=`, `password=` fields
+
+**For NetworkManager profile inspection, use field-targeted nmcli only:**
+- ✅ `nmcli -f connection.id,connection.type,connection.autoconnect,connection.autoconnect-priority connection show <name>`
+- ✅ `nmcli -f general.state,general.connection device show <iface>`
+- ❌ `cat /etc/NetworkManager/system-connections/*.nmconnection`
+- ❌ `nmcli connection show <name>` (without `-f`) on WiFi/VPN profiles
 
 ### SECURITY - FILE PERMISSIONS
 

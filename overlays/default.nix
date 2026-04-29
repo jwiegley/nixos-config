@@ -232,6 +232,10 @@ in
     (import "${inputs.nix-config}/overlays/30-text-tools.nix" final (prev // { inherit inputs; }))
     filetags
     ;
+  inherit
+    (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final (prev // { inherit inputs; }))
+    nix-scripts
+    ;
 
   # John Wiegley's git helper scripts (provides git-merge-changelog, etc.)
   git-scripts =

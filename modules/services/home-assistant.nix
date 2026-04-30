@@ -355,6 +355,9 @@ in
       ps.pyicloud # Required for Apple iCloud integration
       ps.pyatv # Required for Apple TV integration
       ps.webcolors # Required for Local LLMs (llama_conversation) custom component
+      ps.langfuse # Required for custom_conversation custom component (Langfuse tracing)
+      ps.litellm # Required for custom_conversation custom component (multi-provider LLM client)
+      ps.openai # Required for custom_conversation custom component (OpenAI-compatible API)
       ps.wakeonlan # Required for Wake on LAN integration
       ps.pywaze # Required for Waze Travel Time integration
       ps.pydub # Required for Chime TTS audio processing

@@ -1,8 +1,10 @@
 # OpenClaw gateway canary
 #
 # Parses /var/lib/openclaw/.openclaw/logs/gateway-vm.log for the most recent
-# `[gateway] ready (N plugins: …)` line and emits Prometheus metrics via the
-# node-exporter textfile collector:
+# `[gateway] ready` line — either the old `[gateway] ready (N plugins: …)`
+# form (used through openclaw 2026.4.25) or the bare `[gateway] ready` form
+# (2026.4.26+) — and emits Prometheus metrics via the node-exporter textfile
+# collector:
 #
 #   openclaw_gateway_ready_plugins_total
 #   openclaw_gateway_ready_timestamp_seconds
@@ -66,7 +68,16 @@ let
     SYSTEMCTL = "${pkgs.systemd}/bin/systemctl"
     MICROVM_UNIT = "microvm@openclaw.service"
 
+    # OpenClaw 2026.4.26+ emits a bare `[gateway] ready` line without the
+    # `(N plugin[s]: …; …ms)` parenthetical that older builds wrote.  We need
+    # READY_RE to match both shapes so `ready_ts` keeps tracking the latest
+    # boot's ready event; READY_FULL_RE is reserved for the older shape so
+    # plugin-channel gauges keep working when those lines are still present
+    # in the log tail.
     READY_RE = re.compile(
+        r"^(?P<ts>\S+)\s+\[gateway\]\s+ready(?:\s|$)"
+    )
+    READY_FULL_RE = re.compile(
         r"^(?P<ts>\S+)\s+\[gateway\]\s+ready\s+"
         r"\((?P<n>\d+)\s+plugin[s]?:\s*(?P<list>[^;]+);"
     )
@@ -169,6 +180,7 @@ let
         vm_start_ts = microvm_active_enter_ts()
 
         ready = find_last(READY_RE, lines)
+        ready_full = find_last(READY_FULL_RE, lines)
         # Count any failure lines that are NEWER than the most recent ready
         # line.  This way a plugin failure followed by a successful restart
         # does not stay red forever.
@@ -183,12 +195,16 @@ let
                 fail_count += 1
 
         channel_loaded = {c: 0.0 for c in EXPECTED}
-        if ready:
-            plugin_list = [p.strip() for p in ready["list"].split(",") if p.strip()]
+        plugins_total = 0.0
+        if ready_full:
+            plugin_list = [p.strip() for p in ready_full["list"].split(",") if p.strip()]
             for c in EXPECTED:
                 channel_loaded[c] = 1.0 if c in plugin_list else 0.0
+            plugins_total = float(int(ready_full["n"]))
+
+        if ready:
             payload = dict(
-                plugins_total=float(int(ready["n"])),
+                plugins_total=plugins_total,
                 ready_ts=ready_epoch,
                 ready_age=max(0.0, now - ready_epoch) if ready_epoch else 0.0,
                 init_failures=float(fail_count),

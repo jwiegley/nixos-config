@@ -47,6 +47,31 @@
     };
   };
 
+  # CVE-2026-31431 "CopyFail" — disable AF_ALG userspace crypto sockets.
+  # The asahi 6.17.12 kernel pinned by nixos-apple-silicon has no upstream
+  # backport (6.17 was skipped; fixes are in 6.18.12 / 6.19.12 / 7.0 and the
+  # LTS branches). algif_aead is the actual vector; the rest of the family
+  # is blocked too because nothing on this host uses AF_ALG sockets
+  # directly (dm-crypt/LUKS, kTLS, IPsec, OpenSSL, SSH all use the in-kernel
+  # crypto API, not the userspace AF_ALG interface). Drop this once
+  # nixos-apple-silicon ships a patched kernel.
+  #
+  # `blacklist` alone only stops alias-based autoload, so we also use
+  # `install ... /bin/false` (per CERT-EU 2026-005) to make every load path —
+  # explicit modprobe, kernel request_module(), aliased autoload — fail.
+  boot.blacklistedKernelModules = [
+    "algif_aead"
+    "algif_skcipher"
+    "algif_hash"
+    "algif_rng"
+  ];
+  boot.extraModprobeConfig = ''
+    install algif_aead ${pkgs.coreutils}/bin/false
+    install algif_skcipher ${pkgs.coreutils}/bin/false
+    install algif_hash ${pkgs.coreutils}/bin/false
+    install algif_rng ${pkgs.coreutils}/bin/false
+  '';
+
   # Create adm group for log file access
   users.groups.adm = { };
 

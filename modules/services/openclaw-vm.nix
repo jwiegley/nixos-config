@@ -248,6 +248,26 @@ in
     "net.ipv4.conf.all.route_localnet" = 1;
   };
 
+  # CVE-2026-31431 "CopyFail" — disable AF_ALG userspace crypto sockets.
+  # The microVM runs the nixpkgs 25.11 default kernel (6.12.x LTS); patched
+  # in 6.12.85 upstream, so the guest is vulnerable until nixpkgs bumps.
+  # Since the OpenClaw VM runs a Claude Code agent that can fetch and exec
+  # untrusted code, this is a real LPE risk inside the VM. Drop once the
+  # guest kernel reaches 6.12.85+. `install /bin/false` is required in
+  # addition to `blacklist` to block kernel request_module() autoload.
+  boot.blacklistedKernelModules = [
+    "algif_aead"
+    "algif_skcipher"
+    "algif_hash"
+    "algif_rng"
+  ];
+  boot.extraModprobeConfig = ''
+    install algif_aead ${pkgs.coreutils}/bin/false
+    install algif_skcipher ${pkgs.coreutils}/bin/false
+    install algif_hash ${pkgs.coreutils}/bin/false
+    install algif_rng ${pkgs.coreutils}/bin/false
+  '';
+
   # Static IP via systemd-networkd
   systemd.network.enable = true;
   systemd.network.networks."10-eth" = {

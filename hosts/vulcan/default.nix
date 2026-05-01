@@ -134,6 +134,7 @@
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
+    ../../modules/services/voice-assistant.nix
 
     # Containers
     ../../modules/containers/default.nix

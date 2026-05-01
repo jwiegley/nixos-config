@@ -466,6 +466,12 @@ in
 
       # Matter
       "matter" # Matter/CHIP SDK device integration (via python-matter-server)
+
+      # Voice Assistant pipeline (Wyoming protocol bridges STT/TTS/wakeword)
+      "wyoming" # Wyoming protocol client (talks to wyoming-openai on :10300)
+      "assist_pipeline" # Voice pipeline orchestration
+      "stt" # Speech-to-text platform
+      "tts" # Text-to-speech platform
     ];
 
     # Home Assistant configuration (YAML format)

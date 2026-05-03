@@ -47,14 +47,22 @@ groups:
           description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
 
       - alert: HighMajorPageFaultWithMemoryPressure
-        expr: increase(node_vmstat_pgmajfault[5m]) > 10000 and ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.75 or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.50)
+        expr: |
+          (
+            increase(node_vmstat_pgmajfault[5m]) > 10000
+            and (
+              (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.75
+              or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.50
+            )
+          )
+          unless on(instance) (max by (instance) (zfs_pool_scrub_active) > 0)
         for: 5m
         labels:
           severity: critical
           category: system
         annotations:
           summary: "High major page faults with memory pressure on {{ $labels.instance }}"
-          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing! Note: ZFS scrubs running on large pools can cause this alert due to aggressive page cache eviction. Check zfs_pool_scrub_active metric and zpool status."
+          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing! Suppressed while any ZFS scrub is active on the instance; MemoryPressureCritical (>92% RAM) remains as the OOM safety-net during scrubs."
 
       # Swap monitoring
       - alert: SwapUsageHigh

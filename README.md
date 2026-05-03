@@ -54,66 +54,185 @@ This configuration follows a highly modular architecture, organizing system conf
 
 ## 🏗️ Infrastructure Components
 
-### Web Services
+This is the complete service catalog as actually deployed on `vulcan`. Each entry
+notes the runtime model — **(native)** for native systemd services, **(Quadlet)**
+for system-level Podman containers managed by quadlet-nix, **(NixOS container)**
+for `systemd-nspawn` / native NixOS containers, and **(microVM)** for hardware-isolated
+guests. Internal services are reachable as `*.vulcan.lan` behind step-ca TLS;
+external-facing services tunnel out via Cloudflare.
 
-- **Nginx**: Reverse proxy with ACME/Let's Encrypt for internet-facing services
-  - Internal services use step-ca certificates
-  - HTTP/2, HSTS, security headers
-  - Automatic HTTP → HTTPS redirect
-- **Glance**: Alternative dashboard with customizable widgets
-- **Wallabag**: Read-it-later service (containerized)
+### Web & Reverse Proxy
 
-### Mail Infrastructure
+- **Nginx** (native): central reverse proxy terminating step-ca TLS for ~40
+  `*.vulcan.lan` virtual hosts; HTTP/2, HSTS, automatic HTTP → HTTPS redirect,
+  per-upstream retry logic.
+- **Cloudflared tunnels** (native): persistent tunnels exposing
+  `data.newartisans.com` (Copyparty), `gitea.newartisans.com` (Gitea),
+  `s.newartisans.com` (Shlink), and `home.newartisans.com` (static site).
+- **Glance** (native): personal dashboard at `glance.vulcan.lan` with GitHub /
+  RSS / weather widgets.
+- **Static-nginx-container** (NixOS container): read-only static site for
+  `home.newartisans.com`, served from a ZFS bind-mounted directory.
 
-- **Postfix**: SMTP server with monitoring
-- **Dovecot**: IMAP server with full-text search (Xapian backend)
-  - FTS indexing for fast email search
-  - Multiple virtual users supported
-- **mbsync**: Mail synchronization with Prometheus metrics
-  - Pull-only sync from Fastmail and Gmail
-  - Custom alerts for sync failures
-  - Reusable module library (`mkMbsyncModule`)
+### Mail Stack
 
-### Databases & Storage
+- **Postfix** (native): SMTP MTA with submission/TLS, milter integration to
+  Rspamd, system-mail redirection.
+- **Dovecot** (native): IMAP / POP3 with Xapian FTS, global Sieve filtering,
+  `dovecot-archive` (auto-archive of stale Inbox / Spam mail), and
+  `dovecot-imapsieve-monitor`.
+- **Rspamd** (native): Lua-based spam filter with Redis backend, custom rules,
+  `learn_spam` / `learn_ham` helpers, and a UI at `rspamd.vulcan.lan`.
+- **Fetchmail** (native): pulls remote IMAP into Dovecot via LMTP to drive
+  imapsieve learning; paired with `fetchmail-alerts`.
+- **mbsync** (native): isync-based pull from Fastmail; `mkMbsyncModule` library
+  abstracts per-account configuration; paired with `mbsync-alerts`.
+- **Imapdedup** (native): scheduled doveadm-based mailbox deduplication.
+- **Mailarchiver** (Quadlet): long-term mail archive web UI at
+  `mailarchiver.vulcan.lan`.
+- **email-tester-manual** (native): on-demand mail-pipeline tester (auto-runs
+  disabled to avoid retraining Rspamd).
 
-- **PostgreSQL**: Production database with custom tuning
-- **pgAdmin**: Web-based database administration
-- **ZFS**: Enterprise-grade filesystem with:
-  - Automated snapshots (hourly, daily, monthly)
-  - ARC tuning for 64GB RAM system
+### Databases & Data Stores
 
-### Monitoring Stack
+- **PostgreSQL** (native): primary RDBMS backing Gitea, Home Assistant, Immich,
+  OpenProject, Stock Trader, BudgetBoard, and others.
+- **pgAdmin** (native): web admin UI at `postgres.vulcan.lan`.
+- **Redis** (native, multi-instance): dedicated instances for Gitea, Rspamd,
+  SearXNG, LiteLLM, OpenProject, Shlink, and Speedtest Tracker.
+- **Qdrant** (native): vector database at `qdrant.vulcan.lan`; paired with
+  `qdrant-inference-bridge` (translates Qdrant inference to OpenAI-compatible
+  endpoints) and a Nagios health check.
+- **Mosquitto** (native): MQTT broker for Home Assistant and HASS.Agent.
+- **Teable** (Quadlet): no-code Airtable-style database UI at `teable.vulcan.lan`.
 
-- **Prometheus**: Metrics collection and alerting
-  - Node exporter (system metrics)
-  - PostgreSQL exporter
-  - Systemd exporter
-  - Postfix exporter
-  - ZFS exporter
-  - Custom textfile collectors (restic, mbsync)
-- **Grafana**: Visualization dashboards
-- **Alertmanager**: Alert routing and notifications
-- **Blackbox Exporter**: Endpoint monitoring (HTTP, ICMP)
+### Monitoring, Logging & Alerting
 
-### Security Infrastructure
+- **Prometheus** (native): central metrics with auto-discovered alert rules
+  from `modules/monitoring/alerts/`.
+- **VictoriaMetrics** (native): long-term metrics storage at
+  `victoriametrics.vulcan.lan`.
+- **Alertmanager** (native): routes alerts via local Postfix; UI at
+  `alertmanager.vulcan.lan`.
+- **Grafana** (native): dashboards at `grafana.vulcan.lan` with prefetched
+  community dashboards and a custom DNS-query-logs board.
+- **Loki + Promtail** (native): log aggregation/shipping at `loki.vulcan.lan`
+  and `promtail.vulcan.lan`.
+- **Nagios** (native): classic host/service monitor at `nagios.vulcan.lan` with
+  daily HTML reports and discovery scripts for HA, AIDE, Qdrant, and atd.
+- **Cockpit** (native): web admin console at `cockpit.vulcan.lan`.
+- **Glances** (native): live system view at `glances.vulcan.lan`.
+- **Blackbox monitoring** (native): HTTP / ICMP probes for local, DNS, and
+  external host groups.
+- **Prometheus exporters** (mostly native, some Quadlet): node, systemd, zfs,
+  postgres, redis, postfix, nginx, gitea, immich, litellm, node-red, jupyterlab,
+  vdirsyncer, qdrant, aria2, atd, restic, AIDE, ZFS pool health, certificate
+  expiry, container health, HA backup freshness, stock-trader,
+  git-workspace, openclaw-canary, OPNsense (Quadlet), Technitium DNS (Quadlet),
+  copyparty, and remote-nodes.
+- **opnsense-api-transformer** (Quadlet): Python proxy patching the OPNsense
+  exporter's gateway-collector output.
+- **service-reliability** (native): restart and back-off policies for critical
+  services (databases, mail, monitoring).
 
-- **step-ca**: Private certificate authority
-  - TLS certificates for internal services
-  - SSH certificates
-  - Automated certificate renewal
-- **SOPS-nix**: Encrypted secrets in git
-  - Age/PGP key encryption
-  - Secrets available at runtime
-- **Security Hardening**: System-level security enhancements
+### DNS, Networking & VPN
 
-### Containerized Services
+- **Technitium DNS Server** (native): authoritative + recursive DNS at
+  `dns.vulcan.lan`; paired with `technitium-dns-backup` and a containerized
+  exporter.
+- **Avahi** (native): mDNS / zeroconf for local discovery.
+- **OpenSSH** (native): with TCP keepalives and dedicated `gitea` host alias.
+- **dirscan-share** + **dirscan-share-config** (native): scanned-document drop
+  share with permission fix-ups.
+- **home-assistant-metric-trick** (native): boot-time interface-metric swap so
+  python-zeroconf binds to WiFi during HA startup.
 
-All containers use Podman with Quadlet for systemd integration:
+### Authentication, PKI & Secrets
 
-- **LiteLLM**: LLM proxy and gateway
-- **Wallabag**: Article reading and archiving
-- **OPNsense Exporter**: Firewall metrics (with custom API transformer)
-- **Secure Nginx**: Isolated nginx container for specific services
+- **Step-CA** (native): private certificate authority issuing every `*.vulcan.lan`
+  TLS cert (and SSH certificates).
+- **certificate-automation** + **certificates** (native): renewal scripts and
+  CA-trust-store integration so all system services trust the local CA.
+- **SOPS-Nix** (native, activation-time): age-encrypted secrets decrypted into
+  `/run/secrets/` at activation.
+- **AIDE** (native, scheduled): file-system integrity baseline with both Nagios
+  and Prometheus integration.
+- **Security hardening** (native): kernel sysctls, module blacklists (including
+  AF_ALG to mitigate CVE-2026-31431), and systemd unit hardening.
+
+### AI / LLM Services
+
+- **LiteLLM** (Quadlet): OpenAI-compatible LLM proxy/router at
+  `litellm.vulcan.lan`, backed by Postgres + Redis.
+- **litellm-anthropic-fixup** (native): sanitizing forward proxy that reorders
+  `function_call` / `message` items in Anthropic Responses-API conversions.
+- **Open WebUI** (Quadlet): ChatGPT-style web UI at `chat.vulcan.lan`.
+- **llama-swap** (native): orchestrator at `llama-swap.vulcan.lan` for swapping
+  llama.cpp backends on demand.
+- **OpenClaw** (microVM): hardware-isolated AI-agent gateway at
+  `openclaw.vulcan.lan` and `drafts-mcp.vulcan.lan`; persistent state via
+  virtiofs from `/var/lib/openclaw`; openclaw-canary monitors liveness.
+- **Stock Trader** (native): hardened Python service at `trader.vulcan.lan`
+  (Schwab OAuth-bootstrapped) pinned to a Gitea-hosted release tag.
+- **JupyterLab** (native): notebook server at `jupyter.vulcan.lan` with a
+  SageMath kernel.
+- **model-config** (native): deploys `models.nix` JSON to `/etc/models.json` for
+  non-Nix consumers (CLI tools, scripts).
+
+### Voice Assistant & Home Automation
+
+- **Home Assistant** (native): full HA install at `hass.vulcan.lan` with a
+  large `extraComponents` set (Yale, Tesla Wall Connector, BMW, Nest, Ring,
+  LG ThinQ, HomeKit, Withings, Opower SMUD, MQTT, Cast, and more), including a
+  patched `aiopnsense` for Python 3.13 compatibility.
+- **Matter Server** (Quadlet): python-matter-server controller for HA's Matter
+  integration.
+- **wyoming-openai** (Quadlet): Wyoming STT bridge to a LiteLLM
+  `cohere-transcribe` route on loopback for the HA voice pipeline.
+- **Mosquitto** (native, see above): MQTT broker for HA / HASS.Agent.
+- **Node-RED** (native): flow-based automation at `nodered.vulcan.lan`.
+
+### File Sharing, Storage & Media
+
+- **Samba** (native): SMB / CIFS + NetBIOS + WSDD shares for ZFS datasets
+  under `/tank`.
+- **Copyparty** (NixOS container): multi-user file server bind-mounting ZFS
+  datasets; reachable internally and via `data.newartisans.com`.
+- **Immich** (native): photo / video library at `immich.vulcan.lan`.
+- **Aria2** (native): download manager with the AriaNG UI at `aria.vulcan.lan`.
+- **Jellyfin** (native, via `media.nix`): media server at `jellyfin.vulcan.lan`.
+- **OpenSpeedTest** (Quadlet): self-hosted speed-test at `speedtest.vulcan.lan`.
+- **Speedtest Tracker** (Quadlet): historical speed-test tracking at
+  `speedtracker.vulcan.lan` with Redis.
+- **Zimit** (native): web-archive (ZIM) job-manager Flask UI.
+
+### Productivity & Self-Hosted Apps
+
+- **Gitea** (native): Git forge at `gitea.vulcan.lan` and
+  `gitea.newartisans.com`, backed by Postgres + Redis.
+- **gitea-actions-runner** (native): self-hosted CI runner.
+- **github-gitea-mirror** (native): mirrors GitHub `jwiegley` → Gitea `johnw`
+  every 8 h with a full sync at 03:00 daily.
+- **OpenProject** (Quadlet): project-management platform at
+  `openproject.vulcan.lan`.
+- **Wallabag** (Quadlet): read-it-later / article archiving at
+  `wallabag.vulcan.lan`.
+- **Shlink** (Quadlet) + **Shlink Web Client** (Quadlet): URL shortener; admin
+  at `shlink.vulcan.lan`, API at `shlink-api.vulcan.lan`, public at
+  `s.newartisans.com`.
+- **BudgetBoard** (Quadlet pod): personal-finance app (C# server + React
+  client) at `budget.vulcan.lan`.
+- **ChangeDetection.io** (Quadlet): web-page change monitoring with
+  sockpuppetbrowser at `changes.vulcan.lan`.
+- **SearXNG** (native, via uwsgi): metasearch engine at `searxng.vulcan.lan`.
+- **Vane** (Quadlet): AI / Perplexity-style search front-end at `vane.vulcan.lan`.
+- **Radicale** (native): CalDAV / CardDAV server with git-backed collections
+  at `radicale.vulcan.lan`.
+- **vdirsyncer** (native): bidirectional Radicale ↔ Fastmail sync at
+  `vdirsyncer.vulcan.lan`, paired with alerts.
+- **atd web UI** (native): web front-end for `at`-job submission at
+  `atd.vulcan.lan`, split across the `atd`, `atd-web`, and `atd-nginx` modules,
+  with its own exporter, alert rules, and Nagios checks.
 
 ### Backup & Disaster Recovery
 
@@ -123,17 +242,35 @@ All containers use Podman with Quadlet for systemd integration:
 - `production` template: Hourly (24), Daily (14), Weekly (4), Monthly (3)
 
 **Restic Cloud Backups** (to Backblaze B2):
-- Multiple backup filesets (home, documents, projects, etc.)
-- Daily at 2 AM with persistent timers
-- Retention: 7 daily, 5 weekly, 3 yearly
-- Monitoring via Prometheus textfile collector
-- Helper script: `restic-operations` (check, snapshots, prune, repair)
+- Multiple per-purpose filesets (home, documents, projects, …) with daily
+  persistent timers and 7d / 5w / 3y retention.
+- Status surfaced through a Prometheus textfile collector.
+- Helper script: `restic-operations` (check, snapshots, prune, repair).
 
-### Additional Services
+**Other backup services**:
+- **local-backup** (native): restic-driven local backups for selected directory
+  sets, independent of cloud copies.
+- **postgresql-backup** (native): daily `pg_dump` at 02:00 to
+  `/tank/Backups/PostgreSQL/`.
+- **technitium-dns-backup** (native): scheduled Technitium DNS configuration
+  snapshot.
+- **backup-monitoring** (native): restart / back-off policies and failure
+  notifications layered over every restic unit.
+- **HA backup freshness exporter** (native): tracks Home Assistant backup age
+  and size for alerting.
 
-- **DNS**: Technitium DNS Server
-- **Network Services**: Tailscale, Nebula VPN
-- **Media Services**: Configured media management
+### Maintenance & Reliability
+
+- **maintenance/timers** (native): `git-workspace-archive` and
+  `update-containers` systemd timers.
+- **cleanup** (native): dirscan-driven systemd cleanup tasks.
+- **service-reliability** (native, see above): centralised restart policies.
+- **hd-idle** (native): spin-down for non-system disks.
+- **ZFS** (native): pool management with 16 K page size for Apple Silicon
+  and an ARC limit of 16 GiB.
+- **podman autoPrune** (native): daily container/image cleanup.
+- **container-health-exporter** (native): per-container liveness metrics for
+  Prometheus.
 
 ## 🖥️ Hardware & Platform
 

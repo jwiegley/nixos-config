@@ -730,16 +730,16 @@ outputs = { nixpkgs, my-input, ... }: {
 ### NixOS State Version
 
 ```nix
-system.stateVersion = "25.05";
+system.stateVersion = "25.11";
 ```
 
 **⚠️ Important**: This value determines compatibility for stateful data. Do not change unless migrating the system. See [NixOS Manual](https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion) for details.
 
 ### Channel & Version
 
-- **NixOS Version**: 25.05
-- **nixpkgs Channel**: `nixos-unstable`
-- **System Architecture**: x86_64-linux
+- **NixOS Version**: 25.11
+- **nixpkgs Channel**: `nixos-25.11` (with `nixos-unstable` available as a secondary input for select packages)
+- **System Architecture**: aarch64-linux
 
 ### Flake Lock
 
@@ -817,4 +817,4 @@ This configuration is for personal use. Adapt and modify as needed for your own 
 
 ---
 
-**System**: Vulcan • **Platform**: Apple M1 (aarch64-linux) • **NixOS**: 25.05 (unstable)
+**System**: Vulcan • **Platform**: Apple Silicon (aarch64-linux, Asahi) • **NixOS**: 25.11

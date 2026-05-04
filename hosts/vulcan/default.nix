@@ -28,6 +28,7 @@
     # Security modules
     ../../modules/security/hardening.nix
     ../../modules/security/aide.nix
+    ../../modules/security/root-ssh-gitea.nix
     ../../modules/monitoring/aide-nagios-check.nix
 
     # User management

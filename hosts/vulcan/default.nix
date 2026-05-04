@@ -112,6 +112,7 @@
     ../../modules/services/fetchmail.nix
     ../../modules/services/fetchmail-alerts.nix
     ../../modules/services/radicale.nix
+    ../../modules/services/calendar-publisher.nix
     ../../modules/services/vdirsyncer.nix
     ../../modules/services/vdirsyncer-alerts.nix
     ../../modules/services/dns.nix

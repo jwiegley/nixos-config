@@ -57,6 +57,11 @@
       url = "github:jwiegley/org-jw";
     };
 
+    sacramento-cluster-ics = {
+      url = "git+https://gitea.newartisans.com/johnw/sacramento-cluster-ics.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     una = {
       url = "github:jwiegley/una";
       inputs.nixpkgs.follows = "nixpkgs";

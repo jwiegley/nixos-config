@@ -4,6 +4,7 @@
 # - data.newartisans.com → localhost:18080 (Copyparty)
 # - gitea.newartisans.com → localhost:3005 (Gitea)
 # - s.newartisans.com → localhost:8580 (Shlink)
+# - calendar.newartisans.com → localhost:8090 (Sacramento Cluster .ics)
 
 {
   config,
@@ -42,6 +43,7 @@
           "data.newartisans.com" = "http://localhost:18080";
           "gitea.newartisans.com" = "http://localhost:3005";
           "s.newartisans.com" = "http://localhost:8580";
+          "calendar.newartisans.com" = "http://localhost:8090";
         };
       };
     };

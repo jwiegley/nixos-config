@@ -212,6 +212,9 @@ in
   # org-jw — Org-mode data tools (semantic search via `org db search`)
   org-jw = inputs.org-jw.packages.${system}.default;
 
+  # sacramento-cluster-ics — Google Sheet → RFC 5545 .ics files
+  sac-cluster-ics = inputs.sacramento-cluster-ics.packages.${system}.default;
+
   # Import package definitions from nix-config overlays.
   # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
   # can resolve flake input sources.

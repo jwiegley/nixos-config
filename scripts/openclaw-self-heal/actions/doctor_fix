@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/run/current-system/sw/bin/bash
 # openclaw-self-heal action: run `openclaw doctor --fix` and restart microVM.
 # Output: one line of JSON to stdout describing the result.
 set -euo pipefail
@@ -8,8 +8,12 @@ if [ ! -f /var/lib/openclaw/.openclaw/openclaw.json ]; then
   printf '{"ok": false, "notes": "openclaw.json missing"}\n'
   exit 1
 fi
-OPENCLAW_BIN=$(/run/current-system/sw/bin/find /nix/store -maxdepth 1 -type d -name 'openclaw-*' \
-               -not -name '*.drv' 2>/dev/null | sort -V | tail -1)/bin/openclaw
+OPENCLAW_BIN=$(/run/current-system/sw/bin/find /nix/store -maxdepth 1 -type d -name '*-openclaw-*' \
+               -not -name '*.drv' 2>/dev/null \
+               | /run/current-system/sw/bin/sed -nE 's|^(/nix/store/[^/]+-openclaw-([0-9.]+))$|\2 \1|p' \
+               | sort -V \
+               | tail -1 \
+               | /run/current-system/sw/bin/awk '{print $2}')/bin/openclaw
 if [ ! -x "$OPENCLAW_BIN" ]; then
   printf '{"ok": false, "notes": "openclaw binary not found"}\n'
   exit 1

@@ -100,6 +100,9 @@ in
         "/run/wrappers"
         pkgs.coreutils
         pkgs.systemd
+        pkgs.bashInteractive
+        pkgs.curl
+        pkgs.jq
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
@@ -121,7 +124,24 @@ in
         RestrictSUIDSGID = false; # sudo wrapper is setuid
         LockPersonality = true;
         MemoryDenyWriteExecute = false; # python compiles bytecode
-        CapabilityBoundingSet = "";
+        # CAP_SETUID/CAP_SETGID/CAP_AUDIT_WRITE/CAP_SYS_RESOURCE are required
+        # for the setuid sudo wrapper to exec successfully under this unit.
+        # CAP_DAC_OVERRIDE is needed so sudo can read its own files when
+        # running as a non-root user.
+        CapabilityBoundingSet = [
+          "CAP_SETUID"
+          "CAP_SETGID"
+          "CAP_AUDIT_WRITE"
+          "CAP_SYS_RESOURCE"
+          "CAP_DAC_OVERRIDE"
+          "CAP_DAC_READ_SEARCH"
+          "CAP_FOWNER"
+          "CAP_CHOWN"
+          "CAP_KILL"
+          "CAP_SYS_ADMIN"
+          "CAP_NET_ADMIN"
+          "CAP_NET_BIND_SERVICE"
+        ];
         ReadWritePaths = [
           "/var/lib/openclaw-self-heal"
           "/var/log/openclaw-self-heal"

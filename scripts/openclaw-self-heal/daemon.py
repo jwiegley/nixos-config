@@ -70,6 +70,21 @@ def load_state(path):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+def save_state(path, state):
+    p = pathlib.Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    with tmp.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            json.dump(state, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    os.replace(tmp, p)
+
+
 ACTION_MAP = {
     "OpenClawDiscordWsDown":             "restart_microvm",
     "OpenClawHttpHealthDown":            "restart_microvm",
@@ -430,18 +445,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-def save_state(path, state):
-    p = pathlib.Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    with tmp.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            json.dump(state, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
-    os.replace(tmp, p)

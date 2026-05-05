@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/run/current-system/sw/bin/bash
 # openclaw-self-heal action: restart microvm@openclaw.service.
 # Output: one line of JSON to stdout describing the result.
 set -euo pipefail

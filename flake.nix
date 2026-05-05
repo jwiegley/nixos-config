@@ -58,7 +58,7 @@
     };
 
     sacramento-cluster-ics = {
-      url = "git+https://gitea.newartisans.com/johnw/sacramento-cluster-ics.git";
+      url = "git+ssh://gitea/johnw/sacramento-cluster-ics";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

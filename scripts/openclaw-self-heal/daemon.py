@@ -186,6 +186,176 @@ def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
         raise LitellmUnreachable(f"non-json AI response: {content[:200]}")
 
 
+STATE_PATH = "/var/lib/openclaw-self-heal/incidents.json"
+AUX_DIR = "/etc/nixos/scripts/openclaw-self-heal/aux"
+
+
+def current_metrics():
+    """Read freshest values from prom textfile collector."""
+    out = {}
+    path = "/var/lib/prometheus-node-exporter-textfiles/openclaw_canary.prom"
+    try:
+        for line in pathlib.Path(path).read_text().splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            k, _, v = line.rpartition(" ")
+            try:
+                out[k] = float(v)
+            except ValueError:
+                pass
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def probe_clear(incident):
+    m = current_metrics()
+    return m.get("openclaw_discord_ws_connected", 0.0) == 1.0
+
+
+def _read_log_tail(which: str, n: int) -> str:
+    """which = "err" | "out". The aux script enforces the path allowlist;
+    the daemon never sees a free-form path. sudo command is invoked by
+    absolute path that EXACTLY matches the sudoers allowlist entry."""
+    if which not in ("err", "out"):
+        raise ValueError(f"bad log selector: {which!r}")
+    try:
+        return subprocess.check_output(
+            ["sudo", "-n", f"{AUX_DIR}/read_log_tail", which, str(int(n))],
+            text=True, timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return ""
+
+
+def _err_tail(n: int = 80) -> str:
+    return _read_log_tail("err", n)
+
+
+def _out_tail(n: int = 30) -> str:
+    return _read_log_tail("out", n)
+
+
+def _kick_canary() -> None:
+    try:
+        subprocess.run(
+            ["sudo", "-n", f"{AUX_DIR}/kick_canary"],
+            check=False, timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def emit_synthetic_alert(name, annotations, severity="info", duration_s=300):
+    """Stub overridden in B10; defined here so handle_alertmanager_payload can call it."""
+    return None
+
+
+def handle_alertmanager_payload(payload):
+    from datetime import datetime
+    state = load_state(STATE_PATH)
+    metrics = current_metrics()
+    vm_ts = int(metrics.get("openclaw_microvm_active_enter_timestamp_seconds", 0))
+    for a in payload.get("alerts", []):
+        if a.get("status") != "firing":
+            continue
+        alert_meta = {
+            "alert_name":         a["labels"]["alertname"],
+            "vm_active_enter_ts": vm_ts,
+            "starts_at":          int(datetime.fromisoformat(a["startsAt"].replace("Z", "+00:00")).timestamp()),
+        }
+        key = correlation_key(alert_meta)
+        inc = state["active"].get(key) or new_incident(alert_meta)
+        state["active"][key] = inc
+        if inc["status"] != "in_progress":
+            continue
+        n = next_attempt_n(inc)
+        ai_reason = None
+        if n == 1:
+            action = first_attempt_action(alert_meta["alert_name"])
+            by = "deterministic"
+        elif n in (2, 3):
+            try:
+                ai_resp = call_litellm(render_prompt(inc, metrics, _err_tail(), _out_tail()))
+            except LitellmUnreachable as e:
+                inc["attempts"].append({"action": "none", "by": "ai", "result": "litellm_unreachable", "stderr": str(e)})
+                emit_synthetic_alert(
+                    "OpenClawSelfHealLitellmUnreachable",
+                    {"alert": alert_meta["alert_name"], "err": str(e)[:200]},
+                    severity="warning", duration_s=3600,
+                )
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                continue
+            if ai_resp.get("action") == "escalate":
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                continue
+            try:
+                action = validate_action(ai_resp["action"])
+            except (ActionRejectedError, KeyError):
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                continue
+            by = "ai"
+            ai_reason = ai_resp.get("reason")
+        else:
+            inc["status"] = "stuck"
+            save_state(STATE_PATH, state)
+            continue
+        if action == "wait_60s":
+            time.sleep(60)
+            result = {"ok": True, "notes": "waited"}
+        else:
+            result = run_action(action)
+        inc["attempts"].append({"ts": int(time.time()), "action": action, "by": by,
+                                "ai_reason": ai_reason, **result})
+        save_state(STATE_PATH, state)
+        # force fresh metrics via the aux/kick_canary helper
+        _kick_canary()
+        # short wait, then re-probe
+        time.sleep(15)
+        if probe_clear(inc):
+            inc["status"] = "resolved"
+        save_state(STATE_PATH, state)
+
+
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/alert":
+            self.send_response(404)
+            self.end_headers()
+            return
+        n = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(n)
+        try:
+            payload = json.loads(body)
+            handle_alertmanager_payload(payload)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}\n')
+        except Exception as e:
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(f'{{"ok":false,"err":{json.dumps(str(e))}}}\n'.encode())
+
+    def log_message(self, *a, **kw):
+        pass  # silence default access logs
+
+
+def main():
+    srv = ThreadingHTTPServer(("127.0.0.1", WEBHOOK_PORT), Handler)
+    print(f"openclaw-self-heal listening on 127.0.0.1:{WEBHOOK_PORT}", flush=True)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
+
+
 def save_state(path, state):
     p = pathlib.Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)

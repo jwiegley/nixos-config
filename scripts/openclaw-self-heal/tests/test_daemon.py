@@ -159,3 +159,18 @@ def test_call_litellm_returns_parsed_action(monkeypatch):
     monkeypatch.setenv("LITELLM_KEY", "x")
     out = daemon.call_litellm([{"role":"system","content":"x"}], model="hera/Qwen3.6-27B")
     assert out == {"action": "doctor_fix", "reason": "stale"}
+
+
+def test_handle_payload_runs_first_attempt_action(monkeypatch, tmp_path):
+    monkeypatch.setattr(daemon, "STATE_PATH", tmp_path / "incidents.json")
+    monkeypatch.setattr(daemon, "current_metrics", lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 9999})
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda name: ran.append(name) or {"ok": True})
+    monkeypatch.setattr(daemon, "probe_clear", lambda inc: True)
+    monkeypatch.setattr(daemon, "_kick_canary", lambda: None)        # hermetic: don't sudo during pytest
+    monkeypatch.setattr(daemon, "emit_synthetic_alert", lambda *a, **k: None)
+    monkeypatch.setattr(daemon.time, "sleep", lambda *_: None)       # hermetic: don't actually sleep 15 s
+    payload = {"alerts": [{"status":"firing", "labels":{"alertname":"OpenClawDiscordWsDown","service":"openclaw"},
+                          "startsAt":"2026-05-05T18:30:00Z"}]}
+    daemon.handle_alertmanager_payload(payload)
+    assert ran == ["restart_microvm"]

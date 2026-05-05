@@ -133,6 +133,7 @@
     ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
     ../../modules/services/openclaw-microvm.nix
+    ../../modules/services/openclaw-self-heal.nix
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
@@ -171,6 +172,7 @@
 
   services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
+  services.openclawSelfHeal.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

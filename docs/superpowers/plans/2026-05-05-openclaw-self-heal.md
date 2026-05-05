@@ -174,25 +174,62 @@ These deliver immediate value: monitoring becomes correct on 2026.5.x, and futur
 
 - [ ] **Step 1: Add regexes for Discord WS events**
 
+  Audit of `/var/lib/openclaw/.openclaw/logs/gateway-vm.log` against 2026.5.x found that no `[discord] gateway: ready` line is ever emitted (zero matches across multi-week tail). The actual positive ready signals are `[discord] client initialized as ... awaiting gateway readiness` (2026.5.x), `[discord] logged in to discord as ...` (older 2026.4.x), and `[discord] startup [...] gateway-debug ...ms WebSocket connection opened` (2026.4.x debug). Negative events live in both gateway-vm.log (close, reconnect-scheduled) and gateway-vm.err.log (gateway error, was-not-ready, channel exited), so we scan both. Closed-driven `gateway: Gateway reconnect scheduled in Nms (close|zombie, ...)` is a real disconnect; `(reconnect-opcode, ...)` is a normal Discord lifecycle event and is intentionally NOT matched.
+
   In the Python heredoc, after `FAIL_RE`, add:
 
   ```python
-  DISCORD_READY_RE  = re.compile(r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:ready|Ready receipt|Resumed)")
-  DISCORD_CLOSED_RE = re.compile(r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:WebSocket closed|invalid session|disconnect)")
+  DISCORD_READY_RE = re.compile(
+      r"^(?P<ts>\S+)\s+\[discord\]\s+(?:"
+      r"client\s+initialized\s+as\s+\S+;\s*awaiting\s+gateway\s+readiness"
+      r"|"
+      r"logged\s+in\s+to\s+discord\s+as\s+"
+      r"|"
+      r"startup\s+\[\S+\]\s+gateway-debug\s+\d+ms\s+WebSocket\s+connection\s+opened"
+      r")"
+  )
+  DISCORD_CLOSED_RE = re.compile(
+      r"^(?P<ts>\S+)\s+(?:"
+      r"\[discord\]\s+(?:"
+      r"gateway:\s+Gateway\s+websocket\s+closed:"
+      r"|"
+      r"gateway\s+error:"
+      r"|"
+      r"gateway:\s+Gateway\s+reconnect\s+scheduled\s+in\s+\d+ms\s+\((?:close|zombie)"
+      r"|"
+      r"gateway\s+was\s+not\s+ready\s+after\s+\d+ms"
+      r"|"
+      r"\[\S+\]\s+channel\s+exited:\s+discord\s+gateway\s+did\s+not\s+reach\s+READY"
+      r")"
+      r"|"
+      r"\[health-monitor\]\s+\[discord:default\]\s+health-monitor:\s+restarting\s+\(reason:\s+disconnected\)"
+      r")"
+  )
+  DISCORD_RECONNECT_GRACE_SEC = 60
   ```
-
-  (`Resumed` covers `gateway: Resumed (resume=true)`. The closed regex is conservative — it matches all the "we lost the connection" log lines we've seen in the corpus.)
 
 - [ ] **Step 2: Compute `discord_ws_connected` in main()**
 
-  Add after the existing fail_count loop:
+  Add after the existing fail_count loop. Discord 2026.5.x emits no log line on a successful silent reconnect, so we apply a 60s reconnect-grace window after the last close: a still-stuck client emits `gateway was not ready after 15000ms` lines every ~15s, which would refresh the negative timestamp; absence of any negative event for 60s therefore signals successful recovery.
 
   ```python
-  d_ready  = find_last(DISCORD_READY_RE,  lines)
-  d_closed = find_last(DISCORD_CLOSED_RE, lines)
-  d_ready_ts  = iso_to_epoch(d_ready["ts"])  if d_ready  else 0.0
-  d_closed_ts = iso_to_epoch(d_closed["ts"]) if d_closed else 0.0
-  discord_ws_connected = 1.0 if d_ready_ts >= d_closed_ts and d_ready_ts > 0 else 0.0
+  d_ready = find_last(DISCORD_READY_RE, lines)
+  d_closed_log = find_last(DISCORD_CLOSED_RE, lines)
+  d_closed_err = find_last(DISCORD_CLOSED_RE, err_lines)
+  d_closed_log_ts = iso_to_epoch(d_closed_log["ts"]) if d_closed_log else 0.0
+  d_closed_err_ts = iso_to_epoch(d_closed_err["ts"]) if d_closed_err else 0.0
+  d_ready_ts = iso_to_epoch(d_ready["ts"]) if d_ready else 0.0
+  d_closed_ts = max(d_closed_log_ts, d_closed_err_ts)
+  if d_ready_ts > 0 and d_ready_ts >= d_closed_ts:
+      discord_ws_connected = 1.0
+  elif (
+      d_ready_ts > 0
+      and d_closed_ts > 0
+      and (now - d_closed_ts) > DISCORD_RECONNECT_GRACE_SEC
+  ):
+      discord_ws_connected = 1.0
+  else:
+      discord_ws_connected = 0.0
   discord_ws_last_ready_age = max(0.0, now - d_ready_ts) if d_ready_ts else 0.0
   ```
 
@@ -205,7 +242,7 @@ These deliver immediate value: monitoring becomes correct on 2026.5.x, and futur
       "# HELP openclaw_discord_ws_connected 1 if Discord WebSocket is currently connected\n"
       "# TYPE openclaw_discord_ws_connected gauge\n"
       f"openclaw_discord_ws_connected {payload['discord_ws_connected']}\n"
-      "# HELP openclaw_discord_ws_last_ready_age_seconds Seconds since the most recent [discord] gateway: ready event\n"
+      "# HELP openclaw_discord_ws_last_ready_age_seconds Seconds since the most recent positive Discord ready event (client initialized / logged in / WebSocket connection opened)\n"
       "# TYPE openclaw_discord_ws_last_ready_age_seconds gauge\n"
       f"openclaw_discord_ws_last_ready_age_seconds {payload['discord_ws_last_ready_age']}\n"
   )
@@ -306,8 +343,12 @@ These deliver immediate value: monitoring becomes correct on 2026.5.x, and futur
         annotations:
           summary: "OpenClaw Discord WebSocket disconnected for 3 minutes"
           description: |
-            The most recent [discord] gateway: ready event is older than the
-            most recent WebSocket-closed event. Bot will not receive or send
+            The most recent positive Discord ready event (client initialized /
+            logged in / WebSocket connection opened) is older than the most
+            recent negative event (websocket closed / gateway error / reconnect
+            scheduled (close|zombie) / was-not-ready / channel exited /
+            health-monitor restart), and the 60s reconnect grace window has
+            not produced a fresh negative event. Bot will not receive or send
             Discord messages until the connection is restored.
 
       - alert: OpenClawHttpHealthDown

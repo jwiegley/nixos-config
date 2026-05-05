@@ -85,17 +85,46 @@ let
         r"plugin\(s\)\s+failed\s+to\s+initialize"
     )
     # Discord WebSocket state — B-floor signal for the openclaw-self-heal
-    # daemon.  When the VM is up and the gateway HTTP listener is healthy
-    # but the Discord WS has been disconnected for many minutes, no other
-    # signal currently surfaces it; these two regexes let us emit a
-    # connected/age pair that an alert (and the self-heal daemon) can
-    # latch onto.
+    # daemon.  OpenClaw 2026.5.x emits no positive "ready/resumed" log
+    # line; the only positive ready signal is the one-shot
+    # `client initialized as ... awaiting gateway readiness` at plugin
+    # start (or `logged in to discord as` / `WebSocket connection opened`
+    # in older 2026.4.x builds).  After a silent reconnect there is no
+    # log line, but a *failed* reconnect emits continued negative signals
+    # within ~15s, so we treat "no fresh negative event for
+    # RECONNECT_GRACE_SEC" as "silent reconnect succeeded" — the daemon's
+    # 3-minute alert window then only fires on sustained disconnect.
     DISCORD_READY_RE = re.compile(
-        r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:ready|Ready receipt|Resumed)"
+        r"^(?P<ts>\S+)\s+\[discord\]\s+(?:"
+        r"client\s+initialized\s+as\s+\S+;\s*awaiting\s+gateway\s+readiness"
+        r"|"
+        r"logged\s+in\s+to\s+discord\s+as\s+"
+        r"|"
+        r"startup\s+\[\S+\]\s+gateway-debug\s+\d+ms\s+WebSocket\s+connection\s+opened"
+        r")"
     )
     DISCORD_CLOSED_RE = re.compile(
-        r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:WebSocket closed|invalid session|disconnect)"
+        r"^(?P<ts>\S+)\s+(?:"
+        r"\[discord\]\s+(?:"
+        r"gateway:\s+Gateway\s+websocket\s+closed:"
+        r"|"
+        r"gateway\s+error:"
+        r"|"
+        r"gateway:\s+Gateway\s+reconnect\s+scheduled\s+in\s+\d+ms\s+\((?:close|zombie)"
+        r"|"
+        r"gateway\s+was\s+not\s+ready\s+after\s+\d+ms"
+        r"|"
+        r"\[\S+\]\s+channel\s+exited:\s+discord\s+gateway\s+did\s+not\s+reach\s+READY"
+        r")"
+        r"|"
+        r"\[health-monitor\]\s+\[discord:default\]\s+health-monitor:\s+restarting\s+\(reason:\s+disconnected\)"
+        r")"
     )
+    # Seconds to wait after the most recent close event before assuming
+    # the silent reconnect succeeded.  Discord normally reconnects in
+    # under 5s; a stuck client emits `gateway was not ready` lines every
+    # ~15s, so 60s is a comfortable safety margin.
+    DISCORD_RECONNECT_GRACE_SEC = 60
 
 
     def iso_to_epoch(s: str) -> float:
@@ -179,7 +208,7 @@ let
                 "# HELP openclaw_discord_ws_connected 1 if Discord WebSocket is currently connected\n"
                 "# TYPE openclaw_discord_ws_connected gauge\n"
                 f"openclaw_discord_ws_connected {payload['discord_ws_connected']}\n"
-                "# HELP openclaw_discord_ws_last_ready_age_seconds Seconds since the most recent [discord] gateway: ready event\n"
+                "# HELP openclaw_discord_ws_last_ready_age_seconds Seconds since the most recent positive Discord ready event (client initialized / logged in / WebSocket connection opened)\n"
                 "# TYPE openclaw_discord_ws_last_ready_age_seconds gauge\n"
                 f"openclaw_discord_ws_last_ready_age_seconds {payload['discord_ws_last_ready_age']}\n"
                 "# HELP openclaw_channel_plugin_loaded 1 if the plugin is present in the most recent [gateway] ready list\n"
@@ -223,12 +252,31 @@ let
             plugins_total = float(int(presence["n"]))
 
         d_ready = find_last(DISCORD_READY_RE, lines)
-        d_closed = find_last(DISCORD_CLOSED_RE, lines)
+        # Negative events appear in BOTH gateway-vm.log (close, reconnect)
+        # AND gateway-vm.err.log (gateway error, was-not-ready, channel
+        # exited) — scan both so a fresh err-log event isn't missed.
+        d_closed_log = find_last(DISCORD_CLOSED_RE, lines)
+        d_closed_err = find_last(DISCORD_CLOSED_RE, err_lines)
+        d_closed_log_ts = iso_to_epoch(d_closed_log["ts"]) if d_closed_log else 0.0
+        d_closed_err_ts = iso_to_epoch(d_closed_err["ts"]) if d_closed_err else 0.0
         d_ready_ts = iso_to_epoch(d_ready["ts"]) if d_ready else 0.0
-        d_closed_ts = iso_to_epoch(d_closed["ts"]) if d_closed else 0.0
-        discord_ws_connected = (
-            1.0 if d_ready_ts >= d_closed_ts and d_ready_ts > 0 else 0.0
-        )
+        d_closed_ts = max(d_closed_log_ts, d_closed_err_ts)
+        if d_ready_ts > 0 and d_ready_ts >= d_closed_ts:
+            # Most recent positive event newer than any negative event.
+            discord_ws_connected = 1.0
+        elif (
+            d_ready_ts > 0
+            and d_closed_ts > 0
+            and (now - d_closed_ts) > DISCORD_RECONNECT_GRACE_SEC
+        ):
+            # We saw a positive ready event in the tail; the most recent
+            # close is older than the reconnect grace window — assume
+            # the silent reconnect succeeded.  A still-stuck client
+            # would have emitted a fresh negative event within the
+            # window.
+            discord_ws_connected = 1.0
+        else:
+            discord_ws_connected = 0.0
         discord_ws_last_ready_age = (
             max(0.0, now - d_ready_ts) if d_ready_ts else 0.0
         )

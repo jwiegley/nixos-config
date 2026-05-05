@@ -22,7 +22,7 @@ OpenClaw is **healthy** if and only if all three are true:
 
 1. `microvm@openclaw.service` is `active`.
 2. `https://openclaw.vulcan.lan/health` returns `200 OK` with body `{"ok":true,"status":"live"}`.
-3. The Discord WebSocket is in `connected` state (most recent `[discord] gateway: ready` log line is younger than the most recent `[discord] gateway: WebSocket closed`).
+3. The Discord WebSocket is in `connected` state. Definition: the most recent positive ready event in the gateway log tail (`[discord] client initialized as ... awaiting gateway readiness` for 2026.5.x; `[discord] logged in to discord as ...` or `[discord] startup [...] gateway-debug ...ms WebSocket connection opened` for 2026.4.x) is newer than the most recent negative event in either gateway log (`[discord] gateway: Gateway websocket closed:`, `[discord] gateway error:`, `[discord] gateway: Gateway reconnect scheduled in ...ms (close|zombie, ...)`, `[discord] gateway was not ready after ...ms`, `[discord] [...] channel exited: discord gateway did not reach READY`, or `[health-monitor] [discord:default] health-monitor: restarting (reason: disconnected)`). After a close event, a 60s reconnect-grace window is applied: if no fresh negative event lands within that window we treat the silent reconnect as successful, since a stuck reconnect emits `gateway was not ready` lines every ~15s and would refresh the negative timestamp.
 
 Anything below this floor for the configured `for:` window is a P1 incident eligible for auto-remediation.
 

@@ -11,6 +11,8 @@ import fcntl
 import os
 import pathlib
 import subprocess
+import re
+import urllib.request
 
 ACTION_ALLOWLIST = ("restart_microvm", "doctor_fix", "prune_stale_plugin_deps")
 WEBHOOK_PORT = 9092
@@ -98,6 +100,90 @@ def run_action(name: str, timeout_s: int = 240) -> dict:
         return {"ok": False, "notes": f"non-json action output (rc={r.returncode}): {r.stderr[-200:]}"}
     parsed.setdefault("ok", r.returncode == 0)
     return parsed
+
+
+REDACT_PATTERNS = [
+    # Discord bot token: 24-30+ chars . 6 chars . 27+ chars
+    re.compile(r"[A-Za-z0-9_-]{24,40}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}"),
+    # Anthropic
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
+    # OpenAI
+    re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"),
+    # Common bearer headers
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"),
+    # Generic ?token=... or password=...
+    re.compile(r"(?i)(token|password|api[_-]?key)=[^\s&\"]+"),
+]
+
+
+def redact(s: str) -> str:
+    for p in REDACT_PATTERNS:
+        s = p.sub("[REDACTED]", s)
+    return s
+
+
+SYSTEM_PROMPT = """You are an SRE for OpenClaw, a Discord-facing AI gateway running as a microVM
+on host vulcan. Your goal is to restore service. You may take exactly ONE of:
+  1. restart_microvm
+  2. doctor_fix
+  3. prune_stale_plugin_deps
+Output STRICTLY this JSON, no other text:
+  {"action": "<one of the three>", "reason": "<one sentence>"}
+If you do not believe any of these will help, output:
+  {"action": "escalate", "reason": "..."}"""
+
+
+def render_prompt(incident, metrics, err_log_tail, out_log_tail):
+    attempts_str = "\n".join(
+        f"  {i+1}. {a.get('action','?')} ({a.get('by','?')}) -> {a.get('result','?')}"
+        for i, a in enumerate(incident["attempts"])
+    ) or "  (none)"
+    metrics_str = "\n".join(f"  {k}={v}" for k, v in metrics.items())
+    user = (
+        f"[ALERTS] {', '.join(incident['alerts'])}\n"
+        f"[ATTEMPTS SO FAR]\n{attempts_str}\n"
+        f"[METRICS]\n{metrics_str}\n"
+        f"[err.log tail]\n{redact(err_log_tail)}\n"
+        f"[gateway.log tail]\n{redact(out_log_tail)}\n"
+    )
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user},
+    ]
+
+
+LITELLM_URL = "http://127.0.0.1:4000/v1/chat/completions"
+LITELLM_KEY_ENV = "LITELLM_KEY"
+
+
+class LitellmUnreachable(RuntimeError):
+    pass
+
+
+def _http_post_json(url, headers, data, timeout):
+    req = urllib.request.Request(url, data=data.encode(), headers=headers, method="POST")
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
+    key = os.environ.get(LITELLM_KEY_ENV)
+    if not key:
+        raise LitellmUnreachable("LITELLM_KEY not set")
+    headers = {"Content-Type": "application/json",
+               "Authorization": f"Bearer {key}"}
+    body = json.dumps({"model": model, "messages": messages,
+                       "temperature": 0.0,
+                       "response_format": {"type": "json_object"}})
+    try:
+        resp = _http_post_json(LITELLM_URL, headers, body, timeout=timeout_s)
+    except Exception as e:
+        raise LitellmUnreachable(str(e))
+    payload = json.loads(resp.read())
+    content = payload["choices"][0]["message"]["content"]
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        raise LitellmUnreachable(f"non-json AI response: {content[:200]}")
 
 
 def save_state(path, state):

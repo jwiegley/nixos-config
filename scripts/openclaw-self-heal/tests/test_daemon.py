@@ -123,3 +123,39 @@ def test_run_action_handles_nonjson_output(monkeypatch):
     result = daemon.run_action("restart_microvm")
     assert result["ok"] is False
     assert "non-json" in result["notes"].lower()
+
+
+def test_render_prompt_includes_alert_and_attempts():
+    inc = daemon.new_incident({"alert_name": "OpenClawDiscordWsDown",
+                               "vm_active_enter_ts": 1000,
+                               "starts_at": 5000})
+    inc["alerts"] = ["OpenClawDiscordWsDown"]
+    inc["attempts"] = [{"action": "restart_microvm", "by": "deterministic",
+                        "result": "ok"}]
+    msgs = daemon.render_prompt(inc, metrics={"x": 1}, err_log_tail="oops",
+                                out_log_tail="hi")
+    assert any("restart_microvm" in m["content"] for m in msgs)
+    assert any("OpenClawDiscordWsDown" in m["content"] for m in msgs)
+    assert msgs[0]["role"] == "system"
+
+def test_render_prompt_redacts_discord_token_pattern():
+    inc = daemon.new_incident({"alert_name": "OpenClawDiscordWsDown",
+                               "vm_active_enter_ts": 1, "starts_at": 1})
+    tok = "DISCORD_TOKEN_REDACTED"
+    msgs = daemon.render_prompt(inc, metrics={}, err_log_tail=f"got token={tok}",
+                                out_log_tail="")
+    joined = " ".join(m["content"] for m in msgs)
+    assert tok not in joined
+    assert "[REDACTED]" in joined
+
+
+def test_call_litellm_returns_parsed_action(monkeypatch):
+    def fake_post(url, headers, data, timeout):
+        class R:
+            status = 200
+            def read(self): return json.dumps({"choices":[{"message":{"content":'{"action": "doctor_fix", "reason": "stale"}'}}]}).encode()
+        return R()
+    monkeypatch.setattr(daemon, "_http_post_json", fake_post)
+    monkeypatch.setenv("LITELLM_KEY", "x")
+    out = daemon.call_litellm([{"role":"system","content":"x"}], model="hera/Qwen3.6-27B")
+    assert out == {"action": "doctor_fix", "reason": "stale"}

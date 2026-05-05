@@ -174,3 +174,13 @@ def test_handle_payload_runs_first_attempt_action(monkeypatch, tmp_path):
                           "startsAt":"2026-05-05T18:30:00Z"}]}
     daemon.handle_alertmanager_payload(payload)
     assert ran == ["restart_microvm"]
+
+
+def test_write_heartbeat_emits_required_metrics(tmp_path):
+    out = tmp_path / "openclaw_self_heal.prom"
+    daemon.write_heartbeat(out_path=out, active_count=2, action_counts={"restart_microvm": 5})
+    text = out.read_text()
+    for k in ("openclaw_self_heal_last_heartbeat_seconds",
+              "openclaw_self_heal_active_incidents",
+              "openclaw_self_heal_attempts_total"):
+        assert k in text

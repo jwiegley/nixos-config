@@ -590,6 +590,33 @@ in
                 || ${pkgs.coreutils}/bin/echo "openclaw doctor --fix failed (non-fatal); see journal"
             )
 
+            # ────────────────────────────────────────────────────────────────
+            # GC stale plugin-runtime-deps subdirs.  The upstream
+            # stageBundledPluginRuntimeDeps mechanism was dropped in openclaw
+            # 2026.5.x (numtide/llm-agents.nix d9cdb33), so subdirs named
+            # after older versions are dead weight forever.  mv-not-rm
+            # pattern: deleted entries become .bak-<ts>, purged later by the
+            # host-side openclaw-plugin-deps-bak-purge weekly timer.
+            # ────────────────────────────────────────────────────────────────
+            DEPS_DIR="${openclawDir}/plugin-runtime-deps"
+            CURRENT_VER=$(${openclawPkg}/bin/openclaw --version 2>/dev/null \
+                          | ${pkgs.gnused}/bin/sed -nE 's/.*OpenClaw ([0-9.]+).*/\1/p' \
+                          | ${pkgs.coreutils}/bin/head -n1)
+            if [ -n "$CURRENT_VER" ] && [ -d "$DEPS_DIR" ]; then
+              BAK_TS=$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)
+              for entry in "$DEPS_DIR"/*; do
+                [ -d "$entry" ] || continue
+                base=$(${pkgs.coreutils}/bin/basename "$entry")
+                case "$base" in
+                  openclaw-"$CURRENT_VER"-*)  : ;;
+                  openclaw-*)
+                    ${pkgs.coreutils}/bin/mv "$entry" \
+                      "$DEPS_DIR/.bak-$BAK_TS-$base" || true
+                    ;;
+                esac
+              done
+            fi
+
             # Set up mcporter config symlink if present
             if [ -d "${openclawDir}/.mcporter" ]; then
               ln -sfn ${openclawDir}/.mcporter ${stateDir}/.mcporter

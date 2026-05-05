@@ -622,6 +622,40 @@ in
   systemd.services."microvm@openclaw".serviceConfig.TimeoutStartSec = "300";
 
   # ============================================================================
+  # Section 11.b: Weekly purge of plugin-runtime-deps backups
+  # ============================================================================
+  # The VM-side preStart renames stale plugin-runtime-deps version dirs to
+  # .bak-<ts>-<original> on every boot (mv-not-rm safety).  This timer
+  # garbage-collects backups older than 7 days so the safety net does not
+  # accumulate disk indefinitely.
+  systemd.services.openclaw-plugin-deps-bak-purge = {
+    description = "Purge openclaw plugin-runtime-deps backups older than 7 days";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "openclaw";
+      Group = "openclaw";
+      ExecStart = pkgs.writeShellScript "openclaw-bak-purge" ''
+        set -eu
+        DEPS=/var/lib/openclaw/.openclaw/plugin-runtime-deps
+        if [ -d "$DEPS" ]; then
+          ${pkgs.findutils}/bin/find "$DEPS" -maxdepth 1 -type d \
+              -name '.bak-*' -mtime +7 -exec ${pkgs.coreutils}/bin/rm -rf {} +
+        fi
+      '';
+    };
+  };
+
+  systemd.timers.openclaw-plugin-deps-bak-purge = {
+    description = "Weekly trigger for openclaw-plugin-deps-bak-purge";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "weekly";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+    };
+  };
+
+  # ============================================================================
   # Section 12: Bootstrap TLS Certificate
   # ============================================================================
   # Self-signed certificate for openclaw.vulcan.lan (identical to previous module).

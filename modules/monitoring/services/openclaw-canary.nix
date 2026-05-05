@@ -31,11 +31,15 @@ let
   # for OpenClaw to be serving its full capability surface.  Keep this in
   # sync with the auto-enabled set under `plugins:` in openclaw.json; a
   # mismatch produces a false-positive alert, not a silent failure.
+  # Note: `acpx` was on this list through 2026.4.x when it was a channel
+  # plugin.  In 2026.5.x it became an ACP backend (referenced by .acp.backend
+  # in openclaw.json) and no longer appears in the [gateway] http server
+  # listening (...) plugin list, so checking for it produces a permanent
+  # false-positive.  Self-heal spec §3 / §8c documents this transition.
   expectedChannels = [
     "discord"
     "whatsapp"
     "lobster"
-    "acpx"
     "memory-qdrant"
   ];
 
@@ -80,6 +84,15 @@ let
     READY_FULL_RE = re.compile(
         r"^(?P<ts>\S+)\s+\[gateway\]\s+ready\s+"
         r"\((?P<n>\d+)\s+plugin[s]?:\s*(?P<list>[^;]+);"
+    )
+    # OpenClaw 2026.5.x emits a bare `[gateway] ready` line and moves the
+    # plugin list to a separate `[gateway] http server listening (N
+    # plugins: …)` line.  Fall back to LISTEN_RE when READY_FULL_RE
+    # doesn't match this boot's tail, so plugin-presence gauges keep
+    # working.
+    LISTEN_RE = re.compile(
+        r"^(?P<ts>\S+)\s+\[gateway\]\s+http\s+server\s+listening\s+"
+        r"\((?P<n>\d+)\s+plugin[s]?:\s*(?P<list>[^;)]+)"
     )
     FAIL_RE = re.compile(
         r"^(?P<ts>\S+)\s+\[plugins\]\s+(?P<n>\d+)\s+"
@@ -196,11 +209,14 @@ let
 
         channel_loaded = {c: 0.0 for c in EXPECTED}
         plugins_total = 0.0
-        if ready_full:
-            plugin_list = [p.strip() for p in ready_full["list"].split(",") if p.strip()]
+        # Whichever match is freshest wins; on 2026.5.x READY_FULL_RE
+        # finds nothing and LISTEN_RE carries the plugin list.
+        presence = ready_full or find_last(LISTEN_RE, lines)
+        if presence:
+            plugin_list = [p.strip() for p in presence["list"].split(",") if p.strip()]
             for c in EXPECTED:
                 channel_loaded[c] = 1.0 if c in plugin_list else 0.0
-            plugins_total = float(int(ready_full["n"]))
+            plugins_total = float(int(presence["n"]))
 
         if ready:
             payload = dict(

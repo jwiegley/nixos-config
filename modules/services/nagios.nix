@@ -1852,14 +1852,12 @@ let
       service_groups          application-services
     }
 
-    # ACPX channel plugin (Agent Client Protocol bridge).
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw ACPX Plugin Loaded
-      check_command           check_openclaw_plugin!acpx!600
-      service_groups          application-services
-    }
+    # acpx — removed 2026-05-05.  Through 2026.4.x acpx was a channel
+    # plugin tracked by the canary; in 2026.5.x it became an ACP backend
+    # (.acp.backend in openclaw.json) and is no longer in the gateway
+    # plugin list, so the metric permanently reads 0 and the check would
+    # alert forever.  The acpx backend's own health is covered by the
+    # [gateway] auto-enabled plugins / [acp] log lines, not by this metric.
 
     # Memory-qdrant plugin.  Without this OpenClaw can't remember anything
     # between sessions.

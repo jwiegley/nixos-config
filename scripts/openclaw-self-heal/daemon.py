@@ -5,6 +5,8 @@ See docs/superpowers/specs/2026-05-05-openclaw-self-heal-design.md.
 """
 __version__ = "0.1.0"
 
+import time
+
 ACTION_ALLOWLIST = ("restart_microvm", "doctor_fix", "prune_stale_plugin_deps")
 WEBHOOK_PORT = 9092
 
@@ -21,3 +23,29 @@ def validate_action(name: str) -> str:
     if name in ACTION_ALLOWLIST:
         return name
     raise ActionRejectedError(f"action not allowlisted: {name!r}")
+
+
+def correlation_key(alert: dict, window_s: int = 300) -> str:
+    """Same VM boot + 5-min bucket → same incident."""
+    ts = alert.get("starts_at", 0)
+    bucket = ts // window_s
+    return f"{alert.get('vm_active_enter_ts', 0)}:{bucket}"
+
+
+def new_incident(alert: dict) -> dict:
+    return {
+        "first_seen_ts":      int(time.time()),
+        "vm_active_enter_ts": alert.get("vm_active_enter_ts", 0),
+        "alerts":             [alert["alert_name"]],
+        "attempts":           [],
+        "status":             "in_progress",
+        "next_eligible_ts":   None,
+    }
+
+
+def next_attempt_n(incident: dict) -> int:
+    return len(incident["attempts"]) + 1
+
+
+def should_escalate(incident: dict) -> bool:
+    return len(incident["attempts"]) >= 3

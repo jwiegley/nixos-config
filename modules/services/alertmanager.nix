@@ -34,6 +34,23 @@
 
         # Special routing rules
         routes = [
+          # Self-heal pipeline — service=openclaw alerts go to the
+          # openclaw-self-heal daemon's webhook receiver.  continue=true
+          # keeps the email/critical paths firing too so a human still
+          # sees the alert, even when the daemon takes the action.
+          # NOTE: alerts with service=openclaw-self-heal (the daemon's
+          # own watchdog) intentionally do NOT match here, so they never
+          # loop back to the daemon that may already be dead.
+          {
+            match = {
+              service = "openclaw";
+            };
+            receiver = "openclaw-self-heal";
+            group_wait = "10s";
+            group_interval = "5m";
+            repeat_interval = "4h";
+            continue = true;
+          }
           # Backup and storage alerts - group by category and reduce noise
           {
             match = {
@@ -153,6 +170,15 @@
                 View in Prometheus: {{ .GeneratorURL }}
                 {{ end }}
               '';
+            }
+          ];
+        }
+        {
+          name = "openclaw-self-heal";
+          webhook_configs = [
+            {
+              url = "http://127.0.0.1:9092/alert";
+              send_resolved = true;
             }
           ];
         }

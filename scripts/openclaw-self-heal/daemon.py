@@ -246,9 +246,23 @@ def _kick_canary() -> None:
         pass
 
 
+ALERTMANAGER_URL = "http://127.0.0.1:9093/api/v2/alerts"
+
+
 def emit_synthetic_alert(name, annotations, severity="info", duration_s=300):
-    """Stub overridden in B10; defined here so handle_alertmanager_payload can call it."""
-    return None
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    payload = [{
+        "labels": {"alertname": name, "severity": severity, "service": "openclaw-self-heal"},
+        "annotations": {k: str(v) for k, v in annotations.items()},
+        "startsAt": now.isoformat(),
+        "endsAt":   (now + timedelta(seconds=duration_s)).isoformat(),
+    }]
+    try:
+        _http_post_json(ALERTMANAGER_URL, {"Content-Type": "application/json"},
+                        json.dumps(payload), timeout=10)
+    except Exception as e:
+        print(f"emit_synthetic_alert failed: {e}", flush=True)
 
 
 def handle_alertmanager_payload(payload):
@@ -290,18 +304,27 @@ def handle_alertmanager_payload(payload):
             if ai_resp.get("action") == "escalate":
                 inc["status"] = "stuck"
                 save_state(STATE_PATH, state)
+                emit_synthetic_alert("OpenClawSelfHealStuck",
+                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                    severity="critical", duration_s=14400)
                 continue
             try:
                 action = validate_action(ai_resp["action"])
             except (ActionRejectedError, KeyError):
                 inc["status"] = "stuck"
                 save_state(STATE_PATH, state)
+                emit_synthetic_alert("OpenClawSelfHealStuck",
+                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                    severity="critical", duration_s=14400)
                 continue
             by = "ai"
             ai_reason = ai_resp.get("reason")
         else:
             inc["status"] = "stuck"
             save_state(STATE_PATH, state)
+            emit_synthetic_alert("OpenClawSelfHealStuck",
+                {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                severity="critical", duration_s=14400)
             continue
         if action == "wait_60s":
             time.sleep(60)
@@ -311,6 +334,9 @@ def handle_alertmanager_payload(payload):
         inc["attempts"].append({"ts": int(time.time()), "action": action, "by": by,
                                 "ai_reason": ai_reason, **result})
         save_state(STATE_PATH, state)
+        emit_synthetic_alert("OpenClawSelfHealActed",
+            {"action": action, "alert": alert_meta["alert_name"], "by": by,
+             "result": result.get("ok")})
         # force fresh metrics via the aux/kick_canary helper
         _kick_canary()
         # short wait, then re-probe

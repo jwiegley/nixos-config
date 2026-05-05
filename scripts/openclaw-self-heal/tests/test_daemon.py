@@ -184,3 +184,15 @@ def test_write_heartbeat_emits_required_metrics(tmp_path):
               "openclaw_self_heal_active_incidents",
               "openclaw_self_heal_attempts_total"):
         assert k in text
+
+
+def test_emit_synthetic_alert_acted(monkeypatch):
+    sent = []
+    monkeypatch.setattr(daemon, "_http_post_json",
+                        lambda url, headers, data, timeout: sent.append((url, json.loads(data))) or type("R", (), {"read": lambda self: b""})())
+    daemon.emit_synthetic_alert("OpenClawSelfHealActed",
+                                {"action": "restart_microvm", "alert": "OpenClawDiscordWsDown"})
+    assert sent
+    url, payload = sent[0]
+    assert "/api/v2/alerts" in url
+    assert payload[0]["labels"]["alertname"] == "OpenClawSelfHealActed"

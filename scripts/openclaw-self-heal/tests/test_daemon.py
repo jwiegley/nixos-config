@@ -80,3 +80,16 @@ def test_state_roundtrip(tmp_path):
     state = {"active": {"k": {"x": 1}}, "history": [{"y": 2}]}
     daemon.save_state(path, state)
     assert daemon.load_state(path) == state
+
+
+def test_action_map_each_alert_maps_to_known_action_or_wait():
+    for action in daemon.ACTION_MAP.values():
+        assert action in daemon.ACTION_ALLOWLIST or action == "wait_60s"
+
+def test_action_map_covers_expected_alerts():
+    for a in (
+        "OpenClawDiscordWsDown", "OpenClawHttpHealthDown",
+        "OpenClawGatewayReadyStale", "OpenClawDiscordPluginMissing",
+        "OpenClawPluginInitFailuresPresent", "OpenClawMicroVMDown",
+    ):
+        assert a in daemon.ACTION_MAP

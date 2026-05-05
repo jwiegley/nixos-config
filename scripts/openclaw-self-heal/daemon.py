@@ -67,6 +67,20 @@ def load_state(path):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+ACTION_MAP = {
+    "OpenClawDiscordWsDown":             "restart_microvm",
+    "OpenClawHttpHealthDown":            "restart_microvm",
+    "OpenClawGatewayReadyStale":         "restart_microvm",
+    "OpenClawDiscordPluginMissing":      "doctor_fix",
+    "OpenClawPluginInitFailuresPresent": "doctor_fix",
+    "OpenClawMicroVMDown":               "wait_60s",
+}
+
+
+def first_attempt_action(alert_name: str) -> str:
+    return ACTION_MAP.get(alert_name, "restart_microvm")
+
+
 def save_state(path, state):
     p = pathlib.Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)

@@ -430,11 +430,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777678872,
-        "narHash": "sha256-EPIFsulyon7Z1vLQq5Fk64GR8L7cQsT+IPhcsukVbgk=",
+        "lastModified": 1777898446,
+        "narHash": "sha256-tTEOTTjMHd8Vffn4hehLTPgOXXxJ27xfkf4DoyZgD7s=",
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "5250617bffd85403b14dbf43c3870e7f255d2c16",
+        "rev": "5d82aa3d6b5da25dbfec1a995750a70a03b8c659",
         "type": "github"
       },
       "original": {
@@ -1978,11 +1978,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775425411,
-        "narHash": "sha256-KY6HsebJHEe5nHOWP7ur09mb0drGxYSzE3rQxy62rJo=",
+        "lastModified": 1777851538,
+        "narHash": "sha256-Gp8qwTEYNoy2yvmErVGlvLOQvrtEECCAKbonW7VJef8=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "0d02ec1d0a05f88ef9e74b516842900c41f0f2fe",
+        "rev": "cc09c0f9b7eaa95c2d9827338a5eb03d32505ca5",
         "type": "github"
       },
       "original": {
@@ -2134,11 +2134,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1777873616,
-        "narHash": "sha256-W4FRQJ/X6amooqaD6DjLtOiUzUIzyBQOBPAijRMCE44=",
+        "lastModified": 1777931035,
+        "narHash": "sha256-iUNZKBteJacg86XvPKpuM+ItxuyzusdJUqiPOA4ixF8=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "91f891c781adae47bfa5539d80f8528b82bf31fd",
+        "rev": "002e65187fd5eddf421a4c8d5f2e0603391fd802",
         "type": "github"
       },
       "original": {
@@ -2187,11 +2187,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1777569733,
-        "narHash": "sha256-IlTQEzx+wR5CIcfTkOnFd7Gta6+Gg9D8sedV7TeLPw0=",
+        "lastModified": 1777933486,
+        "narHash": "sha256-6fXSK/jIUxed2ie3ilGyiLNdpbXWgV8LYKkdU/J/Em8=",
         "ref": "refs/heads/main",
-        "rev": "308e264ce7d11c533077db9c0ce4d03205b13fa0",
-        "revCount": 1712,
+        "rev": "f79595f8a554537e6a2c741c82beea2a68d8f9db",
+        "revCount": 1728,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2644,11 +2644,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1777268161,
-        "narHash": "sha256-bxrdOn8SCOv8tN4JbTF/TXq7kjo9ag4M+C8yzzIRYbE=",
+        "lastModified": 1777578337,
+        "narHash": "sha256-Ad49moKWeXtKBJNy2ebiTQUEgdLyvGmTeykAQ9xM+Z4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1c3fe55ad329cbcb28471bb30f05c9827f724c76",
+        "rev": "15f4ee454b1dce334612fa6843b3e05cf546efab",
         "type": "github"
       },
       "original": {
@@ -2724,11 +2724,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1777428379,
-        "narHash": "sha256-ypxFOeDz+CqADEQNL72haqGjvZQdBR5Vc7pyx2JDttI=",
+        "lastModified": 1777673416,
+        "narHash": "sha256-5c2POKPOjU40Kh0MirOdScBLG0bu9TAuPYAtPRNZMBs=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "755f5aa91337890c432639c60b6064bb7fe67769",
+        "rev": "26ef669cffa904b6f6832ab57b77892a37c1a671",
         "type": "github"
       },
       "original": {
@@ -2838,11 +2838,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777419598,
-        "narHash": "sha256-BIvaxeDfDszT4Gsv/522Igv2KuKxcKvDaY/Kz3GGIZM=",
+        "lastModified": 1777655533,
+        "narHash": "sha256-BW5iuQABcPNzanVUiw8VC0nB9f9jA9oaZQqKMmgvkq8=",
         "ref": "refs/heads/main",
-        "rev": "708a5ae133052cc987032dae9129baa4aa20b4de",
-        "revCount": 266,
+        "rev": "7aea0d60cdec4ea4420b87cb88725a34d5236c18",
+        "revCount": 268,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },
@@ -2943,17 +2943,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777854507,
-        "narHash": "sha256-2D7lLQRR0ur/YvhcbjlaBrHV8wmdbm/kMEBFQscf5Nw=",
+        "lastModified": 1777913025,
+        "narHash": "sha256-KVDCf/Ug8sPT7vwWg3uWaJuspGQ5PVprTU9J5uOOtYA=",
         "ref": "refs/heads/main",
-        "rev": "704f329f00549faa25abc474b263e4f8f450c47f",
-        "revCount": 37,
+        "rev": "f61818489c74e1d238f268cb7f0a5c04b6bc4e52",
+        "revCount": 39,
         "type": "git",
-        "url": "https://gitea.newartisans.com/johnw/sacramento-cluster-ics.git"
+        "url": "ssh://gitea/johnw/sacramento-cluster-ics"
       },
       "original": {
         "type": "git",
-        "url": "https://gitea.newartisans.com/johnw/sacramento-cluster-ics.git"
+        "url": "ssh://gitea/johnw/sacramento-cluster-ics"
       }
     },
     "secrets": {

@@ -27,21 +27,7 @@
 let
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
-  # Plugins that must be present in the most-recent `[gateway] ready` line
-  # for OpenClaw to be serving its full capability surface.  Keep this in
-  # sync with the auto-enabled set under `plugins:` in openclaw.json; a
-  # mismatch produces a false-positive alert, not a silent failure.
-  # Note: `acpx` was on this list through 2026.4.x when it was a channel
-  # plugin.  In 2026.5.x it became an ACP backend (referenced by .acp.backend
-  # in openclaw.json) and no longer appears in the [gateway] http server
-  # listening (...) plugin list, so checking for it produces a permanent
-  # false-positive.  Self-heal spec §3 / §8c documents this transition.
-  expectedChannels = [
-    "discord"
-    "whatsapp"
-    "lobster"
-    "memory-qdrant"
-  ];
+  expectedChannels = config.services.openclawCanary.expectedChannels;
 
   canaryScript = pkgs.writeScript "openclaw-canary.py" ''
     #!${pkgs.python3}/bin/python3
@@ -97,6 +83,18 @@ let
     FAIL_RE = re.compile(
         r"^(?P<ts>\S+)\s+\[plugins\]\s+(?P<n>\d+)\s+"
         r"plugin\(s\)\s+failed\s+to\s+initialize"
+    )
+    # Discord WebSocket state — B-floor signal for the openclaw-self-heal
+    # daemon.  When the VM is up and the gateway HTTP listener is healthy
+    # but the Discord WS has been disconnected for many minutes, no other
+    # signal currently surfaces it; these two regexes let us emit a
+    # connected/age pair that an alert (and the self-heal daemon) can
+    # latch onto.
+    DISCORD_READY_RE = re.compile(
+        r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:ready|Ready receipt|Resumed)"
+    )
+    DISCORD_CLOSED_RE = re.compile(
+        r"^(?P<ts>\S+)\s+\[discord\]\s+gateway:\s+(?:WebSocket closed|invalid session|disconnect)"
     )
 
 
@@ -178,6 +176,12 @@ let
                 "# HELP openclaw_microvm_active_enter_timestamp_seconds Unix timestamp when microvm@openclaw.service last entered active state\n"
                 "# TYPE openclaw_microvm_active_enter_timestamp_seconds gauge\n"
                 f"openclaw_microvm_active_enter_timestamp_seconds {payload['vm_start_ts']}\n"
+                "# HELP openclaw_discord_ws_connected 1 if Discord WebSocket is currently connected\n"
+                "# TYPE openclaw_discord_ws_connected gauge\n"
+                f"openclaw_discord_ws_connected {payload['discord_ws_connected']}\n"
+                "# HELP openclaw_discord_ws_last_ready_age_seconds Seconds since the most recent [discord] gateway: ready event\n"
+                "# TYPE openclaw_discord_ws_last_ready_age_seconds gauge\n"
+                f"openclaw_discord_ws_last_ready_age_seconds {payload['discord_ws_last_ready_age']}\n"
                 "# HELP openclaw_channel_plugin_loaded 1 if the plugin is present in the most recent [gateway] ready list\n"
                 "# TYPE openclaw_channel_plugin_loaded gauge\n"
             )
@@ -218,6 +222,17 @@ let
                 channel_loaded[c] = 1.0 if c in plugin_list else 0.0
             plugins_total = float(int(presence["n"]))
 
+        d_ready = find_last(DISCORD_READY_RE, lines)
+        d_closed = find_last(DISCORD_CLOSED_RE, lines)
+        d_ready_ts = iso_to_epoch(d_ready["ts"]) if d_ready else 0.0
+        d_closed_ts = iso_to_epoch(d_closed["ts"]) if d_closed else 0.0
+        discord_ws_connected = (
+            1.0 if d_ready_ts >= d_closed_ts and d_ready_ts > 0 else 0.0
+        )
+        discord_ws_last_ready_age = (
+            max(0.0, now - d_ready_ts) if d_ready_ts else 0.0
+        )
+
         if ready:
             payload = dict(
                 plugins_total=plugins_total,
@@ -226,6 +241,8 @@ let
                 init_failures=float(fail_count),
                 parse_ok=1.0,
                 vm_start_ts=vm_start_ts,
+                discord_ws_connected=discord_ws_connected,
+                discord_ws_last_ready_age=discord_ws_last_ready_age,
             )
         else:
             payload = dict(
@@ -235,6 +252,8 @@ let
                 init_failures=float(fail_count),
                 parse_ok=0.0,
                 vm_start_ts=vm_start_ts,
+                discord_ws_connected=0.0,
+                discord_ws_last_ready_age=0.0,
             )
 
         write_metrics(payload, channel_loaded)
@@ -246,43 +265,85 @@ let
   '';
 in
 {
-  systemd.services.openclaw-canary = {
-    description = "OpenClaw gateway log → Prometheus textfile metrics";
+  options.services.openclawCanary = {
+    expectedChannels = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "discord"
+        "whatsapp"
+        "lobster"
+        "memory-qdrant"
+      ];
+      example = [
+        "discord"
+        "whatsapp"
+        "lobster"
+        "memory-qdrant"
+        "slack"
+      ];
+      description = ''
+        Channel plugins that must be present in OpenClaw's most-recent
+        plugin-list line for the gateway to be considered fully serving
+        its capability surface.  Each entry produces a
+        `openclaw_channel_plugin_loaded{channel="…"}` gauge that is
+        `1.0` when the plugin is in the list and `0.0` otherwise.
 
-    # ProtectSystem=strict makes ReadOnlyPaths the default; explicitly allow
-    # writing only into the textfile dir.
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${canaryScript}";
-      # Must run as `openclaw` because the log directory
-      # (/var/lib/openclaw/.openclaw/logs) is 0700 openclaw:openclaw — that
-      # permission mode is set by the VM itself via the virtiofs-shared state
-      # dir and can't be relaxed from the host.  Writes go to the
-      # 1777-mode textfile dir, so the prometheus user reads it just fine.
-      User = "openclaw";
-      Group = "openclaw";
-      UMask = "0022";
-      ReadOnlyPaths = [ "/var/lib/openclaw/.openclaw/logs" ];
-      ReadWritePaths = [ textfileDir ];
-      ProtectSystem = "strict";
-      ProtectHome = true;
-      PrivateTmp = true;
-      NoNewPrivileges = true;
-      RestrictSUIDSGID = true;
-      LockPersonality = true;
-      MemoryDenyWriteExecute = true;
-      SystemCallFilter = [ "@system-service" ];
+        Keep this in sync with the auto-enabled set under `plugins:` in
+        openclaw.json; a mismatch produces a false-positive alert, not
+        a silent failure.
+
+        Note on the 2026.5.x channels-vs-backends split: through
+        2026.4.x, `acpx` was a channel plugin and appeared on this
+        list.  In 2026.5.x it became an ACP backend (referenced by
+        `.acp.backend` in openclaw.json) and no longer appears in the
+        `[gateway] http server listening (…)` plugin list, so checking
+        for it produces a permanent false-positive.  The self-heal
+        spec §3 / §8c documents this transition.  Other plugins that
+        migrate from channel to backend should likewise be removed
+        from this list.
+      '';
     };
   };
 
-  systemd.timers.openclaw-canary = {
-    description = "Run the OpenClaw gateway canary every minute";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "1min";
-      Persistent = true;
-      Unit = "openclaw-canary.service";
+  config = {
+    systemd.services.openclaw-canary = {
+      description = "OpenClaw gateway log → Prometheus textfile metrics";
+
+      # ProtectSystem=strict makes ReadOnlyPaths the default; explicitly allow
+      # writing only into the textfile dir.
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${canaryScript}";
+        # Must run as `openclaw` because the log directory
+        # (/var/lib/openclaw/.openclaw/logs) is 0700 openclaw:openclaw — that
+        # permission mode is set by the VM itself via the virtiofs-shared state
+        # dir and can't be relaxed from the host.  Writes go to the
+        # 1777-mode textfile dir, so the prometheus user reads it just fine.
+        User = "openclaw";
+        Group = "openclaw";
+        UMask = "0022";
+        ReadOnlyPaths = [ "/var/lib/openclaw/.openclaw/logs" ];
+        ReadWritePaths = [ textfileDir ];
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallFilter = [ "@system-service" ];
+      };
+    };
+
+    systemd.timers.openclaw-canary = {
+      description = "Run the OpenClaw gateway canary every minute";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "1min";
+        Persistent = true;
+        Unit = "openclaw-canary.service";
+      };
     };
   };
 }

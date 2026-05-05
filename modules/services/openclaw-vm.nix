@@ -532,6 +532,8 @@ in
             #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
             #  - Schema migration: flatten tools.web.search.<provider>.apiKey → tools.web.search.apiKey
             #    (openclaw >=2026.3.28 rejects nested provider config as "Unrecognized key")
+            #  - Schema migration: openclaw 2026.5.x requires channels.<x>.streaming
+            #    to be an object; older configs may have a boolean. Coerce to {}.
             ${pkgs.jq}/bin/jq \
               --arg agent "${agentModel}" \
               --arg agentRef "vulcan/${agentModel}" \
@@ -547,6 +549,15 @@ in
                       .apiKey = ($s.apiKey // $nestedKey)
                       | del(.[$s.provider])
                     else . end
+                  )
+                else . end
+              | if (.channels // null) | type == "object" then
+                  .channels |= with_entries(
+                    .value |= (
+                      if (type == "object") and has("streaming") and (.streaming | type) != "object"
+                      then .streaming = {}
+                      else . end
+                    )
                   )
                 else . end
               | del(.agents.defaults.instructions)

@@ -574,6 +574,22 @@ in
 
             chmod 600 ${openclawDir}/openclaw.json
 
+            # ────────────────────────────────────────────────────────────────
+            # Auto-migrate runtime state on every boot. doctor is idempotent:
+            # if there's nothing to migrate, it's a no-op (~2 s). When openclaw
+            # bumps, this catches new schema/state migrations before any alert
+            # fires.  Failures are non-fatal — gateway still boots so we can
+            # diagnose.
+            # ────────────────────────────────────────────────────────────────
+            (
+              export OPENCLAW_STATE_DIR="${openclawDir}"
+              export OPENCLAW_CONFIG_PATH="${openclawDir}/openclaw.json"
+              export HOME="${stateDir}"
+              ${pkgs.coreutils}/bin/timeout 120s \
+                ${openclawPkg}/bin/openclaw doctor --fix --non-interactive --yes \
+                || ${pkgs.coreutils}/bin/echo "openclaw doctor --fix failed (non-fatal); see journal"
+            )
+
             # Set up mcporter config symlink if present
             if [ -d "${openclawDir}/.mcporter" ]; then
               ln -sfn ${openclawDir}/.mcporter ${stateDir}/.mcporter

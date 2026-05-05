@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# openclaw-self-heal aux helper: dump tail of a specific gateway log.
+# Usage: read_log_tail (err|out) <N-lines>
+# Path allowlist is hardcoded; no user input ever becomes a file path.
+set -euo pipefail
+WHICH="${1:-}"
+N="${2:-80}"
+case "$WHICH" in
+  err) LOG=/var/lib/openclaw/.openclaw/logs/gateway-vm.err.log ;;
+  out) LOG=/var/lib/openclaw/.openclaw/logs/gateway-vm.log ;;
+  *)   echo "usage: read_log_tail (err|out) <N>" >&2; exit 2 ;;
+esac
+case "$N" in
+  ''|*[!0-9]*) echo "N must be a positive integer" >&2; exit 2 ;;
+esac
+[ "$N" -gt 0 ] && [ "$N" -le 1000 ] || { echo "N out of range" >&2; exit 2; }
+exec /run/current-system/sw/bin/tail -n "$N" "$LOG"

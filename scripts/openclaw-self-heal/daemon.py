@@ -6,6 +6,10 @@ See docs/superpowers/specs/2026-05-05-openclaw-self-heal-design.md.
 __version__ = "0.1.0"
 
 import time
+import json
+import fcntl
+import os
+import pathlib
 
 ACTION_ALLOWLIST = ("restart_microvm", "doctor_fix", "prune_stale_plugin_deps")
 WEBHOOK_PORT = 9092
@@ -49,3 +53,30 @@ def next_attempt_n(incident: dict) -> int:
 
 def should_escalate(incident: dict) -> bool:
     return len(incident["attempts"]) >= 3
+
+
+def load_state(path):
+    p = pathlib.Path(path)
+    if not p.exists():
+        return {"active": {}, "history": []}
+    with p.open("r") as f:
+        fcntl.flock(f, fcntl.LOCK_SH)
+        try:
+            return json.load(f)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def save_state(path, state):
+    p = pathlib.Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    with tmp.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            json.dump(state, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    os.replace(tmp, p)

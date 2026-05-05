@@ -66,3 +66,17 @@ def test_correlation_separates_after_five_minutes_even_with_same_vm_ts():
     b = {"alert_name": "OpenClawDiscordWsDown", "vm_active_enter_ts": 1000,
          "starts_at": 5400}  # 400 s later, well past 5-min window
     assert daemon.correlation_key(a, window_s=300) != daemon.correlation_key(b, window_s=300)
+
+
+import json
+
+def test_state_load_returns_default_on_missing_file(tmp_path):
+    path = tmp_path / "incidents.json"
+    state = daemon.load_state(path)
+    assert state == {"active": {}, "history": []}
+
+def test_state_roundtrip(tmp_path):
+    path = tmp_path / "incidents.json"
+    state = {"active": {"k": {"x": 1}}, "history": [{"y": 2}]}
+    daemon.save_state(path, state)
+    assert daemon.load_state(path) == state

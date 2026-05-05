@@ -123,3 +123,57 @@ groups:
             No `openclaw_canary_parse_ok` sample in Prometheus for
             15 minutes.  Check node_exporter --collector.textfile
             and the canary systemd timer.
+
+      # B-floor signal — Discord WebSocket disconnected.
+      - alert: OpenClawDiscordWsDown
+        expr: openclaw_discord_ws_connected == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw Discord WebSocket disconnected for 3 minutes"
+          description: |
+            The most recent positive Discord ready event (client
+            initialized / logged in / WebSocket connection opened) is
+            older than the most recent negative event (websocket closed
+            / gateway error / reconnect scheduled (close|zombie) /
+            was-not-ready / channel exited / health-monitor restart),
+            and the 60s reconnect grace window has not produced a fresh
+            negative event.  Bot will not receive or send Discord
+            messages until the connection is restored.
+
+      # B-floor signal — gateway HTTP /health probe failing.
+      - alert: OpenClawHttpHealthDown
+        expr: probe_success{probe="openclaw-health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw HTTP /health probe failing for 1 minute"
+          description: |
+            blackbox_exporter cannot reach
+            `https://openclaw.vulcan.lan/health`.  The microVM may be
+            running but the gateway HTTP listener is wedged.
+
+      # Watchdog for the self-heal daemon itself — if this dies, the
+      # whole self-heal layer is offline.  Routes to a different
+      # service label so it is NOT looped back to its own webhook.
+      - alert: OpenClawSelfHealDown
+        expr: |
+          (time() - openclaw_self_heal_last_heartbeat_seconds) > 600
+          or absent(openclaw_self_heal_last_heartbeat_seconds)
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+          service: openclaw-self-heal
+        annotations:
+          summary: "openclaw-self-heal daemon hasn't heartbeat in >10 minutes"
+          description: |
+            The self-heal daemon is the watchdog; if it dies, nothing
+            else will.  Investigate openclaw-self-heal.service on
+            vulcan.

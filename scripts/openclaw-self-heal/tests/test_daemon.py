@@ -93,3 +93,33 @@ def test_action_map_covers_expected_alerts():
         "OpenClawPluginInitFailuresPresent", "OpenClawMicroVMDown",
     ):
         assert a in daemon.ACTION_MAP
+
+
+def test_run_action_invokes_sudo_with_exact_path(monkeypatch):
+    calls = []
+    def fake_run(cmd, capture_output, text, timeout):
+        calls.append(cmd)
+        class R: returncode = 0; stdout = '{"ok": true}'; stderr = ""
+        return R()
+    monkeypatch.setattr(daemon.subprocess, "run", fake_run)
+    result = daemon.run_action("restart_microvm")
+    assert calls == [[
+        "sudo", "-n",
+        "/etc/nixos/scripts/openclaw-self-heal/actions/restart_microvm",
+    ]]
+    assert result["ok"] is True
+
+def test_run_action_rejects_non_allowlisted(monkeypatch):
+    monkeypatch.setattr(daemon.subprocess, "run",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call")))
+    with pytest.raises(daemon.ActionRejectedError):
+        daemon.run_action("rm_rf_slash")
+
+def test_run_action_handles_nonjson_output(monkeypatch):
+    def fake_run(cmd, capture_output, text, timeout):
+        class R: returncode = 0; stdout = "not json"; stderr = ""
+        return R()
+    monkeypatch.setattr(daemon.subprocess, "run", fake_run)
+    result = daemon.run_action("restart_microvm")
+    assert result["ok"] is False
+    assert "non-json" in result["notes"].lower()

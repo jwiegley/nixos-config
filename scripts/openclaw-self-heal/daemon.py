@@ -10,6 +10,7 @@ import json
 import fcntl
 import os
 import pathlib
+import subprocess
 
 ACTION_ALLOWLIST = ("restart_microvm", "doctor_fix", "prune_stale_plugin_deps")
 WEBHOOK_PORT = 9092
@@ -79,6 +80,24 @@ ACTION_MAP = {
 
 def first_attempt_action(alert_name: str) -> str:
     return ACTION_MAP.get(alert_name, "restart_microvm")
+
+
+ACTIONS_DIR = "/etc/nixos/scripts/openclaw-self-heal/actions"
+
+
+def run_action(name: str, timeout_s: int = 240) -> dict:
+    validate_action(name)
+    cmd = ["sudo", "-n", f"{ACTIONS_DIR}/{name}"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "notes": "action timed out", "duration_s": timeout_s}
+    try:
+        parsed = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+    except (json.JSONDecodeError, IndexError):
+        return {"ok": False, "notes": f"non-json action output (rc={r.returncode}): {r.stderr[-200:]}"}
+    parsed.setdefault("ok", r.returncode == 0)
+    return parsed
 
 
 def save_state(path, state):

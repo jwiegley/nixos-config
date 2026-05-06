@@ -33,6 +33,8 @@ Already done while writing this plan:
 - The microVM's iptables rules cover port 443 (`dnatPorts` list at line 119 of `openclaw-microvm.nix` includes 443) → HTTPS to `trader.vulcan.lan` is reachable from inside the VM.
 - Trader is reachable on host: `curl -sk https://trader.vulcan.lan/api/quote/AAPL` returns 200 with a JSON body.
 
+**Deviation from the spec:** the spec mentions `httpx` as a candidate HTTP client. The plan uses `requests` instead because `financialPython` already ships `ps.requests` and does not ship `httpx`; using `requests` avoids modifying `openclaw-microvm.nix` to add a new dep. Same semantics for our use (sync HTTP, JSON, timeouts, configurable certs).
+
 **Confirm before starting Task 1:**
 
 - [ ] Run `curl -sk https://trader.vulcan.lan/api/quote/AAPL | head -c 200` — expect a JSON body containing `"symbol":"AAPL"` and a numeric `"price"`.
@@ -147,24 +149,17 @@ Run: `python3 -m py_compile /etc/nixos/scripts/stock-trader-mcp.py`
 
 Expected: exit code 0, no output.
 
-- [ ] **Step 3: Verify `_request` works against live stock-trader.**
+- [ ] **Step 3: (Optional) Verify the script's HTTP path against live stock-trader.**
 
-Run (from the host, as any user; this hits the LAN-facing nginx vhost):
+The script imports `mcp.server.fastmcp` at module top level, which the host's system Python typically does not have (`mcp` lives in `financialPython`, the VM's Python). Expect this step to fail on the host. The real connectivity test happens inside the VM after Task 5.
+
+If you want a host-side connectivity sanity check that does not require importing the script:
 
 ```
-python3 -c '
-import sys; sys.path.insert(0, "/etc/nixos/scripts")
-import importlib.util
-spec = importlib.util.spec_from_file_location("st", "/etc/nixos/scripts/stock-trader-mcp.py")
-m = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(m)
-print(m._request("GET", "/api/quote/AAPL")[:300])
-'
+curl -sk https://trader.vulcan.lan/api/quote/AAPL | head -c 200
 ```
 
-Note: this uses the host's Python, which may not have `mcp` installed. If `from mcp.server.fastmcp import FastMCP` fails, skip this step — the equivalent verification happens after deploy in Task 3 via mcporter inside the VM, which uses `financialPython`.
-
-Expected (when the import works): a JSON string starting with `{"symbol": "AAPL", "price":` followed by a real number.
+Expected: a JSON string starting with `{"symbol":"AAPL","price":` followed by a real number. This proves stock-trader is up; it does not exercise the wrapper.
 
 - [ ] **Step 4: Make the script executable.**
 
@@ -442,7 +437,7 @@ Locate the existing stanza for `drafts` (search for `.mcpServers["drafts"]` — 
               chmod 600 "$MCPORTER_JSON"
 ```
 
-(The `STOCK_TRADER_BASE_URL` env var is set both in the wrapper script and in the mcporter env block; one wins — we match the wrapper's value here for documentation, but mcporter's env entry is what mcporter sees if a debugger ever inspects the JSON. Keeping both consistent is the goal.)
+(`STOCK_TRADER_BASE_URL` is set in both places — the wrapper script's `export` always wins at runtime because it runs after mcporter spawns the child. The duplicate in the mcporter env block exists only as documentation: anyone inspecting `mcporter.json` can see the URL the wrapper uses. Keep both values in sync if you ever change the URL.)
 
 - [ ] **Step 3: Format and verify the Nix file builds.**
 
@@ -507,53 +502,39 @@ If `stock-trader` is missing: the jq stanza was skipped (the `if [ -f "$MCPORTER
 
 - [ ] **Step 5: Confirm OpenClaw discovers the tools.**
 
-The most reliable check is via OpenClaw's gateway log. Run:
+Check the gateway log for evidence mcporter loaded the new server. Try the file log first; fall back to `journalctl` if the file path differs in your OpenClaw version:
 
 ```
 sudo grep -E 'stock-trader|get_quote|analyze_options' \
-  /var/lib/openclaw/.openclaw/logs/gateway-vm.log | tail -20
+  /var/lib/openclaw/.openclaw/logs/gateway-vm.log 2>/dev/null | tail -20
+
+# Fallback if the file isn't there:
+sudo journalctl -u microvm@openclaw -n 200 --no-pager | grep -E 'stock-trader|get_quote'
 ```
 
 Expected: lines indicating mcporter loaded the `stock-trader` server and registered its tools (exact format depends on the OpenClaw version; lines containing "registered MCP tool" or "loaded MCP server stock-trader" are positive signals).
 
-If the log shows the server but no tools, run:
+If the server loads but no tools register, check the err log:
 
 ```
-sudo grep -i 'stock-trader' /var/lib/openclaw/.openclaw/logs/gateway-vm.err.log | tail -20
+sudo grep -i 'stock-trader' /var/lib/openclaw/.openclaw/logs/gateway-vm.err.log 2>/dev/null | tail -20
+sudo journalctl -u microvm@openclaw -n 200 --no-pager | grep -iE 'stock-trader|ImportError|Traceback'
 ```
 
-A common cause is a Python import error (e.g., `mcp` missing) — in that case, the wrapper script's exec fails and mcporter logs the child exit code. Fix and `systemctl restart microvm@openclaw`.
+A common cause is a Python import error (e.g., `mcp` missing from `financialPython`) — the wrapper's exec fails and mcporter logs the child exit code. Fix and `systemctl restart microvm@openclaw`.
 
-- [ ] **Step 6: Direct functional test from inside the VM.**
+- [ ] **Step 6: Confirm the VM can reach trader.vulcan.lan.**
 
-Open a shell in the VM:
-
-```
-sudo microvm -s openclaw
-```
-
-Then in the VM, as the openclaw user:
+Smoke-test the network path from inside the VM (no MCP protocol drive needed — we're just checking that the wrapper *would* succeed):
 
 ```
-sudo -u openclaw env STOCK_TRADER_BASE_URL=https://trader.vulcan.lan \
-  /nix/var/nix/profiles/system/sw/bin/python3 \
-  /var/lib/openclaw/.openclaw/.mcporter/... # path varies; alternative below
-```
-
-Simpler alternative — exercise the same wrapper that mcporter spawns:
-
-```
-sudo cat /var/lib/openclaw/.openclaw/.mcporter/mcporter.json | jq -r '.mcpServers["stock-trader"].command'
-```
-
-This prints the path of the `stock-trader-mcp` wrapper (a `/nix/store/.../bin/stock-trader-mcp` path). To smoke-test the underlying call without driving the MCP protocol, run from inside the VM:
-
-```
-sudo -u openclaw /run/current-system/sw/bin/curl -sS \
+sudo machinectl shell openclaw.host /run/current-system/sw/bin/curl -sS \
   https://trader.vulcan.lan/api/quote/AAPL | head -c 200
 ```
 
-Expected: a JSON response containing `"symbol":"AAPL"` and a numeric `"price"`. This confirms the VM can reach trader.vulcan.lan over the bridge gateway with TLS validation.
+(If `machinectl shell` doesn't work for the microvm flavor in use, an equivalent is `sudo microvm -s openclaw` to attach a console, then `curl -sS https://trader.vulcan.lan/api/quote/AAPL | head -c 200` inside.)
+
+Expected: a JSON response containing `"symbol":"AAPL"` and a numeric `"price"`. This confirms the VM can resolve `trader.vulcan.lan`, route via the bridge gateway, and validate TLS against Vulcan Step-CA. If this fails but the host-side `curl` succeeds, suspect an iptables/DNAT issue rather than a stock-trader issue.
 
 - [ ] **Step 7: No commit.** This task changes runtime state only.
 

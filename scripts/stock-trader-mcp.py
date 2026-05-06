@@ -82,5 +82,75 @@ def get_quote(symbol: str) -> str:
     return _request("GET", f"/api/quote/{symbol.upper()}")
 
 
+@mcp.tool()
+def get_price_history(
+    symbol: str,
+    period: str = "1mo",
+    interval: str = "1d",
+) -> str:
+    """Fetch historical price bars for a US stock.
+
+    `symbol` is a US ticker like ``AAPL``. `period` accepts yfinance-style
+    strings: ``1d``, ``5d``, ``1mo``, ``3mo``, ``6mo``, ``1y``, ``2y``,
+    ``5y``, ``10y``, ``ytd``, ``max``. `interval` accepts ``1m``, ``5m``,
+    ``15m``, ``30m``, ``1h``, ``1d``, ``1wk``, ``1mo``.
+
+    Returns JSON with an OHLCV list under `data`.
+    """
+    return _request(
+        "GET",
+        f"/api/history/{symbol.upper()}",
+        params={"period": period, "interval": interval},
+    )
+
+
+@mcp.tool()
+def get_technical_analysis(symbol: str, timeframes: str = "1d") -> str:
+    """Run a technical analysis report for a US stock.
+
+    `symbol` is a US ticker like ``AAPL``. `timeframes` is a
+    comma-separated list of bar sizes such as ``1h,1d,1wk``.
+
+    Returns JSON with consensus trend/strength/confidence, per-timeframe
+    indicator readings, entry zones, price targets, and a stop-loss.
+    """
+    return _request(
+        "GET",
+        f"/api/analysis/technical/{symbol.upper()}",
+        params={"timeframes": timeframes},
+    )
+
+
+@mcp.tool()
+def get_news_sentiment(symbol: str, hours_back: int = 24) -> str:
+    """Fetch news sentiment, themes, and headlines for a US stock.
+
+    `symbol` is a US ticker like ``AAPL``. `hours_back` (1-168) is the
+    look-back window. Defaults to 24 (last day).
+
+    Returns JSON with overall sentiment score, article count, themes,
+    top headlines, upcoming catalysts, and risk factors.
+    """
+    return _request(
+        "GET",
+        f"/api/analysis/sentiment/{symbol.upper()}",
+        params={"hours_back": hours_back},
+    )
+
+
+@mcp.tool()
+def check_data_source_status() -> str:
+    """Check whether stock-trader's primary Schwab data source is live.
+
+    Use this when a quote looks stale or sentiment is empty — it tells
+    you whether stock-trader is using live Schwab data or a yfinance
+    fallback.
+
+    Returns JSON with `configured`, `connected`, `expires_at`,
+    `refresh_expires_at`, `days_remaining`, `stale`, and `expired`.
+    """
+    return _request("GET", "/api/schwab/status")
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

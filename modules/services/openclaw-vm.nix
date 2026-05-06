@@ -54,6 +54,16 @@ let
     exec ${financialPython}/bin/python3 ${emailMcpScript}
   '';
 
+  # Wrapper for the stock-trader MCP server.  Sets the base URL so the
+  # script can be tested elsewhere by overriding the env var, then
+  # exec's the Python MCP server with financialPython's interpreter
+  # (which already provides `mcp` and `requests`).
+  stockTraderMcpScript = ../../scripts/stock-trader-mcp.py;
+  stockTraderMcpServer = pkgs.writeShellScript "stock-trader-mcp" ''
+    export STOCK_TRADER_BASE_URL="https://trader.vulcan.lan"
+    exec ${financialPython}/bin/python3 ${stockTraderMcpScript}
+  '';
+
   # TOOLS.MD content sections — kept as writeText derivations so they don't
   # affect Nix's indentation stripping of the preStart ''...'' block.
   toolsSherlockMd = pkgs.writeText "tools-sherlock.md" ''
@@ -654,6 +664,23 @@ in
                 .mcpServers["drafts"] = {
                   "url": "https://drafts-mcp.vulcan.lan/sse",
                   "description": "Create and manage Drafts notes (Drafts app on hera)"
+                }
+              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
+              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
+              chmod 600 "$MCPORTER_JSON"
+
+              # ──────────────────────────────────────────────────────────────
+              # Inject stock-trader MCP server (local stdio, talks to
+              # https://trader.vulcan.lan via the bridge gateway DNAT)
+              # ──────────────────────────────────────────────────────────────
+              ${pkgs.jq}/bin/jq --arg cmd "${stockTraderMcpServer}" '
+                .mcpServers["stock-trader"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "env": {
+                    "STOCK_TRADER_BASE_URL": "https://trader.vulcan.lan"
+                  },
+                  "description": "Stock quotes, technical analysis, news sentiment, options strategies, and risk assessment via the stock-trader service"
                 }
               ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
               mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"

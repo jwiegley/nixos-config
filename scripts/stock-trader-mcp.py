@@ -152,5 +152,79 @@ def check_data_source_status() -> str:
     return _request("GET", "/api/schwab/status")
 
 
+@mcp.tool()
+def scan_market(
+    preset: str = "oversold",
+    min_price: float = 10.0,
+    max_price: float = 500.0,
+    limit: int = 10,
+) -> str:
+    """Scan the market for tickers matching a preset.
+
+    `preset` is one of stock-trader's named scan presets (e.g.
+    ``oversold``, ``momentum``, ``breakout``). `min_price`/`max_price`
+    bracket the share-price range. `limit` caps the result count.
+
+    Returns JSON with `preset`, `count`, and a `results` list — each
+    entry has the ticker plus the preset's diagnostic fields.
+    """
+    return _request(
+        "GET",
+        "/api/scan",
+        params={
+            "preset": preset,
+            "min_price": min_price,
+            "max_price": max_price,
+            "limit": limit,
+        },
+    )
+
+
+@mcp.tool()
+def analyze_options(
+    symbol: str,
+    outlook: str = "neutral",
+    timeframe_days: int = 30,
+) -> str:
+    """Recommend an options strategy for a US stock given an outlook.
+
+    `symbol` is a US ticker like ``AAPL``. `outlook` is one of
+    ``bullish``, ``bearish``, ``neutral``. `timeframe_days` is the
+    expiry horizon in days (1-365).
+
+    Returns JSON with the chosen `outlook` and a `recommendations` list
+    of strategies (calls, puts, spreads, etc.) with strikes, expiries,
+    and Greeks.
+    """
+    return _request(
+        "POST",
+        f"/api/analysis/options/{symbol.upper()}",
+        json_body={"outlook": outlook, "timeframe_days": timeframe_days},
+    )
+
+
+@mcp.tool()
+def assess_trade_risk(
+    entry: float,
+    stop: float,
+    target: float,
+    symbol: str | None = None,
+) -> str:
+    """Compute position sizing and risk/reward for a candidate trade.
+
+    `entry` is the planned entry price. `stop` is the protective stop.
+    `target` is the price target. `symbol` is optional and only affects
+    diagnostic context — the math is symbol-agnostic.
+
+    Returns JSON with `is_acceptable`, `dollar_risk`, `percentage_risk`,
+    `risk_reward_ratio`, `recommended_size` (shares), `position_cost`,
+    and any `warnings`.
+    """
+    body: dict[str, Any] = {"entry": entry, "stop": stop, "target": target}
+    if symbol:
+        body["symbol"] = symbol.upper()
+    return _request("POST", "/api/risk/assess", json_body=body)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

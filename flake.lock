@@ -2134,11 +2134,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1778094204,
-        "narHash": "sha256-ffKm/Y4hyRr1Da2JLb1Tgz97FaU3ZXVhpmTsorbrfq0=",
+        "lastModified": 1778165912,
+        "narHash": "sha256-zMMLwm4nCFTTjmbDHT7btnyJDh0IGcboUYjXdJ5rw/E=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "4cec800067a0e884d04c3529bca481fdd2d65cf3",
+        "rev": "8ff1896efe8e98262dbea505c123e8cf80eaaa4d",
         "type": "github"
       },
       "original": {
@@ -2155,11 +2155,11 @@
         "spectrum": "spectrum"
       },
       "locked": {
-        "lastModified": 1776340739,
-        "narHash": "sha256-s4FDictJlPtY6Shd6scG5hgrDMiHth09+svtvTA5NLA=",
+        "lastModified": 1778163394,
+        "narHash": "sha256-/onkp7olLPDo6GSIJRl3KEnkO0Wk73UbIz1S8bDtKiU=",
         "owner": "astro",
         "repo": "microvm.nix",
-        "rev": "2f2f62fdfdca2750e3399f66bd03986ab967e5ca",
+        "rev": "f614b687f05f61b98186e16771f9f30d21460f69",
         "type": "github"
       },
       "original": {
@@ -2187,11 +2187,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1778018043,
-        "narHash": "sha256-JQqiyUu9SN5xnS5YFlIB4CqHzWScDTi/HNeovR9z6U0=",
+        "lastModified": 1778174388,
+        "narHash": "sha256-KS8JAOA3oQ4BmfVsVYu0vddu1ST8A5MhmcqBTr/58v8=",
         "ref": "refs/heads/main",
-        "rev": "d7938b5d470d00e68bdb158fc7ed835f069f96d1",
-        "revCount": 1734,
+        "rev": "81272b8965ad6156a1c9ee6141ce8acd5695e45f",
+        "revCount": 1739,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2724,11 +2724,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1777673416,
-        "narHash": "sha256-5c2POKPOjU40Kh0MirOdScBLG0bu9TAuPYAtPRNZMBs=",
+        "lastModified": 1778003029,
+        "narHash": "sha256-q/nkKLDtHIyLjZpKhWk3cSK5IYsFqtMd6UtXF3ddjgA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "26ef669cffa904b6f6832ab57b77892a37c1a671",
+        "rev": "0c88e1f2bdb93d5999019e99cb0e61e1fe2af4c5",
         "type": "github"
       },
       "original": {
@@ -2838,11 +2838,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778014268,
-        "narHash": "sha256-3NdqED9uj/khbmWHg0V7r0fWHsmI+H+SDdhYk7jp2yI=",
+        "lastModified": 1778106206,
+        "narHash": "sha256-eoAlhU5Afi9AMCSTGzJcQEyDa3Tq1fteViJBrQDyQoE=",
         "ref": "refs/heads/main",
-        "rev": "0bbf326387030a8b018a47a89b090b75976872a8",
-        "revCount": 270,
+        "rev": "fb57a07b2d50ae2eb110b9636113214da1c756c5",
+        "revCount": 272,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },
@@ -2875,11 +2875,11 @@
     },
     "quadlet-nix": {
       "locked": {
-        "lastModified": 1770606362,
-        "narHash": "sha256-6pOOPOQr4rtgShBtkLkSDTql5rRqcUgTRz8O+axK2eM=",
+        "lastModified": 1778106878,
+        "narHash": "sha256-teDyx9pNOkWTLdoX0FQQ0rvk9QPmryKt638eqXBO9Os=",
         "owner": "SEIAROTg",
         "repo": "quadlet-nix",
-        "rev": "f4ae60350ea6015b6560cbd0e1f11f7e195c993d",
+        "rev": "5e70168272312c0f0d915a37336d95af758146b6",
         "type": "github"
       },
       "original": {

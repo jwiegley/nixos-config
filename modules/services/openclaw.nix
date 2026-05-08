@@ -162,7 +162,6 @@ in
       InaccessiblePaths = [
         "/tank"
         "/secrets"
-        "-/gdrive"
         "-/usb"
         "-/mnt"
         "-/srv"

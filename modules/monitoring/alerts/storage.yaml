@@ -59,7 +59,7 @@ groups:
           description: "ZFS pool {{ $labels.pool }} is at {{ $value }}% capacity"
 
       - alert: ZFSPoolFreeSpaceLow
-        expr: zfs_dataset_available_bytes{name=~"^(tank|gdrive)$",type="filesystem"} < 500 * 1024 * 1024 * 1024
+        expr: zfs_dataset_available_bytes{name=~"^tank$",type="filesystem"} < 500 * 1024 * 1024 * 1024
         for: 1h
         labels:
           severity: warning

@@ -86,18 +86,6 @@ let
       mountpoint = "/tank/Media";
     }
     {
-      name = "gdrive/Models";
-      mountpoint = "/gdrive/Models";
-    }
-    {
-      name = "gdrive/Models/HuggingFace";
-      mountpoint = "/gdrive/Models/HuggingFace";
-    }
-    {
-      name = "gdrive/Models/Llama.cpp";
-      mountpoint = "/gdrive/Models/Llama.cpp";
-    }
-    {
       name = "tank/Movies";
       mountpoint = "/tank/Movies";
     }

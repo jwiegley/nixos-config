@@ -14,7 +14,6 @@
       forceImportRoot = false;
       extraPools = [
         "tank"
-        "gdrive"
       ];
       # Don't request encryption credentials during boot
       # Encrypted datasets with canmount=noauto must be loaded manually
@@ -37,11 +36,9 @@
   systemd.services.zfs-mount = {
     after = [
       "zfs-import-tank.service"
-      "zfs-import-gdrive.service"
     ];
     requires = [
       "zfs-import-tank.service"
-      "zfs-import-gdrive.service"
     ];
   };
 
@@ -51,7 +48,6 @@
       interval = "monthly";
       pools = [
         "tank"
-        "gdrive"
       ];
     };
   };
@@ -64,11 +60,6 @@
         use_template = [ "archival" ];
         recursive = true;
         process_children_only = true;
-      };
-
-      gdrive = {
-        use_template = [ "archival" ];
-        recursive = true;
       };
 
       "tank/Downloads".use_template = [ "active" ];

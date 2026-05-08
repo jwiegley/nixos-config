@@ -46,6 +46,7 @@
     ./litellm-availability-alerts.nix
     ./aide-metrics.nix
     ./openclaw-canary.nix
+    ./openclaw-mcporter-check.nix
 
     # External systems monitoring
     ./opnsense-monitoring.nix

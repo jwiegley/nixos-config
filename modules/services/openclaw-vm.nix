@@ -64,6 +64,37 @@ let
     exec ${financialPython}/bin/python3 ${stockTraderMcpScript}
   '';
 
+  # Stdio bridge from mcporter to Home Assistant's streamable HTTP MCP
+  # server.  We can't connect mcporter directly to HA's SSE/HTTP MCP
+  # endpoint because mcporter 0.10.1 always probes OAuth metadata and
+  # then attempts RFC 7591 dynamic client registration — which HA does
+  # not implement, so the connection fails with "Incompatible auth
+  # server: does not support dynamic client registration".  Static
+  # `Authorization` headers, the `bearerToken` convenience field, and
+  # the explicit `transport: "http"` setting all fail to prevent this
+  # auto-OAuth behaviour.
+  #
+  # `mcp-proxy` is the upstream-recommended bridge: it runs as a stdio
+  # client to mcporter and as a streamable HTTP client to HA, with a
+  # static Bearer token passed via --headers.  The token is read from
+  # the staged secret at startup so it never appears in the unit's env
+  # or the Nix store.  It does briefly appear in argv of the spawned
+  # mcp-proxy process (visible via /proc/<pid>/cmdline to the openclaw
+  # user only); this is an accepted trade-off to keep the wrapper thin.
+  homeAssistantMcpBridge = pkgs.writeShellScript "mcp-proxy-ha-bridge" ''
+    set -eu
+    TOKEN_FILE="/run/openclaw-secrets/home-assistant-token"
+    if [ ! -r "$TOKEN_FILE" ]; then
+      echo "mcp-proxy-ha-bridge: token not readable at $TOKEN_FILE" >&2
+      exit 1
+    fi
+    exec ${pkgs.mcp-proxy}/bin/mcp-proxy \
+      --transport=streamablehttp \
+      --stateless \
+      --headers Authorization "Bearer $(cat "$TOKEN_FILE")" \
+      "http://127.0.0.1:8123/api/mcp"
+  '';
+
   # TOOLS.MD content sections — kept as writeText derivations so they don't
   # affect Nix's indentation stripping of the preStart ''...'' block.
   toolsSherlockMd = pkgs.writeText "tools-sherlock.md" ''
@@ -633,11 +664,22 @@ in
             fi
 
             # ────────────────────────────────────────────────────────────────
-            # Inject email-contacts MCP server into mcporter.json
+            # Inject managed MCP server entries into mcporter.json
             # ────────────────────────────────────────────────────────────────
+            # Helper: apply a jq filter to mcporter.json in place at mode 600.
+            # Args are passed verbatim to jq (so callers supply --arg/--rawfile
+            # and the filter expression). Refactored from three near-identical
+            # mv/chmod tails per the 2026-05-05 review (mem 1776).
             MCPORTER_JSON="${openclawDir}/.mcporter/mcporter.json"
+            apply_mcporter_jq() {
+              ${pkgs.jq}/bin/jq "$@" "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp" \
+                && mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON" \
+                && chmod 600 "$MCPORTER_JSON"
+            }
+
             if [ -f "$MCPORTER_JSON" ]; then
-              ${pkgs.jq}/bin/jq --arg cmd "${emailMcpServer}" '
+              # Email + contacts (local stdio)
+              apply_mcporter_jq --arg cmd "${emailMcpServer}" '
                 .mcpServers["email-contacts"] = {
                   "command": $cmd,
                   "args": [],
@@ -653,27 +695,19 @@ in
                   },
                   "description": "Email (IMAP read/search, SMTP send) and contact lookup"
                 }
-              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
-              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
-              chmod 600 "$MCPORTER_JSON"
+              '
 
-              # ──────────────────────────────────────────────────────────────
-              # Inject Drafts MCP server (remote, on hera via nginx proxy)
-              # ──────────────────────────────────────────────────────────────
-              ${pkgs.jq}/bin/jq '
+              # Drafts (remote SSE on hera)
+              apply_mcporter_jq '
                 .mcpServers["drafts"] = {
                   "url": "https://drafts-mcp.vulcan.lan/sse",
                   "description": "Create and manage Drafts notes (Drafts app on hera)"
                 }
-              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
-              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
-              chmod 600 "$MCPORTER_JSON"
+              '
 
-              # ──────────────────────────────────────────────────────────────
-              # Inject stock-trader MCP server (local stdio, talks to
-              # https://trader.vulcan.lan via the bridge gateway DNAT)
-              # ──────────────────────────────────────────────────────────────
-              ${pkgs.jq}/bin/jq --arg cmd "${stockTraderMcpServer}" '
+              # Stock-trader (local stdio, talks to https://trader.vulcan.lan
+              # via the bridge gateway DNAT)
+              apply_mcporter_jq --arg cmd "${stockTraderMcpServer}" '
                 .mcpServers["stock-trader"] = {
                   "command": $cmd,
                   "args": [],
@@ -682,9 +716,26 @@ in
                   },
                   "description": "Stock quotes, technical analysis, news sentiment, options strategies, and risk assessment via the stock-trader service"
                 }
-              ' "$MCPORTER_JSON" > "$MCPORTER_JSON.tmp"
-              mv "$MCPORTER_JSON.tmp" "$MCPORTER_JSON"
-              chmod 600 "$MCPORTER_JSON"
+              '
+
+              # Home Assistant via mcp-proxy stdio bridge.
+              #
+              # mcporter cannot talk directly to HA's MCP endpoint because
+              # mcporter 0.10.1 auto-probes OAuth metadata for any HTTP/SSE
+              # transport and tries RFC 7591 dynamic client registration,
+              # which HA does not support.  Setting transport=http,
+              # bearerToken, headers.Authorization, and auth=none all fail
+              # to suppress this — mcporter ignores them once OAuth is
+              # detected.  See homeAssistantMcpBridge above for the bridge
+              # script that reads the staged token at spawn time and execs
+              # mcp-proxy with --transport=streamablehttp + Bearer header.
+              apply_mcporter_jq --arg cmd "${homeAssistantMcpBridge}" '
+                .mcpServers["home-assistant"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "description": "Home Assistant (state, services, automation, devices) via mcp-proxy stdio bridge to /api/mcp with static long-lived access token"
+                }
+              '
             fi
 
             # ────────────────────────────────────────────────────────────────

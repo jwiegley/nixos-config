@@ -177,3 +177,66 @@ groups:
             The self-heal daemon is the watchdog; if it dies, nothing
             else will.  Investigate openclaw-self-heal.service on
             vulcan.
+
+      # ─────────────────────────────────────────────────────────────────
+      # mcporter / Home Assistant integration
+      # ─────────────────────────────────────────────────────────────────
+      # The HA MCP integration is the most fragile mcporter entry because
+      # HA's /mcp_server/sse endpoint advertises OAuth metadata that
+      # mcporter then tries to satisfy via RFC 7591 dynamic client
+      # registration — which HA does not support.  We pin transport=http
+      # against /api/mcp with a static long-lived access token; this
+      # alert fires if anything in that chain breaks.
+      - alert: OpenClawMcporterHaDown
+        expr: openclaw_mcporter_ha_auth_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: integration
+          service: openclaw
+        annotations:
+          summary: "OpenClaw HA MCP auth has been failing for 5 minutes"
+          description: |
+            HA's `/api/mcp` endpoint is rejecting the staged Bearer
+            token, or the home-assistant entry in mcporter.json is
+            structurally invalid.  Common causes: token revoked or
+            rotated in HA UI without updating SOPS; preStart didn't
+            re-inject the entry (mcporter.json reverted to SSE
+            transport); HA mcp_server integration disabled.
+            Check `openclaw_mcporter_server_ok{name="home-assistant"}`,
+            `openclaw_mcporter_ha_token_present`,
+            `openclaw_mcporter_ha_endpoint_reachable`.
+
+      - alert: OpenClawMcporterServerStale
+        expr: openclaw_mcporter_server_ok{name!="home-assistant"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: integration
+          service: openclaw
+        annotations:
+          summary: "OpenClaw mcporter entry {{ $labels.name }} structurally invalid for 15m"
+          description: |
+            The mcporter.json entry for `{{ $labels.name }}` is missing
+            or malformed.  This usually means the openclaw service's
+            preStart did not run (or did not finish) since the last
+            microvm restart.  Manual fix:
+            `sudo systemctl restart microvm@openclaw.service`.
+
+      - alert: OpenClawMcporterCheckStale
+        expr: |
+          (time() - openclaw_mcporter_check_last_run_timestamp_seconds) > 1200
+          or absent(openclaw_mcporter_check_last_run_timestamp_seconds)
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "openclaw-mcporter-check has not run in >20 minutes"
+          description: |
+            The mcporter health metric exporter (timer
+            openclaw-mcporter-check.timer) is not firing or its script
+            is failing.  Without it, `openclaw_mcporter_*` metrics go
+            stale and the HaDown / ServerStale alerts cannot fire.
+            Check `systemctl status openclaw-mcporter-check.service`.

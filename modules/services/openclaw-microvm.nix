@@ -206,35 +206,60 @@ in
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
-    restartUnits = [ "microvm@openclaw.service" ];
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
   };
 
   sops.secrets."openclaw/gcp-oauth-keys" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
-    restartUnits = [ "microvm@openclaw.service" ];
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
   };
 
   sops.secrets."openclaw/claude-code-token" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
-    restartUnits = [ "microvm@openclaw.service" ];
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
   };
 
   sops.secrets."openclaw/perplexity-api-key" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
-    restartUnits = [ "microvm@openclaw.service" ];
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
+  };
+
+  sops.secrets."openclaw/home-assistant-token" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
   };
 
   sops.secrets."openclaw/org-db-password" = {
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
-    restartUnits = [ "microvm@openclaw.service" ];
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
   };
 
   # ============================================================================
@@ -286,6 +311,10 @@ in
     {
       assertion = config.sops.secrets ? "openclaw/perplexity-api-key";
       message = "OpenClaw requires SOPS secret 'openclaw/perplexity-api-key'";
+    }
+    {
+      assertion = config.sops.secrets ? "openclaw/home-assistant-token";
+      message = "OpenClaw requires SOPS secret 'openclaw/home-assistant-token' (long-lived access token for Home Assistant MCP server)";
     }
   ];
 
@@ -527,6 +556,15 @@ in
       chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/perplexity-api-key"
       chmod 0400 "${secretsStagingDir}/perplexity-api-key"
       echo "Perplexity API key staged"
+
+      # Stage Home Assistant long-lived access token (used by mcporter
+      # home-assistant entry to authenticate against /api/mcp).
+      cp -f "${
+        config.sops.secrets."openclaw/home-assistant-token".path
+      }" "${secretsStagingDir}/home-assistant-token"
+      chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/home-assistant-token"
+      chmod 0400 "${secretsStagingDir}/home-assistant-token"
+      echo "Home Assistant token staged"
 
       # Stage org database password for Sherlock
       ORG_DB_PASS_SRC="${config.sops.secrets."openclaw/org-db-password".path}"

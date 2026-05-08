@@ -14,7 +14,12 @@ import subprocess
 import re
 import urllib.request
 
-ACTION_ALLOWLIST = ("restart_microvm", "doctor_fix", "prune_stale_plugin_deps")
+ACTION_ALLOWLIST = (
+    "restart_microvm",
+    "doctor_fix",
+    "prune_stale_plugin_deps",
+    "restage_secrets",
+)
 WEBHOOK_PORT = 9092
 
 
@@ -92,6 +97,13 @@ ACTION_MAP = {
     "OpenClawDiscordPluginMissing":      "doctor_fix",
     "OpenClawPluginInitFailuresPresent": "doctor_fix",
     "OpenClawMicroVMDown":               "wait_60s",
+    # mcporter / Home Assistant integration: re-stage SOPS secrets and
+    # bounce the microvm so its preStart re-injects the home-assistant
+    # entry from the freshly staged token.
+    "OpenClawMcporterHaDown":            "restage_secrets",
+    # Other mcporter entries: structural drift means preStart did not
+    # finish.  A plain microvm restart re-runs preStart.
+    "OpenClawMcporterServerStale":       "restart_microvm",
 }
 
 

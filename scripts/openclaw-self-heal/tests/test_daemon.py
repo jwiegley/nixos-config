@@ -3,9 +3,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import daemon
 import pytest
 
-def test_allowlist_is_exactly_the_three_authorized_actions():
+def test_allowlist_is_exactly_the_authorized_actions():
     assert daemon.ACTION_ALLOWLIST == (
-        "restart_microvm", "doctor_fix", "prune_stale_plugin_deps"
+        "restart_microvm",
+        "doctor_fix",
+        "prune_stale_plugin_deps",
+        "restage_secrets",
     )
 
 def test_validate_action_accepts_allowlisted():

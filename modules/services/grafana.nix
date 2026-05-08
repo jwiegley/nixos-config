@@ -10,7 +10,7 @@ let
   grafanaDashboards = {
     "node-exporter-full.json" = pkgs.fetchurl {
       url = "https://grafana.com/api/dashboards/1860/revisions/latest/download";
-      sha256 = "0yjcsqm9js676s299ccnpgpsrr0n82w58p18281wkdb14vc3pr11";
+      sha256 = "11hrll7fm626ikbva5md4gm0rca537vp4xsxa9sxl1pk15s6nk0q";
       name = "node-exporter-full.json";
     };
     "node-exporter-11074.json" = pkgs.fetchurl {

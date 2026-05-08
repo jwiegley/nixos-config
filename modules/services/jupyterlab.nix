@@ -6,8 +6,11 @@
 }:
 
 let
-  # SageMath for the kernel only
-  sage = pkgs.sage;
+  # SageMath for the kernel only.
+  # requireSageTests = false: upstream sage 10.7 has timing-flaky doctests in
+  # sage/doctest/test.py (sleep2.rst slow-doctest warning) that depend on
+  # hardware-specific timing thresholds and fail on this fast aarch64 host.
+  sage = pkgs.sage.override { requireSageTests = false; };
 
   # JupyterLab environment from nixpkgs-unstable (defined in overlay)
   # This gives us:

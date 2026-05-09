@@ -411,6 +411,12 @@ _BENIGN_WARNING_PATTERNS = [
     re.compile(r"\[diagnostic\] long-running session\b"),
     re.compile(r"\[diagnostic\] stalled session\b"),
     re.compile(r"\[diagnostic\] liveness warning\b"),
+    # WhatsApp Web companion-link goes "app-silent" every ~2h; OpenClaw's
+    # watchdog detects it and reconnects, which logs both a watchdog
+    # timeout AND a 499 status close in lockstep. Upstream protocol
+    # behavior, not actionable from NixOS.
+    re.compile(r"\[whatsapp\] watchdog timeout\b"),
+    re.compile(r"\[whatsapp\] Web connection closed\b"),
 ]
 
 

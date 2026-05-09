@@ -44,6 +44,8 @@ let
         "email-contacts",
         "google-calendar-personal",
         "google-calendar-work",
+        "searxng",
+        "vane",
     )
 
 

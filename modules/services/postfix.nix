@@ -55,6 +55,10 @@
     # These are processed before any transport, unlike extraAliases which only
     # work with the local transport (not LMTP)
     virtual = ''
+      root@vulcan.lan     johnw@vulcan.lan
+      root@localhost      johnw@localhost
+      postmaster@vulcan.lan    johnw@vulcan.lan
+      postmaster@localhost     johnw@localhost
       gitea@vulcan.lan    johnw@vulcan.lan
       gitea@localhost     johnw@localhost
       changedetection@vulcan.lan    johnw@vulcan.lan

@@ -64,6 +64,32 @@ let
     exec ${financialPython}/bin/python3 ${stockTraderMcpScript}
   '';
 
+  # SearXNG MCP server: privacy-respecting metasearch via the host
+  # nginx-proxied SearXNG instance. The base URL goes through nginx so
+  # TLS validation uses the Vulcan Step-CA root that's already trusted
+  # in the VM via security.pki.certificates.
+  searxngMcpScript = ../../scripts/searxng-mcp.py;
+  searxngMcpServer = pkgs.writeShellScript "searxng-mcp" ''
+    export SEARXNG_BASE_URL="https://searxng.vulcan.lan"
+    exec ${financialPython}/bin/python3 ${searxngMcpScript}
+  '';
+
+  # Vane (Perplexica) MCP server: AI-synthesized answers with citations,
+  # using SearXNG behind the scenes. Talks to the host vane container
+  # via nginx HTTPS. Provider/model selection is discovered at first
+  # call by GET-ing /api/config — the script never logs the response
+  # body because it contains the LiteLLM apiKey.
+  vaneMcpScript = ../../scripts/vane-mcp.py;
+  vaneMcpServer = pkgs.writeShellScript "vane-mcp" ''
+    export VANE_BASE_URL="https://vane.vulcan.lan"
+    # 10 min HTTP timeout — Vane synthesis can take several minutes when
+    # the focus_mode does deep retrieval. Callers must also pass
+    # `mcporter --timeout 600000` (or set MCPORTER_CALL_TIMEOUT) so
+    # mcporter's per-call cap doesn't trip first.
+    export VANE_TIMEOUT_S=600
+    exec ${financialPython}/bin/python3 ${vaneMcpScript}
+  '';
+
   # Stdio bridge from mcporter to Home Assistant's streamable HTTP MCP
   # server.  We can't connect mcporter directly to HA's SSE/HTTP MCP
   # endpoint because mcporter 0.10.1 always probes OAuth metadata and
@@ -163,6 +189,77 @@ let
     - **org-db-search**: Finding entries by meaning — "tasks about home renovation", "meetings with accountant"
 
     Combine both: use `org-db-search` to find relevant entries, then use Sherlock SQL to get detailed properties, timestamps, or related data for those entries.
+  '';
+
+  toolsWebSearchMd = pkgs.writeText "tools-web-search.md" ''
+
+    ---
+
+    ## Web Search & Research
+
+    You have **three** complementary web tools. Each has different strengths — use the right one for the question, and **combine them** when stakes are high or accuracy matters.
+
+    ### Built-in `web_search` (Perplexity)
+
+    The default `web_search` tool routes through Perplexity. Best for:
+    - Quick paraphrased answers to factual questions
+    - When you want a summarized response with a few citations
+    - Conversational follow-ups where Perplexity's prior context helps
+
+    ### `searxng` MCP — raw metasearch
+
+    Direct access to the Vulcan SearXNG instance, which aggregates DuckDuckGo, Bing, Wikipedia, Startpage, and more. No tracking, no LLM in the loop — you get the unfiltered hits.
+
+    ```bash
+    mcporter list searxng                 # list available SearXNG tools
+    mcporter list searxng --schema        # full tool docs
+    mcporter call searxng.web_search query="NixOS flakes" num_results=10
+    mcporter call searxng.web_search query="!wp Erlang" num_results=5     # !bang shortcuts work
+    mcporter call searxng.search_news query="Apple silicon" time_range=week
+    ```
+
+    Useful args: `categories` (`general`, `news`, `science`, `it`, `videos`, `images`, ...), `time_range` (`day`/`week`/`month`/`year`/empty), `language`, `page`. Returns a JSON list of titles + URLs + content snippets + which engines surfaced each result.
+
+    Best for:
+    - Inspecting the raw landscape of results before forming a hypothesis
+    - Cross-checking a Perplexity answer against the underlying sources
+    - Topics where you need *engine diversity* (e.g., something controversial where Bing and DuckDuckGo might disagree)
+    - Searching specific domains via bangs (`!gh`, `!wp`, `!so`, `!arxiv`, ...)
+
+    ### `vane` MCP — AI answer engine with citations
+
+    Vane (a Perplexica fork at vane.vulcan.lan) runs SearXNG behind the scenes, fetches the top pages, and synthesizes a cited answer. Slow — typical runs take 1–5 minutes; deep queries can take longer.
+
+    **Always pass `--timeout 600000` (10 min) to mcporter for vane calls.** mcporter's default per-call timeout is 60s, which Vane will almost always exceed. The MCP server itself has a matching 10-min HTTP timeout so the call won't be cut short server-side.
+
+    ```bash
+    mcporter list vane --schema
+    mcporter call vane.web_research --timeout 600000 query="tradeoffs between BTRFS and ZFS for home NAS" focus_mode=webSearch optimization_mode=speed
+    mcporter call vane.web_research --timeout 600000 query="recent papers on speculative decoding" focus_mode=academicSearch optimization_mode=quality
+    ```
+
+    `focus_mode` accepts `webSearch` (default), `academicSearch`, `writingAssistant`, `wolframAlphaSearch`, `youtubeSearch`, `redditSearch`. `optimization_mode` is `speed` / `balanced` / `quality` (quality follows more links and takes longer).
+
+    Best for:
+    - "What does the web *currently* say about X?" with a written summary
+    - Research questions where you want citations baked into the answer
+    - Academic-style queries (use `focus_mode=academicSearch`)
+
+    ### Combining sources for high-stakes research
+
+    When the question matters — a bug-fix decision, a security claim, anything you'll act on — **don't trust a single source**. Run two or three in parallel and reconcile:
+
+    1. Fire `web_search` (Perplexity) and `mcporter call searxng.web_search` together in the same turn. Tool calls run in parallel.
+    2. Compare the result sets: if Perplexity claims X and SearXNG's top hits don't support X, treat that as a red flag and dig deeper.
+    3. For deep research, follow up with `mcporter call vane.web_research` with `optimization_mode=quality` to get a synthesized digest, then verify any specific claim against the SearXNG hits you already have.
+    4. Cite *which* tool surfaced each fact in your reply, so the user can audit the chain.
+
+    Quick decision tree:
+
+    - "Just tell me X" → built-in `web_search` (Perplexity)
+    - "Show me the actual sources" → `searxng.web_search`
+    - "Research this and write me a summary with citations" → `vane.web_research`
+    - "I'm going to act on this answer" → run at least two of the above and reconcile
   '';
 
 in
@@ -332,6 +429,8 @@ in
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.0.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)
       "drafts-mcp.vulcan.lan" # Drafts MCP (via nginx → hera:8808)
+      "searxng.vulcan.lan" # SearXNG metasearch (via nginx → 127.0.0.1:8890)
+      "vane.vulcan.lan" # Vane AI answer engine (via nginx → 127.0.0.1:3007)
     ];
   };
 
@@ -736,6 +835,31 @@ in
                   "description": "Home Assistant (state, services, automation, devices) via mcp-proxy stdio bridge to /api/mcp with static long-lived access token"
                 }
               '
+
+              # SearXNG metasearch (local stdio, talks to
+              # https://searxng.vulcan.lan via the bridge gateway DNAT
+              # to host nginx). Returns lists of search results — use
+              # this when you want raw hits to inspect.
+              apply_mcporter_jq --arg cmd "${searxngMcpServer}" '
+                .mcpServers["searxng"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "description": "Privacy-respecting web metasearch via SearXNG (DuckDuckGo, Bing, Wikipedia, etc.) — returns ranked result lists with titles, URLs, and snippets. Use for raw search results."
+                }
+              '
+
+              # Vane (Perplexica) AI answer engine (local stdio, talks to
+              # https://vane.vulcan.lan via the bridge gateway DNAT to
+              # host nginx). Vane runs SearXNG behind the scenes and
+              # synthesizes a cited answer — use this when you want a
+              # researched digest rather than a list of hits.
+              apply_mcporter_jq --arg cmd "${vaneMcpServer}" '
+                .mcpServers["vane"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "description": "AI answer engine (Vane / Perplexica) — synthesizes a cited response from web sources. Slower than searxng but produces a written answer with linked citations. Use for research-style questions."
+                }
+              '
             fi
 
             # ────────────────────────────────────────────────────────────────
@@ -881,6 +1005,12 @@ in
             # Append org db search section to TOOLS.md (idempotent)
             if [ -f "$TOOLS_MD" ] && ! grep -q '## Org Semantic Search' "$TOOLS_MD"; then
               cat ${toolsOrgSearchMd} >> "$TOOLS_MD"
+            fi
+
+            # Append web search section (searxng + vane + how to combine
+            # with the built-in Perplexity tool) — idempotent.
+            if [ -f "$TOOLS_MD" ] && ! grep -q '## Web Search & Research' "$TOOLS_MD"; then
+              cat ${toolsWebSearchMd} >> "$TOOLS_MD"
             fi
 
             # ────────────────────────────────────────────────────────────────

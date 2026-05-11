@@ -653,13 +653,15 @@ def render_report(
             "?" if name not in server_ok else "FAIL"
         )
         live_info = live.get(name)
-        # HOST_BLIND servers always show as skipped, regardless of what
-        # mcporter list reports — they need in-VM state (HA token mount,
-        # GCal OAuth, hera SSE) that isn't accessible from the host, so
-        # an "offline" reading from here is misleading. Their actual
-        # health comes from the textfile structural check + the HA
-        # section below.
-        if name in HOST_BLIND_SERVERS:
+        # HOST_BLIND_SERVERS need in-VM state (HA token mount, GCal
+        # OAuth, hera SSE) to probe correctly. Task 4 added an SSH
+        # probe (run_mcporter_list_via_ssh) that runs `mcporter list`
+        # inside the microVM and merges results into `live` for these
+        # specific names. If that probe failed (network blip, sshd
+        # down, key not delivered), live_info stays None and we fall
+        # back to the historical "skipped" rendering rather than
+        # showing a misleading "offline" status.
+        if name in HOST_BLIND_SERVERS and live_info is None:
             live_count = "n/a"
             status = "(skipped from host context)"
         elif live_info is None:
@@ -813,6 +815,14 @@ def deliver(subject: str, body: str) -> int:
 def main() -> int:
     textfile = parse_textfile()
     live = run_mcporter_list()
+    # Probe HOST_BLIND_SERVERS from inside the microVM over SSH.
+    # VM-side results win for the blind set only — host-side probes
+    # remain authoritative for everything else because they exercise
+    # the same network path the bot itself uses.
+    vm_live = run_mcporter_list_via_ssh()
+    for name in HOST_BLIND_SERVERS:
+        if name in vm_live:
+            live[name] = vm_live[name]
     gateway = gateway_state()
     errors = recent_errors()
     uptime = microvm_uptime()

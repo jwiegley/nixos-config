@@ -51,7 +51,7 @@ def test_run_mcporter_list_via_ssh_returns_parsed_dict(monkeypatch):
         "- home-assistant — HA bridge (12 tools, 0.7s)\n"
     )
     fake_proc = MagicMock(returncode=0, stdout=fake_stdout, stderr="")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: fake_proc)
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=fake_proc))
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_KEY", "/tmp/fake-key")
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_TARGET", "openclaw@10.99.0.2")
     result = report.run_mcporter_list_via_ssh()
@@ -66,10 +66,11 @@ def test_run_mcporter_list_via_ssh_missing_env_returns_empty(monkeypatch):
 
 
 def test_run_mcporter_list_via_ssh_returns_empty_on_timeout(monkeypatch):
-    def raise_timeout(*a, **k):
-        raise subprocess.TimeoutExpired("ssh", 60)
-
-    monkeypatch.setattr(subprocess, "run", raise_timeout)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        MagicMock(side_effect=subprocess.TimeoutExpired("ssh", 60)),
+    )
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_KEY", "/tmp/fake-key")
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_TARGET", "openclaw@10.99.0.2")
     assert report.run_mcporter_list_via_ssh() == {}
@@ -77,7 +78,7 @@ def test_run_mcporter_list_via_ssh_returns_empty_on_timeout(monkeypatch):
 
 def test_run_mcporter_list_via_ssh_returns_empty_on_nonzero_exit(monkeypatch):
     fake_proc = MagicMock(returncode=255, stdout="", stderr="Permission denied")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: fake_proc)
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=fake_proc))
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_KEY", "/tmp/fake-key")
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_TARGET", "openclaw@10.99.0.2")
     assert report.run_mcporter_list_via_ssh() == {}

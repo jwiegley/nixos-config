@@ -16,7 +16,7 @@ def load_report_module():
     spec = importlib.util.spec_from_file_location(
         "openclaw_nightly_report", spec_path
     )
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(mod)
     return mod

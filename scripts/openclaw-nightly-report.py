@@ -819,8 +819,16 @@ def main() -> int:
     # VM-side results win for the blind set only — host-side probes
     # remain authoritative for everything else because they exercise
     # the same network path the bot itself uses.
+    #
+    # For HOST_BLIND_SERVERS we DISCARD the host-side reading first:
+    # mcporter on the host reports those servers as "offline" because
+    # their credentials don't exist outside the VM, and that status
+    # is more misleading than no status. If the VM probe succeeded,
+    # use its result; otherwise leave the key absent so the renderer
+    # falls back to "(skipped from host context)".
     vm_live = run_mcporter_list_via_ssh()
     for name in HOST_BLIND_SERVERS:
+        live.pop(name, None)
         if name in vm_live:
             live[name] = vm_live[name]
     gateway = gateway_state()

@@ -499,6 +499,12 @@ in
     home = stateDir;
     shell = pkgs.bashInteractive;
     description = "OpenClaw AI Gateway service user";
+    openssh.authorizedKeys.keys = [
+      # Public half of the SSH key used by openclaw-nightly-report on the
+      # host to probe HOST_BLIND_SERVERS from inside the VM. Private half
+      # lives in secrets.yaml under openclaw.probe-ssh-private-key.
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxaud1Pwm4ggrgqcmqvBN/iEW/uEVqHJFd0/zRpeN6N openclaw-nightly-report-probe"
+    ];
   };
   users.groups.openclaw = {
     gid = openclawGid;
@@ -512,6 +518,35 @@ in
   systemd.tmpfiles.rules = [
     "d ${stateDir} 0700 openclaw openclaw -"
   ];
+
+  # ========================================================================
+  # In-VM sshd
+  # ========================================================================
+  # Used exclusively by openclaw-nightly-report on the host to probe MCP
+  # servers whose credentials live inside the VM (drafts, google-calendar-*,
+  # home-assistant). Listening only on the bridge IP and gated by the guest
+  # firewall to source 10.99.0.1.
+
+  services.openssh = {
+    enable = true;
+    # CRITICAL: default is true, which would add TCP/22 to
+    # networking.firewall.allowedTCPPorts (unrestricted), defeating the
+    # source-scoped extraInputRules below. Source-restrict via nftables
+    # only.
+    openFirewall = false;
+    listenAddresses = [
+      {
+        addr = "10.99.0.2";
+        port = 22;
+      }
+    ];
+    settings = {
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+      PermitRootLogin = "no";
+      AllowUsers = [ "openclaw" ];
+    };
+  };
 
   # ========================================================================
   # OpenClaw systemd service
@@ -1084,6 +1119,9 @@ in
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [ servicePort ];
+    extraInputRules = ''
+      ip saddr 10.99.0.1 tcp dport 22 accept comment "openclaw-nightly-report probe from host bridge"
+    '';
   };
 
   # ========================================================================

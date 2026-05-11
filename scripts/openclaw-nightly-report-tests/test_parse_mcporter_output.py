@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+from unittest.mock import MagicMock
+
 from conftest import load_report_module
 
 report = load_report_module()
@@ -39,10 +42,6 @@ def test_ignores_non_matching_lines():
 
 def test_empty_input_returns_empty_dict():
     assert report._parse_mcporter_output("") == {}
-
-
-import subprocess
-from unittest.mock import MagicMock
 
 
 def test_run_mcporter_list_via_ssh_returns_parsed_dict(monkeypatch):

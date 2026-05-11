@@ -138,6 +138,29 @@ _MCPORTER_LIST_RE = re.compile(
 )
 
 
+def _parse_mcporter_output(stdout: str) -> dict[str, dict[str, Any]]:
+    """Parse `mcporter list` stdout into {name: {"status", "tool_count", "raw"}}.
+
+    Shared between the host-side ``run_mcporter_list`` and the VM-side
+    ``run_mcporter_list_via_ssh``. Lines that don't match _MCPORTER_LIST_RE
+    are silently ignored — the caller is responsible for emitting any
+    diagnostic about empty results.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for line in stdout.splitlines():
+        m = _MCPORTER_LIST_RE.match(line)
+        if not m:
+            continue
+        name = m.group("name")
+        status = m.group("status")
+        tool_count: int | None = None
+        tm = re.match(r"(\d+)\s+tools?", status)
+        if tm:
+            tool_count = int(tm.group(1))
+        out[name] = {"status": status, "tool_count": tool_count, "raw": line}
+    return out
+
+
 def _build_ca_bundle() -> str | None:
     """Concatenate system CA + Vulcan root into a temp file. Caller deletes."""
     if not SYSTEM_CA.is_file():
@@ -259,21 +282,8 @@ def run_mcporter_list() -> dict[str, dict[str, Any]]:
             f"{proc.stderr[:300]}\n"
         )
 
-    matched = 0
-    for line in proc.stdout.splitlines():
-        m = _MCPORTER_LIST_RE.match(line)
-        if not m:
-            continue
-        matched += 1
-        name = m.group("name")
-        status = m.group("status")
-        tool_count: int | None = None
-        tm = re.match(r"(\d+)\s+tools?", status)
-        if tm:
-            tool_count = int(tm.group(1))
-        out[name] = {"status": status, "tool_count": tool_count, "raw": line}
-
-    if matched == 0:
+    out = _parse_mcporter_output(proc.stdout)
+    if not out:
         # Helpful when the regex stops matching (e.g. mcporter changes
         # its list format). Show the first ~400 bytes so we can tell.
         sys.stderr.write(

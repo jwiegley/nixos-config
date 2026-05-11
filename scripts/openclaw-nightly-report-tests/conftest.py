@@ -1,0 +1,22 @@
+"""Test fixtures for the openclaw nightly report parser tests."""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+
+def load_report_module():
+    """Load the script as `openclaw_nightly_report` despite hyphenated filename."""
+    spec_path = SCRIPT_DIR / "openclaw-nightly-report.py"
+    spec = importlib.util.spec_from_file_location(
+        "openclaw_nightly_report", spec_path
+    )
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod

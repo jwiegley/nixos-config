@@ -293,6 +293,68 @@ def run_mcporter_list() -> dict[str, dict[str, Any]]:
     return out
 
 
+def run_mcporter_list_via_ssh() -> dict[str, dict[str, Any]]:
+    """Probe MCP servers from inside the OpenClaw microVM over SSH.
+
+    Returns the same shape as `run_mcporter_list()`. Empty dict on any
+    failure; callers must merge defensively. Required env:
+        OPENCLAW_REPORT_SSH_KEY     path to private key (LoadCredential).
+        OPENCLAW_REPORT_SSH_TARGET  user@host (e.g. openclaw@10.99.0.2).
+    """
+    key = os.getenv("OPENCLAW_REPORT_SSH_KEY")
+    target = os.getenv("OPENCLAW_REPORT_SSH_TARGET")
+    if not key or not target:
+        sys.stderr.write(
+            "run_mcporter_list_via_ssh: SSH env not configured; "
+            "skipping VM probe\n"
+        )
+        return {}
+
+    ssh_cmd = [
+        "ssh",
+        "-i", key,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=10",
+        "-o", "LogLevel=ERROR",
+        # Defensive: don't fall back to ssh-agent or user-default
+        # identities. The unit runs without an agent and ProtectHome=true
+        # masks /root/.ssh, but explicit > implicit.
+        "-o", "IdentitiesOnly=yes",
+        target,
+        "mcporter list",
+    ]
+    try:
+        proc = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(
+            "run_mcporter_list_via_ssh: ssh timed out after 60s\n"
+        )
+        return {}
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(
+            "run_mcporter_list_via_ssh: ssh subprocess failed: "
+            f"{type(exc).__name__}: {exc}\n"
+        )
+        return {}
+
+    if proc.returncode != 0:
+        sys.stderr.write(
+            f"run_mcporter_list_via_ssh: ssh exited {proc.returncode}: "
+            f"{proc.stderr[:300]}\n"
+        )
+        return {}
+
+    return _parse_mcporter_output(proc.stdout)
+
+
 # ---------------------------------------------------------------------------
 # Source 3: gateway log → uptime + plugins
 # ---------------------------------------------------------------------------

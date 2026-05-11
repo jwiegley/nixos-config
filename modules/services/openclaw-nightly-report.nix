@@ -26,6 +26,12 @@ let
   schedule = "*-*-* 06:00:00";
 in
 {
+  sops.secrets."openclaw/probe-ssh-private-key" = {
+    mode = "0400";
+    owner = "root";
+    group = "root";
+  };
+
   systemd.services.openclaw-nightly-report = {
     description = "Aggregate OpenClaw health and email a nightly report";
     after = [
@@ -39,6 +45,7 @@ in
       systemd # systemctl show
       coreutils
       mcporterPkg # so shutil.which("mcporter") in PATH resolves cleanly
+      openssh # for the in-VM mcporter probe over SSH
     ];
 
     environment = {
@@ -49,6 +56,11 @@ in
       # /nix/store globbing — the latter has bitten us when the readable
       # set under sandbox didn't include the expected store paths.
       OPENCLAW_REPORT_MCPORTER = "${mcporterPkg}/bin/mcporter";
+      # In-VM probe for HOST_BLIND_SERVERS (drafts, google-calendar-*,
+      # home-assistant). SSH key is delivered via LoadCredential below;
+      # %d expands to $CREDENTIALS_DIRECTORY at runtime.
+      OPENCLAW_REPORT_SSH_KEY = "%d/probe-ssh-key";
+      OPENCLAW_REPORT_SSH_TARGET = "openclaw@10.99.0.2";
     };
 
     serviceConfig = {
@@ -84,6 +96,9 @@ in
         "/var/lib/prometheus-node-exporter-textfiles"
         "/etc/nixos/certs"
         "/etc/ssl"
+      ];
+      LoadCredential = [
+        "probe-ssh-key:${config.sops.secrets."openclaw/probe-ssh-private-key".path}"
       ];
 
       TimeoutStartSec = "5min";

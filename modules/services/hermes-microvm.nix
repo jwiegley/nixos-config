@@ -5,6 +5,7 @@
 # its own private /30 bridge so neither VM's networking can affect the
 # other. No DNAT/inbound in Phase 1 — Hermes is outbound-only.
 {
+  config,
   lib,
   pkgs,
   inputs,
@@ -122,14 +123,44 @@ in
   nix.optimise.automatic = false;
 
   # ---- SOPS secret staged for the VM's environmentFile ----
+  # Note: NO `path` option — sops-nix's `path` writes a symlink at the
+  # target, and inside the VM the symlink target /run/secrets/hermes/env
+  # doesn't exist (the VM has no sops-nix). So we let sops deploy to its
+  # default /run/secrets/hermes/env on the host, and a prepare-secrets
+  # oneshot below copies the *content* into the state share at
+  # ${stateDir}/env so the in-VM hermes-agent.service can read a real
+  # file via virtio-fs. Same pattern as openclaw-microvm.nix:495.
   sops.secrets."hermes/env" = {
     mode = "0640";
     owner = "hermes";
     group = "hermes";
-    path = "${stateDir}/env";
-    # Restart the microVM unit when the secret changes so the
-    # in-VM hermes process picks up the new env vars.
-    restartUnits = [ "microvm@hermes.service" ];
+    # Restart both the staging service and the microVM when the secret
+    # rotates so the new env vars propagate.
+    restartUnits = [
+      "hermes-prepare-secrets.service"
+      "microvm@hermes.service"
+    ];
+  };
+
+  # ---- Stage SOPS secret content into the VM's virtio-fs state share ----
+  systemd.services.hermes-prepare-secrets = {
+    description = "Stage SOPS secrets for Hermes microVM";
+    wantedBy = [ "microvm@hermes.service" ];
+    before = [ "microvm@hermes.service" ];
+    after = [ "sops-nix.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      install -d -m 0750 -o hermes -g hermes "${stateDir}"
+      install -m 0640 -o hermes -g hermes \
+        "${config.sops.secrets."hermes/env".path}" \
+        "${stateDir}/env"
+      echo "Hermes env staged to ${stateDir}/env"
+    '';
   };
 
   # ---- microvm.nix declaration ----

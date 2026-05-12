@@ -38,8 +38,11 @@ in
       mac = "02:00:00:0c:1a:02";
     }
   ];
+  # Match `e*` (not just `eth*`) — the kernel may assign an `en*` predictable
+  # name to the virtio-net interface. OpenClaw uses the same prefix at
+  # openclaw-vm.nix:412.
   systemd.network.networks."10-eth" = {
-    matchConfig.Name = "eth*";
+    matchConfig.Name = "e*";
     address = [ "${vmAddr}/30" ];
     routes = [ { Gateway = bridgeAddr; } ];
   };
@@ -66,6 +69,14 @@ in
       proto = "virtiofs";
     }
   ];
+
+  # The Hermes activation script writes config.yaml, .env, and .managed
+  # into ${stateDir}/.hermes/ at NixOS activation time (system.activationScripts).
+  # Activation runs in stage 2 BEFORE local-fs.target — so without
+  # `neededForBoot`, those writes land on the VM's tmpfs root and the
+  # virtio-fs mount silently shadows them at multi-user.target. Forcing
+  # the state share into initrd makes the mount visible to activation.
+  fileSystems."${stateDir}".neededForBoot = lib.mkForce true;
 
   # ---- Vulcan CA bundle (HTTPS to internal services) ----
   # Embed the host's root CA at evaluation time so it lands in the

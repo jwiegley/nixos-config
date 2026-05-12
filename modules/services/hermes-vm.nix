@@ -181,6 +181,36 @@ in
       # gets nothing — every chat-completion call goes out with model=""
       # and LiteLLM bounces it.
       model = agentModel;
+
+      # Per-provider request timeout. The default OpenAI-wire client
+      # timeout fires at 30s before the first byte arrives, which is
+      # too short for a 27B MLX model that needs ~30-60s of prompt
+      # evaluation on a 3-4k-token prompt. Setting both per-provider
+      # and per-model (per-model has higher priority per
+      # hermes_cli/timeouts.py).
+      providers.openrouter = {
+        request_timeout_seconds = 600;
+        models.${agentModel} = {
+          timeout_seconds = 600;
+          stale_timeout_seconds = 600;
+        };
+      };
+
+      # Disable streaming. The streaming code path's 30s "Streaming
+      # failed before delivery" timeout is sticky despite all timeout
+      # overrides — likely because the OpenAI SDK Stream constructor
+      # has an early-response timer we haven't located. Non-streaming
+      # uses the cleaner _resolved_api_call_timeout() path which
+      # honors `request_timeout_seconds` above. Trade-off: Discord
+      # gets the full reply at once instead of progressive chunks.
+      display.streaming = false;
+
+      # Reduce retry count — at 30s per attempt × 3 retries this was
+      # spamming the Discord channel with "Retrying in X.Xs" messages
+      # before each failed attempt. Single attempt fails fast and
+      # cleanly.
+      agent.max_retries = 1;
+
       # memory/skills directories: omit — the upstream module's tmpfiles
       # creates ${stateDir}/.hermes/memories and .hermes/plugins on
       # activation (see nixosModules.nix:712-713). Hermes's defaults

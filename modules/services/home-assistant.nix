@@ -871,12 +871,14 @@ in
     # Ensure all required services are ready before starting
     after = [
       "network-online.target"
+      "nss-lookup.target"
       "postgresql.service"
       "postgresql-hass-password.service"
       "sops-install-secrets.service"
     ];
     wants = [
       "network-online.target"
+      "nss-lookup.target"
       "postgresql.service"
       "postgresql-hass-password.service"
       "sops-install-secrets.service"

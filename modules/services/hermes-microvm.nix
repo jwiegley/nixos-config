@@ -5,7 +5,6 @@
 # its own private /30 bridge so neither VM's networking can affect the
 # other. No DNAT/inbound in Phase 1 — Hermes is outbound-only.
 {
-  config,
   lib,
   pkgs,
   inputs,
@@ -18,7 +17,6 @@ let
   bridgeAddr = "10.99.1.1";
   bridgeCidr = "${bridgeAddr}/30";
   vmAddr = "10.99.1.2";
-  vmCidr = "${vmAddr}/30";
 
   # External NIC used for VM NAT. Matches openclaw-microvm.nix:25 — the
   # host's physical interface on this Asahi/aarch64 box. Update both
@@ -31,10 +29,6 @@ let
   stateDir = "/var/lib/hermes";
 in
 {
-  imports = [
-    inputs.microvm.nixosModules.host
-  ];
-
   # ---- Host user/group ----
   users.users.hermes = {
     isSystemUser = true;
@@ -61,7 +55,7 @@ in
 
   # ---- systemd-networkd: bridge + TAP ----
   systemd.network.enable = true;
-  systemd.network.wait-online.anyInterface = true;
+  systemd.network.wait-online.anyInterface = lib.mkDefault true;
   systemd.network.netdevs."50-${bridgeName}".netdevConfig = {
     Kind = "bridge";
     Name = bridgeName;
@@ -103,6 +97,12 @@ in
 
     # Egress logging — log new outbound connections from the bridge
     iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress: " --log-level info
+
+    # Belt-and-suspenders IPv6: the guest has v6 disabled and the
+    # bridge is v4-only, but if anything ever flips v6 forwarding on
+    # this host (or adds a v6 addr to the bridge), the v4 rules above
+    # silently fail to filter it. Drop any v6 forward off the bridge.
+    ip6tables -A FORWARD -i ${bridgeName} -j DROP
   '';
   networking.firewall.extraStopCommands = ''
     iptables -D nixos-fw -i ${bridgeName} -j hermes-isolate 2>/dev/null || true
@@ -112,6 +112,7 @@ in
     iptables -D FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress: " --log-level info 2>/dev/null || true
+    ip6tables -D FORWARD -i ${bridgeName} -j DROP 2>/dev/null || true
   '';
 
   # ---- Nix store / virtiofs interaction ----
@@ -150,6 +151,10 @@ in
     specialArgs = { inherit inputs system; };
   };
 
+  # Both the per-VM `autostart = true` (above) and this target list
+  # are required by microvm.nix — the former installs the systemd unit
+  # link, the latter drives microvms.target boot ordering. Don't
+  # consolidate.
   microvm = {
     autostart = [ "hermes" ];
   };

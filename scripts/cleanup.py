@@ -87,6 +87,17 @@ if not args or "backups" in args:
                    onEntryPastLimit = safeRemove,
                    **opts).scanEntries()
 
+    if exists('/tank/Backups/NodeRED'):
+        DirScanner(directory        = '/tank/Backups/NodeRED',
+                   days             = 28,
+                   mtime            = True,
+                   sudo             = True,
+                   depth            = 0,
+                   maxSize          = '1000000000',   # 1 GB cap (each backup ~128 KB)
+                   minimalScan      = True,
+                   onEntryPastLimit = safeRemove,
+                   **opts).scanEntries()
+
 flock(lockfile, LOCK_UN)
 os.remove('/tmp/cleanup.lock')
 

@@ -25,7 +25,10 @@ let
   inherit (bindTankLib) bindTankPath;
 
   backupDir = "/var/lib/node-red-backup";
-  retentionDays = 30;
+
+  # Retention is centrally managed by /etc/nixos/scripts/cleanup.py
+  # (cleanup.timer at 03:00 daily) — keep entries here in lockstep with
+  # the corresponding DirScanner block over /tank/Backups/NodeRED.
 
   nodeRedBackupScript = pkgs.writeShellScript "node-red-backup" ''
     set -euo pipefail
@@ -61,18 +64,10 @@ let
     ${pkgs.coreutils}/bin/chmod 0600 "$BACKUP_FILE"
 
     SIZE=$(${pkgs.coreutils}/bin/du -h "$BACKUP_FILE" | ${pkgs.coreutils}/bin/cut -f1)
-    log "Backup size: $SIZE"
-
-    log "Pruning backups older than ${toString retentionDays} days"
-    ${pkgs.findutils}/bin/find "${backupDir}" \
-      -maxdepth 1 \
-      -name 'node-red-*.tar.zst' \
-      -type f \
-      -mtime +${toString retentionDays} \
-      -delete
+    log "Backup size: $SIZE (retention handled by cleanup.service at 03:00)"
 
     KEEPING=$(${pkgs.findutils}/bin/find "${backupDir}" -maxdepth 1 -name 'node-red-*.tar.zst' -type f | ${pkgs.coreutils}/bin/wc -l)
-    log "Node-RED backup complete; $KEEPING tarball(s) retained"
+    log "Node-RED backup complete; $KEEPING tarball(s) on disk"
   '';
 in
 {

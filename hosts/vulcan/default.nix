@@ -86,6 +86,7 @@
     ../../modules/services/nagios.nix
     ../../modules/services/network-services.nix
     ../../modules/services/node-red.nix
+    ../../modules/services/node-red-backup.nix
     ../../modules/services/pgadmin.nix
     ../../modules/services/postfix.nix
     ../../modules/services/postgresql-backup.nix

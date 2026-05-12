@@ -27,6 +27,12 @@
   networking.enableIPv6 = false;
   boot.kernel.sysctl."net.ipv6.conf.all.disable_ipv6" = 1;
   boot.kernel.sysctl."net.ipv6.conf.default.disable_ipv6" = 1;
+  # Allow routing 127.0.0.0/8 traffic on non-loopback interfaces.
+  # Required for the nftables OUTPUT DNAT below that rewrites localhost
+  # connections to the host bridge IP — without this, the kernel
+  # refuses to route packets with source 127.0.0.1 via eth0.
+  # Matches openclaw-vm.nix:386.
+  boot.kernel.sysctl."net.ipv4.conf.all.route_localnet" = 1;
 
   # ---- Guest networking ----
   microvm.interfaces = [

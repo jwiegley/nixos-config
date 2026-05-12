@@ -21,6 +21,44 @@ let
   # intentionally pinned. Edit /etc/nixos/models.nix to change.
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
+
+  # Workaround for upstream hermes-agent v0.13.0 hardcoded 30s connect/pool
+  # timeouts at run_agent.py:7789-7794. Those fields aren't exposed via any
+  # documented config knob (`request_timeout_seconds`, env vars). On a slow
+  # local 27B MLX endpoint, prompt eval + first-byte easily exceeds 30s, and
+  # those hardcoded `connect=30.0` / `pool=30.0` values fire before the
+  # configured read=600s ever gets a chance. Monkey-patch `httpx.Timeout` at
+  # Python startup via `sitecustomize.py` on the PYTHONPATH so the patch
+  # runs before openai/run_agent imports httpx. Track upstream
+  # NousResearch/hermes-agent issue for fix.
+  hermesTimeoutShim = pkgs.writeTextDir "sitecustomize.py" ''
+    """Hermes-agent v0.13.0 timeout workaround — see hermes-vm.nix."""
+    try:
+        import httpx as _httpx
+
+        _orig_init = _httpx.Timeout.__init__
+
+        def _patched_init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            # The upstream code passes connect=30.0 / pool=30.0 as positional
+            # or keyword args via httpx.Timeout(connect=30.0, read=..., ...).
+            # After __init__, the attributes hold the raw seconds. Bump only
+            # when they look like the documented 30s default so we don't
+            # silently lengthen user-chosen short timeouts.
+            try:
+                if getattr(self, "connect", None) == 30.0:
+                    self.connect = 600.0
+                if getattr(self, "pool", None) == 30.0:
+                    self.pool = 600.0
+            except Exception:
+                pass
+
+        _httpx.Timeout.__init__ = _patched_init
+    except Exception:
+        # Don't block Hermes startup if httpx isn't yet importable — the
+        # service will simply use the upstream defaults.
+        pass
+  '';
 in
 {
   imports = [
@@ -219,6 +257,13 @@ in
       # have the right group-write bits.
     };
   };
+
+  # Inject the httpx.Timeout monkey-patch into the hermes-agent service
+  # via PYTHONPATH. Python's site initialization auto-imports
+  # `sitecustomize.py` from any path in sys.path on startup, before the
+  # main script (`bin/hermes`) runs. See `hermesTimeoutShim` in the
+  # let-block above for the why.
+  systemd.services.hermes-agent.environment.PYTHONPATH = "${hermesTimeoutShim}";
 
   # User+group inside the guest — must match the host UID so the
   # virtio-fs share permissions line up.

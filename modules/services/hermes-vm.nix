@@ -48,6 +48,10 @@ in
   # ---- Virtio-fs shares ----
   # ro-store: Nix store from host (read-only) — standard microvm.nix idiom.
   # state:    /var/lib/hermes from host (read-write).
+  # ro-store mountPoint is the host-store stage; microvm.nix's mounts.nix
+  # bind-mounts /nix/.ro-store onto /nix/store at boot when
+  # writableStoreOverlay is unset (which it intentionally is for Hermes —
+  # uv2nix gives us a sealed venv at build time, no runtime store writes).
   microvm.shares = [
     {
       tag = "ro-store";
@@ -80,8 +84,6 @@ in
     stateDir = stateDir;
     addToSystemPackages = false; # Known bug #6044 with HERMES_HOME export.
     container.enable = false; # The microVM IS the sandbox.
-    restart = "always";
-    restartSec = 5;
 
     environmentFiles = [ "${stateDir}/env" ];
 
@@ -90,14 +92,18 @@ in
       # into ~/.hermes/config.yaml; the `.managed` marker blocks
       # `hermes config set` so this file is the only source of truth.
       logging.level = "INFO";
-      gateway.enabled = true;
-      gateway.platforms = [ "discord" ];
+      gateway = {
+        enabled = true;
+        platforms = [ "discord" ];
+      };
       discord = {
-        # Token, allowlists, channel scoping are all read from env vars
+        # Token, allowlists, channel scoping come from env vars
         # (DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USERS,
         # DISCORD_ALLOWED_CHANNELS, DISCORD_HOME_CHANNEL,
-        # DISCORD_REQUIRE_MENTION). Settings here are the YAML-level
-        # knobs that do NOT have env-var equivalents.
+        # DISCORD_REQUIRE_MENTION). YAML keys below are the knobs that
+        # DO NOT have env-var equivalents. If an env var IS set, it
+        # overrides the YAML value at runtime — so DISCORD_REQUIRE_MENTION
+        # in /var/lib/hermes/env wins over `require_mention` here.
         require_mention = true;
         auto_thread = true;
         reactions = true;
@@ -117,9 +123,12 @@ in
         provider = "openrouter";
         name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
       };
-      # Memory & skills — keep within stateDir so virtio-fs persists.
-      memory.directory = "${stateDir}/.hermes/memories";
-      skills.directory = "${stateDir}/.hermes/skills";
+      # memory/skills directories: omit — the upstream module's tmpfiles
+      # creates ${stateDir}/.hermes/memories and .hermes/plugins on
+      # activation (see nixosModules.nix:712-713). Hermes's defaults
+      # already point there. Overriding without a matching tmpfiles
+      # entry would force Hermes to mkdir at runtime, which may not
+      # have the right group-write bits.
     };
   };
 
@@ -130,6 +139,7 @@ in
     uid = hermesUid;
     group = "hermes";
     home = stateDir;
+    createHome = true; # defensive — state share is also tmpfiles'd on host
   };
   users.groups.hermes.gid = hermesGid;
 }

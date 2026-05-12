@@ -46,6 +46,30 @@
   };
   networking.nameservers = [ bridgeAddr ];
 
+  # ---- Two-stage DNAT (stage 1: guest OUTPUT) ----
+  # Hermes (and any other in-VM service) targets host LiteLLM via
+  # http://127.0.0.1:4000 unchanged. This OUTPUT chain rewrites those
+  # connections to the bridge gateway IP, where the host's PREROUTING
+  # rule (hermes-host-dnat.service) rewrites them back to 127.0.0.1
+  # on the host. Same shape as openclaw-vm.nix:443.
+  networking.nftables.enable = true;
+  networking.nftables.tables.hermes-dnat = {
+    family = "ip";
+    content = ''
+      chain output {
+        type nat hook output priority -100; policy accept;
+        ip daddr 127.0.0.1 tcp dport { 4000 } dnat to ${bridgeAddr}
+      }
+      chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        # Rewrite source 127.0.0.1 → VM eth0 IP for DNAT'ed packets.
+        # Without this, the kernel refuses to route loopback-sourced
+        # packets out of a non-loopback interface.
+        oifname "e*" ip saddr 127.0.0.0/8 masquerade
+      }
+    '';
+  };
+
   # ---- Virtio-fs shares ----
   # ro-store: Nix store from host (read-only) — standard microvm.nix idiom.
   # state:    /var/lib/hermes from host (read-write).

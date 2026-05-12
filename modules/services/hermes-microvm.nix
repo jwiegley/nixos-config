@@ -28,6 +28,22 @@ let
   hermesUid = 932;
   hermesGid = 932;
   stateDir = "/var/lib/hermes";
+
+  # -- Host-side loopback services that the VM needs to reach --
+  # Strategy mirrors openclaw-microvm.nix:115-118 — two-stage DNAT:
+  #   1. Guest nftables OUTPUT: 127.0.0.1:port -> 10.99.1.1:port
+  #   2. Host iptables PREROUTING (on hermes-br0): 10.99.1.1:port -> 127.0.0.1:port
+  #   3. Host sysctl route_localnet=1 on hermes-br0 (allows the loopback hop)
+  # Phase 1 only needs LiteLLM (4000) for the hera/* model route; add more
+  # ports here (Qdrant, HA, etc.) when Phase 2 wires Hermes to those services.
+  dnatPorts = [ 4000 ];
+  dnatPortList = lib.concatStringsSep ", " (map toString dnatPorts);
+  hostDnatRules = lib.concatMapStringsSep "\n" (port: ''
+    iptables -t nat -A PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port}
+  '') dnatPorts;
+  hostDnatCleanupRules = lib.concatMapStringsSep "\n" (port: ''
+    iptables -t nat -D PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port} 2>/dev/null || true
+  '') dnatPorts;
 in
 {
   # ---- Host user/group ----
@@ -96,9 +112,19 @@ in
     iptables -A hermes-isolate -d ${bridgeAddr} -p tcp --dport 53 -j RETURN
     iptables -A hermes-isolate -d ${bridgeAddr} -p udp --dport 53 -j RETURN
 
+    # DNAT'd host services (LiteLLM, etc.) — accept inbound traffic to
+    # bridgeAddr on these ports; hermes-host-dnat rewrites dst→127.0.0.1.
+    iptables -A hermes-isolate -d ${bridgeAddr} -p tcp -m multiport --dports ${dnatPortList} -j RETURN
+
     # Drop everything else originating from the VM toward host services
     iptables -A hermes-isolate -j DROP
     iptables -I nixos-fw 3 -i ${bridgeName} -j hermes-isolate
+
+    # Bridge→bridge forwarding for DNAT return path. The DNAT happens
+    # in PREROUTING (host iptables nat:PREROUTING), then the kernel
+    # routes 127.0.0.1 via lo. The reply packet's source is 127.0.0.1
+    # which gets SNAT'd back to bridgeAddr via the FORWARD chain.
+    iptables -A FORWARD -i ${bridgeName} -o ${bridgeName} -j ACCEPT
 
     # FORWARD chain: block private-network-bound traffic.
     iptables -A FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP
@@ -118,12 +144,48 @@ in
     iptables -D nixos-fw -i ${bridgeName} -j hermes-isolate 2>/dev/null || true
     iptables -F hermes-isolate 2>/dev/null || true
     iptables -X hermes-isolate 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${bridgeName} -j ACCEPT 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress: " --log-level info 2>/dev/null || true
     ip6tables -D FORWARD -i ${bridgeName} -j DROP 2>/dev/null || true
   '';
+
+  # ---- Two-stage DNAT (stage 2: host PREROUTING) ----
+  # See dnatPorts comment in `let` block. The guest's stage 1 (OUTPUT
+  # DNAT 127.0.0.1:port -> bridgeAddr:port) is in hermes-vm.nix. This
+  # piece rewrites the bridge-bound packets back to host loopback, and
+  # the sysctl below lets the kernel actually route loopback via the
+  # bridge interface.
+  boot.kernel.sysctl."net.ipv4.conf.${bridgeName}.route_localnet" = 1;
+
+  systemd.services.hermes-host-dnat = {
+    description = "DNAT rules for Hermes VM to reach host loopback services";
+    wantedBy = [ "microvm@hermes.service" ];
+    before = [ "microvm@hermes.service" ];
+    after = [
+      "network-online.target"
+      "sys-subsystem-net-devices-${bridgeName}.device"
+    ];
+    wants = [ "network-online.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    path = [ pkgs.iptables ];
+
+    script = ''
+      ${hostDnatRules}
+      echo "Hermes host DNAT rules installed for ports: ${dnatPortList}"
+    '';
+
+    preStop = ''
+      ${hostDnatCleanupRules}
+    '';
+  };
 
   # ---- Nix store / virtiofs interaction ----
   # The guest mounts /nix/store via virtiofs in hermes-vm.nix.

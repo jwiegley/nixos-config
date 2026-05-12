@@ -25,8 +25,8 @@
     # memory-qdrant, Discord/WhatsApp channels, ACP backend).  Kept separate
     # from `primary` so summarizers / alert probes can move independently.
     agent = {
-      # name = "hera/Qwen3.6-27B-Instruct";
-      name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
+      name = "hera/Qwen3.6-27B-Instruct";
+      # name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

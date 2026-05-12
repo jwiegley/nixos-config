@@ -42,10 +42,11 @@ in
 
   # ---- Host-side persistent state ----
   # `d` directive — preserves contents across rebuilds (CLAUDE.md rule).
-  # `C+` directive stages the Vulcan root CA into the state share.
+  # The Vulcan root CA is embedded into the VM's trust store at
+  # evaluation time via security.pki.certificates (see hermes-vm.nix),
+  # so no host-side staging is needed.
   systemd.tmpfiles.rules = [
     "d ${stateDir} 0750 hermes hermes -"
-    "C+ ${stateDir}/vulcan-root-ca.crt 0644 hermes hermes - /etc/nixos/certs/vulcan-root-ca.crt"
   ];
 
   # ---- NetworkManager coexistence ----
@@ -79,6 +80,14 @@ in
   };
 
   # ---- Egress isolation (iptables-nft, matching OpenClaw) ----
+  # Phase 1: outbound is allowed to the public internet (Discord +
+  # OpenRouter via the hera/* route). The chain below only restricts
+  # the VM's access *back* into the host's private network.
+  #
+  # TODO(phase-2): tighten egress to an allowlist of known endpoint
+  # ranges — Discord runs behind Cloudflare (AS13335) and OpenRouter
+  # publishes its egress addresses. Until then, a compromised Hermes
+  # process could exfiltrate to arbitrary public IPs.
   networking.firewall.extraCommands = ''
     # ── Hermes network isolation ──
     iptables -N hermes-isolate 2>/dev/null || iptables -F hermes-isolate
@@ -171,6 +180,7 @@ in
       _module.args = {
         inherit
           bridgeAddr
+          vmAddr
           vmHostname
           hermesUid
           hermesGid

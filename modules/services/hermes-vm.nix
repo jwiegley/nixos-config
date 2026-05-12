@@ -7,6 +7,7 @@
   inputs,
   system,
   bridgeAddr,
+  vmAddr,
   vmHostname,
   hermesUid,
   hermesGid,
@@ -14,9 +15,6 @@
   tapName,
   ...
 }:
-let
-  vmAddr = "10.99.1.2";
-in
 {
   imports = [
     inputs.hermes-agent.nixosModules.default
@@ -76,6 +74,11 @@ in
   # `neededForBoot`, those writes land on the VM's tmpfs root and the
   # virtio-fs mount silently shadows them at multi-user.target. Forcing
   # the state share into initrd makes the mount visible to activation.
+  #
+  # Failure mode: if the host's virtiofsd-state.service is slow or
+  # crash-looping, the guest will block in initrd waiting on
+  # `dev-virtio\x2dfs-state.mount`. Check virtiofsd status on the host
+  # (microvm-virtiofsd@hermes.service) before suspecting in-VM issues.
   fileSystems."${stateDir}".neededForBoot = lib.mkForce true;
 
   # ---- Vulcan CA bundle (HTTPS to internal services) ----

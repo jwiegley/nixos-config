@@ -68,11 +68,14 @@ in
   ];
 
   # ---- Vulcan CA bundle (HTTPS to internal services) ----
-  # The host's CA cert is staged via tmpfiles into the state share, then
-  # systemd reads it from the standard location. Same pattern as the
-  # OpenClaw VM.
-  security.pki.certificateFiles = [
-    "${stateDir}/vulcan-root-ca.crt"
+  # Embed the host's root CA at evaluation time so it lands in the
+  # nss-cacert bundle at build time. The runtime path inside the VM
+  # (${stateDir}/vulcan-root-ca.crt, mounted via virtio-fs) is staged by
+  # the host module's tmpfiles entry but is no longer needed for trust —
+  # this readFile burns the cert content into the store. Same pattern as
+  # openclaw-vm.nix:277.
+  security.pki.certificates = [
+    (builtins.readFile ../../certs/vulcan-root-ca.crt)
   ];
 
   # ---- Hermes Agent service ----

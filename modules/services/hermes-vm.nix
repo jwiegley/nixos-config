@@ -15,6 +15,13 @@
   tapName,
   ...
 }:
+let
+  # Single source of truth for LLM selection. Mirrors openclaw-vm.nix:41-42
+  # so Hermes and OpenClaw stay on the same `agent` model unless one is
+  # intentionally pinned. Edit /etc/nixos/models.nix to change.
+  models = import ../../models.nix;
+  agentModel = models.llm.agent.name;
+in
 {
   imports = [
     inputs.hermes-agent.nixosModules.default
@@ -162,14 +169,18 @@
         };
       };
       # Model routing — Hermes consumes OPENROUTER_API_KEY and
-      # OPENROUTER_BASE_URL from the env file. The model name MUST match
-      # the `agent` slot in /etc/nixos/models.nix so Hermes shares the
-      # same routing/fallback story OpenClaw uses for its long-running
-      # tool-using sessions. Update both files together when changing.
-      model = {
-        provider = "openrouter";
-        name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
-      };
+      # OPENROUTER_BASE_URL from the env file. The model identifier is
+      # pulled from /etc/nixos/models.nix (`llm.agent.name`) so it tracks
+      # the same setting OpenClaw uses for its long-running tool-using
+      # sessions; change models.nix to update both modules at once.
+      #
+      # NOTE: settings.model is a flat string in upstream's schema (see
+      # nixosModules.nix:267 example: `model = "anthropic/claude-sonnet-4"`).
+      # A nested attrset like `{ name, provider }` deep-merges into
+      # config.yaml but Hermes' Python reads `model` as a string and
+      # gets nothing — every chat-completion call goes out with model=""
+      # and LiteLLM bounces it.
+      model = agentModel;
       # memory/skills directories: omit — the upstream module's tmpfiles
       # creates ${stateDir}/.hermes/memories and .hermes/plugins on
       # activation (see nixosModules.nix:712-713). Hermes's defaults

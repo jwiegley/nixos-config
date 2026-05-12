@@ -5,6 +5,7 @@
 # SSH & Remote Access
 22 0.0.0.0 :: SSH
 22 10.99.0.2 OpenClaw microVM sshd (ingress restricted to host bridge 10.99.0.1; probe-only)
+22 10.99.1.2 Hermes microVM sshd (Phase 2; not enabled in Phase 1)
 2222 * :: Gitea SSH
 
 # DNS Services

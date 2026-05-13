@@ -95,6 +95,18 @@ in
     externalInterface = externalInterface;
   };
 
+  # ---- Per-interface INPUT accepts ----
+  # Technitium DNS on the host binds to 0.0.0.0:53, so the VM uses
+  # bridgeAddr as its DNS server. PREROUTING DNAT rewrites
+  # bridgeAddr:PORT → 127.0.0.1:PORT but the packet still arrives via
+  # hermes-br0; the INPUT chain must whitelist the post-DNAT ports on
+  # this interface or `nixos-fw-log-refuse` drops them at end-of-chain.
+  # Matches openclaw-microvm.nix:479-486.
+  networking.firewall.interfaces.${bridgeName} = {
+    allowedUDPPorts = [ 53 ];
+    allowedTCPPorts = [ 53 ] ++ dnatPorts;
+  };
+
   # ---- Egress isolation (iptables-nft, matching OpenClaw) ----
   # Phase 1: outbound is allowed to the public internet (Discord +
   # OpenRouter via the hera/* route). The chain below only restricts
@@ -113,8 +125,15 @@ in
     iptables -A hermes-isolate -d ${bridgeAddr} -p udp --dport 53 -j RETURN
 
     # DNAT'd host services (LiteLLM, etc.) — accept inbound traffic to
-    # bridgeAddr on these ports; hermes-host-dnat rewrites dst→127.0.0.1.
+    # bridgeAddr on these ports.  NOTE: PREROUTING DNAT rewrites the
+    # destination to 127.0.0.1 BEFORE the INPUT chain (and therefore this
+    # isolation chain) runs, so the post-DNAT packet has dst=127.0.0.1, not
+    # bridgeAddr. We need BOTH rules — the bridgeAddr one is belt-and-
+    # suspenders if the DNAT ever stops running (the connection then fails
+    # noisily rather than silently slipping through), and the 127.0.0.1 one
+    # is what actually matches in steady state. Matches openclaw-isolate.
     iptables -A hermes-isolate -d ${bridgeAddr} -p tcp -m multiport --dports ${dnatPortList} -j RETURN
+    iptables -A hermes-isolate -d 127.0.0.1 -p tcp -m multiport --dports ${dnatPortList} -j RETURN
 
     # Drop everything else originating from the VM toward host services
     iptables -A hermes-isolate -j DROP

@@ -839,6 +839,18 @@ in
                 }
               '
 
+              # Hermes Agent bridge (remote SSE on the OpenClaw VM
+              # bridge gateway, plain HTTP — the host hermes-mcp
+              # service binds 127.0.0.1:9081 and is reached via the
+              # two-stage DNAT 10.99.0.1:9081 → 127.0.0.1:9081 on
+              # br-openclaw, so LAN hosts cannot reach it).
+              apply_mcporter_jq '
+                .mcpServers["hermes"] = {
+                  "url": "http://10.99.0.1:9081/sse",
+                  "description": "Ask Hermes Agent (NousResearch) — multi-turn conversations with the household LLM on the standalone Hermes microVM. Tools: ask_hermes, start_session, continue_session, list_sessions, summarize_session, delete_session."
+                }
+              '
+
               # Stock-trader (local stdio, talks to https://trader.vulcan.lan
               # via the bridge gateway DNAT)
               apply_mcporter_jq --arg cmd "${stockTraderMcpServer}" '

@@ -127,6 +127,7 @@ let
     6334 # Qdrant gRPC API
     6335 # Qdrant inference bridge
     8123 # Home Assistant (direct HTTP)
+    9081 # hermes-mcp — OpenClaw↔Hermes MCP bridge (SSE)
   ];
 
   # Helper: format a list of ports for nftables "dnat to" rules

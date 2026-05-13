@@ -1,0 +1,16 @@
+{
+  "_comment": "Quiet Pyright noise for this nix-built package. Pyright does not see the nix-shell Python environment used by tests, so every `import respx` / `import aiosqlite` / `from hermes_mcp.* import …` is reported as missing. The `client` parameter is also intentionally kept in some tool signatures for dispatch-table symmetry (server.py calls every tool as `await handler(store, client, **kwargs)`). The real type/lint gate is `pytest` under the nix-shell, not Pyright.",
+  "include": ["src", "tests"],
+  "executionEnvironments": [
+    {
+      "root": "src"
+    },
+    {
+      "root": "tests",
+      "extraPaths": ["../src"]
+    }
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportUnusedParameter": "none"
+}

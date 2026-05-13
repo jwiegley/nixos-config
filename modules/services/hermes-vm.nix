@@ -204,7 +204,10 @@ in
       logging.level = "INFO";
       gateway = {
         enabled = true;
-        platforms = [ "discord" ];
+        platforms = [
+          "discord"
+          "api_server"
+        ];
       };
       discord = {
         # Token, allowlists, channel scoping come from env vars
@@ -309,7 +312,17 @@ in
   # `sitecustomize.py` from any path in sys.path on startup, before the
   # main script (`bin/hermes`) runs. See `hermesTimeoutShim` in the
   # let-block above for the why.
-  systemd.services.hermes-agent.environment.PYTHONPATH = "${hermesTimeoutShim}";
+  systemd.services.hermes-agent.environment = {
+    PYTHONPATH = "${hermesTimeoutShim}";
+    # api_server Platform — exposes OpenAI-compatible /v1/chat/completions
+    # for the OpenClaw↔Hermes MCP bridge (host's hermes-mcp.service).
+    # `API_SERVER_KEY` is supplied via environmentFiles=…/env (sops);
+    # `X-Hermes-Session-Key` requests from the host must present that key.
+    # Guest firewall scopes inbound traffic to ${bridgeAddr} only.
+    API_SERVER_ENABLED = "true";
+    API_SERVER_HOST = "0.0.0.0";
+    API_SERVER_PORT = "8080";
+  };
 
   # User+group inside the guest — must match the host UID so the
   # virtio-fs share permissions line up.
@@ -353,6 +366,7 @@ in
     enable = true;
     extraInputRules = ''
       ip saddr ${bridgeAddr} tcp dport 22 accept comment "claude debug ssh from host bridge"
+      ip saddr ${bridgeAddr} tcp dport 8080 accept comment "hermes api_server from host bridge (used by host hermes-mcp.service)"
     '';
   };
 }

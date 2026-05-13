@@ -22,15 +22,30 @@ let
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
 
-  # Workaround for upstream hermes-agent v0.13.0 hardcoded 30s connect/pool
-  # timeouts at run_agent.py:7789-7794. Those fields aren't exposed via any
-  # documented config knob (`request_timeout_seconds`, env vars). On a slow
-  # local 27B MLX endpoint, prompt eval + first-byte easily exceeds 30s, and
-  # those hardcoded `connect=30.0` / `pool=30.0` values fire before the
-  # configured read=600s ever gets a chance. Monkey-patch `httpx.Timeout` at
-  # Python startup via `sitecustomize.py` on the PYTHONPATH so the patch
-  # runs before openai/run_agent imports httpx. Track upstream
-  # NousResearch/hermes-agent issue for fix.
+  # Workaround for upstream hermes-agent v0.13.0 timeout defaults that the
+  # configured `request_timeout_seconds` / `HERMES_STREAM_READ_TIMEOUT` don't
+  # actually override at the httpx layer. Two paths confirmed broken:
+  #
+  #   1. run_agent.py:7789-7794 builds the streaming `httpx.Timeout(...)` with
+  #      hardcoded `connect=30.0` / `pool=30.0` — those fields aren't exposed
+  #      via any documented config knob.
+  #   2. The same site sets `read=_stream_read_timeout` where the resolved
+  #      value falls back to `float(os.getenv("HERMES_STREAM_READ_TIMEOUT",
+  #      120.0))` if `get_provider_request_timeout()` returns None. Observed
+  #      live: even with HERMES_STREAM_READ_TIMEOUT=600 in .env AND
+  #      providers.openrouter.{request_timeout_seconds=600, models.<name>
+  #      .timeout_seconds=600} in config.yaml, the firing timeout is exactly
+  #      120s + ~14s connection overhead = ~134s. Something in the resolution
+  #      chain is yielding 120.0 at the call site (load_config exception
+  #      silently swallowed, dotenv overriding, or stale cached config).
+  #
+  # Monkey-patch `httpx.Timeout` at Python startup via `sitecustomize.py` on
+  # the PYTHONPATH so the patch runs before openai/run_agent imports httpx.
+  # Bump only the documented upstream defaults (30s connect/pool, 120s read,
+  # 30s/5s write) so we don't silently lengthen user-chosen short timeouts in
+  # other code paths (e.g. Gemini adapter explicitly sets 15s/600s/30s/30s
+  # which we leave alone). Track upstream NousResearch/hermes-agent issue
+  # for the proper fix.
   hermesTimeoutShim = pkgs.writeTextDir "sitecustomize.py" ''
     """Hermes-agent v0.13.0 timeout workaround — see hermes-vm.nix."""
     try:
@@ -40,23 +55,26 @@ let
 
         def _patched_init(self, *args, **kwargs):
             _orig_init(self, *args, **kwargs)
-            # The upstream code passes connect=30.0 / pool=30.0 as positional
-            # or keyword args via httpx.Timeout(connect=30.0, read=..., ...).
-            # After __init__, the attributes hold the raw seconds. Bump only
-            # when they look like the documented 30s default so we don't
-            # silently lengthen user-chosen short timeouts.
+            # run_agent.py:7789-7794 hardcodes connect=30.0 / pool=30.0 in
+            # the streaming Timeout, and falls back to read=120.0 when
+            # neither HERMES_STREAM_READ_TIMEOUT nor a provider
+            # request_timeout_seconds is set. Bump only those exact
+            # documented defaults so we don't lengthen user-chosen
+            # shorter timeouts elsewhere (e.g. Gemini adapter sets
+            # connect=15.0 which we leave alone).
             try:
                 if getattr(self, "connect", None) == 30.0:
                     self.connect = 600.0
                 if getattr(self, "pool", None) == 30.0:
                     self.pool = 600.0
+                if getattr(self, "read", None) == 120.0:
+                    self.read = 600.0
             except Exception:
                 pass
 
         _httpx.Timeout.__init__ = _patched_init
     except Exception:
-        # Don't block Hermes startup if httpx isn't yet importable — the
-        # service will simply use the upstream defaults.
+        # Don't block Hermes startup if httpx isn't importable yet.
         pass
   '';
 in

@@ -319,6 +319,40 @@ in
     group = "hermes";
     home = stateDir;
     createHome = true; # defensive — state share is also tmpfiles'd on host
+    shell = pkgs.bashInteractive;
+    openssh.authorizedKeys.keys = [
+      # Ephemeral debug key generated on the host at /root/.ssh/hermes-debug.
+      # Used for interactive debugging from the host (Claude shelling in).
+      # Remove once debugging is complete and replace with the proper
+      # Phase-2 nightly-report probe key, mirroring the openclaw pattern.
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINYXL7oqQT3RgRbnWRQNcKNrywkP3TV2F5m8w02+eGUB claude-hermes-debug"
+    ];
   };
   users.groups.hermes.gid = hermesGid;
+
+  # ---- In-VM sshd (debug only) ----
+  # Listens on the bridge IP so the host (and only the host, via the
+  # extraInputRules nft restriction) can reach it.  Mirrors openclaw-vm.nix.
+  services.openssh = {
+    enable = true;
+    openFirewall = false;
+    listenAddresses = [
+      {
+        addr = vmAddr;
+        port = 22;
+      }
+    ];
+    settings = {
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+      PermitRootLogin = "no";
+      AllowUsers = [ "hermes" ];
+    };
+  };
+  networking.firewall = {
+    enable = true;
+    extraInputRules = ''
+      ip saddr ${bridgeAddr} tcp dport 22 accept comment "claude debug ssh from host bridge"
+    '';
+  };
 }

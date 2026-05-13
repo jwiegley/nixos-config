@@ -96,7 +96,7 @@
 8888 127.0.0.1 JupyterLab
 8890 127.0.0.1 SearXNG metasearch engine
 9080 127.0.0.1 Promtail
-9080 127.0.0.1 hermes-mcp (SSE upstream for nginx vhost hermes-mcp.vulcan.lan)
+9081 127.0.0.1 hermes-mcp (SSE upstream for nginx vhost hermes-mcp.vulcan.lan)
 9091 127.0.0.1 Wallabag container
 9095 127.0.0.1 (Unknown)
 9097 127.0.0.1 MailArchiver container

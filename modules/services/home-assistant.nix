@@ -235,6 +235,16 @@ in
     mode = "0400";
   };
 
+  # OpenUV API key for /forecast REST sensor (separate from the openuv
+  # integration's UI-stored copy; HA's YAML rest: sensor cannot read
+  # integration config_entries, so we duplicate-store the key here).
+  sops.secrets."home-assistant/openuv-api-key" = {
+    owner = "hass";
+    group = "hass";
+    mode = "0400";
+    restartUnits = [ "home-assistant.service" ];
+  };
+
   # Avahi service for mDNS/Bonjour discovery (required for HomeKit and Matter)
   services.avahi = {
     enable = true;
@@ -457,6 +467,7 @@ in
       # Weather
       "accuweather" # AccuWeather weather forecasts
       "nws" # National Weather Service (NOAA) weather forecasts
+      "openuv" # OpenUV API for UV index data (requires pyopenuv)
 
       # Metrics export
       "influxdb" # InfluxDB integration for pushing metrics to VictoriaMetrics
@@ -505,6 +516,31 @@ in
         # Allows loading additional config from /var/lib/hass/packages/*.yaml
         packages = "!include_dir_named packages";
       };
+
+      # OpenUV daily forecast — one /forecast pull per day at 05:00 (driven by
+      # the refresh automation in Task 4). Exposes the hourly UV array as
+      # sensor.openuv_forecast.attributes.result for Node-RED consumption.
+      rest = [
+        {
+          scan_interval = 86400;
+          resource = "https://api.openuv.io/api/v1/forecast";
+          params = {
+            lat = "!secret latitude";
+            lng = "!secret longitude";
+          };
+          headers = {
+            "x-access-token" = "!secret openuv_api_key";
+          };
+          sensor = [
+            {
+              name = "OpenUV Forecast";
+              unique_id = "openuv_forecast";
+              value_template = "{{ value_json.result | map(attribute='uv') | max | round(1) }}";
+              json_attributes = [ "result" ];
+            }
+          ];
+        }
+      ];
 
       # HTTP configuration for reverse proxy
       http = {
@@ -919,6 +955,12 @@ in
             if [ -f ${config.sops.secrets."home-assistant/postgres-password".path} ]; then
               POSTGRES_PASSWORD=$(cat ${config.sops.secrets."home-assistant/postgres-password".path})
               echo "postgres_db_url: postgresql://hass:$POSTGRES_PASSWORD@localhost/hass" >> /var/lib/hass/secrets.yaml
+            fi
+
+            # Add OpenUV API key if SOPS secret exists
+            if [ -f ${config.sops.secrets."home-assistant/openuv-api-key".path} ]; then
+              OPENUV_API_KEY=$(cat ${config.sops.secrets."home-assistant/openuv-api-key".path})
+              echo "openuv_api_key: $OPENUV_API_KEY" >> /var/lib/hass/secrets.yaml
             fi
 
             chmod 600 /var/lib/hass/secrets.yaml

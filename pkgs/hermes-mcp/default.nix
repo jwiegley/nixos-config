@@ -19,6 +19,9 @@ python312Packages.buildPythonApplication {
     httpx
     aiosqlite
     pydantic
+    starlette
+    uvicorn
+    anyio
   ];
 
   nativeCheckInputs = with python312Packages; [

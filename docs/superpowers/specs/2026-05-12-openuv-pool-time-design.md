@@ -1,15 +1,15 @@
 # OpenUV pool-time prediction — design
 
-**Date:** 2026-05-12
-**Status:** brainstorming (pending review)
-**Driver:** The OpenUV integration polls `/uv` only, never `/forecast`. The user wants a once-per-day forecast pull whose hourly array drives both (a) a sunrise daily summary of the day's predicted "pool window," and (b) a scheduled event at the moment UV will descend through 3 — gated against pool water temperature ≥ 82 °F — that triggers a TTS "pool time" announcement.
+**Date:** 2026-05-12 (revised 2026-05-13 to match shipped implementation)
+**Status:** shipped — see deltas in §13
+**Driver:** The OpenUV integration polls `/uv` only, never `/forecast`. The user wants a once-per-day forecast pull whose hourly array drives both (a) a daily summary of the day's predicted "pool window," and (b) a scheduled event at the moment UV will descend through 3 — gated against pool water temperature ≥ 82 °F — that triggers a TTS "pool time" announcement.
 
 ## 1. Goal
 
 Convert OpenUV's once-daily hourly UV forecast into two Node-RED events on `vulcan`:
 
-1. **Sunrise summary** (08:00 local, or immediately if the forecast lands after 08:00): TTS announces the predicted pool-window start time and sunset.
-2. **Pool-time trigger**: At the predicted moment UV descends through 3, read the IntelliCenter pool-water-temp sensor; if ≥ 82 °F, fire a TTS announcement.
+1. **Daily summary** (09:15 local, or immediately if the forecast lands after 09:15): TTS announces the predicted pool-window start time and sunset.
+2. **Pool-time trigger**: At the predicted moment UV descends through 3, read the IntelliCenter pool-water-temp sensor (`sensor.water_sensor_1`); if ≥ 82 °F, fire a TTS announcement.
 
 Total API budget: one `/forecast` call per day. The existing HA `openuv` integration continues to handle current-UV via `/uv` independently.
 
@@ -25,7 +25,7 @@ Total API budget: one `/forecast` call per day. The existing HA `openuv` integra
 
 - The `sensor.openuv_forecast` entity transitions from `unknown` → numeric (the day's predicted peak UV) once daily.
 - Its `result` attribute is a non-empty array of `{uv, uv_time}` records.
-- On a clear day (peak UV ≥ 4), the sunrise summary fires exactly once at 08:00 local, naming a `crossing_time` between 14:00 and sunset.
+- On a clear day (peak UV ≥ 4), the daily summary fires exactly once at 09:15 local, naming a `crossing_time` between 14:00 and sunset.
 - The pool-time trigger fires within ±2 minutes of the linearly-interpolated `crossing_time`.
 - On an overcast / low-UV day where the forecast's peak never exceeds 3, the summary instead announces "no pool window today" and the trigger does not fire.
 - One API request per day; OpenUV free-tier quota remains ≥ 49/50.
@@ -290,3 +290,23 @@ Watch the first three days of natural firings:
 - **TTS service choice** — `tts.cloud_say` (HA Cloud) vs `tts.google_translate_say` vs local. The S106 design defaulted to `tts.cloud_say` with `media_player.vlc_telnet`; this design follows. If the user has since changed their TTS stack, the `call service` nodes need updating.
 - **Forecast endpoint stability** — OpenUV's `/forecast` shape is stable per their docs; a field rename would break the function node. Mitigated by: function emits an explicit warning on missing `result`.
 - **OpenUV quota** — 50/day free tier. Current HA integration's `/uv` polling at 30-min intervals already burns ~48/day. Adding 1 forecast pull at 05:00 brings us to ~49/50 — uncomfortably close but within budget. If the integration ever bumps to 15-min polling we'd blow the quota. Note for future maintenance: if quota becomes a concern, increase the openuv integration's `update_interval` to 60 min (saves ~24 calls/day).
+
+## 13. Deltas from this spec to the shipped implementation
+
+Captured 2026-05-13 after the build session. Reflects what's actually deployed:
+
+| § | Spec said | Shipped |
+|---|---|---|
+| 1, 3, 7 | Summary at 08:00; HA automation triggers refresh at 05:00 | Summary at 09:15; refresh driven by a Node-RED `inject` (cron `00 05 * * *`), no HA automation (user chose not to create one). |
+| 4, 8 | `tts.cloud_say` via `media_player.vlc_telnet` | `tts.speak` with engine `tts.google_translate_en_com`, passing `media_player_entity_id: media_player.vlc_telnet` in service data (matches existing flows). |
+| 8.1 | Stock `trigger` node for the 08:00 wait | `delay` node (`pauseType: "delayv"`) — `trigger` did not emit on `msg.delay=0` on this path; switched to `delay`. The `wait until crossing_time` is still a `trigger` (works there). |
+| 8.1 | `compute window` is the sole source for the listener path | Two paths reach `compute window`: (a) `inject → wait 5s → read OpenUV state` (always fires on cron/button), (b) `OpenUV Forecast updated` listener (fires on actual state changes). Compute window has a 60-s context-keyed dedup to prevent double-scheduling on day-rollover. |
+| 8 | Pool-temp entity TBD | Pinned: `sensor.water_sensor_1` (IntelliCenter via custom_components.intellicenter). |
+| 8.1 | "manual test (bypass timers)" inject for forcing immediate fires | Removed during testing — past 09:15 every cron-button fire is already immediate, so the explicit bypass turned out unnecessary. |
+| (new) | – | Added `simulate crossing now` inject wired directly to `read pool temp` for isolated trigger-branch testing (skips compute window and the wait entirely). |
+| (new) | – | TTS (pool time) JSONata wraps `payload.pool_temp` with `$number()` before `$round()` because `entityState` is a string and `$round(string)` errors. |
+| (new) | – | Three `api-current-state` nodes carry `state_type: "str"` not because of conversion need but to satisfy the contrib-home-assistant-websocket editor's `state_type === "str"` check, which suppresses an in-form deprecation warning. Conversion is exclusively in JSONata / `outputProperties`. |
+| Spec §5 | The HA `secrets.yaml` is generated at every preStart from SOPS | Confirmed working; openuv_api_key appended in the preStart block in `home-assistant.nix`. |
+| Spec §10 | `compute window` test fixtures | Implemented as `/tmp/openuv-compute-test.js`, 4/4 fixtures pass. (Transient — deleted post-deploy.) |
+
+None of these change the system behavior described in §1. They reflect operational realities that emerged during integration testing.

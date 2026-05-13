@@ -273,6 +273,34 @@ in
       # already point there. Overriding without a matching tmpfiles
       # entry would force Hermes to mkdir at runtime, which may not
       # have the right group-write bits.
+
+      # Route auxiliary tasks (title generation, triage, etc.) through
+      # our LiteLLM proxy.  Hermes' internal `OPENROUTER_BASE_URL`
+      # constant is hardcoded to `https://openrouter.ai/api/v1`
+      # (hermes_constants.py:342) and the credential pool builds its
+      # default base_url from that constant, NOT from the env var.
+      # That means the main streaming chat path (which reads
+      # `os.environ["OPENROUTER_BASE_URL"]` directly in run_agent.py)
+      # works, but auxiliary tasks fail with HTTP 401 against the real
+      # OpenRouter cloud using our LiteLLM virtual key.
+      #
+      # Setting both base_url+api_key here triggers the `"custom"`
+      # provider branch in auxiliary_client._resolve_auxiliary_for_call
+      # (auxiliary_client.py:3822-3824), which bypasses the credential
+      # pool entirely and uses the supplied endpoint directly. The
+      # `${VAR}` syntax is expanded at config-load time by Hermes'
+      # `_expand_env_vars()` (config.py:3838) reading from os.environ,
+      # which already has the values from environmentFiles=.../env.
+      auxiliary = {
+        title_generation = {
+          base_url = "\${OPENROUTER_BASE_URL}";
+          api_key = "\${OPENROUTER_API_KEY}";
+        };
+        triage_specifier = {
+          base_url = "\${OPENROUTER_BASE_URL}";
+          api_key = "\${OPENROUTER_API_KEY}";
+        };
+      };
     };
   };
 

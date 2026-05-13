@@ -595,6 +595,14 @@ in
       # in extensions/.  Without this override the whatsapp plugin fails with
       # "missing light-runtime-api for plugin 'whatsapp'".
       OPENCLAW_BUNDLED_PLUGINS_DIR = "${openclawPkg}/lib/openclaw/extensions";
+
+      # MCP tool-call timeout (ms). claude-code defaults to 60_000, which is
+      # too short for the local-LLM Hermes bridge (`mcpServers.hermes`):
+      # a single ask_hermes call can take 2–5 minutes for non-trivial
+      # prompts on the 27B MLX model. 600_000 ms = 10 minutes is a
+      # comfortable upper bound; well within hermes-mcp's own 600 s upstream
+      # read timeout (see pkgs/hermes-mcp/src/hermes_mcp/config.py).
+      MCP_TOOL_TIMEOUT = "600000";
     };
 
     serviceConfig = {

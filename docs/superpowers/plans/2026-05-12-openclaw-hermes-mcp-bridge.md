@@ -268,7 +268,7 @@ git commit -m "feat(hermes-mcp): scaffold Python package + Nix derivation"
 - Modify: `modules/services/hermes-vm.nix` (settings + firewall + env injection)
 - User-driven: `secrets/secrets.yaml` via `sops` — add `API_SERVER_KEY=<64-hex>` to the existing `hermes/env` block
 
-**What "done" means:** From the host, `curl -sS -X POST -H "X-Hermes-Session-Key: $KEY" http://10.99.1.2:8080/v1/chat/completions -d '{"model":"hera/omlx/Qwen3.6-27B-MLX-8bit","messages":[{"role":"user","content":"ping"}]}'` returns a 200 with a chat completion.
+**What "done" means:** From the host, `curl -sS -X POST -H "Authorization: Bearer $KEY" http://10.99.1.2:8080/v1/chat/completions -d '{"model":"hera/omlx/Qwen3.6-27B-MLX-8bit","messages":[{"role":"user","content":"ping"}]}'` returns a 200 with a chat completion.
 
 - [ ] **Step 1: Ask the user to generate and store the shared API key**
 
@@ -351,7 +351,7 @@ KEY=$(sudo grep '^API_SERVER_KEY=' /var/lib/hermes/.hermes/.env | cut -d= -f2- |
 Probe `/v1/capabilities` first (no body needed, lightweight):
 
 ```bash
-curl -sS -m 10 -H "X-Hermes-Session-Key: $KEY" \
+curl -sS -m 10 -H "Authorization: Bearer $KEY" \
   http://10.99.1.2:8080/v1/capabilities | head -20
 ```
 
@@ -360,7 +360,7 @@ Expected: 200 with a JSON object containing `"object": "hermes.api_server.capabi
 Then a real chat call:
 ```bash
 curl -sS -m 120 -X POST \
-  -H "X-Hermes-Session-Key: $KEY" \
+  -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   http://10.99.1.2:8080/v1/chat/completions \
   -d '{"model":"hera/omlx/Qwen3.6-27B-MLX-8bit","messages":[{"role":"user","content":"ping"}],"max_tokens":20}'
@@ -725,7 +725,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Config:
     hermes_api_url: str         # e.g. http://10.99.1.2:8080
-    hermes_api_key: str         # X-Hermes-Session-Key value
+    hermes_api_key: str         # Authorization: Bearer ${this} (Hermes API_SERVER_KEY)
     model: str                  # default model to use, e.g. hera/omlx/Qwen3.6-27B-MLX-8bit
     db_path: Path
     sse_host: str               # e.g. 127.0.0.1
@@ -828,7 +828,8 @@ async def test_chat_sends_session_headers_and_returns_content(cfg):
 
     assert reply == "hello back"
     sent = route.calls.last.request
-    assert sent.headers["X-Hermes-Session-Key"] == "key-deadbeef"
+    assert sent.headers["Authorization"] == "Bearer key-deadbeef"
+    assert sent.headers["X-Hermes-Session-Id"] == "hsid-1"
     assert sent.headers["X-Hermes-Session-Id"] == "hsid-1"
     body = sent.read().decode()
     assert "test-model" in body
@@ -898,7 +899,7 @@ class HermesClient:
                 write=config.request_timeout_seconds,
                 pool=30.0,
             ),
-            headers={"X-Hermes-Session-Key": config.hermes_api_key},
+            headers={"Authorization": f"Bearer {config.hermes_api_key}"},
         )
 
     async def chat(

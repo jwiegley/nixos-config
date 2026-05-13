@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from hermes_mcp.session_store import Session, SessionStore
+from hermes_mcp.session_store import SessionStore
 
 
 @pytest.mark.asyncio

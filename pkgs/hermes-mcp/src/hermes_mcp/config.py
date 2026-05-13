@@ -9,7 +9,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Config:
     hermes_api_url: str         # e.g. http://10.99.1.2:8080
-    hermes_api_key: str         # Authorization: Bearer ${this} (Hermes API_SERVER_KEY)
+    hermes_api_key: str         # Authorization: Bearer ${this} (Hermes API_SERVER_KEY, sourced from API_SERVER_KEY env var)
     model: str                  # default model to use, e.g. hera/omlx/Qwen3.6-27B-MLX-8bit
     db_path: Path
     sse_host: str               # e.g. 127.0.0.1
@@ -20,7 +20,7 @@ class Config:
     def from_env(cls) -> "Config":
         return cls(
             hermes_api_url=_required("HERMES_API_URL").rstrip("/"),
-            hermes_api_key=_required("HERMES_API_KEY"),
+            hermes_api_key=_required("API_SERVER_KEY"),
             model=os.environ.get("HERMES_MCP_MODEL", "hera/omlx/Qwen3.6-27B-MLX-8bit"),
             db_path=Path(os.environ.get("HERMES_MCP_DB_PATH", "/var/lib/hermes-mcp/sessions.db")),
             sse_host=os.environ.get("HERMES_MCP_HOST", "127.0.0.1"),

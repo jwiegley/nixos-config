@@ -22,11 +22,11 @@ def cfg(tmp_path: Path) -> Config:
 
 def test_config_from_env_requires_url_and_key(monkeypatch):
     monkeypatch.delenv("HERMES_API_URL", raising=False)
-    monkeypatch.delenv("HERMES_API_KEY", raising=False)
+    monkeypatch.delenv("API_SERVER_KEY", raising=False)
     with pytest.raises(RuntimeError, match="HERMES_API_URL"):
         Config.from_env()
     monkeypatch.setenv("HERMES_API_URL", "http://x")
-    with pytest.raises(RuntimeError, match="HERMES_API_KEY"):
+    with pytest.raises(RuntimeError, match="API_SERVER_KEY"):
         Config.from_env()
 
 

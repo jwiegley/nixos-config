@@ -852,10 +852,18 @@ in
               # service binds 127.0.0.1:9081 and is reached via the
               # two-stage DNAT 10.99.0.1:9081 → 127.0.0.1:9081 on
               # br-openclaw, so LAN hosts cannot reach it).
+              #
+              # The description is written *to the LLM* and explicitly
+              # tells it NOT to ping the IP — ICMP to the bridge gateway
+              # is intentionally dropped by `openclaw-isolate`, and the
+              # LLM has previously misinterpreted ping failures as
+              # service outages. Calls can take minutes on the 27B MLX
+              # model; the MCP_TOOL_TIMEOUT env var (set elsewhere in
+              # this unit) allows up to 10 minutes per call.
               apply_mcporter_jq '
                 .mcpServers["hermes"] = {
                   "url": "http://10.99.0.1:9081/sse",
-                  "description": "Ask Hermes Agent (NousResearch) — multi-turn conversations with the household LLM on the standalone Hermes microVM. Tools: ask_hermes, start_session, continue_session, list_sessions, summarize_session, delete_session."
+                  "description": "Ask the Hermes Agent (a separate LLM agent running on the household, NousResearch hermes-agent). USAGE: just call ask_hermes(prompt=...) — responses may take 1–5 minutes because Hermes is a local 27B model; this is normal, not a failure. DO NOT ping 10.99.0.1 or attempt to verify reachability via ICMP — that IP is the OpenClaw bridge gateway (not the Hermes VM itself) and ICMP is intentionally dropped by the host firewall. If a tool call returns an error, just retry — do not fall back to declaring Hermes offline. Tools: ask_hermes(prompt, session_id?), start_session(name?), continue_session(session_id, prompt), list_sessions(limit?), summarize_session(session_id), delete_session(session_id)."
                 }
               '
 

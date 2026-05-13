@@ -122,9 +122,21 @@
     inputs:
     let
       system = "aarch64-linux";
+      # Pkgs with the local overlay applied — used to expose in-repo
+      # packages (e.g. hermes-mcp) at the flake's top level so they can
+      # be built standalone with `nix build .#<name>`.
+      pkgs = import inputs.nixpkgs {
+        inherit system;
+        overlays = [ (import ./overlays inputs system) ];
+        config.allowUnfree = true;
+      };
     in
     {
       formatter.aarch64-linux = inputs.nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
+
+      packages.${system} = {
+        hermes-mcp = pkgs.callPackage ./pkgs/hermes-mcp { };
+      };
 
       nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
         inherit system;

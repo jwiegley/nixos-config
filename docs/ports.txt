@@ -77,6 +77,7 @@
 5679 127.0.0.1 (Unknown)
 6253 127.0.0.1 (Unknown)
 6800 127.0.0.1 ::1 (Unknown)
+8080 10.99.1.2 Hermes Agent api_server platform (HTTPS, bridge-IP only)
 8080 127.0.0.1 llama-swap (user johnw)
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
 8180 127.0.0.1 OpenProject web interface
@@ -95,6 +96,7 @@
 8888 127.0.0.1 JupyterLab
 8890 127.0.0.1 SearXNG metasearch engine
 9080 127.0.0.1 Promtail
+9080 127.0.0.1 hermes-mcp (SSE upstream for nginx vhost hermes-mcp.vulcan.lan)
 9091 127.0.0.1 Wallabag container
 9095 127.0.0.1 (Unknown)
 9097 127.0.0.1 MailArchiver container

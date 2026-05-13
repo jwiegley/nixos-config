@@ -659,4 +659,9 @@ in
     frontend = final.stock-trader-frontend;
     pythonOverrides = final.stock-trader-python-overrides;
   };
+
+  # hermes-mcp: MCP server bridging OpenClaw to the Hermes Agent microVM
+  # over SSE. See docs/superpowers/plans/2026-05-12-openclaw-hermes-mcp-bridge.md
+  # for the full design. The systemd unit lands in Task 7.
+  hermes-mcp = final.callPackage ../pkgs/hermes-mcp { };
 }

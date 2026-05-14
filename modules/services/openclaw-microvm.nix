@@ -263,6 +263,55 @@ in
     ];
   };
 
+  # New atomic SOPS entries carved out of the legacy openclaw/config blob.
+  # These four credentials are merged into the Nix-generated
+  # pkgs.openclaw-config-template by openclaw-prepare-secrets.service
+  # via jq deep-merge. Phase A1 confirmed memorySearch.remote.apiKey is
+  # the literal "dummy-key" (provided by the template), so no
+  # openclaw/memsearch-api-key entry is required. openclaw/perplexity-api-key
+  # and qdrant/api-key already exist elsewhere in this file and in
+  # modules/services/qdrant.nix respectively — do NOT duplicate.
+
+  sops.secrets."openclaw/litellm-virtual-key" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
+  };
+
+  sops.secrets."openclaw/discord-token" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
+  };
+
+  sops.secrets."openclaw/gateway-auth-token" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
+  };
+
+  sops.secrets."openclaw/gh-issues-api-key" = {
+    owner = "openclaw";
+    group = "openclaw";
+    mode = "0400";
+    restartUnits = [
+      "openclaw-prepare-secrets.service"
+      "microvm@openclaw.service"
+    ];
+  };
+
   # ============================================================================
   # Section 2b: Build-Time Assertions
   # ============================================================================
@@ -509,10 +558,44 @@ in
       mkdir -p "${secretsStagingDir}"
       chmod 0755 "${secretsStagingDir}"
 
-      # Copy the SOPS-decrypted openclaw config
-      cp -f "${config.sops.secrets."openclaw/config".path}" "${secretsStagingDir}/openclaw-config"
-      chown ${toString openclawUid}:${toString openclawGid} "${secretsStagingDir}/openclaw-config"
-      chmod 0400 "${secretsStagingDir}/openclaw-config"
+      # Merge the Nix-generated structural template with atomic SOPS
+      # secrets to produce ${secretsStagingDir}/openclaw-config.
+      # The guest-side preStart in openclaw-vm.nix reads the result via
+      # virtiofs and does its own jq post-processing.
+      #
+      # This service runs as root (no User= directive on the unit) — that
+      # is intentional and required: --rawfile reads qdrant/api-key, which
+      # is owned root:prometheus mode 0440 (not openclaw:openclaw). The
+      # chown + chmod on the tempfile below restores the host→guest
+      # ownership contract before mv. Do NOT add User=openclaw here without
+      # also widening the qdrant/api-key group.
+      OVERLAY=$(${pkgs.jq}/bin/jq -n \
+        --rawfile vk "${config.sops.secrets."openclaw/litellm-virtual-key".path}" \
+        --rawfile dt "${config.sops.secrets."openclaw/discord-token".path}" \
+        --rawfile gt "${config.sops.secrets."openclaw/gateway-auth-token".path}" \
+        --rawfile pk "${config.sops.secrets."openclaw/perplexity-api-key".path}" \
+        --rawfile qk "${config.sops.secrets."qdrant/api-key".path}" \
+        --rawfile gh "${config.sops.secrets."openclaw/gh-issues-api-key".path}" \
+        '{
+          models: { providers: { vulcan: { apiKey: ($vk|rtrimstr("\n")) } } },
+          channels: { discord: { token: ($dt|rtrimstr("\n")) } },
+          gateway: { auth: { token: ($gt|rtrimstr("\n")) } },
+          plugins: { entries: {
+            "memory-qdrant": { config: { qdrantApiKey: ($qk|rtrimstr("\n")) } },
+            brave: { config: { webSearch: { apiKey: ($pk|rtrimstr("\n")) } } }
+          } },
+          skills: { entries: { "gh-issues": { apiKey: ($gh|rtrimstr("\n")) } } }
+        }')
+      TMP=$(${pkgs.coreutils}/bin/mktemp --tmpdir="${secretsStagingDir}" openclaw-config.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
+      ${pkgs.jq}/bin/jq -s '.[0] * .[1]' \
+        "${pkgs.openclaw-config-template}" \
+        <(printf '%s' "$OVERLAY") \
+        > "$TMP"
+      chown ${toString openclawUid}:${toString openclawGid} "$TMP"
+      chmod 0400 "$TMP"
+      mv "$TMP" "${secretsStagingDir}/openclaw-config"
+      trap - EXIT
 
       # Copy Google Calendar OAuth credentials
       GCP_OAUTH_SRC="${config.sops.secrets."openclaw/gcp-oauth-keys".path}"

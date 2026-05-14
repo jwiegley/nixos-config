@@ -24,12 +24,26 @@
     # Agent-grade model for long-running, tool-using sessions (OpenClaw
     # memory-qdrant, Discord/WhatsApp channels, ACP backend).  Kept separate
     # from `primary` so summarizers / alert probes can move independently.
+    #
+    # Optional fields below (contextWindow, maxTokens, api, reasoning, input,
+    # cost) are consumed by modules/services/openclaw-config.nix to render
+    # the .models.providers.vulcan.models[] entry. Defaults match what
+    # openclaw expects today; tune per-model as needed.
     agent = {
       # name = "hera/Qwen3.6-27B-Instruct";
       name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
+      contextWindow = 262144;
+      maxTokens = null;
+      api = "openai-completions";
+      reasoning = false;
+      input = [ "text" ];
+      cost = {
+        input = 0;
+        output = 0;
+      };
     };
     fallbacks = [
       # {

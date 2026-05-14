@@ -1,0 +1,12 @@
+{
+  "name": "node-red-event-logger",
+  "version": "0.1.0",
+  "description": "Logs all Node-RED message events and errors to PostgreSQL via the Hooks API",
+  "main": "index.js",
+  "node-red": {
+    "plugins": {
+      "event-logger": "index.js"
+    }
+  },
+  "keywords": ["node-red", "plugin"]
+}

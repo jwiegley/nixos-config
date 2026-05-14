@@ -38,9 +38,9 @@
 
 **Files:** none (read-only)
 
-- [ ] **Step 1: Run the metadata-only inspection**
+- [x] **Step 1: Run the metadata-only inspection** *(executed 2026-05-14)*
 
-Run:
+Ran:
 ```bash
 sudo jq -r '
   .agents.defaults.memorySearch.remote.apiKey as $m
@@ -54,14 +54,11 @@ sudo jq -r '
 ' /var/lib/openclaw/.openclaw/openclaw.json
 ```
 
-Expected output: JSON with four booleans and an integer length. **No credential bytes printed.**
+Output: `matches_vulcan=false, is_dummy=true, is_empty_or_null=false, length=9` — confirms the leaf is the literal `"dummy-key"`. No credential bytes printed.
 
-- [ ] **Step 2: Record the disposition in this plan**
+- [x] **Step 2: Record the disposition in this plan**
 
-Append a line to this plan immediately below this step (using `Edit`):
-```
-**Phase A1 outcome:** matches_vulcan=<bool>, is_dummy=<bool>, mapping_decision=<reuse-vulcan|dummy-literal|new-secret>
-```
+**Phase A1 outcome (2026-05-14):** `matches_vulcan=false`, `is_dummy=true`, `is_empty_or_null=false`, `length=9` (= len("dummy-key")). **Mapping decision: `dummy-literal`** — the openclaw-config-template hardcodes the literal string `"dummy-key"` at `.agents.defaults.memorySearch.remote.apiKey`. SOPS layout stays at 4 new entries (no `openclaw/memsearch-api-key` needed). The overlay block in Task 5 Step 2 should NOT include `agents.defaults.memorySearch.remote.apiKey` — the template provides the literal directly.
 
 Then update each subsequent task that references the memorySearch slot to use the chosen mapping:
 - If `matches_vulcan == true` → overlay maps `agents.defaults.memorySearch.remote.apiKey` from `--rawfile vk` (same as vulcan); SOPS layout has 4 new entries.
@@ -444,7 +441,7 @@ Edit `openclaw-microvm.nix` to replace **only the four cp/chown/chmod lines** id
 
 The merge runs **as root** (the existing `systemd.services.openclaw-prepare-secrets` has no `User=` directive). That's intentional and required: it allows `--rawfile` to read `qdrant/api-key` (which is owned `root:prometheus` mode `0440`, not `openclaw:openclaw`). The final `chown ... openclaw:openclaw` + `chmod 0400` on the temp file restores the host→guest ownership contract before `mv` to the staging path. If a future reviewer tightens this service with `User=openclaw`, the qdrant read will silently break — keep this comment in the unit body.
 
-(Apply the Phase A1 disposition: if Phase A1 chose `matches_vulcan`, the overlay line for `memorySearch.remote.apiKey` reuses `$vk`; if `is_dummy`, the line maps to the literal `"dummy-key"`; if `new-secret`, add `--rawfile mk` and adjust.)
+(Phase A1 outcome was `is_dummy` — the template hardcodes the literal `"dummy-key"` at `.agents.defaults.memorySearch.remote.apiKey`. The overlay therefore does NOT include that path. If a future re-run finds the field changed, re-check Phase A1.)
 
 ```nix
       # ── Merge the Nix-generated structural template with atomic SOPS
@@ -460,7 +457,6 @@ The merge runs **as root** (the existing `systemd.services.openclaw-prepare-secr
         --rawfile gh "${config.sops.secrets."openclaw/gh-issues-api-key".path}" \
         '{
           models: { providers: { vulcan: { apiKey: ($vk|rtrimstr("\n")) } } },
-          agents: { defaults: { memorySearch: { remote: { apiKey: ($vk|rtrimstr("\n")) } } } },
           channels: { discord: { token: ($dt|rtrimstr("\n")) } },
           gateway: { auth: { token: ($gt|rtrimstr("\n")) } },
           plugins: { entries: {
@@ -526,7 +522,7 @@ Find the existing `sops.secrets."openclaw/config"` block (near line 206) — lea
     };
 ```
 
-If Phase A1 chose `new-secret` for memorySearch, also add `sops.secrets."openclaw/memsearch-api-key"` with the same shape.
+Phase A1 outcome was `is_dummy`, so no `openclaw/memsearch-api-key` SOPS declaration is needed.
 
 `openclaw/perplexity-api-key` and `qdrant/api-key` are already declared elsewhere in this file — do NOT add them again.
 
@@ -779,8 +775,7 @@ In the chat (not in a file), tell the user:
 > - `openclaw/perplexity-api-key` (already present; mapped to `.plugins.entries.brave.config.webSearch.apiKey`)
 > - `qdrant/api-key` (already present; mapped to `.plugins.entries.memory-qdrant.config.qdrantApiKey`)
 >
-> Conditional fifth key (only if Phase A1 produced the `new-secret` result):
-> - `openclaw/memsearch-api-key` — paste the value at `.agents.defaults.memorySearch.remote.apiKey`.
+> Phase A1 (already executed) confirmed `.agents.defaults.memorySearch.remote.apiKey` is the literal `"dummy-key"` — the Nix template hardcodes this string, so no additional SOPS key is required.
 >
 > Save and exit sops. Tell me "secrets added" when done.
 

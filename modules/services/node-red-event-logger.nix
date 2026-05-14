@@ -16,6 +16,7 @@ let
   };
   pluginDest = "/var/lib/node-red/node_modules/node-red-event-logger";
   schemaSql = ../../config/node-red-event-logger/schema.sql;
+  rotateSql = ../../config/node-red-event-logger/rotate.sql;
 in
 {
   # Install the plugin via a copy (not a symlink). Why: Node.js's resolver
@@ -65,5 +66,27 @@ in
     script = ''
       ${pkgs.postgresql}/bin/psql -d nodered_events -v ON_ERROR_STOP=1 -f ${schemaSql}
     '';
+  };
+
+  systemd.services.node-red-event-logger-rotate = {
+    description = "Rotate Node-RED event log partitions (create next month, drop >30d)";
+    after = [ "postgresql.service" ];
+    requires = [ "postgresql.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+    };
+    script = ''
+      ${pkgs.postgresql}/bin/psql -d nodered_events -v ON_ERROR_STOP=1 -f ${rotateSql}
+    '';
+  };
+
+  systemd.timers.node-red-event-logger-rotate = {
+    description = "Daily Node-RED event log rotation";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:30:00";
+      Persistent = true;
+    };
   };
 }

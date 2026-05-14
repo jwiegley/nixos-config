@@ -137,12 +137,41 @@ module.exports = {
 
     /**
      * Logging Configuration
+     *
+     * console:  human-readable info to journalctl/stdout
+     * dbAudit:  every audit event (deploys, edits, nodes installed, runtime errors)
+     *           is written to PostgreSQL nodered_events.audit_events.
+     *           Hook-level message tracing is handled by the event-logger plugin.
      */
     logging: {
         console: {
             level: "info",
             metrics: false,
             audit: false
+        },
+        dbAudit: {
+            level: "info",
+            metrics: false,
+            audit: true,
+            handler: function(/* settings */) {
+                const { Pool } = require('/var/lib/node-red/node_modules/pg');
+                const pool = new Pool({
+                    host: '/run/postgresql',
+                    database: 'nodered_events',
+                });
+                pool.on('error', (err) => console.error('[audit] pg error:', err.message));
+                return function(msg) {
+                    const txt = typeof msg.msg === 'object'
+                        ? JSON.stringify(msg.msg)
+                        : (msg.msg == null ? null : String(msg.msg));
+                    pool.query(
+                        `INSERT INTO audit_events (level, type, event, name, node_id, msg, "user")
+                         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                        [msg.level, msg.type || null, msg.event || null, msg.name || null,
+                         msg.id || null, txt, (msg.user && msg.user.username) || null]
+                    ).catch(e => console.error('[audit] insert failed:', e.message));
+                };
+            }
         }
     },
 

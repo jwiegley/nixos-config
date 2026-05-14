@@ -664,4 +664,8 @@ in
   # over SSE. See docs/superpowers/plans/2026-05-12-openclaw-hermes-mcp-bridge.md
   # for the full design. The systemd unit lands in Task 7.
   hermes-mcp = final.callPackage ../pkgs/hermes-mcp { };
+
+  # Node-RED — bump to upstream maintenance release 4.1.10.
+  # See overlays/node-red.nix for the rationale and bump instructions.
+  inherit (import ./node-red.nix final prev) node-red;
 }

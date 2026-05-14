@@ -134,6 +134,7 @@
     ../../modules/monitoring/services/atd-alerts.nix
     ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
+    ../../modules/services/openclaw-config.nix
     ../../modules/services/openclaw-microvm.nix
     ../../modules/services/openclaw-self-heal.nix
     ../../modules/services/openclaw-nightly-report.nix

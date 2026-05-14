@@ -203,7 +203,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 16
       },
       "id": 2,
       "options": {
@@ -319,7 +319,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 16
       },
       "id": 3,
       "options": {
@@ -367,6 +367,140 @@
       ],
       "title": "Message trace lookup",
       "type": "table"
+    },
+    {
+      "id": 4,
+      "title": "Recent chains (discovery)",
+      "type": "table",
+      "description": "Lists recent message chains in the time window. Copy a msgid into the dashboard variable above to trace it in Panel 3.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "nodered_events"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "pluginVersion": "11.3.2",
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "msgid"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "started"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rows"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "topics"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nodered_events"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  msgid,\n  min(ts) AS started,\n  count(*) AS rows,\n  string_agg(DISTINCT topic, ', ' ORDER BY topic) FILTER (WHERE topic IS NOT NULL) AS topics,\n  string_agg(DISTINCT node_name, ' → ' ORDER BY node_name) AS nodes\nFROM msg_events\nWHERE msgid IS NOT NULL AND $__timeFilter(ts)\nGROUP BY msgid\nORDER BY started DESC\nLIMIT 30",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 30
+          }
+        }
+      ]
     }
   ],
   "refresh": "30s",

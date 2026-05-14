@@ -203,7 +203,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 26
       },
       "id": 2,
       "options": {
@@ -319,7 +319,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 26
       },
       "id": 3,
       "options": {
@@ -370,15 +370,15 @@
     },
     {
       "id": 4,
-      "title": "Recent chains (discovery)",
+      "title": "All events (browseable)",
       "type": "table",
-      "description": "Lists recent message chains in the time window. Copy a msgid into the dashboard variable above to trace it in Panel 3.",
+      "description": "Every Node-RED message hook in the selected time range. Click the funnel icon on any column header to filter by hook/node_type/node_name/topic/etc. Click a msgid to drill into a specific chain via the Message trace lookup panel.",
       "datasource": {
         "type": "postgres",
         "uid": "nodered_events"
       },
       "gridPos": {
-        "h": 8,
+        "h": 18,
         "w": 24,
         "x": 0,
         "y": 8
@@ -387,14 +387,20 @@
       "options": {
         "cellHeight": "sm",
         "footer": {
-          "countRows": false,
+          "countRows": true,
           "fields": "",
           "reducer": [
             "sum"
           ],
-          "show": false
+          "show": true
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "time",
+            "desc": true
+          }
+        ]
       },
       "fieldConfig": {
         "defaults": {
@@ -424,6 +430,70 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 195
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hook"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_type"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_name"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "topic"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "msgid"
             },
             "properties": [
@@ -436,36 +506,53 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "started"
+              "options": "payload"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 200
+                "value": 350
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "rows"
+              "options": "payload_size"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 70
+                "value": 90
+              },
+              {
+                "id": "unit",
+                "value": "decbytes"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "topics"
+              "options": "error"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 200
+                "value": 250
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
               }
             ]
           }
@@ -480,7 +567,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  msgid,\n  min(ts) AS started,\n  count(*) AS rows,\n  string_agg(DISTINCT topic, ', ' ORDER BY topic) FILTER (WHERE topic IS NOT NULL) AS topics,\n  string_agg(DISTINCT node_name, ' → ' ORDER BY node_name) AS nodes\nFROM msg_events\nWHERE msgid IS NOT NULL AND $__timeFilter(ts)\nGROUP BY msgid\nORDER BY started DESC\nLIMIT 30",
+          "rawSql": "SELECT\n  ts AS \"time\",\n  hook,\n  node_type,\n  node_name,\n  topic,\n  msgid,\n  payload,\n  payload_size,\n  error\nFROM msg_events\nWHERE $__timeFilter(ts)\nORDER BY ts DESC\nLIMIT 2000",
           "refId": "A",
           "sql": {
             "columns": [
@@ -497,7 +584,7 @@
                 "type": "groupBy"
               }
             ],
-            "limit": 30
+            "limit": 2000
           }
         }
       ]

@@ -177,6 +177,7 @@ in
           # No ensureDBOwnership — openclaw gets read-only access to org, not ownership
         }
         { name = "node-red"; }
+        { name = "grafana"; }
       ];
 
       authentication = lib.mkOverride 10 ''
@@ -187,6 +188,7 @@ in
         # Immich uses peer auth (NixOS native module)
         local   immich    immich                  peer
         local   nodered_events  node-red                peer
+        local   nodered_events  grafana                 peer
         local   all       all                     scram-sha-256
 
         # Localhost connections - require password

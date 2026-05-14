@@ -53,6 +53,7 @@ let
     "mac-studio-power.json" = ../monitoring/dashboards/mac-studio-power.json;
     "copyparty.json" = ../monitoring/dashboards/copyparty.json;
     "atd-dashboard.json" = ../monitoring/grafana-dashboards/atd-dashboard.json;
+    "node-red-events.json" = ../monitoring/dashboards/node-red-events.json;
   };
 
   # Combined derivation containing all dashboards
@@ -182,6 +183,22 @@ in
               alertmanager = {
                 implementation = "prometheus";
               };
+            };
+          }
+          {
+            name = "nodered_events";
+            type = "postgres";
+            uid = "nodered_events";
+            access = "proxy";
+            # Unix socket connection; peer auth via grafana role
+            url = "/run/postgresql";
+            user = "grafana";
+            isDefault = false;
+            editable = false;
+            jsonData = {
+              database = "nodered_events";
+              sslmode = "disable";
+              postgresVersion = 1700;
             };
           }
         ];

@@ -44,6 +44,13 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "node-red";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT INSERT ON TABLES TO "node-red";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO "node-red";
 
+-- Grant the grafana role read-only access for the inspection dashboard.
+GRANT USAGE ON SCHEMA public TO grafana;
+GRANT SELECT ON msg_events TO grafana;
+GRANT SELECT ON audit_events TO grafana;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO grafana;
+
 -- Initial partition for the current month
 DO $$
 DECLARE

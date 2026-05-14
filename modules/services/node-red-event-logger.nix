@@ -55,8 +55,16 @@ in
 
   systemd.services.node-red-event-logger-schema = {
     description = "Apply Node-RED event-logger schema migrations";
-    after = [ "postgresql.service" ];
-    requires = [ "postgresql.service" ];
+    # postgresql-setup runs ensureUsers (creates the `grafana` role). Schema
+    # SQL references that role, so we must wait for setup to complete.
+    after = [
+      "postgresql.service"
+      "postgresql-setup.service"
+    ];
+    requires = [
+      "postgresql.service"
+      "postgresql-setup.service"
+    ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";

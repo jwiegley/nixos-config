@@ -1,0 +1,126 @@
+groups:
+  - name: hermes_availability
+    interval: 60s
+    rules:
+      # End-to-end probe through hermes-mcp → Hermes Agent. This is the
+      # single load-bearing signal for "the OpenClaw ↔ Hermes bridge works
+      # right now"; if this is red for >5min, callers cannot reach Hermes.
+      - alert: HermesAskFailing
+        expr: hermes_mcp_ask_hermes_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-mcp
+          self_heal_eligible: "true"
+        annotations:
+          summary: "Hermes end-to-end ask_hermes probe failing for 5 minutes"
+          description: |
+            The 5-minute health check has failed to round-trip
+            `ask_hermes(prompt="Reply with the single word ACK")` for
+            5 consecutive minutes. The chain hermes-mcp ⇒ Hermes Agent
+            api_server (10.99.1.2:8080) ⇒ Qwen on hera is broken
+            somewhere. The downstream component metrics
+            (hermes_api_server_ok, hermes_mcp_sse_open_ok) tell you
+            which leg failed first.
+
+      # The api_server platform inside Hermes Agent. If this is red,
+      # Hermes itself is unreachable; restarting hermes-mcp will not
+      # help. Self-heal at this layer means restarting microvm@hermes.
+      - alert: HermesApiServerDown
+        expr: hermes_api_server_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+          self_heal_eligible: "true"
+        annotations:
+          summary: "Hermes api_server /v1/capabilities down for 5 minutes"
+          description: |
+            Hermes' OpenAI-compatible api_server platform is not
+            answering on http://10.99.1.2:8080/v1/capabilities.
+            Possible causes: microvm@hermes crashed; firewall rule
+            regressed; API_SERVER_KEY missing or wrong;
+            hermes-agent.service restarted but failed to bind the
+            platform (see /var/lib/hermes/.hermes/logs/errors.log
+            for "Refusing to start: binding to 0.0.0.0 requires
+            API_SERVER_KEY").
+
+      # The host-side bridge that OpenClaw talks to. If this fails
+      # the openclaw-side mcporter cannot reach hermes regardless of
+      # whether the upstream Hermes Agent is healthy.
+      - alert: HermesMcpBridgeDown
+        expr: hermes_mcp_sse_open_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-mcp
+          self_heal_eligible: "true"
+        annotations:
+          summary: "hermes-mcp /sse not accepting connections for 5 minutes"
+          description: |
+            The host's hermes-mcp.service is not accepting new SSE
+            connections on 127.0.0.1:9081. The systemd unit may be
+            up but stuck; restarting hermes-mcp.service typically
+            resolves this within a few seconds.
+
+      # Discord WebSocket zombie detector. When the Discord library's
+      # underlying WS goes stale after a reconnect, no inbound events
+      # are processed even though the TCP socket and HTTP rest API
+      # may still appear healthy. The bot looks online in Discord
+      # but won't reply to DMs. We detect this by watching
+      # gateway.log activity age: idle for >30m is highly suspicious
+      # — even idle, the bot logs cron ticks and reconnect attempts.
+      - alert: HermesDiscordZombieSuspected
+        expr: hermes_discord_last_event_age_seconds > 14400
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+          self_heal_eligible: "true"
+        annotations:
+          summary: "Hermes Discord platform shows no activity for >4 hours"
+          description: |
+            /var/lib/hermes/.hermes/logs/gateway.log has not recorded
+            a Discord-relevant event in the last 4+ hours. Hermes
+            only logs gateway.platforms.discord events on actual
+            activity (connect / inbound / outbound / reconnect), so
+            4h of silence on a bot that's supposed to be in active
+            channels is a strong signal that the Discord gateway
+            WebSocket has zombied. Restarting microvm@hermes
+            re-establishes a clean WS session.
+
+      # The check itself stopped running.
+      - alert: HermesHealthCheckStale
+        expr: time() - hermes_health_check_last_run_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-mcp
+        annotations:
+          summary: "Hermes health check has not run in >15 minutes"
+          description: |
+            The hermes-health-check.timer has not produced fresh
+            metrics in 15 minutes. Check `systemctl status
+            hermes-health-check.timer` and the most recent
+            invocation's journal.
+
+      # API key plumbing regression.
+      - alert: HermesApiKeyMissing
+        expr: hermes_api_key_present == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: configuration
+          service: hermes-mcp
+        annotations:
+          summary: "API_SERVER_KEY not present in /run/secrets/hermes/env"
+          description: |
+            The SOPS-decrypted hermes env file is missing the
+            API_SERVER_KEY field — every authenticated probe will
+            fail. Check `sops-install-secrets.service` status and
+            the `hermes:` block in secrets.yaml.

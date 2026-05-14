@@ -47,6 +47,7 @@
     ./aide-metrics.nix
     ./openclaw-canary.nix
     ./openclaw-mcporter-check.nix
+    ./hermes-health-check.nix
 
     # External systems monitoring
     ./opnsense-monitoring.nix

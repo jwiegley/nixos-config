@@ -138,6 +138,7 @@
     ../../modules/services/openclaw-nightly-report.nix
     ../../modules/services/hermes-microvm.nix
     ../../modules/services/hermes-mcp.nix
+    ../../modules/services/hermes-self-heal.nix
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
@@ -177,6 +178,8 @@
   services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
   services.hermes-mcp.enable = true;
+  services.hermesHealthCheck.enable = true;
+  services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;
 
   # This option defines the first version of NixOS you have installed on this

@@ -1,6 +1,7 @@
 """SSE MCP server exposing the six hermes-mcp tools."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -19,6 +20,16 @@ from hermes_mcp.hermes_client import HermesClient
 from hermes_mcp.session_store import SessionStore
 
 logger = logging.getLogger("hermes_mcp")
+
+# Tools that wrap a long upstream call to Hermes Agent and benefit from
+# heartbeats. Heartbeats reset the client-side `resetTimeoutOnProgress`
+# timer so a 15-20 minute analytical run doesn't trip the MCP client's
+# tool-call timeout. The other tools (list/get/delete metadata) are fast
+# enough that heartbeats are pointless overhead.
+_HEARTBEAT_TOOLS = frozenset(
+    {"ask_hermes", "continue_session", "summarize_session"}
+)
+_HEARTBEAT_INTERVAL_SECONDS = 30.0
 
 _TOOL_SCHEMAS: list[Tool] = [
     Tool(
@@ -94,6 +105,44 @@ _TOOL_HANDLERS = {
 }
 
 
+async def _heartbeat(
+    *,
+    session: Any,
+    progress_token: str | int,
+    related_request_id: str,
+    tool_name: str,
+) -> None:
+    """Periodic progress notifier — runs until cancelled.
+
+    Sends one notification every _HEARTBEAT_INTERVAL_SECONDS so the
+    client's `resetTimeoutOnProgress` timer keeps refreshing. The
+    progress counter is monotonic seconds-elapsed; no `total` is
+    supplied since we genuinely don't know how long Hermes will take
+    (the whole point of the heartbeat).
+    """
+    elapsed = 0
+    try:
+        while True:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL_SECONDS)
+            elapsed += int(_HEARTBEAT_INTERVAL_SECONDS)
+            try:
+                await session.send_progress_notification(
+                    progress_token=progress_token,
+                    progress=float(elapsed),
+                    message=f"{tool_name}: Hermes still working ({elapsed}s)",
+                    related_request_id=related_request_id,
+                )
+            except Exception:
+                # If the client has gone away the send will fail; just
+                # stop heartbeating — the main handler will discover the
+                # closed stream when it tries to write its final result.
+                logger.debug("heartbeat send failed for %s; stopping", tool_name)
+                return
+    except asyncio.CancelledError:
+        # Normal path: main handler completed and cancelled us.
+        raise
+
+
 def build_app(cfg: Config) -> Starlette:
     server: Server = Server("hermes-mcp")
     store = SessionStore(cfg.db_path)
@@ -108,11 +157,41 @@ def build_app(cfg: Config) -> Starlette:
         handler = _TOOL_HANDLERS.get(name)
         if handler is None:
             return [TextContent(type="text", text=json.dumps({"error": f"unknown tool {name!r}"}))]
+
+        # If the client supplied a progress token in `_meta.progressToken`,
+        # spawn a background heartbeat that sends a `notifications/progress`
+        # every _HEARTBEAT_INTERVAL_SECONDS. Claude-code (and any MCP client
+        # honoring `resetTimeoutOnProgress: true`) resets its tool-call timer
+        # on each notification, so a 20-minute Hermes run no longer trips the
+        # client's MCP_TOOL_TIMEOUT.
+        heartbeat_task: asyncio.Task[None] | None = None
+        if name in _HEARTBEAT_TOOLS:
+            try:
+                ctx = server.request_context
+            except LookupError:
+                ctx = None
+            if ctx is not None and ctx.meta is not None and ctx.meta.progressToken is not None:
+                heartbeat_task = asyncio.create_task(
+                    _heartbeat(
+                        session=ctx.session,
+                        progress_token=ctx.meta.progressToken,
+                        related_request_id=str(ctx.request_id),
+                        tool_name=name,
+                    )
+                )
+
         try:
             result = await handler(store, client, **arguments)
         except Exception as exc:
             logger.exception("tool %s failed", name)
             return [TextContent(type="text", text=json.dumps({"error": str(exc)}))]
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except (asyncio.CancelledError, Exception):
+                    pass
         return [TextContent(type="text", text=json.dumps(result))]
 
     sse = SseServerTransport("/messages/")

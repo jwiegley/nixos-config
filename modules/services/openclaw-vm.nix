@@ -598,11 +598,17 @@ in
 
       # MCP tool-call timeout (ms). claude-code defaults to 60_000, which is
       # too short for the local-LLM Hermes bridge (`mcpServers.hermes`):
-      # a single ask_hermes call can take 2–5 minutes for non-trivial
-      # prompts on the 27B MLX model. 600_000 ms = 10 minutes is a
-      # comfortable upper bound; well within hermes-mcp's own 600 s upstream
-      # read timeout (see pkgs/hermes-mcp/src/hermes_mcp/config.py).
-      MCP_TOOL_TIMEOUT = "600000";
+      # Hermes is itself an agent that invokes its own internal tools
+      # (yfinance, execute_code, web search…) during analytical queries.
+      # Real Hermes runs in /var/lib/hermes/.hermes/logs/agent.log show
+      # 15-20 minute end-to-end times for tool-heavy financial analysis
+      # prompts. 1_800_000 ms = 30 minutes covers the observed worst case
+      # with headroom. Pair this with the MCP progress-notification
+      # heartbeats sent by hermes-mcp's tool_ask_hermes — when the
+      # client honors `resetTimeoutOnProgress` (claude-code does), the
+      # timer resets on each notification and effectively never expires
+      # while Hermes is making forward progress.
+      MCP_TOOL_TIMEOUT = "1800000";
     };
 
     serviceConfig = {

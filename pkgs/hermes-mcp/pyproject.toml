@@ -1,6 +1,6 @@
 [project]
 name = "hermes-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server bridging OpenClaw to Hermes Agent over SSE"
 requires-python = ">=3.12"
 dependencies = [

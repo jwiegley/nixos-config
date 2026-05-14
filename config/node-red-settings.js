@@ -153,8 +153,12 @@ module.exports = {
             level: "info",
             metrics: false,
             audit: true,
+            // NODE_PATH is set to /var/lib/node-red/node_modules in the
+            // node-red service unit (see node-red-event-logger.nix), which
+            // lets this bare-name require resolve even though settings.js
+            // is loaded out of /nix/store.
             handler: function(/* settings */) {
-                const { Pool } = require('/var/lib/node-red/node_modules/pg');
+                const { Pool } = require('pg');
                 const pool = new Pool({
                     host: '/run/postgresql',
                     database: 'nodered_events',

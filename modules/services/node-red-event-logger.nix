@@ -45,6 +45,13 @@ in
 
   systemd.services.node-red.restartTriggers = [ pluginSrc ];
 
+  # Make modules installed into Node-RED's userDir resolvable from settings.js
+  # (loaded out of /nix/store by node-red) and from any other code path whose
+  # caller location isn't under /var/lib/node-red. Without this, settings.js's
+  # `require('pg')` for the audit handler fails because Node walks up from
+  # /nix/store, not /var/lib/node-red.
+  systemd.services.node-red.environment.NODE_PATH = "/var/lib/node-red/node_modules";
+
   systemd.services.node-red-event-logger-schema = {
     description = "Apply Node-RED event-logger schema migrations";
     after = [ "postgresql.service" ];

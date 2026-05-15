@@ -45,6 +45,16 @@
     restartUnits = [ "node-red.service" ];
   };
 
+  # Admin API bearer token (used by johnw shell / Claude for live flow edits
+  # via the Node-RED Admin API). Mint via the /auth/token endpoint with the
+  # admin user credentials. Owned by johnw so curl can read it without sudo;
+  # not consumed by node-red itself.
+  sops.secrets."node-red-admin-token" = {
+    owner = "johnw";
+    group = "users";
+    mode = "0400";
+  };
+
   # Node-RED service configuration
   services.node-red = {
     enable = true;

@@ -31,9 +31,13 @@ PROMPT = "Reply with exactly two characters: O then K. No explanation."
 METRIC_PATH = (
     "/var/lib/prometheus-node-exporter-textfiles/openclaw_hermes_smoke.prom"
 )
-RESPONSE_MAX_LEN = 1024  # hermes-mcp wraps replies in a JSON envelope
-# ({session_id, reply, message_count}); the trivial-prompt envelope is
-# ~90 chars but leaves headroom for longer session IDs.
+# hermes-mcp wraps replies in a JSON envelope
+# {session_id, reply, message_count}. We try to parse and apply the
+# 16-char bound from the spec to the *reply* field only; if parsing
+# fails (a future hermes-mcp emits raw text), we fall back to bounding
+# the whole text content at REPLY_FALLBACK_MAX_LEN.
+REPLY_MAX_LEN = 16
+REPLY_FALLBACK_MAX_LEN = 1024
 
 
 @dataclass
@@ -104,6 +108,25 @@ def build_tools_call(request_id: int, prompt: str) -> bytes:
             "_meta": {"progressToken": f"smoke-{request_id}"},
         },
     }).encode()
+
+
+def _extract_reply_from_envelope(text: str) -> Optional[str]:
+    """If text is a hermes-mcp envelope, return the `reply` field; else None.
+
+    hermes-mcp wraps tool responses in JSON like
+    `{"session_id": "...", "reply": "OK", "message_count": 1}`.
+    Returns None on parse failure or missing/non-string `reply`.
+    """
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    reply = obj.get("reply")
+    if isinstance(reply, str):
+        return reply
+    return None
 
 
 def extract_tool_result_text(payload: str, request_id: int) -> Optional[str]:
@@ -233,10 +256,28 @@ def run_probe(target: str = METRIC_PATH) -> SmokeResult:
             return None
 
         result_text = _read_until(resp, _find_tool_result, deadline)
-        if result_text is not None and 0 < len(result_text) <= RESPONSE_MAX_LEN:
-            ok = True
-            response_text = result_text
-    except Exception as e:
+        if result_text is not None:
+            reply = _extract_reply_from_envelope(result_text)
+            if reply is not None and 0 < len(reply) <= REPLY_MAX_LEN:
+                ok = True
+                response_text = result_text
+            elif (
+                reply is None
+                and 0 < len(result_text) <= REPLY_FALLBACK_MAX_LEN
+            ):
+                # Envelope didn't parse — accept the raw text if short.
+                ok = True
+                response_text = result_text
+    except (
+        OSError,
+        http.client.HTTPException,
+        RuntimeError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as e:
+        # Only catch transient/IO-level failures. Programming errors
+        # (TypeError, AttributeError, etc.) propagate so they fail the
+        # systemd unit and surface in the journal as stack traces.
         print(f"smoke probe error: {e}", file=sys.stderr)
 
     duration = time.monotonic() - start

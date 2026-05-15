@@ -112,6 +112,21 @@ def test_extract_tool_result_text_error_returns_none():
     assert text is None
 
 
+def test_extract_reply_from_envelope_happy_path():
+    """The hermes-mcp envelope's reply field is extracted."""
+    text = json.dumps({"session_id": "abc", "reply": "OK", "message_count": 1})
+    assert s._extract_reply_from_envelope(text) == "OK"
+
+
+def test_extract_reply_from_envelope_non_json_returns_none():
+    assert s._extract_reply_from_envelope("just a raw string") is None
+
+
+def test_extract_reply_from_envelope_missing_reply_returns_none():
+    text = json.dumps({"session_id": "abc", "message_count": 1})
+    assert s._extract_reply_from_envelope(text) is None
+
+
 # ---------------- Task 5: Atomic metric writer ----------------
 
 

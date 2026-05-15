@@ -46,12 +46,21 @@ in
         User = "hermes-mcp";
         Group = "hermes-mcp";
         ExecStart = "${smokeScript}/bin/openclaw-hermes-smoke";
-        # Hardening
+        # Cap runtime so a wedged read doesn't pile up zombie units.
+        # Budget is BUDGET_SECONDS (90s) inside the script; 120s on
+        # the systemd side leaves margin for python startup.
+        RuntimeMaxSec = "120s";
+        # Hardening (matches modules/monitoring/services/hermes-health-check.nix)
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];
         PrivateTmp = true;
         NoNewPrivileges = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictRealtime = true;
+        LockPersonality = true;
       };
     };
 

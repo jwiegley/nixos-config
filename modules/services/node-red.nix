@@ -77,6 +77,11 @@
   };
 
   # Ensure Node-RED starts after secrets are available
+  # Add bash to the service PATH so npm postinstall scripts that spawn /bin/sh
+  # (e.g. core-js's "Thank you" message script, a transitive dep of
+  # @flowfuse/node-red-dashboard) don't ENOENT and fail the whole install.
+  systemd.services.node-red.path = [ pkgs.bash ];
+
   systemd.services.node-red = {
     after = [ "sops-install-secrets.service" ];
     wants = [ "sops-install-secrets.service" ];

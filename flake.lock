@@ -3115,11 +3115,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1778695432,
-        "narHash": "sha256-of2Y4cnLZCwDksNsjHVs3jbw1tQYo2b6wuV8yugRItE=",
+        "lastModified": 1778827691,
+        "narHash": "sha256-WYG+jeNK1aSNuA/8MNtZM0eSeAx2Gqwrpm9sbWG/YS4=",
         "ref": "refs/heads/main",
-        "rev": "83eb7862c326ba7a46ac01a6b85d401714207dc9",
-        "revCount": 131,
+        "rev": "a29f629a8fbd14e7d93967c2aa3e5acf322cf406",
+        "revCount": 132,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

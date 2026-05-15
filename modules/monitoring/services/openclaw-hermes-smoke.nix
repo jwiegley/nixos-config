@@ -11,6 +11,8 @@ let
     flakeIgnore = [
       "E501" # long lines in JSON-RPC payload formatting
       "W503"
+      "E265" # shebang flagged as non-conforming block comment
+      "E203" # whitespace before ':' (Black-style slicing)
     ];
   } (builtins.readFile ../../../scripts/openclaw_hermes_smoke.py);
 in

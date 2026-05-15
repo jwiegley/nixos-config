@@ -58,23 +58,24 @@ Single markdown file. Sections (in order):
    - **4a.** Bridge SSE returns 200: `curl -sI --max-time 5 http://127.0.0.1:9081/sse`.
    - **4b.** Claw VM can reach the bridge (executed via the openclaw-probe SSH key): `sudo ssh -i /root/.ssh/openclaw-probe openclaw@10.99.0.2 'curl -sI --max-time 5 http://127.0.0.1:9081/sse'`.
    - **4c.** Health metrics summary: `cat /var/lib/prometheus-node-exporter-textfiles/hermes_health.prom | grep -E '^hermes_(ask|api_server|sse|api_key|discord)_'` plus a short "what each line means" key.
-   - **4d.** Full Claw-side test (manual; documented as the gold-standard recovery probe):
+   - **4d.** Full Claw-side test (**manual only — not run by the automated smoke probe**; this is the gold-standard recovery probe operators run by hand when investigating an outage):
      - Short variant: an SSH-in-and-prompt sequence that asks Claw to use the `ask_hermes` MCP tool with a short prompt (e.g. price of BTC). Expected 1–3 min.
-     - Long variant: same but exercising Hermes's `execute_code` skill (e.g. `df -h` inside the Hermes sandbox). Expected 2–5 min.
+     - Long variant: same but exercising Hermes's `execute_code` skill (e.g. `df -h` inside the Hermes sandbox). Expected 2–5 min. Note: this exceeds the automated probe's 90s budget by design.
    - **4e.** Hermes Discord age: `cat /var/lib/prometheus-node-exporter-textfiles/hermes_health.prom | grep ^hermes_discord_event_age_seconds`. <14400 = healthy; ≥14400 = self-heal will restart the Hermes microVM.
 5. **Failure modes + recovery** — short numbered list of the ones we've actually hit, each with a 1-2 line cause description and a one-command (or one-action) remediation:
    1. **Claw hallucinates "Hermes offline"** — model-reasoning limitation; Claw is a 27B local model, not Claude. Remediation: ignore, retry. The MCP description text already discourages diagnosis attempts.
    2. **Hermes Discord WebSocket zombies after a restart** — gateway silent for hours, `hermes_discord_event_age_seconds` climbs. Auto-remediation: `hermes-self-heal.service` restarts microvm@hermes at the 4h threshold. Manual remediation: `sudo systemctl restart microvm@hermes.service`.
    3. **MCP timeout during long Hermes runs** — `ask_hermes` blocks for 15-20 min while Hermes runs internal tool-use cycles. Mitigation already in place: `MCP_TOOL_TIMEOUT=1800000` (30 min) on the Claw side; progress heartbeats every 30s from hermes-mcp via `notifications/progress` with `resetTimeoutOnProgress: true`. Failure indicator: client-side timeout despite heartbeat presence — investigate hermes-mcp logs.
    4. **LiteLLM key rotation** — agent stops responding because Claw/openclaw-config's `litellm-virtual-key` SOPS secret has been re-keyed but openclaw-prepare-secrets.service didn't re-run. Remediation: `sudo systemctl restart openclaw-prepare-secrets.service && sudo systemctl restart microvm@openclaw.service`. `restartUnits` in the sops.secrets declaration handles this automatically on `nixos-rebuild switch`.
-6. **Metrics reference** — single table: metric name | type | range | meaning. Covers `hermes_*` (5 metrics), `openclaw_canary_*` (5 metrics), `openclaw_mcporter_*` (5 metrics), and the new `openclaw_hermes_smoke_*` (4 metrics).
-7. **Where to make changes** — six rows:
+6. **Metrics reference** — single table: metric name | type | range | meaning. Counts to be re-enumerated against the live `.prom` files when the plan executes (current `# HELP` line counts: `hermes_health.prom` = 9, `openclaw_canary.prom` = 10, `openclaw_mcporter.prom` = 5). Plus the 4 new `openclaw_hermes_smoke_*` metrics this spec adds.
+7. **Where to make changes** — seven rows:
    - Bump MCP tool timeout: `modules/services/openclaw-vm.nix`, `MCP_TOOL_TIMEOUT` env var.
    - Add a new MCP tool: `pkgs/hermes-mcp/src/hermes_mcp/tools.py` + `server.py` registration.
    - Change Claw's agent model: `models.nix` `llm.agent.name`.
    - Add/rotate an atomic SOPS secret: edit `secrets.yaml` via `sops`, add a corresponding `sops.secrets."openclaw/<name>"` declaration in `openclaw-microvm.nix`, wire it into the overlay block in `openclaw-prepare-secrets.service`.
    - Adjust self-heal cooldowns/thresholds: `modules/services/hermes-self-heal.nix` (script body).
-   - Bump the smoke probe schedule: `modules/monitoring/services/openclaw-hermes-smoke.nix` (`OnCalendar`).
+   - Bump the smoke probe schedule: `modules/monitoring/services/openclaw-hermes-smoke.nix` (`OnUnitActiveSec`).
+   - **Kill switch — disable the smoke probe:** `sudo systemctl stop --now openclaw-hermes-smoke.timer` (revert by `start`), or set the timer's `enable = false` in the module and rebuild for a persistent disable.
 
 Doc length target: ≈350 lines of markdown. Style matches `docs/HOME_ASSISTANT_ALERTING.md` (headings, copy-paste blocks, tables where they help).
 
@@ -86,14 +87,15 @@ A standalone Python 3.12 script (the hermes-mcp package already pins 3.12). It d
 
 Behavior:
 
-1. Open SSE connection to `http://127.0.0.1:9081/sse`. Receive the initial `endpoint` event (gives a session-scoped POST URL).
-2. POST the MCP `initialize` request (protocol `2025-03-26`, client info: `openclaw-hermes-smoke/0.1.0`).
-3. Wait for `initialized` notification ack from the SSE stream (~50ms).
-4. POST `tools/call` with `name="ask_hermes"`, `arguments={"prompt": "Reply with exactly OK and nothing else."}`. Include a `progressToken` so the heartbeat path gets exercised.
-5. Stream SSE events; ignore `notifications/progress`; capture the first `tools/call` result.
-6. Timeout budget: 90 seconds total (Hermes typically replies to a trivial prompt in 2–10 seconds on the local 27B; 90s leaves margin for cold-cache + model swap).
-7. Write `/var/lib/prometheus-node-exporter-textfiles/openclaw_hermes_smoke.prom` atomically (write to `.tmp`, rename) with four metrics:
-   - `openclaw_hermes_smoke_ok` — 1 if a non-empty text response was received; 0 otherwise.
+1. Open SSE connection to `http://127.0.0.1:9081/sse`. Receive the initial `endpoint` event (gives a session-scoped POST URL on the same host:port).
+2. POST the MCP `initialize` JSON-RPC request with `clientInfo: { name: "openclaw-hermes-smoke", version: "0.1.0" }` and `capabilities: {}`. **Do not hard-code a `protocolVersion`**; pass the one currently used by the `mcp` Python SDK at packaging time — but always parse and store the `protocolVersion` from the server's `initialize` *response* (delivered via the SSE channel) and use that as the authoritative negotiated version. If they disagree, prefer the server's choice for subsequent messages.
+3. Send `notifications/initialized` as a client→server JSON-RPC notification via POST. **This is sent by the client, NOT received from the server** — there is no server-side "initialized ack". No response is expected (it's a notification, not a request).
+4. POST `tools/call` with `name="ask_hermes"`, `arguments={"prompt": "Reply with exactly two characters: O then K. No explanation."}`. Include a `progressToken` in the request `_meta` so the heartbeat path gets exercised.
+5. Stream SSE events; ignore `notifications/progress`; capture the first `tools/call` JSON-RPC response.
+6. Timeout budget: 90 seconds total. Sufficient for the trivial-prompt path because the prompt has no plausible tool need — Hermes should answer from the model alone, without invoking yfinance/execute_code/etc. The 15–20 min `MCP_TOOL_TIMEOUT` documented elsewhere in this spec applies to tool-invoking prompts; this probe explicitly stays in the no-tool-cycle path. If 90s is regularly exceeded, that's a signal the local 27B model is under unusual load or the system is otherwise unhealthy — and the metric will reflect it.
+7. Treat the result as success if the text content's length is ≤ 16 characters AND non-empty (assert liveness, not response correctness — the model may emit trailing whitespace, a newline, or a stray quote even for a deterministic prompt).
+8. Write `/var/lib/prometheus-node-exporter-textfiles/openclaw_hermes_smoke.prom` atomically (write to `.tmp`, rename) with four metrics:
+   - `openclaw_hermes_smoke_ok` — 1 if a non-empty text response of length ≤16 was received within the budget; 0 otherwise.
    - `openclaw_hermes_smoke_duration_seconds` — wall-clock between initiate and result.
    - `openclaw_hermes_smoke_response_bytes` — length of the response text (0 on failure).
    - `openclaw_hermes_smoke_last_run_timestamp_seconds` — `time.time()` at end of probe.
@@ -105,22 +107,26 @@ Dependencies: stdlib only (`http.client`, `json`, `urllib`, `time`, `os`, `sys`)
 #### B.2 Tests: `/etc/nixos/scripts/openclaw-hermes-smoke-tests/`
 
 `test_smoke.py` — unit-tests the parser and the metric-writer with a fake SSE server (stdlib `http.server` in a thread). Two tests:
-- `test_happy_path_emits_ok=1` — bridge returns a content envelope; metric writer emits `openclaw_hermes_smoke_ok 1`.
-- `test_timeout_emits_ok=0` — bridge stalls; metric writer emits `openclaw_hermes_smoke_ok 0` and zero response_bytes.
+- `test_happy_path_emits_ok_1` — bridge returns a content envelope; metric writer emits `openclaw_hermes_smoke_ok 1`.
+- `test_timeout_emits_ok_0` — bridge stalls; metric writer emits `openclaw_hermes_smoke_ok 0` and zero response_bytes.
 
-Pytest is invoked from a `nix run` derivation hooked into `flake.nix` via the existing pattern (see `scripts/openclaw-self-heal/tests/`).
+Tests are run manually with:
+```bash
+nix-shell -p python312 python312Packages.pytest --run 'pytest scripts/openclaw-hermes-smoke-tests/ -v'
+```
+
+No Nix-wired test derivation. There is no existing pattern for hooking stdlib-Python-script tests into `flake check` in this repo (`scripts/openclaw-self-heal/tests/` exists but is not Nix-wired either). Building one is its own work item and is **out of scope** for this spec — adding the smoke probe should not be blocked on inventing a new test-runner pattern.
 
 #### B.3 NixOS module: `/etc/nixos/modules/monitoring/services/openclaw-hermes-smoke.nix`
 
 Provides:
 - `systemd.services.openclaw-hermes-smoke` (oneshot)
   - `Type=oneshot`, `ExecStart=${pkgs.writers.writePython3Bin "..." ... script}`
-  - `User=hermes-mcp` (already exists; this user is the principal of the bridge service so it's the natural "from the bridge's perspective" actor — but for the smoke probe we actually want a separate identity to catch permission regressions; see open question below)
-  - `WorkingDirectory=/var/lib/openclaw-hermes-smoke` (a tmpfs-style state dir, created via `tmpfiles.rules` `d`)
+  - `User=hermes-mcp` (already exists; this user is the principal of the bridge service so it's the natural "from the bridge's perspective" actor). The textfile-collector directory `/var/lib/prometheus-node-exporter-textfiles/` is mode `1777` (sticky world-writable), so no group changes are needed; `hermes-mcp` can write directly.
 - `systemd.timers.openclaw-hermes-smoke`
-  - `OnCalendar=*:0/15` (every 15 min, matching `hermes-health-check.timer`)
-  - `RandomizedDelaySec=120` (so it doesn't fire same second as hermes-health-check)
-  - `Persistent=true`
+  - `OnUnitActiveSec=900s` (every 15 minutes). **Not chosen to match anything** — `hermes-health-check.timer` runs every 300s; the smoke probe runs less frequently because each invocation costs a Hermes model inference (vs. hermes-health-check's lighter HTTP curls). 15 min × 96 runs/day × ~5s avg inference ≈ 8 model-minutes/day of synthetic load, which is acceptable; 5 min would be 3x that. Operators tuning this lever should weigh inference cost against detection latency.
+  - `OnBootSec=3min` (delay first run after boot to let microvm@hermes settle).
+  - Distinct `RandomizedDelaySec=60`.
 - Imported from `hosts/vulcan/default.nix`.
 
 #### B.4 Port registry update: `/etc/nixos/docs/ports.txt`
@@ -134,10 +140,10 @@ No new port (probe uses existing 9081). Just add a comment line near the 9081 en
 - **No changes to hermes-mcp itself.** The probe speaks the bridge's public MCP-SSE contract; it doesn't need any new server-side affordances.
 - **No changes to the openclaw guest VM.** The probe runs entirely on the host.
 
-## Open questions
+## Resolved decisions (previously open questions)
 
-1. **User identity for the smoke probe.** Three reasonable choices: (a) reuse the existing `hermes-mcp` user (simplest; no new user); (b) reuse the `prometheus` user that owns the textfile-collector directory (clean separation but requires the textfile dir to be writeable by it); (c) create a new `openclaw-hermes-smoke` system user (most isolated). The textfile dir at `/var/lib/prometheus-node-exporter-textfiles/` is owned by `prometheus:prometheus` mode `0775` — both `hermes-mcp` (in supplementary group `prometheus`? need to check) and a new user (with the prometheus supplementary group) can write there. Recommendation: option (a) — `hermes-mcp` already has the right adjacency; verify in Task 1 of the plan that it's in the `prometheus` group or can be added cleanly.
-2. **What exactly to ask Hermes.** "Reply with exactly OK and nothing else" is a deterministic short prompt, but Hermes (NousResearch agent) may interpolate explanation. Better wording recommended: `"Respond with exactly two characters: the letters O and K. No other content."` — and assert `len(response) <= 16` rather than `response == "OK"` (room for trailing whitespace/newline). The smoke is for liveness, not response correctness.
+1. **User identity:** `hermes-mcp`. The textfile-collector directory `/var/lib/prometheus-node-exporter-textfiles/` is `1777` (sticky world-writable) — any user can write atomic textfiles there, so no supplementary-group changes are needed. `hermes-mcp` is the natural identity because it's already the bridge service's principal; using it keeps the "view from the bridge" framing intact.
+2. **Probe prompt and response check:** Send `"Reply with exactly two characters: O then K. No explanation."`. Assert success if the response text is non-empty and `len(text) <= 16` (allows trailing whitespace/newline/quote). The smoke is for liveness, not response correctness — a stricter `response == "OK"` would convert benign model variance into false negatives.
 
 ## Verification (what "done" looks like)
 

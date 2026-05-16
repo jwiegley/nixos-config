@@ -150,8 +150,21 @@ in
     iptables -A FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP
     iptables -A FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP
 
-    # Egress logging — log new outbound connections from the bridge
-    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress: " --log-level info
+    # Allow conservative outbound set (per 7-day egress log review):
+    # - TCP 443 (HTTPS — Discord, OpenRouter, internal hera)
+    # - UDP 443 (HTTP/3 — Cloudflare-fronted services increasingly use it)
+    # - TCP/UDP 53 (DNS)
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -p tcp --dport 443 -j ACCEPT
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -p udp --dport 443 -j ACCEPT
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -p tcp --dport 53  -j ACCEPT
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -p udp --dport 53  -j ACCEPT
+
+    # Egress logging — log new outbound connections that didn't match
+    # any ACCEPT above (i.e. about to be DROPped by the final rule).
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress-rejected: " --log-level info
+
+    # Final DROP — anything not matched by the ACCEPT rules above is rejected
+    iptables -A FORWARD -i ${bridgeName} -o ${externalInterface} -j DROP
 
     # Belt-and-suspenders IPv6: the guest has v6 disabled and the
     # bridge is v4-only, but if anything ever flips v6 forwarding on
@@ -167,7 +180,12 @@ in
     iptables -D FORWARD -i ${bridgeName} -d 10.0.0.0/8 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 172.16.0.0/12 -j DROP 2>/dev/null || true
     iptables -D FORWARD -i ${bridgeName} -d 192.168.0.0/16 -j DROP 2>/dev/null || true
-    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress: " --log-level info 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -p udp --dport 443 -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -p tcp --dport 53  -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -p udp --dport 53  -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -m conntrack --ctstate NEW -j LOG --log-prefix "hermes-egress-rejected: " --log-level info 2>/dev/null || true
+    iptables -D FORWARD -i ${bridgeName} -o ${externalInterface} -j DROP 2>/dev/null || true
     ip6tables -D FORWARD -i ${bridgeName} -j DROP 2>/dev/null || true
   '';
 

@@ -46,6 +46,14 @@ in
     # Every script does its own argument validation. The action
     # scripts are state-changing (matched by the L3 allowlist in the
     # daemon); the aux scripts are read-only/trivial helpers.
+    # Suppress sudo's mail-on-error for openclaw-heal. Belt-and-braces
+    # alongside the /run/sudo ReadWritePath above: if sudo ever still
+    # fails for any reason in this confined namespace, we do NOT want
+    # it to spawn a sendmail child that hangs on a read-only maildrop.
+    security.sudo.extraConfig = ''
+      Defaults:${user} !mail_no_perms,!mail_no_user,!mail_badpass,!mail_always
+    '';
+
     security.sudo.extraRules = [
       {
         users = [ user ];
@@ -146,6 +154,13 @@ in
           "/var/lib/openclaw-self-heal"
           "/var/log/openclaw-self-heal"
           "/var/lib/prometheus-node-exporter-textfiles"
+          # sudo writes a per-uid timestamp file at /run/sudo/ts/<uid>
+          # even with NOPASSWD entries; without RW access it fails with
+          # "Read-only file system" and (worse) tries to mail root via
+          # sendmail, whose postdrop also fails in the namespace, leaving
+          # a stuck sendmail/postdrop chain forever (observed 2026-05-08
+          # through 2026-05-15).
+          "/run/sudo"
         ];
       };
       # `script` synthesises ExecStart; do not set ExecStart in serviceConfig

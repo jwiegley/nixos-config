@@ -125,6 +125,7 @@
     ../../modules/services/vane.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/monitoring/services/openclaw-hermes-smoke.nix
+    ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
     ../../modules/services/aria2.nix
@@ -185,6 +186,7 @@
   services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;
   services.openclawHermesSmoke.enable = true;
+  services.openclawConfigDriftCheck.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

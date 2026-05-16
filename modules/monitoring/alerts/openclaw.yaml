@@ -240,3 +240,23 @@ groups:
             is failing.  Without it, `openclaw_mcporter_*` metrics go
             stale and the HaDown / ServerStale alerts cannot fire.
             Check `systemctl status openclaw-mcporter-check.service`.
+
+      - alert: OpenClawConfigDrift
+        expr: openclaw_config_drift_probe_up == 1 and (openclaw_config_drift_keys_added > 0 or openclaw_config_drift_keys_removed > 0)
+        for: 24h
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "OpenClaw config schema-drift detected for 24 hours"
+          description: |
+            The live openclaw.json key set (read from the guest VM) differs
+            from the Nix-rendered template.  This usually means upstream
+            openclaw bumped and added a new config key the template does
+            not yet model — fields silently fall back to whatever Hermes-mcp
+            and the guest preStart inject by default.
+            Investigate: SSH into 10.99.0.2, jq the live config, diff against
+            the in-store openclaw-config-template, decide whether to extend the
+            template (modules/services/openclaw-config.nix) or update the
+            committed snapshot (tests/openclaw/expected-keys.txt).

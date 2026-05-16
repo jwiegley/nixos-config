@@ -31,6 +31,10 @@ in
       ];
       wants = [ "network-online.target" ];
 
+      # ssh binary is needed by the python script; under ProtectSystem=strict
+      # the unit's PATH doesn't include /run/current-system/sw/bin.
+      path = [ pkgs.openssh ];
+
       environment = {
         OPENCLAW_TEMPLATE_PATH = "${pkgs.openclaw-config-template}";
       };

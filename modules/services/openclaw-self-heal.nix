@@ -71,6 +71,18 @@ in
             options = [ "NOPASSWD" ];
           }
           {
+            command = "${actionsDir}/restage_secrets";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/restart_canary";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/restart_mcporter_check";
+            options = [ "NOPASSWD" ];
+          }
+          {
             command = "${auxDir}/read_log_tail";
             options = [ "NOPASSWD" ];
           }

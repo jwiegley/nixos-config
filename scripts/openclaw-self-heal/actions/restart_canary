@@ -1,0 +1,20 @@
+#!/run/current-system/sw/bin/bash
+# openclaw-self-heal action: restart the host-side openclaw-canary
+# service so it re-runs and refreshes openclaw_canary_*.prom.
+#
+# Used when OpenClawCanaryStale or OpenClawCanaryMetricAbsent fires —
+# the canary is a host timer-driven unit, NOT something inside the VM,
+# so restart_microvm is the wrong action for these alerts.
+#
+# Output: one line of JSON to stdout describing the result.
+set -euo pipefail
+start_ts=$(date +%s)
+rc=0
+/run/current-system/sw/bin/systemctl restart openclaw-canary.service || rc=$?
+end_ts=$(date +%s)
+duration=$((end_ts - start_ts))
+if [ "$rc" -eq 0 ]; then
+  printf '{"ok": true, "duration_s": %d, "notes": "openclaw-canary.service restarted"}\n' "$duration"
+else
+  printf '{"ok": false, "duration_s": %d, "notes": "restart failed rc=%d"}\n' "$duration" "$rc"
+fi

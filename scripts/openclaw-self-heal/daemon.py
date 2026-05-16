@@ -19,6 +19,8 @@ ACTION_ALLOWLIST = (
     "doctor_fix",
     "prune_stale_plugin_deps",
     "restage_secrets",
+    "restart_canary",
+    "restart_mcporter_check",
 )
 WEBHOOK_PORT = 9092
 
@@ -104,6 +106,11 @@ ACTION_MAP = {
     # Other mcporter entries: structural drift means preStart did not
     # finish.  A plain microvm restart re-runs preStart.
     "OpenClawMcporterServerStale":       "restart_microvm",
+    # The host-side canary/mcporter-check timers feed Prometheus from
+    # outside the VM, so VM restarts don't help if they go stale.
+    "OpenClawCanaryStale":               "restart_canary",
+    "OpenClawCanaryMetricAbsent":        "restart_canary",
+    "OpenClawMcporterCheckStale":        "restart_mcporter_check",
 }
 
 

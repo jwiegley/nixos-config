@@ -9,6 +9,8 @@ def test_allowlist_is_exactly_the_authorized_actions():
         "doctor_fix",
         "prune_stale_plugin_deps",
         "restage_secrets",
+        "restart_canary",
+        "restart_mcporter_check",
     )
 
 def test_validate_action_accepts_allowlisted():

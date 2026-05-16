@@ -85,11 +85,9 @@ Panels:
    - `openclaw_plugin_init_failures_recent_total` (overlay; rising counter is the most actionable view for a "plugins not loading" incident)
    - `openclaw_channel_plugin_loaded{name=...}` rendered as a per-channel table sidebar (uses the `name` label: discord/whatsapp/lobster — at-a-glance which channel plugins are present in the most recent ready list)
 
-5. **Table panel — MCP servers**
-   - `openclaw_mcporter_server_ok` (one row per `name` label value)
-   - `openclaw_mcporter_ha_auth_ok` (single value, separate panel)
-   - `openclaw_mcporter_ha_endpoint_reachable` (single value)
-   - `openclaw_mcporter_ha_token_present` (single value)
+5. **Table + stat row — MCP servers**
+   - 5a. Table panel `openclaw_mcporter_server_ok` (one row per `name` label value — discord, gh-issues, hass, etc.)
+   - 5b. Three single-value stat panels in a row: `openclaw_mcporter_ha_auth_ok`, `openclaw_mcporter_ha_endpoint_reachable`, `openclaw_mcporter_ha_token_present`
 
 6. **Graph panel — Smoke probe outcomes**
    - `openclaw_hermes_smoke_ok` (line, 0/1)

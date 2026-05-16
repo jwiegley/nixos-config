@@ -54,6 +54,7 @@ let
     "copyparty.json" = ../monitoring/dashboards/copyparty.json;
     "atd-dashboard.json" = ../monitoring/grafana-dashboards/atd-dashboard.json;
     "node-red-events.json" = ../monitoring/dashboards/node-red-events.json;
+    "openclaw-hermes-integration.json" = ../monitoring/dashboards/openclaw-hermes-integration.json;
   };
 
   # Combined derivation containing all dashboards

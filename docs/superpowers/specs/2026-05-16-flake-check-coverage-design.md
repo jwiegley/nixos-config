@@ -26,13 +26,18 @@ This catches both: (a) accidental key removal from the Nix template (template br
 When a deliberate template change adds or removes a key, the workflow is:
 
 ```bash
+# NOTE: the template is overlay-injected into the host's pkgs set from inside
+# a NixOS module, NOT via /etc/nixos/overlays/. Plain `nix build .#openclaw-config-template`
+# will NOT resolve — only the `nixosConfigurations.vulcan.pkgs.<attr>` form works.
 TPL=$(nix build --no-link --print-out-paths '/etc/nixos#nixosConfigurations.vulcan.pkgs.openclaw-config-template')
-jq -r 'paths | map(tostring) | join(".")' "$TPL" | sort > tests/openclaw-expected-keys.txt
-git add tests/openclaw-expected-keys.txt
+jq -r 'paths | map(tostring) | join(".")' "$TPL" | sort > tests/openclaw/expected-keys.txt
+git add tests/openclaw/expected-keys.txt
 git commit -m "chore(openclaw): update expected schema keys for <reason>"
 ```
 
 The check failure message will include this exact regeneration recipe so an operator doesn't have to look it up.
+
+The committed snapshot lives at `/etc/nixos/tests/openclaw/expected-keys.txt` — a **new top-level `tests/` directory** for repo-wide flake-check fixtures. This is the first such fixture; future flake checks for other services may add siblings (e.g. `tests/hermes-mcp/...`).
 
 ### What it doesn't catch
 
@@ -51,7 +56,9 @@ A new monitoring service that compares the live openclaw.json (inside the guest 
 #### Service: `openclaw-config-drift-check`
 
 - Runs as `oneshot` on a daily timer (`OnCalendar = "*-*-* 04:00:00"` with `RandomizedDelaySec = "20m"`).
-- Reads the live openclaw.json from the guest VM via the existing openclaw-probe SSH key, **pre-stripping secret-named keys** through the canonical `SECRET_RE` regex so no credential bytes ever cross the SSH pipe.
+- Runs as `User=openclaw-heal`. **This is the first time openclaw-heal acquires SSH access** (not a reuse — the user previously only used sudo to escalate for local systemctl actions). Wire the existing `sops.secrets."openclaw/probe-ssh-private-key"` (already declared and used by `openclaw-nightly-report.service`) into this unit via `LoadCredential = "probe-ssh-key:${config.sops.secrets."openclaw/probe-ssh-private-key".path}"`. The SOPS secret keeps its current `root:root 0400` ownership; LoadCredential resolves the read-time access for systemd unit consumption without granting the openclaw-heal user direct read on `/run/secrets/openclaw/probe-ssh-private-key`.
+- Reads the live openclaw.json from the guest VM via the openclaw-probe SSH key, **pre-stripping secret-named keys** through the canonical secret regex so no credential bytes ever cross the SSH pipe.
+- The canonical secret regex is currently inlined in three other places (`openclaw-nix-config` spec, `openclaw_hermes_smoke.py`, `scripts/openclaw-nightly-report.py`). This service makes the fourth. The pattern is `([Aa]pi[Kk]ey|[Tt]oken|[Pp]assword|[Pp]assphrase|[Ss]ecret|[Ss]ecretKey|[Pp]sk|[Bb]earer)`. **Inline it in this service too**; extracting to a shared aux file is a separate refactor and not blocking.
 - Reads the in-store template path from the rendered prepare-secrets unit (the same grep pattern Task 7 of the openclaw-nix-config plan used).
 - Computes two integer counts: keys-in-live-not-in-template (`added`) and keys-in-template-not-in-live (`removed`).
 - Writes `/var/lib/prometheus-node-exporter-textfiles/openclaw_config_drift.prom` with three metrics:
@@ -68,16 +75,20 @@ A new monitoring service that compares the live openclaw.json (inside the guest 
 - The 24-hour window prevents an alert during the operator's deliberate template-update window.
 - Annotations include a pointer to the runbook entry on how to investigate (which is just "fetch live config, diff against template, decide whether to update template or `expected-keys.txt`").
 
-#### Where to make the check fire (audit follow-up)
+#### Failure mode
 
-Since the audit added `restart_canary` and `restart_mcporter_check` as the right action for stale-host-side-probes, the drift check's parallel concern is fixed by re-running the check itself — that's `restart_drift_check` action. Adding that to the daemon's `ACTION_ALLOWLIST` + `ACTION_MAP` for an `OpenClawConfigDriftCheckStale` alert is **out of scope** for this spec; if the drift-check timer fails repeatedly, the existing systemd-level alerting picks it up. The drift-check unit's `Restart=on-failure` plus the daily timer means transient failures self-correct.
+If the drift-check timer or service fails repeatedly, the daily cadence + systemd's standard `unit failed` alerting catches it. We do NOT add a `restart_drift_check` action to the self-heal daemon — daily cadence + transient-failure self-correction makes that unnecessary.
 
 ### What it doesn't catch
 
 - Same as Deliverable A's value-level / type-level limitations.
-- A complete openclaw guest VM outage looks identical to "no drift detected" — the service exits cleanly on SSH failure with `openclaw_config_drift_*` set to `-1` so the dashboard can distinguish "no data" from "no drift".
+- A complete openclaw guest VM outage. **Handled by emitting a companion `openclaw_config_drift_probe_up` gauge (`1` = SSH probe succeeded; `0` = probe failed)** rather than poisoning the `added`/`removed` gauges with sentinel values. On probe failure the `added`/`removed` gauges are simply not refreshed (their last-known values stay until the next successful run). The alert rule uses `openclaw_config_drift_probe_up == 1 and (openclaw_config_drift_keys_added > 0 or ...)` to avoid spurious alerts when the VM is reachable but the previous successful probe found drift. The companion gauge also gives the dashboard a clean "probe healthy" signal.
 
 ## Deliverable C: Nix-wired pytest checks
+
+### Pre-requisite gate (must precede C's wiring)
+
+`scripts/openclaw-self-heal/tests/test_daemon.py::test_allowlist_is_exactly_the_authorized_actions` currently **fails** — the audit work in commit `64ed83c` added `restart_canary` and `restart_mcporter_check` to `ACTION_ALLOWLIST` but didn't update the test. C's wiring would have `nix flake check` fail on day one for an unrelated reason. The plan's first step under C must update this assertion to match the current 6-tuple. Empirically verified: `1 failed, 24 passed` today.
 
 ### Scope
 
@@ -106,6 +117,14 @@ The smoke-tests suite uses stdlib `http.server` to fake the MCP-SSE server, whic
 - **No new test-runner pattern**. We use plain `pkgs.runCommand` + pytest, not a Nix-derived pytest harness like the buildPythonApplication patterns in nixpkgs. Reason: the scripts are not Python packages; they're loose .py files with pytest tests next to them. Wrapping each in a `buildPythonApplication` would be more invasive than this spec warrants.
 - **No coverage reporting**. Add later if useful; not the point of this spec.
 - **No parallel test execution**. Per-suite, sequential, fine for our scale.
+
+### Dependencies confirmed minimal
+
+All three suites use stdlib + pytest only — no `anthropic`, `prometheus_client`, `httpx`, or other third-party packages. The runCommand derivation needs `python312` and `python312Packages.pytest` only. If a future test adds a third-party import, the spec for that addition must update this list.
+
+## Cross-deliverable boundary clarification
+
+Deliverable A catches **template-vs-committed-snapshot at build time** (developer-facing — fails `nix flake check` if the template loses a key). Deliverable B catches **live-config-vs-template at runtime** (upstream-drift-facing — emits a metric when production diverges from the template). They share neither code nor failure modes; the overlap is conceptual only.
 
 ## Verification — what "done" looks like
 

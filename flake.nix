@@ -159,5 +159,36 @@
           ./hosts/vulcan
         ];
       };
+
+      checks.${system} =
+        let
+          helpers = import ./tests/checks.nix { inherit pkgs; };
+        in
+        {
+          openclaw-config-schema = import ./tests/openclaw/check-schema.nix {
+            inherit pkgs;
+            inherit (inputs.self.nixosConfigurations.vulcan.pkgs)
+              openclaw-config-template
+              ;
+          };
+
+          openclaw-self-heal-tests = helpers.mkPytestCheck {
+            name = "openclaw-self-heal-tests";
+            src = ./scripts/openclaw-self-heal;
+            suiteDir = "tests";
+          };
+
+          openclaw-hermes-smoke-tests = helpers.mkPytestCheck {
+            name = "openclaw-hermes-smoke-tests";
+            src = ./scripts;
+            suiteDir = "openclaw-hermes-smoke-tests";
+          };
+
+          openclaw-nightly-report-tests = helpers.mkPytestCheck {
+            name = "openclaw-nightly-report-tests";
+            src = ./scripts;
+            suiteDir = "openclaw-nightly-report-tests";
+          };
+        };
     };
 }

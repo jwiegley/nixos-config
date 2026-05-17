@@ -537,19 +537,21 @@ in
   # Uses the vobject overlay defined in pythonPackagesExtensions above
   radicale = final.callPackage radicaleVcard4Def { };
 
-  # Rspamd - Update to 3.13.2 to fix lua_magic empty text part errors
-  # Version 3.13.0 has a bug that causes errors when processing emails with empty text parts
-  # Fixed in 3.13.1+, using 3.13.2 (more stable than 3.14.0 which crashes on AARCH64)
-  # 3.14.0 has Lua API crash: "invalid option '%.' to 'lua_pushfstring'" on ARM64
+  # Rspamd - upgraded to 4.0.1 (2026-04-05) which contains the upstream fix
+  # for the "invalid option '%.' to 'lua_pushfstring'" panic that previously
+  # forced a 3.14.0 -> 3.13.2 downgrade. Root cause was lua_redis.c:765 using
+  # the unsupported `%.2f` precision specifier with lua_pushfstring; fixed in
+  # rspamd commit 04f1118f5 (Dec 2025), first landed in 3.14.3, present in
+  # 3.14.3 / 4.0.0 / 4.0.1. On vulcan this triggered twice in May 2026 when
+  # transient Redis timeouts caused all four proxy workers to hit the bug.
   rspamd = prev.rspamd.overrideAttrs (oldAttrs: {
-    version = "3.13.2";
+    version = "4.0.1";
     src = prev.fetchFromGitHub {
       owner = "rspamd";
       repo = "rspamd";
-      rev = "3.13.2";
-      hash = "sha256-lfMU9o/wnHHAnfRUUNto1edZjXI32q847ZQkSoekg5o=";
+      rev = "4.0.1";
+      hash = "sha256-8hpplpo57DnOUT1T8jcfGRyIoWySfqrOFrMgH1tept8=";
     };
-    # Remove patches that are already included in 3.13.2
     patches = [ ];
   });
 

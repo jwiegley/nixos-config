@@ -10,11 +10,27 @@ Guidance for Claude Code when working with this NixOS repository.
 
 You have a recurring failure mode: tunnel-visioning on a diagnostic or implementation
 task and treating the rules below as a passive constraint. That has produced multiple
-violations (2025-10-27 OAuth tokens, 2026-04-29 WiFi PSK). It must stop.
+violations (2025-10-27 OAuth tokens, 2026-04-29 WiFi PSK, 2026-05-12 SOPS partial output,
+2026-05-13 settings.json plaintext keys, 2026-05-18 db_url grep leak, 2026-05-18
+SOPS phone+pairing code via journalctl). It must stop.
 
-**Mandatory pre-flight check — run BEFORE any tool call that reads or displays file
-contents (`cat`, `head`, `tail`, `Read`, `less`, `more`, `awk`, `sed -n`, redirected
-`grep`, anything that prints file bytes):**
+**The rule applies to BOTH INPUTS AND OUTPUTS.** Past violations clustered around
+output-emitting tools (`journalctl`, `curl`, `psql`, `jq` on a config file, even
+`Read` of an innocuous-looking settings file that turned out to hold plaintext API
+keys), not just direct `cat`-of-secret. Any data path that *might* surface
+credentials, tokens, PII, or PSKs into this conversation triggers the check —
+regardless of whether the *source path* looks sensitive.
+
+**Mandatory pre-flight check — run BEFORE any tool call whose stdout/stderr will
+appear in this conversation AND whose source data might carry secrets:**
+
+Triggering tools include but are not limited to: `cat`, `head`, `tail`, `Read`,
+`less`, `more`, `awk`, `sed -n`, redirected `grep`, `journalctl`, `systemctl status`
+on units that load credentials, `curl`/`wget` against config endpoints, `psql -c`
+against tables that may hold tokens, `jq` against settings files, `ssh <host> '<cmd>'`
+when the remote command emits secrets, `nmcli connection show <wifi-name>` without
+field-targeting, the Read tool against anything under `~/.claude/`, `~/.config/`, or
+`/var/lib/<service>/`.
 
 1. **PATH CHECK** — Is the path on the FORBIDDEN-BY-DEFAULT list below, or in any
    directory adjacent to one (network, auth, secrets, credential storage)?
@@ -37,6 +53,32 @@ contents (`cat`, `head`, `tail`, `Read`, `less`, `more`, `awk`, `sed -n`, redire
    secrets, or auth (e.g. matches `credential`, `secret`, `token`, `psk`, `password`,
    `api_key`, `oauth`), every nearby file is suspect until proven otherwise.
 
+5. **OUTPUT CHECK** — Before pasting any block of tool output into the conversation,
+   ask: could this output contain a credential the user moved into SOPS, a token a
+   service loaded via `LoadCredential`, an API key in `env`, a PSK, an OAuth refresh
+   token, a phone number / SSID treated as PII, or a database connection string with
+   a password? If the answer is "possibly yes":
+   - DO NOT paste the raw block. Paraphrase ("the service is running, paired=true, N
+     vCards indexed") or quote a *specific, manually-verified-safe* line.
+   - When a particular line must be shown, redact secrets inline in the *same
+     command* that produces it — never as a follow-up step. E.g.
+     `journalctl ... | sed -E 's/(code for )\+[0-9]+(: )\S+/\1[REDACTED]\2[REDACTED]/'`,
+     or `jq 'del(.env)' < settings.json`.
+   - "I just want to confirm the value flowed through" is the failure mode that
+     produced the 2026-05-18 SOPS phone+pairing leak. Verifying SOPS plumbing by
+     pasting the journal IS the leak.
+
+**Mechanical backstop (active since 2026-05-18):** A PreToolUse hook wraps every
+`Bash` tool call with a pipe through `~/.claude/scripts/claude-output-redactor.py`,
+scrubbing common credential patterns (E.164 phone numbers, API key prefixes
+`sk-ant-*`/`sk-proj-*`/`gh*_*`/`AIza*`/`pplx-*`/etc., Bearer tokens, postgres/mysql
+URLs with passwords, htpasswd lines, PEM private-key bodies, and generic
+`password=`/`token=`/`secret=` assignments). The hook is a **safety net, not a
+license to ignore the rule above.** It won't catch every shape, it doesn't apply
+to `Read`/`Grep`/`Glob` output, and a single new credential format slips through.
+Treat the redaction as defense in depth — apply the OUTPUT CHECK first; the hook
+is only there to soften the consequence when the check fails.
+
 **FORBIDDEN-BY-DEFAULT paths — no `cat`/`Read`/content display without explicit
 user approval, even with `sudo`:**
 
@@ -54,8 +96,26 @@ user approval, even with `sudo`:**
 **Adjacent / context-sensitive paths — apply Purpose Check rigorously:**
 
 - `/etc/nixos/secrets.yaml` — encrypted form is OK to view; never decrypt
-- `journalctl` output — usually safe, but redact if a service logs raw secrets
 - `nmcli connection show <name>` — fine for metadata; avoid full output for WiFi
+- `~/.claude/settings.json`, any tool's `settings.json`/`config.json` — may hold
+  plaintext API keys in MCP `env` blocks or similar; if you must inspect, use
+  `jq 'del(.. | .env? // empty)'` or field-target a known-safe key
+
+**Outputs that frequently surface secrets despite an innocuous source path:**
+
+- `journalctl -u <unit>` for any service that takes `LoadCredential`, prints a
+  pairing/registration code, or logs unredacted request bodies (whatsapp-bridge,
+  hass, postfix, dovecot, stock-trader, rspamd, anything that calls a third-party
+  API). Paste only summary lines you've eyeballed; never dump the whole tail.
+- `curl http://<svc>/api/config` or any settings-dump endpoint — pipe through
+  `jq 'del(.apiKey, .token, .password)'` (or the project-specific shape) before
+  display.
+- `psql -c "SELECT * FROM <auth-table>"` — column-filter to non-secret fields, or
+  use `\d` for schema only.
+- `Read` of `~/.claude/settings.json`, `*.env`, `*.credentials`, OAuth client JSON
+  — opt for field-targeted jq instead.
+- `ssh <host> '<cmd>'` where the remote command would normally print secrets — the
+  ssh stdout becomes your conversation just like a local command would.
 
 **If you violate these rules: STOP ALL WORK immediately. Apologize. Save a feedback
 memory describing the specific failure mode. Wait for explicit user acknowledgment

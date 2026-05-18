@@ -47,6 +47,14 @@
             OPNSENSE_EXPORTER_OPS_API = "10.88.0.1:8444";
             OPNSENSE_EXPORTER_OPS_INSECURE = "true";
             OPNSENSE_EXPORTER_INSTANCE_LABEL = "opnsense-router";
+            # Kea DHCPv4/v6 collectors fail with "cannot unmarshal array into
+            # Go struct field KeaDhcpv*LeasesResponse.Interfaces of type
+            # map[string]string" — OPNsense returns Interfaces as [] but the
+            # exporter expects {}. No upstream fix as of v0.0.10/11; no
+            # dashboards consume these metrics. Re-enable when upstream ships
+            # a schema fix.
+            OPNSENSE_EXPORTER_DISABLE_KEADHCPV4 = "true";
+            OPNSENSE_EXPORTER_DISABLE_KEADHCPV6 = "true";
           };
 
           environmentFiles = [ "/run/secrets-opnsense-exporter/opnsense-exporter-secrets" ];

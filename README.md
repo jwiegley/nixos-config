@@ -170,8 +170,8 @@ external-facing services tunnel out via Cloudflare.
 - **llama-swap** (native): orchestrator at `llama-swap.vulcan.lan` for swapping
   llama.cpp backends on demand.
 - **OpenClaw** (microVM): hardware-isolated AI-agent gateway at
-  `openclaw.vulcan.lan` and `drafts-mcp.vulcan.lan`; persistent state via
-  virtiofs from `/var/lib/openclaw`; openclaw-canary monitors liveness.
+  `openclaw.vulcan.lan`; persistent state via virtiofs from
+  `/var/lib/openclaw`; openclaw-canary monitors liveness.
 - **Stock Trader** (native): hardened Python service at `trader.vulcan.lan`
   (Schwab OAuth-bootstrapped) pinned to a Gitea-hosted release tag.
 - **JupyterLab** (native): notebook server at `jupyter.vulcan.lan` with a

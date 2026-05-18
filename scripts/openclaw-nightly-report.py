@@ -63,7 +63,6 @@ HOST_BLIND_SERVERS = frozenset(
     {
         "google-calendar-personal",
         "google-calendar-work",
-        "drafts",  # remote SSE on hera; flaky from host
         "home-assistant",  # bridge needs in-VM token mount
     }
 )
@@ -604,7 +603,6 @@ def render_report(
     server_ok = textfile.get("server_ok", {})
     expected = sorted(server_ok.keys()) or sorted(
         {
-            "drafts",
             "email-contacts",
             "google-calendar-personal",
             "google-calendar-work",

@@ -22,12 +22,12 @@ def test_parses_multiple_servers():
     stdout = (
         "- email-contacts — Email contacts (7 tools, 0.6s)\n"
         "- stock-trader — Stock trading (8 tools, 0.6s)\n"
-        "- drafts — Drafts SSE bridge (1 tool, 0.8s)\n"
+        "- vane — Vane AI (1 tool, 0.8s)\n"
     )
     result = report._parse_mcporter_output(stdout)
-    assert set(result) == {"email-contacts", "stock-trader", "drafts"}
+    assert set(result) == {"email-contacts", "stock-trader", "vane"}
     assert result["email-contacts"]["tool_count"] == 7
-    assert result["drafts"]["tool_count"] == 1
+    assert result["vane"]["tool_count"] == 1
 
 
 def test_ignores_non_matching_lines():
@@ -46,7 +46,7 @@ def test_empty_input_returns_empty_dict():
 
 def test_run_mcporter_list_via_ssh_returns_parsed_dict(monkeypatch):
     fake_stdout = (
-        "- drafts — Drafts (1 tool, 0.5s)\n"
+        "- google-calendar-personal — GCal personal (3 tools, 0.5s)\n"
         "- home-assistant — HA bridge (12 tools, 0.7s)\n"
     )
     fake_proc = MagicMock(returncode=0, stdout=fake_stdout, stderr="")
@@ -54,7 +54,7 @@ def test_run_mcporter_list_via_ssh_returns_parsed_dict(monkeypatch):
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_KEY", "/tmp/fake-key")
     monkeypatch.setenv("OPENCLAW_REPORT_SSH_TARGET", "openclaw@10.99.0.2")
     result = report.run_mcporter_list_via_ssh()
-    assert set(result) == {"drafts", "home-assistant"}
+    assert set(result) == {"google-calendar-personal", "home-assistant"}
     assert result["home-assistant"]["tool_count"] == 12
 
 

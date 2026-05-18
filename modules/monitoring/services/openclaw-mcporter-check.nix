@@ -40,7 +40,6 @@ let
     EXPECTED_SERVERS = (
         "home-assistant",
         "stock-trader",
-        "drafts",
         "email-contacts",
         "google-calendar-personal",
         "google-calendar-work",

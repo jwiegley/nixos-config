@@ -56,7 +56,7 @@ in
       # /nix/store globbing — the latter has bitten us when the readable
       # set under sandbox didn't include the expected store paths.
       OPENCLAW_REPORT_MCPORTER = "${mcporterPkg}/bin/mcporter";
-      # In-VM probe for HOST_BLIND_SERVERS (drafts, google-calendar-*,
+      # In-VM probe for HOST_BLIND_SERVERS (google-calendar-*,
       # home-assistant). SSH key is delivered via LoadCredential below;
       # %d expands to $CREDENTIALS_DIRECTORY at runtime.
       OPENCLAW_REPORT_SSH_KEY = "%d/probe-ssh-key";

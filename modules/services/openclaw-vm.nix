@@ -428,7 +428,6 @@ in
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.0.1:993 → 127.0.0.1:993)
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.0.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)
-      "drafts-mcp.vulcan.lan" # Drafts MCP (via nginx → hera:8808)
       "searxng.vulcan.lan" # SearXNG metasearch (via nginx → 127.0.0.1:8890)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx → 127.0.0.1:3007)
     ];
@@ -523,7 +522,7 @@ in
   # In-VM sshd
   # ========================================================================
   # Used exclusively by openclaw-nightly-report on the host to probe MCP
-  # servers whose credentials live inside the VM (drafts, google-calendar-*,
+  # servers whose credentials live inside the VM (google-calendar-*,
   # home-assistant). Listening only on the bridge IP and gated by the guest
   # firewall to source 10.99.0.1.
 
@@ -845,13 +844,8 @@ in
                 }
               '
 
-              # Drafts (remote SSE on hera)
-              apply_mcporter_jq '
-                .mcpServers["drafts"] = {
-                  "url": "https://drafts-mcp.vulcan.lan/sse",
-                  "description": "Create and manage Drafts notes (Drafts app on hera)"
-                }
-              '
+              # Drafts (removed 2026-05-18 — hera-side server retired)
+              apply_mcporter_jq 'del(.mcpServers["drafts"])'
 
               # Hermes Agent bridge — same loopback pattern as the
               # home-assistant entry above. The host hermes-mcp service

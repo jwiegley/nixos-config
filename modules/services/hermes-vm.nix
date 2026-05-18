@@ -90,6 +90,13 @@ in
   networking.enableIPv6 = false;
   boot.kernel.sysctl."net.ipv6.conf.all.disable_ipv6" = 1;
   boot.kernel.sysctl."net.ipv6.conf.default.disable_ipv6" = 1;
+
+  # Disable systemd-timesyncd. The host-side egress firewall (see
+  # hermes-microvm.nix) only allows TCP/UDP 53 and 443 outbound, so NTP
+  # to 0.nixos.pool.ntp.org gets dropped and floods the kernel log with
+  # hermes-egress-rejected entries (~1000/day). The VM's clock is
+  # driven by kvm-clock from the host, which is already accurate.
+  services.timesyncd.enable = false;
   # Allow routing 127.0.0.0/8 traffic on non-loopback interfaces.
   # Required for the nftables OUTPUT DNAT below that rewrites localhost
   # connections to the host bridge IP — without this, the kernel

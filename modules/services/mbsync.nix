@@ -86,6 +86,43 @@ in
       # The service needs to become inactive for the timer to schedule the next run
       extraServiceConfig = { };
     })
+
+    # BIA configuration (john@bia.bahai.org via Google Workspace)
+    (mkMbsyncService {
+      name = "bia";
+      user = "bia";
+      group = "bia";
+      secretName = "bia-imap-bahai-org";
+      trash = "[Gmail]/Trash";
+
+      remoteConfig = ''
+        Host imap.gmail.com
+        User john@bia.bahai.org
+        PassCmd "cat /run/secrets/bia-imap-bahai-org"
+        Port 993
+        TLSType IMAPS
+        CertificateFile /etc/ssl/certs/ca-certificates.crt
+      '';
+
+      channels = ''
+        # Google Workspace to Dovecot channel
+        Channel gmail-all
+        Far :bia-remote:
+        Near :dovecot-local:
+        Patterns INBOX !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred" !"[Gmail]/Trash"
+        Create Near
+        Remove Near
+        Expunge Near
+        Sync Pull
+        SyncState /var/lib/mbsync-bia/
+      '';
+
+      timerInterval = "15min";
+
+      # Don't use RemainAfterExit with OnUnitActiveSec timer
+      # The service needs to become inactive for the timer to schedule the next run
+      extraServiceConfig = { };
+    })
   ];
 
   # Install isync package to make mbsync available

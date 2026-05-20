@@ -15,6 +15,7 @@ import os
 import pathlib
 import re
 import subprocess
+import urllib.request
 
 ACTION_ALLOWLIST = (
     "restart_microvm",
@@ -150,3 +151,37 @@ def run_action(name: str, timeout_s: int = 240) -> dict:
         return {"ok": False, "notes": f"non-json action output (rc={r.returncode}): {r.stderr[-200:]}"}
     parsed.setdefault("ok", r.returncode == 0)
     return parsed
+
+
+LITELLM_URL = "http://127.0.0.1:4000/v1/chat/completions"
+LITELLM_KEY_ENV = "LITELLM_KEY"
+
+
+class LitellmUnreachable(RuntimeError):
+    pass
+
+
+def _http_post_json(url, headers, data, timeout):
+    req = urllib.request.Request(url, data=data.encode(), headers=headers, method="POST")
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
+    key = os.environ.get(LITELLM_KEY_ENV)
+    if not key:
+        raise LitellmUnreachable("LITELLM_KEY not set")
+    headers = {"Content-Type": "application/json",
+               "Authorization": f"Bearer {key}"}
+    body = json.dumps({"model": model, "messages": messages,
+                       "temperature": 0.0,
+                       "response_format": {"type": "json_object"}})
+    try:
+        resp = _http_post_json(LITELLM_URL, headers, body, timeout=timeout_s)
+    except Exception as e:
+        raise LitellmUnreachable(str(e))
+    payload = json.loads(resp.read())
+    content = payload["choices"][0]["message"]["content"]
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        raise LitellmUnreachable(f"non-json AI response: {content[:200]}")

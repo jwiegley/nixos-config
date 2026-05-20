@@ -193,3 +193,42 @@ def test_run_action_handles_non_json_output(monkeypatch):
     result = daemon.run_action("restart_microvm")
     assert result["ok"] is False
     assert "non-json" in result["notes"]
+
+
+def test_call_litellm_raises_unreachable_without_key(monkeypatch):
+    monkeypatch.delenv(daemon.LITELLM_KEY_ENV, raising=False)
+    with pytest.raises(daemon.LitellmUnreachable):
+        daemon.call_litellm([{"role": "user", "content": "test"}])
+
+
+def test_call_litellm_returns_parsed_json(monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv(daemon.LITELLM_KEY_ENV, "test-key")
+
+    class FakeResp:
+        def read(self):
+            return _json.dumps({
+                "choices": [{"message": {"content": _json.dumps(
+                    {"action": "restart_microvm", "reason": "stub"})}}]
+            }).encode()
+
+    def fake_post(url, headers, data, timeout):
+        return FakeResp()
+
+    monkeypatch.setattr(daemon, "_http_post_json", fake_post)
+    result = daemon.call_litellm([{"role": "user", "content": "x"}])
+    assert result == {"action": "restart_microvm", "reason": "stub"}
+
+
+def test_call_litellm_raises_unreachable_on_non_json(monkeypatch):
+    monkeypatch.setenv(daemon.LITELLM_KEY_ENV, "test-key")
+
+    class FakeResp:
+        def read(self):
+            import json as _json
+            return _json.dumps({"choices": [{"message": {"content": "not json"}}]}).encode()
+
+    monkeypatch.setattr(daemon, "_http_post_json", lambda *a, **kw: FakeResp())
+    with pytest.raises(daemon.LitellmUnreachable):
+        daemon.call_litellm([{"role": "user", "content": "x"}])

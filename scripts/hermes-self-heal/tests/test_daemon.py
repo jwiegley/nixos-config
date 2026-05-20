@@ -90,3 +90,30 @@ def test_state_round_trip(tmp_path):
 def test_load_state_returns_empty_when_file_missing(tmp_path):
     p = tmp_path / "does-not-exist.json"
     assert daemon.load_state(p) == {"active": {}, "history": []}
+
+
+def test_action_map_deterministic_first_attempts():
+    """Spec §6.2 — verify the deterministic-first-attempt map exactly."""
+    assert daemon.ACTION_MAP == {
+        "HermesAskFailing":             "restart_microvm",
+        "HermesApiServerDown":          "restart_microvm",
+        "HermesDiscordZombieSuspected": "restart_microvm",
+        "HermesMcpBridgeDown":          "restart_mcp",
+        "HermesHealthCheckStale":       "restart_health_check",
+    }
+
+
+def test_first_attempt_action_returns_none_for_unknown_alert():
+    """Divergence from OpenClaw: NO default fallback. Spec §6.2 explicit decision."""
+    assert daemon.first_attempt_action("SomeNewAlertNobodyMapped") is None
+
+
+def test_first_attempt_action_returns_action_for_known_alert():
+    assert daemon.first_attempt_action("HermesAskFailing") == "restart_microvm"
+
+
+def test_first_attempt_action_does_NOT_default_for_HermesApiKeyMissing():
+    """HermesApiKeyMissing routes here because it has service=hermes-mcp,
+    but no allowlisted action can fix a SOPS plumbing failure — defaulting
+    would consume the AI tier and end at stuck."""
+    assert daemon.first_attempt_action("HermesApiKeyMissing") is None

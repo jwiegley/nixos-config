@@ -89,3 +89,23 @@ def save_state(path, state):
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
     os.replace(tmp, p)
+
+
+ACTION_MAP = {
+    "HermesAskFailing":             "restart_microvm",
+    "HermesApiServerDown":          "restart_microvm",
+    "HermesDiscordZombieSuspected": "restart_microvm",
+    "HermesMcpBridgeDown":          "restart_mcp",
+    "HermesHealthCheckStale":       "restart_health_check",
+}
+
+
+def first_attempt_action(alert_name: str) -> str | None:
+    """Return the deterministic first-attempt action for an alert name,
+    or None if the alert is unknown.
+
+    DIVERGES FROM OpenClaw: no default fallback. Spec §6.2 decision.
+    Unknown alerts are explicitly ignored (counted in
+    hermes_self_heal_unknown_alerts_total).
+    """
+    return ACTION_MAP.get(alert_name)

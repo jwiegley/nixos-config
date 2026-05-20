@@ -112,7 +112,6 @@
     ../../modules/services/email-tester-manual.nix
     ../../modules/services/imapdedup.nix
     ../../modules/services/mbsync.nix
-    ../../modules/services/mbsync-alerts.nix
     ../../modules/services/fetchmail.nix
     ../../modules/services/fetchmail-alerts.nix
     ../../modules/services/radicale.nix

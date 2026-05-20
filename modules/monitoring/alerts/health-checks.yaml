@@ -87,6 +87,17 @@ groups:
           summary: "Mail sync for {{ $labels.account }} hasn't run in over 36 hours"
           description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected daily)"
 
+      # Alert if bia mbsync hasn't run in over 1 hour (runs every 15 minutes)
+      - alert: MbsyncNotRunRecently
+        expr: (time() - mbsync_last_sync_timestamp_seconds{account="bia"}) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          component: mail_sync
+        annotations:
+          summary: "Mail sync for {{ $labels.account }} hasn't run in over 1 hour"
+          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected every 15-30 minutes)"
+
       - alert: MbsyncLastSyncFailed
         expr: mbsync_last_sync_status == 0
         for: 10m

@@ -332,3 +332,30 @@ def test_microvm_active_enter_ts_returns_zero_on_unparseable(monkeypatch):
     monkeypatch.setattr(subprocess, "check_output",
                         lambda cmd, **kw: "n/a\n")
     assert daemon.microvm_active_enter_ts() == 0
+
+
+def test_emit_synthetic_alert_shape(monkeypatch):
+    captured = {}
+
+    def fake_post(url, headers, data, timeout):
+        captured["url"] = url
+        captured["data"] = data
+
+        class R:
+            def read(self):
+                return b""
+        return R()
+
+    monkeypatch.setattr(daemon, "_http_post_json", fake_post)
+    daemon.emit_synthetic_alert(
+        "HermesSelfHealActed",
+        {"action": "restart_microvm", "alert": "HermesAskFailing"},
+        severity="info",
+    )
+
+    import json as _json
+    body = _json.loads(captured["data"])
+    assert body[0]["labels"]["alertname"] == "HermesSelfHealActed"
+    assert body[0]["labels"]["service"] == "hermes-self-heal"  # NOT hermes-*
+    assert body[0]["labels"]["severity"] == "info"
+    assert "/api/v2/alerts" in captured["url"]

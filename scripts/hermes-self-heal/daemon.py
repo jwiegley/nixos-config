@@ -278,6 +278,25 @@ def _kick_health_check() -> None:
         pass
 
 
+ALERTMANAGER_URL = "http://127.0.0.1:9093/api/v2/alerts"
+
+
+def emit_synthetic_alert(name, annotations, severity="info", duration_s=300):
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    payload = [{
+        "labels": {"alertname": name, "severity": severity, "service": "hermes-self-heal"},
+        "annotations": {k: str(v) for k, v in annotations.items()},
+        "startsAt": now.isoformat(),
+        "endsAt":   (now + timedelta(seconds=duration_s)).isoformat(),
+    }]
+    try:
+        _http_post_json(ALERTMANAGER_URL, {"Content-Type": "application/json"},
+                        json.dumps(payload), timeout=10)
+    except Exception as e:
+        print(f"emit_synthetic_alert failed: {e}", flush=True)
+
+
 SYSTEM_PROMPT = """You are an SRE for Hermes Agent, a NousResearch LLM bot running as a microVM
 on host vulcan. Hermes exposes a Discord bot (Hermes#2985) and an
 OpenAI-compatible api_server consumed by hermes-mcp on the host (which

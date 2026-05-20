@@ -245,6 +245,39 @@ def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
         raise LitellmUnreachable(f"non-json AI response: {content[:200]}")
 
 
+def _read_log_tail(which: str, n: int) -> str:
+    """which = "err" | "out". The aux script enforces the path allowlist;
+    the daemon never sees a free-form path. sudo command is invoked by
+    absolute path that EXACTLY matches the sudoers allowlist entry."""
+    if which not in ("err", "out"):
+        raise ValueError(f"bad log selector: {which!r}")
+    try:
+        return subprocess.check_output(
+            ["sudo", "-n", f"{AUX_DIR}/read_log_tail", which, str(int(n))],
+            text=True, timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return ""
+
+
+def _err_tail(n: int = 80) -> str:
+    return _read_log_tail("err", n)
+
+
+def _out_tail(n: int = 30) -> str:
+    return _read_log_tail("out", n)
+
+
+def _kick_health_check() -> None:
+    try:
+        subprocess.run(
+            ["sudo", "-n", f"{AUX_DIR}/kick_health_check"],
+            check=False, timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+
+
 SYSTEM_PROMPT = """You are an SRE for Hermes Agent, a NousResearch LLM bot running as a microVM
 on host vulcan. Hermes exposes a Discord bot (Hermes#2985) and an
 OpenAI-compatible api_server consumed by hermes-mcp on the host (which

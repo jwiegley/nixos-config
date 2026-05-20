@@ -130,6 +130,7 @@
 # Prometheus Exporters (all on all interfaces unless noted)
 9090 127.0.0.1 Prometheus Server
 9092 127.0.0.1 OpenClaw Self-Heal webhook receiver
+9098 127.0.0.1 Hermes Self-Heal webhook receiver
 9093 127.0.0.1 Alertmanager
 9094 * :: Alertmanager clustering (UDP + TCP)
 9096 * :: Loki gRPC

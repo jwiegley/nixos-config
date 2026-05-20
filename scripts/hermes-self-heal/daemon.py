@@ -184,12 +184,15 @@ def microvm_active_enter_ts(unit: str = "microvm@hermes.service") -> int:
         return 0
     # systemd uses %a %Y-%m-%d %H:%M:%S %Z. The TZ name (e.g. "PDT") isn't
     # parseable by strptime portably; strip it and parse the rest as naive
-    # local time, then convert to a unix timestamp.
+    # local time, then convert to a unix timestamp. Drop the weekday too —
+    # %a is locale-dependent (e.g. "Mer" under fr_FR.UTF-8) and the date
+    # already uniquely identifies the day.
     parts = out.rsplit(" ", 1)  # drop the trailing TZ
     if len(parts) != 2:
         return 0
+    _, _, date_part = parts[0].partition(" ")
     try:
-        dt_naive = datetime.strptime(parts[0], "%a %Y-%m-%d %H:%M:%S")
+        dt_naive = datetime.strptime(date_part, "%Y-%m-%d %H:%M:%S")
     except ValueError:
         return 0
     # Assume the timestamp is local time (matches what systemd prints).

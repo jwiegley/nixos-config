@@ -306,8 +306,9 @@ def test_microvm_active_enter_ts_parses_systemctl_output(monkeypatch):
     import subprocess
 
     def fake_check_output(cmd, **kw):
-        # Real format: "Mon 2026-05-20 13:42:01 PDT"
-        return "Mon 2026-05-20 13:42:01 PDT\n"
+        # Real format: "<weekday> 2026-05-20 13:42:01 PDT"
+        # We strip the weekday before parsing, so its value doesn't matter.
+        return "Wed 2026-05-20 13:42:01 PDT\n"
 
     monkeypatch.setattr(subprocess, "check_output", fake_check_output)
     ts = daemon.microvm_active_enter_ts()

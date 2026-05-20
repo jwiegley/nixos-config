@@ -163,6 +163,39 @@ def probe_clear(incident):
     return m.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
 
 
+def microvm_active_enter_ts(unit: str = "microvm@hermes.service") -> int:
+    """Return the unix timestamp of the unit's last ActiveEnter, or 0 on error.
+
+    Used by correlation_key() to detect VM restarts. The Hermes-side
+    equivalent of the openclaw_microvm_active_enter_timestamp_seconds
+    gauge that openclaw-canary writes for OpenClaw — Hermes has no
+    canary, so we read systemd directly.
+    """
+    from datetime import datetime
+    try:
+        out = subprocess.check_output(
+            ["systemctl", "show", "-p", "ActiveEnterTimestamp", "--value", unit],
+            text=True, timeout=10,
+        ).strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return 0
+    # Format: "Mon 2026-05-20 13:42:01 PDT" — or "n/a" if never active.
+    if not out or out == "n/a":
+        return 0
+    # systemd uses %a %Y-%m-%d %H:%M:%S %Z. The TZ name (e.g. "PDT") isn't
+    # parseable by strptime portably; strip it and parse the rest as naive
+    # local time, then convert to a unix timestamp.
+    parts = out.rsplit(" ", 1)  # drop the trailing TZ
+    if len(parts) != 2:
+        return 0
+    try:
+        dt_naive = datetime.strptime(parts[0], "%a %Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return 0
+    # Assume the timestamp is local time (matches what systemd prints).
+    return int(dt_naive.timestamp())
+
+
 def run_action(name: str, timeout_s: int = 240) -> dict:
     validate_action(name)
     cmd = ["sudo", "-n", f"{ACTIONS_DIR}/{name}"]

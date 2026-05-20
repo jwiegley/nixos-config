@@ -300,3 +300,35 @@ def test_probe_clear_false_when_ask_ok_is_zero(monkeypatch):
 def test_probe_clear_false_when_metric_missing(monkeypatch):
     monkeypatch.setattr(daemon, "current_metrics", lambda: {})
     assert daemon.probe_clear({}) is False
+
+
+def test_microvm_active_enter_ts_parses_systemctl_output(monkeypatch):
+    import subprocess
+
+    def fake_check_output(cmd, **kw):
+        # Real format: "Mon 2026-05-20 13:42:01 PDT"
+        return "Mon 2026-05-20 13:42:01 PDT\n"
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    ts = daemon.microvm_active_enter_ts()
+    # Just assert it's a positive int — exact value depends on the test
+    # host's TZ, and we just need monotonicity.
+    assert isinstance(ts, int)
+    assert ts > 0
+
+
+def test_microvm_active_enter_ts_returns_zero_on_error(monkeypatch):
+    import subprocess
+
+    def fake_check_output(cmd, **kw):
+        raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    assert daemon.microvm_active_enter_ts() == 0
+
+
+def test_microvm_active_enter_ts_returns_zero_on_unparseable(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(subprocess, "check_output",
+                        lambda cmd, **kw: "n/a\n")
+    assert daemon.microvm_active_enter_ts() == 0

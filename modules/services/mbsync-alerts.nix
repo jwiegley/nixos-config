@@ -83,6 +83,42 @@ let
         annotations:
           summary: "Significant drop in johnw inbox messages"
           description: "Johnw inbox messages dropped by more than 10% (from {{ with query \"mbsync_johnw_inbox_messages offset 1h\" }}{{ . | first | value }}{{ end }} to {{ $value }})"
+
+      # Alert if bia mbsync hasn't synced successfully in 48 hours
+      - alert: MbsyncBiaNotSyncing
+        expr: (time() - mbsync_bia_last_success_timestamp) > 172800
+        for: 5m
+        labels:
+          severity: warning
+          service: mbsync
+          user: bia
+        annotations:
+          summary: "mbsync for bia user hasn't synced in {{ $value | humanizeDuration }}"
+          description: "The mbsync service for bia user hasn't successfully synced email in over 48 hours. Last successful sync was {{ $value | humanizeDuration }} ago."
+
+      # Alert if bia mbsync is continuously failing
+      - alert: MbsyncBiaFailing
+        expr: mbsync_bia_sync_status == 0
+        for: 1h
+        labels:
+          severity: critical
+          service: mbsync
+          user: bia
+        annotations:
+          summary: "mbsync for bia user is failing"
+          description: "The mbsync service for bia user has been failing for over an hour. Check logs at /var/log/mbsync-bia/sync.log"
+
+      # Alert if bia inbox messages drop significantly (potential data loss)
+      - alert: MbsyncBiaInboxMessagesDropped
+        expr: (mbsync_bia_inbox_messages < (mbsync_bia_inbox_messages offset 1h) * 0.9) and (mbsync_bia_inbox_messages offset 1h) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: mbsync
+          user: bia
+        annotations:
+          summary: "Significant drop in bia inbox messages"
+          description: "BIA inbox messages dropped by more than 10% (from {{ with query \"mbsync_bia_inbox_messages offset 1h\" }}{{ . | first | value }}{{ end }} to {{ $value }})"
   '';
 in
 {

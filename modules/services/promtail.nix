@@ -337,6 +337,33 @@
             }
           ];
         }
+        {
+          job_name = "mbsync-bia";
+          static_configs = [
+            {
+              targets = [ "localhost" ];
+              labels = {
+                job = "mbsync";
+                host = "vulcan";
+                user = "bia";
+                __path__ = "/var/log/mbsync-bia/*.log";
+              };
+            }
+          ];
+          pipeline_stages = [
+            {
+              multiline = {
+                firstline = ''^(\d{4}-\d{2}-\d{2}|\w+\s+\d+)'';
+                max_wait_time = "3s";
+              };
+            }
+            {
+              regex = {
+                expression = "^(?P<message>.*)$";
+              };
+            }
+          ];
+        }
 
         # Audit logs (separate from journal to allow specific handling)
 

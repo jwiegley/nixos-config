@@ -924,12 +924,20 @@ let
       display = "Email Sync (assembly)";
     }
     {
+      name = "mbsync-bia.timer";
+      display = "Email Sync (bia)";
+    }
+    {
       name = "mbsync-johnw-health-check.timer";
       display = "Email Sync Health Check (johnw)";
     }
     {
       name = "mbsync-assembly-health-check.timer";
       display = "Email Sync Health Check (assembly)";
+    }
+    {
+      name = "mbsync-bia-health-check.timer";
+      display = "Email Sync Health Check (bia)";
     }
     {
       name = "imapdedup.timer";

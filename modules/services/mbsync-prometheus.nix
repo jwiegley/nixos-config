@@ -52,6 +52,13 @@
                     except FileNotFoundError:
                         metrics.append("# No metrics found for johnw user")
 
+                    # BIA user metrics
+                    try:
+                        with open("/var/lib/mbsync-bia/metrics", "r") as f:
+                            metrics.extend([line.strip() for line in f if line.strip()])
+                    except FileNotFoundError:
+                        metrics.append("# No metrics found for bia user")
+
                     # If no metrics at all, provide defaults
                     if not metrics:
                         metrics = ["mbsync_sync_status 0"]
@@ -73,6 +80,14 @@
         # TYPE mbsync_johnw_last_failure_timestamp gauge
         # HELP mbsync_johnw_inbox_messages Number of messages in INBOX for johnw user
         # TYPE mbsync_johnw_inbox_messages gauge
+        # HELP mbsync_bia_sync_status Whether the last sync was successful (1) or failed (0) for bia user
+        # TYPE mbsync_bia_sync_status gauge
+        # HELP mbsync_bia_last_success_timestamp Unix timestamp of last successful sync for bia user
+        # TYPE mbsync_bia_last_success_timestamp gauge
+        # HELP mbsync_bia_last_failure_timestamp Unix timestamp of last failed sync for bia user
+        # TYPE mbsync_bia_last_failure_timestamp gauge
+        # HELP mbsync_bia_inbox_messages Number of messages in INBOX for bia user
+        # TYPE mbsync_bia_inbox_messages gauge
         """ + "\n".join(metrics)
 
                     self.send_response(200)
@@ -98,6 +113,7 @@
       ReadOnlyPaths = [
         "/var/lib/mbsync-assembly/metrics"
         "/var/lib/mbsync-johnw/metrics"
+        "/var/lib/mbsync-bia/metrics"
       ];
     };
 

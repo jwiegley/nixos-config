@@ -462,6 +462,7 @@ in
     "d /var/lib/dovecot/sieve/global/rspamd 0775 dovecot2 mail -"
     "d /var/mail/johnw 0700 johnw users -"
     "d /var/mail/assembly 0700 assembly users -"
+    "d /var/mail/bia 0700 bia users -"
     # Note: gitea mail is aliased to johnw in postfix.nix (gitea UID < first_valid_uid)
     # Deploy default.sieve for LMTP delivery (spam filtering + user rules)
     "L+ /var/lib/dovecot/sieve/default.sieve - - - - ${defaultSieveScript}"
@@ -471,6 +472,7 @@ in
     # Create sieve-bin directory for compiled binaries from global scripts
     "d /home/johnw/sieve-bin 0700 johnw users -"
     "d /home/assembly/sieve-bin 0700 assembly users -"
+    "d /home/bia/sieve-bin 0700 bia users -"
   ];
 
   # Pre-compile global Sieve scripts to avoid permission errors

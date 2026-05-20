@@ -333,3 +333,95 @@ def render_prompt(incident, metrics, err_log_tail, out_log_tail):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": user},
     ]
+
+
+def handle_alertmanager_payload(payload):
+    from datetime import datetime
+    state = load_state(STATE_PATH)
+    metrics = current_metrics()
+    vm_ts = microvm_active_enter_ts()  # NOT from metrics — Hermes has no canary producer
+    for a in payload.get("alerts", []):
+        if a.get("status") != "firing":
+            continue
+        alert_name = a["labels"]["alertname"]
+
+        # Explicit ignore on unknown alerts — Hermes diverges from OpenClaw here.
+        if alert_name not in ACTION_MAP:
+            _bump_unknown_counter()
+            print(f"ignoring unknown alert: {alert_name}", flush=True)
+            continue
+
+        alert_meta = {
+            "alert_name":         alert_name,
+            "vm_active_enter_ts": vm_ts,
+            "starts_at":          int(datetime.fromisoformat(a["startsAt"].replace("Z", "+00:00")).timestamp()),
+        }
+        key = correlation_key(alert_meta)
+        inc = state["active"].get(key) or new_incident(alert_meta)
+        state["active"][key] = inc
+        if inc["status"] != "in_progress":
+            continue
+        n = next_attempt_n(inc)
+        ai_reason = None
+        if n == 1:
+            action = first_attempt_action(alert_meta["alert_name"])
+            by = "deterministic"
+        elif n in (2, 3):
+            try:
+                ai_resp = call_litellm(render_prompt(inc, metrics, _err_tail(), _out_tail()))
+            except LitellmUnreachable as e:
+                inc["attempts"].append({"action": "none", "by": "ai", "ok": False,
+                                        "notes": "litellm_unreachable", "stderr": str(e)})
+                emit_synthetic_alert(
+                    "HermesSelfHealLitellmUnreachable",
+                    {"alert": alert_meta["alert_name"], "err": str(e)[:200]},
+                    severity="warning", duration_s=3600,
+                )
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                continue
+            if ai_resp.get("action") == "escalate":
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                emit_synthetic_alert("HermesSelfHealStuck",
+                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                    severity="critical", duration_s=14400)
+                continue
+            try:
+                action = validate_action(ai_resp["action"])
+            except (ActionRejectedError, KeyError):
+                inc["status"] = "stuck"
+                save_state(STATE_PATH, state)
+                emit_synthetic_alert("HermesSelfHealStuck",
+                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                    severity="critical", duration_s=14400)
+                continue
+            by = "ai"
+            ai_reason = ai_resp.get("reason")
+        else:
+            inc["status"] = "stuck"
+            save_state(STATE_PATH, state)
+            emit_synthetic_alert("HermesSelfHealStuck",
+                {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
+                severity="critical", duration_s=14400)
+            continue
+        result = run_action(action)
+        inc["attempts"].append({"ts": int(time.time()), "action": action, "by": by,
+                                "ai_reason": ai_reason, **result})
+        save_state(STATE_PATH, state)
+        emit_synthetic_alert("HermesSelfHealActed",
+            {"action": action, "alert": alert_meta["alert_name"], "by": by,
+             "ok": result.get("ok")})
+        _kick_health_check()
+        time.sleep(15)
+        if probe_clear(inc):
+            inc["status"] = "resolved"
+        save_state(STATE_PATH, state)
+
+
+_UNKNOWN_ALERTS_TOTAL = 0
+
+
+def _bump_unknown_counter():
+    global _UNKNOWN_ALERTS_TOTAL
+    _UNKNOWN_ALERTS_TOTAL += 1

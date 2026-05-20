@@ -147,3 +147,49 @@ def test_redact_generic_token_assignment():
 def test_redact_preserves_non_secret_text():
     s = "Discord WS connected, 12 events received in last 60s"
     assert daemon.redact(s) == s
+
+
+def test_run_action_rejects_non_allowlisted(monkeypatch):
+    with pytest.raises(daemon.ActionRejectedError):
+        daemon.run_action("rm_rf_slash")
+
+
+def test_run_action_parses_last_line_as_json(monkeypatch):
+    import subprocess
+
+    class FakeResult:
+        returncode = 0
+        stdout = 'some chatter\n{"ok": true, "notes": "did it"}\n'
+        stderr = ""
+
+    def fake_run(*a, **kw):
+        return FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = daemon.run_action("restart_microvm")
+    assert result == {"ok": True, "notes": "did it"}
+
+
+def test_run_action_handles_timeout(monkeypatch):
+    import subprocess
+
+    def fake_run(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd="x", timeout=240)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = daemon.run_action("restart_microvm", timeout_s=240)
+    assert result == {"ok": False, "notes": "action timed out", "duration_s": 240}
+
+
+def test_run_action_handles_non_json_output(monkeypatch):
+    import subprocess
+
+    class FakeResult:
+        returncode = 1
+        stdout = "raw error text not json\n"
+        stderr = "bad stuff happened"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: FakeResult())
+    result = daemon.run_action("restart_microvm")
+    assert result["ok"] is False
+    assert "non-json" in result["notes"]

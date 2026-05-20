@@ -14,6 +14,7 @@ import fcntl
 import os
 import pathlib
 import re
+import subprocess
 
 ACTION_ALLOWLIST = (
     "restart_microvm",
@@ -131,3 +132,21 @@ def redact(s: str) -> str:
     for p in REDACT_PATTERNS:
         s = p.sub("[REDACTED]", s)
     return s
+
+
+ACTIONS_DIR = "/etc/nixos/scripts/hermes-self-heal/actions"
+
+
+def run_action(name: str, timeout_s: int = 240) -> dict:
+    validate_action(name)
+    cmd = ["sudo", "-n", f"{ACTIONS_DIR}/{name}"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "notes": "action timed out", "duration_s": timeout_s}
+    try:
+        parsed = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+    except (json.JSONDecodeError, IndexError):
+        return {"ok": False, "notes": f"non-json action output (rc={r.returncode}): {r.stderr[-200:]}"}
+    parsed.setdefault("ok", r.returncode == 0)
+    return parsed

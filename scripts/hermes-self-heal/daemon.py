@@ -425,3 +425,97 @@ _UNKNOWN_ALERTS_TOTAL = 0
 def _bump_unknown_counter():
     global _UNKNOWN_ALERTS_TOTAL
     _UNKNOWN_ALERTS_TOTAL += 1
+
+
+TEXTFILE_DIR = "/var/lib/prometheus-node-exporter-textfiles"
+HEARTBEAT_PATH = pathlib.Path(TEXTFILE_DIR) / "hermes_self_heal.prom"
+
+
+def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
+                    litellm_unreachable=0, unknown_alerts=0):
+    action_counts = action_counts or {}
+    tmp = pathlib.Path(str(out_path) + ".tmp")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    with tmp.open("w") as f:
+        f.write(
+            "# HELP hermes_self_heal_last_heartbeat_seconds Last heartbeat from hermes-self-heal daemon\n"
+            "# TYPE hermes_self_heal_last_heartbeat_seconds gauge\n"
+            f"hermes_self_heal_last_heartbeat_seconds {time.time()}\n"
+            "# HELP hermes_self_heal_active_incidents Currently in_progress incidents\n"
+            "# TYPE hermes_self_heal_active_incidents gauge\n"
+            f"hermes_self_heal_active_incidents {active_count}\n"
+            "# HELP hermes_self_heal_attempts_total Cumulative attempts by action\n"
+            "# TYPE hermes_self_heal_attempts_total counter\n"
+        )
+        for a in ACTION_ALLOWLIST:
+            f.write(f'hermes_self_heal_attempts_total{{action="{a}"}} {action_counts.get(a, 0)}\n')
+        f.write(
+            "# HELP hermes_self_heal_litellm_unreachable_total Cumulative LiteLLM unreachable events\n"
+            "# TYPE hermes_self_heal_litellm_unreachable_total counter\n"
+            f"hermes_self_heal_litellm_unreachable_total {litellm_unreachable}\n"
+            "# HELP hermes_self_heal_unknown_alerts_total Cumulative unknown-alert ignore events\n"
+            "# TYPE hermes_self_heal_unknown_alerts_total counter\n"
+            f"hermes_self_heal_unknown_alerts_total {unknown_alerts}\n"
+        )
+    os.replace(tmp, out_path)
+
+
+import threading
+
+
+def heartbeat_loop():
+    while True:
+        try:
+            state = load_state(STATE_PATH)
+            active = sum(1 for v in state["active"].values() if v["status"] == "in_progress")
+            counts = {a: 0 for a in ACTION_ALLOWLIST}
+            litellm_unreachable = 0
+            for inc in list(state["active"].values()) + state["history"]:
+                for att in inc.get("attempts", []):
+                    if att.get("action") in counts:
+                        counts[att["action"]] += 1
+                    if att.get("notes") == "litellm_unreachable":
+                        litellm_unreachable += 1
+            write_heartbeat(active_count=active, action_counts=counts,
+                            litellm_unreachable=litellm_unreachable,
+                            unknown_alerts=_UNKNOWN_ALERTS_TOTAL)
+        except Exception as e:
+            print(f"heartbeat error: {e}", flush=True)
+        time.sleep(60)
+
+
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/alert":
+            self.send_response(404)
+            self.end_headers()
+            return
+        n = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(n)
+        try:
+            payload = json.loads(body)
+            handle_alertmanager_payload(payload)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}\n')
+        except Exception as e:
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(f'{{"ok":false,"err":{json.dumps(str(e))}}}\n'.encode())
+
+    def log_message(self, *a, **kw):
+        pass  # silence default access logs
+
+
+def main():
+    threading.Thread(target=heartbeat_loop, daemon=True).start()
+    srv = ThreadingHTTPServer(("127.0.0.1", WEBHOOK_PORT), Handler)
+    print(f"hermes-self-heal listening on 127.0.0.1:{WEBHOOK_PORT}", flush=True)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

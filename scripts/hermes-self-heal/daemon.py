@@ -185,3 +185,38 @@ def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
         return json.loads(content)
     except json.JSONDecodeError:
         raise LitellmUnreachable(f"non-json AI response: {content[:200]}")
+
+
+SYSTEM_PROMPT = """You are an SRE for Hermes Agent, a NousResearch LLM bot running as a microVM
+on host vulcan. Hermes exposes a Discord bot (Hermes#2985) and an
+OpenAI-compatible api_server consumed by hermes-mcp on the host (which
+OpenClaw uses as an MCP tool). Your goal is to restore service. You may take
+exactly ONE of:
+  1. restart_microvm
+  2. restart_mcp
+  3. restage_secrets
+  4. reset_credential_pool
+  5. restart_health_check
+Output STRICTLY this JSON, no other text:
+  {"action": "<one of the five>", "reason": "<one sentence>"}
+If you do not believe any of these will help, output:
+  {"action": "escalate", "reason": "..."}"""
+
+
+def render_prompt(incident, metrics, err_log_tail, out_log_tail):
+    attempts_str = "\n".join(
+        f"  {i+1}. {a.get('action','?')} ({a.get('by','?')}) -> {a.get('ok','?')}"
+        for i, a in enumerate(incident["attempts"])
+    ) or "  (none)"
+    metrics_str = "\n".join(f"  {k}={v}" for k, v in metrics.items())
+    user = (
+        f"[ALERTS] {', '.join(incident['alerts'])}\n"
+        f"[ATTEMPTS SO FAR]\n{attempts_str}\n"
+        f"[METRICS]\n{metrics_str}\n"
+        f"[errors.log tail]\n{redact(err_log_tail)}\n"
+        f"[gateway.log tail]\n{redact(out_log_tail)}\n"
+    )
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user},
+    ]

@@ -232,3 +232,33 @@ def test_call_litellm_raises_unreachable_on_non_json(monkeypatch):
     monkeypatch.setattr(daemon, "_http_post_json", lambda *a, **kw: FakeResp())
     with pytest.raises(daemon.LitellmUnreachable):
         daemon.call_litellm([{"role": "user", "content": "x"}])
+
+
+def test_render_prompt_includes_all_five_actions_in_system():
+    inc = {"alerts": ["HermesAskFailing"], "attempts": []}
+    messages = daemon.render_prompt(inc, {}, "", "")
+    system = messages[0]["content"]
+    for action in daemon.ACTION_ALLOWLIST:
+        assert action in system
+
+
+def test_render_prompt_includes_redacted_log_tails():
+    inc = {"alerts": ["HermesAskFailing"], "attempts": []}
+    err = "ERROR Bearer eyJhbGc.abc.def"
+    out = "INFO connected"
+    messages = daemon.render_prompt(inc, {}, err, out)
+    user = messages[1]["content"]
+    assert "eyJhbGc" not in user
+    assert "INFO connected" in user
+
+
+def test_render_prompt_lists_prior_attempts():
+    inc = {
+        "alerts": ["HermesAskFailing"],
+        "attempts": [{"action": "restart_microvm", "by": "deterministic", "ok": False}],
+    }
+    messages = daemon.render_prompt(inc, {"hermes_api_server_ok": 0.0}, "", "")
+    user = messages[1]["content"]
+    assert "restart_microvm" in user
+    assert "deterministic" in user
+    assert "hermes_api_server_ok=0.0" in user

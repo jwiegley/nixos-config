@@ -13,6 +13,7 @@ import json
 import fcntl
 import os
 import pathlib
+import re
 
 ACTION_ALLOWLIST = (
     "restart_microvm",
@@ -109,3 +110,24 @@ def first_attempt_action(alert_name: str) -> str | None:
     hermes_self_heal_unknown_alerts_total).
     """
     return ACTION_MAP.get(alert_name)
+
+
+REDACT_PATTERNS = [
+    # Discord bot token: 24+ chars . 6 chars . 27+ chars
+    re.compile(r"[A-Za-z0-9_-]{24,40}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}"),
+    # Anthropic
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
+    # OpenAI / OpenRouter virtual keys (Hermes consumes these)
+    re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"sk-or-v1-[A-Za-z0-9_-]{20,}"),
+    # Common bearer headers
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"),
+    # Generic ?token=... or password=... or api_key=...
+    re.compile(r"(?i)(token|password|api[_-]?key)=[^\s&\"]+"),
+]
+
+
+def redact(s: str) -> str:
+    for p in REDACT_PATTERNS:
+        s = p.sub("[REDACTED]", s)
+    return s

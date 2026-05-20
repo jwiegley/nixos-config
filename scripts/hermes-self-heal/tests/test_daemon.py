@@ -117,3 +117,33 @@ def test_first_attempt_action_does_NOT_default_for_HermesApiKeyMissing():
     but no allowlisted action can fix a SOPS plumbing failure — defaulting
     would consume the AI tier and end at stuck."""
     assert daemon.first_attempt_action("HermesApiKeyMissing") is None
+
+
+def test_redact_discord_token():
+    s = "Bot is online with token DISCORD_TOKEN_REDACTED OK"
+    out = daemon.redact(s)
+    assert "NTk5MTYzMTM1OTUwNDMyNTc3" not in out
+    assert "[REDACTED]" in out
+
+
+def test_redact_anthropic_key():
+    out = daemon.redact("loaded sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890")
+    assert "sk-ant" not in out
+    assert "[REDACTED]" in out
+
+
+def test_redact_bearer():
+    out = daemon.redact("Authorization: Bearer eyJhbGciOiJIUzI1NiIs.abc.def")
+    assert "eyJhbGc" not in out
+    assert "[REDACTED]" in out
+
+
+def test_redact_generic_token_assignment():
+    out = daemon.redact("config: api_key=sk-proj-xxxxxxxxxxx, password=hunter2")
+    assert "sk-proj" not in out
+    assert "hunter2" not in out
+
+
+def test_redact_preserves_non_secret_text():
+    s = "Discord WS connected, 12 events received in last 60s"
+    assert daemon.redact(s) == s

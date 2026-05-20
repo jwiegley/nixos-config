@@ -65,12 +65,33 @@
       changedetection@localhost     johnw@localhost
     '';
 
-    # Sender address rewriting for external mail relay
-    # Fastmail only accepts mail from authorized sender addresses
-    # smtp_generic_maps only applies to outbound SMTP (Fastmail relay), NOT local LMTP delivery.
-    # This preserves @vulcan.lan From headers for local mail so Sieve whitelisting works.
+    # Sender address rewriting for external mail relay.
+    # smtp_generic_maps only applies to outbound SMTP, NOT local LMTP delivery,
+    # so it preserves @vulcan.lan From headers for local Sieve whitelisting.
+    # Order matters: regexp is first-match-wins, so per-user rules must come
+    # BEFORE the catch-all that rewrites everything else to jwiegley@gmail.com.
+    # Note: bia@vulcan.lan is handled by sender_canonical_maps below (rewrites
+    # envelope+header before routing), so it never reaches this map.
     mapFiles."smtp_generic_regexp" = pkgs.writeText "smtp_generic_regexp" ''
-      /^.*@vulcan\.lan$/    jwiegley@gmail.com
+      /^.*@vulcan\.lan$/            jwiegley@gmail.com
+    '';
+
+    # Sender canonical map: rewrites the ENVELOPE sender (and From/Sender
+    # headers) at message ingest time, BEFORE the queue is consulted for
+    # routing. This is what allows local mail authored as bia@vulcan.lan
+    # (e.g. cron, /usr/bin/mail) to be routed and authenticated as
+    # john@bia.bahai.org consistently. Without this, sender_dependent_relayhost
+    # lookups happen against bia@vulcan.lan and miss.
+    mapFiles."sender_canonical_regexp" = pkgs.writeText "sender_canonical_regexp" ''
+      /^bia(\+.*)?@vulcan\.lan$/    john@bia.bahai.org
+    '';
+
+    # Sender-dependent relayhost map: route specific envelope senders through
+    # alternative SMTP relays instead of the default Fastmail relayhost.
+    # Paired with smtp_sender_dependent_authentication = yes (in settings.main)
+    # so Postfix looks up SASL credentials keyed by sender address.
+    mapFiles."sender_relay" = pkgs.writeText "sender_relay" ''
+      john@bia.bahai.org    [smtp.gmail.com]:587
     '';
 
     settings.main = {
@@ -107,6 +128,18 @@
       smtp_sasl_auth_enable = "yes";
       smtp_sasl_security_options = "";
       smtp_sasl_password_maps = "texthash:/run/secrets/postfix-secrets";
+
+      # Sender-dependent relay + auth.
+      # When the envelope sender matches sender_relay, route via that relayhost
+      # and look up the SASL credentials in smtp_sasl_password_maps by sender
+      # address instead of by relayhost.
+      sender_dependent_relayhost_maps = "texthash:/var/lib/postfix/conf/sender_relay";
+      smtp_sender_dependent_authentication = "yes";
+
+      # Rewrite envelope sender (and From/Sender headers) at ingest, so that
+      # any local mail authored as bia@vulcan.lan is consistently treated as
+      # john@bia.bahai.org for routing, authentication, and DKIM/SPF.
+      sender_canonical_maps = "regexp:/var/lib/postfix/conf/sender_canonical_regexp";
 
       # TLS certificate configuration
       # Using modern smtpd_tls_chain_files instead of legacy cert/key files

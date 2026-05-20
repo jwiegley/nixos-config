@@ -136,6 +136,31 @@ def redact(s: str) -> str:
 
 
 ACTIONS_DIR = "/etc/nixos/scripts/hermes-self-heal/actions"
+STATE_PATH = "/var/lib/hermes-self-heal/incidents.json"
+AUX_DIR = "/etc/nixos/scripts/hermes-self-heal/aux"
+HERMES_HEALTH_PROM = "/var/lib/prometheus-node-exporter-textfiles/hermes_health.prom"
+
+
+def current_metrics():
+    """Read freshest values from prom textfile collector."""
+    out = {}
+    try:
+        for line in pathlib.Path(HERMES_HEALTH_PROM).read_text().splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            k, _, v = line.rpartition(" ")
+            try:
+                out[k] = float(v)
+            except ValueError:
+                pass
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def probe_clear(incident):
+    m = current_metrics()
+    return m.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
 
 
 def run_action(name: str, timeout_s: int = 240) -> dict:

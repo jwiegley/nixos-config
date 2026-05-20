@@ -262,3 +262,41 @@ def test_render_prompt_lists_prior_attempts():
     assert "restart_microvm" in user
     assert "deterministic" in user
     assert "hermes_api_server_ok=0.0" in user
+
+
+def test_current_metrics_parses_textfile(monkeypatch, tmp_path):
+    metrics_file = tmp_path / "hermes_health.prom"
+    metrics_file.write_text(
+        "# HELP some helper\n"
+        "# TYPE foo gauge\n"
+        "hermes_api_server_ok 1\n"
+        "hermes_mcp_ask_hermes_ok 0\n"
+        "hermes_discord_last_event_age_seconds 423.5\n"
+    )
+    monkeypatch.setattr(daemon, "HERMES_HEALTH_PROM", str(metrics_file))
+    m = daemon.current_metrics()
+    assert m["hermes_api_server_ok"] == 1.0
+    assert m["hermes_mcp_ask_hermes_ok"] == 0.0
+    assert m["hermes_discord_last_event_age_seconds"] == 423.5
+
+
+def test_current_metrics_returns_empty_when_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(daemon, "HERMES_HEALTH_PROM", str(tmp_path / "missing.prom"))
+    assert daemon.current_metrics() == {}
+
+
+def test_probe_clear_true_when_ask_ok_is_one(monkeypatch):
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
+    assert daemon.probe_clear({}) is True
+
+
+def test_probe_clear_false_when_ask_ok_is_zero(monkeypatch):
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"hermes_mcp_ask_hermes_ok": 0.0})
+    assert daemon.probe_clear({}) is False
+
+
+def test_probe_clear_false_when_metric_missing(monkeypatch):
+    monkeypatch.setattr(daemon, "current_metrics", lambda: {})
+    assert daemon.probe_clear({}) is False

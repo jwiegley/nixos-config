@@ -92,20 +92,31 @@ def parse_textfile(path: pathlib.Path = TEXTFILE) -> dict[str, float]:
 
 
 GATEWAY_TS_RE = re.compile(
-    r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}).*\[gateway\.platforms\.discord\]\s+(?P<rest>.*)$"
+    # Match BOTH the synthetic test fixture format
+    #   "2026-05-20T03:14:22 [gateway.platforms.discord] foo"
+    # AND the real production log format from Hermes
+    #   "2026-05-20 23:35:31,438 INFO gateway.platforms.discord: foo"
+    # The [T ] handles the date/time separator. The trailing [\]:] accepts
+    # either `]` (bracketed fixture form) or `:` (real Python-logging form).
+    r"^(?P<ts>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}).*?"
+    r"\[?gateway\.platforms\.discord(?:\]|:)\s*(?P<rest>.*)$"
 )
-# NOTE: "reconnect" must be checked before "connect" in the alternation order
-# so that a line like "reconnect (resume ok)" is counted as reconnect, not
-# connect. Python's `\b` already prevents `\bconnect\b` from matching inside
-# `reconnect` (word boundary between two word chars doesn't exist), but the
-# dict iteration order below is the operative safeguard if the regex ever
-# changes.
+# Hermes' Discord gateway log emits bracketed event labels:
+#   2026-05-20 21:15:57,142 INFO gateway.platforms.discord: [Discord] Connected
+# The real vocabulary is Connected / Registered / Skipping / Flushing /
+# Disconnected (one per startup cycle, plus housekeeping). It does NOT log
+# inbound/outbound message activity — that lives elsewhere in Hermes. The
+# 5 categories below pick what's actually meaningful in this log.
+#
+# Order matters: more-specific keywords first so "Disconnected" is not
+# bucketed as "Connected" by a permissive substring match. Python's `\b`
+# word boundaries also help.
 EVENT_KEYWORDS = {
-    "reconnect": re.compile(r"\breconnect\b"),
-    "connect":   re.compile(r"\bWS connect\b|\bconnect\b"),
-    "inbound":   re.compile(r"\binbound\b"),
-    "outbound":  re.compile(r"\boutbound\b"),
-    "error":     re.compile(r"\berror\b|\bheartbeat\b.*\bdelayed\b"),
+    "disconnected": re.compile(r"\[Discord\]\s+(?:Safely\s+)?[Dd]isconnect(?:ed)?\b"),
+    "connected":    re.compile(r"\[Discord\]\s+Connected\b"),
+    "registered":   re.compile(r"\[Discord\]\s+Registered\b"),
+    "flushing":     re.compile(r"\[Discord\]\s+Flushing\b"),
+    "skipping":     re.compile(r"\[Discord\]\s+Skipping\b"),
 }
 
 

@@ -1,6 +1,7 @@
 # Port Registry for vulcan.lan
 # Format: PORT INTERFACE... [SERVICE/DESCRIPTION]
 # Keep this file updated when adding new services!
+# Last cleaned: 2026-05-21
 
 # SSH & Remote Access
 22 0.0.0.0 :: SSH
@@ -11,8 +12,9 @@
 # DNS Services
 53 0.0.0.0 :: Technitium DNS
 853 0.0.0.0 :: DNS over TLS
-5353 0.0.0.0 :: mDNS (various interfaces)
-5355 0.0.0.0 :: LLMNR
+5353 0.0.0.0 :: mDNS (UDP)
+5355 0.0.0.0 :: LLMNR (systemd-resolved)
+5357 0.0.0.0 :: WSDD
 
 # Web Services (HTTP/HTTPS)
 80 0.0.0.0 :: Nginx HTTP
@@ -24,21 +26,23 @@
 465 0.0.0.0 :: Postfix SMTPS
 587 0.0.0.0 :: Postfix submission
 993 0.0.0.0 :: Dovecot IMAPS
+2525 0.0.0.0 :: Postfix plain-SMTP for containers/microVMs (no TLS, mynetworks only)
 4190 0.0.0.0 :: Dovecot ManageSieve
+11332 127.0.0.1 ::1 rspamd controller
+11334 127.0.0.1 ::1 rspamd web UI
 
 # File Sharing (Samba/SMB)
-137 0.0.0.0 :: NetBIOS Name Service
-138 0.0.0.0 :: NetBIOS Datagram Service
+137 0.0.0.0 :: NetBIOS Name Service (UDP)
+138 0.0.0.0 :: NetBIOS Datagram Service (UDP)
 139 0.0.0.0 :: SMB over NetBIOS
 445 0.0.0.0 :: SMB Direct
 
+# Discovery Protocols
+1900 0.0.0.0 * SSDP (UDP)
+3702 0.0.0.0 * :: WS-Discovery (UDP, various interfaces)
+
 # MQTT & IoT
 1883 0.0.0.0 MQTT Mosquitto
-
-# Discovery Protocols
-1900 0.0.0.0 * SSDP
-3702 0.0.0.0 * :: WS-Discovery (various interfaces)
-5357 0.0.0.0 :: WSDD (various interfaces)
 
 # Databases
 5432 0.0.0.0 :: PostgreSQL
@@ -54,13 +58,15 @@
 6385 127.0.0.1 Redis - Shlink
 6386 127.0.0.1 Redis - SearXNG
 6387 127.0.0.1 Redis - Speedtest Tracker
+8085 127.0.0.1 Redis - LiteLLM
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
 2283 127.0.0.1 Immich photo management
 3000 127.0.0.1 Grafana
-3002 127.0.0.1 OpenSpeedTest container
-3004 127.0.0.1 (Unknown)
+3002 127.0.0.1 OpenSpeedTest (rootless container)
+3003 127.0.0.1 Immich gunicorn (machine-learning / API auxiliary)
+3004 127.0.0.1 Teable (rootless container; internal port 3001)
 3005 127.0.0.1 :: Gitea
 # 3006 - removed, Open WebUI uses host networking on port 8080
 3007 127.0.0.1 Vane AI answering engine (host network)
@@ -74,52 +80,39 @@
 5060 127.0.0.1 Zimit Web UI (archive job management)
 5061 127.0.0.1 Kiwix-serve (ZIM file browser)
 5232 127.0.0.1 ::1 Radicale CalDAV/CardDAV
-5679 127.0.0.1 (Unknown)
-6253 127.0.0.1 (Unknown)
-6800 127.0.0.1 ::1 (Unknown)
+5580 0.0.0.0 :: python-matter-server WebSocket API (consumed by Home Assistant)
+6253 127.0.0.1 conmon (podman container-monitor; internal, harmless)
+6800 127.0.0.1 ::1 aria2c JSON-RPC
 8080 10.99.1.2 Hermes Agent api_server platform (HTTPS, bridge-IP only)
 8080 127.0.0.1 llama-swap (user johnw)
+8082 127.0.0.1 Glance metrics endpoint
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
+8089 127.0.0.1 vdirsyncer
+8090 127.0.0.1 Calendar publisher (Sacramento Cluster .ics → calendar.newartisans.com)
+8096 0.0.0.0 Jellyfin (user johnw, host networking)
+8123 127.0.0.1 Home Assistant
 8180 127.0.0.1 OpenProject web interface
 8234 127.0.0.1 Stock Trader web service - trader.vulcan.lan (uvicorn FastAPI)
-8082 127.0.0.1 (Unknown)
-8085 127.0.0.1 LiteLLM proxy
-8580 127.0.0.1 Shlink API (URL shortener backend)
-8581 127.0.0.1 Shlink Web Client (management UI)
-8089 127.0.0.1 (Unknown)
-8765 127.0.0.1 Speedtest Tracker web interface
-8096 0.0.0.0 (Unknown - possibly Jellyfin or similar)
-8123 127.0.0.1 Home Assistant
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
-8444 0.0.0.0 (Unknown)
+8580 127.0.0.1 Shlink API (URL shortener backend)
+8581 127.0.0.1 Shlink Web Client (management UI)
+8765 127.0.0.1 Speedtest Tracker web interface
 8888 127.0.0.1 JupyterLab
 8890 127.0.0.1 SearXNG metasearch engine
-9080 127.0.0.1 Promtail
-9081 127.0.0.1 hermes-mcp (OpenClaw↔Hermes MCP bridge; OpenClaw VM reaches via br-openclaw DNAT 10.99.0.1:9081→127.0.0.1:9081)
-9081 127.0.0.1 openclaw-hermes-smoke (15-min synthetic ask_hermes probe; second loopback consumer of the same bridge port)
-9091 127.0.0.1 Wallabag container
-9095 127.0.0.1 (Unknown)
-9097 127.0.0.1 MailArchiver container
+9091 127.0.0.1 Wallabag (rootless container)
+9097 127.0.0.1 MailArchiver (rootless container)
 9099 127.0.0.1 Cockpit
-11332 127.0.0.1 ::1 rspamd
-11334 127.0.0.1 ::1 rspamd
-13923 127.0.0.1 Copyparty container
-18080 127.0.0.1 Static nginx container
-18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
-18873 127.0.0.1 rsync Cloudflare tunnel backend
-20241 127.0.0.1 (Unknown)
-20242 127.0.0.1 (Unknown)
-40293 127.0.0.1 (Unknown)
-
-# Matter Server
-5540 0.0.0.0 :: Matter operational messaging (UDP - CASE sessions, cluster communication)
-5580 127.0.0.1 python-matter-server WebSocket API (consumed by Home Assistant)
+13923 127.0.0.1 Copyparty container (socket-activated)
+18080 127.0.0.1 Static nginx container (socket-activated)
 
 # Voice Assistant (Wyoming protocol)
 10300 127.0.0.1 wyoming-openai STT bridge to LiteLLM (cohere-transcribe via hera)
 
-# Home Assistant Additional Ports
+# Matter / IoT
+5540 0.0.0.0 :: Matter operational messaging (UDP - CASE sessions, cluster communication)
+
+# Home Assistant Additional Ports (auto-bound by integrations)
 21063 192.168.3.16 Home Assistant (interface-specific)
 21065 0.0.0.0 :: Home Assistant
 21066 0.0.0.0 :: Home Assistant
@@ -127,39 +120,59 @@
 21068 0.0.0.0 :: Home Assistant
 21069 0.0.0.0 :: Home Assistant
 
-# Prometheus Exporters (all on all interfaces unless noted)
+# microVM Bridge Services
+9081 127.0.0.1 hermes-mcp (OpenClaw↔Hermes MCP bridge; OpenClaw VM reaches via br-openclaw DNAT 10.99.0.1:9081→127.0.0.1:9081)
+9081 127.0.0.1 openclaw-hermes-smoke (15-min synthetic ask_hermes probe; second loopback consumer of the same bridge port)
+18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
+
+# Prometheus Stack
 9090 127.0.0.1 Prometheus Server
 9092 127.0.0.1 OpenClaw Self-Heal webhook receiver
-9098 127.0.0.1 Hermes Self-Heal webhook receiver
 9093 127.0.0.1 Alertmanager
 9094 * :: Alertmanager clustering (UDP + TCP)
 9096 * :: Loki gRPC
+9098 127.0.0.1 Hermes Self-Heal webhook receiver
+
+# Prometheus Exporters
+8444 0.0.0.0 OPNsense exporter backend (upstream binary; user `nobody`)
+9080 127.0.0.1 Promtail
 9100 * :: Node Exporter
 9113 127.0.0.1 Nginx Exporter
 9115 * :: Blackbox Exporter
 9121 127.0.0.1 Redis Exporter
-9134 * :: Process Exporter
+9134 * :: ZFS Exporter
 9154 * :: Postfix Exporter
 9166 * :: Dovecot Exporter
 9187 * :: PostgreSQL Exporter
 9221 127.0.0.1 Health Check Exporter (critical services)
-9273 127.0.0.1 OPNsense Exporter
+9273 127.0.0.1 OPNsense Exporter (Prometheus metrics wrapper; rootless container)
 9274 127.0.0.1 Technitium DNS Exporter
-9275 127.0.0.1 (Unknown)
+9275 127.0.0.1 DNS Query Exporter (Python)
 9281 127.0.0.1 ATD Web Status Interface
 9283 127.0.0.1 Immich API Metrics
 9284 127.0.0.1 Immich Microservices Metrics
-9374 127.0.0.1 (Unknown)
+9374 127.0.0.1 aria2 Exporter
 9394 127.0.0.1 OpenProject Prometheus metrics
 
-# Container Services
-3001 container Teable
-5000 container changedetection
+# Cloudflare Tunnels
+18873 127.0.0.1 rsync Cloudflare tunnel backend (bound only while rsync running)
+20241 127.0.0.1 cloudflared-tunnel-data (Cloudflare Tunnel data plane / metrics)
+
+# Container Services (internal ports — host-facing variant listed above)
+3001 container Teable (internal; host-facing on 3004)
+5000 container ChangeDetection.io (internal; host-facing on 5055)
 5380 0.0.0.0 Technitium DNS container
 
 # Other Services
-41941 * (Unknown)
 61208 0.0.0.0 Glances
+
+# Previously seen but not currently listening — verify before reuse
+# (Captured during the 2026-05-21 cleanup; if still absent next pass, drop the line.)
+# 5679    127.0.0.1
+# 9095    127.0.0.1
+# 20242   127.0.0.1
+# 40293   127.0.0.1
+# 41941   *
 
 # Notes:
 # - 0.0.0.0 = All IPv4 interfaces

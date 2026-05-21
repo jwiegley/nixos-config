@@ -367,20 +367,82 @@ in
     '';
   };
 
-  # CRITICAL FIX: PostgreSQL must wait for network devices before starting
-  # Problem: PostgreSQL starts before network interfaces are fully up
-  # Result: PostgreSQL fails to bind to configured addresses
-  # - podman0: PostgreSQL fails to bind to 10.88.0.1 (causes litellm/wallabag to fail pg_isready)
-  # - end0: PostgreSQL fails to bind to 192.168.1.2 (causes external postgres.vulcan.lan connections to fail)
+  # PostgreSQL boot ordering.
+  #
+  # `podman0` is created when the first podman container starts, which itself
+  # depends on postgresql (chicken-and-egg). Treating podman0 as a hard
+  # `Requires=` means postgresql fails permanently at boot if podman is slow,
+  # cascading "dependency failed" to every pg-dependent unit (gitea, immich,
+  # budget-board-server, litellm container, etc. — observed 2026-05-21 boot).
+  #
+  # Soft ordering only: postgres is ordered AFTER podman0/end0 when they're
+  # available, but does NOT require podman0. Containers reach postgres via
+  # `host.containers.internal` (slirp4netns NAT to 127.0.0.1), not by binding
+  # to 10.88.0.1, so postgres losing that bind at startup is harmless. end0
+  # remains required because it's the host's primary interface.
   systemd.services.postgresql = {
     after = [
+      "network-online.target"
       "sys-subsystem-net-devices-podman0.device"
       "sys-subsystem-net-devices-end0.device"
     ];
+    wants = [ "network-online.target" ];
     requires = [
-      "sys-subsystem-net-devices-podman0.device"
       "sys-subsystem-net-devices-end0.device"
     ];
+    # Retry on transient boot-time failures (mounts, device timeouts, etc.)
+    # rather than entering a permanent "failed" state. Default StartLimitBurst=5
+    # gives up after ~50s — boot can take much longer when slow disks or
+    # network bridges are involved.
+    serviceConfig = {
+      Restart = lib.mkForce "on-failure";
+      RestartSec = lib.mkDefault "10s";
+    };
+    unitConfig = {
+      StartLimitIntervalSec = lib.mkForce "10min";
+      StartLimitBurst = lib.mkForce 30;
+    };
+  };
+
+  # Boot-time resilience for pg-dependent services.
+  #
+  # When postgresql.service enters "failed" state, every unit with
+  # `Requires=postgresql.service` (or `Requires=postgresql.target`) fails
+  # immediately with "dependency failed" — and Restart= does NOT trigger,
+  # because the service never reached ExecStart. They stay dead until manually
+  # poked even after postgres recovers (observed 2026-05-21 boot cascade).
+  #
+  # Fix #1 above makes postgresql far less likely to fail. This block is
+  # belt-and-braces: it lifts the default StartLimitBurst=5 / 10s on key
+  # long-running pg-dependent services so they keep retrying when their own
+  # ExecStartPre pg_isready checks time out during a slow postgres start.
+  systemd.services.gitea.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.immich-server.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.immich-machine-learning.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.budget-board-server.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.pgadmin.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.home-assistant.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
+  };
+  systemd.services.nagios.unitConfig = {
+    StartLimitIntervalSec = "10min";
+    StartLimitBurst = 30;
   };
 
   networking.firewall = {

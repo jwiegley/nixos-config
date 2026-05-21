@@ -2,7 +2,7 @@ from pathlib import Path
 
 from conftest import load_report_module
 
-FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 
 def test_parse_textfile_healthy():

@@ -3,7 +3,7 @@ import datetime as dt
 
 from conftest import load_report_module
 
-FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 # Fixture timestamps (1779346740 active, 1779303600 resolved) are within
 # 24h of this anchor — see incidents_sample.json.

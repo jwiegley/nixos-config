@@ -3,7 +3,7 @@ import datetime as dt
 
 from conftest import load_report_module
 
-FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 
 def test_gateway_log_counts_events_by_type():

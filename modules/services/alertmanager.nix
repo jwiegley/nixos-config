@@ -51,6 +51,25 @@
             repeat_interval = "4h";
             continue = true;
           }
+          # Hermes self-heal pipeline — service=hermes-mcp and
+          # service=hermes-agent alerts both go to the hermes-self-heal
+          # daemon's webhook receiver. continue=true preserves the email
+          # path so a human still sees the critical alert.
+          # NOTE: alerts with service=hermes-self-heal (the daemon's own
+          # watchdog) intentionally do NOT match here, so they never loop
+          # back to the daemon that may already be dead.
+          # First use of match_re in this file; passes through to upstream
+          # Alertmanager YAML.
+          {
+            match_re = {
+              service = "hermes-(mcp|agent)";
+            };
+            receiver = "hermes-self-heal";
+            group_wait = "10s";
+            group_interval = "5m";
+            repeat_interval = "4h";
+            continue = true;
+          }
           # Backup and storage alerts - group by category and reduce noise
           {
             match = {
@@ -178,6 +197,15 @@
           webhook_configs = [
             {
               url = "http://127.0.0.1:9092/alert";
+              send_resolved = true;
+            }
+          ];
+        }
+        {
+          name = "hermes-self-heal";
+          webhook_configs = [
+            {
+              url = "http://127.0.0.1:9098/alert";
               send_resolved = true;
             }
           ];

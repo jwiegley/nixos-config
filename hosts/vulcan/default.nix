@@ -140,6 +140,7 @@
     ../../modules/services/openclaw-microvm.nix
     ../../modules/services/openclaw-self-heal.nix
     ../../modules/services/openclaw-nightly-report.nix
+    ../../modules/services/hermes-nightly-report.nix
     ../../modules/services/hermes-microvm.nix
     ../../modules/services/hermes-mcp.nix
     ../../modules/services/hermes-self-heal.nix

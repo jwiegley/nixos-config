@@ -1,0 +1,29 @@
+#!/run/current-system/sw/bin/bash
+# hermes-self-heal aux helper: read N lines from one of the two whitelisted
+# Hermes log files. Argument-validated to prevent path traversal.
+#
+# Usage: read_log_tail <selector> <n>
+#   selector ∈ { err, out } (errors.log vs gateway.log)
+#   n        ∈ [1, 500]
+set -euo pipefail
+
+selector="${1:-}"
+n="${2:-}"
+
+case "$selector" in
+  err) target=/var/lib/hermes/.hermes/logs/errors.log ;;
+  out) target=/var/lib/hermes/.hermes/logs/gateway.log ;;
+  *) echo "bad selector: $selector" >&2; exit 2 ;;
+esac
+
+# Sanity check N: must be a positive integer ≤500.
+case "$n" in
+  ''|*[!0-9]*) echo "bad n: $n" >&2; exit 2 ;;
+esac
+if [ "$n" -lt 1 ] || [ "$n" -gt 500 ]; then
+  echo "n out of range: $n" >&2; exit 2
+fi
+
+if [ -f "$target" ]; then
+  /run/current-system/sw/bin/tail -n "$n" "$target" 2>/dev/null || true
+fi

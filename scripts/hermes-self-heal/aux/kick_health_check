@@ -1,0 +1,5 @@
+#!/run/current-system/sw/bin/bash
+# hermes-self-heal aux helper: synchronously trigger hermes-health-check.service
+# so the daemon can poll hermes_health.prom shortly after to verify recovery.
+set -euo pipefail
+/run/current-system/sw/bin/systemctl start --wait hermes-health-check.service || true

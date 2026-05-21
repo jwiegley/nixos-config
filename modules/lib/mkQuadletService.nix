@@ -292,8 +292,10 @@ in
           (lib.optionalAttrs (containerUser != null) {
             User = containerUser;
             Group = containerUser;
-            # Ensure rootless podman can find slirp4netns and other system binaries
-            Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
+            # /run/wrappers/bin first so podman finds the setuid newuidmap/newgidmap
+            # wrappers (see quadlet.nix comment); otherwise rootless namespace
+            # setup fails on cold start.
+            Environment = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
           })
           extraServiceConfig
         ];

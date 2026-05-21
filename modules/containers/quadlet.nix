@@ -59,10 +59,15 @@
     };
   };
 
-  # Configure systemd user environment for rootless containers
-  # Required for rootless podman to access newuidmap and other tools
+  # Configure systemd user environment for rootless containers.
+  # `/run/wrappers/bin` MUST come before `/run/current-system/sw/bin` so that
+  # podman's exec.LookPath finds the setuid wrapper for `newuidmap`/`newgidmap`
+  # rather than the bare nix-store symlink. With the wrong order, rootless
+  # containers fail with: "cannot set up namespace using
+  # /run/current-system/sw/bin/newuidmap: should have setuid or have filecaps
+  # setuid" (observed 2026-05-21 on shlink/shlink-web-client).
   systemd.user.extraConfig = ''
-    DefaultEnvironment="PATH=/run/current-system/sw/bin:/run/wrappers/bin"
+    DefaultEnvironment="PATH=/run/wrappers/bin:/run/current-system/sw/bin"
   '';
 
   # Enable quadlet and auto-escaping for quadlet configurations

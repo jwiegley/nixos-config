@@ -1,0 +1,14 @@
+#!/run/current-system/sw/bin/bash
+# hermes-self-heal action: restart microvm@hermes.service.
+# Output: one line of JSON to stdout describing the result.
+set -euo pipefail
+start_ts=$(date +%s)
+rc=0
+/run/current-system/sw/bin/systemctl restart microvm@hermes.service || rc=$?
+end_ts=$(date +%s)
+duration=$((end_ts - start_ts))
+if [ "$rc" -eq 0 ]; then
+  printf '{"ok": true, "duration_s": %d, "notes": "microvm@hermes restarted"}\n' "$duration"
+else
+  printf '{"ok": false, "duration_s": %d, "notes": "systemctl restart returned %d"}\n' "$duration" "$rc"
+fi

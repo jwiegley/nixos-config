@@ -762,6 +762,19 @@ in
 
             chmod 600 ${openclawDir}/openclaw.json
 
+            # Discard openclaw's "last-known-good" snapshot before doctor runs.
+            # On model/template changes our jq output lacks the runtime-only
+            # `.meta` block, so doctor treats the config as invalid and
+            # restores `openclaw.json` from `openclaw.json.last-good` —
+            # which still holds the previous model. Removing `.last-good`
+            # short-circuits `recoverConfigFromLastKnownGood` (it returns
+            # false when the file is missing), letting doctor keep our
+            # rewrite. openclaw repopulates `.last-good` after a successful
+            # start, so the safety net regenerates on its own.
+            ${pkgs.coreutils}/bin/rm -f \
+              ${openclawDir}/openclaw.json.last-good \
+              ${openclawDir}/logs/config-health.json
+
             # ────────────────────────────────────────────────────────────────
             # Auto-migrate runtime state on every boot. doctor is idempotent:
             # if there's nothing to migrate, it's a no-op (~2 s). When openclaw

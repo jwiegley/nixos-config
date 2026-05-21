@@ -9,8 +9,10 @@ let
     flakeIgnore = [
       "E501" # ASCII tables push some lines past 79 chars
       "W503"
-      "E265"
-      "E203"
+      "E265" # shebang flagged as non-conforming block comment
+      "E203" # whitespace before ':' (Black-style slicing)
+      "E241" # multiple spaces after ':' (aligned dict literals — ACTION_MAP, EVENT_KEYWORDS)
+      "E226" # missing whitespace around arithmetic operator (i+1 in render)
     ];
   } (builtins.readFile ../../scripts/hermes-nightly-report.py);
 

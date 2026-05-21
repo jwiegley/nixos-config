@@ -260,3 +260,190 @@ def smoke_summary_24h() -> dict:
         "p95_seconds": p95,
         "available": all(v is not None for v in (success, p50, p95)),
     }
+
+
+def systemd_uptime(unit: str) -> dict[str, Any]:
+    """Return {active, since, n_restarts} via `systemctl show`."""
+    try:
+        out = subprocess.check_output(
+            ["systemctl", "show", "-p", "ActiveState,ActiveEnterTimestamp,NRestarts", unit],
+            text=True, timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return {"active": "unknown", "since": None, "n_restarts": None}
+    fields = dict(line.split("=", 1) for line in out.strip().splitlines() if "=" in line)
+    enter_ts = fields.get("ActiveEnterTimestamp", "").strip()
+    try:
+        nrestarts = int(fields.get("NRestarts", "0").strip())
+    except ValueError:
+        nrestarts = 0
+    return {
+        "active": fields.get("ActiveState", "unknown").strip(),
+        "since": enter_ts or None,
+        "n_restarts": nrestarts,
+    }
+
+
+def in_vm_probe() -> dict[str, Any]:
+    """Optional in-VM corroboration via SSH. Returns {skipped, reason, http_code}."""
+    if not SSH_KEY or not pathlib.Path(SSH_KEY).is_file():
+        return {"skipped": True, "reason": "no SSH key available", "http_code": None}
+    try:
+        out = subprocess.check_output(
+            ["ssh", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no",
+             "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
+             SSH_TARGET,
+             "curl -s -m 5 http://localhost:8080/v1/capabilities -o /dev/null -w '%{http_code}'"],
+            text=True, timeout=20, stderr=subprocess.DEVNULL,
+        ).strip()
+        return {"skipped": False, "reason": None, "http_code": out}
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        return {"skipped": True, "reason": f"ssh probe failed: {type(e).__name__}", "http_code": None}
+
+
+def render_report(now: dt.datetime, metrics: dict, smoke: dict,
+                  microvm_uptime: dict, mcp_uptime: dict,
+                  gateway_counts: dict, gateway_latest: dict,
+                  errors: dict, incidents: dict, ssh_probe: dict) -> tuple[str, str]:
+    """Return (subject, body) for the email."""
+    # Headline verdict
+    fail = (
+        metrics.get("hermes_api_server_ok", 1) == 0
+        or metrics.get("hermes_mcp_sse_open_ok", 1) == 0
+        or metrics.get("hermes_mcp_ask_hermes_ok", 1) == 0
+    )
+    verdict = "FAIL" if fail else "PASS"
+    if incidents["stuck_alerts"]:
+        verdict = "FAIL"
+        summary = f"{len(incidents['stuck_alerts'])} stuck incidents"
+    elif incidents["active"]:
+        summary = f"{incidents['active']} active incidents"
+    elif errors["total"] > 50:
+        summary = f"{errors['total']} errors in 24h"
+    else:
+        summary = "all healthy"
+
+    hostname = os.uname().nodename
+    date_str = now.strftime("%Y-%m-%d")
+    subject = f"[hermes-nightly] {hostname} {date_str} — {summary}"
+
+    lines = []
+    lines.append(f"Hermes nightly report — {hostname} — {now.isoformat(timespec='seconds')}")
+    lines.append("=" * 76)
+    lines.append("")
+    lines.append(f"Headline: {verdict} — {summary}")
+    if incidents["stuck_alerts"]:
+        lines.append("  STUCK INCIDENTS: " + ", ".join(incidents["stuck_alerts"]))
+    lines.append("")
+
+    lines.append("Live metrics")
+    lines.append("-" * 76)
+    for k, v in sorted(metrics.items()):
+        lines.append(f"  {k:50} {v}")
+    lines.append("")
+
+    lines.append("microVM + hermes-mcp uptime")
+    lines.append("-" * 76)
+    lines.append(f"  microvm@hermes  active={microvm_uptime['active']:8} "
+                 f"since={microvm_uptime['since'] or '-':25} restarts={microvm_uptime['n_restarts']}")
+    lines.append(f"  hermes-mcp      active={mcp_uptime['active']:8} "
+                 f"since={mcp_uptime['since'] or '-':25} restarts={mcp_uptime['n_restarts']}")
+    lines.append("")
+
+    lines.append("24h smoke probe summary (Prometheus)")
+    lines.append("-" * 76)
+    if smoke["available"]:
+        lines.append(f"  Success ratio: {smoke['success_ratio']*100:.1f}% over 24h")
+        lines.append(f"  Latency p50:   {smoke['p50_seconds']:.2f}s")
+        lines.append(f"  Latency p95:   {smoke['p95_seconds']:.2f}s")
+    else:
+        lines.append("  (history unavailable: Prometheus unreachable)")
+    lines.append("")
+
+    lines.append("Discord activity (last 24h)")
+    lines.append("-" * 76)
+    for etype, count in gateway_counts.items():
+        last = gateway_latest.get(etype)
+        last_str = last.isoformat() if last else "-"
+        lines.append(f"  {etype:10} count={count:4}  most recent={last_str}")
+    lines.append("")
+
+    lines.append(f"Errors digest (last 24h, total={errors['total']})")
+    lines.append("-" * 76)
+    if not errors["patterns"]:
+        lines.append("  (no errors)")
+    for entry in errors["patterns"]:
+        lines.append(f"  {entry['count']:4}x  {entry['pattern'][:60]}")
+    lines.append("")
+
+    lines.append("Self-heal incidents (last 24h)")
+    lines.append("-" * 76)
+    lines.append(f"  active:        {incidents['active']}")
+    lines.append(f"  resolved 24h:  {incidents['resolved_24h']}")
+    if incidents["stuck_alerts"]:
+        lines.append("  STUCK alerts:  " + ", ".join(incidents["stuck_alerts"]))
+    lines.append("")
+
+    lines.append("In-VM corroboration")
+    lines.append("-" * 76)
+    if ssh_probe["skipped"]:
+        lines.append(f"  (probe skipped: {ssh_probe['reason']})")
+    else:
+        lines.append(f"  /v1/capabilities HTTP {ssh_probe['http_code']}")
+    lines.append("")
+
+    body = "\n".join(lines)
+    return subject, body
+
+
+def _build_message(subject: str, body: str) -> bytes:
+    return (
+        f"From: {SENDER}\r\n"
+        f"To: {RECIPIENT}\r\n"
+        f"Subject: {subject}\r\n"
+        f"Content-Type: text/plain; charset=utf-8\r\n"
+        f"\r\n"
+        f"{body}\r\n"
+    ).encode()
+
+
+def deliver(subject: str, body: str) -> int:
+    if DRY_RUN:
+        print(_build_message(subject, body).decode(), end="")
+        return 0
+    msg = _build_message(subject, body)
+    proc = subprocess.run(
+        [SENDMAIL, "-i", "-f", SENDER, RECIPIENT],
+        input=msg, capture_output=True, timeout=60,
+    )
+    if proc.returncode != 0:
+        sys.stderr.write(
+            f"sendmail rc={proc.returncode}\n"
+            f"stdout:{proc.stdout.decode(errors='replace')[:300]}\n"
+            f"stderr:{proc.stderr.decode(errors='replace')[:300]}\n"
+        )
+    return proc.returncode
+
+
+def main() -> int:
+    # Resolve module-level path constants at call time so tests can
+    # monkeypatch them (avoiding the default-arg early-binding trap).
+    now = dt.datetime.now()
+    metrics = parse_textfile(TEXTFILE)
+    smoke = smoke_summary_24h()
+    microvm_up = systemd_uptime("microvm@hermes.service")
+    mcp_up = systemd_uptime("hermes-mcp.service")
+    gw_counts = parse_gateway_log(GATEWAY_LOG, window_hours=24, now=now)
+    gw_latest = most_recent_per_type(GATEWAY_LOG, now=now)
+    errors = parse_errors_log(ERRORS_LOG, window_hours=24, now=now)
+    incidents = parse_incidents(INCIDENTS_JSON, now=now)
+    ssh = in_vm_probe()
+    subject, body = render_report(
+        now, metrics, smoke, microvm_up, mcp_up,
+        gw_counts, gw_latest, errors, incidents, ssh,
+    )
+    return deliver(subject, body)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

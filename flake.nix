@@ -178,6 +178,12 @@
             suiteDir = "tests";
           };
 
+          hermes-self-heal-tests = helpers.mkPytestCheck {
+            name = "hermes-self-heal-tests";
+            src = ./scripts/hermes-self-heal;
+            suiteDir = "tests";
+          };
+
           openclaw-hermes-smoke-tests = helpers.mkPytestCheck {
             name = "openclaw-hermes-smoke-tests";
             src = ./scripts;
@@ -188,6 +194,12 @@
             name = "openclaw-nightly-report-tests";
             src = ./scripts;
             suiteDir = "openclaw-nightly-report-tests";
+          };
+
+          hermes-nightly-report-tests = helpers.mkPytestCheck {
+            name = "hermes-nightly-report-tests";
+            src = ./scripts;
+            suiteDir = "hermes-nightly-report-tests";
           };
         };
     };

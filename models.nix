@@ -36,7 +36,7 @@
       initialDelay = 5;
       maxDelay = 60;
       contextWindow = 262144;
-      maxTokens = null;
+      maxTokens = 81920;
       api = "openai-completions";
       reasoning = false;
       input = [ "text" ];

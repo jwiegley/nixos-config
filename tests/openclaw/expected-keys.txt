@@ -151,6 +151,7 @@ plugins.slots.memory
 skills
 skills.entries
 skills.entries.1password
+skills.entries.1password.enabled
 skills.entries.apple-notes
 skills.entries.apple-notes.enabled
 skills.entries.apple-reminders

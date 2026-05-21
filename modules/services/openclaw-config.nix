@@ -177,7 +177,9 @@ let
           apiKey = null;
           enabled = false;
         };
-        "1password" = null;
+        "1password" = {
+          enabled = false;
+        };
         imsg = {
           enabled = false;
         };

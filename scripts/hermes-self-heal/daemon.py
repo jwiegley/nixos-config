@@ -364,7 +364,7 @@ def handle_alertmanager_payload(payload):
         n = next_attempt_n(inc)
         ai_reason = None
         if n == 1:
-            action = first_attempt_action(alert_meta["alert_name"])
+            action = ACTION_MAP[alert_name]  # membership validated above; satisfies type checker
             by = "deterministic"
         elif n in (2, 3):
             try:
@@ -502,9 +502,10 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'{"ok":true}\n')
         except Exception as e:
+            print(f"do_POST error: {e!r}", flush=True)
             self.send_response(500)
             self.end_headers()
-            self.wfile.write(f'{{"ok":false,"err":{json.dumps(str(e))}}}\n'.encode())
+            self.wfile.write(b'{"ok":false,"err":"internal error"}\n')
 
     def log_message(self, *a, **kw):
         pass  # silence default access logs

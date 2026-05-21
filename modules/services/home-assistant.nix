@@ -374,6 +374,7 @@ in
       ps.pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
       ps.aiopnsense # Required for OPNsense integration
       ps."homekit-audio-proxy" # Required for HomeKit Bridge (missing from nixpkgs)
+      ps.awsiotpythonsdk # Required for Navien NaviLink Water Heater integration
     ];
 
     # Components that don't require YAML configuration

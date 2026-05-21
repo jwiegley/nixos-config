@@ -288,6 +288,19 @@
         create = "0640 root root";
         postrotate = "systemctl reload rsyslog 2>/dev/null || true";
       };
+
+      # Rotate daemon.log — rsyslog routes daemon.* here.
+      # Previously unrotated, this file grew to >5 GiB.
+      "/var/log/daemon.log" = {
+        rotate = 7;
+        frequency = "weekly";
+        compress = true;
+        delaycompress = true;
+        missingok = true;
+        notifempty = true;
+        create = "0640 root root";
+        postrotate = "systemctl reload rsyslog 2>/dev/null || true";
+      };
     };
   };
 

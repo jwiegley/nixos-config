@@ -13,6 +13,11 @@
   ...
 }:
 let
+  # Imported here (in addition to hermes-vm.nix) so the host service has
+  # something to key restart triggers on — changing models.nix should
+  # restart microvm@hermes during the next nixos-rebuild switch.
+  models = import ../../models.nix;
+
   bridgeName = "hermes-br0";
   tapName = "vm-hermes";
   bridgeAddr = "10.99.1.1";
@@ -257,6 +262,11 @@ in
     before = [ "microvm@hermes.service" ];
     after = [ "sops-nix.service" ];
 
+    # Force re-stage when models.nix changes — Type=oneshot + RemainAfterExit
+    # means switch-to-configuration would otherwise skip restarting this unit
+    # on closure changes, leaving the staged config out of sync.
+    restartTriggers = [ (builtins.toJSON models) ];
+
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -270,6 +280,13 @@ in
       echo "Hermes env staged to ${stateDir}/env"
     '';
   };
+
+  # Restart the host's microvm@hermes service whenever models.nix changes,
+  # so a `nixos-rebuild switch` propagates new model selections into the
+  # running VM without manual intervention.
+  systemd.services."microvm@hermes".restartTriggers = [
+    (builtins.toJSON models)
+  ];
 
   # ---- microvm.nix declaration ----
   microvm.vms.hermes = {

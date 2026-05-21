@@ -70,11 +70,14 @@ groups:
       # underlying WS goes stale after a reconnect, no inbound events
       # are processed even though the TCP socket and HTTP rest API
       # may still appear healthy. The bot looks online in Discord
-      # but won't reply to DMs. We detect this by watching
-      # gateway.log activity age: idle for >30m is highly suspicious
-      # — even idle, the bot logs cron ticks and reconnect attempts.
+      # but won't reply to DMs. The probe regex only matches user
+      # activity + reconnect/connect events, so an idle bot accumulates
+      # age between human interactions. 24h is the conservative
+      # threshold; a real zombied WS produces "Reconnecting" log lines
+      # (which ARE matched) well before then, so 24h+ idleness with no
+      # reconnect attempts is a genuine signal.
       - alert: HermesDiscordZombieSuspected
-        expr: hermes_discord_last_event_age_seconds > 14400
+        expr: hermes_discord_last_event_age_seconds > 86400
         for: 10m
         labels:
           severity: warning
@@ -82,16 +85,17 @@ groups:
           service: hermes-agent
           self_heal_eligible: "true"
         annotations:
-          summary: "Hermes Discord platform shows no activity for >4 hours"
+          summary: "Hermes Discord platform shows no activity for >24 hours"
           description: |
             /var/lib/hermes/.hermes/logs/gateway.log has not recorded
-            a Discord-relevant event in the last 4+ hours. Hermes
-            only logs gateway.platforms.discord events on actual
-            activity (connect / inbound / outbound / reconnect), so
-            4h of silence on a bot that's supposed to be in active
-            channels is a strong signal that the Discord gateway
-            WebSocket has zombied. Restarting microvm@hermes
-            re-establishes a clean WS session.
+            a Discord-relevant event in the last 24+ hours. The probe
+            regex matches connect / inbound / outbound / reconnect
+            events, so 24h of silence on a bot that should be in
+            active channels (and would normally log periodic
+            reconnect attempts even when idle) is a strong signal
+            that the Discord gateway WebSocket has zombied.
+            Restarting microvm@hermes re-establishes a clean WS
+            session.
 
       # The check itself stopped running.
       - alert: HermesHealthCheckStale

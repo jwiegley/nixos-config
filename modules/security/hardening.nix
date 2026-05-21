@@ -85,8 +85,17 @@
   # Create polkit rules directories to suppress harmless error messages
   # polkitd is hardcoded to check /usr/local/share/polkit-1/rules.d which doesn't
   # exist on NixOS since it doesn't follow FHS conventions
+  #
+  # `/run/sudo/ts` is sudo's per-uid timestamp directory. It's only created
+  # lazily by sudo when a password-needing invocation runs — never on a system
+  # where every entry is NOPASSWD. Self-heal services (openclaw/hermes) bind
+  # `/run/sudo` ReadWrite into their mount namespace; if it doesn't exist at
+  # boot, namespace setup fails with exit 226/NAMESPACE and the daemons
+  # restart-loop indefinitely (observed 2026-05-21: 165 restarts on cold boot).
   systemd.tmpfiles.rules = [
     "d /run/polkit-1/rules.d 0755 root root -"
     "d /usr/local/share/polkit-1/rules.d 0755 root root -"
+    "d /run/sudo 0711 root root -"
+    "d /run/sudo/ts 0700 root root -"
   ];
 }

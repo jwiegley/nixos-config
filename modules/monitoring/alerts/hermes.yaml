@@ -124,3 +124,58 @@ groups:
             API_SERVER_KEY field — every authenticated probe will
             fail. Check `sops-install-secrets.service` status and
             the `hermes:` block in secrets.yaml.
+
+      # The self-heal daemon's own heartbeat. If the daemon dies, no
+      # auto-remediation is happening — operator must intervene.
+      # NOTE: service: hermes-self-heal (NOT hermes-*) so this alert
+      # is not routed back to the daemon itself (which may be dead).
+      - alert: HermesSelfHealDown
+        expr: time() - hermes_self_heal_last_heartbeat_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-self-heal
+        annotations:
+          summary: "hermes-self-heal daemon heartbeat stale (>10 min)"
+          description: |
+            The hermes-self-heal daemon stopped writing
+            hermes_self_heal_last_heartbeat_seconds. Either the
+            service crashed (check `systemctl status hermes-self-heal`)
+            or the textfile collector cannot read its output.
+
+      # An incident has been open for >30 minutes. The daemon has
+      # exhausted its 3 attempts or the AI tier returned escalate.
+      # Human action required.
+      - alert: HermesSelfHealStuck
+        expr: hermes_self_heal_active_incidents > 0
+        for: 30m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-self-heal
+        annotations:
+          summary: "Hermes self-heal incident open for >30 minutes"
+          description: |
+            One or more Hermes incidents have not resolved despite
+            the daemon's attempts. Inspect
+            /var/lib/hermes-self-heal/incidents.json and recent
+            journal output to decide on a manual action.
+
+      # Track how often the AI tier was unreachable. >3/hour suggests
+      # LiteLLM is down and the daemon is degraded to deterministic-only.
+      - alert: HermesSelfHealLitellmUnreachable
+        expr: increase(hermes_self_heal_litellm_unreachable_total[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-self-heal
+        annotations:
+          summary: ">3 LiteLLM unreachable events in last hour for hermes self-heal"
+          description: |
+            The daemon attempted to escalate to the AI tier multiple
+            times and could not reach LiteLLM. Verify
+            `systemctl status litellm` and that the
+            litellm-vulcan-lan-hermes-self-heal SOPS secret matches
+            LiteLLM's master key.

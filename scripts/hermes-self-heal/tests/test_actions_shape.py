@@ -8,7 +8,6 @@ first.
 import os
 import json
 import pathlib
-import shutil
 import stat
 import subprocess
 
@@ -54,7 +53,7 @@ def test_script_has_absolute_shebang(name):
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_ACTIONS))
-def test_action_prints_valid_json_with_fake_systemctl(name, tmp_path, monkeypatch):
+def test_action_prints_valid_json_with_fake_systemctl(name, tmp_path):
     """Smoke test: run each action with a fake systemctl on PATH.
     Asserts the script emits valid JSON on its last stdout line.
 

@@ -325,7 +325,9 @@ def render_report(now: dt.datetime, metrics: dict, smoke: dict,
 
     hostname = os.uname().nodename
     date_str = now.strftime("%Y-%m-%d")
-    subject = f"[hermes-nightly] {hostname} {date_str} — {summary}"
+    # ASCII hyphen (not em-dash) so headers.encode("ascii") in _build_message
+    # doesn't trip on the Subject. The body keeps unicode via 8bit CTE.
+    subject = f"[hermes-nightly] {hostname} {date_str} - {summary}"
 
     lines = []
     lines.append(f"Hermes nightly report — {hostname} — {now.isoformat(timespec='seconds')}")
@@ -397,31 +399,45 @@ def render_report(now: dt.datetime, metrics: dict, smoke: dict,
 
 
 def _build_message(subject: str, body: str) -> bytes:
-    return (
+    """Construct an RFC 822 message with 8bit text/plain UTF-8.
+
+    EmailMessage's set_content() forces quoted-printable for utf-8 bodies,
+    which mangles `=` and unicode (em dash, warning glyph) in the
+    rendered email. Build the message manually so we can declare 8bit CTE.
+    Mirrors the openclaw-nightly-report fix.
+    """
+    headers = (
+        f"Subject: {subject}\r\n"
         f"From: {SENDER}\r\n"
         f"To: {RECIPIENT}\r\n"
-        f"Subject: {subject}\r\n"
-        f"Content-Type: text/plain; charset=utf-8\r\n"
-        f"\r\n"
-        f"{body}\r\n"
-    ).encode()
+        "Auto-Submitted: auto-generated\r\n"
+        "X-Hermes-Report: nightly\r\n"
+        "MIME-Version: 1.0\r\n"
+        'Content-Type: text/plain; charset="utf-8"\r\n'
+        "Content-Transfer-Encoding: 8bit\r\n"
+        "\r\n"
+    )
+    return headers.encode("ascii") + body.encode("utf-8")
 
 
 def deliver(subject: str, body: str) -> int:
+    raw = _build_message(subject, body)
     if DRY_RUN:
-        print(_build_message(subject, body).decode(), end="")
+        sys.stdout.write(raw.decode("utf-8"))
+        sys.stdout.write("\n")
         return 0
-    msg = _build_message(subject, body)
-    proc = subprocess.run(
-        [SENDMAIL, "-i", "-f", SENDER, RECIPIENT],
-        input=msg, capture_output=True, timeout=60,
-    )
-    if proc.returncode != 0:
-        sys.stderr.write(
-            f"sendmail rc={proc.returncode}\n"
-            f"stdout:{proc.stdout.decode(errors='replace')[:300]}\n"
-            f"stderr:{proc.stderr.decode(errors='replace')[:300]}\n"
+    if not os.path.isfile(SENDMAIL):
+        sys.stderr.write(f"sendmail not found at {SENDMAIL}\n")
+        return 2
+    try:
+        proc = subprocess.run(
+            [SENDMAIL, "-i", "-B", "8BITMIME", "-f", SENDER, RECIPIENT],
+            input=raw,
+            timeout=30,
         )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        sys.stderr.write(f"sendmail failed: {exc}\n")
+        return 3
     return proc.returncode
 
 

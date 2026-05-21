@@ -35,6 +35,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -224,3 +225,38 @@ def parse_incidents(path: pathlib.Path = INCIDENTS_JSON, now=None) -> dict:
         and v.get("first_seen_ts", 0) >= cutoff_ts
     )
     return {"active": active, "resolved_24h": resolved_24h, "stuck_alerts": stuck_alerts}
+
+
+def prometheus_query(promql: str) -> float | None:
+    """Query Prometheus' /api/v1/query and return the scalar value, or None on error."""
+    url = f"{PROMETHEUS_URL}/api/v1/query?query={urllib.parse.quote(promql)}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except (OSError, json.JSONDecodeError, urllib.error.URLError):
+        return None
+    if data.get("status") != "success":
+        return None
+    result = data.get("data", {}).get("result", [])
+    if not result:
+        return None
+    try:
+        return float(result[0]["value"][1])
+    except (KeyError, IndexError, ValueError):
+        return None
+
+
+def smoke_summary_24h() -> dict:
+    """Spec §7.2 section 4 — three Prometheus queries over the smoke gauge.
+
+    Returns {success_ratio, p50_seconds, p95_seconds, available}.
+    """
+    success = prometheus_query("avg_over_time(openclaw_hermes_smoke_ok[24h])")
+    p50 = prometheus_query("quantile_over_time(0.5, openclaw_hermes_smoke_duration_seconds[24h])")
+    p95 = prometheus_query("quantile_over_time(0.95, openclaw_hermes_smoke_duration_seconds[24h])")
+    return {
+        "success_ratio": success,
+        "p50_seconds": p50,
+        "p95_seconds": p95,
+        "available": all(v is not None for v in (success, p50, p95)),
+    }

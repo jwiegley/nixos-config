@@ -1,0 +1,17 @@
+# HELP hermes_api_server_ok 1 if Hermes api_server /v1/capabilities returned 200
+# TYPE hermes_api_server_ok gauge
+hermes_api_server_ok 1
+# HELP hermes_mcp_sse_open_ok 1 if hermes-mcp /sse accepted a connection
+# TYPE hermes_mcp_sse_open_ok gauge
+hermes_mcp_sse_open_ok 1
+# HELP hermes_mcp_ask_hermes_ok 1 if a full ask_hermes round-trip completed within 60s
+# TYPE hermes_mcp_ask_hermes_ok gauge
+hermes_mcp_ask_hermes_ok 1
+# HELP hermes_mcp_ask_hermes_seconds Wall-clock seconds
+# TYPE hermes_mcp_ask_hermes_seconds gauge
+hermes_mcp_ask_hermes_seconds 8.234
+hermes_api_server_probe_seconds 0.041
+hermes_discord_event_present 1
+hermes_discord_last_event_age_seconds 312.5
+hermes_health_check_last_run_timestamp_seconds 1747800000.0
+hermes_api_key_present 1

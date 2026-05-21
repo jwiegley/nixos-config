@@ -1,263 +1,175 @@
-# Hermes self-heal — polls hermes_health.prom and recovers from common
-# failure modes without operator intervention.
-#
-# This is simpler than the openclaw-self-heal daemon: no Alertmanager
-# webhook, no Python daemon, no L3 action allowlist. A systemd timer
-# runs a small shell script every N minutes; the script reads the
-# Prometheus textfile, applies a small state machine of "if X failing
-# for ≥ M ticks, restart Y", and writes its own state to /var/lib.
-#
-# Failure modes handled:
-#
-#   1. hermes_mcp_sse_open_ok == 0 for ≥2 ticks   → restart hermes-mcp.service
-#   2. hermes_api_server_ok == 0 for ≥2 ticks     → restart microvm@hermes.service
-#   3. hermes_mcp_ask_hermes_ok == 0 for ≥3 ticks → restart microvm@hermes.service
-#      (covers Discord-WS-zombie too, since restarting the VM clears it)
-#   4. hermes_discord_last_event_age_seconds > 1800
-#      AND no recent self-heal action               → restart microvm@hermes.service
-#
-# Cooldown: never restart the same unit more than once per 15 minutes,
-# so a deeper outage doesn't get into a restart loop.
 {
   config,
   lib,
   pkgs,
   ...
 }:
-
 let
   cfg = config.services.hermesSelfHeal;
-  stateDir = "/var/lib/hermes-self-heal";
-  metricsFile = "/var/lib/prometheus-node-exporter-textfiles/hermes_health.prom";
-
-  healScript = pkgs.writeShellApplication {
-    name = "hermes-self-heal";
-    runtimeInputs = with pkgs; [
-      coreutils
-      gnugrep
-      gawk
-      systemd
-    ];
-    text = ''
-      set -euo pipefail
-
-      METRICS_FILE='${metricsFile}'
-      STATE_DIR='${stateDir}'
-      COOLDOWN_SECONDS=${toString cfg.cooldownSeconds}
-      DISCORD_AGE_THRESHOLD=${toString cfg.discordAgeThresholdSeconds}
-
-      # Read a single Prometheus textfile metric value (returns empty if missing).
-      get_metric() {
-        local name="$1"
-        # Match exact metric name at start-of-line followed by space, then capture
-        # the floating-point value. Skip lines starting with `#`.
-        grep -E "^''${name} " "$METRICS_FILE" 2>/dev/null | awk '{print $2}' | head -1
-      }
-
-      # Check whether `unit` was last restarted within COOLDOWN_SECONDS.
-      in_cooldown() {
-        local unit="$1"
-        local stamp
-        stamp="$STATE_DIR/last-restart-$(echo "$unit" | tr '/@:' '___')"
-        if [ -f "$stamp" ]; then
-          local last
-          last=$(cat "$stamp")
-          local now
-          now=$(date +%s)
-          local age=$(( now - last ))
-          if [ "$age" -lt "$COOLDOWN_SECONDS" ]; then
-            echo "  cooldown: $unit was restarted $age s ago; skipping"
-            return 0
-          fi
-        fi
-        return 1
-      }
-
-      restart_unit() {
-        local unit="$1"
-        local reason="$2"
-        if in_cooldown "$unit"; then
-          return 0
-        fi
-        echo "RESTART $unit (reason: $reason)"
-        local stamp
-        stamp="$STATE_DIR/last-restart-$(echo "$unit" | tr '/@:' '___')"
-        date +%s > "$stamp"
-        systemctl restart "$unit"
-        # Reset the consecutive-failure counters so the next tick is a fresh window.
-        : > "$STATE_DIR/counters"
-      }
-
-      # Increment consecutive-failure counter; return new value.
-      bump_counter() {
-        local key="$1"
-        local cur=0
-        if [ -f "$STATE_DIR/counters" ]; then
-          cur=$(grep -E "^''${key}=" "$STATE_DIR/counters" 2>/dev/null | tail -1 | cut -d= -f2 || true)
-          cur=''${cur:-0}
-        fi
-        cur=$((cur + 1))
-        # Rewrite counters file atomically.
-        local tmp="$STATE_DIR/counters.tmp"
-        : > "$tmp"
-        if [ -f "$STATE_DIR/counters" ]; then
-          grep -vE "^''${key}=" "$STATE_DIR/counters" >> "$tmp" || true
-        fi
-        printf '%s=%d\n' "$key" "$cur" >> "$tmp"
-        mv "$tmp" "$STATE_DIR/counters"
-        echo "$cur"
-      }
-
-      reset_counter() {
-        local key="$1"
-        if [ -f "$STATE_DIR/counters" ]; then
-          local tmp="$STATE_DIR/counters.tmp"
-          grep -vE "^''${key}=" "$STATE_DIR/counters" > "$tmp" 2>/dev/null || true
-          mv "$tmp" "$STATE_DIR/counters"
-        fi
-      }
-
-      # --- Main ---
-
-      if [ ! -f "$METRICS_FILE" ]; then
-        echo "metrics file missing — nothing to do"
-        exit 0
-      fi
-
-      mkdir -p "$STATE_DIR"
-
-      sse_ok=$(get_metric hermes_mcp_sse_open_ok)
-      api_ok=$(get_metric hermes_api_server_ok)
-      ask_ok=$(get_metric hermes_mcp_ask_hermes_ok)
-      disco_age=$(get_metric hermes_discord_last_event_age_seconds)
-
-      printf 'metrics: sse=%s api=%s ask=%s disco_age=%s\n' \
-        "$sse_ok" "$api_ok" "$ask_ok" "$disco_age"
-
-      # SSE bridge failure → restart hermes-mcp
-      if [ "$sse_ok" = "0" ]; then
-        n=$(bump_counter sse_fails)
-        if [ "$n" -ge 2 ]; then
-          restart_unit hermes-mcp.service "sse_open_ok=0 for $n ticks"
-        fi
-      else
-        reset_counter sse_fails
-      fi
-
-      # API server failure → restart microvm@hermes
-      if [ "$api_ok" = "0" ]; then
-        n=$(bump_counter api_fails)
-        if [ "$n" -ge 2 ]; then
-          restart_unit microvm@hermes.service "api_server_ok=0 for $n ticks"
-        fi
-      else
-        reset_counter api_fails
-      fi
-
-      # End-to-end ask_hermes failing → restart microvm@hermes
-      # (also catches Discord-WS-zombie if mcp-side path went stale through it)
-      if [ "$ask_ok" = "0" ]; then
-        n=$(bump_counter ask_fails)
-        if [ "$n" -ge 3 ]; then
-          restart_unit microvm@hermes.service "ask_hermes_ok=0 for $n ticks"
-        fi
-      else
-        reset_counter ask_fails
-      fi
-
-      # Discord-WS zombie: gateway.log hasn't moved.
-      # Use bc for float comparison since shell can't do it natively.
-      if [ -n "$disco_age" ]; then
-        gt=$(awk -v a="$disco_age" -v t="$DISCORD_AGE_THRESHOLD" 'BEGIN{print (a > t) ? 1 : 0}')
-        if [ "$gt" = "1" ]; then
-          restart_unit microvm@hermes.service "discord_event_age=''${disco_age}s > ''${DISCORD_AGE_THRESHOLD}s"
-        fi
-      fi
-
-      echo "done"
-    '';
-  };
+  daemonScript = pkgs.writeText "hermes-self-heal-daemon.py" (
+    builtins.readFile ../../scripts/hermes-self-heal/daemon.py
+  );
+  user = "hermes-heal";
+  actionsDir = "/etc/nixos/scripts/hermes-self-heal/actions";
+  auxDir = "/etc/nixos/scripts/hermes-self-heal/aux";
 in
 {
   options.services.hermesSelfHeal = {
-    enable = lib.mkEnableOption "Hermes self-heal watchdog";
-
-    intervalSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 300;
-      description = "How often the watchdog polls the metrics file (seconds).";
-    };
-
-    cooldownSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 900;
-      description = ''
-        Minimum seconds between two restarts of the *same* unit.
-        Prevents a deeper outage from looping the watchdog.
-      '';
-    };
-
-    discordAgeThresholdSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 14400;
-      description = ''
-        Trigger a Hermes VM restart when the Discord gateway log has
-        not seen an event in this many seconds. Default 4 hours,
-        matching the HermesDiscordZombieSuspected alert. Hermes
-        gateway.log doesn't record idle heartbeats — only connect,
-        reconnect, inbound, outbound, and platform-error events —
-        so anything < 1h would flood false positives on quiet days.
-      '';
+    enable = lib.mkEnableOption "hermes self-heal daemon";
+    port = lib.mkOption {
+      type = lib.types.port;
+      default = 9098;
+      description = "Loopback port for the Alertmanager webhook.";
     };
   };
 
   config = lib.mkIf cfg.enable {
+    users.users.${user} = {
+      isSystemUser = true;
+      group = user;
+      home = "/var/lib/hermes-self-heal";
+      createHome = true;
+      homeMode = "0700";
+      description = "Hermes self-heal daemon";
+    };
+    users.groups.${user} = { };
+
+    # Persistent state directory — `d` directive preserves contents across rebuilds.
+    # On the first rebuild after the rewrite, this re-chowns the dir to hermes-heal
+    # (previously owned by root from the shell-watchdog era). Old last-restart-*
+    # files keep their root ownership but are harmless; the new daemon never reads
+    # them. See spec §10.
     systemd.tmpfiles.rules = [
-      "d ${stateDir} 0700 root root -"
+      "d /var/lib/hermes-self-heal 0700 ${user} ${user} -"
+      "d /var/log/hermes-self-heal  0750 ${user} ${user} -"
     ];
 
-    systemd.services.hermes-self-heal = {
-      description = "Hermes watchdog — react to hermes_health.prom and restart on persistent failure";
-      after = [
-        "hermes-health-check.service"
-        "prometheus-node-exporter.service"
-      ];
+    # Suppress sudo's mail-on-error for hermes-heal. Mirrors the
+    # openclaw-heal defense against the stuck sendmail loop (see
+    # openclaw spec §10, 2026-05-08 → 2026-05-15 incident).
+    security.sudo.extraConfig = ''
+      Defaults:${user} !mail_no_perms,!mail_no_user,!mail_badpass,!mail_always
+    '';
 
-      # We have to run as root because we systemctl restart system units.
-      # The script is small, hardened, reads only one metrics file plus its
-      # own state, and the only privileged action is `systemctl restart`.
-      serviceConfig = {
-        Type = "oneshot";
-        User = "root";
-        ExecStart = "${healScript}/bin/hermes-self-heal";
-
-        ReadWritePaths = [ stateDir ];
-        ReadOnlyPaths = [
-          "/var/lib/prometheus-node-exporter-textfiles"
+    security.sudo.extraRules = [
+      {
+        users = [ user ];
+        commands = [
+          {
+            command = "${actionsDir}/restart_microvm";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/restart_mcp";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/restage_secrets";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/reset_credential_pool";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${actionsDir}/restart_health_check";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${auxDir}/read_log_tail";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${auxDir}/kick_health_check";
+            options = [ "NOPASSWD" ];
+          }
         ];
+      }
+    ];
+
+    # Reuse the same LiteLLM master key that openclaw-self-heal uses.
+    # Different SOPS-secrets entry (owner) so the file is readable as hermes-heal.
+    sops.secrets."litellm-vulcan-lan-hermes-self-heal" = {
+      key = "litellm-vulcan-lan";
+      owner = user;
+      mode = "0400";
+      restartUnits = [ "hermes-self-heal.service" ];
+    };
+
+    systemd.services.hermes-self-heal = {
+      description = "Hermes self-heal webhook receiver and remediation runner";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "network-online.target"
+        "alertmanager.service"
+      ];
+      wants = [ "network-online.target" ];
+      # PATH must include /run/wrappers/bin so the daemon's bare `sudo`
+      # invocations resolve to NixOS's setuid sudo wrapper. The daemon
+      # never asks sudo to run a bare command — only absolute paths
+      # under /etc/nixos/scripts/hermes-self-heal/{actions,aux}/
+      # which are matched by exact path in the sudoers allowlist.
+      path = [
+        "/run/wrappers"
+        pkgs.coreutils
+        pkgs.systemd
+        pkgs.bashInteractive
+        pkgs.curl
+        pkgs.jq
+      ];
+      environment = {
+        PYTHONUNBUFFERED = "1";
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = user;
+        Group = user;
+        Restart = "always";
+        RestartSec = "5s";
+        # Allow a long-running action (240s timeout) + 30s buffer to finish
+        # gracefully before systemd SIGKILLs on `systemctl stop`. Default
+        # TimeoutStopSec is 90s which would kill mid-action.
+        TimeoutStopSec = "270s";
+        LoadCredential = [
+          "litellm-key:${config.sops.secrets."litellm-vulcan-lan-hermes-self-heal".path}"
+        ];
+        # Hardening mirrors openclaw-self-heal.
         ProtectSystem = "strict";
         ProtectHome = true;
-        NoNewPrivileges = true;
+        NoNewPrivileges = false; # needs setuid sudo wrapper
         PrivateTmp = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        RestrictRealtime = true;
+        RestrictSUIDSGID = false; # sudo wrapper is setuid
         LockPersonality = true;
-        RuntimeMaxSec = "60s";
+        MemoryDenyWriteExecute = false; # python compiles bytecode
+        CapabilityBoundingSet = [
+          "CAP_SETUID"
+          "CAP_SETGID"
+          "CAP_AUDIT_WRITE"
+          "CAP_SYS_RESOURCE"
+          "CAP_DAC_OVERRIDE"
+          "CAP_DAC_READ_SEARCH"
+          "CAP_FOWNER"
+          "CAP_CHOWN"
+          "CAP_KILL"
+          "CAP_SYS_ADMIN"
+          "CAP_NET_ADMIN"
+          "CAP_NET_BIND_SERVICE"
+        ];
+        ReadWritePaths = [
+          "/var/lib/hermes-self-heal"
+          "/var/log/hermes-self-heal"
+          "/var/lib/prometheus-node-exporter-textfiles"
+          # See openclaw-self-heal.nix comment block: /run/sudo needed even
+          # with NOPASSWD, otherwise sudo fails AND spawns a stuck sendmail.
+          "/run/sudo"
+        ];
       };
+      script = ''
+        export LITELLM_KEY="$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/litellm-key")"
+        exec ${pkgs.python3}/bin/python3 ${daemonScript}
+      '';
     };
 
-    systemd.timers.hermes-self-heal = {
-      description = "Timer for hermes-self-heal";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        # Start 5 min after boot, after the first health-check has run.
-        OnBootSec = "5min";
-        OnUnitActiveSec = "${toString cfg.intervalSeconds}s";
-        Unit = "hermes-self-heal.service";
-        AccuracySec = "15s";
-      };
-    };
+    networking.firewall.allowedTCPPorts = [ ]; # 127.0.0.1 only — no firewall change needed
   };
 }

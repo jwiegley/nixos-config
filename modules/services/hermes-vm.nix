@@ -104,6 +104,13 @@ in
   # Matches openclaw-vm.nix:386.
   boot.kernel.sysctl."net.ipv4.conf.all.route_localnet" = 1;
 
+  # ---- Guest resources ----
+  # microvm.nix default is 512 MiB. Python+discord.py running the full
+  # agent runtime has OOM-killed at 512 MiB under load (anon-rss:191 MiB
+  # python3.12 on top of ~250 MiB kernel+systemd). 1 GiB gives ~512 MiB
+  # headroom for the agent process.
+  microvm.mem = 1024;
+
   # ---- Guest networking ----
   microvm.interfaces = [
     {

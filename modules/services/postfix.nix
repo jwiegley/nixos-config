@@ -185,7 +185,7 @@
   # Containers can't verify the Step-CA cert hostname, so STARTTLS
   # on port 25 causes connection failures. Port 2525 advertises
   # no TLS at all, avoiding the issue entirely.
-  services.postfix.masterConfig."2525" = {
+  services.postfix.settings.master."2525" = {
     type = "inet";
     private = false;
     command = "smtpd";

@@ -4171,3 +4171,15 @@ Confirm the dashboard renders.
 - HA package YAML: `modules/services/home-assistant.nix`
 - VM client conventions: `modules/monitoring/services/victoriametrics.nix` (port 8428)
 - Grafana dashboard auto-provisioning: `modules/services/grafana.nix`
+
+---
+
+## Plan addenda (post-execution corrections)
+
+The following corrections were applied during Phase 1 implementation and should be treated as authoritative over the Phase 1 YAML samples earlier in this document. The committed module code (`modules/services/home-assistant-water-attribution.nix`) is the ground truth.
+
+- **Single-document YAML structure** — Tasks 5, 6, 7 each show YAML snippets with their own `template:` and `sensor:` top-level keys. Concatenating these would produce a document with duplicate top-level keys, which PyYAML silently truncates. The actual module consolidates everything into a single Nix attrset and emits it via `builtins.toJSON` (valid YAML by YAML 1.2 spec). See commit `96eaac3`.
+
+- **No `unit_prefix: ""` on `integration:` sensors** — HA's integration platform schema only accepts `None` (default), `'G'`, `'M'`, `'T'`, or `'k'`. The Task 5/6 samples include `unit_prefix: ""` which fails. The field must be omitted entirely. See commit `9bb5ae8`.
+
+- **No `_module.args._yamlPreview` at module top level** — NixOS module syntax only accepts `options`, `imports`, `config`, `_class`, `_file` at top level. Verification is done via `nix-instantiate --parse <file>` (parse-only) and `nixos-rebuild build` (full evaluation).

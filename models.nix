@@ -31,8 +31,7 @@
     # openclaw expects today; tune per-model as needed.
     agent = {
       # name = "hera/Qwen3.6-27B-Instruct";
-      # name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
-      name = "hera/omlx/Qwen3.6-27B-oQ8-mtp";
+      name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

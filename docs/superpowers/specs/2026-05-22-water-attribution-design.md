@@ -358,8 +358,9 @@ duration of the overlap (gallons are double-counted on the input side). The
 `other`, but the consequence is that `other` is **systematically biased low**
 during overlap windows. This is intentional and consistent with the
 independent-counters policy; consumers of `other` should not treat it as
-ground-truth cold-water flow during periods where `pool_autofill_active`
-overlaps an open irrigation zone.
+ground-truth cold-water flow during any overlap window — including
+`pool_autofill_active` overlapping an open irrigation zone, hot-water flow
+overlapping `pool_autofill_active`, or any combination thereof.
 
 ## Single-source-of-truth Nix module (`§2.5`)
 
@@ -916,7 +917,7 @@ Runtime artifacts:
 | Q7 | NR vs HA for data gathering? | HA only; NR reserved for consumer automations |
 | Q8 | Phase 1 implementation? | Pure HA declarative (template + history_stats + statistics + integration + utility_meter) |
 | Q9 | Phase 2 implementation? | External Python via systemd, dedicated user, hardened |
-| Q10 | Phase 3 source priority? | VictoriaMetrics → Flume API → HA Postgres → HA LTS |
+| Q10 | Phase 3 source preference? | Deepest-history wins; VM preferred where it has data (no rate limit), Flume API the only option for windows predating VM, HA Postgres for sub-minute valve timing, HA LTS coarse fallback |
 | Q11 | Phase 3 destinations? | CSV + VM line protocol + HA LTS injection |
 | Q12 | NaviLink integration role? | Direct measurement of `domestic_hot` category; documented hot-only limitation |
 | Q13 | Weekly water report? | Always emitted by the same Mon 03:30 cross-check service |

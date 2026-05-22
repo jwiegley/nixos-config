@@ -1283,11 +1283,28 @@ git commit -m "feat(water-attribution): utility_meter cycle generation"
 **Files:**
 - Modify: `modules/services/home-assistant-water-attribution.nix`
 
-- [ ] **Step 1: Replace the empty `config = lib.mkIf cfg.enable {}` block with an activation script that materializes the YAML and zones.json into runtime locations.**
+- [ ] **Step 1: Replace the empty `config = lib.mkIf cfg.enable {}` block with the activation script AND the shared `flume-autofill` user/group declaration that the zones.json materialization depends on.**
+
+The `flume-autofill` user/group is shared infrastructure between this module and the Phase 2 `flume-autofill.nix` module (Task 17). It is declared HERE so that Phase 1 can deploy and ship zones.json with the correct ownership even before Phase 2 is enabled. Task 17 will reference (not redeclare) the same user.
 
 Replace the placeholder `config = lib.mkIf cfg.enable { ... }` body with:
 
 ```nix
+    # Shared user/group used by zones.json materialization here and by the
+    # Phase 2/3 systemd services in modules/services/flume-autofill.nix.
+    # Declared in this module so Phase 1 can deploy independently of Phase 2.
+    users.users.flume-autofill = {
+      isSystemUser = true;
+      group = "flume-autofill";
+      home = "/var/lib/flume-autofill";
+      createHome = true;
+    };
+    users.groups.flume-autofill = {};
+
+    systemd.tmpfiles.rules = [
+      "d /var/lib/flume-autofill 0750 flume-autofill flume-autofill -"
+    ];
+
     # Materialize the generated YAML into the HA packages directory.
     # Symlink from the Nix store ensures atomic swaps on every rebuild.
     system.activationScripts.water-attribution-package = {
@@ -1301,7 +1318,7 @@ Replace the placeholder `config = lib.mkIf cfg.enable { ... }` body with:
           ${zonesJsonFile} \
           ${toString cfg.zonesJsonOutputPath}
       '';
-      deps = [ "users" ];
+      deps = [ "users" "groups" ];
     };
 
     # Restart HA when the generated content changes.
@@ -2802,19 +2819,26 @@ in
       mode = "0400";
     };
 
-    users.users.flume-autofill = {
-      isSystemUser = true;
-      group = "flume-autofill";
-      home = "/var/lib/flume-autofill";
-      createHome = true;
-    };
-    users.groups.flume-autofill = {};
-
+    # NOTE: users.users.flume-autofill, users.groups.flume-autofill, and the
+    # /var/lib/flume-autofill tmpfiles entry are declared by
+    # modules/services/home-assistant-water-attribution.nix (shared
+    # infrastructure). We only add the subdirectories used by Phase 2/3.
     systemd.tmpfiles.rules = [
-      "d /var/lib/flume-autofill         0750 flume-autofill flume-autofill -"
       "d /var/lib/flume-autofill/reports 0750 flume-autofill flume-autofill -"
       "d /var/lib/flume-autofill/backfill 0750 flume-autofill flume-autofill -"
     ];
+
+    # Sanity assertion: if a fresh subagent forgets to enable the HA
+    # package module, fail the build with a clear message rather than
+    # producing a half-broken system.
+    assertions = [{
+      assertion = config.services.home-assistant-water-attribution.enable;
+      message = ''
+        services.flume-autofill.enable = true requires
+        services.home-assistant-water-attribution.enable = true.
+        The latter owns the flume-autofill user/group used by this service.
+      '';
+    }];
 
     systemd.services.flume-autofill-weekly = {
       description = "Flume autofill weekly cross-check + water report";
@@ -3750,11 +3774,23 @@ Expected: clean activation, the template unit registered (it's a template so it'
 - [ ] **Step 3: Smoke-test the discovery mode.**
 
 ```bash
-sudo systemctl start 'flume-autofill-backfill@2026-05-21.service' 2>&1
-sudo journalctl -u 'flume-autofill-backfill@2026-05-21.service' -n 20 --no-pager
+sudo systemctl start 'flume-autofill-backfill@2026-05-21.service'
+sudo systemctl status 'flume-autofill-backfill@2026-05-21.service' --no-pager 2>&1 | head -8
 ```
 
-Expected: exits 0, log shows "Backfill 2026-05-21 → 2026-05-21 using source=…"
+Expected: exits 0.
+
+If the service failed, examine the journal **with redaction in the same pipeline** (same pattern as Task 17 Step 6 — the backfill service holds Flume credentials + HA token in `LoadCredential`, so raw paste is forbidden):
+
+```bash
+sudo journalctl -u 'flume-autofill-backfill@2026-05-21.service' -n 20 --no-pager 2>&1 | \
+  sed -E '
+    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
+  ' | tail -20
+```
+
+Expected: log shows "Backfill 2026-05-21 → 2026-05-21 using source=…"
 
 - [ ] **Step 4: Commit.**
 
@@ -3875,6 +3911,28 @@ live LTS namespace:
 Rollback:
 
     flume-autofill backfill --unpromote --through 2026-05-21
+
+## v1 backfill scope and limitations
+
+**Backfill v1 reconstructs `pool_autofill` totals only.** Per-zone irrigation
+totals during the backfill window are NOT reconstructed in v1 — the algorithm
+would need to integrate valve open/close intervals from VictoriaMetrics against
+the gated Flume GPM, mirroring Phase 1's per-zone YAML logic in Python. This
+is in scope for a v2 backfill update.
+
+**What this means for the user:**
+
+- The Energy dashboard, Grafana, and HA Statistics tab show historical
+  pool_autofill values immediately after Phase 3 + `--promote`.
+- Historical per-zone irrigation values remain at zero (the zones did receive
+  water in the past, but our backfill doesn't yet attribute it).
+- "Live forward" — i.e., from the moment Phase 1 was deployed onward — every
+  per-zone value is tracked correctly. Only the pre-deployment history is
+  missing per-zone detail.
+
+If you need historical per-zone data: the raw minute resolution is preserved
+in VictoriaMetrics (100-year retention), so the algorithm can be added later
+without losing any source data.
 ```
 
 - [ ] **Step 2: Write `scripts/flume-autofill/README.md`.**
@@ -4049,11 +4107,18 @@ sudo journalctl -u flume-autofill-weekly.service -n 50 --no-pager
 
 Expected: clean exit, email arrived in inbox.
 
-- [ ] **Step 4: Run backfill discovery.**
+- [ ] **Step 4: Run backfill discovery (with redaction on any journal inspection).**
 
 ```bash
-sudo systemctl start 'flume-autofill-backfill@2024-12.service' 2>&1
-sudo journalctl -u 'flume-autofill-backfill@2024-12.service' -n 20 --no-pager
+sudo systemctl start 'flume-autofill-backfill@2024-12.service'
+sudo systemctl status 'flume-autofill-backfill@2024-12.service' --no-pager 2>&1 | head -8
+
+# If status shows failure, examine journal with redaction:
+sudo journalctl -u 'flume-autofill-backfill@2024-12.service' -n 20 --no-pager 2>&1 | \
+  sed -E '
+    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
+  ' | tail -20
 ```
 
 Expected: prints source coverage and the chosen source for the window.

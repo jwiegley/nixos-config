@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from flume_autofill.detection import (
-    AutofillSession,
+    AutofillSession,  # noqa: F401  # public-API surface check
     DetectionConfig,
     detect_autofill_sessions,
 )
@@ -54,17 +54,17 @@ def test_blip_tolerance_one_minute_at_8_gpm_keeps_session():
 
 
 def test_high_blip_25_gpm_breaks_mean_check_and_yields_no_session():
-    """A 25 GPM spike (hose burst) pushes the rolling mean above 5."""
+    """A 25 GPM spike (hose burst) pushes the rolling mean above 5.
+
+    With the leading-edge debounce, the activity has only one rolling
+    window that passes (at i=9) before the spike at i=10 fails the
+    mean check, so no session is declared.
+    """
     start = datetime(2026, 5, 22, 22, 0, 0)
     gpms = [4.0] * 10 + [25.0] + [4.0] * 5
     series = _series(start, gpms)
     sessions = detect_autofill_sessions(series, CONFIG)
-    # The window containing the 25 GPM blip fails the mean check; session
-    # should end at minute 9 (last fully clean window). With our algorithm a
-    # session begins once 9/10 are in range AND mean is in range; the spike
-    # ends it and no new session begins because the spike alone is < 10 min.
-    assert all(s.end < start + timedelta(minutes=10) for s in sessions)
-    assert sum(s.gallons for s in sessions) <= 40.0
+    assert sessions == []
 
 
 def test_two_separate_autofills_30_min_apart():
@@ -74,6 +74,8 @@ def test_two_separate_autofills_30_min_apart():
     sessions = detect_autofill_sessions(series, CONFIG)
     assert len(sessions) == 2
     assert all(round(s.gallons, 1) == 60.0 for s in sessions)
+    assert sessions[0].end == start + timedelta(minutes=14)
+    assert sessions[1].start == start + timedelta(minutes=45)
 
 
 def test_startup_first_10_minutes_have_no_session():

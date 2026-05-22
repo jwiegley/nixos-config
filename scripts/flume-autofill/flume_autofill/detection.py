@@ -1,16 +1,17 @@
 """Pool autofill detection algorithm.
 
-Mirrors the Phase 1 HA semantic: a session is a contiguous run of minutes
-where >= `min_minutes_in_range` of every rolling `window_minutes`-minute
-window land in [`gpm_min`, `gpm_max`], and the rolling mean is also in
-that range when `enforce_mean_check=True`.
+A session is a contiguous run of minutes where >= `min_minutes_in_range`
+of every rolling `window_minutes`-minute window land in
+[`gpm_min`, `gpm_max`], and the rolling mean is also in that range when
+`enforce_mean_check=True`.
 
-To suppress sub-threshold blips (e.g. a 9-minute pulse that happens to
-satisfy the "9 of last 10" rule at a single instant), a session must
-remain active across at least two consecutive rolling windows before
-it's reported. This matches the spec's "Below the 10-min duration
-threshold -> no session" expectation while still preserving session
-detection for legitimate runs that include a single noisy minute.
+The Python algorithm uses a leading-edge debounce (requires >= 2
+consecutive rolling windows to satisfy the in-range + mean rules before
+declaring a session). Phase 1's HA equivalent uses a trailing-edge
+`delay_off: 1m` debounce -- the two converge for steady sessions, but
+Phase 2 cross-check will see small boundary differences on real-world
+data with mid-session dips. Document any persistent drift in the Phase 2
+anomaly section.
 
 This module is a pure function over a (timestamp, gpm) list. Sources and
 destinations are layered on top.
@@ -18,8 +19,7 @@ destinations are layered on top.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Iterable
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -106,6 +106,14 @@ def _build_session(
     start_idx: int,
     end_idx: int,
 ) -> AutofillSession:
+    # Trim leading/trailing out-of-range minutes so session boundaries
+    # reflect actual activity. Mid-session out-of-range minutes (e.g. a
+    # one-minute blip) are preserved.
+    while start_idx <= end_idx and not in_range[start_idx][2]:
+        start_idx += 1
+    while end_idx >= start_idx and not in_range[end_idx][2]:
+        end_idx -= 1
+
     span = in_range[start_idx : end_idx + 1]
     # 1 minute per sample; gpm * 1 = gal contribution.
     gallons = sum(gpm for _, gpm, _ in span)

@@ -1,3 +1,11 @@
+from pathlib import Path
+
+
+# Package root directory (parent of the tests/ directory). Derived from
+# __file__ so the test still works after the worktree is merged to main.
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def test_package_imports():
     """flume_autofill imports cleanly."""
     import flume_autofill
@@ -11,7 +19,7 @@ def test_cli_help_works():
         [sys.executable, "-m", "flume_autofill", "--help"],
         capture_output=True,
         text=True,
-        cwd="/etc/nixos.worktrees/water-attribution/scripts/flume-autofill",
+        cwd=str(ROOT),
     )
     assert result.returncode == 0
     assert "cross-check" in result.stdout

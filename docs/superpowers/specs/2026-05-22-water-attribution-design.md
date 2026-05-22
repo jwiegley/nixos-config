@@ -56,7 +56,7 @@ Out of scope (deferred):
 
 | Entity | Type | Unit | Role |
 |---|---|---|---|
-| `sensor.flume_sensor_sierra_oaks_current` | source (Flume integration) | gal/m | Total household flow at the meter |
+| `sensor.flume_sensor_sierra_oaks_current` | source (Flume integration) | gal/min | Total household flow at the meter |
 | `sensor.water_heater_ch1_ch1_unit1_hot_water_flow` | source (NaviLink integration) | gal/min | Indoor hot-water flow (subset of indoor — see §6.4) |
 | `valve.sprinkler_control_<10 zones>_zone` | source (B-Hyve integration) | open/closed | Per-zone irrigation indicator |
 | `sensor.water_attribution_cross_check_delta_gal` | new (Phase 2) | gal | Output of weekly cross-check |
@@ -83,8 +83,8 @@ The B-Hyve sprinkler zones (canonical list, populated in the Nix module):
 │  Home Assistant                                                     │
 │                                                                     │
 │  Sources (existing):                                                │
-│    sensor.flume_sensor_sierra_oaks_current        (gal/m)           │
-│    sensor.water_heater_ch1_ch1_unit1_hot_water_flow (gal/m)         │
+│    sensor.flume_sensor_sierra_oaks_current        (gal/min)           │
+│    sensor.water_heater_ch1_ch1_unit1_hot_water_flow (gal/min)         │
 │    valve.sprinkler_control_<10>_zone              (open/closed)     │
 │                                                                     │
 │  ┌─── /var/lib/hass/packages/water_attribution.yaml ─────────┐      │
@@ -252,7 +252,7 @@ template:
   - sensor:
       - name: "Water Front Yard Gated GPM"
         unique_id: water_front_yard_gpm_gated
-        unit_of_measurement: "gal/m"
+        unit_of_measurement: "gal/min"
         state: >
           {% if is_state('valve.sprinkler_control_front_yard_zone', 'open') %}
             {{ states('sensor.flume_sensor_sierra_oaks_current') | float(0) }}
@@ -291,7 +291,7 @@ template:
   - sensor:
       - name: "Water Domestic Hot GPM"
         unique_id: water_domestic_hot_gpm
-        unit_of_measurement: "gal/m"
+        unit_of_measurement: "gal/min"
         state: >
           {{ states('sensor.water_heater_ch1_ch1_unit1_hot_water_flow') | float(0) }}
         attributes:
@@ -315,7 +315,7 @@ template:
   - sensor:
       - name: "Water Other GPM"
         unique_id: water_other_gpm
-        unit_of_measurement: "gal/m"
+        unit_of_measurement: "gal/min"
         state: >
           {% set total = states('sensor.flume_sensor_sierra_oaks_current') | float(0) %}
           {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
@@ -336,7 +336,7 @@ template:
   - sensor:
       - name: "Water Other GPM"
         unique_id: water_other_gpm
-        unit_of_measurement: "gal/m"
+        unit_of_measurement: "gal/min"
         state: >
           {% set total = states('sensor.flume_sensor_sierra_oaks_current') | float(0) %}
           {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}

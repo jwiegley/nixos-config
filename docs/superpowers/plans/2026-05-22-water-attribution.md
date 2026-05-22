@@ -786,14 +786,14 @@ in
     flumeCurrentSensor = lib.mkOption {
       type = lib.types.str;
       default = "sensor.flume_sensor_sierra_oaks_current";
-      description = "Flume entity reporting gal/m instantaneous flow.";
+      description = "Flume entity reporting gal/min instantaneous flow.";
     };
 
     domesticHotFlowSensor = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = "sensor.water_heater_ch1_ch1_unit1_hot_water_flow";
       description = ''
-        Optional indoor hot-water flow sensor (gal/m). Setting to null
+        Optional indoor hot-water flow sensor (gal/min). Setting to null
         disables the domestic_hot category entirely.
       '';
     };
@@ -952,7 +952,7 @@ Inside the `let` block of the module, add (before the `in {`):
       - sensor:
           - name: "Water Pool Autofill Gated GPM"
             unique_id: water_pool_autofill_gpm_gated
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% if is_state('binary_sensor.pool_autofill_active', 'on') %}
                 {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
@@ -982,7 +982,7 @@ Inside the `let` block of the module, add (before the `in {`):
       - sensor:
           - name: "Water Domestic Hot GPM"
             unique_id: water_domestic_hot_gpm
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {{ states('${cfg.domesticHotFlowSensor}') | float(0) }}
             availability: >
@@ -1062,7 +1062,7 @@ Append to the `let` block:
       - sensor:
           - name: "Water ${z.name} Gated GPM"
             unique_id: water_${z.slug}_gpm_gated
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% if is_state('valve.sprinkler_control_${z.slug}_zone', 'open') %}
                 {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
@@ -1149,7 +1149,7 @@ Append to the `let` block:
       - sensor:
           - name: "Water Other GPM"
             unique_id: water_other_gpm
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% set total = states('${cfg.flumeCurrentSensor}') | float(0) %}
               {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}

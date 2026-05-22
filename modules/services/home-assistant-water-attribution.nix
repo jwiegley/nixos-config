@@ -137,6 +137,122 @@ let
         round: 3
   '';
 
+  perZoneGatedYaml = z: ''
+    template:
+      - sensor:
+          - name: "Water ${z.name} Gated GPM"
+            unique_id: water_${z.slug}_gpm_gated
+            unit_of_measurement: "gal/min"
+            state: >
+              {% if is_state('valve.sprinkler_control_${z.slug}_zone', 'open') %}
+                {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
+              {% else %}
+                0
+              {% endif %}
+            availability: >
+              {{ states('valve.sprinkler_control_${z.slug}_zone') not in ['unknown','unavailable']
+                 and states('${cfg.flumeCurrentSensor}') not in ['unknown','unavailable'] }}
+            attributes:
+              water_category: irrigation
+              zone_slug: ${z.slug}
+              ${lib.optionalString (z.type != null) "zone_type: ${z.type}"}
+              generation: water_attribution_v1
+
+    sensor:
+      - platform: integration
+        name: "Water ${z.name} Total"
+        unique_id: water_${z.slug}_total
+        source: sensor.water_${z.slug}_gpm_gated
+        method: left
+        unit_time: min
+        unit_prefix: ""
+        round: 3
+  '';
+
+  zonesIterationYaml = lib.concatMapStringsSep "\n" perZoneGatedYaml cfg.zones;
+
+  # Aggregate irrigation total (sum of zones, with drop tolerance)
+  zoneTotalsList = lib.concatMapStringsSep ", "
+    (z: "'sensor.water_${z.slug}_total'") cfg.zones;
+
+  aggregateIrrigationYaml = ''
+    template:
+      - sensor:
+          - name: "Water Irrigation Total"
+            unique_id: water_irrigation_total
+            unit_of_measurement: "gal"
+            device_class: water
+            state_class: total_increasing
+            state: >
+              {% set zones = [ ${zoneTotalsList} ] %}
+              {% set s = zones | map('states') | map('float', 0) | sum %}
+              {% set last = states('sensor.water_irrigation_total') | float(0) %}
+              {% set tol = ${yamlFloat cfg.aggregateDropToleranceGal} %}
+              {{ (([s, last] | max | round(3)) if ((last - s) < tol) else (s | round(3))) }}
+            availability: >
+              {% set zones = [ ${zoneTotalsList} ] %}
+              {{ zones | map('states') | reject('in', ['unknown','unavailable']) | list | length == zones | length }}
+            attributes:
+              water_category: irrigation
+              generation: water_attribution_v1
+  '';
+
+  # Convenience binary_sensor: any irrigation zone open right now.
+  # Used by future NR consumer flows; also a clean signal for Grafana annotations.
+  zoneValveList = lib.concatMapStringsSep ", "
+    (z: "'valve.sprinkler_control_${z.slug}_zone'") cfg.zones;
+
+  irrigationActiveYaml = ''
+    template:
+      - binary_sensor:
+          - name: "Irrigation Active"
+            unique_id: irrigation_active
+            state: >
+              {% set valves = [ ${zoneValveList} ] %}
+              {{ valves | map('states') | select('eq', 'open') | list | length > 0 }}
+            availability: >
+              {% set valves = [ ${zoneValveList} ] %}
+              {{ valves | map('states') | reject('in', ['unknown','unavailable']) | list | length > 0 }}
+            attributes:
+              water_category: irrigation
+              generation: water_attribution_v1
+  '';
+
+  # Gated-GPM list for the "other" residual subtraction
+  zoneGatedList = lib.concatMapStringsSep ", "
+    (z: "'sensor.water_${z.slug}_gpm_gated'") cfg.zones;
+
+  hasHot = cfg.domesticHotFlowSensor != null;
+
+  otherResidualYaml = ''
+    template:
+      - sensor:
+          - name: "Water Other GPM"
+            unique_id: water_other_gpm
+            unit_of_measurement: "gal/min"
+            state: >
+              {% set total = states('${cfg.flumeCurrentSensor}') | float(0) %}
+              {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
+              ${lib.optionalString hasHot "{% set hot = states('sensor.water_domestic_hot_gpm') | float(0) %}"}
+              {% set zones = [ ${zoneGatedList} ] %}
+              {% set irrigation = zones | map('states') | map('float', 0) | sum %}
+              {% set residual = total - autofill ${lib.optionalString hasHot "- hot"} - irrigation %}
+              {{ [residual, 0] | max | round(3) }}
+            attributes:
+              water_category: other
+              generation: water_attribution_v1
+
+    sensor:
+      - platform: integration
+        name: "Water Other Total"
+        unique_id: water_other_total
+        source: sensor.water_other_gpm
+        method: left
+        unit_time: min
+        unit_prefix: ""
+        round: 3
+  '';
+
 in
 {
   options.services.home-assistant-water-attribution = {
@@ -218,5 +334,13 @@ in
     ${poolAutofillGatedGpmYaml}
 
     ${domesticHotYaml}
+
+    ${zonesIterationYaml}
+
+    ${irrigationActiveYaml}
+
+    ${aggregateIrrigationYaml}
+
+    ${otherResidualYaml}
   '';
 }

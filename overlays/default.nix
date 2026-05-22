@@ -24,6 +24,13 @@ let
   # Apply check-systemd overlay
   prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
 
+  # Inject `myLib` (mkScriptPackage / mkSimpleGitHubBinary helpers) from
+  # nix-config's 00-lib.nix overlay so 30-data-tools, 30-misc-tools, and
+  # 30-user-scripts can reference prev.myLib when imported below.
+  myLibOverlay = import "${inputs.nix-config}/overlays/00-lib.nix";
+  prevWithMyLib =
+    prevWithCheckSystemd // (myLibOverlay final prevWithCheckSystemd) // { inherit inputs; };
+
   # Fix script for aiopnsense Python 2-style except clauses (used in haPackageOverrides)
   aiopnsenseFixScript = prev.writeText "fix-aiopnsense-py2-except.py" ''
     import re, os
@@ -219,7 +226,7 @@ in
   # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
   # can resolve flake input sources.
   inherit
-    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final (prev // { inherit inputs; }))
+    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final prevWithMyLib)
     hammer
     linkdups
     lipotell
@@ -228,7 +235,7 @@ in
     markless
     ;
   inherit
-    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final (prev // { inherit inputs; }))
+    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final prevWithMyLib)
     tsvutils
     ;
   inherit
@@ -236,7 +243,7 @@ in
     filetags
     ;
   inherit
-    (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final (prev // { inherit inputs; }))
+    (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final prevWithMyLib)
     nix-scripts
     ;
 

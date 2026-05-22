@@ -223,5 +223,75 @@ in
         Unit = "flume-autofill-weekly.service";
       };
     };
+
+    # Phase 3: Historical backfill template service. Instantiated manually
+    # via `systemctl start 'flume-autofill-backfill@<INSTANCE>.service'`
+    # where INSTANCE matches `parse_systemd_instance` in
+    # flume_autofill/backfill.py — i.e. one of:
+    #   YYYY                    e.g. 2024
+    #   YYYY-MM                 e.g. 2024-05
+    #   YYYY-MM-DD              e.g. 2024-05-18
+    #   YYYY-MM-DD:YYYY-MM-DD   e.g. 2024-05-01:2024-05-07
+    #
+    # The instance string is plumbed into the process via
+    # FLUME_AUTOFILL_INSTANCE=%i (systemd substitutes %i with the
+    # post-@ portion of the unit name). The Python driver expands the
+    # short form into a (start, end) date pair before running.
+    #
+    # No timer: backfill is operator-driven, not scheduled. The unit
+    # holds the same LoadCredential set as the weekly service so it can
+    # write back to HA's LTS namespace.
+    systemd.services."flume-autofill-backfill@" = {
+      description = "Flume autofill backfill for %i";
+      after = [
+        "network-online.target"
+        "postgresql.service"
+        "home-assistant.service"
+      ];
+      wants = [ "network-online.target" ];
+
+      environment = {
+        PYTHONPATH = "${scriptDir}";
+        PYTHONUNBUFFERED = "1";
+        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-autofill/zones.json";
+        FLUME_AUTOFILL_INSTANCE = "%i";
+      };
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = "flume-autofill";
+        Group = "flume-autofill";
+        WorkingDirectory = "/var/lib/flume-autofill";
+        ExecStart = "${pyenv}/bin/python -m flume_autofill backfill";
+
+        LoadCredential = [
+          "client_id:${config.sops.secrets."flume/client_id".path}"
+          "client_secret:${config.sops.secrets."flume/client_secret".path}"
+          "username:${config.sops.secrets."flume/username".path}"
+          "password:${config.sops.secrets."flume/password".path}"
+          "ha_token:${config.sops.secrets."home-assistant/flume-autofill-token".path}"
+        ];
+
+        # ── Hardening ───────────────────────────────────────────────
+        # Lighter than the weekly service (no postfix path needed —
+        # backfill is fire-and-forget; failures appear in journalctl,
+        # not email).
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+
+        # Multi-year backfills cap out around 10 minutes of wall-clock
+        # in practice; give the driver headroom for the LTS write phase
+        # which serialises per-category WebSocket sends.
+        TimeoutStartSec = "30min";
+      };
+    };
   };
 }

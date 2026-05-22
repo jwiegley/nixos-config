@@ -1,4 +1,18 @@
 # modules/services/home-assistant-water-attribution.nix
+#
+# Single-source-of-truth NixOS module for water attribution. Generates an HA
+# package file at /var/lib/hass/packages/water_attribution.yaml from the
+# `zones` list, autofill thresholds, cycles, and detection knobs declared
+# below.
+#
+# Implementation note — JSON-as-YAML:
+# We build the entire package as a single Nix attrset and emit it via
+# `builtins.toJSON`. JSON is a valid subset of YAML 1.2 (and HA's PyYAML
+# loader accepts it), so this sidesteps the whitespace pitfalls of
+# concatenating indented-string fragments. It also means every top-level
+# integration (`template`, `sensor`, `utility_meter`, `binary_sensor`)
+# appears exactly once, which is required — PyYAML silently drops all but
+# the last value for duplicate top-level keys.
 { config, lib, pkgs, ... }:
 
 let
@@ -22,286 +36,325 @@ let
     };
   };
 
-  # ---- YAML generation helpers ----
-
-  # Render a single python-like float so YAML is readable.
-  yamlFloat = f: builtins.toString f;
-
-  yamlBool = b: if b then "true" else "false";
-
-  autofillRangeYaml = ''
-    # ─── Pool Autofill — pattern-based detection ─────────────────────────────
-    template:
-      - binary_sensor:
-          - name: "Flume GPM in Autofill Range"
-            unique_id: flume_gpm_in_autofill_range
-            state: >
-              {% set gpm = states('${cfg.flumeCurrentSensor}') | float(-1) %}
-              {{ ${yamlFloat cfg.autofill.gpmMin} <= gpm <= ${yamlFloat cfg.autofill.gpmMax} }}
-            availability: >
-              {{ states('${cfg.flumeCurrentSensor}') not in ['unknown','unavailable'] }}
-            attributes:
-              generation: water_attribution_v1
-
-    sensor:
-      - platform: history_stats
-        name: "Flume Minutes in Autofill Range ${toString cfg.autofill.windowMinutes}m"
-        unique_id: flume_minutes_in_autofill_range_${toString cfg.autofill.windowMinutes}m
-        entity_id: binary_sensor.flume_gpm_in_autofill_range
-        state: "on"
-        type: time
-        duration:
-          minutes: ${toString cfg.autofill.windowMinutes}
-        end: "{{ now() }}"
-
-      - platform: statistics
-        name: "Flume GPM ${toString cfg.autofill.windowMinutes}m Mean"
-        unique_id: flume_gpm_${toString cfg.autofill.windowMinutes}m_mean
-        entity_id: ${cfg.flumeCurrentSensor}
-        state_characteristic: mean
-        max_age:
-          minutes: ${toString cfg.autofill.windowMinutes}
-        sampling_size: 50
-  '';
-
-  poolAutofillActiveYaml = ''
-    template:
-      - binary_sensor:
-          - name: "Pool Autofill Active"
-            unique_id: pool_autofill_active
-            state: >
-              {% set mins = (states('sensor.flume_minutes_in_autofill_range_${toString cfg.autofill.windowMinutes}m') | float(0)) * 60 %}
-              {% set m = states('sensor.flume_gpm_${toString cfg.autofill.windowMinutes}m_mean') | float(-1) %}
-              {{ mins >= ${toString cfg.autofill.minMinutesInRange}
-                 ${lib.optionalString cfg.autofill.enforceMeanCheck
-                     "and ${yamlFloat cfg.autofill.gpmMin} <= m <= ${yamlFloat cfg.autofill.gpmMax}"} }}
-            delay_off:
-              minutes: 1
-            attributes:
-              water_category: autofill
-              generation: water_attribution_v1
-  '';
-
-  poolAutofillGatedGpmYaml = ''
-    template:
-      - sensor:
-          - name: "Water Pool Autofill Gated GPM"
-            unique_id: water_pool_autofill_gpm_gated
-            unit_of_measurement: "gal/min"
-            state: >
-              {% if is_state('binary_sensor.pool_autofill_active', 'on') %}
-                {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
-              {% else %}
-                0
-              {% endif %}
-            availability: >
-              {{ states('binary_sensor.pool_autofill_active') not in ['unknown','unavailable']
-                 and states('${cfg.flumeCurrentSensor}') not in ['unknown','unavailable'] }}
-            attributes:
-              water_category: autofill
-              generation: water_attribution_v1
-
-    sensor:
-      - platform: integration
-        name: "Water Pool Autofill Total"
-        unique_id: water_pool_autofill_total
-        source: sensor.water_pool_autofill_gpm_gated
-        method: left
-        unit_time: min
-        unit_prefix: ""
-        round: 3
-  '';
-
-  domesticHotYaml = lib.optionalString (cfg.domesticHotFlowSensor != null) ''
-    template:
-      - sensor:
-          - name: "Water Domestic Hot GPM"
-            unique_id: water_domestic_hot_gpm
-            unit_of_measurement: "gal/min"
-            state: >
-              {{ states('${cfg.domesticHotFlowSensor}') | float(0) }}
-            availability: >
-              {{ states('${cfg.domesticHotFlowSensor}') not in ['unknown','unavailable'] }}
-            attributes:
-              water_category: domestic_hot
-              generation: water_attribution_v1
-
-    sensor:
-      - platform: integration
-        name: "Water Domestic Hot Total"
-        unique_id: water_domestic_hot_total
-        source: sensor.water_domestic_hot_gpm
-        method: left
-        unit_time: min
-        unit_prefix: ""
-        round: 3
-  '';
-
-  perZoneGatedYaml = z: ''
-    template:
-      - sensor:
-          - name: "Water ${z.name} Gated GPM"
-            unique_id: water_${z.slug}_gpm_gated
-            unit_of_measurement: "gal/min"
-            state: >
-              {% if is_state('valve.sprinkler_control_${z.slug}_zone', 'open') %}
-                {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
-              {% else %}
-                0
-              {% endif %}
-            availability: >
-              {{ states('valve.sprinkler_control_${z.slug}_zone') not in ['unknown','unavailable']
-                 and states('${cfg.flumeCurrentSensor}') not in ['unknown','unavailable'] }}
-            attributes:
-              water_category: irrigation
-              zone_slug: ${z.slug}
-              ${lib.optionalString (z.type != null) "zone_type: ${z.type}"}
-              generation: water_attribution_v1
-
-    sensor:
-      - platform: integration
-        name: "Water ${z.name} Total"
-        unique_id: water_${z.slug}_total
-        source: sensor.water_${z.slug}_gpm_gated
-        method: left
-        unit_time: min
-        unit_prefix: ""
-        round: 3
-  '';
-
-  zonesIterationYaml = lib.concatMapStringsSep "\n" perZoneGatedYaml cfg.zones;
-
-  # Aggregate irrigation total (sum of zones, with drop tolerance)
-  zoneTotalsList = lib.concatMapStringsSep ", "
-    (z: "'sensor.water_${z.slug}_total'") cfg.zones;
-
-  aggregateIrrigationYaml = ''
-    template:
-      - sensor:
-          - name: "Water Irrigation Total"
-            unique_id: water_irrigation_total
-            unit_of_measurement: "gal"
-            device_class: water
-            state_class: total_increasing
-            state: >
-              {% set zones = [ ${zoneTotalsList} ] %}
-              {% set s = zones | map('states') | map('float', 0) | sum %}
-              {% set last = states('sensor.water_irrigation_total') | float(0) %}
-              {% set tol = ${yamlFloat cfg.aggregateDropToleranceGal} %}
-              {{ (([s, last] | max | round(3)) if ((last - s) < tol) else (s | round(3))) }}
-            availability: >
-              {% set zones = [ ${zoneTotalsList} ] %}
-              {{ zones | map('states') | reject('in', ['unknown','unavailable']) | list | length == zones | length }}
-            attributes:
-              water_category: irrigation
-              generation: water_attribution_v1
-  '';
-
-  # Convenience binary_sensor: any irrigation zone open right now.
-  # Used by future NR consumer flows; also a clean signal for Grafana annotations.
-  zoneValveList = lib.concatMapStringsSep ", "
-    (z: "'valve.sprinkler_control_${z.slug}_zone'") cfg.zones;
-
-  irrigationActiveYaml = ''
-    template:
-      - binary_sensor:
-          - name: "Irrigation Active"
-            unique_id: irrigation_active
-            state: >
-              {% set valves = [ ${zoneValveList} ] %}
-              {{ valves | map('states') | select('eq', 'open') | list | length > 0 }}
-            availability: >
-              {% set valves = [ ${zoneValveList} ] %}
-              {{ valves | map('states') | reject('in', ['unknown','unavailable']) | list | length > 0 }}
-            attributes:
-              water_category: irrigation
-              generation: water_attribution_v1
-  '';
-
-  # Gated-GPM list for the "other" residual subtraction
-  zoneGatedList = lib.concatMapStringsSep ", "
-    (z: "'sensor.water_${z.slug}_gpm_gated'") cfg.zones;
-
   hasHot = cfg.domesticHotFlowSensor != null;
 
-  otherResidualYaml = ''
-    template:
-      - sensor:
-          - name: "Water Other GPM"
-            unique_id: water_other_gpm
-            unit_of_measurement: "gal/min"
-            state: >
-              {% set total = states('${cfg.flumeCurrentSensor}') | float(0) %}
-              {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
-              ${lib.optionalString hasHot "{% set hot = states('sensor.water_domestic_hot_gpm') | float(0) %}"}
-              {% set zones = [ ${zoneGatedList} ] %}
-              {% set irrigation = zones | map('states') | map('float', 0) | sum %}
-              {% set residual = total - autofill ${lib.optionalString hasHot "- hot"} - irrigation %}
-              {{ [residual, 0] | max | round(3) }}
-            attributes:
-              water_category: other
-              generation: water_attribution_v1
+  flumeSensor = cfg.flumeCurrentSensor;
+  windowMin = toString cfg.autofill.windowMinutes;
+  windowSuffix = "${windowMin}m";
 
-    sensor:
-      - platform: integration
-        name: "Water Other Total"
-        unique_id: water_other_total
-        source: sensor.water_other_gpm
-        method: left
-        unit_time: min
-        unit_prefix: ""
-        round: 3
-  '';
+  # Jinja literal arrays used by template state expressions.
+  zoneTotalsLiteral = lib.concatMapStringsSep ", "
+    (z: "'sensor.water_${z.slug}_total'") cfg.zones;
+  zoneValveLiteral = lib.concatMapStringsSep ", "
+    (z: "'valve.sprinkler_control_${z.slug}_zone'") cfg.zones;
+  zoneGatedLiteral = lib.concatMapStringsSep ", "
+    (z: "'sensor.water_${z.slug}_gpm_gated'") cfg.zones;
 
-  # Map "weekly" → offset days so utility_meter can anchor properly.
+  # Drop any null-valued keys from a {key=value;} attrset. Used to omit the
+  # optional `zone_type` attribute when a zone's type is null without leaving
+  # behind a "zone_type: null" entry.
+  dropNulls = a:
+    lib.filterAttrs (_n: v: v != null) a;
+
+  # ── template -> binary_sensor entries ─────────────────────────────────────
+
+  flumeRangeBinarySensor = {
+    name = "Flume GPM in Autofill Range";
+    unique_id = "flume_gpm_in_autofill_range";
+    state = ''
+      {% set gpm = states('${flumeSensor}') | float(-1) %}
+      {{ ${toString cfg.autofill.gpmMin} <= gpm <= ${toString cfg.autofill.gpmMax} }}
+    '';
+    availability = ''
+      {{ states('${flumeSensor}') not in ['unknown','unavailable'] }}
+    '';
+    attributes = {
+      generation = "water_attribution_v1";
+    };
+  };
+
+  poolAutofillActiveBinarySensor = {
+    name = "Pool Autofill Active";
+    unique_id = "pool_autofill_active";
+    state =
+      let
+        meanGuard = lib.optionalString cfg.autofill.enforceMeanCheck
+          " and ${toString cfg.autofill.gpmMin} <= m <= ${toString cfg.autofill.gpmMax}";
+      in ''
+        {% set mins = (states('sensor.flume_minutes_in_autofill_range_${windowSuffix}') | float(0)) * 60 %}
+        {% set m = states('sensor.flume_gpm_${windowSuffix}_mean') | float(-1) %}
+        {{ mins >= ${toString cfg.autofill.minMinutesInRange}${meanGuard} }}
+      '';
+    delay_off = { minutes = 1; };
+    attributes = {
+      water_category = "autofill";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  irrigationActiveBinarySensor = {
+    name = "Irrigation Active";
+    unique_id = "irrigation_active";
+    state = ''
+      {% set valves = [ ${zoneValveLiteral} ] %}
+      {{ valves | map('states') | select('eq', 'open') | list | length > 0 }}
+    '';
+    availability = ''
+      {% set valves = [ ${zoneValveLiteral} ] %}
+      {{ valves | map('states') | reject('in', ['unknown','unavailable']) | list | length > 0 }}
+    '';
+    attributes = {
+      water_category = "irrigation";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  # ── template -> sensor entries ────────────────────────────────────────────
+
+  poolAutofillGatedGpmSensor = {
+    name = "Water Pool Autofill Gated GPM";
+    unique_id = "water_pool_autofill_gpm_gated";
+    unit_of_measurement = "gal/min";
+    state = ''
+      {% if is_state('binary_sensor.pool_autofill_active', 'on') %}
+        {{ states('${flumeSensor}') | float(0) }}
+      {% else %}
+        0
+      {% endif %}
+    '';
+    availability = ''
+      {{ states('binary_sensor.pool_autofill_active') not in ['unknown','unavailable']
+         and states('${flumeSensor}') not in ['unknown','unavailable'] }}
+    '';
+    attributes = {
+      water_category = "autofill";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  domesticHotGpmSensors = lib.optional hasHot {
+    name = "Water Domestic Hot GPM";
+    unique_id = "water_domestic_hot_gpm";
+    unit_of_measurement = "gal/min";
+    state = ''
+      {{ states('${cfg.domesticHotFlowSensor}') | float(0) }}
+    '';
+    availability = ''
+      {{ states('${cfg.domesticHotFlowSensor}') not in ['unknown','unavailable'] }}
+    '';
+    attributes = {
+      water_category = "domestic_hot";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  perZoneGatedSensor = z: {
+    name = "Water ${z.name} Gated GPM";
+    unique_id = "water_${z.slug}_gpm_gated";
+    unit_of_measurement = "gal/min";
+    state = ''
+      {% if is_state('valve.sprinkler_control_${z.slug}_zone', 'open') %}
+        {{ states('${flumeSensor}') | float(0) }}
+      {% else %}
+        0
+      {% endif %}
+    '';
+    availability = ''
+      {{ states('valve.sprinkler_control_${z.slug}_zone') not in ['unknown','unavailable']
+         and states('${flumeSensor}') not in ['unknown','unavailable'] }}
+    '';
+    attributes = dropNulls {
+      water_category = "irrigation";
+      zone_slug = z.slug;
+      zone_type = z.type;  # may be null; dropped by dropNulls
+      generation = "water_attribution_v1";
+    };
+  };
+
+  aggregateIrrigationSensor = {
+    name = "Water Irrigation Total";
+    unique_id = "water_irrigation_total";
+    unit_of_measurement = "gal";
+    device_class = "water";
+    state_class = "total_increasing";
+    state = ''
+      {% set zones = [ ${zoneTotalsLiteral} ] %}
+      {% set s = zones | map('states') | map('float', 0) | sum %}
+      {% set last = states('sensor.water_irrigation_total') | float(0) %}
+      {% set tol = ${toString cfg.aggregateDropToleranceGal} %}
+      {{ (([s, last] | max | round(3)) if ((last - s) < tol) else (s | round(3))) }}
+    '';
+    availability = ''
+      {% set zones = [ ${zoneTotalsLiteral} ] %}
+      {{ zones | map('states') | reject('in', ['unknown','unavailable']) | list | length == zones | length }}
+    '';
+    attributes = {
+      water_category = "irrigation";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  otherResidualSensor = {
+    name = "Water Other GPM";
+    unique_id = "water_other_gpm";
+    unit_of_measurement = "gal/min";
+    state =
+      let
+        hotLine = lib.optionalString hasHot
+          "{% set hot = states('sensor.water_domestic_hot_gpm') | float(0) %}\n";
+        hotSubtract = lib.optionalString hasHot " - hot";
+      in ''
+        {% set total = states('${flumeSensor}') | float(0) %}
+        {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
+        ${hotLine}{% set zones = [ ${zoneGatedLiteral} ] %}
+        {% set irrigation = zones | map('states') | map('float', 0) | sum %}
+        {% set residual = total - autofill${hotSubtract} - irrigation %}
+        {{ [residual, 0] | max | round(3) }}
+      '';
+    attributes = {
+      water_category = "other";
+      generation = "water_attribution_v1";
+    };
+  };
+
+  templateBlock = [
+    { binary_sensor = [
+        flumeRangeBinarySensor
+        poolAutofillActiveBinarySensor
+        irrigationActiveBinarySensor
+      ];
+    }
+    { sensor =
+        [ poolAutofillGatedGpmSensor ]
+        ++ domesticHotGpmSensors
+        ++ (map perZoneGatedSensor cfg.zones)
+        ++ [ aggregateIrrigationSensor otherResidualSensor ];
+    }
+  ];
+
+  # ── sensor: platform entries ──────────────────────────────────────────────
+
+  historyStatsEntry = {
+    platform = "history_stats";
+    name = "Flume Minutes in Autofill Range ${windowSuffix}";
+    unique_id = "flume_minutes_in_autofill_range_${windowSuffix}";
+    entity_id = "binary_sensor.flume_gpm_in_autofill_range";
+    state = "on";
+    type = "time";
+    duration = { minutes = cfg.autofill.windowMinutes; };
+    end = "{{ now() }}";
+  };
+
+  statisticsEntry = {
+    platform = "statistics";
+    name = "Flume GPM ${windowSuffix} Mean";
+    unique_id = "flume_gpm_${windowSuffix}_mean";
+    entity_id = flumeSensor;
+    state_characteristic = "mean";
+    max_age = { minutes = cfg.autofill.windowMinutes; };
+    sampling_size = 50;
+  };
+
+  integrationEntry = { name, unique_id, source }: {
+    platform = "integration";
+    inherit name unique_id source;
+    method = "left";
+    unit_time = "min";
+    unit_prefix = "";
+    round = 3;
+  };
+
+  poolAutofillTotalEntry = integrationEntry {
+    name = "Water Pool Autofill Total";
+    unique_id = "water_pool_autofill_total";
+    source = "sensor.water_pool_autofill_gpm_gated";
+  };
+
+  domesticHotTotalEntry = lib.optional hasHot (integrationEntry {
+    name = "Water Domestic Hot Total";
+    unique_id = "water_domestic_hot_total";
+    source = "sensor.water_domestic_hot_gpm";
+  });
+
+  perZoneTotalEntry = z: integrationEntry {
+    name = "Water ${z.name} Total";
+    unique_id = "water_${z.slug}_total";
+    source = "sensor.water_${z.slug}_gpm_gated";
+  };
+
+  otherTotalEntry = integrationEntry {
+    name = "Water Other Total";
+    unique_id = "water_other_total";
+    source = "sensor.water_other_gpm";
+  };
+
+  sensorBlock =
+    [ historyStatsEntry statisticsEntry poolAutofillTotalEntry ]
+    ++ domesticHotTotalEntry
+    ++ (map perZoneTotalEntry cfg.zones)
+    ++ [ otherTotalEntry ];
+
+  # ── utility_meter ─────────────────────────────────────────────────────────
+
   weekOffsetDays = if cfg.weekStart == "monday" then 0 else 6;
 
-  utilityMeterEntry = source: cycle: ''
-      ${source}_${cycle}:
-        source: sensor.${source}
-        cycle: ${cycle}
-        name: "${
-          let
-            cleaned = lib.replaceStrings [ "water_" "_total" ] [ "Water " "" ] source;
-            cycleTitle = lib.toUpper (builtins.substring 0 1 cycle) +
-              builtins.substring 1 (builtins.stringLength cycle) cycle;
-          in "${cleaned} ${cycleTitle}"
-        }"
-        ${lib.optionalString (cycle == "weekly") "offset: { days: ${toString weekOffsetDays} }"}
-  '';
+  prettyCategory = source:
+    let
+      stripped = lib.replaceStrings [ "water_" "_total" ] [ "" "" ] source;
+      titleCase = w:
+        if w == ""
+        then ""
+        else lib.toUpper (builtins.substring 0 1 w)
+             + builtins.substring 1 (builtins.stringLength w) w;
+      words = lib.splitString "_" stripped;
+    in
+      "Water " + lib.concatStringsSep " " (map titleCase words);
 
-  # Cumulative source sensors that need utility_meter wrappers.
+  cycleTitle = cycle:
+    lib.toUpper (builtins.substring 0 1 cycle)
+    + builtins.substring 1 (builtins.stringLength cycle) cycle;
+
+  utilityMeterEntry = source: cycle:
+    let
+      base = {
+        source = "sensor.${source}";
+        inherit cycle;
+        name = "${prettyCategory source} ${cycleTitle cycle}";
+      };
+      withOffset =
+        if cycle == "weekly"
+        then base // { offset = { days = weekOffsetDays; }; }
+        else base;
+    in
+      { "${source}_${cycle}" = withOffset; };
+
   cumulativeSources =
     [ "water_pool_autofill_total" ]
     ++ (lib.optional hasHot "water_domestic_hot_total")
     ++ (map (z: "water_${z.slug}_total") cfg.zones)
     ++ [ "water_irrigation_total" "water_other_total" ];
 
-  utilityMeterYaml = ''
-    utility_meter:
-    ${lib.concatStrings (lib.concatMap
+  utilityMeterBlock = lib.foldl' (acc: x: acc // x) {}
+    (lib.concatMap
       (source: map (cycle: utilityMeterEntry source cycle) cfg.cycles)
-      cumulativeSources)}
-  '';
+      cumulativeSources);
+
+  # ── Assembled package YAML ───────────────────────────────────────────────
+  #
+  # We emit the entire package as JSON (a valid subset of YAML 1.2) prefixed
+  # by a comment header. HA's PyYAML loader handles both JSON and the YAML
+  # superset.
+  packageData = {
+    template = templateBlock;
+    sensor = sensorBlock;
+    utility_meter = utilityMeterBlock;
+  };
 
   packageYamlFile = pkgs.writeText "water_attribution.yaml" ''
-    ${autofillRangeYaml}
-
-    ${poolAutofillActiveYaml}
-
-    ${poolAutofillGatedGpmYaml}
-
-    ${domesticHotYaml}
-
-    ${zonesIterationYaml}
-
-    ${irrigationActiveYaml}
-
-    ${aggregateIrrigationYaml}
-
-    ${otherResidualYaml}
-
-    ${utilityMeterYaml}
+    # ─── Generated by modules/services/home-assistant-water-attribution.nix ──
+    # DO NOT EDIT by hand. Update the Nix module and rebuild.
+    # Emitted as JSON for whitespace-safe HA package loading (JSON ⊂ YAML 1.2).
+    ${builtins.toJSON packageData}
   '';
 
   zonesJsonFile = pkgs.writeText "zones.json" (builtins.toJSON {
@@ -424,26 +477,4 @@ in
       zonesJsonFile
     ];
   };
-
-  # Verification helper: surface the generated YAML text so flake/dev tools
-  # can inspect what the module would produce. Not used at runtime.
-  _module.args._yamlPreview = pkgs.writeText "water_attribution_preview.yaml" ''
-    ${autofillRangeYaml}
-
-    ${poolAutofillActiveYaml}
-
-    ${poolAutofillGatedGpmYaml}
-
-    ${domesticHotYaml}
-
-    ${zonesIterationYaml}
-
-    ${irrigationActiveYaml}
-
-    ${aggregateIrrigationYaml}
-
-    ${otherResidualYaml}
-
-    ${utilityMeterYaml}
-  '';
 }

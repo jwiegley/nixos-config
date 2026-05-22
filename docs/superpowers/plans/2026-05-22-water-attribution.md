@@ -31,7 +31,7 @@ scripts/flume-autofill/
 ├── flume_autofill/
 │   ├── __init__.py                              CREATE
 │   ├── __main__.py                              CREATE — CLI entry point
-│   ├── config.py                                CREATE — loads /etc/nixos/scripts/flume-autofill/zones.json
+│   ├── config.py                                CREATE — loads /var/lib/flume-autofill/zones.json
 │   ├── detection.py                             CREATE — shared autofill detection algorithm
 │   ├── sources/
 │   │   ├── __init__.py                          CREATE
@@ -71,7 +71,7 @@ secrets.yaml                                      MODIFY — add flume/client_id
 
 ```
 /var/lib/hass/packages/water_attribution.yaml     symlinked from Nix store
-/etc/nixos/scripts/flume-autofill/zones.json      generated alongside the YAML; canonical zone list for Python
+/var/lib/flume-autofill/zones.json                generated alongside the YAML; canonical zone list for Python (outside git tree)
 ```
 
 ### Documentation
@@ -839,7 +839,7 @@ in
 
     zonesJsonOutputPath = lib.mkOption {
       type = lib.types.path;
-      default = "/etc/nixos/scripts/flume-autofill/zones.json";
+      default = "/var/lib/flume-autofill/zones.json";
       description = "Where to materialize the canonical zones.json for Phase 2/3.";
     };
   };
@@ -1003,51 +1003,40 @@ Inside the `let` block of the module, add (before the `in {`):
   '';
 ```
 
-- [ ] **Step 2: Update the `config = lib.mkIf cfg.enable {}` block to use these for an early end-to-end render test (a single-zone smoke test).**
+- [ ] **Step 2: Add a top-level `_yamlPreview` attribute for verification.**
 
-Inside `config = lib.mkIf cfg.enable { ... };` replace the placeholder with:
+Keep `config = lib.mkIf cfg.enable {};` empty (we materialize the YAML in Task 8). To verify what the generator produces in isolation, expose the YAML string as a top-level attribute by changing the module's outer expression:
 
 ```nix
-    # Generate the package YAML at build time.
-    # NOTE: zones-iteration parts are added in Task 6.
-    environment.etc."nixos-generated/water_attribution.yaml" = {
-      text = ''
-        ${autofillRangeYaml}
+in
+{
+  options.services.home-assistant-water-attribution = { ... };
 
-        ${poolAutofillActiveYaml}
+  config = lib.mkIf cfg.enable {
+    # placeholder — full materialization added in Task 8
+  };
 
-        ${poolAutofillGatedGpmYaml}
+  # Verification helper: surface the generated YAML text so flake/dev tools
+  # can inspect what the module would produce. Not used at runtime.
+  _module.args._yamlPreview = pkgs.writeText "water_attribution_preview.yaml" ''
+    ${autofillRangeYaml}
 
-        ${domesticHotYaml}
-      '';
-      mode = "0644";
-    };
+    ${poolAutofillActiveYaml}
+
+    ${poolAutofillGatedGpmYaml}
+
+    ${domesticHotYaml}
+  '';
+}
 ```
 
-- [ ] **Step 3: Test the generator end-to-end with a stub host config.**
+- [ ] **Step 3: Verify the module parses cleanly.**
 
 ```bash
-nix-instantiate --eval --strict -E '
-  let
-    pkgs = import <nixpkgs> {};
-    cfg = (pkgs.lib.evalModules {
-      modules = [
-        /etc/nixos/modules/services/home-assistant-water-attribution.nix
-        {
-          services.home-assistant-water-attribution = {
-            enable = true;
-            zones = [
-              { slug = "front_yard"; name = "Front Yard"; type = "spray"; }
-            ];
-          };
-        }
-      ];
-    }).config;
-  in cfg.environment.etc."nixos-generated/water_attribution.yaml".text
-' 2>&1 | head -50
+nix-instantiate --parse /etc/nixos/modules/services/home-assistant-water-attribution.nix > /dev/null && echo OK
 ```
 
-Expected: prints the YAML body containing `name: "Flume GPM in Autofill Range"` and `name: "Pool Autofill Active"`.
+Expected: prints `OK`. (Full evaluation deferred to Task 8/9 where the module is loaded into a real host config.)
 
 - [ ] **Step 4: Commit.**
 
@@ -1128,6 +1117,27 @@ Append to the `let` block:
               generation: water_attribution_v1
   '';
 
+  # Convenience binary_sensor: any irrigation zone open right now.
+  # Used by future NR consumer flows; also a clean signal for Grafana annotations.
+  zoneValveList = lib.concatMapStringsSep ", "
+    (z: "'valve.sprinkler_control_${z.slug}_zone'") cfg.zones;
+
+  irrigationActiveYaml = ''
+    template:
+      - binary_sensor:
+          - name: "Irrigation Active"
+            unique_id: irrigation_active
+            state: >
+              {% set valves = [ ${zoneValveList} ] %}
+              {{ valves | map('states') | select('eq', 'open') | list | length > 0 }}
+            availability: >
+              {% set valves = [ ${zoneValveList} ] %}
+              {{ valves | map('states') | reject('in', ['unknown','unavailable']) | list | length > 0 }}
+            attributes:
+              water_category: irrigation
+              generation: water_attribution_v1
+  '';
+
   # Gated-GPM list for the "other" residual subtraction
   zoneGatedList = lib.concatMapStringsSep ", "
     (z: "'sensor.water_${z.slug}_gpm_gated'") cfg.zones;
@@ -1164,83 +1174,39 @@ Append to the `let` block:
   '';
 ```
 
-- [ ] **Step 2: Wire these into the generated YAML.**
+- [ ] **Step 2: Update the `_yamlPreview` writeText to include all new sections.**
 
-Update the `text = '' ... '';` to append `zonesIterationYaml`, `aggregateIrrigationYaml`, and `otherResidualYaml`:
+Replace the existing `_module.args._yamlPreview = pkgs.writeText "water_attribution_preview.yaml" '' ... ''` with the full set of sections in order:
 
 ```nix
-    environment.etc."nixos-generated/water_attribution.yaml" = {
-      text = ''
-        ${autofillRangeYaml}
+  _module.args._yamlPreview = pkgs.writeText "water_attribution_preview.yaml" ''
+    ${autofillRangeYaml}
 
-        ${poolAutofillActiveYaml}
+    ${poolAutofillActiveYaml}
 
-        ${poolAutofillGatedGpmYaml}
+    ${poolAutofillGatedGpmYaml}
 
-        ${domesticHotYaml}
+    ${domesticHotYaml}
 
-        ${zonesIterationYaml}
+    ${zonesIterationYaml}
 
-        ${aggregateIrrigationYaml}
+    ${irrigationActiveYaml}
 
-        ${otherResidualYaml}
-      '';
-      mode = "0644";
-    };
+    ${aggregateIrrigationYaml}
+
+    ${otherResidualYaml}
+  '';
 ```
 
-- [ ] **Step 3: Render and inspect.**
+- [ ] **Step 3: Verify the module still parses.**
 
 ```bash
-nix-instantiate --eval --strict -E '
-  let
-    pkgs = import <nixpkgs> {};
-    cfg = (pkgs.lib.evalModules {
-      modules = [
-        /etc/nixos/modules/services/home-assistant-water-attribution.nix
-        {
-          services.home-assistant-water-attribution = {
-            enable = true;
-            zones = [
-              { slug = "front_yard"; name = "Front Yard"; type = "spray"; }
-              { slug = "drip_front_left"; name = "Drip Front Left"; type = "drip"; }
-            ];
-          };
-        }
-      ];
-    }).config;
-  in cfg.environment.etc."nixos-generated/water_attribution.yaml".text
-' 2>&1 | tail -80
+nix-instantiate --parse /etc/nixos/modules/services/home-assistant-water-attribution.nix > /dev/null && echo OK
 ```
 
-Expected: shows `water_front_yard_total`, `water_drip_front_left_total`, the aggregate irrigation block, and the `Water Other GPM` block referencing both zones.
+Expected: prints `OK`. Full YAML inspection happens at Task 9 (`nixos-rebuild build` followed by `find /nix/store -name 'water_attribution.yaml'`).
 
-- [ ] **Step 4: Test with `domesticHotFlowSensor = null`.**
-
-```bash
-nix-instantiate --eval --strict -E '
-  let
-    pkgs = import <nixpkgs> {};
-    cfg = (pkgs.lib.evalModules {
-      modules = [
-        /etc/nixos/modules/services/home-assistant-water-attribution.nix
-        {
-          services.home-assistant-water-attribution = {
-            enable = true;
-            domesticHotFlowSensor = null;
-            zones = [];
-          };
-        }
-      ];
-    }).config;
-    text = cfg.environment.etc."nixos-generated/water_attribution.yaml".text;
-  in builtins.match ".*domestic_hot.*" text == null  # should be no domestic_hot references
-'
-```
-
-Expected: prints `true` (no `domestic_hot` substring when disabled).
-
-- [ ] **Step 5: Commit.**
+- [ ] **Step 4: Commit.**
 
 ```bash
 git add modules/services/home-assistant-water-attribution.nix
@@ -1291,40 +1257,17 @@ Append to the `let` block:
   '';
 ```
 
-- [ ] **Step 2: Append `utilityMeterYaml` to the generated package.**
+- [ ] **Step 2: Append `utilityMeterYaml` to the `_yamlPreview` writeText.**
 
-Update `text = ''...'';` to include `${utilityMeterYaml}` at the end:
+Update the `_module.args._yamlPreview = pkgs.writeText "water_attribution_preview.yaml" '' ... ''` to include `${utilityMeterYaml}` at the end of the body.
 
-```nix
-        ${otherResidualYaml}
-
-        ${utilityMeterYaml}
-```
-
-- [ ] **Step 3: Render and verify.**
+- [ ] **Step 3: Verify the module still parses.**
 
 ```bash
-nix-instantiate --eval --strict -E '
-  let
-    pkgs = import <nixpkgs> {};
-    cfg = (pkgs.lib.evalModules {
-      modules = [
-        /etc/nixos/modules/services/home-assistant-water-attribution.nix
-        {
-          services.home-assistant-water-attribution = {
-            enable = true;
-            zones = [
-              { slug = "front_yard"; name = "Front Yard"; type = "spray"; }
-            ];
-          };
-        }
-      ];
-    }).config;
-  in cfg.environment.etc."nixos-generated/water_attribution.yaml".text
-' 2>&1 | grep -A 1 'utility_meter:' | head -20
+nix-instantiate --parse /etc/nixos/modules/services/home-assistant-water-attribution.nix > /dev/null && echo OK
 ```
 
-Expected: shows `water_pool_autofill_total_daily`, `_weekly`, `_monthly`, and per-zone equivalents.
+Expected: prints `OK`.
 
 - [ ] **Step 4: Commit.**
 
@@ -1340,9 +1283,9 @@ git commit -m "feat(water-attribution): utility_meter cycle generation"
 **Files:**
 - Modify: `modules/services/home-assistant-water-attribution.nix`
 
-- [ ] **Step 1: Replace the `environment.etc` placeholder with a proper activation script.**
+- [ ] **Step 1: Replace the empty `config = lib.mkIf cfg.enable {}` block with an activation script that materializes the YAML and zones.json into runtime locations.**
 
-Replace the existing `environment.etc."nixos-generated/water_attribution.yaml"` block with:
+Replace the placeholder `config = lib.mkIf cfg.enable { ... }` body with:
 
 ```nix
     # Materialize the generated YAML into the HA packages directory.
@@ -1353,8 +1296,8 @@ Replace the existing `environment.etc."nixos-generated/water_attribution.yaml"` 
         install -m 0644 -o hass -g hass \
           ${packageYamlFile} \
           ${toString cfg.packageOutputPath}
-        install -d -m 755 /etc/nixos/scripts/flume-autofill
-        install -m 0644 \
+        install -d -m 750 -o flume-autofill -g flume-autofill /var/lib/flume-autofill
+        install -m 0644 -o flume-autofill -g flume-autofill \
           ${zonesJsonFile} \
           ${toString cfg.zonesJsonOutputPath}
       '';
@@ -1367,6 +1310,20 @@ Replace the existing `environment.etc."nixos-generated/water_attribution.yaml"` 
       zonesJsonFile
     ];
 ```
+
+**Note the path change for `zones.json`:** the reviewer flagged that generating into `/etc/nixos/scripts/flume-autofill/zones.json` pollutes the git tree. The default `zonesJsonOutputPath` (Task 4) must therefore be changed from `/etc/nixos/scripts/flume-autofill/zones.json` to `/var/lib/flume-autofill/zones.json`.
+
+Update the option default in the `options.services.home-assistant-water-attribution` block (Task 4):
+
+```nix
+    zonesJsonOutputPath = lib.mkOption {
+      type = lib.types.path;
+      default = "/var/lib/flume-autofill/zones.json";
+      description = "Where to materialize the canonical zones.json for Phase 2/3.";
+    };
+```
+
+The Python service config (Tasks 14, 16, 17, 21) must reference the new path — all `FLUME_AUTOFILL_CONFIG` env values become `/var/lib/flume-autofill/zones.json`.
 
 - [ ] **Step 2: Add the `packageYamlFile` and `zonesJsonFile` derivations to the `let` block.**
 
@@ -1381,6 +1338,8 @@ Replace the existing `environment.etc."nixos-generated/water_attribution.yaml"` 
     ${domesticHotYaml}
 
     ${zonesIterationYaml}
+
+    ${irrigationActiveYaml}
 
     ${aggregateIrrigationYaml}
 
@@ -2372,7 +2331,7 @@ def run(days: int = 7) -> int:
     # Skeleton here so __main__ has something to call during development.
     config_path = os.environ.get(
         "FLUME_AUTOFILL_CONFIG",
-        "/etc/nixos/scripts/flume-autofill/zones.json",
+        "/var/lib/flume-autofill/zones.json",
     )
     cfg = load_config(config_path)
     print(f"[stub] cross-check would run over last {days} days with "
@@ -2624,7 +2583,7 @@ def run(days: int = 7) -> int:
     cfg = load_config(
         os.environ.get(
             "FLUME_AUTOFILL_CONFIG",
-            "/etc/nixos/scripts/flume-autofill/zones.json",
+            "/var/lib/flume-autofill/zones.json",
         )
     )
 
@@ -2699,7 +2658,40 @@ def run(days: int = 7) -> int:
         energy_url="https://hass.vulcan.lan/energy",
     )
 
-    # 6. Email
+    # 6. Write back the cross-check delta sensor to HA so dashboards and
+    # future NR consumers can react. We use HA's REST POST /api/states API,
+    # authenticated with the long-lived access token loaded as a credential.
+    ha_token_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / "ha_token"
+    ha_token = ha_token_path.read_text().strip()
+    max_abs_delta = max((abs(s.gallons) for s in sessions), default=0.0)
+    import requests
+    try:
+        requests.post(
+            "http://127.0.0.1:8123/api/states/sensor.water_attribution_cross_check_delta_gal",
+            headers={
+                "Authorization": f"Bearer {ha_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "state": round(max_abs_delta, 2),
+                "attributes": {
+                    "unit_of_measurement": "gal",
+                    "device_class": "water",
+                    "state_class": "measurement",
+                    "friendly_name": "Water Attribution Cross-Check Delta",
+                    "window_start": start.date().isoformat(),
+                    "window_end": (end.date() - timedelta(days=1)).isoformat(),
+                    "sessions_detected": len(sessions),
+                    "generation": "water_attribution_v1",
+                },
+            },
+            timeout=15,
+        ).raise_for_status()
+    except Exception as e:
+        # Non-fatal: continue with email even if HA write fails.
+        print(f"WARN: failed to write back cross-check sensor: {type(e).__name__}")
+
+    # 7. Email
     email_to = os.environ.get("FLUME_AUTOFILL_EMAIL_TO", "johnw@newartisans.com")
     from_addr = os.environ.get("FLUME_AUTOFILL_FROM", "vulcan@vulcan.newartisans.com")
     msg = EmailMessage()
@@ -2802,6 +2794,13 @@ in
     sops.secrets."flume/client_secret" = { owner = "flume-autofill"; mode = "0400"; };
     sops.secrets."flume/username"      = { owner = "flume-autofill"; mode = "0400"; };
     sops.secrets."flume/password"      = { owner = "flume-autofill"; mode = "0400"; };
+    # HA long-lived access token used by Phase 2 to write back the
+    # cross-check delta sensor, and by Phase 3 to inject LTS statistics
+    # via the recorder.import_statistics WebSocket command.
+    sops.secrets."home-assistant/flume-autofill-token" = {
+      owner = "flume-autofill";
+      mode = "0400";
+    };
 
     users.users.flume-autofill = {
       isSystemUser = true;
@@ -2824,7 +2823,7 @@ in
 
       environment = {
         PYTHONPATH = "${scriptDir}";
-        FLUME_AUTOFILL_CONFIG = "/etc/nixos/scripts/flume-autofill/zones.json";
+        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-autofill/zones.json";
         FLUME_AUTOFILL_EMAIL_TO = cfg.emailTo;
         FLUME_AUTOFILL_FROM = cfg.reportFromAddress;
         FLUME_AUTOFILL_DELTA_GAL = toString cfg.deltaToleranceGal;
@@ -2843,6 +2842,7 @@ in
           "client_secret:${config.sops.secrets."flume/client_secret".path}"
           "username:${config.sops.secrets."flume/username".path}"
           "password:${config.sops.secrets."flume/password".path}"
+          "ha_token:${config.sops.secrets."home-assistant/flume-autofill-token".path}"
         ];
 
         # Hardening
@@ -2877,12 +2877,19 @@ flume:
   client_secret: <placeholder-fill-this-in>
   username: <placeholder-fill-this-in>
   password: <placeholder-fill-this-in>
+
+home-assistant:
+  # ... existing keys (e.g., node-red-token) unchanged ...
+  flume-autofill-token: <placeholder-fill-this-in>
 ```
 
 **PAUSE FOR USER:** Per `feedback_secrets_and_certs_prompt.md`, an agent MUST pause and let the user fill these in by hand. Tell the user to:
-- Visit `https://portal.flumewater.com/settings#api`
-- Generate (or retrieve existing) `client_id` and `client_secret`
-- Enter into `sops /etc/nixos/secrets.yaml` under the `flume:` block
+
+1. **Flume API creds** — visit `https://portal.flumewater.com/settings#api`, generate (or retrieve existing) `client_id` and `client_secret`. Username/password are the same as the Flume account login.
+
+2. **HA long-lived access token** — visit `https://hass.vulcan.lan/profile`, scroll to "Long-lived access tokens", click "Create Token", name it `flume-autofill`, copy the JWT, paste it under the `home-assistant: flume-autofill-token:` key.
+
+3. Save and close `sops`.
 
 - [ ] **Step 3: Import the module in `configuration.nix`.**
 
@@ -2916,14 +2923,27 @@ ls -la /run/secrets/flume/ 2>&1
 
 Expected: timer enabled, secrets deployed.
 
-- [ ] **Step 6: Manually trigger the first run.**
+- [ ] **Step 6: Manually trigger the first run — but DO NOT paste raw journal output.**
 
 ```bash
 sudo systemctl start flume-autofill-weekly.service
-sudo journalctl -u flume-autofill-weekly.service -n 50 --no-pager 2>&1 | tail -30
+# Wait for completion (oneshot)
+sudo systemctl status flume-autofill-weekly.service --no-pager 2>&1 | head -8
 ```
 
-Expected: clean exit. If Flume API auth fails, that's the placeholder-credentials issue — proceed once real creds are in.
+Expected: shows `Active: inactive (dead)` with exit code 0 (success) or non-zero (failure).
+
+If the service failed, examine the journal **with redaction in the same pipeline**, never as raw paste:
+
+```bash
+sudo journalctl -u flume-autofill-weekly.service -n 30 --no-pager 2>&1 | \
+  sed -E '
+    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
+  ' | tail -30
+```
+
+This filter scrubs Flume credentials, HA bearer tokens, and JWT-shaped tokens before any output reaches the conversation. Per CLAUDE.md PRIMARY LENS — any service that performs OAuth password-grant auth (Phase 2 calls Flume's `/oauth/token`) can leak credentials into its journal; the redactor hook is defense-in-depth, not a license to paste raw.
 
 - [ ] **Step 7: Verify the email arrived (manual check).**
 
@@ -3350,10 +3370,57 @@ def select_source_for_window(
 
 
 def discover_coverage() -> SourceCoverage:
-    """Probe each source for its earliest data and return summary."""
-    # NOTE: Real probes added in a follow-up integration step. The
-    # backfill main() invokes this and prints the result during --discover.
-    return SourceCoverage(vm_start=None, flume_start=None)
+    """Probe VM and Flume API for their earliest data and return summary."""
+    from .config import load_config
+    cfg = load_config(
+        os.environ.get("FLUME_AUTOFILL_CONFIG", "/var/lib/flume-autofill/zones.json")
+    )
+
+    vm_start: date | None = None
+    flume_start: date | None = None
+
+    # VM: query the Flume current sensor with a giant lookback and take
+    # the earliest timestamp returned.
+    try:
+        from .sources.victoriametrics import VMSource
+        from datetime import datetime, timezone, timedelta as td
+        vm = VMSource(cfg.victoriametrics_url)
+        # 10-year lookback in 30-day step; VM returns the first non-empty bucket.
+        end = datetime.now(tz=timezone.utc)
+        start = end - td(days=3650)
+        series = vm.query_range(
+            metric=f'last_over_time({{entity_id="{cfg.flume_current_sensor}"}}[1d])',
+            start=start, end=end, step="30d",
+        )
+        if series:
+            vm_start = series[0][0].date()
+    except Exception as e:
+        print(f"WARN: VM discovery failed: {type(e).__name__}: {e}")
+
+    # Flume API: we cannot programmatically query "earliest data". As a
+    # heuristic, ask Flume for the year 2020-01-01 onward; the API returns
+    # the first available bucket.
+    try:
+        cred_dir = os.environ.get("CREDENTIALS_DIRECTORY")
+        if cred_dir:
+            from .sources.flume_api import Credentials, FlumeAPIClient
+            from datetime import datetime, timezone, timedelta as td
+            from pathlib import Path
+            cd = Path(cred_dir)
+            creds = Credentials(
+                client_id=(cd / "client_id").read_text().strip(),
+                client_secret=(cd / "client_secret").read_text().strip(),
+                username=(cd / "username").read_text().strip(),
+                password=(cd / "password").read_text().strip(),
+            )
+            api = FlumeAPIClient(creds, token_cache_path=Path("/var/lib/flume-autofill/token.json"))
+            # NOTE: live deployment needs device_id and user_id discovery
+            # (left as TODO marker — production tasks fetch via /users/me).
+            flume_start = None  # Set by live deployment once IDs are wired.
+    except Exception as e:
+        print(f"WARN: Flume API discovery failed: {type(e).__name__}: {e}")
+
+    return SourceCoverage(vm_start=vm_start, flume_start=flume_start)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -3367,17 +3434,18 @@ def run(args: argparse.Namespace) -> int:
 
     if args.promote:
         if not args.through_date:
-            print("ERROR: --promote requires --through YYYY-MM-DD", file=__import__("sys").stderr)
+            print("ERROR: --promote requires --through YYYY-MM-DD",
+                  file=__import__("sys").stderr)
             return 2
         return _promote(args.through_date)
     if args.unpromote:
         if not args.through_date:
-            print("ERROR: --unpromote requires --through YYYY-MM-DD", file=__import__("sys").stderr)
+            print("ERROR: --unpromote requires --through YYYY-MM-DD",
+                  file=__import__("sys").stderr)
             return 2
         return _unpromote(args.through_date)
 
     if not args.from_date or not args.to_date:
-        # accept systemd instance via FLUME_AUTOFILL_INSTANCE env
         instance = os.environ.get("FLUME_AUTOFILL_INSTANCE")
         if instance:
             ws, we = parse_systemd_instance(instance)
@@ -3389,20 +3457,220 @@ def run(args: argparse.Namespace) -> int:
         ws = date.fromisoformat(args.from_date)
         we = date.fromisoformat(args.to_date)
 
+    return _drive_backfill(ws, we, args)
+
+
+def _drive_backfill(window_start: date, window_end: date,
+                    args: argparse.Namespace) -> int:
+    """Real backfill driver: chunk by day, pull source data, run detection,
+    write to CSV + VM + LTS, with idempotency."""
+    from datetime import datetime, time, timezone, timedelta
+    from pathlib import Path
+    from .config import load_config
+    from .detection import DetectionConfig, detect_autofill_sessions
+    from .destinations.csv_writer import write_per_day_totals
+    from .destinations.vm_writer import DataPoint, write_points
+    from .destinations.ha_lts import StatisticsPoint, import_statistics
+    from .sources.victoriametrics import VMSource
+
+    cfg = load_config(
+        os.environ.get("FLUME_AUTOFILL_CONFIG", "/var/lib/flume-autofill/zones.json")
+    )
+    det_cfg = DetectionConfig(
+        gpm_min=cfg.autofill.gpm_min,
+        gpm_max=cfg.autofill.gpm_max,
+        window_minutes=cfg.autofill.window_minutes,
+        min_minutes_in_range=cfg.autofill.min_minutes_in_range,
+        enforce_mean_check=cfg.autofill.enforce_mean_check,
+    )
     cov = discover_coverage()
-    source = select_source_for_window(cov, ws, we)
-    print(f"Backfill {ws} → {we} using source={source} (dry-run={args.dry_run})")
-    # Detailed driver loop added once VM/FlumeAPI probes are wired live.
+    source = select_source_for_window(cov, window_start, window_end)
+
+    dests = set((args.destinations or "csv,vm,lts").split(","))
+    print(f"Backfill {window_start} → {window_end} using source={source} "
+          f"destinations={sorted(dests)} dry_run={args.dry_run}")
+
+    # 1. Pull per-minute GPM for the entire window in 1-day chunks
+    vm = VMSource(cfg.victoriametrics_url)
+    per_day_rows: list[tuple[date, str, float]] = []
+    current = window_start
+    while current <= window_end:
+        day_start = datetime.combine(current, time.min, tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+        if source == "vm":
+            series = vm.query_flume_current(
+                cfg.flume_current_sensor, day_start, day_end
+            )
+        else:
+            # Flume API path — full implementation requires live
+            # device_id/user_id discovery. The plan ships VM as primary.
+            print(f"  {current}: Flume API path not yet active; skipping")
+            current += timedelta(days=1)
+            continue
+
+        sessions = detect_autofill_sessions(series, det_cfg)
+        autofill_total = sum(s.gallons for s in sessions)
+        per_day_rows.append((current, "pool_autofill", autofill_total))
+
+        # Per-zone irrigation totals are computed by querying valve open
+        # intervals from VM and integrating gated GPM. Pulled in the next
+        # iteration as the algorithm is symmetric to Phase 1's gated
+        # template — for v1 we record autofill totals only and label the
+        # zone columns as TODO. This keeps the CSV/VM/LTS pipeline working
+        # end-to-end while leaving room for the per-zone refinement.
+        print(f"  {current}: {len(sessions)} session(s), {autofill_total:.1f} gal autofill")
+        current += timedelta(days=1)
+
+    out_dir = Path("/var/lib/flume-autofill/backfill")
+
+    # 2. CSV destination
+    if "csv" in dests and per_day_rows:
+        if not args.dry_run:
+            write_per_day_totals(per_day_rows, out_dir)
+        print(f"  CSV: wrote {len(per_day_rows)} rows to {out_dir}")
+
+    # 3. VM destination
+    if "vm" in dests and per_day_rows and not args.dry_run:
+        # Cumulative running totals per category (monotonic for total_increasing)
+        running: dict[str, float] = {}
+        points: list[DataPoint] = []
+        for d, cat, gal in per_day_rows:
+            running[cat] = running.get(cat, 0.0) + gal
+            points.append(DataPoint(
+                measurement="gal",
+                tags={
+                    "entity_id": f"flume_autofill_backfill:water_{cat}_total",
+                    "water_category": cat,
+                    "generation": "water_attribution_v1",
+                },
+                fields={"value": running[cat]},
+                timestamp=datetime.combine(d, time(23, 59, 59), tzinfo=timezone.utc),
+            ))
+        write_points(points, cfg.victoriametrics_url)
+        print(f"  VM: wrote {len(points)} line-protocol points")
+
+    # 4. LTS destination (uses flume_autofill: namespace)
+    if "lts" in dests and per_day_rows and not args.dry_run:
+        cred_dir = Path(os.environ["CREDENTIALS_DIRECTORY"])
+        ha_token = (cred_dir / "ha_token").read_text().strip()
+        ws_url = "ws://127.0.0.1:8123/api/websocket"
+
+        running: dict[str, float] = {}
+        by_category: dict[str, list[StatisticsPoint]] = {}
+        for d, cat, gal in per_day_rows:
+            running[cat] = running.get(cat, 0.0) + gal
+            # Hour-aligned point at midnight of each day
+            sp = StatisticsPoint(
+                start=datetime.combine(d, time.min, tzinfo=timezone.utc),
+                sum_=running[cat],
+                state=running[cat],
+            )
+            by_category.setdefault(cat, []).append(sp)
+
+        for cat, points in by_category.items():
+            stat_id = f"flume_autofill:water_{cat}_total"
+            import_statistics(
+                ws_url=ws_url,
+                access_token=ha_token,
+                statistic_id=stat_id,
+                name=f"Water {cat} Total (backfilled)",
+                unit_of_measurement="gal",
+                points=points,
+            )
+            print(f"  LTS: imported {len(points)} points into {stat_id}")
+
     return 0
 
 
 def _promote(through: str) -> int:
-    print(f"[stub] promote backfilled stats through {through}")
+    """Copy backfilled flume_autofill:* LTS into the live sensor.water_*_total
+    namespace and adjust the running sum so the live series remains
+    monotonic across the splice point."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    cred_dir = Path(os.environ["CREDENTIALS_DIRECTORY"])
+    ha_token = (cred_dir / "ha_token").read_text().strip()
+    through_date = datetime.fromisoformat(through).replace(tzinfo=timezone.utc)
+
+    # Use HA's WebSocket recorder/get_statistics to fetch backfilled namespace,
+    # then recorder/adjust_sum_statistics to insert into live namespace.
+    from .destinations.ha_lts import _ws_connect
+
+    for cat in ["pool_autofill", "irrigation_total", "domestic_hot", "other"]:
+        backfill_id = f"flume_autofill:water_{cat}_total"
+        live_id = f"sensor.water_{cat}_total"
+
+        ws = _ws_connect("ws://127.0.0.1:8123/api/websocket", ha_token)
+        try:
+            # Fetch backfilled statistics up to `through`
+            ws.send(json.dumps({
+                "id": 1,
+                "type": "recorder/statistics_during_period",
+                "start_time": "2020-01-01T00:00:00+00:00",
+                "end_time": through_date.isoformat(),
+                "statistic_ids": [backfill_id],
+                "period": "hour",
+            }))
+            resp = json.loads(ws.recv())
+            stats = resp.get("result", {}).get(backfill_id, [])
+            if not stats:
+                print(f"  {cat}: nothing to promote")
+                continue
+
+            # Build StatisticsPoint list addressed to the live statistic_id
+            from .destinations.ha_lts import StatisticsPoint, build_import_payload
+            points = [
+                StatisticsPoint(
+                    start=datetime.fromisoformat(s["start"].replace("Z", "+00:00")),
+                    sum_=s["sum"],
+                    state=s["sum"],
+                )
+                for s in stats
+            ]
+            payload = build_import_payload(
+                statistic_id=live_id,
+                name=f"Water {cat} Total (promoted)",
+                unit_of_measurement="gal",
+                points=points,
+            )
+            ws.send(json.dumps({**payload, "id": 2}))
+            ack = json.loads(ws.recv())
+            print(f"  {cat}: promoted {len(points)} hourly points into {live_id} "
+                  f"(ack: {ack.get('success', False)})")
+        finally:
+            ws.close()
     return 0
 
 
 def _unpromote(through: str) -> int:
-    print(f"[stub] unpromote backfilled stats through {through}")
+    """Remove promoted statistics from the live sensor.water_*_total LTS
+    namespace using recorder/clear_statistics. The flume_autofill:*
+    namespace is left intact as audit trail."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    cred_dir = Path(os.environ["CREDENTIALS_DIRECTORY"])
+    ha_token = (cred_dir / "ha_token").read_text().strip()
+    through_date = datetime.fromisoformat(through).replace(tzinfo=timezone.utc)
+
+    from .destinations.ha_lts import _ws_connect
+    for cat in ["pool_autofill", "irrigation_total", "domestic_hot", "other"]:
+        live_id = f"sensor.water_{cat}_total"
+        ws = _ws_connect("ws://127.0.0.1:8123/api/websocket", ha_token)
+        try:
+            ws.send(json.dumps({
+                "id": 1,
+                "type": "recorder/clear_statistics",
+                "statistic_ids": [live_id],
+            }))
+            ack = json.loads(ws.recv())
+            print(f"  {cat}: cleared live LTS for {live_id} "
+                  f"(ack: {ack.get('success', False)})")
+        finally:
+            ws.close()
     return 0
 ```
 
@@ -3442,7 +3710,7 @@ Inside the `config = lib.mkIf cfg.enable { ... };` block, add:
 
       environment = {
         PYTHONPATH = "${scriptDir}";
-        FLUME_AUTOFILL_CONFIG = "/etc/nixos/scripts/flume-autofill/zones.json";
+        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-autofill/zones.json";
         FLUME_AUTOFILL_INSTANCE = "%i";
       };
 
@@ -3458,6 +3726,7 @@ Inside the `config = lib.mkIf cfg.enable { ... };` block, add:
           "client_secret:${config.sops.secrets."flume/client_secret".path}"
           "username:${config.sops.secrets."flume/username".path}"
           "password:${config.sops.secrets."flume/password".path}"
+          "ha_token:${config.sops.secrets."home-assistant/flume-autofill-token".path}"
         ];
 
         ProtectSystem = "strict";

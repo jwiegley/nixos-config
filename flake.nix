@@ -82,11 +82,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    git-ai = {
-      url = "git+file:///home/johnw/git-ai/nix-fix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     promptdeploy = {
       url = "git+ssh://gitea/johnw/promptdeploy";
       inputs.nixpkgs.follows = "nixpkgs";

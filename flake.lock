@@ -465,7 +465,7 @@
     },
     "flake-utils": {
       "inputs": {
-        "systems": "systems"
+        "systems": "systems_2"
       },
       "locked": {
         "lastModified": 1731533236,
@@ -569,46 +569,6 @@
         "owner": "numtide",
         "repo": "flake-utils",
         "type": "github"
-      }
-    },
-    "flake-utils_7": {
-      "inputs": {
-        "systems": "systems_8"
-      },
-      "locked": {
-        "lastModified": 1731533236,
-        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "type": "github"
-      }
-    },
-    "git-ai": {
-      "inputs": {
-        "flake-utils": "flake-utils",
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "rust-overlay": "rust-overlay"
-      },
-      "locked": {
-        "lastModified": 1776357054,
-        "narHash": "sha256-zSY1ZMUT+lQRRGviNQ/hqmxCkrryAQF5gawbdQBXthg=",
-        "ref": "refs/heads/johnw/nix-fix",
-        "rev": "fe619fb51b81e3ead4e29937e774d760d1691b41",
-        "revCount": 3408,
-        "type": "git",
-        "url": "file:///home/johnw/git-ai/nix-fix"
-      },
-      "original": {
-        "type": "git",
-        "url": "file:///home/johnw/git-ai/nix-fix"
       }
     },
     "git-scripts": {
@@ -2175,7 +2135,7 @@
         "bun2nix": "bun2nix",
         "flake-parts": "flake-parts_2",
         "nixpkgs": "nixpkgs",
-        "systems": "systems_2",
+        "systems": "systems",
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
@@ -2874,7 +2834,7 @@
     },
     "org-jw": {
       "inputs": {
-        "flake-utils": "flake-utils_2",
+        "flake-utils": "flake-utils",
         "haskellNix": "haskellNix",
         "nixpkgs": [
           "org-jw",
@@ -2898,7 +2858,7 @@
     },
     "promptdeploy": {
       "inputs": {
-        "flake-utils": "flake-utils_3",
+        "flake-utils": "flake-utils_2",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -2919,7 +2879,7 @@
     },
     "pushme": {
       "inputs": {
-        "flake-utils": "flake-utils_4",
+        "flake-utils": "flake-utils_3",
         "haskellNix": "haskellNix_2",
         "nixpkgs": [
           "nixpkgs"
@@ -3045,7 +3005,6 @@
     "root": {
       "inputs": {
         "firmware": "firmware",
-        "git-ai": "git-ai",
         "git-scripts": "git-scripts",
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager",
@@ -3069,30 +3028,9 @@
         "una": "una"
       }
     },
-    "rust-overlay": {
-      "inputs": {
-        "nixpkgs": [
-          "git-ai",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1770174315,
-        "narHash": "sha256-GUaMxDmJB1UULsIYpHtfblskVC6zymAaQ/Zqfo+13jc=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "095c394bb91342882f27f6c73f64064fb9de9f2a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
     "sacramento-cluster-ics": {
       "inputs": {
-        "flake-utils": "flake-utils_5",
+        "flake-utils": "flake-utils_4",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -3114,11 +3052,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1779342094,
-        "narHash": "sha256-9GQdCFtllG6OJ4GGD2wiTHb3Wcj5azLxv3hgoB5Tfa8=",
+        "lastModified": 1779430230,
+        "narHash": "sha256-wYXb+X2Wfsvd2xTn1SL1znF7Uxw8fs+B7lhybFmkKLI=",
         "ref": "refs/heads/main",
-        "rev": "da45f428bf40d6aa5cce933e5f20efc493eedccf",
-        "revCount": 137,
+        "rev": "0679bda4c44058261297eabce80403e7ed10b7f4",
+        "revCount": 138,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },
@@ -3129,7 +3067,7 @@
     },
     "sizes": {
       "inputs": {
-        "flake-utils": "flake-utils_6",
+        "flake-utils": "flake-utils_5",
         "haskellNix": "haskellNix_3",
         "nixpkgs": [
           "nixpkgs"
@@ -3371,21 +3309,6 @@
         "type": "github"
       }
     },
-    "systems_8": {
-      "locked": {
-        "lastModified": 1681028828,
-        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
-        "owner": "nix-systems",
-        "repo": "default",
-        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-systems",
-        "repo": "default",
-        "type": "github"
-      }
-    },
     "treefmt-nix": {
       "inputs": {
         "nixpkgs": [
@@ -3409,7 +3332,7 @@
     },
     "una": {
       "inputs": {
-        "flake-utils": "flake-utils_7",
+        "flake-utils": "flake-utils_6",
         "haskellNix": "haskellNix_4",
         "nixpkgs": [
           "nixpkgs"

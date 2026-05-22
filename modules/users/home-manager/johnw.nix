@@ -29,7 +29,24 @@
       };
     in
     {
-      imports = [ "${inputs.nix-config}/config/johnw.nix" ];
+      imports = [
+        "${inputs.nix-config}/config/johnw.nix"
+        # Stub for `programs.git-ai = {...}` in the shared nix-config: the
+        # git-ai flake input is intentionally absent on vulcan, so the real
+        # home-manager module isn't loaded. Declare a freeform option so the
+        # unconditional assignment in nix-config/config/johnw.nix still
+        # type-checks; nothing reads these values.
+        (
+          { lib, ... }:
+          {
+            options.programs.git-ai = lib.mkOption {
+              type = lib.types.submodule { freeformType = lib.types.anything; };
+              default = { };
+              visible = false;
+            };
+          }
+        )
+      ];
 
       home = {
         # NixOS-specific settings

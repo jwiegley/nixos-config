@@ -73,6 +73,7 @@
     ../../modules/services/gitea-actions-runner.nix
     ../../modules/services/gitea.nix
     ../../modules/services/github-gitea-mirror.nix
+    ../../modules/services/flume-autofill.nix
     ../../modules/services/grafana.nix
     ../../modules/services/home-assistant-metric-trick.nix
     ../../modules/services/home-assistant.nix
@@ -205,23 +206,74 @@
       enforceMeanCheck = true;
     };
 
-    cycles = [ "daily" "weekly" "monthly" ];
+    cycles = [
+      "daily"
+      "weekly"
+      "monthly"
+    ];
     weekStart = "monday";
     aggregateDropToleranceGal = 5.0;
 
     zones = [
-      { slug = "front_yard";                          name = "Front Yard";                          type = "spray"; }
-      { slug = "side_yard_right";                     name = "Side Yard (right)";                   type = "spray"; }
-      { slug = "back_wall";                           name = "Back Wall";                           type = "spray"; }
-      { slug = "around_dining_set";                   name = "Around Dining Set";                   type = "spray"; }
-      { slug = "along_driveway";                      name = "Along Driveway";                      type = "spray"; }
-      { slug = "back_of_house_and_side_yard_left";    name = "Back of House and Side Yard (left)";  type = "spray"; }
-      { slug = "drip_front_left";                     name = "Drip Front Left";                     type = "drip"; }
-      { slug = "drip_front_right";                    name = "Drip Front Right";                    type = "drip"; }
-      { slug = "planter_box";                         name = "Planter Box";                         type = "drip"; }
-      { slug = "zone_5";                              name = "Zone 5";                              type = null; }
+      {
+        slug = "front_yard";
+        name = "Front Yard";
+        type = "spray";
+      }
+      {
+        slug = "side_yard_right";
+        name = "Side Yard (right)";
+        type = "spray";
+      }
+      {
+        slug = "back_wall";
+        name = "Back Wall";
+        type = "spray";
+      }
+      {
+        slug = "around_dining_set";
+        name = "Around Dining Set";
+        type = "spray";
+      }
+      {
+        slug = "along_driveway";
+        name = "Along Driveway";
+        type = "spray";
+      }
+      {
+        slug = "back_of_house_and_side_yard_left";
+        name = "Back of House and Side Yard (left)";
+        type = "spray";
+      }
+      {
+        slug = "drip_front_left";
+        name = "Drip Front Left";
+        type = "drip";
+      }
+      {
+        slug = "drip_front_right";
+        name = "Drip Front Right";
+        type = "drip";
+      }
+      {
+        slug = "planter_box";
+        name = "Planter Box";
+        type = "drip";
+      }
+      {
+        slug = "zone_5";
+        name = "Zone 5";
+        type = null;
+      }
     ];
   };
+
+  # Phase 2/3 backend for water attribution: weekly cross-check that
+  # re-derives totals from VictoriaMetrics + HA Postgres, emails a water
+  # report, and writes the max-delta sensor back to HA. SOPS secrets at
+  # flume/* and home-assistant/flume-autofill-token must be populated
+  # before the first run.
+  services.flume-autofill.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

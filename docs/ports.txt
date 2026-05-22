@@ -73,6 +73,7 @@
 3008 127.0.0.1 sockpuppetbrowser (Chrome for ChangeDetection.io)
 3050 127.0.0.1 Glance
 3100 * :: Loki
+3493 127.0.0.1 NUT upsd (Network UPS Tools) - APC BR1000MS
 4000 127.0.0.1 LiteLLM
 4001 127.0.0.1 LiteLLM anthropic /v1/messages fixup proxy (litellm-anthropic-fixup.service) - workaround for adapter misorder bug; stock-trader points ANTHROPIC_BASE_URL here
 5050 127.0.0.1 pgAdmin

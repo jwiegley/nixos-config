@@ -253,6 +253,37 @@ let
         round: 3
   '';
 
+  # Map "weekly" → offset days so utility_meter can anchor properly.
+  weekOffsetDays = if cfg.weekStart == "monday" then 0 else 6;
+
+  utilityMeterEntry = source: cycle: ''
+      ${source}_${cycle}:
+        source: sensor.${source}
+        cycle: ${cycle}
+        name: "${
+          let
+            cleaned = lib.replaceStrings [ "water_" "_total" ] [ "Water " "" ] source;
+            cycleTitle = lib.toUpper (builtins.substring 0 1 cycle) +
+              builtins.substring 1 (builtins.stringLength cycle) cycle;
+          in "${cleaned} ${cycleTitle}"
+        }"
+        ${lib.optionalString (cycle == "weekly") "offset: { days: ${toString weekOffsetDays} }"}
+  '';
+
+  # Cumulative source sensors that need utility_meter wrappers.
+  cumulativeSources =
+    [ "water_pool_autofill_total" ]
+    ++ (lib.optional hasHot "water_domestic_hot_total")
+    ++ (map (z: "water_${z.slug}_total") cfg.zones)
+    ++ [ "water_irrigation_total" "water_other_total" ];
+
+  utilityMeterYaml = ''
+    utility_meter:
+    ${lib.concatStrings (lib.concatMap
+      (source: map (cycle: utilityMeterEntry source cycle) cfg.cycles)
+      cumulativeSources)}
+  '';
+
 in
 {
   options.services.home-assistant-water-attribution = {
@@ -342,5 +373,7 @@ in
     ${aggregateIrrigationYaml}
 
     ${otherResidualYaml}
+
+    ${utilityMeterYaml}
   '';
 }

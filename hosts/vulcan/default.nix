@@ -76,6 +76,7 @@
     ../../modules/services/grafana.nix
     ../../modules/services/home-assistant-metric-trick.nix
     ../../modules/services/home-assistant.nix
+    ../../modules/services/home-assistant-water-attribution.nix
     ../../modules/services/immich.nix
     ../../modules/services/jupyterlab.nix
     ../../modules/services/local-backup.nix
@@ -190,6 +191,37 @@
   services.openclawSelfHeal.enable = true;
   services.openclawHermesSmoke.enable = true;
   services.openclawConfigDriftCheck.enable = true;
+
+  services.home-assistant-water-attribution = {
+    enable = true;
+    flumeCurrentSensor = "sensor.flume_sensor_sierra_oaks_current";
+    domesticHotFlowSensor = "sensor.water_heater_ch1_ch1_unit1_hot_water_flow";
+
+    autofill = {
+      gpmMin = 3.0;
+      gpmMax = 5.0;
+      windowMinutes = 10;
+      minMinutesInRange = 9;
+      enforceMeanCheck = true;
+    };
+
+    cycles = [ "daily" "weekly" "monthly" ];
+    weekStart = "monday";
+    aggregateDropToleranceGal = 5.0;
+
+    zones = [
+      { slug = "front_yard";                          name = "Front Yard";                          type = "spray"; }
+      { slug = "side_yard_right";                     name = "Side Yard (right)";                   type = "spray"; }
+      { slug = "back_wall";                           name = "Back Wall";                           type = "spray"; }
+      { slug = "around_dining_set";                   name = "Around Dining Set";                   type = "spray"; }
+      { slug = "along_driveway";                      name = "Along Driveway";                      type = "spray"; }
+      { slug = "back_of_house_and_side_yard_left";    name = "Back of House and Side Yard (left)";  type = "spray"; }
+      { slug = "drip_front_left";                     name = "Drip Front Left";                     type = "drip"; }
+      { slug = "drip_front_right";                    name = "Drip Front Right";                    type = "drip"; }
+      { slug = "planter_box";                         name = "Planter Box";                         type = "drip"; }
+      { slug = "zone_5";                              name = "Zone 5";                              type = null; }
+    ];
+  };
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

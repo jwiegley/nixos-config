@@ -24,6 +24,13 @@ let
   # Apply check-systemd overlay
   prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
 
+  # Inject `myLib` (mkScriptPackage / mkSimpleGitHubBinary helpers) from
+  # nix-config's 00-lib.nix overlay so 30-data-tools, 30-misc-tools, and
+  # 30-user-scripts can reference prev.myLib when imported below.
+  myLibOverlay = import "${inputs.nix-config}/overlays/00-lib.nix";
+  prevWithMyLib =
+    prevWithCheckSystemd // (myLibOverlay final prevWithCheckSystemd) // { inherit inputs; };
+
   # Fix script for aiopnsense Python 2-style except clauses (used in haPackageOverrides)
   aiopnsenseFixScript = prev.writeText "fix-aiopnsense-py2-except.py" ''
     import re, os
@@ -201,6 +208,40 @@ let
       ];
       doCheck = false;
     };
+
+    # pyalarmdotcomajax: Event-driven async Python client for Alarm.com.
+    # Paired with alarmdotcom v4.0.1-beta.2 (push-based rewrite). We initially
+    # auth'd on v3.0.15/0.5.13 because v0.6.x has an MFA-cookie acquisition bug
+    # (pyalarmdotcom/alarmdotcom#534); the existing session lets v0.6.x skip that
+    # broken codepath. v3.0.15 itself was unusable because its entity code calls
+    # _friendly_name_internal which HA 2026.5.x removed.
+    pyalarmdotcomajax = hasPy.buildPythonPackage rec {
+      pname = "pyalarmdotcomajax";
+      version = "0.6.0b9";
+      pyproject = true;
+      src = prev.fetchPypi {
+        inherit pname version;
+        hash = "sha256-rgO/SJ/mORK4YIqzaEjWAt0HJ2dOs7I64jUFCSA1/Lc=";
+      };
+      build-system = with hasPy; [
+        setuptools
+        setuptools-scm
+      ];
+      # setuptools-scm needs an explicit version outside a git checkout
+      env.SETUPTOOLS_SCM_PRETEND_VERSION = version;
+      # Upstream pins pyhumps~=3.8.0 but nixpkgs ships 3.9.0 (API-compatible).
+      pythonRelaxDeps = [ "pyhumps" ];
+      dependencies = with hasPy; [
+        aiohttp
+        beautifulsoup4
+        mashumaro
+        phonenumbers
+        python-dateutil
+        pyhumps
+        typer
+      ];
+      doCheck = false;
+    };
   };
 in
 {
@@ -218,8 +259,7 @@ in
   # Import package definitions from nix-config overlays.
   # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
   # can resolve flake input sources.
-  inherit
-    (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final (prev // { inherit inputs; }))
+  inherit (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final prevWithMyLib)
     hammer
     linkdups
     lipotell
@@ -227,16 +267,14 @@ in
   inherit (import "${inputs.nix-config}/overlays/30-markless.nix" final (prev // { inherit inputs; }))
     markless
     ;
-  inherit
-    (import "${inputs.nix-config}/overlays/30-data-tools.nix" final (prev // { inherit inputs; }))
+  inherit (import "${inputs.nix-config}/overlays/30-data-tools.nix" final prevWithMyLib)
     tsvutils
     ;
   inherit
     (import "${inputs.nix-config}/overlays/30-text-tools.nix" final (prev // { inherit inputs; }))
     filetags
     ;
-  inherit
-    (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final (prev // { inherit inputs; }))
+  inherit (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final prevWithMyLib)
     nix-scripts
     ;
 

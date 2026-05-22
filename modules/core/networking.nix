@@ -139,6 +139,20 @@
     };
   };
 
+  # Override NetworkManager-wait-online to use `nm-online -x` instead of `-s -q`.
+  # `-s` waits for NM's one-shot "startup complete" event, which only fires during
+  # initial autoconnect activation. On a `nixos-rebuild switch` the unit gets
+  # restarted while NM is already in steady-state — no fresh startup-complete
+  # event ever arrives, so nm-online times out at NM_ONLINE_TIMEOUT (60s) and
+  # the unit lands in failed state. `-x` exits as soon as connectivity is
+  # present, working correctly for both fresh boots and hot switches.
+  # The leading empty ExecStart= is required for drop-in overrides to replace
+  # rather than append to the upstream unit's ExecStart line.
+  systemd.services.NetworkManager-wait-online.serviceConfig.ExecStart = lib.mkForce [
+    ""
+    "${pkgs.networkmanager}/bin/nm-online -x -q"
+  ];
+
   # Policy routing for asymmetric routing support
   # Problem: Clients on 192.168.3.x reach 192.168.1.2 via router (arrives on end0),
   # but responses would go out via wlp1s0f0 with source IP 192.168.3.16 (wrong!)

@@ -376,6 +376,7 @@ in
       ps.aionut # Required for Network UPS Tools (NUT) integration
       ps."homekit-audio-proxy" # Required for HomeKit Bridge (missing from nixpkgs)
       ps.awsiotpythonsdk # Required for Navien NaviLink Water Heater integration
+      ps.pyalarmdotcomajax # Required for Alarm.com / ADT Control custom integration
     ];
 
     # Components that don't require YAML configuration

@@ -429,6 +429,17 @@ in
 
     # Pentair IntelliCenter Integration
     intellicenter = final.callPackage ./intellicenter.nix { };
+
+    # waste_collection_schedule v2.24.0 (nixpkgs has 2.10.0) — adds Sacramento County, CA
+    # source. Called via the HA python set so deps resolve against the same instances
+    # the rest of HA uses (manifestRequirementsCheckHook is strict about this).
+    # curl-cffi attribute has a dash, which isn't a valid function-arg identifier;
+    # pass it explicitly so the .nix file can name its arg curl_cffi.
+    waste_collection_schedule =
+      final.home-assistant.python.pkgs.callPackage ./waste_collection_schedule.nix
+        {
+          curl_cffi = final.home-assistant.python.pkgs."curl-cffi";
+        };
   };
 
   llama-cpp =

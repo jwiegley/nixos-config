@@ -255,12 +255,14 @@ let
     sampling_size = 50;
   };
 
+  # HA's `integration` platform rejects `unit_prefix: ""` even though the spec
+  # in docs/ used that to mean "no prefix". The schema only accepts one of
+  # ['G','M','T','k'] or None; the default IS None, so we omit the field.
   integrationEntry = { name, unique_id, source }: {
     platform = "integration";
     inherit name unique_id source;
     method = "left";
     unit_time = "min";
-    unit_prefix = "";
     round = 3;
   };
 

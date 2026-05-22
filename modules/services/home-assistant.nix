@@ -373,6 +373,7 @@ in
       ps.pydub # Required for Chime TTS audio processing
       ps.pykumo # Required for Kumo Cloud integration (Mitsubishi mini-splits)
       ps.aiopnsense # Required for OPNsense integration
+      ps.aionut # Required for Network UPS Tools (NUT) integration
       ps."homekit-audio-proxy" # Required for HomeKit Bridge (missing from nixpkgs)
       ps.awsiotpythonsdk # Required for Navien NaviLink Water Heater integration
     ];
@@ -428,6 +429,9 @@ in
       # Energy & Solar
       "enphase_envoy" # Enphase Solar Inverter
       "tesla_wall_connector" # Tesla Wall Connector
+
+      # UPS / Power backup
+      "nut" # Network UPS Tools — APC BR1000MS via local upsd on 127.0.0.1:3493
 
       # Water monitoring
       "flume" # Flume water meter

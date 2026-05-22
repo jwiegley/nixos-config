@@ -1,0 +1,71 @@
+groups:
+  - name: calendar_publisher_alerts
+    interval: 5m
+    rules:
+      # Publisher hasn't produced fresh output in >30 hours.
+      # Publisher fires daily ~04:00, so one missed run lands here.
+      - alert: CalendarPublisherStale
+        expr: (time() - calendar_publisher_output_mtime_seconds) > 108000
+        for: 15m
+        labels:
+          severity: warning
+          component: calendar_publisher
+        annotations:
+          summary: "Sacramento Cluster .ics files haven't been refreshed in {{ $value | humanizeDuration }}"
+          description: "Newest file in /var/lib/calendar-publisher is {{ $value | humanizeDuration }} old. Expected daily refresh at 04:00. Check `systemctl status calendar-publisher.timer calendar-publisher.service` and `journalctl -u calendar-publisher`."
+
+      # Two missed runs in a row — escalate.
+      - alert: CalendarPublisherDead
+        expr: (time() - calendar_publisher_output_mtime_seconds) > 194400
+        for: 15m
+        labels:
+          severity: critical
+          component: calendar_publisher
+        annotations:
+          summary: "Sacramento Cluster calendar mirror has been broken for {{ $value | humanizeDuration }}"
+          description: "Newest .ics file is over 54 hours old — at least two daily runs have not produced output. Subscribers are reading stale calendars. Investigate calendar-publisher.service and the upstream Google Sheet."
+
+      # Last invocation of the publisher unit exited non-success.
+      - alert: CalendarPublisherFailed
+        expr: calendar_publisher_service_result == 0
+        for: 15m
+        labels:
+          severity: critical
+          component: calendar_publisher
+        annotations:
+          summary: "calendar-publisher.service last run failed"
+          description: "The last calendar-publisher.service exit was a non-success Result. Check `journalctl -u calendar-publisher -n 200` for the failure mode (Sheet schema change, network, sac-cluster-ics crash)."
+
+      # Output directory is empty — catastrophic.
+      - alert: CalendarPublisherNoFiles
+        expr: calendar_publisher_output_file_count < 1
+        for: 15m
+        labels:
+          severity: critical
+          component: calendar_publisher
+        annotations:
+          summary: "/var/lib/calendar-publisher has no .ics files"
+          description: "No calendar output at all. The publisher likely failed before writing anything, or files were deleted out from under it."
+
+      # Public URL is not serving a valid VCALENDAR.
+      # for: 1h tolerates transient Cloudflare/tunnel hiccups.
+      - alert: CalendarPublisherUrlDown
+        expr: calendar_publisher_url_up == 0
+        for: 1h
+        labels:
+          severity: critical
+          component: calendar_publisher
+        annotations:
+          summary: "Public calendar URL {{ $labels.url }} is not serving a valid VCALENDAR"
+          description: "Subscribers cannot fetch the calendar. HTTP code from last check: {{ with query (printf `calendar_publisher_url_status_code{url=\"%s\"}` $labels.url) }}{{ . | first | value }}{{ end }}. Check the cloudflared tunnel, the nginx vhost on 127.0.0.1:8090, and DNS for calendar.newartisans.com."
+
+      # Health check itself hasn't run — the daily timer stopped firing.
+      - alert: CalendarPublisherCheckStale
+        expr: (time() - calendar_publisher_check_timestamp_seconds) > 108000
+        for: 15m
+        labels:
+          severity: warning
+          component: calendar_publisher
+        annotations:
+          summary: "calendar-publisher-health hasn't run in {{ $value | humanizeDuration }}"
+          description: "The daily health check itself appears to have stopped. Check `systemctl status calendar-publisher-health.timer`."

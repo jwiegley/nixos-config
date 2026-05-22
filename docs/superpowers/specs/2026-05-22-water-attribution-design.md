@@ -301,6 +301,15 @@ template:
 
 ### Residual ("other")
 
+The Nix generator emits one of two residual templates depending on whether
+`domesticHotFlowSensor` is null. **Variant A** (NaviLink configured) subtracts
+the hot-water term; **Variant B** (`domesticHotFlowSensor = null`) omits the
+domestic_hot category entirely — no `water_domestic_hot_gpm`, no
+`water_domestic_hot_total`, no per-cycle wrappers, and the residual formula
+drops the `hot` term.
+
+**Variant A — with NaviLink:**
+
 ```yaml
 template:
   - sensor:
@@ -319,6 +328,38 @@ template:
           water_category: other
           generation: water_attribution_v1
 ```
+
+**Variant B — NaviLink disabled (`domesticHotFlowSensor = null`):**
+
+```yaml
+template:
+  - sensor:
+      - name: "Water Other GPM"
+        unique_id: water_other_gpm
+        unit_of_measurement: "gal/m"
+        state: >
+          {% set total = states('sensor.flume_sensor_sierra_oaks_current') | float(0) %}
+          {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
+          {% set zones = [ {{ generated_zone_gated_list }} ] %}
+          {% set irrigation = zones | map('states') | map('float', 0) | sum %}
+          {% set residual = total - autofill - irrigation %}
+          {{ [residual, 0] | max | round(3) }}
+        attributes:
+          water_category: other
+          generation: water_attribution_v1
+```
+
+**Note on the floored residual under overlap:** because the user-chosen policy is
+"both counters tick independently" (autofill and irrigation can both attribute
+the same gallons during overlap), the residual computed as
+`total - autofill_gated - hot - irrigation_gated` can go negative for the
+duration of the overlap (gallons are double-counted on the input side). The
+`max(residual, 0)` floor absorbs this without leaking phantom gallons into
+`other`, but the consequence is that `other` is **systematically biased low**
+during overlap windows. This is intentional and consistent with the
+independent-counters policy; consumers of `other` should not treat it as
+ground-truth cold-water flow during periods where `pool_autofill_active`
+overlaps an open irrigation zone.
 
 ## Single-source-of-truth Nix module (`§2.5`)
 
@@ -416,7 +457,7 @@ state: >
   {% set s = zones | map('states') | map('float', 0) | sum %}
   {% set last = states('sensor.water_irrigation_total') | float(0) %}
   {% set tol = 5.0 %}   {# Nix-option aggregateDropToleranceGal #}
-  {{ [s, last] | max | round(3) if (last - s) < tol else s | round(3) }}
+  {{ ([s, last] | max | round(3)) if ((last - s) < tol) else (s | round(3)) }}
 ```
 
 Holds at previous value if new sum dips by less than `tol` gallons
@@ -544,14 +585,20 @@ per hour via a `/var/lib/flume-autofill/.run.lock` lockfile.
 
 ## Phase 3 — Multi-source backfill (§5)
 
-### Source priority
+### Source preference (deepest history wins)
 
-| Priority | Source | Coverage |
+For any timeframe being reconstructed, the backfill picks the source with
+data available; when multiple have it, the higher-fidelity source wins (VM
+is preferred over the Flume API where both have minute-resolution data
+because VM avoids the API rate-limit; Flume API is the *only* option for
+windows that predate VM).
+
+| Preference | Source | Coverage characteristics |
 |---|---|---|
-| **1** | VictoriaMetrics (127.0.0.1:8428) | Since HA's InfluxDB integration was enabled — deepest local source, 100y retention |
-| **2** | Flume Personal API | Since Flume device install — may predate VM |
-| **3** | HA Postgres `states` | Bounded by `purge_keep_days` — recent only, but highest fidelity for valve events |
-| **4** | HA Postgres `statistics` | Hourly aggregates, coarse fallback |
+| Preferred where available | VictoriaMetrics (127.0.0.1:8428) | Since HA's InfluxDB integration was enabled — 100y retention. No rate limit. |
+| Fills gaps before VM and acts as cross-check inside VM coverage | Flume Personal API | Since Flume device install — may predate VM by months or years. Rate-limited 120 req/hr. |
+| Highest fidelity for valve events (sub-minute resolution) | HA Postgres `states` | Bounded by `purge_keep_days` — recent only. Used for irrigation attribution where the sub-minute timing matters. |
+| Coarse fallback when minute resolution is unavailable | HA Postgres `statistics` (LTS) | Hourly aggregates kept forever. Pattern detection cannot run at hourly resolution — used only to validate per-day totals. |
 
 The backfill tool auto-discovers overlap and reports:
 
@@ -577,15 +624,50 @@ periods will be tagged 'irrigation_unknown' and counted in the residual.
 | HA Long-Term Statistics | Hourly aggregated per cumulative sensor | HA Energy dashboard shows history |
 | Phase 3 report email (optional, `--email`) | Summary of backfilled period | User confirmation |
 
+### LTS namespace strategy
+
+Phase 3 writes to a **dedicated statistic_id namespace** rather than into the
+live entity's LTS series, so backfilled data never collides with the live
+Phase 1 entities while the user is verifying values.
+
+* **Backfilled stats use the namespace `flume_autofill:water_<category>_total`**
+  (e.g., `flume_autofill:water_pool_autofill_total`). The colon-separated
+  prefix is HA's convention for "external" statistic IDs not bound to a
+  registered entity. The data appears in the Statistics tab of HA Developer
+  Tools and is queryable from Grafana, but does NOT feed the Energy
+  dashboard (which only consumes statistics for registered sensor entities).
+
+* **The live entity's LTS** at `sensor.water_<category>_total` is
+  populated forward in time by the normal recorder + utility_meter machinery
+  in Phase 1. It is **never written by Phase 3 directly** — that is the
+  invariant that prevents collision.
+
+* **The "promote" operation** (separate command:
+  `flume-autofill backfill --promote --through YYYY-MM-DD`) is the explicit
+  step the user runs once they have visually confirmed backfilled values
+  look correct in HA's Statistics tab and in Grafana. Promote copies the
+  hourly sum values from `flume_autofill:water_<category>_total` into the
+  live `sensor.water_<category>_total` LTS for every hour earlier than
+  `--through`, calling `recorder.adjust_sum_statistics` to rewrite the
+  cumulative sum so the live series remains monotonic across the boundary.
+  The `--through` date is conventionally the day before the user first
+  enabled Phase 1 (so promoted data never overwrites any live data).
+
+* **Rollback** is supported by `--unpromote --through YYYY-MM-DD`, which
+  removes the promoted data points from the live LTS namespace and leaves
+  the backfilled-namespace copy intact.
+
+* The `flume_autofill:` namespaced statistics remain forever (they're cheap
+  hourly aggregates) and serve as the audit trail of what was backfilled.
+
 ### Idempotency
 
 Re-running over an already-imported window is a no-op:
 
-* **VM**: (entity_id, timestamp) is the dedup key; same point overwrites
-* **LTS**: re-import same hour replaces value. Namespace
-  `flume_autofill:water_*` keeps backfilled stats distinct from live
-  `sensor.water_*` LTS during development; `recorder.adjust_sum_statistics`
-  splices the two at handoff time
+* **VM**: (entity_id, timestamp) is the dedup key; same point overwrites.
+* **LTS**: re-import of the same hour into the same namespace replaces the
+  value. Promote is also idempotent — running `--promote --through DATE`
+  twice produces the same result.
 
 ### CLI surface
 
@@ -593,18 +675,26 @@ Re-running over an already-imported window is a no-op:
 # Discover what's available
 flume-autofill backfill --discover
 
-# Dry run — produces CSV only
+# Dry run — produces CSV only, no VM/LTS writes
 flume-autofill backfill --from 2024-01-01 --to 2024-12-31 --dry-run
 
-# Full backfill, all destinations
+# Full backfill — writes CSV + VM + LTS (in `flume_autofill:` namespace)
 sudo systemctl start flume-autofill-backfill@2024.service
+
+# Promote backfilled data into the live entity LTS (one-way; idempotent)
+flume-autofill backfill --promote --through 2026-05-21
+
+# Rollback a promote
+flume-autofill backfill --unpromote --through 2026-05-21
 
 # Targeted re-ingest of a gap from a Phase 2 anomaly email
 sudo systemctl start flume-autofill-backfill@2026-05-18.service
 ```
 
 The `@instance` systemd template parses `YYYY`, `YYYY-MM`, `YYYY-MM-DD`,
-or `YYYY-MM-DD:YYYY-MM-DD` from the instance name.
+or `YYYY-MM-DD:YYYY-MM-DD` from the instance name. The promote / unpromote
+operations are NOT wrapped in a systemd unit — they're explicit human-driven
+steps invoked from the shell.
 
 ### Failure modes
 

@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from flume_autofill.sources.ha_postgres import (
     parse_sensor_states,
     parse_valve_events,
-    sensor_states_sql,
     valve_events_sql,
 )
 

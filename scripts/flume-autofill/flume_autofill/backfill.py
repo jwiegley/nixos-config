@@ -143,8 +143,10 @@ def discover_coverage() -> SourceCoverage:
         if series:
             vm_start = series[0][0].date()
     except Exception as e:
-        # Don't print the credential-bearing detail; only the type+message.
-        print(f"WARN: VM discovery failed: {type(e).__name__}: {e}")
+        # Type name only — the exception body can include URL/credential
+        # fragments from `requests` (e.g. NewConnectionError repr) and from
+        # OAuth-grant failures. Mirrors cross_check.py:251.
+        print(f"WARN: VM discovery failed: {type(e).__name__}")
 
     # Flume API: live deployment fills this in once device/user ids are
     # wired. Token plumbing exists; the discovery query does not.
@@ -170,7 +172,8 @@ def discover_coverage() -> SourceCoverage:
             # path goes live. Tracked in docs/WATER_ATTRIBUTION.md §v2.
             flume_start = None
     except Exception as e:
-        print(f"WARN: Flume API discovery failed: {type(e).__name__}: {e}")
+        # Type name only — see VM-discovery comment above.
+        print(f"WARN: Flume API discovery failed: {type(e).__name__}")
 
     return SourceCoverage(vm_start=vm_start, flume_start=flume_start)
 
@@ -439,15 +442,27 @@ def _unpromote(through: str) -> int:
     The ``flume_autofill:`` backfill namespace is left intact as an
     audit trail — only the live ``sensor.*`` namespace is cleared. Use
     ``_promote`` again to restore.
+
+    NOTE: ``--through`` is accepted for CLI symmetry with ``--promote``
+    but is **ignored** by this operation. HA's ``recorder/clear_statistics``
+    is namespace-wide, not range-filtered, so any value passed for
+    ``through`` cannot bound what's cleared. The print on entry makes
+    this explicit so the operator isn't surprised.
     """
     import json
     from datetime import datetime, timezone
     from pathlib import Path
 
+    print(
+        "INFO: --unpromote ignores --through; HA's "
+        "recorder/clear_statistics wipes the entire namespace"
+    )
+
     cred_dir = Path(os.environ["CREDENTIALS_DIRECTORY"])
     ha_token = (cred_dir / "ha_token").read_text().strip()
-    # `through` is accepted for symmetry with --promote; clear_statistics
-    # itself wipes the whole namespace (there is no per-range variant).
+    # `through` is accepted for symmetry with --promote and parsed only
+    # to validate that it's well-formed (early failure beats a silent
+    # success on a misspelled date). The parsed value is not used.
     _through_date = datetime.fromisoformat(through).replace(tzinfo=timezone.utc)
 
     from .destinations.ha_lts import _ws_connect

@@ -90,13 +90,17 @@ def detect_autofill_sessions(
         else:
             if active_start is not None:
                 # Session ended at the previous index.
-                sessions.append(_build_session(in_range, active_start, i - 1))
+                session = _build_session(in_range, active_start, i - 1)
+                if session is not None:
+                    sessions.append(session)
                 active_start = None
             consecutive_active = 0
             pending_start = None
 
     if active_start is not None:
-        sessions.append(_build_session(in_range, active_start, len(in_range) - 1))
+        session = _build_session(in_range, active_start, len(in_range) - 1)
+        if session is not None:
+            sessions.append(session)
 
     return sessions
 
@@ -105,7 +109,14 @@ def _build_session(
     in_range: list[tuple[datetime, float, bool]],
     start_idx: int,
     end_idx: int,
-) -> AutofillSession:
+) -> AutofillSession | None:
+    # Defensive guard: callers (detect_autofill_sessions) should never
+    # pass an inverted span, but a future refactor that promotes `active_start`
+    # without crossing through `start_idx <= end_idx` would silently produce
+    # a 0-length session that crashes on `span[0]`. Bail out cleanly instead.
+    if start_idx > end_idx:
+        return None
+
     # Trim leading/trailing out-of-range minutes so session boundaries
     # reflect actual activity. Mid-session out-of-range minutes (e.g. a
     # one-minute blip) are preserved.
@@ -113,6 +124,10 @@ def _build_session(
         start_idx += 1
     while end_idx >= start_idx and not in_range[end_idx][2]:
         end_idx -= 1
+
+    # All-out-of-range trims to an empty span — drop it.
+    if start_idx > end_idx:
+        return None
 
     span = in_range[start_idx : end_idx + 1]
     # 1 minute per sample; gpm * 1 = gal contribution.

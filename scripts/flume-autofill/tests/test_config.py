@@ -5,7 +5,10 @@ import json
 
 import pytest
 
-from flume_autofill.config import Config, Zone, load_config
+# Config is imported only as an API-surface check: load_config must
+# return a Config and tests should be able to reference the type.
+# Keep it in the import line via `# noqa: F401` rather than dropping it.
+from flume_autofill.config import Config, Zone, load_config  # noqa: F401
 
 
 def test_load_minimal_valid_config(tmp_path):
@@ -71,5 +74,5 @@ def test_load_config_rejects_missing_required_key(tmp_path):
 def test_zone_valve_entity_id_property():
     z = Zone(slug="front_yard", name="Front Yard", type="spray")
     assert z.valve_entity_id == "valve.sprinkler_control_front_yard_zone"
-    assert z.gated_gpm_sensor == "sensor.water_front_yard_gpm_gated"
+    assert z.gated_gpm_sensor == "sensor.water_front_yard_gated_gpm"
     assert z.total_sensor == "sensor.water_front_yard_total"

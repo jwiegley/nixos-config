@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
 import responses
 
-from flume_autofill.sources.flume_api import (
+# FlumeAPIError is part of the public API surface; keep it imported so a
+# rename in the source breaks this test (defence against silent renames).
+from flume_autofill.sources.flume_api import (  # noqa: F401
     Credentials,
     FlumeAPIClient,
     FlumeAPIError,

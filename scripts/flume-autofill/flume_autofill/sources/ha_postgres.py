@@ -7,9 +7,9 @@ without a live database.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
 
 import psycopg2
 
@@ -111,18 +111,16 @@ class HAPostgresSource:
         self, entity_ids: list[str], since: datetime, until: datetime
     ) -> list[ValveOpenInterval]:
         sql, params = valve_events_sql(entity_ids, since, until)
-        with psycopg2.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, params)
-                rows = cur.fetchall()
+        with psycopg2.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
         return parse_valve_events(rows)
 
     def fetch_sensor_states(
         self, entity_id: str, since: datetime, until: datetime
     ) -> list[tuple[datetime, float]]:
         sql, params = sensor_states_sql(entity_id, since, until)
-        with psycopg2.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, params)
-                rows = cur.fetchall()
+        with psycopg2.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
         return parse_sensor_states(rows)

@@ -14,7 +14,8 @@ def test_package_imports():
 
 def test_cli_help_works():
     """The CLI parser accepts --help without crashing."""
-    import subprocess, sys
+    import subprocess
+    import sys
     result = subprocess.run(
         [sys.executable, "-m", "flume_autofill", "--help"],
         capture_output=True,

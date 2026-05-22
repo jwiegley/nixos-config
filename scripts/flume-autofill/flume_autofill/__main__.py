@@ -18,8 +18,24 @@ def main(argv: list[str] | None = None) -> int:
     back.add_argument("--discover", action="store_true")
     back.add_argument("--dry-run", action="store_true")
     back.add_argument("--promote", action="store_true")
-    back.add_argument("--unpromote", action="store_true")
-    back.add_argument("--through", dest="through_date")
+    back.add_argument(
+        "--unpromote",
+        action="store_true",
+        help=(
+            "Remove backfilled stats from live LTS namespace (entire "
+            "namespace — HA's recorder/clear_statistics is not range-"
+            "filtered; --through is accepted for symmetry but ignored)."
+        ),
+    )
+    back.add_argument(
+        "--through",
+        dest="through_date",
+        help=(
+            "Hour boundary for --promote. Accepted by --unpromote for "
+            "CLI symmetry but ignored (clear_statistics wipes the entire "
+            "namespace, not a range)."
+        ),
+    )
     back.add_argument(
         "--destinations",
         default="csv,vm,lts",

@@ -11,6 +11,7 @@ process doesn't burn the rate-limited oauth/token endpoint on every run.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -96,16 +97,36 @@ class FlumeAPIClient:
         self._token = data["access_token"]
         # The user_id is embedded in the JWT; parse it lazily on first query call.
         if self._cache_path:
-            self._cache_path.write_text(
-                json.dumps(
-                    {
-                        "access_token": self._token,
-                        "expires_at": time.time() + int(data["expires_in"]) - 60,
-                        "user_id": self._user_id,
-                    }
-                )
+            # Atomic 0600 write: the previous `write_text` + `chmod(0o600)`
+            # pair left a ≈microsecond TOCTOU window where the cache file
+            # was world-readable. `os.open` with O_CREAT | O_WRONLY | O_TRUNC
+            # at mode 0600 establishes permissions in the same syscall that
+            # creates the file (subject to the process umask, which Python
+            # respects). Use os.fdopen to wrap the descriptor for the JSON
+            # write; the descriptor is closed on success by the context
+            # manager, or explicitly on exception.
+            payload = {
+                "access_token": self._token,
+                "expires_at": time.time() + int(data["expires_in"]) - 60,
+                "user_id": self._user_id,
+            }
+            fd = os.open(
+                str(self._cache_path),
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                0o600,
             )
-            self._cache_path.chmod(0o600)
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(payload, f)
+            except Exception:
+                # os.fdopen() with a successful return path closes via the
+                # context manager. If json.dump or fdopen itself raises
+                # before that handoff, close the raw fd to avoid leakage.
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                raise
 
     def query_gpm(
         self,

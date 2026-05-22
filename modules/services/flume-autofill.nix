@@ -129,7 +129,11 @@ in
     # of producing a half-broken system.
     assertions = [
       {
-        assertion = config.services.home-assistant-water-attribution.enable;
+        # `or false` guards against the case where a host imports this
+        # module without ever importing modules/services/home-assistant-
+        # water-attribution.nix — without the fallback, the option
+        # lookup itself would error before the friendly message fires.
+        assertion = config.services.home-assistant-water-attribution.enable or false;
         message = ''
           services.flume-autofill.enable = true requires
           services.home-assistant-water-attribution.enable = true.

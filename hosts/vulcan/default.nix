@@ -270,10 +270,22 @@
 
   # Phase 2/3 backend for water attribution: weekly cross-check that
   # re-derives totals from VictoriaMetrics + HA Postgres, emails a water
-  # report, and writes the max-delta sensor back to HA. SOPS secrets at
-  # flume/* and home-assistant/flume-autofill-token must be populated
-  # before the first run.
-  services.flume-autofill.enable = true;
+  # report, and writes the max-delta sensor back to HA.
+  #
+  # DISABLED until SOPS secrets are populated. Flip to `true` after:
+  #   1. sops /etc/nixos/secrets/secrets.yaml and add the keys:
+  #        flume:
+  #          client_id: <Flume Personal API client_id>
+  #          client_secret: <Flume Personal API client_secret>
+  #          username: <Flume account email>
+  #          password: <Flume account password>
+  #        home-assistant:
+  #          flume-autofill-token: <long-lived HA token>
+  #   2. sudo nixos-rebuild switch --flake '/etc/nixos.worktrees/water-attribution#vulcan'
+  #
+  # Until then, the Phase 1 templates + utility meters deploy on their
+  # own (gated GPM sensors, integration totals, weekly/monthly cycles).
+  services.flume-autofill.enable = false;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

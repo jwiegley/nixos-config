@@ -22,7 +22,11 @@ class Zone:
 
     @property
     def gated_gpm_sensor(self) -> str:
-        return f"sensor.water_{self.slug}_gpm_gated"
+        # HA slugifies the sensor "name" attribute, not the unique_id, so the
+        # resulting entity_id is `water_<slug>_gated_gpm` (matches the name
+        # "Water X Gated GPM"). Don't switch this to `_gpm_gated` — it'll
+        # break every Phase 2/3 lookup. See docs/WATER_ATTRIBUTION.md.
+        return f"sensor.water_{self.slug}_gated_gpm"
 
     @property
     def total_sensor(self) -> str:

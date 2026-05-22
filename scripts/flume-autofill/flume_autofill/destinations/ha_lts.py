@@ -27,17 +27,40 @@ from typing import Any
 def _ws_connect(url: str, token: str):
     """Open an authenticated HA WebSocket connection.
 
+    HA's WebSocket auth is a THREE-message handshake (see
+    https://developers.home-assistant.io/docs/api/websocket/#authentication-phase):
+
+      1. server → ``{"type": "auth_required", ...}``  (greeting)
+      2. client → ``{"type": "auth", "access_token": "<token>"}``
+      3. server → ``{"type": "auth_ok"}`` or ``{"type": "auth_invalid"}``
+
+    Misaligning these steps causes every subsequent ``ws.recv()`` to return
+    the auth result instead of the command response. We synchronously
+    walk all three steps and raise on anything unexpected, so callers
+    can rely on ``recv()`` returning the *command* response.
+
     ``websocket-client`` is imported lazily so unit tests don't need it on
     the path — the build payload is the only thing exercised in tests.
     """
     from websocket import create_connection  # type: ignore[import]
 
     ws = create_connection(url, timeout=30)
+    # Step 1: server sends auth_required greeting
+    greeting = json.loads(ws.recv())
+    if greeting.get("type") != "auth_required":
+        ws.close()
+        raise RuntimeError(
+            f"HA WebSocket unexpected greeting: {greeting.get('type')}"
+        )
+    # Step 2: client sends auth
     ws.send(json.dumps({"type": "auth", "access_token": token}))
-    # HA replies with auth_required followed by auth_ok / auth_invalid.
-    # We don't inspect the handshake here; downstream sends will raise
-    # if auth failed.
-    _ = ws.recv()
+    # Step 3: server sends auth_ok or auth_invalid (no token echoed back).
+    auth_resp = json.loads(ws.recv())
+    if auth_resp.get("type") != "auth_ok":
+        ws.close()
+        raise RuntimeError(
+            f"HA WebSocket auth failed: {auth_resp.get('type')}"
+        )
     return ws
 
 

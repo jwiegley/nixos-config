@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
 
 
 def _gal(n: float) -> str:
@@ -35,7 +34,7 @@ class WeeklyReport:
     per_zone_totals: dict[str, tuple[float, float]]
     daily_breakdown: list[tuple[date, float, dict[str, int]]]
     notable_observations: list[str] = field(default_factory=list)
-    cross_check_anomaly: Optional[str] = None
+    cross_check_anomaly: str | None = None
     grafana_url: str = ""
     energy_url: str = ""
 

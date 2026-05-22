@@ -284,6 +284,42 @@ let
       cumulativeSources)}
   '';
 
+  packageYamlFile = pkgs.writeText "water_attribution.yaml" ''
+    ${autofillRangeYaml}
+
+    ${poolAutofillActiveYaml}
+
+    ${poolAutofillGatedGpmYaml}
+
+    ${domesticHotYaml}
+
+    ${zonesIterationYaml}
+
+    ${irrigationActiveYaml}
+
+    ${aggregateIrrigationYaml}
+
+    ${otherResidualYaml}
+
+    ${utilityMeterYaml}
+  '';
+
+  zonesJsonFile = pkgs.writeText "zones.json" (builtins.toJSON {
+    flume_current_sensor = cfg.flumeCurrentSensor;
+    domestic_hot_flow_sensor = cfg.domesticHotFlowSensor;
+    autofill = {
+      gpm_min = cfg.autofill.gpmMin;
+      gpm_max = cfg.autofill.gpmMax;
+      window_minutes = cfg.autofill.windowMinutes;
+      min_minutes_in_range = cfg.autofill.minMinutesInRange;
+      enforce_mean_check = cfg.autofill.enforceMeanCheck;
+    };
+    cycles = cfg.cycles;
+    zones = map (z: { inherit (z) slug name type; }) cfg.zones;
+    victoriametrics_url = "http://127.0.0.1:8428";
+    ha_postgres_dsn = "postgresql:///hass";
+  });
+
 in
 {
   options.services.home-assistant-water-attribution = {
@@ -350,9 +386,43 @@ in
     };
   };
 
-  # config block populated in Task 8
   config = lib.mkIf cfg.enable {
-    # placeholder — full materialization added in Task 8
+    # Shared user/group used by zones.json materialization here and by the
+    # Phase 2/3 systemd services in modules/services/flume-autofill.nix.
+    # Declared in this module so Phase 1 can deploy independently of Phase 2.
+    users.users.flume-autofill = {
+      isSystemUser = true;
+      group = "flume-autofill";
+      home = "/var/lib/flume-autofill";
+      createHome = true;
+    };
+    users.groups.flume-autofill = {};
+
+    systemd.tmpfiles.rules = [
+      "d /var/lib/flume-autofill 0750 flume-autofill flume-autofill -"
+    ];
+
+    # Materialize the generated YAML into the HA packages directory.
+    # `install -m … -o … -g …` ensures an atomic swap on every rebuild.
+    system.activationScripts.water-attribution-package = {
+      text = ''
+        install -d -m 755 -o hass -g hass /var/lib/hass/packages
+        install -m 0644 -o hass -g hass \
+          ${packageYamlFile} \
+          ${toString cfg.packageOutputPath}
+        install -d -m 750 -o flume-autofill -g flume-autofill /var/lib/flume-autofill
+        install -m 0644 -o flume-autofill -g flume-autofill \
+          ${zonesJsonFile} \
+          ${toString cfg.zonesJsonOutputPath}
+      '';
+      deps = [ "users" "groups" ];
+    };
+
+    # Restart HA when the generated content changes.
+    systemd.services.home-assistant.restartTriggers = [
+      packageYamlFile
+      zonesJsonFile
+    ];
   };
 
   # Verification helper: surface the generated YAML text so flake/dev tools

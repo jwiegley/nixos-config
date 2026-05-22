@@ -1,0 +1,121 @@
+"""Pool autofill detection algorithm.
+
+Mirrors the Phase 1 HA semantic: a session is a contiguous run of minutes
+where >= `min_minutes_in_range` of every rolling `window_minutes`-minute
+window land in [`gpm_min`, `gpm_max`], and the rolling mean is also in
+that range when `enforce_mean_check=True`.
+
+To suppress sub-threshold blips (e.g. a 9-minute pulse that happens to
+satisfy the "9 of last 10" rule at a single instant), a session must
+remain active across at least two consecutive rolling windows before
+it's reported. This matches the spec's "Below the 10-min duration
+threshold -> no session" expectation while still preserving session
+detection for legitimate runs that include a single noisy minute.
+
+This module is a pure function over a (timestamp, gpm) list. Sources and
+destinations are layered on top.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Iterable
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    gpm_min: float
+    gpm_max: float
+    window_minutes: int
+    min_minutes_in_range: int
+    enforce_mean_check: bool
+
+
+@dataclass(frozen=True)
+class AutofillSession:
+    start: datetime
+    end: datetime
+    gallons: float
+
+
+def detect_autofill_sessions(
+    series: list[tuple[datetime, float]],
+    config: DetectionConfig,
+) -> list[AutofillSession]:
+    """Return detected autofill sessions from a 1-minute (ts, gpm) series.
+
+    Each session reports start/end (inclusive) and total gallons.
+    """
+    in_range = [
+        (ts, gpm, config.gpm_min <= gpm <= config.gpm_max)
+        for ts, gpm in series
+    ]
+
+    sessions: list[AutofillSession] = []
+    active_start: int | None = None
+    # `pending_start` records the window_start of the FIRST active window
+    # in a run; we only promote it to `active_start` once we have two
+    # consecutive active windows (i.e. the activity is sustained, not a
+    # single-window blip).
+    pending_start: int | None = None
+    consecutive_active = 0
+
+    for i in range(len(in_range)):
+        # Look at the window [i-window+1 .. i] (last `window_minutes` points).
+        window_start = max(0, i - config.window_minutes + 1)
+        window = in_range[window_start : i + 1]
+        if len(window) < config.window_minutes:
+            # Not enough history yet to confirm a session.
+            continue
+
+        count_in_range = sum(1 for _, _, r in window if r)
+        mean_ok = True
+        if config.enforce_mean_check:
+            mean = sum(gpm for _, gpm, _ in window) / len(window)
+            mean_ok = config.gpm_min <= mean <= config.gpm_max
+
+        is_active_at_i = (
+            count_in_range >= config.min_minutes_in_range and mean_ok
+        )
+
+        if is_active_at_i:
+            consecutive_active += 1
+            if consecutive_active == 1:
+                # Remember where this active run started; don't declare a
+                # session yet.
+                pending_start = window_start
+            elif consecutive_active >= 2 and active_start is None:
+                # Two windows in a row confirm a real session.
+                active_start = pending_start
+        else:
+            if active_start is not None:
+                # Session ended at the previous index.
+                sessions.append(_build_session(in_range, active_start, i - 1))
+                active_start = None
+            consecutive_active = 0
+            pending_start = None
+
+    if active_start is not None:
+        sessions.append(_build_session(in_range, active_start, len(in_range) - 1))
+
+    return sessions
+
+
+def _build_session(
+    in_range: list[tuple[datetime, float, bool]],
+    start_idx: int,
+    end_idx: int,
+) -> AutofillSession:
+    span = in_range[start_idx : end_idx + 1]
+    # 1 minute per sample; gpm * 1 = gal contribution.
+    gallons = sum(gpm for _, gpm, _ in span)
+    return AutofillSession(
+        start=span[0][0],
+        end=span[-1][0],
+        gallons=round(gallons, 3),
+    )
+
+
+def run_cli(input_path: str) -> int:
+    """CLI helper used by `flume-autofill detect --input X.csv`."""
+    raise NotImplementedError("Wired in Phase 2 alongside the Flume API source.")

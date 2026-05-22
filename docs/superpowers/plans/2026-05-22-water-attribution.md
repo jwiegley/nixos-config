@@ -2962,7 +2962,8 @@ If the service failed, examine the journal **with redaction in the same pipeline
 ```bash
 sudo journalctl -u flume-autofill-weekly.service -n 30 --no-pager 2>&1 | \
   sed -E '
-    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -30
 ```
@@ -3785,7 +3786,8 @@ If the service failed, examine the journal **with redaction in the same pipeline
 ```bash
 sudo journalctl -u 'flume-autofill-backfill@2026-05-21.service' -n 20 --no-pager 2>&1 | \
   sed -E '
-    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -20
 ```
@@ -4097,12 +4099,21 @@ sudo -u postgres psql -d hass -c "
 
 Expected: at least one state transition during the past week (or 'off' if no autofill ran).
 
-- [ ] **Step 3: Trigger a manual cross-check run and inspect the email.**
+- [ ] **Step 3: Trigger a manual cross-check run and inspect the email (with redaction on any journal output).**
 
 ```bash
 sudo systemctl start flume-autofill-weekly.service
-sleep 30
-sudo journalctl -u flume-autofill-weekly.service -n 50 --no-pager
+sudo systemctl status flume-autofill-weekly.service --no-pager 2>&1 | head -8
+
+# Failure-path journal inspection — never raw, always through the redactor.
+# flume-autofill-weekly.service performs OAuth password-grant against
+# api.flumewater.com and holds the HA bearer token via LoadCredential.
+sudo journalctl -u flume-autofill-weekly.service -n 50 --no-pager 2>&1 | \
+  sed -E '
+    s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
+    s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
+  ' | tail -30
 ```
 
 Expected: clean exit, email arrived in inbox.
@@ -4116,7 +4127,8 @@ sudo systemctl status 'flume-autofill-backfill@2024-12.service' --no-pager 2>&1 
 # If status shows failure, examine journal with redaction:
 sudo journalctl -u 'flume-autofill-backfill@2024-12.service' -n 20 --no-pager 2>&1 | \
   sed -E '
-    s/(password|client_secret|username|access_token|Bearer)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
+    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -20
 ```

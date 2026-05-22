@@ -1,0 +1,73 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "title": "Water Attribution",
+  "uid": "water-attribution",
+  "tags": ["water", "flume", "irrigation"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1h",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "This Week — Gallons by Category",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "targets": [
+        {
+          "expr": "last_over_time({entity_id=~\"sensor\\\\.water_(pool_autofill|irrigation|domestic_hot|other)_weekly\"}[5m])",
+          "legendFormat": "{{entity_id}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Per-Zone Irrigation (last 30d)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "targets": [
+        {
+          "expr": "rate({entity_id=~\"sensor\\\\.water_.+_total\", water_category=\"irrigation\"}[1h])",
+          "legendFormat": "{{zone_slug}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Daily Totals — Stacked",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "targets": [
+        {
+          "expr": "{entity_id=~\"sensor\\\\.water_.+_daily\"}",
+          "legendFormat": "{{entity_id}}"
+        }
+      ]
+    }
+  ]
+}

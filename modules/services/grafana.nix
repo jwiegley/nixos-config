@@ -55,6 +55,7 @@ let
     "atd-dashboard.json" = ../monitoring/grafana-dashboards/atd-dashboard.json;
     "node-red-events.json" = ../monitoring/dashboards/node-red-events.json;
     "openclaw-hermes-integration.json" = ../monitoring/dashboards/openclaw-hermes-integration.json;
+    "water-attribution.json" = ../monitoring/grafana-dashboards/water-attribution.json;
   };
 
   # Combined derivation containing all dashboards

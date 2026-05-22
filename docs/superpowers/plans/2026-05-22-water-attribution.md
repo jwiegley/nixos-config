@@ -786,14 +786,14 @@ in
     flumeCurrentSensor = lib.mkOption {
       type = lib.types.str;
       default = "sensor.flume_sensor_sierra_oaks_current";
-      description = "Flume entity reporting gal/m instantaneous flow.";
+      description = "Flume entity reporting gal/min instantaneous flow.";
     };
 
     domesticHotFlowSensor = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = "sensor.water_heater_ch1_ch1_unit1_hot_water_flow";
       description = ''
-        Optional indoor hot-water flow sensor (gal/m). Setting to null
+        Optional indoor hot-water flow sensor (gal/min). Setting to null
         disables the domestic_hot category entirely.
       '';
     };
@@ -952,7 +952,7 @@ Inside the `let` block of the module, add (before the `in {`):
       - sensor:
           - name: "Water Pool Autofill Gated GPM"
             unique_id: water_pool_autofill_gpm_gated
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% if is_state('binary_sensor.pool_autofill_active', 'on') %}
                 {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
@@ -982,7 +982,7 @@ Inside the `let` block of the module, add (before the `in {`):
       - sensor:
           - name: "Water Domestic Hot GPM"
             unique_id: water_domestic_hot_gpm
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {{ states('${cfg.domesticHotFlowSensor}') | float(0) }}
             availability: >
@@ -1062,7 +1062,7 @@ Append to the `let` block:
       - sensor:
           - name: "Water ${z.name} Gated GPM"
             unique_id: water_${z.slug}_gpm_gated
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% if is_state('valve.sprinkler_control_${z.slug}_zone', 'open') %}
                 {{ states('${cfg.flumeCurrentSensor}') | float(0) }}
@@ -1149,7 +1149,7 @@ Append to the `let` block:
       - sensor:
           - name: "Water Other GPM"
             unique_id: water_other_gpm
-            unit_of_measurement: "gal/m"
+            unit_of_measurement: "gal/min"
             state: >
               {% set total = states('${cfg.flumeCurrentSensor}') | float(0) %}
               {% set autofill = states('sensor.water_pool_autofill_gpm_gated') | float(0) %}
@@ -2963,7 +2963,7 @@ If the service failed, examine the journal **with redaction in the same pipeline
 sudo journalctl -u flume-autofill-weekly.service -n 30 --no-pager 2>&1 | \
   sed -E '
     s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
-    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
+    s/[Bb]earer[=[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -30
 ```
@@ -3787,7 +3787,7 @@ If the service failed, examine the journal **with redaction in the same pipeline
 sudo journalctl -u 'flume-autofill-backfill@2026-05-21.service' -n 20 --no-pager 2>&1 | \
   sed -E '
     s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
-    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
+    s/[Bb]earer[=[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -20
 ```
@@ -4111,7 +4111,7 @@ sudo systemctl status flume-autofill-weekly.service --no-pager 2>&1 | head -8
 sudo journalctl -u flume-autofill-weekly.service -n 50 --no-pager 2>&1 | \
   sed -E '
     s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
-    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
+    s/[Bb]earer[=[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -30
 ```
@@ -4128,7 +4128,7 @@ sudo systemctl status 'flume-autofill-backfill@2024-12.service' --no-pager 2>&1 
 sudo journalctl -u 'flume-autofill-backfill@2024-12.service' -n 20 --no-pager 2>&1 | \
   sed -E '
     s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
-    s/[Bb]earer[[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
+    s/[Bb]earer[=[:space:]]+[A-Za-z0-9._\-]+/Bearer [REDACTED]/g
     s/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/[REDACTED_JWT]/g
   ' | tail -20
 ```
@@ -4171,3 +4171,15 @@ Confirm the dashboard renders.
 - HA package YAML: `modules/services/home-assistant.nix`
 - VM client conventions: `modules/monitoring/services/victoriametrics.nix` (port 8428)
 - Grafana dashboard auto-provisioning: `modules/services/grafana.nix`
+
+---
+
+## Plan addenda (post-execution corrections)
+
+The following corrections were applied during Phase 1 implementation and should be treated as authoritative over the Phase 1 YAML samples earlier in this document. The committed module code (`modules/services/home-assistant-water-attribution.nix`) is the ground truth.
+
+- **Single-document YAML structure** — Tasks 5, 6, 7 each show YAML snippets with their own `template:` and `sensor:` top-level keys. Concatenating these would produce a document with duplicate top-level keys, which PyYAML silently truncates. The actual module consolidates everything into a single Nix attrset and emits it via `builtins.toJSON` (valid YAML by YAML 1.2 spec). See commit `96eaac3`.
+
+- **No `unit_prefix: ""` on `integration:` sensors** — HA's integration platform schema only accepts `None` (default), `'G'`, `'M'`, `'T'`, or `'k'`. The Task 5/6 samples include `unit_prefix: ""` which fails. The field must be omitted entirely. See commit `9bb5ae8`.
+
+- **No `_module.args._yamlPreview` at module top level** — NixOS module syntax only accepts `options`, `imports`, `config`, `_class`, `_file` at top level. Verification is done via `nix-instantiate --parse <file>` (parse-only) and `nixos-rebuild build` (full evaluation).

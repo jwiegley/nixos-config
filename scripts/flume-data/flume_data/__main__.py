@@ -6,7 +6,7 @@ import sys
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="flume-autofill")
+    parser = argparse.ArgumentParser(prog="flume-data")
     sub = parser.add_subparsers(dest="command", required=True)
 
     cross = sub.add_parser("cross-check", help="Phase 2 weekly cross-check")

@@ -1,5 +1,5 @@
 [project]
-name = "flume-autofill"
+name = "flume-data"
 version = "0.1.0"
 description = "Water attribution: cross-check + backfill for HA water sensors"
 requires-python = ">=3.13"

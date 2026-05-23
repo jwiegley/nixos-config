@@ -538,30 +538,38 @@ in
     zonesJsonOutputPath = lib.mkOption {
       # See packageOutputPath: this is an `install` target, not a store path.
       type = lib.types.str;
-      default = "/var/lib/flume-autofill/zones.json";
+      default = "/var/lib/flume-data/zones.json";
       description = "Where to materialize the canonical zones.json for Phase 2/3.";
     };
   };
 
   config = lib.mkIf cfg.enable {
     # Shared user/group used by zones.json materialization here and by the
-    # Phase 2/3 systemd services in modules/services/flume-autofill.nix.
+    # Phase 2/3 systemd services in modules/services/flume-data.nix.
     # Declared in this module so Phase 1 can deploy independently of Phase 2.
-    users.users.flume-autofill = {
+    # UID/GID pinned to the values the user was originally allocated as
+    # `flume-autofill` (uid=905 gid=898). Preserves /var/lib/flume-data
+    # file ownership through the 2026-05-23 flume-autofill → flume-data
+    # rename; without this NixOS would allocate a fresh uid for the
+    # "new" user and orphan every cached JSON / token / reports file.
+    users.users.flume-data = {
       isSystemUser = true;
-      group = "flume-autofill";
-      home = "/var/lib/flume-autofill";
+      uid = 905;
+      group = "flume-data";
+      home = "/var/lib/flume-data";
       createHome = true;
     };
-    users.groups.flume-autofill = { };
+    users.groups.flume-data = {
+      gid = 898;
+    };
 
     systemd.tmpfiles.rules = [
-      "d /var/lib/flume-autofill 0750 flume-autofill flume-autofill -"
+      "d /var/lib/flume-data 0750 flume-data flume-data -"
     ];
 
     # Materialize the generated YAML into the HA packages directory.
     # `install -m … -o … -g …` ensures an atomic swap on every rebuild.
-    # The parent directory `/var/lib/flume-autofill` is created by the
+    # The parent directory `/var/lib/flume-data` is created by the
     # tmpfiles entry above; `install` only writes the regular files.
     system.activationScripts.water-attribution-package = {
       text = ''
@@ -569,7 +577,7 @@ in
         install -m 0644 -o hass -g hass \
           ${packageYamlFile} \
           ${toString cfg.packageOutputPath}
-        install -m 0644 -o flume-autofill -g flume-autofill \
+        install -m 0644 -o flume-data -g flume-data \
           ${zonesJsonFile} \
           ${toString cfg.zonesJsonOutputPath}
       '';

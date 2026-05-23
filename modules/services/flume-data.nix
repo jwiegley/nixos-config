@@ -1,12 +1,12 @@
-# modules/services/flume-autofill.nix
+# modules/services/flume-data.nix
 #
 # Phase 2/3 NixOS module for the Flume water-attribution backend. Owns:
 #   - SOPS secret declarations for Flume API + HA write-back token
 #   - The systemd weekly cross-check service + timer
 #   - The subdirectory tmpfiles entries Phase 2/3 need under
-#     /var/lib/flume-autofill
+#     /var/lib/flume-data
 #
-# The flume-autofill user/group and the base /var/lib/flume-autofill
+# The flume-data user/group and the base /var/lib/flume-data
 # tmpfiles entry are declared by
 # modules/services/home-assistant-water-attribution.nix (Phase 1), which
 # is shared infrastructure between Phase 1 (zones.json materialization)
@@ -21,7 +21,7 @@
 }:
 
 let
-  cfg = config.services.flume-autofill;
+  cfg = config.services.flume-data;
 
   pyenv = pkgs.python3.withPackages (
     ps: with ps; [
@@ -35,12 +35,12 @@ let
 
   # Symlinked into the Python environment via PYTHONPATH below. We
   # readSourceFromOutOfTree-style at the source root because the package
-  # is laid out as flume_autofill/ inside scripts/flume-autofill/.
-  scriptDir = ../../scripts/flume-autofill;
+  # is laid out as flume_data/ inside scripts/flume-data/.
+  scriptDir = ../../scripts/flume-data;
 
 in
 {
-  options.services.flume-autofill = {
+  options.services.flume-data = {
     enable = lib.mkEnableOption "Flume autofill cross-check + backfill (Phase 2/3)";
 
     weeklySchedule = lib.mkOption {
@@ -91,36 +91,36 @@ in
     # activation time into /run/secrets/flume/* and the systemd unit
     # plumbs them into the process via LoadCredential.
     sops.secrets."flume/client_id" = {
-      owner = "flume-autofill";
+      owner = "flume-data";
       mode = "0400";
     };
     sops.secrets."flume/client_secret" = {
-      owner = "flume-autofill";
+      owner = "flume-data";
       mode = "0400";
     };
     sops.secrets."flume/username" = {
-      owner = "flume-autofill";
+      owner = "flume-data";
       mode = "0400";
     };
     sops.secrets."flume/password" = {
-      owner = "flume-autofill";
+      owner = "flume-data";
       mode = "0400";
     };
     # HA long-lived access token. Used by Phase 2 to write back the
     # cross-check delta sensor, and (planned) by Phase 3 to inject LTS
     # statistics via recorder.import_statistics over WebSocket.
-    sops.secrets."home-assistant/flume-autofill-token" = {
-      owner = "flume-autofill";
+    sops.secrets."home-assistant/flume-data-token" = {
+      owner = "flume-data";
       mode = "0400";
     };
 
-    # NOTE: users.users.flume-autofill, users.groups.flume-autofill, and the
-    # base /var/lib/flume-autofill tmpfiles entry live in
+    # NOTE: users.users.flume-data, users.groups.flume-data, and the
+    # base /var/lib/flume-data tmpfiles entry live in
     # modules/services/home-assistant-water-attribution.nix. We only add the
     # subdirectories used by Phase 2/3.
     systemd.tmpfiles.rules = [
-      "d /var/lib/flume-autofill/reports 0750 flume-autofill flume-autofill -"
-      "d /var/lib/flume-autofill/backfill 0750 flume-autofill flume-autofill -"
+      "d /var/lib/flume-data/reports 0750 flume-data flume-data -"
+      "d /var/lib/flume-data/backfill 0750 flume-data flume-data -"
     ];
 
     # Hard requirement: Phase 1 owns the user/group and the zones.json
@@ -135,14 +135,14 @@ in
         # lookup itself would error before the friendly message fires.
         assertion = config.services.home-assistant-water-attribution.enable or false;
         message = ''
-          services.flume-autofill.enable = true requires
+          services.flume-data.enable = true requires
           services.home-assistant-water-attribution.enable = true.
-          The latter owns the flume-autofill user/group used by this service.
+          The latter owns the flume-data user/group used by this service.
         '';
       }
     ];
 
-    systemd.services.flume-autofill-weekly = {
+    systemd.services.flume-data-weekly = {
       description = "Flume autofill weekly cross-check + water report";
       after = [
         "network-online.target"
@@ -164,7 +164,7 @@ in
       environment = {
         PYTHONPATH = "${scriptDir}";
         PYTHONUNBUFFERED = "1";
-        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-autofill/zones.json";
+        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-data/zones.json";
         FLUME_AUTOFILL_EMAIL_TO = cfg.emailTo;
         FLUME_AUTOFILL_FROM = cfg.reportFromAddress;
         FLUME_AUTOFILL_DELTA_GAL = toString cfg.deltaToleranceGal;
@@ -173,13 +173,13 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        User = "flume-autofill";
-        Group = "flume-autofill";
-        WorkingDirectory = "/var/lib/flume-autofill";
+        User = "flume-data";
+        Group = "flume-data";
+        WorkingDirectory = "/var/lib/flume-data";
         # /run/wrappers/bin is needed for the setgid postdrop sendmail
         # wrapper. The Python module shells out to "sendmail -t -i".
         ExecStart = ''
-          ${pyenv}/bin/python -m flume_autofill cross-check --days 7
+          ${pyenv}/bin/python -m flume_data cross-check --days 7
         '';
 
         LoadCredential = [
@@ -187,7 +187,7 @@ in
           "client_secret:${config.sops.secrets."flume/client_secret".path}"
           "username:${config.sops.secrets."flume/username".path}"
           "password:${config.sops.secrets."flume/password".path}"
-          "ha_token:${config.sops.secrets."home-assistant/flume-autofill-token".path}"
+          "ha_token:${config.sops.secrets."home-assistant/flume-data-token".path}"
         ];
 
         # ── Hardening ───────────────────────────────────────────────
@@ -206,7 +206,7 @@ in
           "AF_PACKET"
         ];
         ReadWritePaths = [
-          "/var/lib/flume-autofill"
+          "/var/lib/flume-data"
           # Sendmail (setgid postdrop wrapper) writes into postfix's
           # maildrop queue.
           "/var/lib/postfix/queue"
@@ -216,7 +216,7 @@ in
       };
     };
 
-    systemd.timers.flume-autofill-weekly = {
+    systemd.timers.flume-data-weekly = {
       description = "Weekly Flume autofill cross-check + water report";
       wantedBy = [ "timers.target" ];
       timerConfig = {
@@ -224,14 +224,14 @@ in
         Persistent = true;
         RandomizedDelaySec = "10m";
         AccuracySec = "1min";
-        Unit = "flume-autofill-weekly.service";
+        Unit = "flume-data-weekly.service";
       };
     };
 
     # 6-hourly DB sync: pulls the last 3 days from Flume API + cache and
     # UPSERTs into flume_history.flume_segments. The 3-day window absorbs
     # late-arriving data without re-fetching the full history.
-    systemd.services.flume-autofill-daily-sync = {
+    systemd.services.flume-data-daily-sync = {
       description = "Sync recent Flume per-segment data into flume_history";
       after = [
         "network-online.target"
@@ -246,9 +246,9 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        User = "flume-autofill";
-        Group = "flume-autofill";
-        WorkingDirectory = "/var/lib/flume-autofill";
+        User = "flume-data";
+        Group = "flume-data";
+        WorkingDirectory = "/var/lib/flume-data";
         ExecStart = "${pyenv}/bin/python -m flume_db_sync --days 3";
         LoadCredential = [
           "client_id:${config.sops.secrets."flume/client_id".path}"
@@ -260,7 +260,7 @@ in
         ProtectHome = true;
         NoNewPrivileges = true;
         PrivateTmp = true;
-        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+        ReadWritePaths = [ "/var/lib/flume-data" ];
         RestrictAddressFamilies = [
           "AF_UNIX"
           "AF_INET"
@@ -269,7 +269,7 @@ in
       };
     };
 
-    systemd.timers.flume-autofill-daily-sync = {
+    systemd.timers.flume-data-daily-sync = {
       description = "6-hourly Flume DB sync";
       wantedBy = [ "timers.target" ];
       timerConfig = {
@@ -278,19 +278,19 @@ in
         Persistent = true;
         RandomizedDelaySec = "5m";
         AccuracySec = "1min";
-        Unit = "flume-autofill-daily-sync.service";
+        Unit = "flume-data-daily-sync.service";
       };
     };
 
     # One-shot bulk-loader: replays EVERY cached day into Postgres.
     # No timer; fired manually with `systemctl start
-    # flume-autofill-bulkload.service` once the initial historical pull
+    # flume-data-bulkload.service` once the initial historical pull
     # has finished filling the cache. Idempotent — re-running just
     # UPSERTs the same rows over themselves.
     #
     # Uses execute_values batched at 5000 rows/page for the ~1.2M
     # minute samples; completes in seconds not minutes.
-    systemd.services.flume-autofill-bulkload = {
+    systemd.services.flume-data-bulkload = {
       description = "Bulk-load all cached Flume days into PostgreSQL";
       after = [ "postgresql.service" ];
       wants = [ "postgresql.service" ];
@@ -300,16 +300,16 @@ in
       };
       serviceConfig = {
         Type = "oneshot";
-        User = "flume-autofill";
-        Group = "flume-autofill";
-        WorkingDirectory = "/var/lib/flume-autofill";
+        User = "flume-data";
+        Group = "flume-data";
+        WorkingDirectory = "/var/lib/flume-data";
         ExecStart = "${pyenv}/bin/python -m flume_db_sync --from-cache";
         TimeoutStartSec = "30m";
         ProtectSystem = "strict";
         ProtectHome = true;
         NoNewPrivileges = true;
         PrivateTmp = true;
-        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+        ReadWritePaths = [ "/var/lib/flume-data" ];
         RestrictAddressFamilies = [
           "AF_UNIX"
           "AF_INET"
@@ -319,9 +319,9 @@ in
     };
 
     # Phase 3: Historical backfill template service. Instantiated manually
-    # via `systemctl start 'flume-autofill-backfill@<INSTANCE>.service'`
+    # via `systemctl start 'flume-data-backfill@<INSTANCE>.service'`
     # where INSTANCE matches `parse_systemd_instance` in
-    # flume_autofill/backfill.py — i.e. one of:
+    # flume_data/backfill.py — i.e. one of:
     #   YYYY                    e.g. 2024
     #   YYYY-MM                 e.g. 2024-05
     #   YYYY-MM-DD              e.g. 2024-05-18
@@ -335,7 +335,7 @@ in
     # No timer: backfill is operator-driven, not scheduled. The unit
     # holds the same LoadCredential set as the weekly service so it can
     # write back to HA's LTS namespace.
-    systemd.services."flume-autofill-backfill@" = {
+    systemd.services."flume-data-backfill@" = {
       description = "Flume autofill backfill for %i";
       after = [
         "network-online.target"
@@ -347,23 +347,23 @@ in
       environment = {
         PYTHONPATH = "${scriptDir}";
         PYTHONUNBUFFERED = "1";
-        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-autofill/zones.json";
+        FLUME_AUTOFILL_CONFIG = "/var/lib/flume-data/zones.json";
         FLUME_AUTOFILL_INSTANCE = "%i";
       };
 
       serviceConfig = {
         Type = "oneshot";
-        User = "flume-autofill";
-        Group = "flume-autofill";
-        WorkingDirectory = "/var/lib/flume-autofill";
-        ExecStart = "${pyenv}/bin/python -m flume_autofill backfill";
+        User = "flume-data";
+        Group = "flume-data";
+        WorkingDirectory = "/var/lib/flume-data";
+        ExecStart = "${pyenv}/bin/python -m flume_data backfill";
 
         LoadCredential = [
           "client_id:${config.sops.secrets."flume/client_id".path}"
           "client_secret:${config.sops.secrets."flume/client_secret".path}"
           "username:${config.sops.secrets."flume/username".path}"
           "password:${config.sops.secrets."flume/password".path}"
-          "ha_token:${config.sops.secrets."home-assistant/flume-autofill-token".path}"
+          "ha_token:${config.sops.secrets."home-assistant/flume-data-token".path}"
         ];
 
         # ── Hardening ───────────────────────────────────────────────
@@ -379,7 +379,7 @@ in
           "AF_INET"
           "AF_INET6"
         ];
-        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+        ReadWritePaths = [ "/var/lib/flume-data" ];
 
         # Multi-year backfills cap out around 10 minutes of wall-clock
         # in practice; give the driver headroom for the LTS write phase

@@ -8,7 +8,7 @@ import pytest
 # Config is imported only as an API-surface check: load_config must
 # return a Config and tests should be able to reference the type.
 # Keep it in the import line via `# noqa: F401` rather than dropping it.
-from flume_autofill.config import Config, Zone, load_config  # noqa: F401
+from flume_data.config import Config, Zone, load_config  # noqa: F401
 
 
 def test_load_minimal_valid_config(tmp_path):

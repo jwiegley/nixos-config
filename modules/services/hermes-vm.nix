@@ -209,6 +209,12 @@ in
     addToSystemPackages = false; # Known bug #6044 with HERMES_HOME export.
     container.enable = false; # The microVM IS the sandbox.
 
+    # Upstream restructured pyproject.toml so discord.py / telegram / slack
+    # only install via the `messaging` extras group. Without this, the
+    # gateway logs `Discord: discord.py not installed` and silently drops
+    # the Discord adapter (observed 2026-05-22 after a flake.lock bump).
+    extraDependencyGroups = [ "messaging" ];
+
     environmentFiles = [ "${stateDir}/env" ];
 
     settings = {

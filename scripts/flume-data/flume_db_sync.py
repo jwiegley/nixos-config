@@ -8,7 +8,7 @@ Two modes:
   whole history. Wired to the 6-hourly systemd timer.
 
 * `--from-cache` — replay every cached day in
-  /var/lib/flume-autofill/cache/per-minute-by-day into Postgres. Used
+  /var/lib/flume-data/cache/per-minute-by-day into Postgres. Used
   once after the initial historical pull completes.
 
 Both modes are idempotent: INSERT … ON CONFLICT (date, start_time) DO
@@ -17,7 +17,7 @@ UPDATE keeps the table in sync with the latest cache contents.
 Schema is created in-place on first run (CREATE TABLE IF NOT EXISTS),
 so deployment doesn't need a separate migration step.
 
-Run as the `flume-autofill` system user (peer-auth to Postgres).
+Run as the `flume-data` system user (peer-auth to Postgres).
 """
 
 from __future__ import annotations
@@ -47,15 +47,15 @@ from emit_segments_csv import (  # noqa: E402
     segment_to_local,
 )
 
-# The db, postgres role, and OS user are all named `flume-autofill` so
+# The db, postgres role, and OS user are all named `flume-data` so
 # the ensureDBOwnership assertion + peer-auth ident mapping align on a
 # single string. psycopg2 needs explicit user= (it can't reliably derive
 # from the OS identity inside the systemd sandbox) AND kwargs rather than
 # a DSN string (the hyphen confuses libpq's DSN-string quote handling —
 # embedded "..." gets treated as part of the value).
 DB_CONNECT_KWARGS: dict[str, str] = {
-    "dbname": "flume-autofill",
-    "user": "flume-autofill",
+    "dbname": "flume-data",
+    "user": "flume-data",
 }
 
 SCHEMA_DDL = """
@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS flume_minute_samples_date
 -- Pre-computed segments — derived from flume_minute_samples but cached
 -- here for fast Grafana/dashboard queries. You can compute alternative
 -- aggregations from flume_minute_samples directly without touching this
--- table. Detection rule lives in flume_autofill/detection.py.
+-- table. Detection rule lives in flume_data/detection.py.
 CREATE TABLE IF NOT EXISTS flume_segments (
     date                  DATE          NOT NULL,
     start_time            TIME          NOT NULL,

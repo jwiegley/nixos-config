@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from flume_autofill.destinations.csv_writer import write_per_day_totals
+from flume_data.destinations.csv_writer import write_per_day_totals
 
 
 def test_write_per_day_totals_creates_one_file_per_category(tmp_path):

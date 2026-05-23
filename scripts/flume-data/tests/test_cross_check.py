@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from flume_autofill.cross_check import (
+from flume_data.cross_check import (
     CategoryComparison,
     Tolerances,
     _build_category_comparisons,
@@ -192,11 +192,11 @@ def test_cross_check_run_writes_summary_max_delta(tmp_path, monkeypatch):
     )
 
     with patch(
-        "flume_autofill.sources.victoriametrics.VMSource"
+        "flume_data.sources.victoriametrics.VMSource"
     ) as VMMock, patch(
-        "flume_autofill.sources.flume_api.FlumeAPIClient"
+        "flume_data.sources.flume_api.FlumeAPIClient"
     ) as _FlumeMock, patch(
-        "flume_autofill.sources.ha_postgres.HAPostgresSource"
+        "flume_data.sources.ha_postgres.HAPostgresSource"
     ) as _HAMock, patch(
         "requests.post", side_effect=fake_post
     ), patch(
@@ -207,7 +207,7 @@ def test_cross_check_run_writes_summary_max_delta(tmp_path, monkeypatch):
         vm_inst.query_range.side_effect = vm_query_range
         VMMock.return_value = vm_inst
 
-        from flume_autofill.cross_check import run
+        from flume_data.cross_check import run
 
         rc = run(days=7)
 

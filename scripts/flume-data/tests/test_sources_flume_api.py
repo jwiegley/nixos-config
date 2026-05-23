@@ -7,7 +7,7 @@ import responses
 
 # FlumeAPIError is part of the public API surface; keep it imported so a
 # rename in the source breaks this test (defence against silent renames).
-from flume_autofill.sources.flume_api import (  # noqa: F401
+from flume_data.sources.flume_api import (  # noqa: F401
     Credentials,
     FlumeAPIClient,
     FlumeAPIError,

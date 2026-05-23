@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from flume_autofill.sources.ha_postgres import (
+from flume_data.sources.ha_postgres import (
     parse_sensor_states,
     parse_valve_events,
     valve_events_sql,

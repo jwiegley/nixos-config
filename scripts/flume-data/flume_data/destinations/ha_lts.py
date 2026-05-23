@@ -1,7 +1,7 @@
 """HA Long-Term Statistics writer via WebSocket ``recorder/import_statistics``.
 
 The Phase 3 backfill injects synthetic hourly cumulative totals into the
-``flume_autofill:water_*_total`` external-statistic namespace. HA's
+``flume_data:water_*_total`` external-statistic namespace. HA's
 recorder integration documents two operations we need:
 
 - ``recorder/import_statistics`` — insert/overwrite hourly LTS records
@@ -9,7 +9,7 @@ recorder integration documents two operations we need:
 - ``recorder/clear_statistics`` — wipe a statistic namespace; used by
   ``backfill --unpromote``.
 
-The ``flume_autofill:`` prefix marks these as external statistics so
+The ``flume_data:`` prefix marks these as external statistics so
 they remain visible alongside the live ``sensor.water_*_total`` series
 but never compete with the recorder's own write path.
 

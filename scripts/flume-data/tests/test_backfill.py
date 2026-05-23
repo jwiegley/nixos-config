@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from flume_autofill.backfill import (
+from flume_data.backfill import (
     SourceCoverage,
     parse_systemd_instance,
     select_source_for_window,

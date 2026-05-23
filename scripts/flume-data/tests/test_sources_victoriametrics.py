@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import responses
 
-from flume_autofill.sources.victoriametrics import VMSource
+from flume_data.sources.victoriametrics import VMSource
 
 
 @responses.activate

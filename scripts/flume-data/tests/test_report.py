@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from flume_autofill.report import WeeklyReport, render_html, render_text
+from flume_data.report import WeeklyReport, render_html, render_text
 
 
 def make_report() -> WeeklyReport:

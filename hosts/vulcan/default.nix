@@ -73,7 +73,7 @@
     ../../modules/services/gitea-actions-runner.nix
     ../../modules/services/gitea.nix
     ../../modules/services/github-gitea-mirror.nix
-    ../../modules/services/flume-autofill.nix
+    ../../modules/services/flume-data.nix
     ../../modules/services/grafana.nix
     ../../modules/services/home-assistant-metric-trick.nix
     ../../modules/services/home-assistant.nix
@@ -280,12 +280,12 @@
   #          username: <Flume account email>
   #          password: <Flume account password>
   #        home-assistant:
-  #          flume-autofill-token: <long-lived HA token>
+  #          flume-data-token: <long-lived HA token>
   #   2. sudo nixos-rebuild switch --flake '/etc/nixos.worktrees/water-attribution#vulcan'
   #
   # Until then, the Phase 1 templates + utility meters deploy on their
   # own (gated GPM sensors, integration totals, weekly/monthly cycles).
-  services.flume-autofill.enable = true;
+  services.flume-data.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

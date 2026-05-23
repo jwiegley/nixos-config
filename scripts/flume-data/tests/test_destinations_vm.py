@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import responses
 
-from flume_autofill.destinations.vm_writer import (
+from flume_data.destinations.vm_writer import (
     DataPoint,
     format_line_protocol,
     write_points,

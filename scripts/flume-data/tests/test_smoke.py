@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_package_imports():
-    """flume_autofill imports cleanly."""
-    import flume_autofill
-    assert flume_autofill.__version__ == "0.1.0"
+    """flume_data imports cleanly."""
+    import flume_data
+    assert flume_data.__version__ == "0.1.0"
 
 
 def test_cli_help_works():
@@ -17,7 +17,7 @@ def test_cli_help_works():
     import subprocess
     import sys
     result = subprocess.run(
-        [sys.executable, "-m", "flume_autofill", "--help"],
+        [sys.executable, "-m", "flume_data", "--help"],
         capture_output=True,
         text=True,
         cwd=str(ROOT),

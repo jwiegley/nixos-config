@@ -140,5 +140,5 @@ def _build_session(
 
 
 def run_cli(input_path: str) -> int:
-    """CLI helper used by `flume-autofill detect --input X.csv`."""
+    """CLI helper used by `flume-data detect --input X.csv`."""
     raise NotImplementedError("Wired in Phase 2 alongside the Flume API source.")

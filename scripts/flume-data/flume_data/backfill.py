@@ -12,7 +12,7 @@ High-level shape::
         2. select_source_for_window() picks VM vs Flume API per window
         3. _drive_backfill() chunks the window by day, runs detection,
            and forwards the per-day rollups to the enabled destinations
-        4. _promote(through) splices the flume_autofill: namespace into
+        4. _promote(through) splices the flume_data: namespace into
            the live sensor.water_*_total LTS namespace
         5. _unpromote(through) reverses _promote via recorder/clear_statistics
 
@@ -115,7 +115,7 @@ def discover_coverage() -> SourceCoverage:
 
     cfg = load_config(
         os.environ.get(
-            "FLUME_AUTOFILL_CONFIG", "/var/lib/flume-autofill/zones.json"
+            "FLUME_AUTOFILL_CONFIG", "/var/lib/flume-data/zones.json"
         )
     )
 
@@ -171,7 +171,7 @@ def discover_coverage() -> SourceCoverage:
             )
             FlumeAPIClient(
                 creds,
-                token_cache_path=Path("/var/lib/flume-autofill/token.json"),
+                token_cache_path=Path("/var/lib/flume-data/token.json"),
             )
             # TODO: needs /users/me + device-id discovery before the API
             # path goes live. Tracked in docs/WATER_ATTRIBUTION.md §v2.
@@ -250,7 +250,7 @@ def _drive_backfill(
 
     cfg = load_config(
         os.environ.get(
-            "FLUME_AUTOFILL_CONFIG", "/var/lib/flume-autofill/zones.json"
+            "FLUME_AUTOFILL_CONFIG", "/var/lib/flume-data/zones.json"
         )
     )
     det_cfg = DetectionConfig(
@@ -301,7 +301,7 @@ def _drive_backfill(
         )
         current += timedelta(days=1)
 
-    out_dir = Path("/var/lib/flume-autofill/backfill")
+    out_dir = Path("/var/lib/flume-data/backfill")
 
     # 2. CSV destination
     if "csv" in dests and per_day_rows:
@@ -320,7 +320,7 @@ def _drive_backfill(
                     measurement="gal",
                     tags={
                         "entity_id": (
-                            f"flume_autofill_backfill:water_{cat}_total"
+                            f"flume_data_backfill:water_{cat}_total"
                         ),
                         "water_category": cat,
                         "generation": "water_attribution_v1",
@@ -335,7 +335,7 @@ def _drive_backfill(
         print(f"  VM: wrote {len(points)} line-protocol points")
 
     # 4. LTS destination — hourly cumulative points in the
-    # flume_autofill: external-statistic namespace.
+    # flume_data: external-statistic namespace.
     if "lts" in dests and per_day_rows and not args.dry_run:
         cred_dir = Path(os.environ["CREDENTIALS_DIRECTORY"])
         ha_token = (cred_dir / "ha_token").read_text().strip()
@@ -353,7 +353,7 @@ def _drive_backfill(
             by_category.setdefault(cat, []).append(sp)
 
         for cat, points_lts in by_category.items():
-            stat_id = f"flume_autofill:water_{cat}_total"
+            stat_id = f"flume_data:water_{cat}_total"
             import_statistics(
                 ws_url=ws_url,
                 access_token=ha_token,
@@ -368,7 +368,7 @@ def _drive_backfill(
 
 
 def _promote(through: str) -> int:
-    """Splice ``flume_autofill:*`` LTS into live ``sensor.water_*_total``.
+    """Splice ``flume_data:*`` LTS into live ``sensor.water_*_total``.
 
     Fetches the backfilled namespace through ``through`` via
     ``recorder/statistics_during_period`` and re-imports each hour into
@@ -391,7 +391,7 @@ def _promote(through: str) -> int:
     )
 
     for cat in ["pool_autofill", "irrigation_total", "domestic_hot", "other"]:
-        backfill_id = f"flume_autofill:water_{cat}_total"
+        backfill_id = f"flume_data:water_{cat}_total"
         live_id = f"sensor.water_{cat}_total"
 
         ws = _ws_connect("ws://127.0.0.1:8123/api/websocket", ha_token)
@@ -444,7 +444,7 @@ def _promote(through: str) -> int:
 def _unpromote(through: str) -> int:
     """Reverse :func:`_promote` via ``recorder/clear_statistics``.
 
-    The ``flume_autofill:`` backfill namespace is left intact as an
+    The ``flume_data:`` backfill namespace is left intact as an
     audit trail — only the live ``sensor.*`` namespace is cleared. Use
     ``_promote`` again to restore.
 

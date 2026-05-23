@@ -8,7 +8,7 @@ from types import ModuleType
 
 import pytest
 
-from flume_autofill.destinations.ha_lts import (
+from flume_data.destinations.ha_lts import (
     StatisticsPoint,
     build_import_payload,
 )
@@ -30,13 +30,13 @@ def test_build_import_payload_shapes_message_correctly():
         ),
     ]
     payload = build_import_payload(
-        statistic_id="flume_autofill:water_pool_autofill_total",
+        statistic_id="flume_data:water_pool_autofill_total",
         name="Water Pool Autofill Total (backfilled)",
         unit_of_measurement="gal",
         points=points,
     )
     assert payload["type"] == "recorder/import_statistics"
-    assert payload["statistic_id"] == "flume_autofill:water_pool_autofill_total"
+    assert payload["statistic_id"] == "flume_data:water_pool_autofill_total"
     assert payload["has_sum"] is True
     assert payload["has_mean"] is False
     assert payload["unit_of_measurement"] == "gal"
@@ -80,7 +80,7 @@ def _install_fake_websocket(monkeypatch, ws: _FakeWebSocket) -> None:
 
 def test_ws_connect_three_step_handshake(monkeypatch):
     """``_ws_connect`` walks auth_required → auth → auth_ok in order."""
-    from flume_autofill.destinations.ha_lts import _ws_connect
+    from flume_data.destinations.ha_lts import _ws_connect
 
     ws = _FakeWebSocket(
         inbound=[
@@ -101,7 +101,7 @@ def test_ws_connect_three_step_handshake(monkeypatch):
 
 def test_ws_connect_raises_on_auth_invalid(monkeypatch):
     """An ``auth_invalid`` response surfaces as RuntimeError, no token leak."""
-    from flume_autofill.destinations.ha_lts import _ws_connect
+    from flume_data.destinations.ha_lts import _ws_connect
 
     ws = _FakeWebSocket(
         inbound=[
@@ -119,7 +119,7 @@ def test_ws_connect_raises_on_auth_invalid(monkeypatch):
 
 def test_ws_connect_raises_on_missing_greeting(monkeypatch):
     """A server that opens with anything but ``auth_required`` is rejected."""
-    from flume_autofill.destinations.ha_lts import _ws_connect
+    from flume_data.destinations.ha_lts import _ws_connect
 
     ws = _FakeWebSocket(
         inbound=[
@@ -135,7 +135,7 @@ def test_ws_connect_raises_on_missing_greeting(monkeypatch):
 
 def test_import_statistics_after_handshake_uses_command_response(monkeypatch):
     """End-to-end: after auth_ok, ``import_statistics`` sees the command ack."""
-    from flume_autofill.destinations.ha_lts import (
+    from flume_data.destinations.ha_lts import (
         StatisticsPoint as _SP,
         import_statistics,
     )
@@ -161,7 +161,7 @@ def test_import_statistics_after_handshake_uses_command_response(monkeypatch):
     ack = import_statistics(
         ws_url="ws://test/api/websocket",
         access_token="fake-token",
-        statistic_id="flume_autofill:water_pool_autofill_total",
+        statistic_id="flume_data:water_pool_autofill_total",
         name="Water Pool Autofill Total (backfilled)",
         unit_of_measurement="gal",
         points=points,

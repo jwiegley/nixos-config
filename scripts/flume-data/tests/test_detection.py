@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from flume_autofill.detection import (
+from flume_data.detection import (
     AutofillSession,  # noqa: F401  # public-API surface check
     DetectionConfig,
     detect_autofill_sessions,

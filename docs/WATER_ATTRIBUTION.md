@@ -73,30 +73,30 @@ Includes:
 - Cross-check anomaly section (only when delta > tolerance)
 
 Tolerance defaults: 5 gal absolute, 3% relative. Tune via
-`services.flume-autofill.deltaToleranceGal` / `deltaTolerancePct`.
+`services.flume-data.deltaToleranceGal` / `deltaTolerancePct`.
 
 ## Historical backfill
 
 Discover what's available:
 
-    sudo -u flume-autofill /run/current-system/sw/bin/python -m flume_autofill backfill --discover
+    sudo -u flume-data /run/current-system/sw/bin/python -m flume_data backfill --discover
 
 Backfill a year:
 
-    sudo systemctl start 'flume-autofill-backfill@2024.service'
+    sudo systemctl start 'flume-data-backfill@2024.service'
 
 Backfill a specific day (e.g., from a Phase 2 anomaly email):
 
-    sudo systemctl start 'flume-autofill-backfill@2026-05-18.service'
+    sudo systemctl start 'flume-data-backfill@2026-05-18.service'
 
 Once values look correct in HA's Statistics tab and Grafana, promote into the
 live LTS namespace:
 
-    flume-autofill backfill --promote --through 2026-05-21
+    flume-data backfill --promote --through 2026-05-21
 
 Rollback:
 
-    flume-autofill backfill --unpromote --through 2026-05-21
+    flume-data backfill --unpromote --through 2026-05-21
 
 ## v1 backfill scope and limitations
 

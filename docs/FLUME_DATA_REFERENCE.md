@@ -6,7 +6,7 @@ how to query / re-process it for your own analyses.
 Companion to `docs/WATER_ATTRIBUTION.md` (which covers the live Phase 1/2/3
 attribution stack inside Home Assistant). This document is specifically
 about the **per-minute historical Flume data** persisted in PostgreSQL and
-on disk under `/var/lib/flume-autofill/`.
+on disk under `/var/lib/flume-data/`.
 
 ---
 
@@ -17,10 +17,10 @@ stream, each serving a different need:
 
 | Location | Format | Content | Purpose |
 |---|---|---|---|
-| `/var/lib/flume-autofill/cache/per-minute-by-day/YYYY-MM-DD.json` | JSON | One file per local date, `[[iso_naive_local_ts, gpm], ...]` | Source of truth on disk; cheap re-processing |
-| `/var/lib/flume-autofill/backfill/flume-segments.csv` | CSV | One row per continuous-usage segment + autofill classification | Excel-friendly export |
-| `/var/lib/flume-autofill/backfill/flume-day-totals.csv` | CSV | One row per day with sum/count rollups | Excel-friendly day-level view |
-| PostgreSQL `flume-autofill` database | SQL | Two tables + one view (see schema below) | Ad-hoc SQL queries, Grafana, joins |
+| `/var/lib/flume-data/cache/per-minute-by-day/YYYY-MM-DD.json` | JSON | One file per local date, `[[iso_naive_local_ts, gpm], ...]` | Source of truth on disk; cheap re-processing |
+| `/var/lib/flume-data/backfill/flume-segments.csv` | CSV | One row per continuous-usage segment + autofill classification | Excel-friendly export |
+| `/var/lib/flume-data/backfill/flume-day-totals.csv` | CSV | One row per day with sum/count rollups | Excel-friendly day-level view |
+| PostgreSQL `flume-data` database | SQL | Two tables + one view (see schema below) | Ad-hoc SQL queries, Grafana, joins |
 
 **The PostgreSQL tables are the recommended primary source for analysis.**
 The CSVs are convenience exports; the cache files are intermediate. All
@@ -105,12 +105,12 @@ Auto-updates when `flume_segments` changes; no separate sync needed.
 
 ## How to connect
 
-The database is owned by the OS user `flume-autofill` via Postgres peer
+The database is owned by the OS user `flume-data` via Postgres peer
 authentication. The Grafana service user also has peer access (read).
 For interactive queries:
 
 ```bash
-sudo -u flume-autofill psql -d flume-autofill
+sudo -u flume-data psql -d flume-data
 ```
 
 For Python from outside the systemd sandbox (e.g., a notebook):
@@ -118,7 +118,7 @@ For Python from outside the systemd sandbox (e.g., a notebook):
 ```python
 import psycopg2
 # kwargs form — DSN string mangles the hyphenated dbname
-conn = psycopg2.connect(dbname="flume-autofill", user="flume-autofill")
+conn = psycopg2.connect(dbname="flume-data", user="flume-data")
 ```
 
 For Grafana, add a PostgreSQL data source pointing at
@@ -269,9 +269,9 @@ The pipeline:
             │  ≤ 120 req/hr (Flume hard limit)
             │  MIN bucket, 24h chunks (Flume hard limit)
             ▼
-   /var/lib/flume-autofill/cache/per-minute-by-day/YYYY-MM-DD.json
+   /var/lib/flume-data/cache/per-minute-by-day/YYYY-MM-DD.json
             │
-            ├──→ flume-autofill-daily-sync.service (oneshot, every 6h)
+            ├──→ flume-data-daily-sync.service (oneshot, every 6h)
             │       loads last 3 days from cache, computes segments,
             │       UPSERTs into BOTH tables.
             │
@@ -281,8 +281,8 @@ The pipeline:
 
 ### The 6-hourly sync timer
 
-`flume-autofill-daily-sync.timer` fires at **00:30, 06:30, 12:30, 18:30**
-local time. It triggers `flume-autofill-daily-sync.service`, which runs
+`flume-data-daily-sync.timer` fires at **00:30, 06:30, 12:30, 18:30**
+local time. It triggers `flume-data-daily-sync.service`, which runs
 `python -m flume_db_sync --days 3`.
 
 The 3-day rolling window absorbs late-arriving data without re-fetching
@@ -292,13 +292,13 @@ on a typical run — well under the per-hour budget.
 
 ```bash
 # Check next firing time
-systemctl list-timers flume-autofill-daily-sync.timer
+systemctl list-timers flume-data-daily-sync.timer
 
 # Trigger a sync immediately
-sudo systemctl start flume-autofill-daily-sync.service
+sudo systemctl start flume-data-daily-sync.service
 
 # See what happened (with credential redaction)
-sudo journalctl -u flume-autofill-daily-sync.service --since '10 min ago' \
+sudo journalctl -u flume-data-daily-sync.service --since '10 min ago' \
     --no-pager 2>&1 | \
   sed -E '
     s/(password|client_secret|username|access_token)[[:space:]]*[:=][[:space:]]*[^[:space:]"]+/\1=[REDACTED]/gi
@@ -312,8 +312,8 @@ sudo journalctl -u flume-autofill-daily-sync.service --since '10 min ago' \
 After a fresh historical pull (or any time the cache and DB diverge):
 
 ```bash
-sudo systemd-run --uid=$(id -u flume-autofill) --gid=$(id -g flume-autofill) \
-    --setenv=PYTHONPATH=$(systemctl show flume-autofill-daily-sync.service \
+sudo systemd-run --uid=$(id -u flume-data) --gid=$(id -g flume-data) \
+    --setenv=PYTHONPATH=$(systemctl show flume-data-daily-sync.service \
         --property=Environment --value | tr ' ' '\n' | \
         grep ^PYTHONPATH= | cut -d= -f2) \
     --pipe --wait \
@@ -335,16 +335,16 @@ you want to do a bulk historical fetch:
 # Pull the entire device history (~7-8 hours wall time at 30s/call)
 sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
     /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-autofill/emit_segments_csv.py
+    /etc/nixos/scripts/flume-data/emit_segments_csv.py
 
 # Or a specific date range
 sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
     /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-autofill/emit_segments_csv.py \
+    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
     --from 2024-02-01 --to 2024-12-31
 ```
 
-The cache directory under `/var/lib/flume-autofill/cache/` persists
+The cache directory under `/var/lib/flume-data/cache/` persists
 across runs — if the script is interrupted, just re-run; cached days
 are skipped.
 
@@ -362,7 +362,7 @@ float now opens at 4 GPM instead of 3.5), the segments table needs to be
 rebuilt:
 
 1. Edit the detection constants in
-   `/etc/nixos/scripts/flume-autofill/flume_autofill/detection.py` (or
+   `/etc/nixos/scripts/flume-data/flume_data/detection.py` (or
    the duplicate in `emit_segments_csv.py` — long-term, deduplicate).
 2. `nixos-rebuild switch` to deploy.
 3. `TRUNCATE flume_segments` to drop the old classification.
@@ -372,7 +372,7 @@ rebuilt:
 
 ### Backups
 
-The whole `flume-autofill` database is included in the daily
+The whole `flume-data` database is included in the daily
 `postgresql-backup.timer` snapshot at 2 AM (writes to
 `/tank/Backups/PostgreSQL/`). No additional backup step needed.
 
@@ -390,11 +390,11 @@ Run a targeted re-sync:
 # Day-by-day re-fetch + re-sync from API
 sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
     /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-autofill/emit_segments_csv.py \
+    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
     --from 2026-05-10 --to 2026-05-22
 
 # Bulk-load the now-up-to-date cache into Postgres
-sudo systemd-run --uid=$(id -u flume-autofill) ... -m flume_db_sync --from-cache
+sudo systemd-run --uid=$(id -u flume-data) ... -m flume_db_sync --from-cache
 ```
 
 ### Monitoring health
@@ -452,10 +452,10 @@ the Flume API and bulkload:
 ```bash
 sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
     /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-autofill/emit_segments_csv.py \
+    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
     --from YYYY-MM-DD --to YYYY-MM-DD
 
-sudo systemctl start flume-autofill-bulkload.service
+sudo systemctl start flume-data-bulkload.service
 ```
 
 The bulkload is idempotent (UPSERT semantics on the natural keys), so
@@ -487,12 +487,12 @@ on `ts` (e.g., `flume_minute_annotations`).
 
 ## Where things are defined in code
 
-* Schema DDL: `scripts/flume-autofill/flume_db_sync.py:SCHEMA_DDL`
-* Segment detection: `scripts/flume-autofill/flume_autofill/detection.py`
-  + `scripts/flume-autofill/emit_segments_csv.py:detect_segments` +
+* Schema DDL: `scripts/flume-data/flume_db_sync.py:SCHEMA_DDL`
+* Segment detection: `scripts/flume-data/flume_data/detection.py`
+  + `scripts/flume-data/emit_segments_csv.py:detect_segments` +
   `is_pool_autofill_segment`
-* Cache shape: `scripts/flume-autofill/emit_segments_csv.py:chunked_pull`
+* Cache shape: `scripts/flume-data/emit_segments_csv.py:chunked_pull`
   (writes one JSON per day with `[[iso_naive_ts, gpm], ...]`)
-* NixOS module: `modules/services/flume-autofill.nix`
+* NixOS module: `modules/services/flume-data.nix`
 * DB provisioning: `modules/services/databases.nix` (database +
   `ensureUsers` + pg_hba peer-auth lines)

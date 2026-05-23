@@ -10,17 +10,17 @@ The script authenticates against Flume's Personal API, derives `user_id`
 from the JWT's `data` claim, lists devices to find `device_id`, queries
 per-minute samples in 7-day chunks (well under the API's per-call size
 limits and 120-req/hr rate budget), runs detection from the live
-`flume_autofill.detection` module, and writes:
+`flume_data.detection` module, and writes:
 
-    /var/lib/flume-autofill/backfill/flume-segments.csv
-    /var/lib/flume-autofill/backfill/flume-day-totals.csv
+    /var/lib/flume-data/backfill/flume-segments.csv
+    /var/lib/flume-data/backfill/flume-day-totals.csv
 
-Both are owned by flume-autofill:flume-autofill and readable by group
+Both are owned by flume-data:flume-data and readable by group
 `users` (so you can scp / open without sudo).
 
 Run as root (the systemd unit handles LoadCredential):
 
-    sudo systemctl start flume-autofill-emit-csv.service
+    sudo systemctl start flume-data-emit-csv.service
 
 Or interactively for development:
 
@@ -49,7 +49,7 @@ import requests
 FLUME_API_BASE = "https://api.flumewater.com"
 FLUME_RATE_LIMIT_PER_HOUR = 120
 
-# Autofill detection (must match flume_autofill.detection / Phase 1 HA rule)
+# Autofill detection (must match flume_data.detection / Phase 1 HA rule)
 GPM_MIN = 3.0
 GPM_MAX = 5.0
 WINDOW_MINUTES = 10
@@ -61,7 +61,7 @@ SEGMENT_GPM_THRESHOLD = 0.05
 SEGMENT_MAX_INNER_GAP_MIN = 1
 
 # Output
-OUTPUT_DIR = Path("/var/lib/flume-autofill/backfill")
+OUTPUT_DIR = Path("/var/lib/flume-data/backfill")
 SEGMENTS_CSV = OUTPUT_DIR / "flume-segments.csv"
 DAY_TOTALS_CSV = OUTPUT_DIR / "flume-day-totals.csv"
 
@@ -269,7 +269,7 @@ def discover_earliest_data(
     return datetime(earliest_found.year, earliest_found.month, 1)
 
 
-CACHE_DIR = Path("/var/lib/flume-autofill/cache/per-minute-by-day")
+CACHE_DIR = Path("/var/lib/flume-data/cache/per-minute-by-day")
 
 
 def chunked_pull(

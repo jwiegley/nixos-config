@@ -339,7 +339,7 @@ def run(days: int = 7) -> int:
     cfg = load_config(
         os.environ.get(
             "FLUME_AUTOFILL_CONFIG",
-            "/var/lib/flume-autofill/zones.json",
+            "/var/lib/flume-data/zones.json",
         )
     )
 
@@ -362,7 +362,7 @@ def run(days: int = 7) -> int:
     # for a small "third-witness" subset of windows.
     _flume = FlumeAPIClient(
         creds,
-        token_cache_path=Path("/var/lib/flume-autofill/token.json"),
+        token_cache_path=Path("/var/lib/flume-data/token.json"),
     )
     vm = VMSource(cfg.victoriametrics_url)
     _ha = HAPostgresSource(cfg.ha_postgres_dsn)
@@ -386,12 +386,12 @@ def run(days: int = 7) -> int:
         per_day_rows.append((s.start.date(), "pool_autofill", s.gallons))
 
     # The reports directory is overridable for tests; production points
-    # at /var/lib/flume-autofill/reports (writable by the flume-autofill
-    # user, see modules/services/flume-autofill.nix tmpfiles entry).
+    # at /var/lib/flume-data/reports (writable by the flume-data
+    # user, see modules/services/flume-data.nix tmpfiles entry).
     reports_root = Path(
         os.environ.get(
             "FLUME_AUTOFILL_REPORTS_DIR",
-            "/var/lib/flume-autofill/reports",
+            "/var/lib/flume-data/reports",
         )
     )
     out_dir = reports_root / end.date().isoformat()

@@ -138,7 +138,7 @@ in
         "shlink"
         "speedtest_tracker"
         "nodered_events"
-        "flume-autofill"
+        "flume-data"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -180,7 +180,7 @@ in
         { name = "node-red"; }
         { name = "grafana"; }
         {
-          name = "flume-autofill";
+          name = "flume-data";
           ensureDBOwnership = true;
         }
       ];
@@ -194,9 +194,9 @@ in
         local   immich    immich                  peer
         local   nodered_events  node-red                peer
         local   nodered_events  grafana                 peer
-        local   flume-autofill   flume-autofill          peer
-        local   flume-autofill   grafana                 peer
-        local   flume-autofill   johnw                   peer
+        local   flume-data   flume-data          peer
+        local   flume-data   grafana                 peer
+        local   flume-data   johnw                   peer
         local   all       all                     scram-sha-256
 
         # Localhost connections - require password
@@ -338,13 +338,13 @@ in
       ${config.services.postgresql.package}/bin/psql -d org -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO openclaw;"
       ${config.services.postgresql.package}/bin/psql -d org -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO openclaw;"
 
-      # Read-only access to the flume-autofill database for the johnw
+      # Read-only access to the flume-data database for the johnw
       # OS user (peer auth). Same shape as the openclaw → org grant above:
       # CONNECT + USAGE on public + SELECT on current + future tables.
-      ${config.services.postgresql.package}/bin/psql -d "flume-autofill" -c 'GRANT CONNECT ON DATABASE "flume-autofill" TO johnw;'
-      ${config.services.postgresql.package}/bin/psql -d "flume-autofill" -c "GRANT USAGE ON SCHEMA public TO johnw;"
-      ${config.services.postgresql.package}/bin/psql -d "flume-autofill" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO johnw;"
-      ${config.services.postgresql.package}/bin/psql -d "flume-autofill" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"flume-autofill\" IN SCHEMA public GRANT SELECT ON TABLES TO johnw;"
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c 'GRANT CONNECT ON DATABASE "flume-data" TO johnw;'
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT USAGE ON SCHEMA public TO johnw;"
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO johnw;"
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"flume-data\" IN SCHEMA public GRANT SELECT ON TABLES TO johnw;"
     '';
   };
 

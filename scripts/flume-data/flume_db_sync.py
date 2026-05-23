@@ -46,6 +46,12 @@ from emit_segments_csv import (  # noqa: E402
     RateLimiter,
     segment_to_local,
 )
+from flume_data.classify_v2 import classify_segment  # noqa: E402
+from flume_data.irrigation_sessions import (  # noqa: E402
+    HA_RECORDER_RETENTION_DAYS,
+    extract_sessions_from_ha,
+    persist_sessions,
+)
 
 # The db, postgres role, and OS user are all named `flume-data` so
 # the ensureDBOwnership assertion + peer-auth ident mapping align on a
@@ -57,6 +63,11 @@ DB_CONNECT_KWARGS: dict[str, str] = {
     "dbname": "flume-data",
     "user": "flume-data",
 }
+
+# HA Postgres DSN — peer auth via Unix socket, no password. Granted in
+# modules/services/databases.nix (pg_hba `local hass flume-data peer`
+# + SELECT on states / states_meta).
+HA_POSTGRES_DSN = "postgresql:///hass"
 
 SCHEMA_DDL = """
 -- Raw per-minute Flume samples — the authoritative ground truth. Every
@@ -96,6 +107,34 @@ CREATE INDEX IF NOT EXISTS flume_segments_autofill
     ON flume_segments(date)
     WHERE category = 'pool_autofill';
 
+-- v2 classification (B-Hyve-aware). category stays untouched as the v1
+-- historical label; category_v2 is the corrected label that incorporates
+-- HA's valve.sprinkler_control_*_zone events. NULL category_v2 means
+-- "not yet classified" — backfill_v2.py populates it for all rows.
+ALTER TABLE flume_segments
+    ADD COLUMN IF NOT EXISTS category_v2             TEXT;
+ALTER TABLE flume_segments
+    ADD COLUMN IF NOT EXISTS category_v2_reason      TEXT;
+ALTER TABLE flume_segments
+    ADD COLUMN IF NOT EXISTS category_v2_computed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS flume_segments_category_v2_date
+    ON flume_segments(category_v2, date);
+
+-- B-Hyve irrigation sessions, merged from per-zone valve open/close
+-- intervals. Source = 'bhyve_valve' for HA-derived sessions; the
+-- column allows future heuristics-based fillers without schema churn.
+CREATE TABLE IF NOT EXISTS irrigation_sessions (
+    session_id   SERIAL       PRIMARY KEY,
+    start_ts     TIMESTAMP    NOT NULL UNIQUE,
+    end_ts       TIMESTAMP    NOT NULL,
+    zone_count   INT          NOT NULL,
+    zones        TEXT         NOT NULL,
+    source       TEXT         NOT NULL DEFAULT 'bhyve_valve',
+    detected_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS irrigation_sessions_range
+    ON irrigation_sessions (start_ts, end_ts);
+
 -- Convenience view: per-day rollups from the derived segments table.
 -- (For per-day rollups computed directly from flume_minute_samples, see
 -- the README — single SQL query.)
@@ -118,18 +157,23 @@ ON CONFLICT (ts) DO UPDATE SET gpm = EXCLUDED.gpm;
 UPSERT_SQL = """
 INSERT INTO flume_segments
        (date, start_time, end_time, duration_min, gallons, mean_gpm,
-        peak_gpm, category, autofill_session_id)
+        peak_gpm, category, autofill_session_id,
+        category_v2, category_v2_reason, category_v2_computed_at)
 VALUES (%s,   %s,         %s,       %s,           %s,      %s,
+        %s,       %s,       %s,
         %s,       %s,       %s)
 ON CONFLICT (date, start_time) DO UPDATE SET
-    end_time            = EXCLUDED.end_time,
-    duration_min        = EXCLUDED.duration_min,
-    gallons             = EXCLUDED.gallons,
-    mean_gpm            = EXCLUDED.mean_gpm,
-    peak_gpm            = EXCLUDED.peak_gpm,
-    category            = EXCLUDED.category,
-    autofill_session_id = EXCLUDED.autofill_session_id,
-    detected_at         = now();
+    end_time                = EXCLUDED.end_time,
+    duration_min            = EXCLUDED.duration_min,
+    gallons                 = EXCLUDED.gallons,
+    mean_gpm                = EXCLUDED.mean_gpm,
+    peak_gpm                = EXCLUDED.peak_gpm,
+    category                = EXCLUDED.category,
+    autofill_session_id     = EXCLUDED.autofill_session_id,
+    category_v2             = EXCLUDED.category_v2,
+    category_v2_reason      = EXCLUDED.category_v2_reason,
+    category_v2_computed_at = EXCLUDED.category_v2_computed_at,
+    detected_at             = now();
 """
 
 
@@ -191,10 +235,36 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
             sample_dict[ts] = gpm
     sample_rows = list(sample_dict.items())
 
-    # 2) Derived segments — precomputed for fast dashboard queries.
+    # 2) Refresh B-Hyve irrigation sessions for the date range from HA
+    # Postgres. Only the dates we're syncing — anything older than HA's
+    # ~30-day recorder retention won't return rows and the v2 classifier
+    # falls back to its no-valve-data branch. Errors here are non-fatal:
+    # we degrade to v1-equivalent (rules 1+2 only) rather than blocking
+    # the sync.
+    range_start = datetime.combine(target_dates[0], datetime.min.time())
+    range_end = datetime.combine(
+        target_dates[-1] + timedelta(days=1), datetime.min.time()
+    )
+    try:
+        sessions = extract_sessions_from_ha(
+            HA_POSTGRES_DSN, range_start, range_end
+        )
+    except Exception as exc:
+        print(f"warning: HA Postgres unreachable, v2 classifier degraded: {exc}")
+        sessions = []
+
+    # 3) Derived segments — precomputed for fast dashboard queries.
+    # Also compute v2 classification using the refreshed irrigation
+    # sessions. Per-segment slice of `samples` is reused for both the
+    # v1 detector (already computed by detect_segments) and the v2
+    # classifier (needs per-minute gpm for stddev / in-band frac).
     segments = detect_segments(samples)
     segment_rows: list[tuple] = []
     autofill_session_by_date: dict[date, int] = defaultdict(int)
+    now_ts = datetime.now()
+    sessions_by_date_cache: dict[date, list[tuple[datetime, datetime]]] = {}
+    valve_data_by_date: dict[date, bool] = {}
+
     for start_i, end_i in segments:
         span = samples[start_i : end_i + 1]
         gpms = [g for _, g in span]
@@ -214,9 +284,38 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
             autofill_session_by_date[d] += 1
             session_id = autofill_session_by_date[d]
             category = "pool_autofill"
+
+        # v2 classification — restrict the irrigation_sessions list to
+        # those overlapping this date and decide if we have any B-Hyve
+        # context to apply rule 3.
+        if d not in sessions_by_date_cache:
+            day_start = datetime.combine(d, datetime.min.time())
+            day_end = day_start + timedelta(days=1)
+            sessions_by_date_cache[d] = [
+                (s.start_ts, s.end_ts)
+                for s in sessions
+                if s.start_ts < day_end and s.end_ts > day_start
+            ]
+            # Have-valve-data heuristic for the sync path: yes if we
+            # got ANY sessions back in the range (means HA recorder
+            # retention covers it).
+            valve_data_by_date[d] = bool(sessions) and (
+                d >= (date.today() - timedelta(days=HA_RECORDER_RETENTION_DAYS))
+            )
+        v2 = classify_segment(
+            seg_date=d,
+            seg_start_time=start_local.time(),
+            seg_end_time=end_local.time(),
+            mean_gpm=float(mean_gpm),
+            per_minute_gpm=gpms,
+            irrigation_sessions=sessions_by_date_cache[d],
+            have_valve_data=valve_data_by_date[d],
+        )
+
         segment_rows.append(
             (d, start_local.time(), end_local.time(), duration, gallons,
-             mean_gpm, peak_gpm, category, session_id)
+             mean_gpm, peak_gpm, category, session_id,
+             v2.category, v2.reason, now_ts)
         )
 
     with psycopg2.connect(**DB_CONNECT_KWARGS) as conn:
@@ -240,6 +339,9 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
                     cur.executemany(UPSERT_SAMPLE_SQL, sample_rows)
             if segment_rows:
                 cur.executemany(UPSERT_SQL, segment_rows)
+            persisted = persist_sessions(conn, sessions)
+            if persisted:
+                print(f"  upserted {persisted} irrigation sessions")
         conn.commit()
     return (len(sample_rows), len(segment_rows))
 

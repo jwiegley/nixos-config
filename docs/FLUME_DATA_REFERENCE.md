@@ -86,6 +86,59 @@ Otherwise `'other'`. `autofill_session_id` is a per-day sequence number
 (1 = first autofill of that day) — useful for grouping multiple
 soak-cycles of a single irrigation/fill event in a future v2.
 
+#### v2 columns — B-Hyve-aware classification
+
+```sql
+ALTER TABLE flume_segments
+    ADD COLUMN category_v2             TEXT,         -- 'pool_autofill' | 'irrigation' | 'background' | 'other'
+    ADD COLUMN category_v2_reason      TEXT,         -- human-readable explanation
+    ADD COLUMN category_v2_computed_at TIMESTAMPTZ;
+```
+
+The v2 classifier (`flume_data/classify_v2.py`) replaces the rolling 9-of-10
+heuristic with three rules applied in order:
+
+1. **Irrigation suppression** — if the segment overlaps any row in
+   `irrigation_sessions` (sourced from `valve.sprinkler_control_*_zone`
+   open/closed events in HA), it is `irrigation`. Wins over all other
+   rules.
+2. **Tight band** — `mean_gpm` must be in `[3.2, 3.8]` GPM (the
+   characteristic pool autofill rate is ~3.5 GPM, not the looser 3-5
+   v1 used).
+3. **Sustained** — per-minute `gpm_stddev < 0.6` AND at least 85% of
+   minutes in the [3.2, 3.8] band. Drip-zone tails fluctuate too much
+   to satisfy this even when their mean drifts through 3.5.
+
+`background` is the bucket for sub-1 GPM segments (faint leaks, drip
+noise) — separated out so the "other" bucket isn't dominated by them.
+
+When the date is older than HA recorder retention (~30 days), rule 1 is
+skipped and `category_v2_reason` ends in `(no B-Hyve data)`. Filter on
+that suffix when comparing recent vs historical classifications.
+
+Use `category` for v1 (historical, pre-2026-05-23). Use `category_v2`
+for accurate current totals. The v1 column stays for audit trail.
+
+### `irrigation_sessions` — B-Hyve ground truth
+
+```sql
+CREATE TABLE irrigation_sessions (
+    session_id  SERIAL      PRIMARY KEY,
+    start_ts    TIMESTAMP   NOT NULL UNIQUE,      -- local PT, naive
+    end_ts      TIMESTAMP   NOT NULL,             -- local PT, naive
+    zone_count  INT         NOT NULL,             -- distinct zones in the session
+    zones       TEXT        NOT NULL,             -- comma-separated zone slugs
+    source      TEXT        NOT NULL DEFAULT 'bhyve_valve',
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+A "session" is a merge of overlapping or near-adjacent
+(`gap ≤ 10 min`) zone open intervals. The 6-hourly sync extracts new
+sessions from HA's `valve.sprinkler_control_*_zone` history each run;
+the standalone `backfill_v2.py` bootstraps the table from whatever HA
+retention still has.
+
 ### `flume_day_totals` — view
 
 ```sql
@@ -133,6 +186,56 @@ auth.
 
 ```sql
 SELECT * FROM flume_day_totals ORDER BY date DESC LIMIT 30;
+```
+
+> Note: `flume_day_totals` aggregates the v1 `category` column. For
+> accurate post-2026-05-23 numbers, use the v2 recipes below.
+
+### True pool autofill totals (v2, B-Hyve-aware)
+
+```sql
+SELECT date,
+       SUM(gallons) FILTER (WHERE category_v2 = 'pool_autofill') AS pool_gal,
+       SUM(gallons) FILTER (WHERE category_v2 = 'irrigation')    AS irrig_gal,
+       SUM(gallons) FILTER (WHERE category_v2 = 'background')    AS bg_gal,
+       SUM(gallons) FILTER (WHERE category_v2 = 'other')         AS other_gal,
+       SUM(gallons)                                              AS total_gal
+FROM flume_segments
+WHERE date >= '2026-04-23'                          -- HA recorder retention
+GROUP BY date
+ORDER BY date DESC;
+```
+
+### What changed between v1 and v2 (audit query)
+
+```sql
+SELECT category AS v1, category_v2 AS v2, COUNT(*) AS n,
+       ROUND(SUM(gallons)::numeric, 0) AS gal
+FROM flume_segments
+GROUP BY 1, 2
+ORDER BY 1, 2;
+```
+
+### Spot-check a specific reclassification
+
+```sql
+SELECT date, start_time, duration_min, mean_gpm, peak_gpm,
+       category, category_v2, category_v2_reason
+FROM flume_segments
+WHERE category = 'pool_autofill'
+  AND category_v2 = 'irrigation'
+ORDER BY date DESC, start_time;
+```
+
+### Which irrigation sessions hit on a given day
+
+```sql
+SELECT start_ts, end_ts,
+       EXTRACT(EPOCH FROM (end_ts - start_ts))::int / 60 AS minutes,
+       zone_count, zones
+FROM irrigation_sessions
+WHERE start_ts::date = '2026-05-21'
+ORDER BY start_ts;
 ```
 
 ### Custom daily total computed from raw samples

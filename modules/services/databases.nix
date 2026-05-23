@@ -197,6 +197,11 @@ in
         local   flume-data   flume-data          peer
         local   flume-data   grafana                 peer
         local   flume-data   johnw                   peer
+        # flume-data needs read-only access to HA's states table to derive
+        # irrigation sessions from B-Hyve valve.* entities (used by the v2
+        # classifier in flume_data/classify_v2.py to suppress false-positive
+        # pool autofills during scheduled watering windows).
+        local   hass         flume-data          peer
         local   all       all                     scram-sha-256
 
         # Localhost connections - require password
@@ -345,6 +350,14 @@ in
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT USAGE ON SCHEMA public TO johnw;"
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO johnw;"
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"flume-data\" IN SCHEMA public GRANT SELECT ON TABLES TO johnw;"
+
+      # Read-only access to the hass database for the flume-data role.
+      # The v2 classifier reads valve.sprinkler_control_*_zone state
+      # changes to build irrigation_sessions windows; segments overlapping
+      # those windows are reclassified out of pool_autofill.
+      ${config.services.postgresql.package}/bin/psql -d hass -c 'GRANT CONNECT ON DATABASE hass TO "flume-data";'
+      ${config.services.postgresql.package}/bin/psql -d hass -c 'GRANT USAGE ON SCHEMA public TO "flume-data";'
+      ${config.services.postgresql.package}/bin/psql -d hass -c 'GRANT SELECT ON states, states_meta TO "flume-data";'
     '';
   };
 

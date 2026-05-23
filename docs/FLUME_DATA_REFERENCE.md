@@ -411,6 +411,28 @@ WHERE NOT EXISTS (
 )
 ORDER BY d;
 
+-- COMPLETE gap detection: every missing date from earliest sample
+-- through today. Run this after the initial bulkload to verify no
+-- days were dropped during the multi-hour historical pull. Should
+-- return ZERO rows if the cache is hole-free.
+WITH range AS (
+    SELECT MIN(ts::date) AS first, CURRENT_DATE AS last FROM flume_minute_samples
+)
+SELECT d AS missing_date
+FROM range, generate_series(range.first, range.last, '1 day') AS s(d)
+WHERE NOT EXISTS (
+    SELECT 1 FROM flume_minute_samples WHERE ts::date = d::date
+)
+ORDER BY d;
+
+-- Per-day sample count — should be close to 1440 (one per minute).
+-- Days with < 1440 may indicate Flume-side outages or partial pulls.
+SELECT (ts::date) AS d, COUNT(*) AS samples
+FROM flume_minute_samples
+GROUP BY (ts::date)
+HAVING COUNT(*) < 1400  -- 40 missing minutes ≈ likely real issue
+ORDER BY d DESC;
+
 -- Segment-vs-raw gallons mismatch (large = detection drift or data corruption)
 SELECT ABS(
     (SELECT SUM(gallons) FROM flume_segments) -
@@ -421,6 +443,23 @@ SELECT ABS(
 If `gal_delta` exceeds a few percent of the raw total, segments are out
 of sync with the underlying samples — most likely a detection-rule
 change without re-classification. Truncate + re-load (see above).
+
+### Re-fetching specific date ranges (gap repair)
+
+If the gap query reveals missing dates, re-fetch just those days from
+the Flume API and bulkload:
+
+```bash
+sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
+    /run/current-system/sw/bin/python \
+    /etc/nixos/scripts/flume-autofill/emit_segments_csv.py \
+    --from YYYY-MM-DD --to YYYY-MM-DD
+
+sudo systemctl start flume-autofill-bulkload.service
+```
+
+The bulkload is idempotent (UPSERT semantics on the natural keys), so
+this can be run any number of times without duplication.
 
 ---
 

@@ -131,15 +131,20 @@ def discover_coverage() -> SourceCoverage:
         vm = VMSource(cfg.victoriametrics_url)
         end = datetime.now(tz=timezone.utc)
         start = end - td(days=3650)
+        vm_id = VMSource.vm_entity_id(cfg.flume_current_sensor)
         series = vm.query_range(
             metric=(
-                f'last_over_time({{entity_id="{cfg.flume_current_sensor}"}}'
+                f'last_over_time({{entity_id="{vm_id}"}}'
                 "[1d])"
             ),
             start=start,
             end=end,
             step="30d",
         )
+        # series[0] is the earliest bucket VM has data for, regardless of
+        # value — a 0 reading is still a valid sample (water just wasn't
+        # flowing). VM returns empty results outside its stored range, so
+        # series[0] is the actual earliest-data boundary.
         if series:
             vm_start = series[0][0].date()
     except Exception as e:

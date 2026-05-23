@@ -57,12 +57,24 @@ class VMSource:
         out.sort(key=lambda r: r[0])
         return out
 
+    @staticmethod
+    def vm_entity_id(entity_id: str) -> str:
+        """Strip the HA `<domain>.` prefix for VM lookup.
+
+        The HA InfluxDB integration writes only the entity name (post-dot
+        segment) into VM's `entity_id` label, with the domain captured
+        separately in the `domain` label. So `sensor.flume_x_current` becomes
+        `entity_id="flume_x_current", domain="sensor"` in VM.
+        """
+        return entity_id.split(".", 1)[1] if "." in entity_id else entity_id
+
     def query_flume_current(
         self, entity_id: str, start: datetime, end: datetime
     ) -> list[tuple[datetime, float]]:
         """Convenience: pull a single HA-entity GPM series at 1-minute resolution."""
+        vm_id = self.vm_entity_id(entity_id)
         return self.query_range(
-            metric=f'last_over_time({{entity_id="{entity_id}"}}[1m])',
+            metric=f'last_over_time({{entity_id="{vm_id}"}}[1m])',
             start=start,
             end=end,
             step="60s",

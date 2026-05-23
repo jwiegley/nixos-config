@@ -256,9 +256,11 @@ def main() -> int:
         target = [date.fromisoformat(p.stem) for p in cache_files]
         print(f"--from-cache: {len(target)} cached days available")
     else:
-        # Last N days, but pull missing data from the API first.
+        # Last N days INCLUDING today. range(N, -1, -1) → [N, N-1, ..., 1, 0]
+        # so we capture today's partial data; tomorrow's run UPSERTs the
+        # complete day over it.
         today = date.today()
-        target = [today - timedelta(days=i) for i in range(args.days, 0, -1)]
+        target = [today - timedelta(days=i) for i in range(args.days, -1, -1)]
         print(f"--days {args.days}: syncing {target[0]} .. {target[-1]}")
 
         # Ensure all target days are in cache (no-ops for cache hits)

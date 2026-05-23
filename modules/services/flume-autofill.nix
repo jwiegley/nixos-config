@@ -282,6 +282,42 @@ in
       };
     };
 
+    # One-shot bulk-loader: replays EVERY cached day into Postgres.
+    # No timer; fired manually with `systemctl start
+    # flume-autofill-bulkload.service` once the initial historical pull
+    # has finished filling the cache. Idempotent — re-running just
+    # UPSERTs the same rows over themselves.
+    #
+    # Uses execute_values batched at 5000 rows/page for the ~1.2M
+    # minute samples; completes in seconds not minutes.
+    systemd.services.flume-autofill-bulkload = {
+      description = "Bulk-load all cached Flume days into PostgreSQL";
+      after = [ "postgresql.service" ];
+      wants = [ "postgresql.service" ];
+      environment = {
+        PYTHONPATH = "${scriptDir}";
+        PYTHONUNBUFFERED = "1";
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = "flume-autofill";
+        Group = "flume-autofill";
+        WorkingDirectory = "/var/lib/flume-autofill";
+        ExecStart = "${pyenv}/bin/python -m flume_db_sync --from-cache";
+        TimeoutStartSec = "30m";
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+      };
+    };
+
     # Phase 3: Historical backfill template service. Instantiated manually
     # via `systemctl start 'flume-autofill-backfill@<INSTANCE>.service'`
     # where INSTANCE matches `parse_systemd_instance` in

@@ -48,9 +48,11 @@ from emit_segments_csv import (  # noqa: E402
 )
 
 # The db, postgres role, and OS user are all named `flume-autofill` so
-# the ensureDBOwnership assertion + peer-auth ident mapping both align
-# on a single string. Quoted via dbname="..." to survive the hyphen.
-DSN = 'dbname="flume-autofill"'
+# the ensureDBOwnership assertion + peer-auth ident mapping align on a
+# single string. Both dbname and user must be explicit + quoted: psycopg2
+# can't reliably derive `user` from the OS identity inside the systemd
+# sandbox (no USER env, hyphenated name), so we say it directly.
+DSN = 'dbname="flume-autofill" user="flume-autofill"'
 
 SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS flume_segments (

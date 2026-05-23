@@ -285,7 +285,7 @@
   #
   # Until then, the Phase 1 templates + utility meters deploy on their
   # own (gated GPM sensors, integration totals, weekly/monthly cycles).
-  services.flume-autofill.enable = false;
+  services.flume-autofill.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

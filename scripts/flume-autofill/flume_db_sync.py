@@ -59,6 +59,22 @@ DB_CONNECT_KWARGS: dict[str, str] = {
 }
 
 SCHEMA_DDL = """
+-- Raw per-minute Flume samples — the authoritative ground truth. Every
+-- sample Flume's API returned, including zero-GPM idle minutes.
+-- Naive timestamps in device-local TZ (America/Los_Angeles) to match
+-- what Flume returns from its query API.
+CREATE TABLE IF NOT EXISTS flume_minute_samples (
+    ts   TIMESTAMP    NOT NULL,
+    gpm  NUMERIC(8,3) NOT NULL,
+    PRIMARY KEY (ts)
+);
+CREATE INDEX IF NOT EXISTS flume_minute_samples_date
+    ON flume_minute_samples ((ts::date));
+
+-- Pre-computed segments — derived from flume_minute_samples but cached
+-- here for fast Grafana/dashboard queries. You can compute alternative
+-- aggregations from flume_minute_samples directly without touching this
+-- table. Detection rule lives in flume_autofill/detection.py.
 CREATE TABLE IF NOT EXISTS flume_segments (
     date                  DATE          NOT NULL,
     start_time            TIME          NOT NULL,
@@ -74,13 +90,15 @@ CREATE TABLE IF NOT EXISTS flume_segments (
     detected_at           TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (date, start_time)
 );
-
 CREATE INDEX IF NOT EXISTS flume_segments_category_date
     ON flume_segments(category, date);
 CREATE INDEX IF NOT EXISTS flume_segments_autofill
     ON flume_segments(date)
     WHERE category = 'pool_autofill';
 
+-- Convenience view: per-day rollups from the derived segments table.
+-- (For per-day rollups computed directly from flume_minute_samples, see
+-- the README — single SQL query.)
 CREATE OR REPLACE VIEW flume_day_totals AS
 SELECT date,
        SUM(gallons)                                        AS total_gallons,
@@ -89,6 +107,12 @@ SELECT date,
        COUNT(*)     FILTER (WHERE category='pool_autofill') AS pool_autofill_sessions
 FROM flume_segments
 GROUP BY date;
+"""
+
+UPSERT_SAMPLE_SQL = """
+INSERT INTO flume_minute_samples (ts, gpm)
+VALUES (%s, %s)
+ON CONFLICT (ts) DO UPDATE SET gpm = EXCLUDED.gpm;
 """
 
 UPSERT_SQL = """
@@ -138,24 +162,28 @@ def ensure_cache_for(
         pass
 
 
-def sync_dates_to_db(target_dates: list[date]) -> int:
-    """Detect segments for the given local dates and UPSERT into Postgres."""
+def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
+    """UPSERT BOTH raw per-minute samples AND derived segments for the
+    given local dates. Returns (samples_written, segments_written).
+    """
     if not target_dates:
-        return 0
+        return (0, 0)
 
     samples = load_cached_samples(target_dates)
     if not samples:
         print(f"no cached samples for {target_dates[0]}..{target_dates[-1]} — skipping")
-        return 0
+        return (0, 0)
 
-    # detect_segments works over the entire concatenated series; segments
-    # never span a day boundary in practice (autofill runs are ≤ 2h, day
-    # boundary is midnight, and detection requires GPM > 0 throughout),
-    # but the segment's `date` comes from the start timestamp's local date
-    # anyway, so a hypothetical crossing is handled correctly.
+    target_set = set(target_dates)
+
+    # 1) Raw per-minute samples — every cached point whose local date is
+    # in the target set. This is the authoritative ground truth for any
+    # downstream re-aggregation the user wants to do in SQL.
+    sample_rows = [(ts, gpm) for ts, gpm in samples if ts.date() in target_set]
+
+    # 2) Derived segments — precomputed for fast dashboard queries.
     segments = detect_segments(samples)
-
-    rows: list[tuple] = []
+    segment_rows: list[tuple] = []
     autofill_session_by_date: dict[date, int] = defaultdict(int)
     for start_i, end_i in segments:
         span = samples[start_i : end_i + 1]
@@ -167,13 +195,8 @@ def sync_dates_to_db(target_dates: list[date]) -> int:
         start_local = segment_to_local(span[0][0])
         end_local = segment_to_local(span[-1][0])
         d = start_local.date()
-
-        # Filter to ONLY the dates we were asked to sync — concatenated
-        # segments can straddle into days outside our window if the cache
-        # accidentally contains adjacent data.
-        if d not in target_dates:
+        if d not in target_set:
             continue
-
         is_autofill = is_pool_autofill_segment(samples, start_i, end_i)
         session_id: int | None = None
         category = "other"
@@ -181,30 +204,34 @@ def sync_dates_to_db(target_dates: list[date]) -> int:
             autofill_session_by_date[d] += 1
             session_id = autofill_session_by_date[d]
             category = "pool_autofill"
-
-        rows.append(
-            (
-                d,
-                start_local.time(),
-                end_local.time(),
-                duration,
-                gallons,
-                mean_gpm,
-                peak_gpm,
-                category,
-                session_id,
-            )
+        segment_rows.append(
+            (d, start_local.time(), end_local.time(), duration, gallons,
+             mean_gpm, peak_gpm, category, session_id)
         )
-
-    if not rows:
-        return 0
 
     with psycopg2.connect(**DB_CONNECT_KWARGS) as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_DDL)
-            cur.executemany(UPSERT_SQL, rows)
+            if sample_rows:
+                # executemany on 1.2M rows scales fine but takes a few
+                # seconds; large batches are fine for psycopg2's prepared
+                # path. Use mogrify-based bulk insert for the bulk-load
+                # case (--from-cache) — 100x faster than executemany.
+                if len(sample_rows) > 10_000:
+                    from psycopg2.extras import execute_values
+                    execute_values(
+                        cur,
+                        "INSERT INTO flume_minute_samples (ts, gpm) VALUES %s "
+                        "ON CONFLICT (ts) DO UPDATE SET gpm = EXCLUDED.gpm",
+                        sample_rows,
+                        page_size=5000,
+                    )
+                else:
+                    cur.executemany(UPSERT_SAMPLE_SQL, sample_rows)
+            if segment_rows:
+                cur.executemany(UPSERT_SQL, segment_rows)
         conn.commit()
-    return len(rows)
+    return (len(sample_rows), len(segment_rows))
 
 
 def main() -> int:
@@ -244,8 +271,8 @@ def main() -> int:
             sensor = next((d for d in devices if d.get("type") == 2), devices[0])
             ensure_cache_for(missing[0], missing[-1], token, user_id, sensor["id"])
 
-    written = sync_dates_to_db(target)
-    print(f"  UPSERTed {written} segment rows")
+    samples_written, segments_written = sync_dates_to_db(target)
+    print(f"  UPSERTed {samples_written} minute samples + {segments_written} segment rows")
     return 0
 
 

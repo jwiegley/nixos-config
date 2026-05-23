@@ -70,14 +70,20 @@ groups:
       # underlying WS goes stale after a reconnect, no inbound events
       # are processed even though the TCP socket and HTTP rest API
       # may still appear healthy. The bot looks online in Discord
-      # but won't reply to DMs. The probe regex only matches user
-      # activity + reconnect/connect events, so an idle bot accumulates
-      # age between human interactions. 24h is the conservative
-      # threshold; a real zombied WS produces "Reconnecting" log lines
-      # (which ARE matched) well before then, so 24h+ idleness with no
-      # reconnect attempts is a genuine signal.
+      # but won't reply to DMs. The probe regex matches user activity +
+      # reconnect/connect events.
+      #
+      # Threshold tuning (2026-05-22): lowered from 24h to 2h after a
+      # zombie-immediately-after-restart incident went undetected for
+      # 5h 51min before the user noticed manually. The original 24h was
+      # set to avoid false-positives on legitimately idle bots, but for
+      # a chat bot in active Discord servers (where presence/typing/
+      # member events from other users fire regularly) 2h of total
+      # silence is a strong zombie signal. Worst-case false positive is
+      # one unnecessary restart every few days during deep quiet
+      # periods — acceptable cost.
       - alert: HermesDiscordZombieSuspected
-        expr: hermes_discord_last_event_age_seconds > 86400
+        expr: hermes_discord_last_event_age_seconds > 7200
         for: 10m
         labels:
           severity: warning
@@ -85,17 +91,43 @@ groups:
           service: hermes-agent
           self_heal_eligible: "true"
         annotations:
-          summary: "Hermes Discord platform shows no activity for >24 hours"
+          summary: "Hermes Discord platform shows no activity for >2 hours"
           description: |
             /var/lib/hermes/.hermes/logs/gateway.log has not recorded
-            a Discord-relevant event in the last 24+ hours. The probe
-            regex matches connect / inbound / outbound / reconnect
-            events, so 24h of silence on a bot that should be in
-            active channels (and would normally log periodic
-            reconnect attempts even when idle) is a strong signal
-            that the Discord gateway WebSocket has zombied.
+            a Discord-relevant event in the last 2+ hours. In an active
+            server the bot should see presence/typing/member events from
+            other users continuously; 2h+ silence indicates the gateway
+            WebSocket has zombied (TCP socket appears alive, Discord
+            sees the bot as online, but no inbound events propagate).
             Restarting microvm@hermes re-establishes a clean WS
             session.
+
+      # Faster sibling of HermesDiscordZombieSuspected — fires after just
+      # 15 min when the self-heal daemon just restarted the microvm but
+      # no Discord events came in. A fresh Hermes connection ALWAYS fires
+      # ready/guild_create within seconds, so disco_age > 10m within 1h
+      # of a self-heal restart is definitively a zombie.
+      # (Doesn't fire for manual user restarts — those are caught by
+      # the 2h catchall above.)
+      - alert: HermesDiscordPostSelfHealRestart
+        expr: |
+          hermes_discord_last_event_age_seconds > 600
+          and
+          changes(hermes_self_heal_attempts_total{action="restart_microvm"}[1h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+          self_heal_eligible: "true"
+        annotations:
+          summary: "Hermes Discord silent after self-heal restart — zombie WS"
+          description: |
+            The self-heal daemon restarted microvm@hermes within the last
+            hour, but the Discord gateway has not received any events in
+            10+ minutes. A fresh WS connection fires ready / guild_create
+            within seconds, so this is a zombie on top of the restart —
+            another restart is needed.
 
       # The check itself stopped running.
       - alert: HermesHealthCheckStale

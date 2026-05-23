@@ -228,6 +228,60 @@ in
       };
     };
 
+    # 6-hourly DB sync: pulls the last 3 days from Flume API + cache and
+    # UPSERTs into flume_history.flume_segments. The 3-day window absorbs
+    # late-arriving data without re-fetching the full history.
+    systemd.services.flume-autofill-daily-sync = {
+      description = "Sync recent Flume per-segment data into flume_history";
+      after = [
+        "network-online.target"
+        "postgresql.service"
+      ];
+      wants = [ "network-online.target" ];
+
+      path = [ pkgs.bash ];
+      environment = {
+        PYTHONPATH = "${scriptDir}";
+      };
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = "flume-autofill";
+        Group = "flume-autofill";
+        WorkingDirectory = "/var/lib/flume-autofill";
+        ExecStart = "${pyenv}/bin/python -m flume_db_sync --days 3";
+        LoadCredential = [
+          "client_id:${config.sops.secrets."flume/client_id".path}"
+          "client_secret:${config.sops.secrets."flume/client_secret".path}"
+          "username:${config.sops.secrets."flume/username".path}"
+          "password:${config.sops.secrets."flume/password".path}"
+        ];
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ReadWritePaths = [ "/var/lib/flume-autofill" ];
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+      };
+    };
+
+    systemd.timers.flume-autofill-daily-sync = {
+      description = "6-hourly Flume DB sync";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        # 00:30, 06:30, 12:30, 18:30 — staggered off the top of the hour.
+        OnCalendar = "*-*-* 00,06,12,18:30:00";
+        Persistent = true;
+        RandomizedDelaySec = "5m";
+        AccuracySec = "1min";
+        Unit = "flume-autofill-daily-sync.service";
+      };
+    };
+
     # Phase 3: Historical backfill template service. Instantiated manually
     # via `systemctl start 'flume-autofill-backfill@<INSTANCE>.service'`
     # where INSTANCE matches `parse_systemd_instance` in

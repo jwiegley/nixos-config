@@ -97,8 +97,9 @@ def test_action_map_deterministic_first_attempts():
     assert daemon.ACTION_MAP == {
         "HermesAskFailing":             "restart_microvm",
         "HermesApiServerDown":          "restart_microvm",
-        "HermesDiscordZombieSuspected": "restart_microvm",
-        "HermesMcpBridgeDown":          "restart_mcp",
+        "HermesDiscordZombieSuspected":   "restart_microvm",
+        "HermesDiscordPostSelfHealRestart": "restart_microvm",
+        "HermesMcpBridgeDown":            "restart_mcp",
         "HermesHealthCheckStale":       "restart_health_check",
     }
 

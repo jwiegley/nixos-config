@@ -138,6 +138,7 @@ in
         "shlink"
         "speedtest_tracker"
         "nodered_events"
+        "flume-autofill"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -178,6 +179,10 @@ in
         }
         { name = "node-red"; }
         { name = "grafana"; }
+        {
+          name = "flume-autofill";
+          ensureDBOwnership = true;
+        }
       ];
 
       authentication = lib.mkOverride 10 ''
@@ -189,6 +194,8 @@ in
         local   immich    immich                  peer
         local   nodered_events  node-red                peer
         local   nodered_events  grafana                 peer
+        local   flume-autofill   flume-autofill          peer
+        local   flume-autofill   grafana                 peer
         local   all       all                     scram-sha-256
 
         # Localhost connections - require password

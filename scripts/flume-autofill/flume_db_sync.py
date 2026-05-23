@@ -179,7 +179,17 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
     # 1) Raw per-minute samples — every cached point whose local date is
     # in the target set. This is the authoritative ground truth for any
     # downstream re-aggregation the user wants to do in SQL.
-    sample_rows = [(ts, gpm) for ts, gpm in samples if ts.date() in target_set]
+    #
+    # Dedup by ts: VM pre-populate's query_range end-time is inclusive,
+    # so the midnight sample of day N appears in BOTH cache files
+    # (day N-1.json and day N.json). Postgres rejects duplicate rows
+    # in a single ON CONFLICT DO UPDATE batch — collapse them here.
+    # Later sample wins (consistent with UPSERT semantics).
+    sample_dict: dict = {}
+    for ts, gpm in samples:
+        if ts.date() in target_set:
+            sample_dict[ts] = gpm
+    sample_rows = list(sample_dict.items())
 
     # 2) Derived segments — precomputed for fast dashboard queries.
     segments = detect_segments(samples)

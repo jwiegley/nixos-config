@@ -49,10 +49,14 @@ from emit_segments_csv import (  # noqa: E402
 
 # The db, postgres role, and OS user are all named `flume-autofill` so
 # the ensureDBOwnership assertion + peer-auth ident mapping align on a
-# single string. Both dbname and user must be explicit + quoted: psycopg2
-# can't reliably derive `user` from the OS identity inside the systemd
-# sandbox (no USER env, hyphenated name), so we say it directly.
-DSN = 'dbname="flume-autofill" user="flume-autofill"'
+# single string. psycopg2 needs explicit user= (it can't reliably derive
+# from the OS identity inside the systemd sandbox) AND kwargs rather than
+# a DSN string (the hyphen confuses libpq's DSN-string quote handling —
+# embedded "..." gets treated as part of the value).
+DB_CONNECT_KWARGS: dict[str, str] = {
+    "dbname": "flume-autofill",
+    "user": "flume-autofill",
+}
 
 SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS flume_segments (
@@ -195,7 +199,7 @@ def sync_dates_to_db(target_dates: list[date]) -> int:
     if not rows:
         return 0
 
-    with psycopg2.connect(DSN) as conn:
+    with psycopg2.connect(**DB_CONNECT_KWARGS) as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_DDL)
             cur.executemany(UPSERT_SQL, rows)

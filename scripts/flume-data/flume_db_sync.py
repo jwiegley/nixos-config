@@ -52,6 +52,7 @@ from flume_data.irrigation_sessions import (  # noqa: E402
     extract_sessions_from_ha,
     persist_sessions,
 )
+from flume_data.tankless import sync_range_from_ha as tankless_sync  # noqa: E402
 
 # The db, postgres role, and OS user are all named `flume-data` so
 # the ensureDBOwnership assertion + peer-auth ident mapping align on a
@@ -119,6 +120,20 @@ ALTER TABLE flume_segments
     ADD COLUMN IF NOT EXISTS category_v2_computed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS flume_segments_category_v2_date
     ON flume_segments(category_v2, date);
+
+-- Per-minute hot-water flow from the tankless heater (Navien NaviLink).
+-- Source data is event-driven (HA reports on each state change), but
+-- this table is per-minute interpolated (forward-fill the last known
+-- value) so it can be joined directly with flume_minute_samples on ts.
+-- Used by the v3 fixture classifier to discriminate shower / dishwasher
+-- / washer-hot from cold-only fixtures (toilet / irrigation / pool).
+CREATE TABLE IF NOT EXISTS tankless_minute_samples (
+    ts   TIMESTAMP    NOT NULL,  -- naive local (America/Los_Angeles)
+    gpm  NUMERIC(8,3) NOT NULL,
+    PRIMARY KEY (ts)
+);
+CREATE INDEX IF NOT EXISTS tankless_minute_samples_date
+    ON tankless_minute_samples ((ts::date));
 
 -- B-Hyve irrigation sessions, merged from per-zone valve open/close
 -- intervals. Source = 'bhyve_valve' for HA-derived sessions; the
@@ -252,6 +267,23 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
     except Exception as exc:
         print(f"warning: HA Postgres unreachable, v2 classifier degraded: {exc}")
         sessions = []
+
+    # 2a) Tankless hot-water flow — persists per-minute interpolated
+    # values into tankless_minute_samples. Same failure mode handling:
+    # non-fatal, classifier just won't have hot-water context.
+    try:
+        with psycopg2.connect(**DB_CONNECT_KWARGS) as tk_conn:
+            with tk_conn.cursor() as cur:
+                cur.execute(SCHEMA_DDL)
+            tk_conn.commit()
+            tk_rows = tankless_sync(
+                tk_conn, HA_POSTGRES_DSN, range_start, range_end
+            )
+            tk_conn.commit()
+            if tk_rows:
+                print(f"  upserted {tk_rows} tankless minute samples")
+    except Exception as exc:
+        print(f"warning: tankless sync failed: {exc}")
 
     # 3) Derived segments — precomputed for fast dashboard queries.
     # Also compute v2 classification using the refreshed irrigation

@@ -253,13 +253,39 @@ in
       # the same setting OpenClaw uses for its long-running tool-using
       # sessions; change models.nix to update both modules at once.
       #
-      # NOTE: settings.model is a flat string in upstream's schema (see
-      # nixosModules.nix:267 example: `model = "anthropic/claude-sonnet-4"`).
-      # A nested attrset like `{ name, provider }` deep-merges into
-      # config.yaml but Hermes' Python reads `model` as a string and
-      # gets nothing — every chat-completion call goes out with model=""
-      # and LiteLLM bounces it.
-      model = agentModel;
+      # IMPORTANT: in Hermes v0.14 the model field accepts either a flat
+      # string OR a dict with {default, provider, base_url, api_key, ...}.
+      # We use the dict form because:
+      #
+      #   1. The openrouter provider profile (plugins/model-providers/
+      #      openrouter/__init__.py:99) hardcodes base_url to
+      #      `https://openrouter.ai/api/v1` and only honors OPENROUTER_API_KEY
+      #      as an env var — it ignores OPENROUTER_BASE_URL entirely.
+      #   2. The streaming-on chat path used to bypass this by reading
+      #      os.environ["OPENROUTER_BASE_URL"] directly, but we have
+      #      display.streaming = false below (sticky 30s timeout bug), so
+      #      non-streaming traffic now flows through the provider profile
+      #      and hits the hardcoded openrouter.ai URL with a LiteLLM virtual
+      #      key — every call 401s with "Missing Authentication header".
+      #   3. Setting model.provider = "custom" + model.base_url + model.api_key
+      #      triggers the credential_pool custom-provider branch
+      #      (agent/credential_pool.py:`model_provider == "custom"`), which
+      #      routes through the supplied endpoint directly. Same fix the
+      #      auxiliary block below uses for title_generation / triage_specifier.
+      #   4. `${...}` syntax is expanded at config-load time by
+      #      _expand_env_vars() (config.py:3838) reading from os.environ,
+      #      which already has the values from environmentFiles=.../env.
+      #
+      # The earlier "Python reads model as a string and gets nothing"
+      # warning was for an older Hermes version. v0.14's model resolver
+      # (hermes_cli/dump.py:`model_cfg.get("default") or .get("model") or
+      # .get("name")`) reads the name from any of those keys.
+      model = {
+        default = agentModel;
+        provider = "custom";
+        base_url = "\${OPENROUTER_BASE_URL}";
+        api_key = "\${OPENROUTER_API_KEY}";
+      };
 
       # Per-provider request timeout. The default OpenAI-wire client
       # timeout fires at 30s before the first byte arrives, which is

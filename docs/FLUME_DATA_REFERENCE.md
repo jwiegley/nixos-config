@@ -214,46 +214,56 @@ The library of fixtures lives in `flume_data/fixtures.py` and uses
 Gaussian likelihoods (mean ± σ from range midpoint) plus hard
 constraints (must overlap B-Hyve, must be cold-only, etc.).
 
-### `flume_minute_attributions` — wide per-minute table
+### `flume_minute_attributions` — per-minute long-format attributions
 
 ```sql
 CREATE TABLE flume_minute_attributions (
-    ts                       TIMESTAMP    NOT NULL PRIMARY KEY,
-    total_gpm                NUMERIC(8,3) NOT NULL,
-    irrigation_spray_gpm     NUMERIC(8,3) NOT NULL DEFAULT 0,
-    irrigation_drip_gpm      NUMERIC(8,3) NOT NULL DEFAULT 0,
-    irrigation_bubbler_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
-    pool_autofill_gpm        NUMERIC(8,3) NOT NULL DEFAULT 0,
-    dishwasher_gpm           NUMERIC(8,3) NOT NULL DEFAULT 0,
-    shower_gpm               NUMERIC(8,3) NOT NULL DEFAULT 0,
-    sink_hot_gpm             NUMERIC(8,3) NOT NULL DEFAULT 0,
-    clothes_washer_hot_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
-    clothes_washer_cold_gpm  NUMERIC(8,3) NOT NULL DEFAULT 0,
-    toilet_flush_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
-    sink_cold_gpm            NUMERIC(8,3) NOT NULL DEFAULT 0,
-    fridge_event_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
-    leak_gpm                 NUMERIC(8,3) NOT NULL DEFAULT 0,
-    unknown_gpm              NUMERIC(8,3) NOT NULL DEFAULT 0,
-    computed_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+    ts          TIMESTAMP    NOT NULL,
+    fixture     TEXT         NOT NULL,
+    gpm         NUMERIC(8,3) NOT NULL CHECK (gpm >= 0),
+    source      TEXT         NOT NULL DEFAULT 'v3'
+        CHECK (source IN ('v3','user')),
+    computed_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (ts, fixture)
 );
 ```
 
-**This is the headline user-facing table.** One row per minute, one
-column per fixture. Each minute's `total_gpm` is distributed across
-the fixture columns by projecting `flume_segment_attributions` onto
-the per-minute `flume_minute_samples.gpm`.
+**This is the headline user-facing table.** Zero or more rows per
+minute, one row per `(minute, fixture)`. The `gpm` value is the share
+of that minute's total flow attributed to that fixture.
 
-**Invariant:** for every row,
-`sum(all *_gpm columns) ≈ total_gpm` (within 0.05 GPM rounding).
-Verified across 1.2M rows during the initial backfill.
+**INVARIANT (per minute):**
 
-The `unknown_gpm` column catches two cases:
-1. Minutes where the v3 classifier returned `("unknown", 1.0)`
-2. Minutes with flow but no enclosing segment (sub-threshold flow
-   that the segmenter skipped over)
+```
+SUM(flume_minute_attributions.gpm WHERE ts = T)
+  == flume_minute_samples.gpm WHERE ts = T
+within 0.05 GPM rounding tolerance.
+```
+
+`refresh_minute_attributions.py` asserts this after each rebuild and
+fails loudly on violations.
+
+Row counts per minute:
+- **Zero rows** when the raw row has `gpm == 0` (nothing to attribute).
+- **One row** for a confidently-classified single-fixture minute, OR an
+  `unknown` row when the minute has flow but no enclosing segment.
+- **Multiple rows** when the containing segment had a multi-fixture
+  probabilistic attribution (e.g., 60% shower + 40% sink_hot during
+  an ambiguous hot-water minute).
+
+Daily/monthly reports compute directly from this table:
+
+```sql
+-- Daily totals per fixture (long output, one row per day per fixture)
+SELECT ts::date AS day, fixture, ROUND(SUM(gpm)::numeric, 1) AS gallons
+FROM flume_minute_attributions
+GROUP BY ts::date, fixture
+ORDER BY day, gallons DESC;
+```
 
 Materialized by `refresh_minute_attributions.py`; refreshed
-incrementally by the 6-hourly sync (`--days 4` window).
+incrementally by the 6-hourly sync (`--days 4` window) which also
+re-runs the invariant check on the touched window.
 
 ### `flume_user_labels` — manual ground-truth overrides
 
@@ -410,35 +420,50 @@ ORDER BY start_ts;
 ### v3 — minute-by-minute attribution (the headline view)
 
 ```sql
--- what was happening every minute of an interesting hour
-SELECT to_char(ts, 'HH24:MI') AS t, total_gpm,
-       NULLIF(dishwasher_gpm, 0)         AS dishwasher,
-       NULLIF(shower_gpm, 0)             AS shower,
-       NULLIF(toilet_flush_gpm, 0)       AS toilet,
-       NULLIF(sink_cold_gpm, 0)          AS sink_cold,
-       NULLIF(sink_hot_gpm, 0)           AS sink_hot,
-       NULLIF(fridge_event_gpm, 0)       AS fridge,
-       NULLIF(unknown_gpm, 0)            AS unknown
+-- what was happening every minute of an interesting hour (long format)
+SELECT to_char(ts, 'HH24:MI') AS t, fixture, gpm
 FROM flume_minute_attributions
 WHERE ts BETWEEN '2026-05-22 06:00' AND '2026-05-22 10:00'
-  AND total_gpm > 0
-ORDER BY ts;
+ORDER BY ts, fixture;
 ```
 
-### v3 — weekly water breakdown by category
+### v3 — daily totals by fixture (long output, one row per day per fixture)
+
+```sql
+SELECT ts::date AS day, fixture, ROUND(SUM(gpm)::numeric, 1) AS gallons
+FROM flume_minute_attributions
+WHERE ts >= now() - INTERVAL '7 days'
+GROUP BY ts::date, fixture
+ORDER BY day, gallons DESC;
+```
+
+### v3 — pivoted daily report (one row per day, one column per fixture)
 
 ```sql
 SELECT ts::date AS day,
-       ROUND(SUM(pool_autofill_gpm)::numeric, 0)        AS pool,
-       ROUND(SUM(shower_gpm + sink_hot_gpm + dishwasher_gpm)::numeric, 0) AS hot_domestic,
-       ROUND(SUM(toilet_flush_gpm + sink_cold_gpm + fridge_event_gpm)::numeric, 0) AS cold_domestic,
-       ROUND(SUM(clothes_washer_hot_gpm + clothes_washer_cold_gpm)::numeric, 0) AS laundry,
-       ROUND(SUM(irrigation_spray_gpm + irrigation_drip_gpm + irrigation_bubbler_gpm)::numeric, 0) AS irrigation,
-       ROUND(SUM(unknown_gpm)::numeric, 0)              AS unknown,
-       ROUND(SUM(total_gpm)::numeric, 0)                AS total
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'pool_autofill')::numeric, 0)        AS pool,
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'shower')::numeric, 0)               AS shower,
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'dishwasher')::numeric, 0)           AS dish,
+       ROUND(SUM(gpm) FILTER (WHERE fixture LIKE 'clothes_washer%')::numeric, 0)   AS washer,
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'toilet_flush')::numeric, 0)         AS toilet,
+       ROUND(SUM(gpm) FILTER (WHERE fixture LIKE 'sink%')::numeric, 0)             AS sink,
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'fridge_event')::numeric, 0)         AS fridge,
+       ROUND(SUM(gpm) FILTER (WHERE fixture LIKE 'irrigation%')::numeric, 0)       AS irrigation,
+       ROUND(SUM(gpm) FILTER (WHERE fixture = 'unknown')::numeric, 0)              AS unknown,
+       ROUND(SUM(gpm)::numeric, 0)                                                 AS total
 FROM flume_minute_attributions
-WHERE ts >= now() - INTERVAL '7 days'
+WHERE ts >= now() - INTERVAL '30 days'
 GROUP BY 1 ORDER BY 1;
+```
+
+### v3 — monthly report
+
+```sql
+SELECT to_char(ts, 'YYYY-MM') AS month, fixture,
+       ROUND(SUM(gpm)::numeric, 0) AS gallons
+FROM flume_minute_attributions
+GROUP BY 1, fixture
+ORDER BY 1, gallons DESC;
 ```
 
 ### v3 — find segments with low classifier confidence (review candidates)
@@ -456,17 +481,19 @@ WHERE segment_date = '2026-05-22' AND segment_start = '09:29:00'
 ORDER BY probability DESC;
 ```
 
-### v3 — invariant check (column sums must equal total_gpm)
+### v3 — invariant check (per-minute attribution sums must equal raw)
 
 ```sql
-SELECT COUNT(*) AS minutes,
-       COUNT(*) FILTER (WHERE abs(total_gpm - (
-           irrigation_spray_gpm + irrigation_drip_gpm + irrigation_bubbler_gpm
-         + pool_autofill_gpm + dishwasher_gpm + shower_gpm + sink_hot_gpm
-         + clothes_washer_hot_gpm + clothes_washer_cold_gpm + toilet_flush_gpm
-         + sink_cold_gpm + fridge_event_gpm + leak_gpm + unknown_gpm
-       )) > 0.05) AS invariant_failures
-FROM flume_minute_attributions;
+-- Should return zero rows. Each minute's attribution rows must sum
+-- to the raw flume_minute_samples value within 0.05 GPM.
+SELECT m.ts, m.gpm AS raw, COALESCE(SUM(a.gpm), 0) AS attr_sum,
+       abs(m.gpm - COALESCE(SUM(a.gpm), 0)) AS diff
+FROM flume_minute_samples m
+LEFT JOIN flume_minute_attributions a ON a.ts = m.ts
+WHERE m.gpm > 0
+GROUP BY m.ts, m.gpm
+HAVING abs(m.gpm - COALESCE(SUM(a.gpm), 0)) > 0.05
+ORDER BY diff DESC LIMIT 20;
 ```
 
 ### v3 — manually label a segment

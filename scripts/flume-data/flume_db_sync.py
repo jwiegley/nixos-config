@@ -187,35 +187,33 @@ CREATE TABLE IF NOT EXISTS flume_user_labels (
     UNIQUE (segment_date, segment_start)
 );
 
--- Per-minute wide attribution: one row per minute, one column per
--- fixture, gpm allocated proportionally from each segment's
--- attribution probabilities. Materialized for fast dashboard queries;
--- refreshed by backfill_minute_attributions.py (one-shot) and by the
--- 6-hourly sync (last 4 days incremental).
+-- Per-minute long-format attribution: zero or more rows per minute,
+-- one row per (minute, fixture). gpm is the portion of that minute's
+-- total flow attributed to that fixture.
 --
--- Invariant: the sum of all *_gpm columns equals total_gpm (within
--- 0.05 rounding tolerance).
+-- INVARIANT (per minute):
+--     SUM(flume_minute_attributions.gpm WHERE ts = T)
+--       == flume_minute_samples.gpm WHERE ts = T
+--     within 0.05 GPM rounding tolerance.
+--
+-- Zero rows is valid when the raw row has gpm == 0 (nothing to attribute).
+-- A single 'unknown' row appears when the minute has flow but the
+-- segmenter/classifier couldn't categorize it.
+--
+-- The refresh script asserts the invariant after each rebuild.
 CREATE TABLE IF NOT EXISTS flume_minute_attributions (
-    ts                       TIMESTAMP    NOT NULL PRIMARY KEY,
-    total_gpm                NUMERIC(8,3) NOT NULL,
-    irrigation_spray_gpm     NUMERIC(8,3) NOT NULL DEFAULT 0,
-    irrigation_drip_gpm      NUMERIC(8,3) NOT NULL DEFAULT 0,
-    irrigation_bubbler_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
-    pool_autofill_gpm        NUMERIC(8,3) NOT NULL DEFAULT 0,
-    dishwasher_gpm           NUMERIC(8,3) NOT NULL DEFAULT 0,
-    shower_gpm               NUMERIC(8,3) NOT NULL DEFAULT 0,
-    sink_hot_gpm             NUMERIC(8,3) NOT NULL DEFAULT 0,
-    clothes_washer_hot_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
-    clothes_washer_cold_gpm  NUMERIC(8,3) NOT NULL DEFAULT 0,
-    toilet_flush_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
-    sink_cold_gpm            NUMERIC(8,3) NOT NULL DEFAULT 0,
-    fridge_event_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
-    leak_gpm                 NUMERIC(8,3) NOT NULL DEFAULT 0,
-    unknown_gpm              NUMERIC(8,3) NOT NULL DEFAULT 0,
-    computed_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+    ts          TIMESTAMP    NOT NULL,
+    fixture     TEXT         NOT NULL,
+    gpm         NUMERIC(8,3) NOT NULL CHECK (gpm >= 0),
+    source      TEXT         NOT NULL DEFAULT 'v3'
+        CHECK (source IN ('v3','user')),
+    computed_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (ts, fixture)
 );
-CREATE INDEX IF NOT EXISTS flume_minute_attributions_date
-    ON flume_minute_attributions ((ts::date));
+CREATE INDEX IF NOT EXISTS flume_minute_attributions_date_fixture
+    ON flume_minute_attributions ((ts::date), fixture);
+CREATE INDEX IF NOT EXISTS flume_minute_attributions_fixture
+    ON flume_minute_attributions (fixture);
 
 -- Surface ambiguous and unknown segments for user review. Ordered by
 -- gallons descending so the biggest unidentified events are at the top.
@@ -554,11 +552,13 @@ def main() -> int:
         counter = backfill_v3(days=days)
         n_attrs = sum(counter.values())
         print(f"  v3 attributions: classified {n_attrs} segments")
-        n_min = refresh_minutes(
+        n_min, violations = refresh_minutes(
             start_date=date.today() - timedelta(days=days),
             end_date=date.today(),
         )
         print(f"  refreshed {n_min} per-minute attribution rows")
+        if violations:
+            print(f"  WARN: {violations} per-minute invariant violations")
     except Exception as exc:
         print(f"warning: v3 attribution refresh failed: {exc}")
 

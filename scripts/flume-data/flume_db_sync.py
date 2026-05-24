@@ -155,6 +155,68 @@ CREATE TABLE IF NOT EXISTS dishwasher_cycles (
 CREATE INDEX IF NOT EXISTS dishwasher_cycles_range
     ON dishwasher_cycles (start_ts, end_ts);
 
+-- v3 per-segment fixture attributions: probabilistic, one row per
+-- (fixture, segment). Probabilities sum to 1.0 across all rows for a
+-- given segment; gallons sums to flume_segments.gallons (within
+-- rounding). User overrides via flume_user_labels collapse to one row
+-- with probability=1.0.
+CREATE TABLE IF NOT EXISTS flume_segment_attributions (
+    segment_date  DATE          NOT NULL,
+    segment_start TIME          NOT NULL,
+    fixture       TEXT          NOT NULL,
+    probability   NUMERIC(4,3)  NOT NULL CHECK (probability BETWEEN 0 AND 1),
+    gallons       NUMERIC(10,3) NOT NULL,
+    classifier    TEXT          NOT NULL DEFAULT 'v3',
+    computed_at   TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (segment_date, segment_start, fixture)
+);
+CREATE INDEX IF NOT EXISTS flume_segment_attributions_fixture_date
+    ON flume_segment_attributions (fixture, segment_date);
+
+-- User-provided ground-truth labels. When a row exists, the classifier
+-- replaces its computed attributions with a single (user_fixture, 1.0).
+CREATE TABLE IF NOT EXISTS flume_user_labels (
+    label_id      SERIAL      PRIMARY KEY,
+    segment_date  DATE        NOT NULL,
+    segment_start TIME        NOT NULL,
+    user_fixture  TEXT        NOT NULL,
+    confidence    TEXT        NOT NULL DEFAULT 'certain'
+        CHECK (confidence IN ('certain','likely','guess')),
+    notes         TEXT,
+    labeled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (segment_date, segment_start)
+);
+
+-- Surface ambiguous and unknown segments for user review. Ordered by
+-- gallons descending so the biggest unidentified events are at the top.
+CREATE OR REPLACE VIEW flume_questionnaire AS
+SELECT
+    f.date, f.start_time, f.duration_min, f.mean_gpm, f.peak_gpm, f.gallons,
+    f.category_v2,
+    (SELECT string_agg(fixture || ':' || ROUND(probability*100) || '%',
+                       ', ' ORDER BY probability DESC)
+     FROM flume_segment_attributions a
+     WHERE a.segment_date=f.date AND a.segment_start=f.start_time
+       AND a.probability >= 0.05) AS top_candidates,
+    (SELECT MAX(probability)
+     FROM flume_segment_attributions a
+     WHERE a.segment_date=f.date AND a.segment_start=f.start_time) AS top_prob
+FROM flume_segments f
+WHERE NOT EXISTS (
+    SELECT 1 FROM flume_user_labels l
+    WHERE l.segment_date=f.date AND l.segment_start=f.start_time
+  )
+  AND f.gallons >= 1.0
+  AND (
+    (SELECT MAX(probability) FROM flume_segment_attributions a
+     WHERE a.segment_date=f.date AND a.segment_start=f.start_time) < 0.7
+    OR
+    EXISTS (SELECT 1 FROM flume_segment_attributions a
+            WHERE a.segment_date=f.date AND a.segment_start=f.start_time
+              AND a.fixture='unknown')
+  )
+ORDER BY f.gallons DESC;
+
 -- B-Hyve irrigation sessions, merged from per-zone valve open/close
 -- intervals. Source = 'bhyve_valve' for HA-derived sessions; the
 -- column allows future heuristics-based fillers without schema churn.

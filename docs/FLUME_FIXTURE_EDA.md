@@ -50,9 +50,9 @@ Pulling all segments with `gallons >= 2` from the 4-day window
 | 5/21 | 18:54 | 7 | 0.71 | — | 5.0 | 6.6 | 1.32 | ★ sink hot (brief) |
 | 5/21 | 19:19 | 8 | 0.74 | — | 5.9 | 7.2 | 1.22 | ★ sink hot (brief) |
 | 5/21 | 22:00 | 83 | 8.35 | — | 693 | 13.2 | 0.02 | **irrigation** (B-Hyve confirmed) |
-| 5/22 | 06:27 | 7 | 0.37 | — | 2.6 | 9.4 | 3.67 | ★ sink hot (very brief) |
-| 5/22 | 06:51 | 4 | 0.51 | — | 2.0 | 6.2 | 3.05 | ★ sink hot (very brief) |
-| 5/22 | 09:29 | 21 | 1.10 | — | 23.1 | 24.2 | 1.05 | ★ **dishwasher** |
+| 5/22 | 06:27 | 7 | 0.37 | — | 2.6 | 9.4 | 3.67 | **dishwasher fill** (cycle 06:31-09:24) |
+| 5/22 | 06:51 | 4 | 0.51 | — | 2.0 | 6.2 | 3.05 | **dishwasher fill** (same cycle) |
+| 5/22 | 09:29 | 21 | 1.10 | — | 23.1 | 24.2 | 1.05 | ★ **shower (long, possibly 2 simultaneous)** — Miele cycle ended 09:24 |
 | 5/22 | 18:06 | 5 | 0.53 | — | 2.6 | 4.4 | 1.68 | ★ sink hot |
 | 5/22 | 21:43 | 10 | 1.49 | — | 14.9 | 0.7 | 0.05 | sink cold or fill |
 | 5/22 | 23:44 | **48** | **6.41** | **25.66** | **308** | **0.0** | **0.0** | **clothes washer (cold)** ★ peak signature |
@@ -71,8 +71,13 @@ Pulling all segments with `gallons >= 2` from the 4-day window
    The 1.4 GPM is **lower than the textbook 2.0-2.5** — suggests a
    low-flow shower head or the user adjusts to <full. Calibrate to
    actual.
-3. **Dishwasher signature** (5/22 09:29): 21 min, 1.1 GPM, hot_frac ~1.0
-   (entirely hot). Single segment, not multi-cycle in our window.
+3. **Dishwasher signature** (Miele ground truth, 13 cycles in 30 days):
+   each cycle runs 2-3 hours wall-clock with 3.7 gal typical (1.6 for
+   quick, 5.0 for intensive). The actual *Flume-visible* water is just
+   2-3 short fill pulses (e.g., 5/22 06:27 + 06:51 = 4.6 gal across
+   11 min). Most of the cycle window is heating/circulation, not new
+   water draw. Use Miele `dishwasher_cycles` as ground truth — don't
+   try to detect from Flume alone.
 4. **Clothes washer (cold)** (5/22 23:44): **distinctive peak signature**
    — 48-min segment with peak 25.66 GPM (washer fill pressure) but
    mean only 6.41. The `peak / mean` ratio (~4x) is the discriminator.

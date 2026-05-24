@@ -53,6 +53,10 @@ from flume_data.irrigation_sessions import (  # noqa: E402
     persist_sessions,
 )
 from flume_data.tankless import sync_range_from_ha as tankless_sync  # noqa: E402
+from flume_data.dishwasher import (  # noqa: E402
+    extract_cycles_from_ha as dishwasher_extract,
+    persist_cycles as dishwasher_persist,
+)
 
 # The db, postgres role, and OS user are all named `flume-data` so
 # the ensureDBOwnership assertion + peer-auth ident mapping align on a
@@ -134,6 +138,22 @@ CREATE TABLE IF NOT EXISTS tankless_minute_samples (
 );
 CREATE INDEX IF NOT EXISTS tankless_minute_samples_date
     ON tankless_minute_samples ((ts::date));
+
+-- Miele dishwasher cycle windows. Source = HA `sensor.dishwasher_program_phase`
+-- state transitions; gallons = peak `sensor.dishwasher_water_consumption`
+-- during the cycle. Used by the v3 classifier to attribute flow during
+-- a dishwasher cycle with high confidence (third ground-truth source
+-- alongside B-Hyve and the tankless heater).
+CREATE TABLE IF NOT EXISTS dishwasher_cycles (
+    cycle_id    SERIAL    PRIMARY KEY,
+    start_ts    TIMESTAMP NOT NULL UNIQUE,  -- local naive
+    end_ts      TIMESTAMP NOT NULL,
+    program     TEXT,
+    gallons     NUMERIC(6,3),
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS dishwasher_cycles_range
+    ON dishwasher_cycles (start_ts, end_ts);
 
 -- B-Hyve irrigation sessions, merged from per-zone valve open/close
 -- intervals. Source = 'bhyve_valve' for HA-derived sessions; the
@@ -284,6 +304,17 @@ def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
                 print(f"  upserted {tk_rows} tankless minute samples")
     except Exception as exc:
         print(f"warning: tankless sync failed: {exc}")
+
+    # 2b) Miele dishwasher cycles — third ground-truth source.
+    try:
+        with psycopg2.connect(**DB_CONNECT_KWARGS) as dw_conn:
+            cycles = dishwasher_extract(HA_POSTGRES_DSN, range_start, range_end)
+            n = dishwasher_persist(dw_conn, cycles)
+            dw_conn.commit()
+            if n:
+                print(f"  upserted {n} dishwasher cycles")
+    except Exception as exc:
+        print(f"warning: dishwasher sync failed: {exc}")
 
     # 3) Derived segments — precomputed for fast dashboard queries.
     # Also compute v2 classification using the refreshed irrigation

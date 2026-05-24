@@ -187,6 +187,36 @@ CREATE TABLE IF NOT EXISTS flume_user_labels (
     UNIQUE (segment_date, segment_start)
 );
 
+-- Per-minute wide attribution: one row per minute, one column per
+-- fixture, gpm allocated proportionally from each segment's
+-- attribution probabilities. Materialized for fast dashboard queries;
+-- refreshed by backfill_minute_attributions.py (one-shot) and by the
+-- 6-hourly sync (last 4 days incremental).
+--
+-- Invariant: the sum of all *_gpm columns equals total_gpm (within
+-- 0.05 rounding tolerance).
+CREATE TABLE IF NOT EXISTS flume_minute_attributions (
+    ts                       TIMESTAMP    NOT NULL PRIMARY KEY,
+    total_gpm                NUMERIC(8,3) NOT NULL,
+    irrigation_spray_gpm     NUMERIC(8,3) NOT NULL DEFAULT 0,
+    irrigation_drip_gpm      NUMERIC(8,3) NOT NULL DEFAULT 0,
+    irrigation_bubbler_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
+    pool_autofill_gpm        NUMERIC(8,3) NOT NULL DEFAULT 0,
+    dishwasher_gpm           NUMERIC(8,3) NOT NULL DEFAULT 0,
+    shower_gpm               NUMERIC(8,3) NOT NULL DEFAULT 0,
+    sink_hot_gpm             NUMERIC(8,3) NOT NULL DEFAULT 0,
+    clothes_washer_hot_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
+    clothes_washer_cold_gpm  NUMERIC(8,3) NOT NULL DEFAULT 0,
+    toilet_flush_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
+    sink_cold_gpm            NUMERIC(8,3) NOT NULL DEFAULT 0,
+    fridge_event_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
+    leak_gpm                 NUMERIC(8,3) NOT NULL DEFAULT 0,
+    unknown_gpm              NUMERIC(8,3) NOT NULL DEFAULT 0,
+    computed_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS flume_minute_attributions_date
+    ON flume_minute_attributions ((ts::date));
+
 -- Surface ambiguous and unknown segments for user review. Ordered by
 -- gallons descending so the biggest unidentified events are at the top.
 CREATE OR REPLACE VIEW flume_questionnaire AS
@@ -512,6 +542,26 @@ def main() -> int:
 
     samples_written, segments_written = sync_dates_to_db(target)
     print(f"  UPSERTed {samples_written} minute samples + {segments_written} segment rows")
+
+    # v3 attributions + per-minute materialization. Failures are
+    # non-fatal — the upstream segment data is still up to date and
+    # the user can re-run these manually.
+    try:
+        from backfill_v3 import backfill as backfill_v3
+        from refresh_minute_attributions import refresh as refresh_minutes
+
+        days = max(args.days, 1) if not args.from_cache else 7
+        counter = backfill_v3(days=days)
+        n_attrs = sum(counter.values())
+        print(f"  v3 attributions: classified {n_attrs} segments")
+        n_min = refresh_minutes(
+            start_date=date.today() - timedelta(days=days),
+            end_date=date.today(),
+        )
+        print(f"  refreshed {n_min} per-minute attribution rows")
+    except Exception as exc:
+        print(f"warning: v3 attribution refresh failed: {exc}")
+
     return 0
 
 

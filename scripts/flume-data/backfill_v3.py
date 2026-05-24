@@ -165,13 +165,21 @@ def build_context(
     )
 
 
-def backfill(verbose: bool = False) -> dict[str, int]:
+def backfill(
+    verbose: bool = False,
+    days: int | None = None,
+) -> dict[str, int]:
+    """Re-attribute segments. days=None means all history; days=N means
+    only segments whose date is within the last N days (incremental sync)."""
     with psycopg2.connect(**DB_CONNECT_KWARGS) as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_DDL)
         conn.commit()
 
         segments = fetch_all_segments(conn)
+        if days is not None:
+            cutoff = date.today() - timedelta(days=days)
+            segments = [s for s in segments if s["date"] >= cutoff]
         labels = fetch_user_labels(conn)
         print(f"classifying {len(segments):,} segments "
               f"(of which {len(labels)} have user labels)")
@@ -211,9 +219,21 @@ def backfill(verbose: bool = False) -> dict[str, int]:
             if verbose:
                 print(f"  {d}: {len(by_date[d])} segments")
 
-        # Wipe and reload attributions in one transaction
+        # Targeted replacement: delete attributions for the affected
+        # segments only, then re-insert. Avoids TRUNCATE on incremental
+        # runs which would drop the rest of the history.
+        affected_keys = sorted({(s["date"], s["start_time"]) for s in segments})
         with conn.cursor() as cur:
-            cur.execute("TRUNCATE flume_segment_attributions")
+            if days is None:
+                cur.execute("TRUNCATE flume_segment_attributions")
+            else:
+                execute_values(
+                    cur,
+                    "DELETE FROM flume_segment_attributions WHERE "
+                    "(segment_date, segment_start) IN (VALUES %s)",
+                    affected_keys,
+                    page_size=5000,
+                )
             execute_values(
                 cur,
                 """
@@ -232,8 +252,14 @@ def backfill(verbose: bool = False) -> dict[str, int]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="Re-attribute only segments in the last N days (default: all)",
+    )
     args = parser.parse_args()
-    counter = backfill(verbose=args.verbose)
+    counter = backfill(verbose=args.verbose, days=args.days)
     print("\nTop-fixture distribution (segments classified, not gallons):")
     for fix, n in sorted(counter.items(), key=lambda kv: -kv[1]):
         print(f"  {fix:<22} {n:>10,}")

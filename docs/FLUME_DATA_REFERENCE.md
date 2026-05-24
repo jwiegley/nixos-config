@@ -139,6 +139,175 @@ sessions from HA's `valve.sprinkler_control_*_zone` history each run;
 the standalone `backfill_v2.py` bootstraps the table from whatever HA
 retention still has.
 
+### `tankless_minute_samples` — hot-water flow
+
+```sql
+CREATE TABLE tankless_minute_samples (
+    ts   TIMESTAMP    NOT NULL PRIMARY KEY,  -- local PT, naive
+    gpm  NUMERIC(8,3) NOT NULL
+);
+```
+
+Per-minute hot-water flow from the Navien tankless heater, sourced
+from `sensor.water_heater_ch1_ch1_unit1_hot_water_flow` in HA. The
+underlying sensor is event-driven (emits on state change); this table
+is **forward-filled** to per-minute so it joins directly with
+`flume_minute_samples` on `ts`. A minute with no event keeps the prior
+value (which may be 0).
+
+**Coverage starts 2026-05-19** (when the sensor was added to HA);
+older minutes won't appear here.
+
+Used by the v3 classifier to discriminate hot-water fixtures (shower,
+dishwasher, washer-hot) from cold-only ones (toilet, irrigation, pool
+autofill, fridge).
+
+### `dishwasher_cycles` — Miele ground truth
+
+```sql
+CREATE TABLE dishwasher_cycles (
+    cycle_id    SERIAL    PRIMARY KEY,
+    start_ts    TIMESTAMP NOT NULL UNIQUE,   -- local PT, naive
+    end_ts      TIMESTAMP NOT NULL,
+    program     TEXT,                        -- "Normal", "Eco" etc. (may be "no_program")
+    gallons     NUMERIC(6,3),                -- peak water_consumption during cycle
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Reconstructed from `sensor.dishwasher_program_phase` transitions in
+HA. A cycle starts on `not_running → pre_dishwash` and ends on
+entering `drying` (no more water from there) or returning to
+`not_running`. Cycles shorter than 5 minutes are dropped as aborts.
+
+The classifier treats any flow during a cycle's `[start_ts, end_ts]`
+window as dishwasher, since attempting to detect from Flume alone
+fails (the Miele uses ~3.5 gal across ~3 hours in 3-5 fill pulses,
+many of which are sub-segment-detection-threshold).
+
+**Coverage starts 2026-04-23** (HA recorder retention for the
+`sensor.dishwasher_*` entities).
+
+### `flume_segment_attributions` — v3 probabilistic classifier
+
+```sql
+CREATE TABLE flume_segment_attributions (
+    segment_date  DATE          NOT NULL,
+    segment_start TIME          NOT NULL,
+    fixture       TEXT          NOT NULL,
+    probability   NUMERIC(4,3)  NOT NULL CHECK (probability BETWEEN 0 AND 1),
+    gallons       NUMERIC(10,3) NOT NULL,   -- = segment.gallons × probability
+    classifier    TEXT          NOT NULL DEFAULT 'v3',
+    computed_at   TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (segment_date, segment_start, fixture)
+);
+```
+
+Long-format probabilistic output. **Multiple rows per segment**, one
+per fixture that scored above the 5% noise threshold. Probabilities
+sum to ~1.0 per segment; gallons sums to `flume_segments.gallons`
+(within rounding). When a row exists in `flume_user_labels`, the
+classifier replaces the multi-row distribution with a single row at
+`probability = 1.0`.
+
+The library of fixtures lives in `flume_data/fixtures.py` and uses
+Gaussian likelihoods (mean ± σ from range midpoint) plus hard
+constraints (must overlap B-Hyve, must be cold-only, etc.).
+
+### `flume_minute_attributions` — wide per-minute table
+
+```sql
+CREATE TABLE flume_minute_attributions (
+    ts                       TIMESTAMP    NOT NULL PRIMARY KEY,
+    total_gpm                NUMERIC(8,3) NOT NULL,
+    irrigation_spray_gpm     NUMERIC(8,3) NOT NULL DEFAULT 0,
+    irrigation_drip_gpm      NUMERIC(8,3) NOT NULL DEFAULT 0,
+    irrigation_bubbler_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
+    pool_autofill_gpm        NUMERIC(8,3) NOT NULL DEFAULT 0,
+    dishwasher_gpm           NUMERIC(8,3) NOT NULL DEFAULT 0,
+    shower_gpm               NUMERIC(8,3) NOT NULL DEFAULT 0,
+    sink_hot_gpm             NUMERIC(8,3) NOT NULL DEFAULT 0,
+    clothes_washer_hot_gpm   NUMERIC(8,3) NOT NULL DEFAULT 0,
+    clothes_washer_cold_gpm  NUMERIC(8,3) NOT NULL DEFAULT 0,
+    toilet_flush_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
+    sink_cold_gpm            NUMERIC(8,3) NOT NULL DEFAULT 0,
+    fridge_event_gpm         NUMERIC(8,3) NOT NULL DEFAULT 0,
+    leak_gpm                 NUMERIC(8,3) NOT NULL DEFAULT 0,
+    unknown_gpm              NUMERIC(8,3) NOT NULL DEFAULT 0,
+    computed_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+```
+
+**This is the headline user-facing table.** One row per minute, one
+column per fixture. Each minute's `total_gpm` is distributed across
+the fixture columns by projecting `flume_segment_attributions` onto
+the per-minute `flume_minute_samples.gpm`.
+
+**Invariant:** for every row,
+`sum(all *_gpm columns) ≈ total_gpm` (within 0.05 GPM rounding).
+Verified across 1.2M rows during the initial backfill.
+
+The `unknown_gpm` column catches two cases:
+1. Minutes where the v3 classifier returned `("unknown", 1.0)`
+2. Minutes with flow but no enclosing segment (sub-threshold flow
+   that the segmenter skipped over)
+
+Materialized by `refresh_minute_attributions.py`; refreshed
+incrementally by the 6-hourly sync (`--days 4` window).
+
+### `flume_user_labels` — manual ground-truth overrides
+
+```sql
+CREATE TABLE flume_user_labels (
+    label_id      SERIAL      PRIMARY KEY,
+    segment_date  DATE        NOT NULL,
+    segment_start TIME        NOT NULL,
+    user_fixture  TEXT        NOT NULL,
+    confidence    TEXT        NOT NULL DEFAULT 'certain'
+        CHECK (confidence IN ('certain','likely','guess')),
+    notes         TEXT,
+    labeled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (segment_date, segment_start)
+);
+```
+
+When you can identify a segment that the classifier couldn't, label
+it here. The next attribution refresh will replace the multi-fixture
+probabilistic guess with `(user_fixture, 1.0)`.
+
+```sql
+-- example: label the 85-hour July 2025 event as a pool float stuck
+INSERT INTO flume_user_labels (segment_date, segment_start, user_fixture, notes)
+VALUES ('2025-07-23', '20:07:00', 'leak', 'pool float valve stuck open');
+```
+
+After labeling, run:
+```bash
+sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py --days 800
+sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+```
+(or wait for the next 6-hourly sync, which only catches the most
+recent 4-day window).
+
+### `flume_questionnaire` — VIEW: events that need labeling
+
+```sql
+CREATE VIEW flume_questionnaire AS ...  -- see schema in flume_db_sync.py
+```
+
+Surfaces segments where:
+- No user label exists yet
+- `gallons >= 1.0` (skip noise)
+- The top fixture probability is below 70% (ambiguous), OR the
+  attribution is `unknown`
+
+Ordered by gallons descending so the biggest unidentified events
+appear first.
+
+```sql
+SELECT * FROM flume_questionnaire LIMIT 10;
+```
+
 ### `flume_day_totals` — view
 
 ```sql
@@ -236,6 +405,88 @@ SELECT start_ts, end_ts,
 FROM irrigation_sessions
 WHERE start_ts::date = '2026-05-21'
 ORDER BY start_ts;
+```
+
+### v3 — minute-by-minute attribution (the headline view)
+
+```sql
+-- what was happening every minute of an interesting hour
+SELECT to_char(ts, 'HH24:MI') AS t, total_gpm,
+       NULLIF(dishwasher_gpm, 0)         AS dishwasher,
+       NULLIF(shower_gpm, 0)             AS shower,
+       NULLIF(toilet_flush_gpm, 0)       AS toilet,
+       NULLIF(sink_cold_gpm, 0)          AS sink_cold,
+       NULLIF(sink_hot_gpm, 0)           AS sink_hot,
+       NULLIF(fridge_event_gpm, 0)       AS fridge,
+       NULLIF(unknown_gpm, 0)            AS unknown
+FROM flume_minute_attributions
+WHERE ts BETWEEN '2026-05-22 06:00' AND '2026-05-22 10:00'
+  AND total_gpm > 0
+ORDER BY ts;
+```
+
+### v3 — weekly water breakdown by category
+
+```sql
+SELECT ts::date AS day,
+       ROUND(SUM(pool_autofill_gpm)::numeric, 0)        AS pool,
+       ROUND(SUM(shower_gpm + sink_hot_gpm + dishwasher_gpm)::numeric, 0) AS hot_domestic,
+       ROUND(SUM(toilet_flush_gpm + sink_cold_gpm + fridge_event_gpm)::numeric, 0) AS cold_domestic,
+       ROUND(SUM(clothes_washer_hot_gpm + clothes_washer_cold_gpm)::numeric, 0) AS laundry,
+       ROUND(SUM(irrigation_spray_gpm + irrigation_drip_gpm + irrigation_bubbler_gpm)::numeric, 0) AS irrigation,
+       ROUND(SUM(unknown_gpm)::numeric, 0)              AS unknown,
+       ROUND(SUM(total_gpm)::numeric, 0)                AS total
+FROM flume_minute_attributions
+WHERE ts >= now() - INTERVAL '7 days'
+GROUP BY 1 ORDER BY 1;
+```
+
+### v3 — find segments with low classifier confidence (review candidates)
+
+```sql
+SELECT * FROM flume_questionnaire LIMIT 20;
+```
+
+### v3 — see all attributions for a single segment
+
+```sql
+SELECT fixture, probability, gallons, classifier
+FROM flume_segment_attributions
+WHERE segment_date = '2026-05-22' AND segment_start = '09:29:00'
+ORDER BY probability DESC;
+```
+
+### v3 — invariant check (column sums must equal total_gpm)
+
+```sql
+SELECT COUNT(*) AS minutes,
+       COUNT(*) FILTER (WHERE abs(total_gpm - (
+           irrigation_spray_gpm + irrigation_drip_gpm + irrigation_bubbler_gpm
+         + pool_autofill_gpm + dishwasher_gpm + shower_gpm + sink_hot_gpm
+         + clothes_washer_hot_gpm + clothes_washer_cold_gpm + toilet_flush_gpm
+         + sink_cold_gpm + fridge_event_gpm + leak_gpm + unknown_gpm
+       )) > 0.05) AS invariant_failures
+FROM flume_minute_attributions;
+```
+
+### v3 — manually label a segment
+
+```sql
+-- example: the 85-hour July 2025 event was a stuck pool float valve
+INSERT INTO flume_user_labels (segment_date, segment_start, user_fixture, notes)
+VALUES ('2025-07-23', '20:07:00', 'leak', 'pool float valve stuck open');
+
+-- example: weekend dishwasher cycle the classifier missed (pre-Miele data era)
+INSERT INTO flume_user_labels (segment_date, segment_start, user_fixture, confidence)
+VALUES ('2025-09-20', '14:32:00', 'dishwasher', 'likely');
+```
+
+After labeling N segments, refresh the materialized table so the
+labels propagate to `flume_minute_attributions`:
+
+```bash
+sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
+sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
 ```
 
 ### Custom daily total computed from raw samples
@@ -388,6 +639,16 @@ The pipeline:
 local time. It triggers `flume-data-daily-sync.service`, which runs
 `python -m flume_db_sync --days 3`.
 
+Each run does the full pipeline end-to-end in ~1 second (after the
+initial backfill):
+
+1. Pull Flume API data for the 3-day rolling window → `flume_minute_samples` + `flume_segments`
+2. Pull tankless hot-water events from HA Postgres → `tankless_minute_samples` (per-minute interpolated)
+3. Pull Miele dishwasher phases from HA Postgres → `dishwasher_cycles`
+4. Pull B-Hyve valve events from HA Postgres → `irrigation_sessions`
+5. Run v3 classifier on the recent segments → `flume_segment_attributions`
+6. Refresh the wide projection → `flume_minute_attributions`
+
 The 3-day rolling window absorbs late-arriving data without re-fetching
 the full history. Cache hits are free (no API call); only genuinely
 missing days trigger Flume API calls. The window itself is ≈ 4 API calls
@@ -472,6 +733,52 @@ rebuilt:
 4. Run `--from-cache` to repopulate from the (unchanged) raw samples
    with the new rule. **`flume_minute_samples` is unaffected** — that's
    the point of separating raw from derived.
+
+### Re-calibrating v3 fixture signatures
+
+The v3 fixture library lives in
+`/etc/nixos/scripts/flume-data/flume_data/fixtures.py`. Each fixture
+has a Gaussian likelihood centered on the midpoint of its
+(mean_gpm, duration, gallons, hot_frac, peak/mean) ranges.
+
+To tighten or expand a fixture (e.g., after observing that your shower
+runs at 1.8 GPM rather than the assumed 2.0):
+
+1. Edit the `Range(low, high)` for the relevant field in `fixtures.py`.
+2. `nixos-rebuild switch` to deploy.
+3. Re-attribute:
+   ```bash
+   sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
+   sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+   ```
+
+A useful re-calibration cadence is every ~2 weeks, as new
+`tankless_minute_samples` and `dishwasher_cycles` data accumulates.
+Look at `flume_questionnaire` for segments where the classifier is
+uncertain — those are the candidates for either user labeling or
+fixture-range tuning.
+
+### Labeling unknown events
+
+When `flume_questionnaire` shows a high-gallon event the classifier
+couldn't identify (or got wrong), insert a row in
+`flume_user_labels`. The next attribution refresh will replace the
+multi-row probabilistic guess with a single `(user_fixture, 1.0)` row.
+
+```sql
+INSERT INTO flume_user_labels (segment_date, segment_start, user_fixture, notes)
+VALUES ('2025-07-23', '20:07:00', 'leak', 'pool float stuck open');
+```
+
+Then:
+```bash
+sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
+sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+```
+
+Labeled segments are also propagated into the wide
+`flume_minute_attributions` table, so dashboards and reports pick up
+the correction automatically.
 
 ### Backups
 
@@ -590,12 +897,24 @@ on `ts` (e.g., `flume_minute_annotations`).
 
 ## Where things are defined in code
 
-* Schema DDL: `scripts/flume-data/flume_db_sync.py:SCHEMA_DDL`
-* Segment detection: `scripts/flume-data/flume_data/detection.py`
+* Schema DDL (all tables + views): `scripts/flume-data/flume_db_sync.py:SCHEMA_DDL`
+* v1 segment detection: `scripts/flume-data/flume_data/detection.py`
   + `scripts/flume-data/emit_segments_csv.py:detect_segments` +
   `is_pool_autofill_segment`
+* v2 sustained-flow classifier: `scripts/flume-data/flume_data/classify_v2.py`
+* v3 fixture library: `scripts/flume-data/flume_data/fixtures.py`
+* v3 probabilistic classifier: `scripts/flume-data/flume_data/classify_v3.py`
+* B-Hyve irrigation extractor: `scripts/flume-data/flume_data/irrigation_sessions.py`
+* Tankless hot-water reader: `scripts/flume-data/flume_data/tankless.py`
+* Miele dishwasher reader: `scripts/flume-data/flume_data/dishwasher.py`
+* One-shot backfills:
+  - `scripts/flume-data/backfill_v2.py` (category_v2 + irrigation_sessions)
+  - `scripts/flume-data/backfill_v3.py` (flume_segment_attributions)
+  - `scripts/flume-data/refresh_minute_attributions.py` (per-minute wide table)
 * Cache shape: `scripts/flume-data/emit_segments_csv.py:chunked_pull`
   (writes one JSON per day with `[[iso_naive_ts, gpm], ...]`)
 * NixOS module: `modules/services/flume-data.nix`
 * DB provisioning: `modules/services/databases.nix` (database +
-  `ensureUsers` + pg_hba peer-auth lines)
+  `ensureUsers` + pg_hba peer-auth lines including `local hass flume-data peer`)
+* Preliminary fixture EDA findings: `docs/FLUME_FIXTURE_EDA.md`
+* v3 design rationale: `docs/FLUME_V3_DESIGN.md`

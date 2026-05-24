@@ -129,6 +129,8 @@
     ../../modules/services/vane.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/monitoring/services/openclaw-hermes-smoke.nix
+    ../../modules/monitoring/services/hermes-e2e-chat-probe.nix
+    ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/cockpit.nix
     ../../modules/services/llama-swap.nix
@@ -191,6 +193,8 @@
   services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;
   services.openclawHermesSmoke.enable = true;
+  services.hermesE2eChatProbe.enable = true;
+  services.hermesFallbackCounter.enable = true;
   services.openclawConfigDriftCheck.enable = true;
 
   services.home-assistant-water-attribution = {

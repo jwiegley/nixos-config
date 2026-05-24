@@ -73,17 +73,16 @@ groups:
       # but won't reply to DMs. The probe regex matches user activity +
       # reconnect/connect events.
       #
-      # Threshold tuning (2026-05-22): lowered from 24h to 2h after a
-      # zombie-immediately-after-restart incident went undetected for
-      # 5h 51min before the user noticed manually. The original 24h was
-      # set to avoid false-positives on legitimately idle bots, but for
-      # a chat bot in active Discord servers (where presence/typing/
-      # member events from other users fire regularly) 2h of total
-      # silence is a strong zombie signal. Worst-case false positive is
-      # one unnecessary restart every few days during deep quiet
-      # periods — acceptable cost.
+      # Threshold tuning (2026-05-24): restored to 24h after the 2h
+      # setting caused continuous spurious restarts every 2h 16min —
+      # the bot is idle on Discord for >2h regularly, so a 2h threshold
+      # paced the VM through forced reboots instead of catching real
+      # zombies. The original "zombie-immediately-after-restart" gap
+      # that motivated the May-22 tightening is now covered by the
+      # faster HermesDiscordPostSelfHealRestart alert below (15 min
+      # after a self-heal restart), so this catchall can stay at 24h.
       - alert: HermesDiscordZombieSuspected
-        expr: hermes_discord_last_event_age_seconds > 7200
+        expr: hermes_discord_last_event_age_seconds > 86400
         for: 10m
         labels:
           severity: warning
@@ -91,16 +90,16 @@ groups:
           service: hermes-agent
           self_heal_eligible: "true"
         annotations:
-          summary: "Hermes Discord platform shows no activity for >2 hours"
+          summary: "Hermes Discord platform shows no activity for >24 hours"
           description: |
             /var/lib/hermes/.hermes/logs/gateway.log has not recorded
-            a Discord-relevant event in the last 2+ hours. In an active
-            server the bot should see presence/typing/member events from
-            other users continuously; 2h+ silence indicates the gateway
-            WebSocket has zombied (TCP socket appears alive, Discord
-            sees the bot as online, but no inbound events propagate).
-            Restarting microvm@hermes re-establishes a clean WS
-            session.
+            a Discord-relevant event in the last 24+ hours. In an
+            active server the bot should see presence/typing/member
+            events from other users continuously; 24h+ silence
+            indicates the gateway WebSocket has zombied (TCP socket
+            appears alive, Discord sees the bot as online, but no
+            inbound events propagate). Restarting microvm@hermes
+            re-establishes a clean WS session.
 
       # Faster sibling of HermesDiscordZombieSuspected — fires after just
       # 15 min when the self-heal daemon just restarted the microvm but
@@ -160,6 +159,75 @@ groups:
             API_SERVER_KEY field — every authenticated probe will
             fail. Check `sops-install-secrets.service` status and
             the `hermes:` block in secrets.yaml.
+
+      # End-to-end chat probe — the real test. Sends a chat completion
+      # through the Hermes Agent api_server (the path Discord uses) and
+      # validates the response contains an expected token. Catches any
+      # regression in routing, auth, model availability, or the MLX
+      # backend that the static smoke probe (openclaw_hermes_smoke)
+      # would silently miss.
+      #
+      # History: 2026-05-24 incident — Discord chat returned HTTP 401
+      # from openrouter.ai for 24+ hours while openclaw_hermes_smoke_ok
+      # stayed at 1 (probe used a short-circuited fixed 185-byte path).
+      # This alert would have fired within 5 min.
+      - alert: HermesE2eChatFailing
+        expr: hermes_e2e_chat_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes end-to-end chat probe failing for >5 min"
+          description: |
+            The hermes-e2e-chat-probe (every 5 min) is returning a
+            non-200 or missing-token response from
+            http://10.99.1.2:8080/v1/chat/completions. The chat path
+            Discord uses is broken — users will see "Non-retryable
+            error" or no response. Check `/var/lib/hermes/.hermes/logs/
+            errors.log` for the upstream HTTP status and the failing
+            base_url; the most common causes are model.base_url
+            misrouting (config.yaml regression) and LiteLLM master_key
+            mismatch.
+
+      # E2E probe hasn't run recently. Catches the case where the
+      # probe service is failing to start (e.g., EnvironmentFile
+      # missing) — distinct from "probe ran but got non-200".
+      - alert: HermesE2eChatProbeStale
+        expr: time() - hermes_e2e_chat_last_run_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes
+        annotations:
+          summary: "hermes-e2e-chat-probe has not run in >15 min"
+          description: |
+            The hermes-e2e-chat-probe.timer should fire every 5 min.
+            Stale >15 min means the timer or service is broken. Check
+            `systemctl status hermes-e2e-chat-probe.timer` and the
+            most recent service journal.
+
+      # Fallback chain triggered — Hermes' agent loop hit a non-retryable
+      # error (typically 401/403/404 from upstream) and tried a fallback
+      # model. Counts unique occurrences in the errors.log; any positive
+      # increase over 10 min means a user-visible chat error happened.
+      - alert: HermesFallbackChainTriggered
+        expr: increase(hermes_fallback_chain_triggered_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes fallback chain triggered — primary chat path errored"
+          description: |
+            Hermes' conversation loop logged "Non-retryable client
+            error" at least once in the last 10 min. The user saw
+            the "⚠️ Non-retryable error (HTTP N) — trying fallback…"
+            banner. Check `/var/lib/hermes/.hermes/logs/errors.log`
+            for the failing base_url and HTTP code.
 
       # The self-heal daemon's own heartbeat. If the daemon dies, no
       # auto-remediation is happening — operator must intervene.

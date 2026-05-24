@@ -65,7 +65,17 @@ module.exports = {
             permissions: "*"
         }],
         // Tokens expire after 7 days of inactivity
-        sessionExpiryTime: 604800
+        sessionExpiryTime: 604800,
+        // Service tokens: same SOPS-managed tokens used by httpNodeMiddleware
+        // also authorize the Admin API, with full permissions. Lets local
+        // automation talk to /flow/<id> etc. via Authorization: Bearer <token>
+        // without going through the password login flow.
+        tokens: async function (token) {
+            if (apiTokens.some(t => t.token === token)) {
+                return { username: "service", permissions: "*" };
+            }
+            return null;
+        }
     } : undefined,
 
     /**

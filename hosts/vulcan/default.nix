@@ -193,7 +193,13 @@
   services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;
   services.openclawHermesSmoke.enable = true;
-  services.hermesE2eChatProbe.enable = true;
+  services.hermesE2eChatProbe = {
+    enable = true;
+    # 900s = 15 min. Detection latency ~20 min when paired with the
+    # fallback counter (1 min cadence) that catches per-conversation
+    # failures immediately. ~96 probes/day, ~11 min MLX compute/day.
+    intervalSeconds = 900;
+  };
   services.hermesFallbackCounter.enable = true;
   services.openclawConfigDriftCheck.enable = true;
 

@@ -63,6 +63,8 @@ channels.whatsapp.allowFrom.0
 channels.whatsapp.debounceMs
 channels.whatsapp.dmPolicy
 channels.whatsapp.enabled
+channels.whatsapp.groupAllowFrom
+channels.whatsapp.groupAllowFrom.0
 channels.whatsapp.groupPolicy
 channels.whatsapp.mediaMaxMb
 commands

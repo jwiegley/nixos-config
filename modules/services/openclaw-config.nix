@@ -133,6 +133,7 @@ let
         dmPolicy = "allowlist";
         allowFrom = [ "+19194299581" ];
         groupPolicy = "allowlist";
+        groupAllowFrom = [ "XXXXXXXXXXXXXXXXXX@g.us" ];
         debounceMs = 0;
         mediaMaxMb = 50;
       };

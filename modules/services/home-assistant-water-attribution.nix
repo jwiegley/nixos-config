@@ -400,6 +400,108 @@ let
     lib.concatMap (source: map (cycle: utilityMeterEntry source cycle) cfg.cycles) cumulativeSources
   );
 
+  # ── SQL fixture sensors (read v3 attributions from flume-data) ───────────
+  #
+  # Each fixture in the v3 classifier gets three sensors: today / this
+  # week / this month. The sensors read `flume_minute_attributions`
+  # directly via peer auth — no password, the `hass` Postgres role is
+  # granted SELECT in modules/services/databases.nix.
+  #
+  # `scan_interval: 600` (10 min) is plenty given the underlying data
+  # only refreshes on the 6-hour sync cadence.
+
+  fixtures = [
+    "irrigation_spray"
+    "irrigation_drip"
+    "irrigation_bubbler"
+    "pool_autofill"
+    "shower"
+    "dishwasher"
+    "sink_hot"
+    "sink_cold"
+    "clothes_washer_hot"
+    "clothes_washer_cold"
+    "toilet_flush"
+    "fridge_event"
+    "leak"
+    "unknown"
+  ];
+
+  prettyFixture =
+    f:
+    let
+      parts = lib.splitString "_" f;
+      cap = s: (lib.toUpper (builtins.substring 0 1 s)) + (builtins.substring 1 (-1) s);
+    in
+    lib.concatStringsSep " " (map cap parts);
+
+  # SQLAlchemy DSN form that works for peer auth via Unix socket.
+  # The "hass" role gets peer access via `local flume-data hass peer`
+  # in pg_hba.
+  #
+  # Note: the modern `sql:` integration uses a fixed 30s scan interval
+  # internally and rejects per-entry `scan_interval`. That's overkill
+  # for our 6-hour-cadence data, but the queries are cheap (indexed
+  # date_trunc) so we accept the default.
+  flumeDataDsn = "postgresql://hass@/flume-data?host=/run/postgresql";
+
+  # PostgreSQL date_trunc on a timezone-aware now() gives the local
+  # midnight / Monday / first-of-month boundary. We do this server-side
+  # so the result is independent of where the HA process thinks "now"
+  # is (HA's TZ config can drift from system TZ during upgrades).
+  cycleBoundaryExpr =
+    cycle:
+    {
+      daily = "date_trunc('day',   now() AT TIME ZONE 'America/Los_Angeles')";
+      weekly = "date_trunc('week',  now() AT TIME ZONE 'America/Los_Angeles')";
+      monthly = "date_trunc('month', now() AT TIME ZONE 'America/Los_Angeles')";
+    }
+    .${cycle};
+
+  cycleSuffix = {
+    daily = "today";
+    weekly = "week";
+    monthly = "month";
+  };
+
+  cycleLabel = {
+    daily = "Today";
+    weekly = "This Week";
+    monthly = "This Month";
+  };
+
+  sqlFixtureSensor =
+    fixture: cycle:
+    let
+      slug = "water_fixture_${fixture}_${cycleSuffix.${cycle}}";
+    in
+    {
+      name = "Water Fixture ${prettyFixture fixture} ${cycleLabel.${cycle}}";
+      unique_id = slug;
+      db_url = flumeDataDsn;
+      query = ''
+        SELECT COALESCE(SUM(gpm), 0)::numeric(10,2) AS gal
+        FROM flume_minute_attributions
+        WHERE fixture = '${fixture}'
+          AND ts >= ${cycleBoundaryExpr cycle};
+      '';
+      column = "gal";
+      unit_of_measurement = "gal";
+      device_class = "water";
+      state_class = "total";
+    };
+
+  fixtureSqlSensors = lib.flatten (
+    map (
+      f:
+      map (c: sqlFixtureSensor f c) [
+        "daily"
+        "weekly"
+        "monthly"
+      ]
+    ) fixtures
+  );
+
   # ── Assembled package YAML ───────────────────────────────────────────────
   #
   # We emit the entire package as JSON (a valid subset of YAML 1.2) prefixed
@@ -409,6 +511,7 @@ let
     template = templateBlock;
     sensor = sensorBlock;
     utility_meter = utilityMeterBlock;
+    sql = fixtureSqlSensors;
   };
 
   packageYamlFile = pkgs.writeText "water_attribution.yaml" ''

@@ -386,6 +386,7 @@ in
       "default_config"
       "met"
       "mqtt" # MQTT broker for HASS.Agent and other IoT devices
+      "sql" # SQL sensor platform — water-attribution fixture totals from flume-data DB
 
       # Calendar and scheduling
       "google" # Google Calendar integration (requires gcal_sync)

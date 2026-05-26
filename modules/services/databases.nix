@@ -197,6 +197,7 @@ in
         local   flume-data   flume-data          peer
         local   flume-data   grafana                 peer
         local   flume-data   johnw                   peer
+        local   flume-data   hass                    peer
         # flume-data needs read-only access to HA's states table to derive
         # irrigation sessions from B-Hyve valve.* entities (used by the v2
         # classifier in flume_data/classify_v2.py to suppress false-positive
@@ -350,6 +351,15 @@ in
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT USAGE ON SCHEMA public TO johnw;"
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO johnw;"
       ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"flume-data\" IN SCHEMA public GRANT SELECT ON TABLES TO johnw;"
+
+      # Read-only access on the flume-data database for the hass user
+      # so HA's SQL sensor platform can read the per-fixture
+      # attribution totals. Pairs with the `local flume-data hass peer`
+      # pg_hba entry above.
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c 'GRANT CONNECT ON DATABASE "flume-data" TO hass;'
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT USAGE ON SCHEMA public TO hass;"
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO hass;"
+      ${config.services.postgresql.package}/bin/psql -d "flume-data" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"flume-data\" IN SCHEMA public GRANT SELECT ON TABLES TO hass;"
 
       # Read-only access to the hass database for the flume-data role.
       # The v2 classifier reads valve.sprinkler_control_*_zone state

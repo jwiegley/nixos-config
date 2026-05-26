@@ -16,11 +16,15 @@ in
   ];
 
   # Bind mount ZFS dataset to host directory (container will access via bindMount)
-  # Read-only since this is just a static file server
+  # Host-level mount is read-write so the copyparty container (which shares this
+  # same path) can perform uploads. Static-nginx's view stays read-only via its
+  # container bindMount option below. The copyparty-container module also
+  # declares this same fileSystems entry; NixOS concatenates option lists, so
+  # any "ro" here would override copyparty's writable intent.
   fileSystems = bindTankPath {
     path = "/var/www/home.newartisans.com";
     device = "/tank/Public";
-    isReadOnly = true;
+    isReadOnly = false;
   };
 
   # Persistent networkd config for the container veth — takes priority over any

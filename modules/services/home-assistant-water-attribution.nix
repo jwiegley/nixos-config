@@ -470,6 +470,11 @@ let
     monthly = "This Month";
   };
 
+  # Cycle-resetting sensors for dashboards / cards / automations. These
+  # go to zero at midnight, Monday 00:00, or first-of-month and climb
+  # back up across the cycle. `total_increasing` is the right state_class
+  # for this pattern — HA detects the cycle-boundary drop-to-zero as a
+  # known reset and continues the running total in its statistics engine.
   sqlFixtureSensor =
     fixture: cycle:
     let
@@ -488,19 +493,47 @@ let
       column = "gal";
       unit_of_measurement = "gal";
       device_class = "water";
-      state_class = "total";
+      state_class = "total_increasing";
     };
 
-  fixtureSqlSensors = lib.flatten (
-    map (
-      f:
-      map (c: sqlFixtureSensor f c) [
-        "daily"
-        "weekly"
-        "monthly"
-      ]
-    ) fixtures
-  );
+  # Lifetime cumulative sensors for the HA Energy panel. These NEVER
+  # reset — they sum every minute we've ever recorded for the fixture.
+  # That makes them suitable as a "Water source" in the Energy panel,
+  # where HA computes daily/weekly/monthly deltas itself.
+  #
+  # Add each one to Settings → Energy → Water Consumption to get the
+  # per-fixture breakdown (analogous to the per-circuit electricity
+  # breakdown). Mix-and-match: e.g., add pool, irrigation_spray,
+  # irrigation_drip, shower, dishwasher, clothes_washer_* separately,
+  # and combine the rest into a single "other indoor" view in your
+  # dashboard.
+  sqlFixtureLifetimeSensor = fixture: {
+    name = "Water Fixture ${prettyFixture fixture} Lifetime";
+    unique_id = "water_fixture_${fixture}_lifetime";
+    db_url = flumeDataDsn;
+    query = ''
+      SELECT COALESCE(SUM(gpm), 0)::numeric(12,2) AS gal
+      FROM flume_minute_attributions
+      WHERE fixture = '${fixture}';
+    '';
+    column = "gal";
+    unit_of_measurement = "gal";
+    device_class = "water";
+    state_class = "total_increasing";
+  };
+
+  fixtureSqlSensors =
+    (lib.flatten (
+      map (
+        f:
+        map (c: sqlFixtureSensor f c) [
+          "daily"
+          "weekly"
+          "monthly"
+        ]
+      ) fixtures
+    ))
+    ++ (map sqlFixtureLifetimeSensor fixtures);
 
   # ── Assembled package YAML ───────────────────────────────────────────────
   #

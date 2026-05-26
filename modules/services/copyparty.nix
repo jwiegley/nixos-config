@@ -234,9 +234,16 @@ in
 
   config = mkIf cfg.enable {
 
-    # Create copyparty user and group
+    # Create copyparty user and group with pinned UID/GID. Pinning matters here
+    # because copyparty runs inside a NixOS container that bind-mounts host paths;
+    # an unpinned UID drifts on rebuild and orphans previously-written files
+    # (visible on the host as whatever local user happens to share the drifted
+    # number — e.g. "nm-iodine"). A pinned 970 stays stable, and a matching
+    # host-side copyparty:copyparty user (declared in the container module) makes
+    # `ls` on the host show the right name too.
     users.users.copyparty = {
       isSystemUser = true;
+      uid = 970;
       group = "copyparty";
       description = "Copyparty file server user";
       home = dataDir;
@@ -244,6 +251,7 @@ in
     };
 
     users.groups.copyparty = {
+      gid = 970;
       members = [ "prometheus" ]; # Allow Prometheus to read secrets
     };
 

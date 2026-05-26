@@ -12,6 +12,62 @@ let
   inherit (bindTankLib) bindTankPath;
 in
 {
+  # Pinned copyparty user/group on the host. The container's copyparty user is
+  # pinned to the same UID/GID (see modules/services/copyparty.nix). Without
+  # this, the host shows copyparty-owned files as whatever stranger happens to
+  # share the auto-allocated UID (was "nm-iodine"); with it, `ls` displays
+  # copyparty:copyparty correctly and ownership stays stable across rebuilds.
+  users.users.copyparty = {
+    isSystemUser = true;
+    uid = 970;
+    group = "copyparty";
+    description = "Copyparty file server user (host placeholder for container UID)";
+  };
+  users.groups.copyparty.gid = 970;
+
+  # One-shot fixup that runs before the copyparty container starts. Reclaims any
+  # files left orphaned by a previous container UID (e.g. the old 999) so the
+  # service inside the container can read/write them under the pinned 970.
+  systemd.services.copyparty-ownership-fixup = {
+    description = "Reclaim copyparty-owned files under pinned UID 970";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "container@copyparty.service" ];
+    after = [ "var-www-home.newartisans.com.mount" ];
+    requires = [ "var-www-home.newartisans.com.mount" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    # The "stale" UIDs are previous auto-allocations that copyparty has used
+    # historically inside this container (996 and 999 seen in the wild). Anything
+    # under the state dir or the share that's still owned by one of those gets
+    # repatriated to the pinned 970.
+    script = ''
+      set -eu
+      state=/var/lib/copyparty-container
+      share=/var/www/home.newartisans.com
+
+      # State dir: recursively reclaim everything inside (config files, .hist,
+      # .th, .config, ...). The parent itself stays root-owned per tmpfiles.
+      if [ -d "$state" ]; then
+        ${pkgs.findutils}/bin/find "$state" -mindepth 1 \
+          \( -not -uid 970 -o -not -gid 970 \) -exec \
+          ${pkgs.coreutils}/bin/chown 970:970 {} + || true
+      fi
+
+      # Share dir: only touch entries currently owned by a previous copyparty UID.
+      # Leaves host-managed dirs (johnw, nasimw, aria2-owned download/) untouched.
+      if [ -d "$share" ]; then
+        ${pkgs.findutils}/bin/find "$share" \( -uid 996 -o -uid 999 \) -exec \
+          ${pkgs.coreutils}/bin/chown 970 {} + || true
+        ${pkgs.findutils}/bin/find "$share" \( -gid 994 -o -gid 999 \) -exec \
+          ${pkgs.coreutils}/bin/chgrp 970 {} + || true
+      fi
+    '';
+  };
+
   # Create password files for copyparty from SOPS secrets
   systemd.services.copyparty-password-setup = {
     description = "Create copyparty password files for container";
@@ -63,12 +119,14 @@ in
     restartUnits = [ "copyparty-password-setup.service" ];
   };
 
-  # Ensure directories exist on host
+  # Ensure directories exist on host. State subdirs owned by the pinned
+  # copyparty user so tmpfiles doesn't undo the ownership-fixup service on
+  # every reboot.
   systemd.tmpfiles.rules = [
     "d /var/www/home.newartisans.com 0755 root root -"
     "d /var/lib/copyparty-container 0755 root root -"
-    "d /var/lib/copyparty-container/.hist 0755 root root -"
-    "d /var/lib/copyparty-container/.th 0755 root root -"
+    "d /var/lib/copyparty-container/.hist 0755 copyparty copyparty -"
+    "d /var/lib/copyparty-container/.th 0755 copyparty copyparty -"
     "d /var/lib/copyparty-passwords 0755 root root -"
     # Personal directories for copyparty shares
     "d /tank/Public/johnw 0755 root root -"

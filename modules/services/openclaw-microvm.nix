@@ -55,7 +55,20 @@ let
   # 2. Strip `devDependencies` from every plugin package.json so that even if
   #    a future refactor drops the source-checkout skip, npm still won't
   #    choke on pnpm's `"workspace:*"` protocol (EUNSUPPORTEDPROTOCOL).
+  # llm-agents.nix commit 42c63d7 (2026-05-24 01:06Z) bumped openclaw
+  # 2026.5.20 → 2026.5.22, but the auto-update bot computed the source hash
+  # ~6 minutes *before* upstream finalized the GitHub release (01:12Z).
+  # GitHub re-generated the archive when the release assets were attached,
+  # so the recorded `sha256-CnU1n4mzX7tH...` no longer matches the served
+  # archive `sha256-Sllmrkkb...`. Override src with the actual hash until
+  # llm-agents.nix corrects upstream.
   openclawPkg = (inputs.llm-agents.packages.${system}.openclaw).overrideAttrs (old: {
+    src = pkgs.fetchFromGitHub {
+      owner = "openclaw";
+      repo = "openclaw";
+      rev = "v2026.5.22";
+      hash = "sha256-SllmrkkbIFwznUhZ6zogmQ91oCao6d0fMI5473jjrU0=";
+    };
     postFixup = (old.postFixup or "") + ''
       if [ -d "$out/lib/openclaw" ]; then
         mkdir -p "$out/lib/openclaw/.git" "$out/lib/openclaw/src"

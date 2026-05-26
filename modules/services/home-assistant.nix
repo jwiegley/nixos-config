@@ -377,6 +377,7 @@ in
       ps."homekit-audio-proxy" # Required for HomeKit Bridge (missing from nixpkgs)
       ps.awsiotpythonsdk # Required for Navien NaviLink Water Heater integration
       ps.pyalarmdotcomajax # Required for Alarm.com / ADT Control custom integration
+      ps.vtherm_api # Required for Versatile Thermostat custom component (>=0.3.0)
     ];
 
     # Components that don't require YAML configuration

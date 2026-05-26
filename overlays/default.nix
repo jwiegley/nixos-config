@@ -9,6 +9,7 @@ let
   pyVollibDef = import ./py-vollib.nix;
   curlCffiDef = import ./curl-cffi.nix;
   requestsFuturesDef = import ./requests-futures.nix;
+  vthermApiDef = import ./vtherm-api.nix;
   yahooqueryDef = import ./yahooquery.nix;
   radicaleVcard4Def = import ./radicale-vcard4.nix;
 
@@ -242,6 +243,9 @@ let
       ];
       doCheck = false;
     };
+
+    # vtherm_api: Developer-facing API for the Versatile Thermostat custom component
+    vtherm_api = hasPy.callPackage vthermApiDef { };
   };
 in
 {

@@ -36,8 +36,12 @@
     restartUnits = [ "node-red.service" ];
   };
 
-  # API bearer tokens for HTTP node authentication (JSON array)
-  # Format: [{"token": "abc123", "description": "Service name"}, ...]
+  # API bearer tokens, JSON array of {token, description}.
+  # Consumed by settings.js for both:
+  #   - httpNodeMiddleware (HTTP-In endpoints + /metrics)
+  #   - adminAuth.tokens (Admin API: GET/PUT /flow, /flows, etc.)
+  # Any token in this list grants full Admin API permissions, so each entry
+  # should map to a single named consumer. Rotate by replacing the entry.
   sops.secrets."node-red/api-tokens" = {
     owner = "node-red";
     group = "node-red";
@@ -45,10 +49,14 @@
     restartUnits = [ "node-red.service" ];
   };
 
-  # Admin API bearer token (used by johnw shell / Claude for live flow edits
-  # via the Node-RED Admin API). Mint via the /auth/token endpoint with the
-  # admin user credentials. Owned by johnw so curl can read it without sudo;
-  # not consumed by node-red itself.
+  # Admin API bearer token used by johnw shell / Claude for live flow edits.
+  # IMPORTANT: this value MUST exactly equal the .token field of one entry in
+  # node-red/api-tokens (conventionally the entry described "johnw shell /
+  # Claude"). settings.js does not read this file — it only reads api-tokens
+  # — so a mismatch silently breaks `curl -H "Authorization: Bearer ..."`
+  # against /flows with HTTP 401. When rotating, update BOTH SOPS values in
+  # one `sops /etc/nixos/secrets.yaml` session.
+  # Owned by johnw so curl works without sudo.
   sops.secrets."node-red-admin-token" = {
     owner = "johnw";
     group = "users";

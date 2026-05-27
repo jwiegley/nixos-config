@@ -157,16 +157,19 @@ in
       sync_google() {  # $1 = remote  $2 = dest
         local remote="$1" dest="$2" drives
         rclone sync "$remote": "$dest/MyDrive" ${commonFlags} ${driveFlags} || return 1
+        # Shared-with-me is best-effort: stale/forbidden shares (404/403) are
+        # common and must NOT fail the remote — MyDrive is authoritative.
         rclone sync "$remote": "$dest/SharedWithMe" ${commonFlags} ${driveFlags} \
-          --drive-shared-with-me || return 1
+          --drive-shared-with-me || echo "WARNING: $remote SharedWithMe had errors (continuing)"
         drives=$(rclone backend drives "$remote": 2>/dev/null || echo '[]')
         printf '%s' "$drives" | jq -r '.[]? | "\(.id)\t\(.name)"' \
           | while IFS=$'\t' read -r id name; do
               [ -n "$id" ] || continue
               safe=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._- ' '_')
               rclone sync "$remote": "$dest/SharedDrives/$safe" \
-                ${commonFlags} ${driveFlags} --drive-team-drive "$id" || exit 1
-            done || return 1
+                ${commonFlags} ${driveFlags} --drive-team-drive "$id" \
+                || echo "WARNING: $remote shared drive '$name' had errors (continuing)"
+            done
         return 0
       }
 

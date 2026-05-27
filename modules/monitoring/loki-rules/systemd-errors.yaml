@@ -18,6 +18,8 @@ groups:
             != "Direct fetch of page URL timed out"
             != "\"context\":\"crawlStatus\""
             != "DNSSEC validation failed"
+            != "cannotDownloadFile"
+            != "forbidden to download"
             [10m])) * 600 > 10
         for: 5m
         labels:
@@ -53,6 +55,8 @@ groups:
             != "Direct fetch of page URL timed out"
             != "\"context\":\"crawlStatus\""
             != "DNSSEC validation failed"
+            != "cannotDownloadFile"
+            != "forbidden to download"
             | json
             | unit != ""
             | unit != "user@948.service"

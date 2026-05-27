@@ -124,6 +124,9 @@ let
     "Machines"
     "PostgreSQL"
     "TechnitiumDNS"
+    # cloud-drive mirrors (rclone-cloud-backup): local-only, never pushed to B2
+    "GoogleDrive"
+    "OneDrive"
   ];
 
   # Photos excludes

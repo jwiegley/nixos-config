@@ -657,6 +657,7 @@ let
       podman
       gnugrep
       gawk
+      systemd # systemctl, to check whether the job-runner is still alive
     ];
     text = ''
       set -euo pipefail
@@ -707,6 +708,22 @@ let
                 '.progress = {crawled: ($crawled|tonumber), total: ($total|tonumber), percent: ($percent|tonumber), updated: (now | strftime("%Y-%m-%dT%H:%M:%S")), source: "log_file", warning: "No container running - job may be orphaned"}' \
                 "$job_file" > "$job_file.tmp" && mv "$job_file.tmp" "$job_file"
             fi
+          fi
+
+          # Reconcile orphaned jobs: a job still marked "running" with no
+          # container is only truly orphaned if the job-runner is no longer
+          # alive. A Type=oneshot runner stays "activating" for the entire
+          # crawl, so treat both active and activating as alive; only inactive
+          # or failed (host reboot, OOM kill) means the runner died before
+          # writing a terminal status. Flip those to "failed" so the UI is
+          # accurate. Gated this way, an in-flight crawl whose container is
+          # briefly missed by "podman ps" is never wrongly failed.
+          runner_state=$(systemctl is-active zimit-job-runner.service 2>/dev/null || true)
+          if [ "$runner_state" != "active" ] && [ "$runner_state" != "activating" ]; then
+            log "Job $job_name orphaned (running, no container, runner=$runner_state) - marking failed"
+            jq --arg err "Orphaned: job-runner exited before completion (no container running, zimit-job-runner $runner_state). Auto-failed by progress-monitor." \
+              '.status = "failed" | .error = $err | .completed = (now | strftime("%Y-%m-%dT%H:%M:%S"))' \
+              "$job_file" > "$job_file.tmp" && mv "$job_file.tmp" "$job_file"
           fi
         done
         mv "$PROGRESS_FILE.tmp" "$PROGRESS_FILE"

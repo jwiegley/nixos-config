@@ -801,6 +801,20 @@ in
               state = "{{ is_state('binary_sensor.office_presence_sensor_fp300_occupancy', 'off') and is_state('binary_sensor.office_door_sensor_p2_office_door', 'off') }}";
               icon = "mdi:door-closed-lock";
             }
+            {
+              # Debounced office occupancy for the Upstairs VTherm presence feature.
+              # The FP300 mmWave is twitchy (sensitivity "high", 20s hold) and John
+              # steps out often, so the raw sensor flaps the thermostat between
+              # comfort and away. Stay "present" until the FP300 reports a genuine
+              # 'off' for a continuous 15 min; 'unavailable'/'unknown' (the device's
+              # frequent connectivity dropouts) count as present so they never force
+              # an away setback. Point the VTherm presence sensor at this entity.
+              name = "Office Occupied Debounced";
+              unique_id = "office_occupied_debounced_15m";
+              device_class = "occupancy";
+              state = "{{ not is_state('binary_sensor.office_presence_sensor_fp300_occupancy', 'off') }}";
+              delay_off = "00:15:00";
+            }
           ];
         }
       ];

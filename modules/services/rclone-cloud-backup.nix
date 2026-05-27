@@ -30,6 +30,10 @@ let
   driveFlags = lib.concatStringsSep " " [
     "--drive-export-formats=docx,xlsx,pptx,svg,csv"
     "--drive-acknowledge-abuse"
+    # Skip shortcuts: they resolve to other owners' files that frequently can't be
+    # downloaded ("failed to open source object: operation not permitted"), which
+    # otherwise fails the whole remote on every run. Proven on gdrive: 48 errors -> 0.
+    "--drive-skip-shortcuts"
   ];
 in
 {

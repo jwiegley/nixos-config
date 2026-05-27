@@ -72,6 +72,8 @@ in
         tank/Backups/GoogleDrive/assembly \
         tank/Backups/GoogleDrive/bia \
         tank/Backups/GoogleDrive/jwiegley \
+        tank/Backups/GoogleDrive/positron \
+        tank/Backups/GoogleDrive/git-ai \
         tank/Backups/OneDrive"
       for ds in $datasets; do
         if ! zfs list -H -o name "$ds" >/dev/null 2>&1; then
@@ -82,6 +84,8 @@ in
                 /tank/Backups/GoogleDrive/assembly \
                 /tank/Backups/GoogleDrive/bia \
                 /tank/Backups/GoogleDrive/jwiegley \
+                /tank/Backups/GoogleDrive/positron \
+                /tank/Backups/GoogleDrive/git-ai \
                 /tank/Backups/OneDrive; do
         chown ${user}:${user} "$mp"
         chmod 0700 "$mp"
@@ -174,6 +178,8 @@ in
       if sync_google assembly /tank/Backups/GoogleDrive/assembly; then metric assembly; else overall=1; fi
       if sync_google bia      /tank/Backups/GoogleDrive/bia;      then metric bia;      else overall=1; fi
       if sync_google gdrive   /tank/Backups/GoogleDrive/jwiegley; then metric gdrive;   else overall=1; fi
+      if sync_google positron /tank/Backups/GoogleDrive/positron; then metric positron; else overall=1; fi
+      if sync_google git-ai   /tank/Backups/GoogleDrive/git-ai;   then metric git-ai;   else overall=1; fi
       if sync_onedrive onedrive /tank/Backups/OneDrive;           then metric onedrive; else overall=1; fi
 
       exit $overall

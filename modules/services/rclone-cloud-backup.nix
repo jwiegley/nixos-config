@@ -11,9 +11,8 @@ let
   configPath = config.sops.secrets."rclone-cloudbackup-config".path;
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
-  commonFlags = lib.concatStringsSep " " [
+  baseFlags = lib.concatStringsSep " " [
     "--config=${configPath}"
-    "--fast-list"
     "--track-renames"
     "--transfers=8"
     "--checkers=16"
@@ -25,6 +24,8 @@ let
     "--stats=5m"
     "--stats-one-line"
   ];
+  # Google Drive handles server-side recursive listing (ListR) well.
+  commonFlags = baseFlags + " --fast-list";
 
   driveFlags = lib.concatStringsSep " " [
     "--drive-export-formats=docx,xlsx,pptx,svg,csv"
@@ -174,7 +175,10 @@ in
       }
 
       sync_onedrive() {  # $1 = remote  $2 = dest
-        rclone sync "$1": "$2" ${commonFlags} || return 1
+        # No --fast-list: OneDrive's server-side recursive listing chokes on the
+        # locked "Personal Vault" folder (invalidResourceId / ObjectHandle is
+        # Invalid). Skip it and list incrementally so the filter applies.
+        rclone sync "$1": "$2" ${baseFlags} --exclude "/Personal Vault/**" || return 1
         return 0
       }
 

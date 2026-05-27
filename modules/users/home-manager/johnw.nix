@@ -86,5 +86,18 @@
       programs.git.signing.signByDefault = lib.mkForce false;
       programs.git.settings.commit.gpgsign = lib.mkForce false;
       programs.git.settings.tag.gpgsign = lib.mkForce false;
+
+      # claude-mem (Fix A + Fix B): the worker runs as a systemd *user* service,
+      # which starts with a minimal env that doesn't inherit the login shell.
+      # Restore PATH (so it finds uvx for chroma-mcp and the claude CLI) and
+      # point LD_LIBRARY_PATH at nix-ld's curated lib set so chroma's manylinux
+      # wheels can dlopen libstdc++.so.6 / libz.so.1. claude-mem owns the
+      # .service unit, so manage only the .service.d/override.conf drop-in.
+      # (Fix C / CLAUDE_CODE_PATH lives in the shared johnw.nix activation.)
+      xdg.configFile."systemd/user/claude-mem-worker.service.d/override.conf".text = ''
+        [Service]
+        Environment=PATH=${config.home.profileDirectory}/bin:/run/current-system/sw/bin:/run/wrappers/bin:${config.home.homeDirectory}/src/scripts
+        Environment=LD_LIBRARY_PATH=/run/current-system/sw/share/nix-ld/lib
+      '';
     };
 }

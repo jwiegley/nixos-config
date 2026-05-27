@@ -9,10 +9,10 @@
 let
   user = "rclone-backup";
   configPath = config.sops.secrets."rclone-cloudbackup-config".path;
+  workConfig = "/run/rclone-backup/rclone.conf";
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
   baseFlags = lib.concatStringsSep " " [
-    "--config=${configPath}"
     "--track-renames"
     "--transfers=8"
     "--checkers=16"
@@ -116,9 +116,11 @@ in
       Nice = 19;
       IOSchedulingClass = "idle";
       StateDirectory = "rclone-backup";
+      RuntimeDirectory = "rclone-backup";
+      RuntimeDirectoryPreserve = true;
       Environment = [
         "HOME=/var/lib/rclone-backup"
-        "RCLONE_CONFIG=${configPath}"
+        "RCLONE_CONFIG=${workConfig}"
       ];
       # hardening
       NoNewPrivileges = true;
@@ -144,6 +146,15 @@ in
     script = ''
       set -uo pipefail
       export HOME=/var/lib/rclone-backup
+
+      # rclone persists refreshed/rotated OAuth tokens to its config, but the SOPS
+      # secret is read-only. Keep a writable working copy on the (tmpfs) runtime
+      # dir; reseed from SOPS only when SOPS is newer, so rotated tokens survive
+      # between runs while secret edits still propagate on rebuild.
+      if [ ! -e "${workConfig}" ] || [ "${configPath}" -nt "${workConfig}" ]; then
+        install -m 0600 "${configPath}" "${workConfig}"
+      fi
+
       overall=0
 
       metric() {  # $1 = remote label

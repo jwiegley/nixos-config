@@ -96,6 +96,7 @@
     ../../modules/services/postfix.nix
     ../../modules/services/postgresql-backup.nix
     ../../modules/services/promtail.nix
+    ../../modules/services/rclone-cloud-backup.nix
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/service-reliability.nix

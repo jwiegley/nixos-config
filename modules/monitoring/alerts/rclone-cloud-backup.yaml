@@ -1,0 +1,23 @@
+groups:
+  - name: rclone-cloud-backup
+    rules:
+      - alert: RcloneCloudBackupStale
+        expr: time() - rclone_last_success_timestamp_seconds > 36 * 3600
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: rclone-cloud-backup
+        annotations:
+          summary: "Cloud-drive mirror stale: {{ $labels.remote }}"
+          description: "rclone remote {{ $labels.remote }} has not completed a successful sync in over 36 hours."
+      - alert: RcloneCloudBackupNeverRan
+        expr: absent(rclone_last_success_timestamp_seconds)
+        for: 26h
+        labels:
+          severity: warning
+          category: storage
+          service: rclone-cloud-backup
+        annotations:
+          summary: "Cloud-drive mirror metric absent"
+          description: "No rclone_last_success_timestamp_seconds present — the cloud-drive backup has not reported a successful sync in over a day."

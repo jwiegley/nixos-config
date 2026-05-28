@@ -361,3 +361,99 @@ def test_emit_synthetic_alert_shape(monkeypatch):
     assert body[0]["labels"]["service"] == "hermes-self-heal"  # NOT hermes-*
     assert body[0]["labels"]["severity"] == "info"
     assert "/api/v2/alerts" in captured["url"]
+
+
+# ---- incident eviction (sweep_resolved) ----
+# Regression coverage for the bug where resolved incidents were never moved
+# out of state["active"] and accumulated without bound (20 stale entries
+# observed 2026-05-28). sweep_resolved archives aged resolved incidents to
+# history while retaining recent ones for same-episode de-duplication.
+
+def _resolved_inc(resolved_ts, attempts=None):
+    return {
+        "first_seen_ts": resolved_ts,
+        "status": "resolved",
+        "resolved_ts": resolved_ts,
+        "attempts": attempts if attempts is not None else [{"action": "restart_microvm"}],
+    }
+
+
+def test_sweep_resolved_archives_aged_resolved():
+    now = 1_000_000
+    state = {"active": {"k1": _resolved_inc(now - daemon.RESOLVED_RETENTION_S - 1)},
+             "history": []}
+    assert daemon.sweep_resolved(state, now=now) == 1
+    assert "k1" not in state["active"]
+    assert len(state["history"]) == 1
+    assert state["history"][0]["status"] == "resolved"
+
+
+def test_sweep_resolved_retains_recent_resolved_for_dedup():
+    """A just-resolved incident stays in active so repeat sends of the same
+    firing episode (same correlation key) are de-duped, not re-triggered."""
+    now = 1_000_000
+    state = {"active": {"k1": _resolved_inc(now - 60)}, "history": []}
+    assert daemon.sweep_resolved(state, now=now) == 0
+    assert "k1" in state["active"]
+    assert state["history"] == []
+
+
+def test_sweep_resolved_never_archives_in_progress_or_stuck():
+    now = 1_000_000
+    old = now - daemon.RESOLVED_RETENTION_S - 1
+    state = {
+        "active": {
+            "ip": {"status": "in_progress", "first_seen_ts": old, "attempts": []},
+            "st": {"status": "stuck", "first_seen_ts": old, "attempts": []},
+        },
+        "history": [],
+    }
+    assert daemon.sweep_resolved(state, now=now) == 0
+    assert set(state["active"]) == {"ip", "st"}
+    assert state["history"] == []
+
+
+def test_sweep_resolved_falls_back_to_first_seen_ts_for_legacy():
+    """Legacy resolved incidents (pre-fix) have no resolved_ts; age off first_seen_ts."""
+    now = 1_000_000
+    inc = {"status": "resolved",
+           "first_seen_ts": now - daemon.RESOLVED_RETENTION_S - 1,
+           "attempts": []}
+    state = {"active": {"legacy": inc}, "history": []}
+    assert daemon.sweep_resolved(state, now=now) == 1
+    assert "legacy" not in state["active"]
+
+
+def test_sweep_resolved_caps_history():
+    now = 1_000_000
+    old = now - daemon.RESOLVED_RETENTION_S - 1
+    state = {
+        "active": {f"k{i}": _resolved_inc(old) for i in range(5)},
+        "history": [{"status": "resolved", "attempts": []}
+                    for _ in range(daemon.HISTORY_MAX)],
+    }
+    daemon.sweep_resolved(state, now=now)
+    assert len(state["history"]) == daemon.HISTORY_MAX
+    assert state["active"] == {}
+
+
+def test_sweep_resolved_preserves_attempt_total():
+    """Moving resolved active->history must not change the active+history
+    attempt total that heartbeat_loop sums for hermes_self_heal_attempts_total."""
+    now = 1_000_000
+    old = now - daemon.RESOLVED_RETENTION_S - 1
+    state = {
+        "active": {
+            "a": _resolved_inc(old, attempts=[{"action": "restart_microvm"}]),
+            "b": _resolved_inc(old, attempts=[{"action": "restart_mcp"}]),
+        },
+        "history": [{"attempts": [{"action": "restart_microvm"}]}],
+    }
+
+    def total(s):
+        return sum(len(i.get("attempts", []))
+                   for i in list(s["active"].values()) + s["history"])
+
+    before = total(state)
+    daemon.sweep_resolved(state, now=now)
+    assert total(state) == before == 3

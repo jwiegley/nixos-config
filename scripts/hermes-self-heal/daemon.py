@@ -94,6 +94,41 @@ def save_state(path, state):
     os.replace(tmp, p)
 
 
+# Resolved incidents are retained in the active map for this long so that
+# repeat alertmanager sends of the same firing episode (the correlation key
+# is stable for the entire time an alert fires) are de-duped instead of
+# re-triggering the action; after that they are archived to history.
+# Previously resolved incidents were never removed from active and
+# accumulated without bound (20 stale entries observed 2026-05-28).
+RESOLVED_RETENTION_S = 3600
+HISTORY_MAX = 500
+
+
+def sweep_resolved(state, now=None):
+    """Archive aged-out resolved incidents from active -> history.
+
+    Keeps the active working set bounded while preserving same-episode
+    de-duplication for RESOLVED_RETENTION_S after an incident resolves.
+    history is capped at HISTORY_MAX (most-recent kept). The cumulative
+    hermes_self_heal_attempts_total counter is unaffected: heartbeat_loop
+    sums attempts across active + history, so moving an incident between
+    the two does not change the total. Returns the number archived.
+    """
+    now = int(time.time()) if now is None else int(now)
+    aged = [
+        k
+        for k, v in state["active"].items()
+        if v.get("status") == "resolved"
+        and now - int(v.get("resolved_ts") or v.get("first_seen_ts") or 0)
+        >= RESOLVED_RETENTION_S
+    ]
+    for k in aged:
+        state["history"].append(state["active"].pop(k))
+    if len(state["history"]) > HISTORY_MAX:
+        del state["history"][:-HISTORY_MAX]
+    return len(aged)
+
+
 ACTION_MAP = {
     "HermesAskFailing":             "restart_microvm",
     "HermesApiServerDown":          "restart_microvm",
@@ -339,6 +374,8 @@ def render_prompt(incident, metrics, err_log_tail, out_log_tail):
 def handle_alertmanager_payload(payload):
     from datetime import datetime
     state = load_state(STATE_PATH)
+    if sweep_resolved(state):
+        save_state(STATE_PATH, state)
     metrics = current_metrics()
     vm_ts = microvm_active_enter_ts()  # NOT from metrics — Hermes has no canary producer
     for a in payload.get("alerts", []):
@@ -417,6 +454,7 @@ def handle_alertmanager_payload(payload):
         time.sleep(15)
         if probe_clear(inc):
             inc["status"] = "resolved"
+            inc["resolved_ts"] = int(time.time())
         save_state(STATE_PATH, state)
 
 

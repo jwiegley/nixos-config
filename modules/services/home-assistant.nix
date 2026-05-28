@@ -738,6 +738,45 @@ in
       # Enable script UI
       script = "!include scripts.yaml";
 
+      # Live-tunable calibration parameters for the temperature-compensated
+      # pool salt virtual sensor (sensor.pool_salt_temp_compensated). Exposed
+      # as input_number helpers so calibrating against titration needs no
+      # rebuild — adjust them from the UI:
+      #   alpha  = conductivity temperature coefficient (~0.02 /°C for NaCl);
+      #            fit it from a warm-vs-cold reading of the same water.
+      #   scale  = slope m of the two-point linear fit to titration.
+      #   offset = intercept b (ppm) of the two-point linear fit to titration.
+      input_number = {
+        pool_salt_alpha = {
+          name = "Pool Salt Temp Coefficient";
+          min = 0;
+          max = 0.05;
+          step = 0.001;
+          initial = 0.02;
+          mode = "box";
+          icon = "mdi:thermometer-lines";
+        };
+        pool_salt_scale = {
+          name = "Pool Salt Calibration Scale";
+          min = 0.5;
+          max = 2.0;
+          step = 0.01;
+          initial = 1.25; # single-point cal 2026-05-28: titration 4800 / raw 3800
+          mode = "box";
+          icon = "mdi:multiplication";
+        };
+        pool_salt_offset = {
+          name = "Pool Salt Calibration Offset";
+          min = -1000;
+          max = 1000;
+          step = 10;
+          initial = 0;
+          unit_of_measurement = "ppm";
+          mode = "box";
+          icon = "mdi:plus-minus-variant";
+        };
+      };
+
       # Template sensors for presence detection
       # These combine person entity states to determine if anyone is home
       template = [
@@ -814,6 +853,49 @@ in
               device_class = "occupancy";
               state = "{{ not is_state('binary_sensor.office_presence_sensor_fp300_occupancy', 'off') }}";
               delay_off = "00:15:00";
+            }
+          ];
+        }
+        {
+          # Temperature-compensated, titration-calibrated pool salt reading.
+          # The IntelliChlor cell reports a conductivity-derived salt ppm that
+          # drifts with water temperature (warm reads high, cold reads low).
+          # Stage 1 normalizes the raw reading to a 25 °C reference using the
+          # standard EC compensation EC25 = EC_T / (1 + alpha*(T-25)); stage 2
+          # applies a linear fit (scale m, offset b) to match silver-nitrate
+          # titration. With no water replacement the output should hold steady.
+          # alpha/m/b come from the input_number helpers above (UI-tunable).
+          sensor = [
+            {
+              name = "Pool Salt (Temp-Compensated)";
+              unique_id = "pool_salt_temp_compensated";
+              unit_of_measurement = "ppm";
+              state_class = "measurement";
+              icon = "mdi:shaker-outline";
+              availability = "{{ has_value('sensor.intellichlor_1_salt') and has_value('sensor.pool_last_temp') }}";
+              state = ''
+                {%- set raw = states('sensor.intellichlor_1_salt') | float(0) -%}
+                {%- set t = states('sensor.pool_last_temp') | float(77) -%}
+                {%- set unit = state_attr('sensor.pool_last_temp', 'unit_of_measurement') -%}
+                {%- set tc = t if unit == '°C' else (t - 32) * 5 / 9 -%}
+                {%- set alpha = states('input_number.pool_salt_alpha') | float(0.02) -%}
+                {%- set m = states('input_number.pool_salt_scale') | float(1.0) -%}
+                {%- set b = states('input_number.pool_salt_offset') | float(0.0) -%}
+                {%- set comp = raw / (1 + alpha * (tc - 25)) -%}
+                {{- ((m * comp) + b) | round(0) | int -}}
+              '';
+              attributes = {
+                raw_salt = "{{ states('sensor.intellichlor_1_salt') }}";
+                water_temp = "{{ states('sensor.pool_last_temp') }}";
+                compensated_25c = ''
+                  {%- set raw = states('sensor.intellichlor_1_salt') | float(0) -%}
+                  {%- set t = states('sensor.pool_last_temp') | float(77) -%}
+                  {%- set unit = state_attr('sensor.pool_last_temp', 'unit_of_measurement') -%}
+                  {%- set tc = t if unit == '°C' else (t - 32) * 5 / 9 -%}
+                  {%- set alpha = states('input_number.pool_salt_alpha') | float(0.02) -%}
+                  {{- (raw / (1 + alpha * (tc - 25))) | round(0) | int -}}
+                '';
+              };
             }
           ];
         }

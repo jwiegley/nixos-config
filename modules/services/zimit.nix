@@ -814,6 +814,7 @@ let
       coreutils
       gnused
       gnugrep
+      gawk
     ];
     text = ''
       set -euo pipefail
@@ -821,6 +822,7 @@ let
       ZIM_DIR="${zimDir}"
       MAP_FILE="/var/lib/nginx/kiwix-url-map.conf"
       TEMP_MAP=$(mktemp)
+      TEMP_ENTRIES=$(mktemp)
 
       log() {
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -849,9 +851,17 @@ let
             # kiwix-serve treats ? as query string separator, but in ZIM it's part of the path
             encoded_url=''${url/\?/%3F}
             # Format: /content/zim-name/base -> /content/zim-name/encoded-full
-            echo "/content/$zim_name/$base /content/$zim_name/$encoded_url;" >> "$TEMP_MAP"
+            echo "/content/$zim_name/$base /content/$zim_name/$encoded_url;" >> "$TEMP_ENTRIES"
           done || true
       done
+
+      # Deduplicate by map key (first field), keeping the first mapping seen.
+      # One base URL can appear with several cache-buster query strings, which
+      # would emit the same nginx map key twice; nginx then refuses to load the
+      # map ("conflicting parameter") and fails to start. (Seen with the
+      # afnan-library_* PDFs.)
+      awk '!seen[$1]++' "$TEMP_ENTRIES" >> "$TEMP_MAP"
+      rm -f "$TEMP_ENTRIES"
 
       # Count mappings
       count=$(grep -c ';$' "$TEMP_MAP" || echo 0)

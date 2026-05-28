@@ -66,23 +66,28 @@ groups:
             up but stuck; restarting hermes-mcp.service typically
             resolves this within a few seconds.
 
-      # Discord WebSocket zombie detector. When the Discord library's
-      # underlying WS goes stale after a reconnect, no inbound events
-      # are processed even though the TCP socket and HTTP rest API
-      # may still appear healthy. The bot looks online in Discord
-      # but won't reply to DMs. The probe regex matches user activity +
-      # reconnect/connect events.
+      # Discord WebSocket zombie detector — heartbeat-ACK based.
+      # hermes_discord_last_event_age_seconds is the age of the most
+      # recent proof of gateway liveness: primarily the discord.py
+      # HEARTBEAT_ACK stamp (the in-VM sitecustomize shim writes it on
+      # every ack, ~every 41s while the WS is healthy), falling back to
+      # the gateway.log connect/message scrape. Heartbeats flow even
+      # with zero message traffic, so this is independent of how idle
+      # the server is — a stale value means acks have genuinely stopped
+      # = the WS has zombied (TCP/REST may still look alive and Discord
+      # still shows the bot online, but nothing propagates).
       #
-      # Threshold tuning (2026-05-24): restored to 24h after the 2h
-      # setting caused continuous spurious restarts every 2h 16min —
-      # the bot is idle on Discord for >2h regularly, so a 2h threshold
-      # paced the VM through forced reboots instead of catching real
-      # zombies. The original "zombie-immediately-after-restart" gap
-      # that motivated the May-22 tightening is now covered by the
-      # faster HermesDiscordPostSelfHealRestart alert below (15 min
-      # after a self-heal restart), so this catchall can stay at 24h.
+      # Threshold history: started at 2h (gateway.log idleness), which
+      # restarted the VM every ~2h16m on a quiet bot; raised to 24h
+      # (2026-05-24), which merely paced the same idleness false-positive
+      # to ~daily. Switched to the heartbeat-ACK signal (2026-05-28) and
+      # dropped to 600s: a healthy WS keeps the metric < ~60s regardless
+      # of traffic, and discord.py self-reconnects a missed-ack zombie
+      # within its own ~60s heartbeat_timeout, so 600s sustained for 10m
+      # means discord.py could NOT self-heal and a microvm restart is
+      # warranted.
       - alert: HermesDiscordZombieSuspected
-        expr: hermes_discord_last_event_age_seconds > 86400
+        expr: hermes_discord_last_event_age_seconds > 600
         for: 10m
         labels:
           severity: warning
@@ -90,24 +95,24 @@ groups:
           service: hermes-agent
           self_heal_eligible: "true"
         annotations:
-          summary: "Hermes Discord platform shows no activity for >24 hours"
+          summary: "Hermes Discord gateway: no heartbeat-ACK for >10 min"
           description: |
-            /var/lib/hermes/.hermes/logs/gateway.log has not recorded
-            a Discord-relevant event in the last 24+ hours. In an
-            active server the bot should see presence/typing/member
-            events from other users continuously; 24h+ silence
-            indicates the gateway WebSocket has zombied (TCP socket
-            appears alive, Discord sees the bot as online, but no
-            inbound events propagate). Restarting microvm@hermes
-            re-establishes a clean WS session.
+            No Discord gateway HEARTBEAT_ACK (nor any gateway.log
+            connect/message event) has been observed for 10+ minutes,
+            sustained over the 10m window. A healthy WS acks ~every 41s
+            and discord.py reconnects a missed-ack zombie within ~60s,
+            so a sustained 10m+ gap means the gateway has zombied and
+            discord.py did not self-recover. Restarting microvm@hermes
+            re-establishes a clean WS session. (Heartbeat-based since
+            2026-05-28 — no longer fires on an idle-but-healthy bot.)
 
       # Faster sibling of HermesDiscordZombieSuspected — fires after just
-      # 15 min when the self-heal daemon just restarted the microvm but
-      # no Discord events came in. A fresh Hermes connection ALWAYS fires
-      # ready/guild_create within seconds, so disco_age > 10m within 1h
-      # of a self-heal restart is definitively a zombie.
-      # (Doesn't fire for manual user restarts — those are caught by
-      # the 2h catchall above.)
+      # 5 min (vs 10m) when the self-heal daemon just restarted the microvm
+      # but the fresh connection produced no heartbeat-ACK. A healthy WS
+      # acks within ~41s of connecting, so a 600s+ liveness gap within 1h
+      # of a self-heal restart is definitively a zombie that survived the
+      # restart — escalate as critical. (Doesn't fire for manual user
+      # restarts — those have no recent restart_microvm attempt.)
       - alert: HermesDiscordPostSelfHealRestart
         expr: |
           hermes_discord_last_event_age_seconds > 600
@@ -123,10 +128,10 @@ groups:
           summary: "Hermes Discord silent after self-heal restart — zombie WS"
           description: |
             The self-heal daemon restarted microvm@hermes within the last
-            hour, but the Discord gateway has not received any events in
-            10+ minutes. A fresh WS connection fires ready / guild_create
-            within seconds, so this is a zombie on top of the restart —
-            another restart is needed.
+            hour, but the Discord gateway has produced no HEARTBEAT-ACK
+            (nor connect/message event) in 10+ minutes. A fresh WS
+            connection acks within ~41s, so this is a zombie on top of
+            the restart — another restart is needed.
 
       # The check itself stopped running.
       - alert: HermesHealthCheckStale

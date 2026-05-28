@@ -22,32 +22,44 @@ let
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
 
-  # Workaround for upstream hermes-agent v0.13.0 timeout defaults that the
-  # configured `request_timeout_seconds` / `HERMES_STREAM_READ_TIMEOUT` don't
-  # actually override at the httpx layer. Two paths confirmed broken:
+  # Python startup shims injected into the hermes-agent process via a
+  # `sitecustomize.py` on PYTHONPATH — Python's `site` init auto-imports it
+  # before `bin/hermes` runs, so both patches land before openai/run_agent
+  # and discord.py do their work. Two shims:
   #
-  #   1. run_agent.py:7789-7794 builds the streaming `httpx.Timeout(...)` with
-  #      hardcoded `connect=30.0` / `pool=30.0` — those fields aren't exposed
-  #      via any documented config knob.
-  #   2. The same site sets `read=_stream_read_timeout` where the resolved
-  #      value falls back to `float(os.getenv("HERMES_STREAM_READ_TIMEOUT",
-  #      120.0))` if `get_provider_request_timeout()` returns None. Observed
-  #      live: even with HERMES_STREAM_READ_TIMEOUT=600 in .env AND
-  #      providers.openrouter.{request_timeout_seconds=600, models.<name>
-  #      .timeout_seconds=600} in config.yaml, the firing timeout is exactly
-  #      120s + ~14s connection overhead = ~134s. Something in the resolution
-  #      chain is yielding 120.0 at the call site (load_config exception
-  #      silently swallowed, dotenv overriding, or stale cached config).
+  #   1. httpx.Timeout workaround for upstream hermes-agent v0.13.0 timeout
+  #      defaults that the configured `request_timeout_seconds` /
+  #      `HERMES_STREAM_READ_TIMEOUT` don't actually override at the httpx
+  #      layer. Two paths confirmed broken:
+  #        - run_agent.py:7789-7794 builds the streaming `httpx.Timeout(...)`
+  #          with hardcoded `connect=30.0` / `pool=30.0` — not exposed via
+  #          any documented config knob.
+  #        - The same site sets `read=_stream_read_timeout`, falling back to
+  #          `float(os.getenv("HERMES_STREAM_READ_TIMEOUT", 120.0))`. Observed
+  #          live: even with 600 set everywhere the firing timeout is ~134s.
+  #      Bump only those exact documented defaults (30→600 connect/pool,
+  #      120→600 read) so we don't silently lengthen user-chosen short
+  #      timeouts elsewhere (e.g. the Gemini adapter's explicit 15s connect).
   #
-  # Monkey-patch `httpx.Timeout` at Python startup via `sitecustomize.py` on
-  # the PYTHONPATH so the patch runs before openai/run_agent imports httpx.
-  # Bump only the documented upstream defaults (30s connect/pool, 120s read,
-  # 30s/5s write) so we don't silently lengthen user-chosen short timeouts in
-  # other code paths (e.g. Gemini adapter explicitly sets 15s/600s/30s/30s
-  # which we leave alone). Track upstream NousResearch/hermes-agent issue
-  # for the proper fix.
-  hermesTimeoutShim = pkgs.writeTextDir "sitecustomize.py" ''
-    """Hermes-agent v0.13.0 timeout workaround — see hermes-vm.nix."""
+  #   2. Discord WS heartbeat-ACK liveness stamp. discord.py 2.7.1's
+  #      `KeepAliveHandler.ack()` (discord/gateway.py:217) runs on every
+  #      HEARTBEAT_ACK from Discord (~every 41s while the gateway WS is
+  #      healthy). The heartbeat *send* fires on a timer regardless of
+  #      connection health, so only the ACK proves the socket is truly
+  #      alive. We wrap ack() to atomically stamp a wall-clock timestamp
+  #      into the heartbeat file; the host-side hermes-health-check reads
+  #      its age. A stale stamp means acks have stopped = a genuine zombie,
+  #      and — crucially — heartbeats flow even with zero message traffic,
+  #      so an idle server can no longer trip the detector. Replaces the
+  #      old gateway.log-idleness heuristic that forced a VM restart
+  #      roughly daily on a quiet bot. Non-fatal: if discord.py's API
+  #      changed, the health check falls back to the gateway.log scrape.
+  hermesPyShim = pkgs.writeTextDir "sitecustomize.py" ''
+    """Hermes-agent Python startup shims — see hermes-vm.nix."""
+    import os
+    import time
+
+    # ---- Shim 1: httpx.Timeout workaround (hermes-agent v0.13.0) ----
     try:
         import httpx as _httpx
 
@@ -55,13 +67,6 @@ let
 
         def _patched_init(self, *args, **kwargs):
             _orig_init(self, *args, **kwargs)
-            # run_agent.py:7789-7794 hardcodes connect=30.0 / pool=30.0 in
-            # the streaming Timeout, and falls back to read=120.0 when
-            # neither HERMES_STREAM_READ_TIMEOUT nor a provider
-            # request_timeout_seconds is set. Bump only those exact
-            # documented defaults so we don't lengthen user-chosen
-            # shorter timeouts elsewhere (e.g. Gemini adapter sets
-            # connect=15.0 which we leave alone).
             try:
                 if getattr(self, "connect", None) == 30.0:
                     self.connect = 600.0
@@ -75,6 +80,32 @@ let
         _httpx.Timeout.__init__ = _patched_init
     except Exception:
         # Don't block Hermes startup if httpx isn't importable yet.
+        pass
+
+    # ---- Shim 2: Discord WS heartbeat-ACK liveness stamp ----
+    _HEARTBEAT_FILE = "${stateDir}/.hermes/logs/discord_ws_heartbeat"
+
+    def _stamp_discord_heartbeat():
+        try:
+            os.makedirs(os.path.dirname(_HEARTBEAT_FILE), exist_ok=True)
+            tmp = _HEARTBEAT_FILE + ".tmp"
+            with open(tmp, "w") as _f:
+                _f.write(repr(time.time()))
+            os.replace(tmp, _HEARTBEAT_FILE)
+        except Exception:
+            pass
+
+    try:
+        import discord.gateway as _dgw
+
+        _orig_ack = _dgw.KeepAliveHandler.ack
+
+        def _patched_ack(self):
+            _stamp_discord_heartbeat()
+            return _orig_ack(self)
+
+        _dgw.KeepAliveHandler.ack = _patched_ack
+    except Exception:
         pass
   '';
 in
@@ -353,13 +384,14 @@ in
     };
   };
 
-  # Inject the httpx.Timeout monkey-patch into the hermes-agent service
-  # via PYTHONPATH. Python's site initialization auto-imports
+  # Inject the Python startup shims (httpx.Timeout patch + Discord WS
+  # heartbeat-ACK liveness stamp) into the hermes-agent service via
+  # PYTHONPATH. Python's site initialization auto-imports
   # `sitecustomize.py` from any path in sys.path on startup, before the
-  # main script (`bin/hermes`) runs. See `hermesTimeoutShim` in the
+  # main script (`bin/hermes`) runs. See `hermesPyShim` in the
   # let-block above for the why.
   systemd.services.hermes-agent.environment = {
-    PYTHONPATH = "${hermesTimeoutShim}";
+    PYTHONPATH = "${hermesPyShim}";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions
     # for the OpenClaw↔Hermes MCP bridge (host's hermes-mcp.service).
     # `API_SERVER_KEY` is supplied via environmentFiles=…/env (sops);

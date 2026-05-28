@@ -8,10 +8,14 @@
 #        initialize → notifications/initialized → tools/list → tools/call ask_hermes
 #      with a fixed micro-prompt and a 60s budget — proves the entire chain
 #      OpenClaw VM would traverse actually works, including Hermes inference.
-#   4. Discord platform liveness: parses /var/lib/hermes/.hermes/logs/gateway.log
-#      (host-mounted via virtiofs) to surface the age of the last meaningful
-#      Discord event. A bot whose WebSocket has zombied silently produces no
-#      log entries; this catches that without round-tripping a Discord message.
+#   4. Discord platform liveness: primarily the age of the discord.py
+#      heartbeat-ACK stamp file (written by the in-VM sitecustomize shim in
+#      hermes-vm.nix on every gateway HEARTBEAT_ACK, ~every 41s while the WS
+#      is alive). This is traffic-independent — a stale stamp means acks have
+#      stopped = a genuine zombie, regardless of how idle the server is.
+#      Falls back to scraping gateway.log for the last connect/message event
+#      if the stamp file is absent (older Hermes / shim not yet applied).
+#      The emitted age is the min of the two, so a healthy WS keeps it tiny.
 #
 # Emits a Prometheus textfile at /var/lib/prometheus-node-exporter-textfiles/
 # hermes_health.prom. Pair with alerts/hermes.yaml.
@@ -62,6 +66,15 @@ let
     HERMES_API_URL = os.environ.get("HERMES_API_URL", "http://10.99.1.2:8080")
     GATEWAY_LOG = pathlib.Path(
         os.environ.get("HERMES_GATEWAY_LOG", "/var/lib/hermes/.hermes/logs/gateway.log")
+    )
+    # Heartbeat-ACK stamp written by the in-VM sitecustomize shim (hermes-vm.nix)
+    # on every discord.py gateway HEARTBEAT_ACK. This is the primary, traffic-
+    # independent liveness signal.
+    HEARTBEAT_FILE = pathlib.Path(
+        os.environ.get(
+            "HERMES_DISCORD_HEARTBEAT_FILE",
+            "/var/lib/hermes/.hermes/logs/discord_ws_heartbeat",
+        )
     )
     OUT_FINAL = pathlib.Path("${textfileDir}/hermes_health.prom")
     OUT_TMP = OUT_FINAL.with_suffix(".prom.tmp")
@@ -238,6 +251,26 @@ let
             return (0, 1e9)
 
 
+    def discord_heartbeat_age_seconds() -> tuple[int, float]:
+        """Read the discord.py heartbeat-ACK stamp; return (present, age_seconds).
+
+        The in-VM sitecustomize shim wraps KeepAliveHandler.ack() to write
+        time.time() here on every Discord HEARTBEAT_ACK (~every 41s while the
+        gateway WS is alive). A stale stamp = acks stopped = genuine zombie,
+        independent of message traffic. present=0 if the file is missing or
+        unparseable (shim not applied / bot not yet connected).
+        """
+        try:
+            raw = HEARTBEAT_FILE.read_text().strip()
+        except OSError:
+            return (0, 1e9)
+        try:
+            stamped = float(raw)
+        except ValueError:
+            return (0, 1e9)
+        return (1, max(0.0, time.time() - stamped))
+
+
     def read_api_key() -> Optional[str]:
         path = pathlib.Path("/run/secrets/hermes/env")
         try:
@@ -270,7 +303,9 @@ let
         "hermes_mcp_ask_hermes_ok": "1 if a full ask_hermes round-trip completed within 60s",
         "hermes_mcp_ask_hermes_seconds": "Wall-clock seconds for the end-to-end ask_hermes probe",
         "hermes_discord_event_present": "1 if at least one Discord event was found in gateway.log tail",
-        "hermes_discord_last_event_age_seconds": "Wall-clock seconds since the most recent Discord gateway event",
+        "hermes_discord_heartbeat_present": "1 if the discord.py heartbeat-ACK stamp file was readable",
+        "hermes_discord_heartbeat_age_seconds": "Wall-clock seconds since the last Discord gateway HEARTBEAT_ACK (via in-VM shim)",
+        "hermes_discord_last_event_age_seconds": "Wall-clock seconds since the most recent proof of Discord liveness (min of heartbeat-ACK age and gateway.log event age)",
         "hermes_health_check_last_run_timestamp_seconds": "When the health check last ran",
         "hermes_api_key_present": "1 if API_SERVER_KEY was readable from /run/secrets/hermes/env",
     }
@@ -292,6 +327,12 @@ let
         ask_ok, ask_seconds, _ = await probe_ask_hermes_e2e()
 
         disco_present, disco_age = discord_last_event_age_seconds()
+        hb_present, hb_age = discord_heartbeat_age_seconds()
+        # "Proof of life" age: the smaller of the heartbeat-ACK age (primary,
+        # traffic-independent) and the gateway.log event age (fallback). A
+        # healthy WS acks ~every 41s, keeping this tiny; it only climbs when
+        # acks AND log events both go silent = a real zombie.
+        live_age = min(disco_age, hb_age) if hb_present else disco_age
 
         write_metrics(
             {
@@ -301,7 +342,9 @@ let
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),
                 "hermes_discord_event_present": disco_present,
-                "hermes_discord_last_event_age_seconds": round(disco_age, 1),
+                "hermes_discord_heartbeat_present": hb_present,
+                "hermes_discord_heartbeat_age_seconds": round(hb_age, 1),
+                "hermes_discord_last_event_age_seconds": round(live_age, 1),
                 "hermes_api_key_present": api_key_present,
                 "hermes_health_check_last_run_timestamp_seconds": round(time.time(), 3),
             }

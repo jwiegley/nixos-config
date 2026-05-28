@@ -100,7 +100,9 @@ groups:
 
       - alert: MbsyncLastSyncFailed
         expr: mbsync_last_sync_status == 0
-        for: 10m
+        # 25m spans more than one ~15min sync cycle, so a single transient
+        # failure that self-heals on the next run won't alert; needs 2+ in a row.
+        for: 25m
         labels:
           severity: warning
           component: mail_sync

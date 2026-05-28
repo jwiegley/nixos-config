@@ -1015,11 +1015,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1779993196,
-        "narHash": "sha256-hx5njC6yMDU3kBalOaMWcIO72BJ62pzaAHO1yJ6LikE=",
+        "lastModified": 1779999478,
+        "narHash": "sha256-OqWblDF0UsHMQddIQ1cSMD/9zgL+4kKmIchO9aO043Q=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "3a9bc9d88a847feb97f86e5cde6588503871e3b8",
+        "rev": "ea5a6c216b99319353bddc99b2a1a0c1b2241b6d",
         "type": "github"
       },
       "original": {
@@ -2139,11 +2139,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1779991449,
-        "narHash": "sha256-QdfwmaR35R6KOrtxGQKGGplbzXNdqwJpDikML6TCXyI=",
+        "lastModified": 1779996558,
+        "narHash": "sha256-97+sQrHMlAm605Knx9zceiXYW9N8BYvotQiGcIcoCXU=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "49e973e379007f3f154b91206679ec306c3a2175",
+        "rev": "fbdfb26f43f9c74543ff3ddfa80c954355c0b6ac",
         "type": "github"
       },
       "original": {
@@ -2192,11 +2192,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1779993646,
-        "narHash": "sha256-9ifytHCmOAO+vuPsRu5VfrSJFsyemdq3djq9+CsGsPk=",
+        "lastModified": 1780001327,
+        "narHash": "sha256-io8WPiFbaWE8SaOTyqtYu/I7UCasWMD3y/Nix3uemXY=",
         "ref": "refs/heads/main",
-        "rev": "44b66ce9a3791bb459756fc058994a99e09d07e8",
-        "revCount": 1830,
+        "rev": "9726626c4c32fa812fb30b774d5ea7da4453a4a9",
+        "revCount": 1831,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

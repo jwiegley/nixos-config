@@ -1015,11 +1015,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1779983539,
-        "narHash": "sha256-QwKsGh1jirt35J5GX+0zbCdv6mTkto8XLl/ejj5UPMI=",
+        "lastModified": 1779993196,
+        "narHash": "sha256-hx5njC6yMDU3kBalOaMWcIO72BJ62pzaAHO1yJ6LikE=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "e8b9369a9d2df36139a5055cae3ed3c15691e03e",
+        "rev": "3a9bc9d88a847feb97f86e5cde6588503871e3b8",
         "type": "github"
       },
       "original": {
@@ -2192,11 +2192,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1779918116,
-        "narHash": "sha256-78P/q0Op0UzTN1rNcJAFxHjgwSQTvXShIhbH8IqF3mw=",
+        "lastModified": 1779993646,
+        "narHash": "sha256-9ifytHCmOAO+vuPsRu5VfrSJFsyemdq3djq9+CsGsPk=",
         "ref": "refs/heads/main",
-        "rev": "29b70210570077d90af84a6cc641622f049096eb",
-        "revCount": 1822,
+        "rev": "44b66ce9a3791bb459756fc058994a99e09d07e8",
+        "revCount": 1830,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

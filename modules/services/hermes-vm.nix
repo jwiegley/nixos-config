@@ -13,6 +13,8 @@
   hermesGid,
   stateDir,
   tapName,
+  secretsStagingDir,
+  dnatPortList,
   ...
 }:
 let
@@ -21,6 +23,180 @@ let
   # intentionally pinned. Edit /etc/nixos/models.nix to change.
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
+
+  # ── Python environments for the stdio MCP servers ──────────────────────
+  # Hermes spawns each MCP server as a child process running one of these
+  # interpreters on an absolute store path. `lightPython` covers the simple
+  # servers (vane, email-contacts, perplexity, org-db); `financialPython`
+  # carries the heavy numeric stack that only stock-trader-mcp.py needs.
+  #
+  # The MCP scripts themselves are shared verbatim with OpenClaw (same files
+  # under ../../scripts), so the interpreter package sets must match what
+  # those scripts import. `psycopg2` is required by org-db-mcp.py's read-only
+  # org_sql (requests cannot speak the PostgreSQL wire protocol).
+  lightPython = pkgs.python312.withPackages (ps: [
+    ps.mcp
+    ps.requests
+    ps.simplejson
+    ps.psycopg2
+  ]);
+
+  # canonical copy in openclaw-microvm.nix
+  financialPython = pkgs.python312.withPackages (ps: [
+    ps.mcp
+    ps.pandas
+    ps.numpy
+    ps.scipy
+    ps.matplotlib
+    ps.requests
+    ps.yahooquery
+    ps.py_vollib
+    ps.simplejson
+  ]);
+
+  # canonical copy in openclaw-microvm.nix
+  khardFixed = pkgs.khard.overrideAttrs (_: {
+    dontCheckRuntimeDeps = true;
+  });
+
+  # ── MCP server wrapper scripts ─────────────────────────────────────────
+  # Each wrapper sets the env the corresponding script expects, then exec's
+  # the right Python interpreter on the script's absolute store path. These
+  # mirror openclaw-vm.nix's *McpServer wrappers; Hermes registers them via
+  # services.hermes-agent.mcpServers.<name>.command below. The scripts are
+  # referenced as Nix paths so they land in the store (shared into the VM
+  # via the ro-store virtiofs mount).
+
+  # Vane (Perplexica) MCP server: AI-synthesized answers with citations,
+  # talking to the host vane container via nginx HTTPS. TLS is verified
+  # against the Vulcan Step-CA already trusted in the VM via
+  # security.pki.certificates. The script never logs the /api/config body
+  # because it carries the LiteLLM apiKey.
+  vaneMcpScript = ../../scripts/vane-mcp.py;
+  vaneMcpServer = pkgs.writeShellScript "vane-mcp" ''
+    export VANE_BASE_URL="https://vane.vulcan.lan"
+    # 10 min HTTP timeout — Vane synthesis can take several minutes when the
+    # focus_mode does deep retrieval.
+    export VANE_TIMEOUT_S=600
+    exec ${lightPython}/bin/python3 ${vaneMcpScript}
+  '';
+
+  # Stock-trader MCP server: quotes, technical analysis, options strategies.
+  # Talks to https://trader.vulcan.lan via the bridge gateway DNAT. Uses the
+  # heavy financialPython interpreter (yahooquery / py_vollib / pandas).
+  stockTraderMcpScript = ../../scripts/stock-trader-mcp.py;
+  stockTraderMcpServer = pkgs.writeShellScript "stock-trader-mcp" ''
+    export STOCK_TRADER_BASE_URL="https://trader.vulcan.lan"
+    exec ${financialPython}/bin/python3 ${stockTraderMcpScript}
+  '';
+
+  # Email + contacts MCP server: IMAP read/search + SMTP send (Dovecot /
+  # Postfix via the two-stage DNAT) and khard contact lookup. Puts khard on
+  # PATH and points XDG_CONFIG_HOME at the read-write state share so the
+  # script finds the khard.conf written by hermes-tools-setup. The IMAP
+  # password is read at command time from the staged secret file.
+  emailMcpScript = ../../scripts/email-contacts-mcp.py;
+  emailMcpServer = pkgs.writeShellScript "email-contacts-mcp" ''
+    export PATH="${khardFixed}/bin:$PATH"
+    export XDG_CONFIG_HOME="${stateDir}/.config"
+    exec ${lightPython}/bin/python3 ${emailMcpScript}
+  '';
+
+  # Perplexity MCP server: web answers via the public Perplexity API over
+  # the already-allowed 443 egress. The API key is exported from the staged
+  # secret file so it never appears in the unit env or the Nix store.
+  perplexityMcpScript = ../../scripts/perplexity-mcp.py;
+  perplexityMcpServer = pkgs.writeShellScript "perplexity-mcp" ''
+    set -eu
+    KEY_FILE="/run/hermes-secrets/perplexity-api-key"
+    if [ ! -r "$KEY_FILE" ]; then
+      echo "perplexity-mcp: API key not readable at $KEY_FILE" >&2
+      exit 1
+    fi
+    export PERPLEXITY_API_KEY="$(cat "$KEY_FILE")"
+    exec ${lightPython}/bin/python3 ${perplexityMcpScript}
+  '';
+
+  # org-db MCP server: read-only org-mode access. org_sql connects to
+  # PostgreSQL (org database, read-only role `openclaw`) over the 5432 DNAT
+  # via psycopg2/libpq; org_search shells `org db search` against LiteLLM
+  # embeddings. The PG password is exported from the staged secret; the
+  # PG* defaults match the host's org-db-search wrapper. org_search also
+  # needs OPENROUTER_API_KEY (the LiteLLM virtual key) and ORG_CONFIG. We do
+  # NOT rely on inheriting OPENROUTER_API_KEY from the hermes-agent parent:
+  # hermes-agent has no systemd EnvironmentFile= — it loads ${stateDir}/env
+  # as an internal dotenv at Python startup, so the key is not guaranteed to
+  # be in os.environ of spawned stdio MCP children (org_search would then
+  # fall back to `--api-key unused` and every embedding call would 401).
+  # Instead we source the SAME LiteLLM virtual key Hermes already holds out
+  # of ${stateDir}/env (no new SOPS secret, no widened secret surface) and
+  # export it ourselves — mirroring how openclaw-microvm.nix's orgDbSearch
+  # reads LITELLM_KEY from its own config rather than trusting env
+  # inheritance. ORG_CONFIG points at the khard-style config written by
+  # hermes-tools-setup.
+  orgDbMcpScript = ../../scripts/org-db-mcp.py;
+  orgDbMcpServer = pkgs.writeShellScript "org-db-mcp" ''
+    set -eu
+    # org_search shells the bare `org` binary; put org-jw on PATH so it
+    # resolves (matches openclaw-microvm.nix's orgDbSearch wrapper).
+    export PATH="${pkgs.org-jw}/bin:$PATH"
+    export PGHOST=127.0.0.1
+    export PGPORT=5432
+    export PGDATABASE=org
+    export PGUSER=openclaw
+    PW_FILE="/run/hermes-secrets/org-db-password"
+    if [ -r "$PW_FILE" ]; then
+      export PGPASSWORD="$(cat "$PW_FILE")"
+    fi
+    # Source OPENROUTER_API_KEY (the LiteLLM virtual key) from the same
+    # dotenv hermes-agent itself reads, so org_search's `org db search`
+    # subprocess authenticates to LiteLLM regardless of whether the key is
+    # present in this wrapper's inherited env. Match the first assignment
+    # only; strip optional surrounding quotes with shell parameter
+    # expansion (no embedded quote chars in this Nix string). Never echo
+    # the value.
+    ENV_FILE="${stateDir}/env"
+    if [ -r "$ENV_FILE" ]; then
+      _ork="$(${pkgs.gnused}/bin/sed -n \
+        's/^[[:space:]]*OPENROUTER_API_KEY[[:space:]]*=[[:space:]]*//p' \
+        "$ENV_FILE" | ${pkgs.coreutils}/bin/head -n1)"
+      _ork="''${_ork%\"}"
+      _ork="''${_ork#\"}"
+      _ork="''${_ork%\'}"
+      _ork="''${_ork#\'}"
+      if [ -n "$_ork" ]; then
+        export OPENROUTER_API_KEY="$_ork"
+      fi
+      unset _ork
+    fi
+    export ORG_CONFIG="${stateDir}/.config/org/config.yaml"
+    exec ${lightPython}/bin/python3 ${orgDbMcpScript}
+  '';
+
+  # Stdio bridge from Hermes's MCP client to Home Assistant's streamable
+  # HTTP MCP server. Mirrors openclaw-vm.nix's homeAssistantMcpBridge: we
+  # use mcp-proxy with a static Bearer header rather than a direct HTTP
+  # connection because clients that auto-probe OAuth metadata fail against
+  # HA (no RFC 7591 dynamic client registration). The token is read from
+  # the staged secret at startup so it never lands in the unit env or the
+  # Nix store. It connects by IP to http://127.0.0.1:8123/api/mcp, reached
+  # via the 8123 DNAT (the hass.vulcan.lan hosts entry is unused by this
+  # path). The token does briefly appear in the spawned mcp-proxy argv
+  # (visible to the hermes user via /proc/<pid>/cmdline only) — the same
+  # accepted trade-off OpenClaw makes.
+  haBridge = pkgs.writeShellScript "mcp-proxy-ha-bridge" ''
+    set -eu
+    TOKEN_FILE="/run/hermes-secrets/home-assistant-token"
+    if [ ! -r "$TOKEN_FILE" ]; then
+      echo "mcp-proxy-ha-bridge: token not readable at $TOKEN_FILE" >&2
+      exit 1
+    fi
+    exec ${pkgs.mcp-proxy}/bin/mcp-proxy \
+      --transport=streamablehttp \
+      --stateless \
+      --headers Authorization "Bearer $(cat "$TOKEN_FILE")" \
+      "http://127.0.0.1:8123/api/mcp"
+  '';
 
   # Python startup shims injected into the hermes-agent process via a
   # `sitecustomize.py` on PYTHONPATH — Python's `site` init auto-imports it
@@ -138,9 +314,12 @@ in
   # ---- Guest resources ----
   # microvm.nix default is 512 MiB. Python+discord.py running the full
   # agent runtime has OOM-killed at 512 MiB under load (anon-rss:191 MiB
-  # python3.12 on top of ~250 MiB kernel+systemd). 1 GiB gives ~512 MiB
-  # headroom for the agent process.
-  microvm.mem = 1024;
+  # python3.12 on top of ~250 MiB kernel+systemd). 2 GiB gives the agent
+  # process headroom AND room for the concurrent stdio MCP servers
+  # (each spawns its own python3.12; financialPython for stock-trader
+  # pulls in the heavy numeric stack), which add real memory pressure
+  # on top of the gateway. Was 1024 before the MCP-server parity work.
+  microvm.mem = 2048;
 
   # ---- Guest networking ----
   microvm.interfaces = [
@@ -160,19 +339,41 @@ in
   };
   networking.nameservers = [ bridgeAddr ];
 
+  # Override *.vulcan.lan hostnames to point at the bridge gateway so the
+  # MCP servers reach host services directly. The host egress filter blocks
+  # 192.168.0.0/16, so normal DNS resolution (the real LAN IP) is
+  # unreachable; pointing these names at the gateway routes them through the
+  # two-stage DNAT instead. Mirrors openclaw-vm.nix's networking.hosts.
+  # searxng/vane/trader/imap/smtp/radicale are load-bearing (the scripts use
+  # the hostnames); hass.vulcan.lan is included for consistency but is
+  # unused — the HA bridge connects to 127.0.0.1:8123 by IP via the DNAT.
+  networking.hosts = {
+    ${bridgeAddr} = [
+      "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
+      "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
+      "trader.vulcan.lan" # stock-trader service (via nginx 443)
+      "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
+      "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.1.1:2525 → 127.0.0.1:2525)
+      "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.1.1:5232 → 127.0.0.1:5232)
+      "hass.vulcan.lan" # Home Assistant (HA bridge uses 127.0.0.1:8123 directly)
+    ];
+  };
+
   # ---- Two-stage DNAT (stage 1: guest OUTPUT) ----
-  # Hermes (and any other in-VM service) targets host LiteLLM via
-  # http://127.0.0.1:4000 unchanged. This OUTPUT chain rewrites those
+  # Hermes (and the stdio MCP servers it spawns) target host services via
+  # http://127.0.0.1:PORT unchanged. This OUTPUT chain rewrites those
   # connections to the bridge gateway IP, where the host's PREROUTING
   # rule (hermes-host-dnat.service) rewrites them back to 127.0.0.1
-  # on the host. Same shape as openclaw-vm.nix:443.
+  # on the host. The port set is threaded from hermes-microvm.nix via
+  # _module.args (dnatPortList) so it stays in sync with the host-side
+  # PREROUTING/INPUT rules. Same shape as openclaw-vm.nix:452.
   networking.nftables.enable = true;
   networking.nftables.tables.hermes-dnat = {
     family = "ip";
     content = ''
       chain output {
         type nat hook output priority -100; policy accept;
-        ip daddr 127.0.0.1 tcp dport { 4000 } dnat to ${bridgeAddr}
+        ip daddr 127.0.0.1 tcp dport { ${dnatPortList} } dnat to ${bridgeAddr}
       }
       chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
@@ -202,6 +403,17 @@ in
       tag = "state";
       source = stateDir;
       mountPoint = stateDir;
+      proto = "virtiofs";
+    }
+    # hermes-secrets: SOPS-staged secret content from the host
+    # (secretsStagingDir, threaded via _module.args). Read-only inside the
+    # VM — the MCP wrappers and hermes-tools-setup read tokens/passwords
+    # from here, but all GENERATED config files go under ${stateDir}/.config
+    # (the read-write state share), never into /run/hermes-secrets.
+    {
+      tag = "hermes-secrets";
+      source = secretsStagingDir;
+      mountPoint = "/run/hermes-secrets";
       proto = "virtiofs";
     }
   ];
@@ -244,7 +456,12 @@ in
     # only install via the `messaging` extras group. Without this, the
     # gateway logs `Discord: discord.py not installed` and silently drops
     # the Discord adapter (observed 2026-05-22 after a flake.lock bump).
-    extraDependencyGroups = [ "messaging" ];
+    # `mcp` adds the MCP-client deps so services.hermes-agent.mcpServers
+    # (below) can actually connect to the stdio MCP servers.
+    extraDependencyGroups = [
+      "messaging"
+      "mcp"
+    ];
 
     environmentFiles = [ "${stateDir}/env" ];
 
@@ -253,6 +470,15 @@ in
       # into ~/.hermes/config.yaml; the `.managed` marker blocks
       # `hermes config set` so this file is the only source of truth.
       logging.level = "INFO";
+
+      # SearXNG is the NATIVE web-search backend (no MCP server, no script).
+      # Setting SEARXNG_URL in the systemd environment (below) registers the
+      # web_search tool; forcing the backend here makes SearXNG the chosen
+      # provider rather than letting Hermes fall through its default list
+      # (firecrawl→parallel→tavily→exa→searxng→brave-free→ddgs). Reaches the
+      # host SearXNG over 443 via the bridge DNAT; TLS verifies against the
+      # Vulcan root CA already trusted in the VM.
+      web.search_backend = "searxng";
       gateway = {
         enabled = true;
         platforms = [
@@ -382,6 +608,94 @@ in
         };
       };
     };
+
+    # ── MCP servers (stdio) ──────────────────────────────────────────────
+    # Top-level option (NOT settings.mcpServers): the upstream module maps
+    # this attrset into settings.mcp_servers. Each entry's `command` is an
+    # absolute store-path wrapper from the let-block above; `args`/`env`
+    # follow the same contract OpenClaw uses for the SAME scripts. SearXNG
+    # is intentionally absent here — it is the native web backend, not an
+    # MCP server.
+    #
+    # NOTE for reviewers: the upstream mcpServers submodule
+    # (hermes-agent nixosModules.nix:327) type-checks strictly and has NO
+    # `description` field (only command/args/env/url/headers/auth/enabled/
+    # timeout/connect_timeout/tools/sampling). Adding `description = ...`
+    # would fail evaluation. Hermes derives each tool's doc from the MCP
+    # server's own FastMCP tool docstrings, not from this option, so the
+    # human-readable descriptions live as comments here (mirroring the
+    # spirit of openclaw-vm.nix's mcporter `description` fields).
+    mcpServers = {
+      # Vane (Perplexica) — AI answer engine that runs SearXNG behind the
+      # scenes and synthesizes a cited answer from web sources. Slower than
+      # raw SearXNG but produces a written digest with linked citations.
+      # Use for research-style questions.
+      vane = {
+        command = "${vaneMcpServer}";
+        args = [ ];
+        env = {
+          VANE_BASE_URL = "https://vane.vulcan.lan";
+          VANE_TIMEOUT_S = "600";
+        };
+      };
+
+      # Home Assistant (state, services, automation, devices) via the
+      # mcp-proxy stdio bridge to /api/mcp with a static long-lived access
+      # token. command is the haBridge wrapper, which reads the token from
+      # the staged secret at spawn time.
+      home-assistant = {
+        command = "${haBridge}";
+        args = [ ];
+      };
+
+      # Stock quotes, technical analysis, news sentiment, options
+      # strategies, and risk assessment via the stock-trader service.
+      stock-trader = {
+        command = "${stockTraderMcpServer}";
+        args = [ ];
+        env = {
+          STOCK_TRADER_BASE_URL = "https://trader.vulcan.lan";
+        };
+      };
+
+      # Email (IMAP read/search, SMTP send) and contact lookup. khard reads
+      # the contacts synced by hermes-tools-setup; the password comes from
+      # the staged secret file.
+      email-contacts = {
+        command = "${emailMcpServer}";
+        args = [ ];
+        env = {
+          IMAP_HOST = "imap.vulcan.lan";
+          IMAP_PORT = "993";
+          SMTP_HOST = "smtp.vulcan.lan";
+          SMTP_PORT = "2525";
+          EMAIL_ADDRESS = "johnw@vulcan.lan";
+          EMAIL_USERNAME = "johnw";
+          EMAIL_PASSWORD_FILE = "/run/hermes-secrets/imap-password";
+          KHARD_CONFIG = "${stateDir}/.config/khard/khard.conf";
+        };
+      };
+
+      # Web answers via the public Perplexity API. Parity with OpenClaw's
+      # built-in Perplexity web tool; the wrapper exports PERPLEXITY_API_KEY
+      # from the staged secret.
+      perplexity = {
+        command = "${perplexityMcpServer}";
+        args = [ ];
+      };
+
+      # Read-only org-mode access: org_sql (sanitized single SELECT via
+      # psycopg2 against the org database as the read-only `openclaw` role)
+      # and org_search (semantic search via `org db search` over LiteLLM
+      # bge-m3 embeddings). The wrapper exports PG*/PGPASSWORD and ORG_CONFIG,
+      # and sources OPENROUTER_API_KEY (the LiteLLM virtual key) from
+      # ${stateDir}/env so the semantic-search subprocess authenticates to
+      # LiteLLM without relying on parent-process env inheritance.
+      org-db = {
+        command = "${orgDbMcpServer}";
+        args = [ ];
+      };
+    };
   };
 
   # Inject the Python startup shims (httpx.Timeout patch + Discord WS
@@ -392,6 +706,12 @@ in
   # let-block above for the why.
   systemd.services.hermes-agent.environment = {
     PYTHONPATH = "${hermesPyShim}";
+    # Native SearXNG web backend. Setting this registers Hermes's web_search
+    # tool; settings.web.search_backend = "searxng" (above) forces it as the
+    # provider. Reaches the host SearXNG over 443 via the bridge DNAT; the
+    # SearXNG provider GETs /search?format=json, which the host instance
+    # already enables. No API key, no extra deps (uses core httpx).
+    SEARXNG_URL = "https://searxng.vulcan.lan";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions
     # for the OpenClaw↔Hermes MCP bridge (host's hermes-mcp.service).
     # `API_SERVER_KEY` is supplied via environmentFiles=…/env (sops);
@@ -400,6 +720,171 @@ in
     API_SERVER_ENABLED = "true";
     API_SERVER_HOST = "0.0.0.0";
     API_SERVER_PORT = "8080";
+  };
+
+  # ---- Tool config + contact sync (runs before hermes-agent) ----
+  # Writes the per-tool config files the email-contacts and org-db MCP
+  # servers need, then does a best-effort contact sync. This is the
+  # relevant slice of openclaw-vm.nix's giant preStart, factored out into
+  # its own oneshot so the hermes-agent unit stays declarative.
+  #
+  # All generated config goes under ${stateDir}/.config (the read-write
+  # state share) — NEVER into the read-only /run/hermes-secrets mount.
+  # Secrets are read from /run/hermes-secrets/* and injected into the
+  # config files at write time (the sherlock config at mode 600 via jq, so
+  # the password never appears in argv). Runs as the hermes user so every
+  # file it writes is owned hermes:hermes.
+  systemd.services.hermes-tools-setup = {
+    description = "Hermes MCP tool config + initial contact sync";
+    before = [ "hermes-agent.service" ];
+    requiredBy = [ "hermes-agent.service" ];
+    after = [
+      # The state share must be mounted before we write into it. microvm.nix
+      # bind-mounts the virtiofs `state` share at ${stateDir}; the unit name
+      # is derived from the mount point.
+      "${lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "/" stateDir)}.mount"
+    ];
+    requires = [
+      "${lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "/" stateDir)}.mount"
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "hermes";
+      Group = "hermes";
+      WorkingDirectory = stateDir;
+    };
+    path = with pkgs; [
+      coreutils
+      jq
+      vdirsyncer
+      curl
+    ];
+    script = ''
+      set -u
+
+      # Create config directories (safe "d"-style mkdir -p — preserves
+      # contents; never deletes). All under the read-write state share.
+      mkdir -p ${stateDir}/.config/khard
+      mkdir -p ${stateDir}/.config/vdirsyncer
+      mkdir -p ${stateDir}/.config/sherlock
+      mkdir -p ${stateDir}/.config/org
+      mkdir -p ${stateDir}/.vdirsyncer/status
+      mkdir -p ${stateDir}/contacts/contacts
+
+      # ── vdirsyncer: sync Radicale contacts to local vCard files ───────
+      # Password is fetched at command time from the staged secret so it
+      # never lands in this file. Mirrors openclaw-vm.nix's vdirsyncer cfg.
+      cat > ${stateDir}/.config/vdirsyncer/config << VDIRSYNCER_END
+      [general]
+      status_path = "${stateDir}/.vdirsyncer/status"
+
+      [pair contacts]
+      a = "radicale"
+      b = "local"
+      collections = [["contacts", "contacts", "contacts"]]
+
+      [storage radicale]
+      type = "carddav"
+      url = "http://radicale.vulcan.lan:5232/"
+      username = "johnw"
+      password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "/run/hermes-secrets/radicale-password"]
+
+      [storage local]
+      type = "filesystem"
+      path = "${stateDir}/contacts/"
+      fileext = ".vcf"
+      VDIRSYNCER_END
+      chmod 600 ${stateDir}/.config/vdirsyncer/config
+
+      # ── khard: CLI contact manager for the synced vCard files ─────────
+      # The contacts subdir is created by vdirsyncer for the "contacts"
+      # collection. KHARD_CONFIG on the email-contacts MCP entry points
+      # here.
+      cat > ${stateDir}/.config/khard/khard.conf << KHARD_END
+      [addressbooks]
+      [[contacts]]
+      path = ${stateDir}/contacts/contacts/
+
+      [general]
+      default_action = show
+      editor = cat
+      merge_editor = cat
+      KHARD_END
+      chmod 600 ${stateDir}/.config/khard/khard.conf
+
+      # ── sherlock: read-only DB query config (org connection) ──────────
+      # Written with a PLACEHOLDER password, then the real org-db password
+      # is injected via jq so it never appears in argv. Mode 600. Mirrors
+      # openclaw-vm.nix's sherlock config.
+      ORG_DB_PASS=""
+      if [ -r /run/hermes-secrets/org-db-password ]; then
+        ORG_DB_PASS=$(cat /run/hermes-secrets/org-db-password)
+      fi
+      cat > ${stateDir}/.config/sherlock/config.json <<'SHERLOCK_END'
+      {
+        "version": "2.0",
+        "connections": {
+          "org": {
+            "type": "postgres",
+            "host": "127.0.0.1",
+            "port": 5432,
+            "database": "org",
+            "username": "openclaw",
+            "password": "PLACEHOLDER"
+          }
+        }
+      }
+      SHERLOCK_END
+      jq --arg pass "$ORG_DB_PASS" '.connections.org.password = $pass' \
+        ${stateDir}/.config/sherlock/config.json > ${stateDir}/.config/sherlock/config.json.tmp
+      mv ${stateDir}/.config/sherlock/config.json.tmp ${stateDir}/.config/sherlock/config.json
+      chmod 600 ${stateDir}/.config/sherlock/config.json
+
+      # ── org: minimal config.yaml required by the org CLI for db search ─
+      # (org_search in org-db-mcp.py shells `org -c <this> db search`.)
+      cat > ${stateDir}/.config/org/config.yaml << 'ORG_CONFIG_END'
+      startKeywords: ["TODO", "TASK"]
+      openKeywords: ["TODO", "DOING", "WAIT", "DEFER", "TASK"]
+      closedKeywords: ["DONE", "CANCELED", "NOTE"]
+      keywordTransitions: []
+      checkFiles: false
+      priorities: ["A", "B", "C"]
+      propertyColumn: 11
+      tagsColumn: 97
+      attachmentsDir: "/tmp/org-attach"
+      ORG_CONFIG_END
+      chmod 644 ${stateDir}/.config/org/config.yaml
+
+      # ── Sync contacts from Radicale (best-effort, logged, non-fatal) ──
+      VDIR_LOG="${stateDir}/.hermes/logs/vdirsyncer-startup.log"
+      mkdir -p "$(dirname "$VDIR_LOG")"
+      echo "=== vdirsyncer startup $(date -u) ===" | tee -a "$VDIR_LOG"
+      if [ -r /run/hermes-secrets/radicale-password ]; then
+        echo "Testing Radicale at http://radicale.vulcan.lan:5232/ ..." | tee -a "$VDIR_LOG"
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          --connect-timeout 5 "http://radicale.vulcan.lan:5232/" 2>&1 || echo "CURL_FAILED")
+        echo "Radicale HTTP response: $HTTP_CODE" | tee -a "$VDIR_LOG"
+
+        echo "Running vdirsyncer discover..." | tee -a "$VDIR_LOG"
+        vdirsyncer --config ${stateDir}/.config/vdirsyncer/config \
+          discover contacts 2>&1 | tee -a "$VDIR_LOG" | head -20 || \
+          echo "vdirsyncer discover failed (non-fatal)" | tee -a "$VDIR_LOG"
+
+        echo "Running vdirsyncer sync..." | tee -a "$VDIR_LOG"
+        vdirsyncer --config ${stateDir}/.config/vdirsyncer/config \
+          sync 2>&1 | tee -a "$VDIR_LOG" | head -40 || \
+          echo "vdirsyncer sync failed; will use cached contacts if available" | tee -a "$VDIR_LOG"
+        echo "Contact count: $(ls ${stateDir}/contacts/contacts/*.vcf 2>/dev/null | wc -l) vCards" | tee -a "$VDIR_LOG"
+      else
+        echo "Radicale credentials not staged; skipping contact sync" | tee -a "$VDIR_LOG"
+      fi
+
+      # Never fail the unit on a flaky sync — the MCP servers can still run
+      # with cached (or empty) contacts, and email/SQL parity does not
+      # depend on contacts at all.
+      exit 0
+    '';
   };
 
   # User+group inside the guest — must match the host UID so the

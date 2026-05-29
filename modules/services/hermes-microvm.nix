@@ -69,7 +69,13 @@ let
     5432
     8123
   ];
-  dnatPortList = lib.concatStringsSep ", " (map toString dnatPorts);
+  # NO-SPACE comma join: this string feeds both `iptables -m multiport
+  # --dports` (host isolate chain below) and the guest's nftables
+  # `tcp dport { ... }` set. iptables multiport rejects spaces (an unquoted
+  # "443, 993" word-splits into a trailing-comma token -> "invalid port ''"),
+  # and nftables sets accept the comma-only form fine. Was ", " when only
+  # port 4000 was in the list, which hid the bug.
+  dnatPortList = lib.concatStringsSep "," (map toString dnatPorts);
   hostDnatRules = lib.concatMapStringsSep "\n" (port: ''
     iptables -t nat -A PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port}
   '') dnatPorts;
@@ -414,8 +420,9 @@ in
         # Secrets share root (guest mounts this as /run/hermes-secrets) and
         # the comma-joined DNAT port set (guest threads it into its
         # OUTPUT-DNAT rule, mirroring openclaw-vm.nix's dnatPortList arg).
-        secretsStagingDir = secretsStagingDir;
-        dnatPortList = lib.concatStringsSep ", " (map toString dnatPorts);
+        # Both inherit the single let-block source of truth so the host
+        # firewall rules and the guest DNAT can never drift.
+        inherit secretsStagingDir dnatPortList;
       };
     };
     specialArgs = { inherit inputs system; };

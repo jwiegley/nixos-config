@@ -216,6 +216,12 @@ in
         # OpenClaw microVM bridge network — Sherlock queries org database
         host    org       openclaw   10.99.0.0/30    scram-sha-256
 
+        # Hermes microVM bridge network — org-db MCP server (org_sql) queries
+        # the org database as the same read-only `openclaw` role. Hermes reaches
+        # PostgreSQL via its own two-stage DNAT, so connections arrive sourced
+        # from the Hermes VM IP 10.99.1.2 (subnet 10.99.1.0/30).
+        host    org       openclaw   10.99.1.0/30    scram-sha-256
+
         # Local networks - SSL required with client certificate verification
         hostssl all       postgres   192.168.0.0/16  scram-sha-256
         hostssl all       all        192.168.0.0/16  scram-sha-256

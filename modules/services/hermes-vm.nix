@@ -314,12 +314,15 @@ in
   # ---- Guest resources ----
   # microvm.nix default is 512 MiB. Python+discord.py running the full
   # agent runtime has OOM-killed at 512 MiB under load (anon-rss:191 MiB
-  # python3.12 on top of ~250 MiB kernel+systemd). 2 GiB gives the agent
+  # python3.12 on top of ~250 MiB kernel+systemd). 3 GiB gives the agent
   # process headroom AND room for the concurrent stdio MCP servers
   # (each spawns its own python3.12; financialPython for stock-trader
   # pulls in the heavy numeric stack), which add real memory pressure
   # on top of the gateway. Was 1024 before the MCP-server parity work.
-  microvm.mem = 2048;
+  # NOTE: must NOT be exactly 2048 — microvm.nix/QEMU hangs at exactly 2 GiB
+  # (microvm-nix/microvm.nix#171), so 3072 both avoids that trap and adds
+  # headroom for the MCP servers.
+  microvm.mem = 3072;
 
   # ---- Guest networking ----
   microvm.interfaces = [

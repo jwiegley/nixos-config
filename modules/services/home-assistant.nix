@@ -429,6 +429,9 @@ in
       # OPNsense firewall - use HACS custom component instead
       # Built-in integration has JSON parsing issues with newer OPNsense versions
 
+      # Lighting
+      "wiz" # WiZ WiFi smart bulbs (Signify/Philips) — local push, requires pywizlight
+
       # Energy & Solar
       "enphase_envoy" # Enphase Solar Inverter
       "tesla_wall_connector" # Tesla Wall Connector

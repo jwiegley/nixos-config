@@ -34,14 +34,41 @@ let
   hermesGid = 932;
   stateDir = "/var/lib/hermes";
 
+  # Host-side staging dir for SOPS secret *content* shared into the VM via
+  # virtiofs as /run/hermes-secrets. Mirrors openclaw-microvm.nix:43
+  # ("${microvmBase}/secrets"). sops-nix decrypts on the host; the
+  # hermes-prepare-secrets oneshot copies the content here at 0400
+  # hermes:hermes before the VM starts (the guest has no sops-nix).
+  secretsStagingDir = "/var/lib/microvms/hermes/secrets";
+
   # -- Host-side loopback services that the VM needs to reach --
   # Strategy mirrors openclaw-microvm.nix:115-118 — two-stage DNAT:
   #   1. Guest nftables OUTPUT: 127.0.0.1:port -> 10.99.1.1:port
   #   2. Host iptables PREROUTING (on hermes-br0): 10.99.1.1:port -> 127.0.0.1:port
   #   3. Host sysctl route_localnet=1 on hermes-br0 (allows the loopback hop)
-  # Phase 1 only needs LiteLLM (4000) for the hera/* model route; add more
-  # ports here (Qdrant, HA, etc.) when Phase 2 wires Hermes to those services.
-  dnatPorts = [ 4000 ];
+  # Service-parity set (mirrors the OpenClaw service surface, minus
+  # OpenClaw-only ports). The host PREROUTING DNAT, per-interface INPUT
+  # accepts, and the hermes-isolate RETURN rules below are all
+  # parameterized on this list, so adding a port here propagates to all
+  # three automatically:
+  #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan)
+  #   993  Dovecot IMAPS (email-contacts)
+  #   2525 Postfix SMTP (email-contacts)
+  #   4000 LiteLLM (hera/* model route + org-search embeddings)
+  #   5232 Radicale CardDAV (contacts)
+  #   5432 PostgreSQL (org-db read-only)
+  #   8123 Home Assistant (mcp-proxy bridge)
+  # Deliberately EXCLUDED: 6333/6334/6335 (Qdrant — OpenClaw-memory-specific)
+  # and 9081 (the OpenClaw↔Hermes bridge — Hermes *is* Hermes).
+  dnatPorts = [
+    443
+    993
+    2525
+    4000
+    5232
+    5432
+    8123
+  ];
   dnatPortList = lib.concatStringsSep ", " (map toString dnatPorts);
   hostDnatRules = lib.concatMapStringsSep "\n" (port: ''
     iptables -t nat -A PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port}
@@ -255,6 +282,33 @@ in
     ];
   };
 
+  # ---- Reused SOPS secrets: append Hermes restart triggers only ----
+  # owner/group/mode for these five are declared by their canonical
+  # owners (openclaw-microvm.nix, email-tester, vdirsyncer). Declaring
+  # them again here would conflict; sops-nix `restartUnits` is a list
+  # that merges across modules, so we add ONLY the restart triggers so
+  # that rotating any of these re-stages the secret and restarts the VM.
+  sops.secrets."email-tester-imap-password".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
+  sops.secrets."vdirsyncer-johnw/radicale-password".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
+  sops.secrets."openclaw/home-assistant-token".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
+  sops.secrets."openclaw/org-db-password".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
+  sops.secrets."openclaw/perplexity-api-key".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
+
   # ---- Stage SOPS secret content into the VM's virtio-fs state share ----
   systemd.services.hermes-prepare-secrets = {
     description = "Stage SOPS secrets for Hermes microVM";
@@ -278,6 +332,60 @@ in
         "${config.sops.secrets."hermes/env".path}" \
         "${stateDir}/env"
       echo "Hermes env staged to ${stateDir}/env"
+
+      # Staging dir for the virtio-fs hermes-secrets share. Owned by root
+      # (0755); virtiofs handles per-file access, the files themselves are
+      # 0400 hermes:hermes. Matches openclaw-prepare-secrets:570-571.
+      mkdir -p "${secretsStagingDir}"
+      chmod 0755 "${secretsStagingDir}"
+
+      # Stage the five reused SOPS secrets' *content* into the share. These
+      # are NOT hermes-owned SOPS entries (they're reused from OpenClaw /
+      # email-tester / vdirsyncer), so guard each copy with `if [ -f ]` the
+      # same way openclaw-prepare-secrets does for its reused secrets — a
+      # missing source must not fail the unit and block the VM.
+
+      # IMAP/SMTP password (reuse email-tester-imap-password — same Dovecot passdb)
+      IMAP_PASS_SRC="${config.sops.secrets."email-tester-imap-password".path}"
+      if [ -f "$IMAP_PASS_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$IMAP_PASS_SRC" "${secretsStagingDir}/imap-password"
+        echo "IMAP credentials staged"
+      fi
+
+      # Radicale CardDAV password (reuse vdirsyncer-johnw radicale credentials)
+      RADICALE_PASS_SRC="${config.sops.secrets."vdirsyncer-johnw/radicale-password".path}"
+      if [ -f "$RADICALE_PASS_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$RADICALE_PASS_SRC" "${secretsStagingDir}/radicale-password"
+        echo "Radicale CardDAV credentials staged"
+      fi
+
+      # Home Assistant long-lived access token (mcp-proxy bridge → /api/mcp)
+      HA_TOKEN_SRC="${config.sops.secrets."openclaw/home-assistant-token".path}"
+      if [ -f "$HA_TOKEN_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$HA_TOKEN_SRC" "${secretsStagingDir}/home-assistant-token"
+        echo "Home Assistant token staged"
+      fi
+
+      # org PostgreSQL password (read-only role `openclaw`)
+      ORG_DB_PASS_SRC="${config.sops.secrets."openclaw/org-db-password".path}"
+      if [ -f "$ORG_DB_PASS_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$ORG_DB_PASS_SRC" "${secretsStagingDir}/org-db-password"
+        echo "Org database password staged"
+      fi
+
+      # Perplexity API key (perplexity-mcp.py wrapper exports it from this file)
+      PERPLEXITY_KEY_SRC="${config.sops.secrets."openclaw/perplexity-api-key".path}"
+      if [ -f "$PERPLEXITY_KEY_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$PERPLEXITY_KEY_SRC" "${secretsStagingDir}/perplexity-api-key"
+        echo "Perplexity API key staged"
+      fi
+
+      echo "Hermes secrets staged to ${secretsStagingDir}"
     '';
   };
 
@@ -303,6 +411,11 @@ in
           stateDir
           tapName
           ;
+        # Secrets share root (guest mounts this as /run/hermes-secrets) and
+        # the comma-joined DNAT port set (guest threads it into its
+        # OUTPUT-DNAT rule, mirroring openclaw-vm.nix's dnatPortList arg).
+        secretsStagingDir = secretsStagingDir;
+        dnatPortList = lib.concatStringsSep ", " (map toString dnatPorts);
       };
     };
     specialArgs = { inherit inputs system; };

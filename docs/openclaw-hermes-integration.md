@@ -274,8 +274,27 @@ All metrics are gauges. Files live at
 | Bump the smoke probe schedule | `modules/monitoring/services/openclaw-hermes-smoke.nix`, the `intervalSeconds` option (default 900) |
 | Kill switch — disable the smoke probe | `sudo systemctl stop --now openclaw-hermes-smoke.timer` (transient), or set `services.openclawHermesSmoke.enable = false;` in `hosts/vulcan/default.nix` and `nixos-rebuild switch` (persistent) |
 
+## 8. Hermes service parity (2026-05-28)
+
+This doc covers the **bridge** direction (OpenClaw → Hermes via the 9081 `ask_hermes`
+path). Separately, as of 2026-05-28 Hermes reached **host-service parity** with OpenClaw:
+the Hermes microVM (`10.99.1.2`) now reaches the same seven host services OpenClaw does,
+via its own `hermes-br0` gateway DNAT (`10.99.1.1:PORT→127.0.0.1:PORT`, mirroring the
+`br-openclaw` pattern; the new ports are recorded in `docs/ports.txt`).
+
+- **Web search:** native SearXNG backend (`SEARXNG_URL` + `web.search_backend="searxng"`).
+- **MCP servers:** Vane (cited research), Home Assistant, stock-trader, email + contacts,
+  Perplexity, and read-only org PostgreSQL — registered via the `hermes-agent` native MCP
+  client. Most reuse OpenClaw's shipped scripts/secrets; only `perplexity-mcp.py` and
+  `org-db-mcp.py` are net-new.
+
+These widen the Hermes VM's reach but stay inside the microVM isolation boundary; egress
+stays restricted to the enumerated DNAT ports plus 443/53, the org-DB role is read-only,
+and no new plaintext enters `secrets.yaml`. See the design spec for the full rationale.
+
 ## Related documents
 
+- **Service parity spec:** `docs/superpowers/specs/2026-05-28-hermes-service-parity-design.md`
 - **Spec:** `docs/superpowers/specs/2026-05-15-openclaw-hermes-runbook-smoke-design.md`
 - **Bridge plan:** `docs/superpowers/plans/2026-05-12-openclaw-hermes-mcp-bridge.md`
 - **Config refactor:** `docs/superpowers/specs/2026-05-14-openclaw-nix-config-design.md`

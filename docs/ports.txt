@@ -125,6 +125,16 @@
 9081 127.0.0.1 hermes-mcp (OpenClaw↔Hermes MCP bridge; OpenClaw VM reaches via br-openclaw DNAT 10.99.0.1:9081→127.0.0.1:9081)
 9081 127.0.0.1 openclaw-hermes-smoke (15-min synthetic ask_hermes probe; second loopback consumer of the same bridge port)
 18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
+# Hermes VM bridge DNAT (hermes-br0 gateway 10.99.1.1): host PREROUTING maps 10.99.1.1:PORT→127.0.0.1:PORT
+# so the Hermes microVM (10.99.1.2) can reach EXISTING host loopback listeners. NOT new listeners — see the
+# 443/993/2525/4000/5232/5432/8123 entries above. (Mirrors the OpenClaw br-openclaw DNAT pattern.)
+443  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:443 (Nginx HTTPS: searxng/vane/trader.vulcan.lan)
+993  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:993 (Dovecot IMAPS)
+2525 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:2525 (Postfix plain-SMTP for microVMs)
+4000 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:4000 (LiteLLM; pre-existing, was the lone DNAT port)
+5232 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:5232 (Radicale CalDAV/CardDAV)
+5432 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:5432 (PostgreSQL; read-only org-db role)
+8123 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:8123 (Home Assistant)
 
 # Prometheus Stack
 9090 127.0.0.1 Prometheus Server

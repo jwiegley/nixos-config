@@ -24,8 +24,12 @@
 
     # Additional VictoriaMetrics flags for optimization
     extraOptions = [
-      # Enable deduplication of samples with identical timestamps
-      "-dedup.minScrapeInterval=60s"
+      # Keep at most one sample per series per 15s window. 15s (not 60s)
+      # sets the dedup floor at the finest interval we might ever ingest
+      # (e.g. a future 15s Prometheus remote_write); HA's ~60s push is
+      # unaffected. NOTE: dedup drops samples per-window, it does NOT
+      # aggregate/downsample (downsampling is VM Enterprise-only).
+      "-dedup.minScrapeInterval=15s"
 
       # Memory optimizations
       "-memory.allowedPercent=60"

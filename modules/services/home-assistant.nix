@@ -12,7 +12,7 @@ let
   # opnsense stays Nix-managed because upstream lacks Python 3.13 syntax fixes.
   hacsUntrackNixManaged = pkgs.writeText "hacs-untrack-nix-managed.py" ''
     import json
-    NIX_MANAGED = {"travisghansen/hass-opnsense"}
+    NIX_MANAGED = {"travisghansen/hass-opnsense", "rsnodgrass/hass-poolmath"}
     fpath = "/var/lib/hass/.storage/hacs.repositories"
     try:
         with open(fpath) as f:
@@ -164,6 +164,40 @@ let
       description = "Home Assistant custom component for simulating presence when away";
       homepage = "https://github.com/slashback100/presence_simulation";
       license = licenses.asl20;
+    };
+  };
+
+  # Custom Home Assistant component: Pool Math (Trouble Free Pool)
+  # GitHub: https://github.com/rsnodgrass/hass-poolmath
+  # Pinned to v2.2.0 (latest release) + poolmath-fixes.patch, which carries two
+  # fixes not yet in any upstream release (see the patch for full context):
+  #   1. config_flow.py: v2.2.0 calls async_show_form(data_description=...), which
+  #      is not a valid kwarg (data_description is a strings.json key), so the config
+  #      flow 500s. Upstream master switched to description_placeholders=; backported.
+  #   2. sensor.py: add async_added_to_hass so each entity seeds its value from the
+  #      already-fetched coordinator data on add, instead of reading 'unknown' for one
+  #      update_interval (~8 min) after every (re)start.
+  poolmath = pkgs.buildHomeAssistantComponent rec {
+    owner = "rsnodgrass";
+    domain = "poolmath";
+    version = "2.2.0";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "rsnodgrass";
+      repo = "hass-poolmath";
+      rev = "v${version}";
+      hash = "sha256-dFSCoubrvj0X9d6IH+7RSY06Xt7sXNRU/wPiXRbFR18=";
+    };
+
+    patches = [ ./poolmath-fixes.patch ];
+
+    # Manifest requires only aiohttp>=3.10.0, which HA core already provides.
+    dependencies = [ pkgs.home-assistant.python.pkgs.aiohttp ];
+
+    meta = with pkgs.lib; {
+      description = "Home Assistant custom integration for Pool Math (Trouble Free Pool)";
+      homepage = "https://github.com/rsnodgrass/hass-poolmath";
+      license = licenses.mit;
     };
   };
 in
@@ -343,6 +377,7 @@ in
       chime-tts # Play chime sounds before TTS announcements
       presence-simulation # Simulate presence by replaying historical entity states
       hass-opnsense # OPNsense firewall integration v0.6.5 (with Python 3.13 syntax fix)
+      poolmath # Pool Math (Trouble Free Pool) v2.2.0 + poolmath-fixes.patch (config-flow + initial-state seed)
     ];
 
     # Use PostgreSQL for better performance

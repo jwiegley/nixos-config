@@ -1,0 +1,70 @@
+diff --git a/custom_components/poolmath/config_flow.py b/custom_components/poolmath/config_flow.py
+index 1e7c417..1d74a8d 100644
+--- a/custom_components/poolmath/config_flow.py
++++ b/custom_components/poolmath/config_flow.py
+@@ -121,7 +121,7 @@ async def _process_share_url(
+             return flow.async_show_form(
+                 step_id=step_id,
+                 data_schema=_build_share_url_schema(),
+-                data_description={
++                description_placeholders={
+                     'suggested_values': _build_suggested_values(
+                         share_url=share_url,
+                         name=user_input.get(CONF_NAME, default_name),
+@@ -149,7 +149,7 @@ async def _process_share_url(
+         return flow.async_show_form(
+             step_id=step_id,
+             data_schema=_build_share_url_schema(),
+-            data_description={
++            description_placeholders={
+                 'suggested_values': _build_suggested_values(
+                     share_url=share_url,
+                     name=user_input.get(CONF_NAME, default_name),
+@@ -170,7 +170,7 @@ def _initial_form(
+     return flow.async_show_form(
+         step_id='user',
+         data_schema=_build_share_url_schema(),
+-        data_description={
++        description_placeholders={
+             'suggested_values': _build_suggested_values(
+                 name=DEFAULT_NAME,
+                 target=DEFAULT_TARGET,
+@@ -192,7 +192,7 @@ def _configure_form(
+     return flow.async_show_form(
+         step_id='configure',
+         data_schema=_build_share_url_schema(),
+-        data_description={
++        description_placeholders={
+             'suggested_values': _build_suggested_values(
+                 name=name,
+                 target=target,
+@@ -303,7 +303,7 @@ class PoolMathFlowHandler(ConfigFlow, domain=DOMAIN):
+                 return self.async_show_form(
+                     step_id='user',
+                     data_schema=_build_share_url_schema(),
+-                    data_description={
++                    description_placeholders={
+                         'suggested_values': _build_suggested_values(
+                             share_url=share_url,
+                             name=user_input.get(CONF_NAME, DEFAULT_NAME),
+diff --git a/custom_components/poolmath/sensor.py b/custom_components/poolmath/sensor.py
+index f5d79bf..0f46c65 100644
+--- a/custom_components/poolmath/sensor.py
++++ b/custom_components/poolmath/sensor.py
+@@ -313,6 +313,16 @@ class PoolMathSensor(CoordinatorEntity[PoolMathUpdateCoordinator], SensorEntity)
+         self._attr_native_value: float | None = None
+         self._attr_extra_state_attributes: dict[str, Any] = {}
+ 
++    async def async_added_to_hass(self) -> None:
++        """Seed state from already-fetched coordinator data on add.
++
++        poolmath only updates _attr_native_value in _handle_coordinator_update,
++        which the coordinator first fires one update_interval AFTER setup; without
++        this, every entity reads 'unknown' for ~8 min after each (re)start.
++        """
++        await super().async_added_to_hass()
++        self._handle_coordinator_update()
++
+     @callback
+     def _handle_coordinator_update(self) -> None:
+         """Handle updated data from the coordinator."""

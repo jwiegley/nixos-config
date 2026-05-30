@@ -11,7 +11,7 @@ Aggregates 8 signal sources:
   5. Discord gateway activity (gateway.log tail)
   6. Errors digest (errors.log tail, redacted)
   7. Self-heal incidents (incidents.json last 24h)
-  8. Optional in-VM SSH probe
+  8. Optional in-VM SSH probe (api_server + stock-trader reachability/TLS)
 
 Composes a plain-text email with ASCII tables and pipes it to sendmail.
 Designed to run as root from a systemd timer at 06:15 daily.
@@ -296,20 +296,72 @@ def systemd_uptime(unit: str) -> dict[str, Any]:
 
 
 def in_vm_probe() -> dict[str, Any]:
-    """Optional in-VM corroboration via SSH. Returns {skipped, reason, http_code}."""
+    """Optional in-VM corroboration via SSH.
+
+    Returns a dict with:
+      skipped, reason       — whether the SSH probe ran at all
+      http_code             — api_server /v1/capabilities HTTP code
+      trader_curl_code      — https://trader.vulcan.lan/api/schwab/status code
+                              via curl (system CA bundle path: proves the cert,
+                              nginx, the stock-trader service, and the bridge
+                              DNAT are all healthy)
+      trader_requests_tls   — "OK"/"FAIL"/"ERR"/"NOPY": whether Python
+                              `requests` (the library the stock-trader MCP
+                              child uses) validates the Vulcan Step-CA cert
+                              against the system bundle. Guards the certifi
+                              trust path that broke on 2026-05-29 — see the
+                              vulcanCaBundle note in hermes-vm.nix.
+
+    All checks run in one SSH round-trip. The python3 interpreter is discovered
+    from the Nix store at probe time so we never hardcode a store hash that
+    changes on every VM rebuild.
+    """
+    blank = {
+        "skipped": True,
+        "reason": "no SSH key available",
+        "http_code": None,
+        "trader_curl_code": None,
+        "trader_requests_tls": None,
+    }
     if not SSH_KEY or not pathlib.Path(SSH_KEY).is_file():
-        return {"skipped": True, "reason": "no SSH key available", "http_code": None}
+        return blank
+
+    remote = r'''set -u
+cap=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://localhost:8080/v1/capabilities 2>/dev/null || echo 000)
+tcurl=$(curl -s -m 8 -o /dev/null -w '%{http_code}' https://trader.vulcan.lan/api/schwab/status 2>/dev/null || echo 000)
+ttls=NOPY
+for p in /nix/store/*-python3-*-env/bin/python3; do
+  "$p" -c 'import requests' 2>/dev/null || continue
+  ttls=$("$p" -c 'import requests
+try:
+    r = requests.get("https://trader.vulcan.lan/api/schwab/status", verify="/etc/ssl/certs/ca-certificates.crt", timeout=8)
+    print("OK" if r.status_code == 200 else "FAIL")
+except Exception:
+    print("ERR")' 2>/dev/null || echo ERR)
+  break
+done
+printf 'cap=%s\ntcurl=%s\nttls=%s\n' "$cap" "$tcurl" "$ttls"
+'''
     try:
         out = subprocess.check_output(
             ["ssh", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no",
              "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
-             SSH_TARGET,
-             "curl -s -m 5 http://localhost:8080/v1/capabilities -o /dev/null -w '%{http_code}'"],
-            text=True, timeout=20, stderr=subprocess.DEVNULL,
-        ).strip()
-        return {"skipped": False, "reason": None, "http_code": out}
+             SSH_TARGET, remote],
+            text=True, timeout=40, stderr=subprocess.DEVNULL,
+        )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        return {"skipped": True, "reason": f"ssh probe failed: {type(e).__name__}", "http_code": None}
+        return {**blank, "reason": f"ssh probe failed: {type(e).__name__}"}
+
+    fields = dict(
+        line.split("=", 1) for line in out.strip().splitlines() if "=" in line
+    )
+    return {
+        "skipped": False,
+        "reason": None,
+        "http_code": fields.get("cap"),
+        "trader_curl_code": fields.get("tcurl"),
+        "trader_requests_tls": fields.get("ttls"),
+    }
 
 
 def render_report(now: dt.datetime, metrics: dict, smoke: dict,
@@ -317,11 +369,24 @@ def render_report(now: dt.datetime, metrics: dict, smoke: dict,
                   gateway_counts: dict, gateway_latest: dict,
                   errors: dict, incidents: dict, ssh_probe: dict) -> tuple[str, str]:
     """Return (subject, body) for the email."""
+    # stock-trader reachability is only a failure signal when the in-VM probe
+    # actually ran AND returned a trader result. When the keys are absent (the
+    # probe was skipped, or an older code path) we treat it as "not probed" so
+    # a missing SSH key never flips the verdict to FAIL.
+    trader_curl = ssh_probe.get("trader_curl_code")
+    trader_tls = ssh_probe.get("trader_requests_tls")
+    trader_probed = trader_curl is not None or trader_tls is not None
+    trader_ok = trader_curl == "200" and trader_tls == "OK"
+    trader_failed = (
+        not ssh_probe.get("skipped", False) and trader_probed and not trader_ok
+    )
+
     # Headline verdict
     fail = (
         metrics.get("hermes_api_server_ok", 1) == 0
         or metrics.get("hermes_mcp_sse_open_ok", 1) == 0
         or metrics.get("hermes_mcp_ask_hermes_ok", 1) == 0
+        or trader_failed
     )
     verdict = "FAIL" if fail else "PASS"
     if incidents["stuck_alerts"]:
@@ -329,6 +394,8 @@ def render_report(now: dt.datetime, metrics: dict, smoke: dict,
         summary = f"{len(incidents['stuck_alerts'])} stuck incidents"
     elif incidents["active"]:
         summary = f"{incidents['active']} active incidents"
+    elif trader_failed:
+        summary = "stock-trader unreachable from VM"
     elif errors["total"] > 50:
         summary = f"{errors['total']} errors in 24h"
     else:
@@ -402,7 +469,10 @@ def render_report(now: dt.datetime, metrics: dict, smoke: dict,
     if ssh_probe["skipped"]:
         lines.append(f"  (probe skipped: {ssh_probe['reason']})")
     else:
-        lines.append(f"  /v1/capabilities HTTP {ssh_probe['http_code']}")
+        lines.append(f"  /v1/capabilities           HTTP {ssh_probe['http_code']}")
+        if trader_curl is not None or trader_tls is not None:
+            lines.append(f"  trader /api/schwab/status  HTTP {trader_curl}")
+            lines.append(f"  trader requests-TLS        {trader_tls}")
     lines.append("")
 
     body = "\n".join(lines)

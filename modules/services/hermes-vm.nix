@@ -24,6 +24,21 @@ let
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
 
+  # System CA bundle inside the VM. security.pki.certificates (below) bakes
+  # the Vulcan Step-CA root into this file at build time. The stdio MCP
+  # children do NOT inherit the agent's environment — hermes-agent loads
+  # ${stateDir}/env as an internal dotenv at Python startup rather than via a
+  # systemd EnvironmentFile, so a child's os.environ starts effectively empty
+  # except for the per-server `env` attrset below. Python `requests` (used by
+  # the trader and vane MCP scripts) then resolves its trust store via the
+  # nixpkgs-patched certifi, which falls back to certifi's *vendored* Mozilla
+  # bundle (no Vulcan CA) unless redirected. Empirically (2026-05-29) certifi
+  # honors REQUESTS_CA_BUNDLE and NIX_SSL_CERT_FILE but NOT SSL_CERT_FILE, so
+  # every HTTPS-to-internal-CA server must carry these two explicitly or its
+  # tool calls fail with `CERTIFICATE_VERIFY_FAILED`. OpenClaw avoids this
+  # because mcporter spawns its children with the full VM env inherited.
+  vulcanCaBundle = "/etc/ssl/certs/ca-certificates.crt";
+
   # ── Python environments for the stdio MCP servers ──────────────────────
   # Hermes spawns each MCP server as a child process running one of these
   # interpreters on an absolute store path. `lightPython` covers the simple
@@ -639,6 +654,12 @@ in
         env = {
           VANE_BASE_URL = "https://vane.vulcan.lan";
           VANE_TIMEOUT_S = "600";
+          # vane-mcp.py talks HTTPS to vane.vulcan.lan via `requests`, so it
+          # needs the Vulcan CA bundle for the same reason as stock-trader
+          # (see the vulcanCaBundle note above). This was a latent failure —
+          # vane was never exercised in the 2026-05-28 parity smoke test.
+          REQUESTS_CA_BUNDLE = vulcanCaBundle;
+          NIX_SSL_CERT_FILE = vulcanCaBundle;
         };
       };
 
@@ -658,6 +679,11 @@ in
         args = [ ];
         env = {
           STOCK_TRADER_BASE_URL = "https://trader.vulcan.lan";
+          # Without these the `requests` calls in stock-trader-mcp.py reject
+          # the Vulcan Step-CA cert (certifi's vendored bundle lacks it). See
+          # the vulcanCaBundle note above. SSL_CERT_FILE does NOT work here.
+          REQUESTS_CA_BUNDLE = vulcanCaBundle;
+          NIX_SSL_CERT_FILE = vulcanCaBundle;
         };
       };
 

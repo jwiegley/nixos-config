@@ -430,6 +430,7 @@ in
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)
       "searxng.vulcan.lan" # SearXNG metasearch (via nginx → 127.0.0.1:8890)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx → 127.0.0.1:3007)
+      "trader.vulcan.lan" # stock-trader service (via nginx 443 → 127.0.0.1:8234)
     ];
   };
 

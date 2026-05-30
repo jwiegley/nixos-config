@@ -799,7 +799,7 @@ in
           min = 0.5;
           max = 2.0;
           step = 0.01;
-          initial = 1.25; # single-point cal 2026-05-28: titration 4800 / raw 3800
+          initial = 1.35; # single-point cal 2026-05-29: titration 4800 / compensated-25°C 3558 (α=0.02). Corrects prior 1.25 (that was wrongly computed vs RAW 3800, not the compensated value).
           mode = "box";
           icon = "mdi:multiplication";
         };

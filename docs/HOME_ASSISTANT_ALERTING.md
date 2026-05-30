@@ -336,11 +336,9 @@ curl -s 'http://localhost:9090/api/v1/query' \
 - **Alert Rules**: `/etc/nixos/modules/monitoring/alerts/home-assistant.yaml`
 - **Prometheus Config**: `/etc/nixos/modules/monitoring/services/prometheus-server.nix`
 - **Grafana Config**: `/etc/nixos/modules/services/grafana.nix`
-- **Dashboard JSON**: `/etc/nixos/modules/monitoring/dashboards/home-assistant.json`
 - **This Documentation**: `/etc/nixos/docs/HOME_ASSISTANT_ALERTING.md`
 
 ### Runtime Files
-- **Grafana Dashboard**: `/var/lib/grafana/dashboards/home-assistant.json`
 - **Prometheus Data**: `/var/lib/prometheus`
 - **Alertmanager Data**: `/var/lib/alertmanager`
 

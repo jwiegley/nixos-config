@@ -48,7 +48,6 @@ let
   # Local dashboards from the NixOS config repo
   localDashboards = {
     "dns-query-logs.json" = ../../modules/storage/dns-query-logs-dashboard.json;
-    "home-assistant.json" = ../monitoring/dashboards/home-assistant.json;
     "systemd-services-enhanced.json" = ../monitoring/dashboards/systemd-services-enhanced.json;
     "mac-studio-power.json" = ../monitoring/dashboards/mac-studio-power.json;
     "copyparty.json" = ../monitoring/dashboards/copyparty.json;

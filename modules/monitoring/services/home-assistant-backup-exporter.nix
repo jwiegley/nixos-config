@@ -31,6 +31,13 @@ let
     echo "# HELP home_assistant_backup_latest_timestamp Unix timestamp of the most recent backup" >> "''${TEMP_FILE}"
     echo "# TYPE home_assistant_backup_latest_timestamp gauge" >> "''${TEMP_FILE}"
 
+    # Aggregate age of the NEWEST backup. Prefer this for "is my backup
+    # current?"; the per-file home_assistant_backup_age_seconds{backup=...} is
+    # one series per file, so a bare query of it returns an arbitrary backup
+    # (e.g. a months-old manual "First_Backup"), which is misleading.
+    echo "# HELP home_assistant_backup_latest_age_seconds Age in seconds of the most recent backup (now - newest mtime)" >> "''${TEMP_FILE}"
+    echo "# TYPE home_assistant_backup_latest_age_seconds gauge" >> "''${TEMP_FILE}"
+
     echo "# HELP home_assistant_backup_total_size_bytes Total size of all backup files in bytes" >> "''${TEMP_FILE}"
     echo "# TYPE home_assistant_backup_total_size_bytes gauge" >> "''${TEMP_FILE}"
 
@@ -75,6 +82,9 @@ let
     # Export aggregate metrics
     echo "home_assistant_backup_total_size_bytes ''${total_size}" >> "''${TEMP_FILE}"
     echo "home_assistant_backup_latest_timestamp ''${latest_timestamp}" >> "''${TEMP_FILE}"
+    if [ "''${latest_timestamp}" -gt 0 ]; then
+      echo "home_assistant_backup_latest_age_seconds $((current_time - latest_timestamp))" >> "''${TEMP_FILE}"
+    fi
 
     # Atomically update metrics file
     mv "''${TEMP_FILE}" "''${METRICS_FILE}"

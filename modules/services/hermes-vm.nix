@@ -348,18 +348,19 @@ in
   # headroom for the MCP servers.
   microvm.mem = 3072;
 
-  # microvm.nix defaults to 1 vCPU. The 2026-05-28 MCP-server parity work
-  # bumped mem (above) and added the workload — 6 stdio MCP servers + plugins
-  # + the Discord WS + the api_server platform — but left vCPU at the default.
-  # On a single core the gateway initializes all of that serially, which pushed
-  # the api_server /v1/capabilities cold-start to ~10 min (measured 2026-05-30:
-  # hermes-agent "Started" at 11:30:15, api_server_ok 0→1 only at ~11:40). That
-  # exceeds the 5-min HermesApiServerDown window, so every rebuild that restarts
-  # the VM tripped a self-heal restart_microvm — which only re-armed the 10-min
-  # clock. OpenClaw runs the same workload at vmVcpu=4 (openclaw-microvm.nix:28);
-  # match it so the init parallelizes and api_server binds well under 5 min.
-  # Host has 10 cores, so 4 (openclaw) + 4 (hermes) is comfortable.
-  microvm.vcpu = 4;
+  # vCPU intentionally left at the microvm.nix default (1).
+  #
+  # A 4-vCPU bump (2fa452c) was tried 2026-05-31 to "fix" the recurring
+  # HermesApiServerDown alert, on the theory that serial init on one core
+  # pushed the api_server cold-start to ~10 min. That premise was wrong: the
+  # api_server BINDS in ~8s regardless of vCPU, and deploying 4 vCPU did not
+  # change the ~8-min /v1/capabilities warmup (it is gated on the LiteLLM/MLX
+  # model backend, not local CPU). The real driver was a 5-min health-check
+  # sample feeding a 5-min `for:` window over that warmup; fixed by widening
+  # HermesApiServerDown to `for: 15m` (see monitoring/alerts/hermes.yaml). So
+  # 4 vCPU is reverted. If genuine runtime freezes under load recur on one
+  # core, hermes-hang-capture (below) records the frozen thread state —
+  # revisit vCPU with that evidence, not on theory.
 
   # ---- Guest networking ----
   microvm.interfaces = [

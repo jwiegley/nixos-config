@@ -339,6 +339,19 @@ in
   # headroom for the MCP servers.
   microvm.mem = 3072;
 
+  # microvm.nix defaults to 1 vCPU. The 2026-05-28 MCP-server parity work
+  # bumped mem (above) and added the workload — 6 stdio MCP servers + plugins
+  # + the Discord WS + the api_server platform — but left vCPU at the default.
+  # On a single core the gateway initializes all of that serially, which pushed
+  # the api_server /v1/capabilities cold-start to ~10 min (measured 2026-05-30:
+  # hermes-agent "Started" at 11:30:15, api_server_ok 0→1 only at ~11:40). That
+  # exceeds the 5-min HermesApiServerDown window, so every rebuild that restarts
+  # the VM tripped a self-heal restart_microvm — which only re-armed the 10-min
+  # clock. OpenClaw runs the same workload at vmVcpu=4 (openclaw-microvm.nix:28);
+  # match it so the init parallelizes and api_server binds well under 5 min.
+  # Host has 10 cores, so 4 (openclaw) + 4 (hermes) is comfortable.
+  microvm.vcpu = 4;
+
   # ---- Guest networking ----
   microvm.interfaces = [
     {

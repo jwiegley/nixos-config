@@ -54,6 +54,7 @@ let
     "atd-dashboard.json" = ../monitoring/grafana-dashboards/atd-dashboard.json;
     "node-red-events.json" = ../monitoring/dashboards/node-red-events.json;
     "openclaw-hermes-integration.json" = ../monitoring/dashboards/openclaw-hermes-integration.json;
+    "technitium-dns.json" = ../monitoring/dashboards/technitium-dns.json;
     "water-attribution.json" = ../monitoring/grafana-dashboards/water-attribution.json;
   };
 

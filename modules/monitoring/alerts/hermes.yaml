@@ -27,9 +27,26 @@ groups:
       # The api_server platform inside Hermes Agent. If this is red,
       # Hermes itself is unreachable; restarting hermes-mcp will not
       # help. Self-heal at this layer means restarting microvm@hermes.
+      #
+      # `for: 15m` (not 5m) deliberately. hermes_api_server_ok probes
+      # /v1/capabilities authenticated with a TIGHT 5s budget, and that
+      # endpoint enumerates models against the LiteLLM/MLX backend, so it
+      # stays non-200 for the first ~8 min after every microvm restart while
+      # the model backend warms up (measured 2026-05-31). With a 5-min
+      # health-check sample interval that warmup shows as a ~10-min plateau
+      # of 0s — which a `for: 5m` window read as an outage and self-healed by
+      # restarting the VM, restarting the warmup: a self-perpetuating loop
+      # (the 2026-05-24 every-2h16m cluster, and again on the 2026-05-31
+      # 4-vCPU deploy). The api_server actually BINDS in ~8s; binding was
+      # never the problem, and 4 vCPU did not change the warmup. The e2e
+      # probes (HermesAskFailing / HermesE2eChatFailing, 60s budgets) tolerate
+      # the warmup and stay green, so they remain the fast (5m) real-breakage
+      # detectors; this alert is the slow hard-down backstop. Proper fix
+      # (follow-up): export a VM-uptime metric and gate on uptime>10m, or
+      # split api_server liveness (port/401) from /v1/capabilities readiness.
       - alert: HermesApiServerDown
         expr: hermes_api_server_ok == 0
-        for: 5m
+        for: 15m
         labels:
           severity: critical
           category: availability

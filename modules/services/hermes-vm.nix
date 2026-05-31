@@ -299,6 +299,15 @@ let
     except Exception:
         pass
   '';
+
+  # In-VM watchdog: detects a frozen/CPU-starved api_server and captures a
+  # py-spy stack dump of the gateway BEFORE self-heal restarts the microVM
+  # (which SIGKILLs the frozen process and destroys the evidence). Loaded from
+  # a repo file so the bash is reviewable and unit-testable on its own; PATH is
+  # supplied by the systemd unit below. See scripts/hermes-hang-capture.sh.
+  hangCapture = pkgs.writeShellScript "hermes-hang-capture" (
+    builtins.readFile ../../scripts/hermes-hang-capture.sh
+  );
 in
 {
   imports = [
@@ -762,6 +771,52 @@ in
     API_SERVER_ENABLED = "true";
     API_SERVER_HOST = "0.0.0.0";
     API_SERVER_PORT = "8080";
+  };
+
+  # ---- Hang detector + forensic capture ----
+  # Independent of hermes-agent (it must keep running while the gateway is
+  # frozen, and it intentionally does NOT restart the gateway — capture only).
+  # Probes the local api_server every 20s; after 3 consecutive non-responses
+  # (~60s of a frozen loop) it writes per-thread scheduler state + kernel stacks
+  # to ${stateDir}/.hermes/diag/ (host-shared, so it survives the self-heal VM
+  # restart). That state distinguishes the CPU-starvation freeze (threads
+  # runnable but load >> nproc — the cause the 4-vCPU bump above fixes) from a
+  # blocking call / deadlock on any residual freeze.
+  #
+  # NB: py-spy (which would give Python frames) does NOT compile on aarch64 in
+  # this nixpkgs (meta.broken = isAarch64; remoteprocess libunwind build error),
+  # so the capture is /proc-based and needs no extra packages. Runs as root to
+  # read /proc/<pid>/task/*/stack (privileged).
+  systemd.services.hermes-hang-capture = {
+    description = "Hermes api_server hang detector + forensic capture";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "hermes-agent.service" ];
+    environment = {
+      HANG_PROBE_INTERVAL = "20";
+      HANG_FAIL_THRESHOLD = "3";
+      HANG_DIAG_DIR = "${stateDir}/.hermes/diag";
+      HANG_AGENT_LOG = "${stateDir}/.hermes/logs/agent.log";
+    };
+    path = with pkgs; [
+      curl
+      procps # uptime, free, top, ps
+      iproute2 # ss
+      util-linux # logger
+      coreutils # date, nproc, cat, tail, head, chown, chmod, mkdir, rm, ls
+      gnugrep
+      systemd # systemctl, journalctl
+    ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${hangCapture}";
+      Restart = "always";
+      RestartSec = 10;
+      # Root + CAP_SYS_PTRACE to read /proc/<pid>/task/*/stack of the gateway,
+      # which runs as the unprivileged `hermes` user.
+      User = "root";
+      AmbientCapabilities = [ "CAP_SYS_PTRACE" ];
+      Nice = 5;
+    };
   };
 
   # ---- Tool config + contact sync (runs before hermes-agent) ----

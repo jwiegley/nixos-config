@@ -48,8 +48,16 @@ def _strip_paths(buf: bytes) -> set[str]:
                 yield path
                 yield from walk(v, path)
         elif isinstance(o, list):
-            for i, v in enumerate(o):
-                path = f"{prefix}.{i}"
+            # Normalize list indices to "[]" so we compare config SCHEMA (key
+            # structure), not list CONTENT/length. OpenClaw mutates lists like
+            # plugins.load.paths at runtime (installed skills, plugin-dep dirs),
+            # so flagging list growth as "schema drift" is a false positive (it
+            # produced the OpenClawConfigDrift on plugins.load.paths.1, 2026-05).
+            # New keys *inside* list-element objects are still caught because
+            # their dotted paths share the normalized "[]" prefix; the
+            # surrounding set() dedups the repeated indices.
+            for v in o:
+                path = f"{prefix}.[]"
                 yield path
                 yield from walk(v, path)
 
@@ -123,9 +131,17 @@ def main() -> int:
         write_metrics(probe_up=False, added=0, removed=0)
         return 0
 
-    added = len(live_keys - template_keys)
-    removed = len(template_keys - live_keys)
-    write_metrics(probe_up=True, added=added, removed=removed)
+    added_keys = sorted(live_keys - template_keys)
+    removed_keys = sorted(template_keys - live_keys)
+    # Log the drifted key PATHS (structure only — never values; secret-named
+    # keys are already dropped by SECRET_RE in _strip_paths) to stderr ->
+    # journal, so an operator can see WHICH keys drifted. The metric file
+    # stays counts-only. `journalctl -u openclaw-config-drift-check`.
+    for k in added_keys:
+        print(f"drift: +added   (in live, not in template): {k}", file=sys.stderr)
+    for k in removed_keys:
+        print(f"drift: -removed (in template, not in live): {k}", file=sys.stderr)
+    write_metrics(probe_up=True, added=len(added_keys), removed=len(removed_keys))
     return 0
 
 

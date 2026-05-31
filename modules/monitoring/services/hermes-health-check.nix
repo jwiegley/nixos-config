@@ -56,6 +56,7 @@ let
     import os
     import pathlib
     import re
+    import subprocess
     import time
     from typing import Optional
 
@@ -282,6 +283,41 @@ let
         return None
 
 
+    VM_UNIT = "microvm@hermes.service"
+
+
+    def vm_uptime_seconds() -> float:
+        """Seconds since microvm@hermes last became active — a VM-boot proxy.
+
+        Gates HermesApiServerDown so the ~8-min post-restart /v1/capabilities
+        warmup (model-backend-bound; see hermes.yaml) is not read as an outage.
+        Uses systemd's CLOCK_MONOTONIC activation timestamp, compared against
+        time.monotonic() (same clock). On ANY failure returns a large value so
+        the alert gate stays OPEN — a probe failure must never mask a real
+        outage by making the VM look freshly booted forever.
+        """
+        try:
+            out = subprocess.run(
+                [
+                    "${pkgs.systemd}/bin/systemctl",
+                    "show",
+                    VM_UNIT,
+                    "--property=ActiveEnterTimestampMonotonic",
+                    "--value",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+            active_us = int(out)
+            if active_us <= 0:
+                return 86400.0  # never active / unknown → don't suppress
+            up = time.monotonic() - active_us / 1e6
+            return up if up >= 0 else 86400.0
+        except Exception:
+            return 86400.0
+
+
     def write_metrics(metrics: dict[str, float | int]) -> None:
         OUT_FINAL.parent.mkdir(parents=True, exist_ok=True)
         lines = []
@@ -308,6 +344,7 @@ let
         "hermes_discord_last_event_age_seconds": "Wall-clock seconds since the most recent proof of Discord liveness (min of heartbeat-ACK age and gateway.log event age)",
         "hermes_health_check_last_run_timestamp_seconds": "When the health check last ran",
         "hermes_api_key_present": "1 if API_SERVER_KEY was readable from /run/secrets/hermes/env",
+        "hermes_vm_uptime_seconds": "Seconds since microvm@hermes last became active (VM-boot proxy; gates HermesApiServerDown past the post-restart warmup)",
     }
     METRIC_TYPE = {
         "hermes_health_check_last_run_timestamp_seconds": "gauge",
@@ -333,11 +370,13 @@ let
         # healthy WS acks ~every 41s, keeping this tiny; it only climbs when
         # acks AND log events both go silent = a real zombie.
         live_age = min(disco_age, hb_age) if hb_present else disco_age
+        vm_up = vm_uptime_seconds()
 
         write_metrics(
             {
                 "hermes_api_server_ok": api_ok,
                 "hermes_api_server_probe_seconds": round(api_seconds, 3),
+                "hermes_vm_uptime_seconds": round(vm_up, 1),
                 "hermes_mcp_sse_open_ok": sse_ok,
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),

@@ -28,25 +28,26 @@ groups:
       # Hermes itself is unreachable; restarting hermes-mcp will not
       # help. Self-heal at this layer means restarting microvm@hermes.
       #
-      # `for: 15m` (not 5m) deliberately. hermes_api_server_ok probes
-      # /v1/capabilities authenticated with a TIGHT 5s budget, and that
-      # endpoint enumerates models against the LiteLLM/MLX backend, so it
-      # stays non-200 for the first ~8 min after every microvm restart while
-      # the model backend warms up (measured 2026-05-31). With a 5-min
-      # health-check sample interval that warmup shows as a ~10-min plateau
-      # of 0s — which a `for: 5m` window read as an outage and self-healed by
-      # restarting the VM, restarting the warmup: a self-perpetuating loop
-      # (the 2026-05-24 every-2h16m cluster, and again on the 2026-05-31
-      # 4-vCPU deploy). The api_server actually BINDS in ~8s; binding was
-      # never the problem, and 4 vCPU did not change the warmup. The e2e
-      # probes (HermesAskFailing / HermesE2eChatFailing, 60s budgets) tolerate
-      # the warmup and stay green, so they remain the fast (5m) real-breakage
-      # detectors; this alert is the slow hard-down backstop. Proper fix
-      # (follow-up): export a VM-uptime metric and gate on uptime>10m, or
-      # split api_server liveness (port/401) from /v1/capabilities readiness.
+      # The `hermes_vm_uptime_seconds > 600` gate excludes the ~8-min
+      # post-restart warmup. hermes_api_server_ok probes /v1/capabilities
+      # authenticated with a TIGHT 5s budget; that endpoint enumerates models
+      # against the LiteLLM/MLX backend, so it stays non-200 for ~8 min after
+      # every microvm restart while the backend warms up (the api_server itself
+      # BINDS in ~8s — binding was never the problem, and the 2026-05-31 4-vCPU
+      # bump didn't change the warmup; reverted). Sampled every 5 min that
+      # warmup was a ~10-min 0-plateau that a bare `for: 5m` read as down and
+      # self-healed by restarting the VM — restarting the warmup: a self-
+      # perpetuating loop (2026-05-24 cluster; reproduced on the 4-vCPU deploy).
+      # Gating on VM uptime > 10 min ignores the warmup while a genuine outage
+      # on an already-up VM still pages fast at `for: 5m`. `ignoring(__name__)`
+      # is required: the two series differ only by __name__ (identical node
+      # textfile labels otherwise). hermes_vm_uptime_seconds fails OPEN (large
+      # value on probe error) so a uptime-probe failure never masks an outage.
+      # The e2e probes (HermesAskFailing / HermesE2eChatFailing, 60s budgets)
+      # tolerate warmup and stay green — independent fast real-breakage detectors.
       - alert: HermesApiServerDown
-        expr: hermes_api_server_ok == 0
-        for: 15m
+        expr: hermes_api_server_ok == 0 and ignoring(__name__) hermes_vm_uptime_seconds > 600
+        for: 5m
         labels:
           severity: critical
           category: availability

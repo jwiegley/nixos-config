@@ -46,13 +46,21 @@ groups:
           summary: "Critical memory pressure on {{ $labels.instance }}"
           description: "Memory usage is above 92% for 5 minutes on {{ $labels.instance }}. OOM risk! Available: {{ $value | humanize1024 }}B"
 
+      # Thrash detector tuned for zram swap (zstd, ~4.5:1 on vulcan). zram fill is
+      # normal operation, NOT pressure, and pgmajfault counts cheap zram swap-ins
+      # (and file-mmap reads) the same as disk paging. Thresholds raised 2026-05-30
+      # so it fires only on genuine thrash: >150k faults/5m (baseline zram swap-in
+      # alone is 30k-100k here) AND either >75% RAM or >90% swap (near zram
+      # exhaustion / about to spill to the disk swapfile). The <=50% swap branch
+      # produced a false critical on 2026-05-30 while RAM peaked at 74.9% and no
+      # OOM occurred. Sibling Swap/Memory alerts cover the non-thrash dimensions.
       - alert: HighMajorPageFaultWithMemoryPressure
         expr: |
           (
-            increase(node_vmstat_pgmajfault[5m]) > 10000
+            increase(node_vmstat_pgmajfault[5m]) > 150000
             and (
               (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.75
-              or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.50
+              or (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) > 0.90
             )
           )
           unless on(instance) (max by (instance) (zfs_pool_scrub_active) > 0)
@@ -62,7 +70,7 @@ groups:
           category: system
         annotations:
           summary: "High major page faults with memory pressure on {{ $labels.instance }}"
-          description: "Major page faults exceed 10000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >50% swap used). System may be thrashing! Suppressed while any ZFS scrub is active on the instance; MemoryPressureCritical (>92% RAM) remains as the OOM safety-net during scrubs."
+          description: "Major page faults exceed 150000 per 5 minutes ({{ $value | humanize }}) combined with memory pressure (>75% RAM used or >90% swap used). System may be thrashing! Thresholds account for zram compressed swap, where moderate swap fill and zram swap-ins are normal. Suppressed while any ZFS scrub is active on the instance; MemoryPressureCritical (>92% RAM) remains as the OOM safety-net during scrubs."
 
       # Swap monitoring
       - alert: SwapUsageHigh

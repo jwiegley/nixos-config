@@ -252,10 +252,21 @@ in
       DASHBOARD_DIR="/var/lib/grafana/dashboards"
       mkdir -p "$DASHBOARD_DIR"
 
-      # Copy all dashboards from the Nix store derivation
-      cp -f ${dashboardDir}/*.json "$DASHBOARD_DIR/"
+      # Authoritative mirror: the Nix derivation is the single source of truth.
+      # Prune any file not present in the derivation (stale/renamed dashboards
+      # and *.broken/*.backup cruft) so the runtime set is fully reproducible
+      # from the flake. With provisioning disableDeletion=false, Grafana then
+      # drops the removed dashboards from its UI on the next poll.
+      for existing in "$DASHBOARD_DIR"/*; do
+        [ -f "$existing" ] || continue
+        name="$(basename "$existing")"
+        if [ ! -e "${dashboardDir}/$name" ]; then
+          rm -f "$existing"
+        fi
+      done
 
-      # Preserve any manually-added dashboards (e.g. technitium-dns.json)
+      # Install the authoritative dashboard set from the Nix store
+      cp -f ${dashboardDir}/*.json "$DASHBOARD_DIR/"
       chown -R grafana:grafana "$DASHBOARD_DIR"
     '';
   };

@@ -1,0 +1,25 @@
+{
+  "active": {
+    "1779346740:5826": {
+      "first_seen_ts": 1779346740,
+      "vm_active_enter_ts": 1779346000,
+      "alerts": ["HermesAskFailing"],
+      "attempts": [
+        {"ts": 1779346750, "action": "restart_microvm", "by": "deterministic", "ok": false}
+      ],
+      "status": "in_progress",
+      "next_eligible_ts": null
+    }
+  },
+  "history": [
+    {
+      "first_seen_ts": 1779303600,
+      "vm_active_enter_ts": 1779300000,
+      "alerts": ["HermesMcpBridgeDown"],
+      "attempts": [
+        {"ts": 1779303610, "action": "restart_mcp", "by": "deterministic", "ok": true}
+      ],
+      "status": "resolved"
+    }
+  ]
+}

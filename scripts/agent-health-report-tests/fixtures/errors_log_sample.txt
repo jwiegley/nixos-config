@@ -1,0 +1,8 @@
+2026-05-20T03:00:01 ERROR LiteLLM 401: bearer eyJabc.def.ghi
+2026-05-20T04:15:09 ERROR LiteLLM 401: bearer eyJabc.def.ghi
+2026-05-20T04:15:09 ERROR Failed to parse tool reply from Qwen
+2026-05-20T05:31:08 WARN Empty completion (model returned 0 tokens)
+2026-05-20T05:31:10 WARN Empty completion (model returned 0 tokens)
+2026-05-20T11:02:44 ERROR LiteLLM 401: bearer eyJabc.def.ghi
+2026-05-20T15:18:01 ERROR Failed to parse tool reply from Qwen
+2026-05-20T22:00:00 ERROR Discord WS heartbeat timeout

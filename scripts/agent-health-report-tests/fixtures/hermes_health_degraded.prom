@@ -1,0 +1,9 @@
+hermes_api_server_ok 1
+hermes_mcp_sse_open_ok 0
+hermes_mcp_ask_hermes_ok 0
+hermes_mcp_ask_hermes_seconds 60.0
+hermes_api_server_probe_seconds 0.041
+hermes_discord_event_present 0
+hermes_discord_last_event_age_seconds 18234.7
+hermes_health_check_last_run_timestamp_seconds 1747800000.0
+hermes_api_key_present 1

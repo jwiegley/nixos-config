@@ -114,6 +114,17 @@ def test_render_headline_fail_lists_issue():
     assert "api_server down" in subject
 
 
+def test_render_active_incident_in_summary_not_fail():
+    # An active (in-progress, not stuck) incident → still PASS, but surfaced.
+    p = m.PROFILES["openclaw"]
+    data = _base(p)
+    data["live"]["openclaw_mcporter_ha_auth_ok"] = 1.0
+    data["incidents"]["active"] = 1
+    subject, body = m.render(p, data)
+    assert "PASS" in body
+    assert "1 active self-heal incident" in subject
+
+
 def test_render_flags_stuck_incidents():
     p = m.PROFILES["hermes"]
     data = _base(p)

@@ -1172,7 +1172,14 @@ def render(profile: dict, data: dict) -> tuple[str, str]:
     """Return (subject, body) for the email."""
     issues = _compute_issues(profile, data)
     verdict = "FAIL" if issues else "PASS"
-    summary = issues[0] if issues else "all healthy"
+    if issues:
+        summary = issues[0]
+    elif data["incidents"]["active"]:
+        # Self-heal is actively remediating: not a FAIL, but not "all healthy".
+        n = data["incidents"]["active"]
+        summary = f"{n} active self-heal incident{'s' if n != 1 else ''}"
+    else:
+        summary = "all healthy"
 
     host = data["host"]
     now = data["now"]

@@ -115,6 +115,18 @@ in
       # Scrape frequently to track query patterns
       scrape_interval = "15s";
       scrape_timeout = "10s";
+
+      # Drop the redundant OpenMetrics `_created` companion of dns_queries_total
+      # (a static counter-creation-timestamp series, ~30k of them mirroring
+      # dns_queries_total 1:1 with zero analytical value). Scoped to THIS job
+      # only; dns_queries_total and everything else are untouched.
+      metric_relabel_configs = [
+        {
+          source_labels = [ "__name__" ];
+          regex = "dns_queries_created";
+          action = "drop";
+        }
+      ];
     }
   ];
 }

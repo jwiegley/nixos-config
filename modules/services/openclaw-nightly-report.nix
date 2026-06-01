@@ -9,14 +9,19 @@
 let
   mcporterPkg = inputs.llm-agents.packages.${system}.mcporter;
 
-  reportScript = pkgs.writers.writePython3Bin "openclaw-nightly-report" {
+  # Shared engine — built identically in hermes-nightly-report.nix (same name,
+  # source, and flakeIgnore → Nix dedupes to one derivation). Invoked with
+  # `--agent openclaw` below.
+  reportScript = pkgs.writers.writePython3Bin "agent-health-report" {
     flakeIgnore = [
       "E501" # ASCII tables push some lines past 79 chars
       "W503"
       "E265" # shebang flagged as non-conforming block comment
       "E203" # whitespace before ':' (Black-style slicing)
+      "E241" # multiple spaces after ':' (aligned dict/profile literals)
+      "E226" # missing whitespace around arithmetic operator
     ];
-  } (builtins.readFile ../../scripts/openclaw-nightly-report.py);
+  } (builtins.readFile ../../scripts/agent_health_report.py);
 
   recipient = "johnw@vulcan.lan";
   sender = "openclaw-health@vulcan.lan";
@@ -56,6 +61,8 @@ in
       # /nix/store globbing — the latter has bitten us when the readable
       # set under sandbox didn't include the expected store paths.
       OPENCLAW_REPORT_MCPORTER = "${mcporterPkg}/bin/mcporter";
+      # Section 5 (24h probe summary) + any metric-derived line query Prometheus.
+      OPENCLAW_REPORT_PROMETHEUS_URL = "http://127.0.0.1:9090";
       # In-VM probe for HOST_BLIND_SERVERS (google-calendar-*,
       # home-assistant). SSH key is delivered via LoadCredential below;
       # %d expands to $CREDENTIALS_DIRECTORY at runtime.
@@ -67,7 +74,7 @@ in
       Type = "oneshot";
       User = "root";
       Group = "root";
-      ExecStart = "${reportScript}/bin/openclaw-nightly-report";
+      ExecStart = "${reportScript}/bin/agent-health-report --agent openclaw";
 
       # Sandbox tightly — the script only reads metric files and runs
       # mcporter list / systemctl show; it must also pipe to sendmail.
@@ -93,6 +100,7 @@ in
       ];
       ReadOnlyPaths = [
         "/var/lib/openclaw"
+        "/var/lib/openclaw-self-heal" # section 9: incidents.json
         "/var/lib/prometheus-node-exporter-textfiles"
         "/etc/nixos/certs"
         "/etc/ssl"

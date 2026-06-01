@@ -270,16 +270,10 @@
             suiteDir = "openclaw-hermes-smoke-tests";
           };
 
-          openclaw-nightly-report-tests = helpers.mkPytestCheck {
-            name = "openclaw-nightly-report-tests";
+          agent-health-report-tests = helpers.mkPytestCheck {
+            name = "agent-health-report-tests";
             src = ./scripts;
-            suiteDir = "openclaw-nightly-report-tests";
-          };
-
-          hermes-nightly-report-tests = helpers.mkPytestCheck {
-            name = "hermes-nightly-report-tests";
-            src = ./scripts;
-            suiteDir = "hermes-nightly-report-tests";
+            suiteDir = "agent-health-report-tests";
           };
         };
     };

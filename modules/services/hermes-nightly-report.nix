@@ -5,16 +5,19 @@
   ...
 }:
 let
-  reportScript = pkgs.writers.writePython3Bin "hermes-nightly-report" {
+  # Shared engine — built identically in openclaw-nightly-report.nix (same
+  # name, source, and flakeIgnore → Nix dedupes to one derivation). Invoked
+  # with `--agent hermes` below.
+  reportScript = pkgs.writers.writePython3Bin "agent-health-report" {
     flakeIgnore = [
       "E501" # ASCII tables push some lines past 79 chars
       "W503"
       "E265" # shebang flagged as non-conforming block comment
       "E203" # whitespace before ':' (Black-style slicing)
-      "E241" # multiple spaces after ':' (aligned dict literals — ACTION_MAP, EVENT_KEYWORDS)
-      "E226" # missing whitespace around arithmetic operator (i+1 in render)
+      "E241" # multiple spaces after ':' (aligned dict/profile literals)
+      "E226" # missing whitespace around arithmetic operator
     ];
-  } (builtins.readFile ../../scripts/hermes-nightly-report.py);
+  } (builtins.readFile ../../scripts/agent_health_report.py);
 
   recipient = "johnw@vulcan.lan";
   sender = "hermes-health@vulcan.lan";
@@ -62,7 +65,7 @@ in
       Type = "oneshot";
       User = "root";
       Group = "root";
-      ExecStart = "${reportScript}/bin/hermes-nightly-report";
+      ExecStart = "${reportScript}/bin/agent-health-report --agent hermes";
 
       ProtectSystem = "strict";
       ProtectHome = true;

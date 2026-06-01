@@ -29,6 +29,7 @@ def _base(profile):
         "live": {},
         "live_selfheal": {},
         "servers": {},
+        "mcp_log": {},
         "uptime": {u: {"active": "active", "since": "Sat 2026-05-31", "n_restarts": 0}
                    for u in profile["units"]},
         "probes": [{**f, "success_ratio": 1.0, "p50_seconds": 6.0,
@@ -73,34 +74,41 @@ def test_render_hermes_all_headers_in_order():
     assert "PASS" in body
 
 
-def test_render_hermes_gateway_is_na_with_count():
+def test_render_hermes_gateway_real_analog():
+    # §3 is now a REAL platform/MCP-readiness analog (not n/a): platform
+    # liveness + loaded-server/tool totals + reconnect health.
     p = m.PROFILES["hermes"]
     data = _base(p)
-    data["live"].update({"hermes_api_server_ok": 1.0, "hermes_mcp_sse_open_ok": 1.0,
-                         "hermes_mcp_ask_hermes_ok": 1.0})
-    _, body = m.render(p, data)
-    assert "n/a — not applicable" in body
-    assert "6 MCP servers loaded" in body  # len(expected_servers)
+    data["mcp_log"] = {"servers": {"vane": 5}, "total_tools": 67,
+                       "total_servers": 6, "reconnects_24h": 1,
+                       "reconnect_servers": ["vane"]}
+    data["live"].update({"hermes_discord_heartbeat_age_seconds": 20.0,
+                         "hermes_discord_heartbeat_present": 1.0})
+    joined = "\n".join(m.render_gateway(p, data))
+    assert "platform:" in joined and "discord" in joined
+    assert "MCP servers loaded:   6 (67 tools" in joined
+    assert "MCP reconnects (24h): 1" in joined
+    assert "n/a" not in joined
 
 
-def test_render_gateway_count_unavailable_when_no_servers():
-    # Branch coverage: an empty inventory renders "count unavailable", not "None".
-    p = {**m.PROFILES["hermes"], "expected_servers": ()}
+def test_render_gateway_none_is_na():
+    # Defensive: a profile that declares no gateway analog still renders cleanly.
+    p = {**m.PROFILES["hermes"], "gateway": None}
     data = _base(p)
-    lines = m.render_gateway(p, data)
-    joined = "\n".join(lines)
-    assert "MCP server count unavailable" in joined
-    assert "None" not in joined
+    assert "n/a" in "\n".join(m.render_gateway(p, data))
 
 
-def test_render_hermes_ha_mcp_is_na_pointer():
+def test_render_hermes_ha_mcp_derived_real():
+    # §7 is now REAL for Hermes: HA tool registration proves token+endpoint+auth.
     p = m.PROFILES["hermes"]
     data = _base(p)
+    data["mcp_log"] = {"servers": {"home-assistant": 28}}
     _, body = m.render(p, data)
     ha_idx = body.index("Home Assistant MCP")
     after = body[ha_idx:ha_idx + 300]
-    assert "n/a — not applicable" in after
-    assert "configured MCP servers" in after
+    assert "connected (28 tools registered)" in after
+    assert "bearer token accepted:  OK" in after
+    assert "n/a" not in after
 
 
 def test_render_headline_fail_lists_issue():
@@ -153,19 +161,26 @@ def test_render_openclaw_mcp_table_and_blind():
     assert "skipped from host context" in joined
 
 
-def test_render_hermes_mcp_inventory_and_aggregate():
+def test_render_hermes_mcp_real_per_server_counts():
+    # Parity with OpenClaw: real per-server tool counts (from agent.log).
     p = m.PROFILES["hermes"]
     data = _base(p)
+    data["mcp_log"] = {
+        "servers": {"vane": 5, "home-assistant": 28, "stock-trader": 12,
+                    "email-contacts": 11, "perplexity": 5, "org-db": 6},
+        "total_tools": 67, "total_servers": 6,
+        "reconnects_24h": 0, "reconnect_servers": [],
+    }
     data["live"].update({"hermes_mcp_sse_open_ok": 1.0,
                          "hermes_mcp_ask_hermes_ok": 1.0,
                          "hermes_mcp_ask_hermes_seconds": 0.53})
-    lines = m.render_mcp_servers(p, data)
-    joined = "\n".join(lines)
-    for srv in ("vane", "home-assistant", "stock-trader", "perplexity", "org-db"):
-        assert srv in joined
-    assert "configured" in joined
+    joined = "\n".join(m.render_mcp_servers(p, data))
+    assert "home-assistant" in joined and "28" in joined
+    assert "stock-trader" in joined and "12" in joined
+    assert "tools registered" in joined
+    assert "OK" in joined  # struct column now shows OK like OpenClaw
+    assert "total: 67 tools from 6 servers" in joined
     assert "MCP layer: sse_open=OK  ask_hermes=OK" in joined
-    assert "no mcporter CLI" in joined
 
 
 def test_render_gateway_survives_multilabel_channel_key():

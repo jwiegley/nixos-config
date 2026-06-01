@@ -418,6 +418,69 @@ def most_recent_per_type(path, now=None) -> dict[str, dt.datetime]:
 
 
 # ---------------------------------------------------------------------------
+# Hermes MCP inventory from agent.log (Hermes has no mcporter; the NousResearch
+# agent logs per-server tool counts at startup, e.g.
+#   tools.mcp_tool: MCP server 'home-assistant' (stdio): registered 28 tool(s): …
+#   tools.mcp_tool: MCP: registered 67 tool(s) from 6 server(s)
+# plus keepalive/reconnect warnings. This gives real per-server live counts —
+# the parity analog to OpenClaw's `mcporter list`.
+# ---------------------------------------------------------------------------
+
+_HMCP_REG_RE = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}).*?"
+    r"MCP server '(?P<name>[^']+)'.*?registered (?P<n>\d+) tool\(s\)"
+)
+_HMCP_AGG_RE = re.compile(
+    r"MCP: registered (?P<n>\d+) tool\(s\) from (?P<k>\d+) server\(s\)"
+)
+_HMCP_RECONNECT_RE = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}).*?"
+    r"MCP server '(?P<name>[^']+)'[^\n]*?(?:keepalive failed|reconnecting)"
+)
+
+
+def parse_hermes_mcp_log(path, window_hours: int = 24, now=None) -> dict:
+    """Parse the Hermes agent.log for per-server MCP tool counts + reconnects.
+
+    Returns {servers:{name:count}, total_tools, total_servers,
+    reconnects_24h, reconnect_servers}. `servers` keeps the MOST RECENT
+    registration count per server (current state, any age — the agent
+    re-registers on every restart); reconnects are counted within the window.
+    """
+    now = now or dt.datetime.now()
+    cutoff = now - dt.timedelta(hours=window_hours)
+    servers: dict[str, int] = {}
+    total_tools: Optional[int] = None
+    total_servers: Optional[int] = None
+    reconnects: list[str] = []
+    for line in _safe_read_lines(path):
+        m = _HMCP_REG_RE.match(line)
+        if m:
+            servers[m.group("name")] = int(m.group("n"))
+            continue
+        a = _HMCP_AGG_RE.search(line)
+        if a:
+            total_tools = int(a.group("n"))
+            total_servers = int(a.group("k"))
+            continue
+        r = _HMCP_RECONNECT_RE.match(line)
+        if r:
+            try:
+                ts = dt.datetime.fromisoformat(r.group("ts"))
+            except ValueError:
+                continue
+            if ts >= cutoff:
+                reconnects.append(r.group("name"))
+    return {
+        "servers": servers,
+        "total_tools": total_tools if total_tools is not None else sum(servers.values()),
+        "total_servers": total_servers if total_servers is not None else len(servers),
+        "reconnects_24h": len(reconnects),
+        "reconnect_servers": sorted(set(reconnects)),
+    }
+
+
+# ---------------------------------------------------------------------------
 # mcporter (OpenClaw only) — structural + live tool counts
 # ---------------------------------------------------------------------------
 
@@ -702,6 +765,7 @@ PROFILES: dict[str, dict] = {
         "host_blind_servers": frozenset(
             {"google-calendar-personal", "google-calendar-work", "home-assistant"}),
         "gateway": {
+            "mode": "metrics",
             "ready_age": "openclaw_gateway_ready_age_seconds",
             "plugins_total": "openclaw_gateway_ready_plugins_total",
             "channels": "openclaw_channel_plugin_loaded",
@@ -742,14 +806,20 @@ PROFILES: dict[str, dict] = {
         "expected_servers": (
             "vane", "home-assistant", "stock-trader", "email-contacts",
             "perplexity", "org-db"),
-        # Hermes VM has no mcporter CLI; MCP loads inside the agent.
-        "mcp_servers_mode": "config_inventory",
+        # Hermes VM has no mcporter CLI; the NousResearch agent logs per-server
+        # tool counts to agent.log at startup, so §2 gets REAL live counts from
+        # there (parity with OpenClaw's mcporter table) — see parse_hermes_mcp_log.
+        "mcp_servers_mode": "agent_log",
+        "agent_log": "/var/lib/hermes/.hermes/logs/agent.log",
         "server_ok_metric": None,
         "mcp_aggregate": {"sse": "hermes_mcp_sse_open_ok",
                           "ask": "hermes_mcp_ask_hermes_ok",
                           "ask_s": "hermes_mcp_ask_hermes_seconds"},
         "host_blind_servers": frozenset(),
-        "gateway": None,  # NousResearch agent: no plugin gateway → n/a
+        # No OpenClaw-style plugin gateway, but agent.log + the discord
+        # heartbeat give a real platform/MCP-readiness analog (loaded servers,
+        # tool total, reconnects, platform liveness).
+        "gateway": {"mode": "hermes_agent_log"},
         "units": ["microvm@hermes.service", "hermes-mcp.service",
                   "hermes-self-heal.service"],
         "probe_families": [{"label": "Hermes e2e chat",
@@ -761,7 +831,7 @@ PROFILES: dict[str, dict] = {
         "discord": {"mode": "log",
                     "log": "/var/lib/hermes/.hermes/logs/gateway.log",
                     "heartbeat_age_metric": "hermes_discord_heartbeat_age_seconds"},
-        "ha_mcp": {"mode": "na_pointer"},
+        "ha_mcp": {"mode": "agent_log_derive", "server": "home-assistant"},
         "errors_log": "/var/lib/hermes/.hermes/logs/errors.log",
         "errors_grammar": "hermes",
         "incidents_json": "/var/lib/hermes-self-heal/incidents.json",
@@ -808,13 +878,18 @@ def collect(profile: dict) -> dict:
 
     # Section 2 — MCP servers
     servers: dict[str, dict] = {}
-    if profile.get("mcp_servers_mode") == "mcporter":
+    mcp_log: dict = {}
+    mode = profile.get("mcp_servers_mode")
+    if mode == "mcporter":
         servers = run_mcporter_list(prefix, profile.get("mcporter_home", "/var/lib/openclaw"))
         vm_live = run_mcporter_list_via_ssh(ssh_key, ssh_target, prefix)
         for name in profile.get("host_blind_servers", frozenset()):
             servers.pop(name, None)
             if name in vm_live:
                 servers[name] = vm_live[name]
+    elif mode == "agent_log":
+        # Hermes: real per-server tool counts from the agent's startup log.
+        mcp_log = parse_hermes_mcp_log(profile["agent_log"], 24, now)
 
     # Section 4 — uptime
     uptime = {u: systemd_uptime(u) for u in profile["units"]}
@@ -850,6 +925,7 @@ def collect(profile: dict) -> dict:
         "live": live,
         "live_selfheal": live_selfheal,
         "servers": servers,
+        "mcp_log": mcp_log,
         "uptime": uptime,
         "probes": probes,
         "discord": discord,
@@ -928,21 +1004,37 @@ def render_live_metrics(profile, data) -> list[str]:
 def render_mcp_servers(profile, data) -> list[str]:
     lines = _section("MCP servers")
     mode = profile.get("mcp_servers_mode")
-    if mode == "config_inventory":
-        servers = profile["expected_servers"]
-        lines.append(f"  {'Server':<28} {'Struct':<10} {'Live':<6} Status")
-        lines.append(f"  {'-' * 28} {'-' * 10} {'-' * 6} {'-' * 24}")
-        for name in servers:
-            lines.append(f"  {name:<28} {'configured':<10} {'—':<6} (configured in nix)")
+    if mode == "agent_log":
+        # Hermes: real per-server tool counts parsed from agent.log (the agent
+        # logs `registered N tool(s)` per MCP server at startup). Same table
+        # shape as the OpenClaw mcporter path.
+        mlog = data.get("mcp_log", {})
+        counts = mlog.get("servers", {})
+        reconnecting = set(mlog.get("reconnect_servers", []))
+        expected = list(profile["expected_servers"])
+        extra = [s for s in sorted(counts) if s not in expected]
+        lines.append(f"  {'Server':<28} {'Struct':<7} {'Live':<6} Status")
+        lines.append(f"  {'-' * 28} {'-' * 7} {'-' * 6} {'-' * 26}")
+        for name in expected + extra:
+            n = counts.get(name)
+            if n is None:
+                struct, live_count, status = "?", "?", "(no registration in agent.log)"
+            else:
+                struct = "OK"
+                live_count = str(n)
+                status = f"{n} tool{'s' if n != 1 else ''} registered"
+                if name in reconnecting:
+                    status += " (reconnected ≤24h)"
+            lines.append(f"  {name:<28} {struct:<7} {live_count:<6} {status}")
+        tot_t, tot_s = mlog.get("total_tools"), mlog.get("total_servers")
+        if tot_t is not None:
+            lines.append(f"  total: {tot_t} tools from {tot_s} servers (agent.log)")
         agg = profile.get("mcp_aggregate", {})
         live = data["live"]
-        sse = _ok(live.get(agg.get("sse")))
-        ask = _ok(live.get(agg.get("ask")))
+        sse, ask = _ok(live.get(agg.get("sse"))), _ok(live.get(agg.get("ask")))
         ask_s = live.get(agg.get("ask_s"))
         ask_s_str = f" ({ask_s:.1f}s round-trip)" if isinstance(ask_s, (int, float)) else ""
         lines.append(f"  MCP layer: sse_open={sse}  ask_hermes={ask}{ask_s_str}")
-        lines.append("  (per-server tool counts n/a — Hermes loads MCP via the "
-                     "agent, no mcporter CLI; aggregate liveness above)")
         return lines
 
     # mcporter mode (OpenClaw)
@@ -971,12 +1063,32 @@ def render_mcp_servers(profile, data) -> list[str]:
 def render_gateway(profile, data) -> list[str]:
     lines = _section("Gateway + plugins")
     gw = profile.get("gateway")
+    mode = gw.get("mode") if isinstance(gw, dict) else None
     if gw is None:
-        n = len(profile.get("expected_servers") or ())
-        detail = (f"NousResearch agent has no plugin gateway; "
-                  f"{n} MCP servers loaded" if n else
-                  "NousResearch agent has no plugin gateway; MCP server count unavailable")
-        lines.append(_na(detail, kind="not applicable"))
+        # Defensive: a profile that declares no gateway analog at all.
+        lines.append(_na("agent has no plugin-gateway analog", kind="not applicable"))
+        return lines
+    if mode == "hermes_agent_log":
+        # Real platform/MCP-readiness analog (no OpenClaw-style plugin gateway):
+        # loaded servers + tool total + reconnect health + platform liveness.
+        mlog = data.get("mcp_log", {})
+        live = data["live"]
+        hb = live.get("hermes_discord_heartbeat_age_seconds")
+        hb_present = live.get("hermes_discord_heartbeat_present")
+        if hb is not None and hb_present == 1.0:
+            plat = f"discord (heartbeat {_age_str(hb)} ago)"
+        elif hb_present == 0.0:
+            plat = "discord (no heartbeat stamp)"
+        else:
+            plat = "discord"
+        lines.append(f"  platform:             {plat}")
+        ts, tt = mlog.get("total_servers"), mlog.get("total_tools")
+        lines.append(f"  MCP servers loaded:   {ts if ts is not None else '?'} "
+                     f"({tt if tt is not None else '?'} tools registered)")
+        rc = mlog.get("reconnects_24h", 0)
+        rc_srv = mlog.get("reconnect_servers", [])
+        rc_str = str(rc) + (f"   {', '.join(rc_srv)}" if rc_srv else "")
+        lines.append(f"  MCP reconnects (24h): {rc_str}")
         return lines
     live = data["live"]
     ready_age = live.get(gw["ready_age"])
@@ -1059,12 +1171,18 @@ def render_discord(profile, data) -> list[str]:
 def render_ha_mcp(profile, data) -> list[str]:
     lines = _section("Home Assistant MCP")
     ha = profile["ha_mcp"]
-    if ha["mode"] == "na_pointer":
-        n = len(profile.get("expected_servers") or ())
-        lines.append(_na(
-            f"Hermes has no dedicated HA-MCP probe; home-assistant is one of "
-            f"{n} configured MCP servers (see MCP servers above); MCP liveness "
-            f"via ask_hermes round-trip", kind="not applicable"))
+    if ha["mode"] == "agent_log_derive":
+        # Hermes: a successful tool registration proves the HA MCP server
+        # connected — i.e. token present, endpoint reachable, and bearer
+        # accepted (a bad token/endpoint registers 0 tools or errors out).
+        n = data.get("mcp_log", {}).get("servers", {}).get(ha["server"])
+        if n:
+            lines.append(f"  home-assistant MCP:     connected ({n} tools registered)")
+            lines.append("  token present:          OK")
+            lines.append("  endpoint reachable:     OK")
+            lines.append("  bearer token accepted:  OK  (proven by tool registration)")
+        else:
+            lines.append(_na("home-assistant not seen registered in agent.log"))
         return lines
     live = data["live"]
     lines.append(f"  token present:          {_ok(live.get(ha['token']))}")

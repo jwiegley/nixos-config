@@ -1,0 +1,9 @@
+2026-06-01 05:53:42,303 WARNING tools.mcp_tool: MCP server 'home-assistant' keepalive failed, triggering reconnect:
+2026-06-01 06:59:43,980 WARNING tools.mcp_tool: MCP server 'vane' keepalive failed, triggering reconnect:
+2026-06-01 18:28:28,577 INFO tools.mcp_tool: MCP server 'home-assistant' (stdio): registered 28 tool(s): mcp_home_assistant_HassTurnOn, mcp_home_assistant_HassTurnOff
+2026-06-01 18:28:29,829 INFO tools.mcp_tool: MCP server 'org-db' (stdio): registered 6 tool(s): mcp_org_db_org_sql, mcp_org_db_org_search
+2026-06-01 18:28:29,842 INFO tools.mcp_tool: MCP server 'email-contacts' (stdio): registered 11 tool(s): mcp_email_contacts_list_folders
+2026-06-01 18:28:29,913 INFO tools.mcp_tool: MCP server 'vane' (stdio): registered 5 tool(s): mcp_vane_web_research
+2026-06-01 18:28:29,936 INFO tools.mcp_tool: MCP server 'perplexity' (stdio): registered 5 tool(s): mcp_perplexity_web_search
+2026-06-01 18:28:30,018 INFO tools.mcp_tool: MCP server 'stock-trader' (stdio): registered 12 tool(s): mcp_stock_trader_get_quote
+2026-06-01 18:28:30,019 INFO tools.mcp_tool: MCP: registered 67 tool(s) from 6 server(s)

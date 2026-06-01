@@ -14,6 +14,7 @@ def _fake_data(profile):
         "live": {},
         "live_selfheal": {},
         "servers": {},
+        "mcp_log": {},
         "uptime": {u: {"active": "active", "since": "Sat", "n_restarts": 0}
                    for u in profile["units"]},
         "probes": [{**f, "success_ratio": None, "p50_seconds": None,

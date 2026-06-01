@@ -109,7 +109,11 @@ in
         "probe-ssh-key:${config.sops.secrets."openclaw/probe-ssh-private-key".path}"
       ];
 
-      TimeoutStartSec = "5min";
+      # Worst case (every probe hits its hard timeout): local mcporter 180s +
+      # mcporter-via-ssh 60s + 2 systemctl 20s + 3 Prometheus 30s + ssh_probe
+      # 45s + sendmail 30s ≈ 365s. 8min leaves headroom so a degraded night
+      # still emails a report instead of being SIGTERM'd mid-collect.
+      TimeoutStartSec = "8min";
     };
   };
 

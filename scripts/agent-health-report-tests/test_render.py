@@ -157,6 +157,24 @@ def test_render_hermes_mcp_inventory_and_aggregate():
     assert "no mcporter CLI" in joined
 
 
+def test_render_gateway_survives_multilabel_channel_key():
+    # H1 regression: a channel series with an extra label must not crash render.
+    p = m.PROFILES["openclaw"]
+    data = _base(p)
+    data["live"]['openclaw_channel_plugin_loaded{instance="i",channel="discord"}'] = 1.0
+    lines = m.render_gateway(p, data)
+    assert "discord" in "\n".join(lines)
+
+
+def test_render_selfheal_survives_multilabel_action_key():
+    # H1 regression: an attempts series with an extra label must not crash.
+    p = m.PROFILES["openclaw"]
+    data = _base(p)
+    data["live_selfheal"]['openclaw_self_heal_attempts_total{instance="i",action="restart_microvm"}'] = 3.0
+    lines = m.render_selfheal(p, data)
+    assert "restart_microvm=3" in "\n".join(lines)
+
+
 def test_render_invm_skipped_is_na():
     p = m.PROFILES["hermes"]
     data = _base(p)

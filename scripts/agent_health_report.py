@@ -33,7 +33,6 @@ Environment overrides (read under the profile's <PREFIX>, e.g. OPENCLAW_REPORT):
   <PREFIX>_SSH_KEY         path to ssh key for the in-VM probe
   <PREFIX>_SSH_TARGET      e.g. openclaw@10.99.0.2 / hermes@10.99.1.2
   <PREFIX>_MCPORTER        mcporter binary (OpenClaw only)
-  <PREFIX>_CA_BUNDLE       CA bundle for live mcporter list (OpenClaw only)
 """
 from __future__ import annotations
 
@@ -41,6 +40,7 @@ import argparse
 import collections
 import datetime as dt
 import json
+import math
 import os
 import pathlib
 import re
@@ -73,7 +73,15 @@ REDACT_PATTERNS = [
     re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"),
     re.compile(r"sk-or-v1-[A-Za-z0-9_-]{20,}"),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"),
-    re.compile(r"(?i)(token|password|api[_-]?key)=[^\s&\"]+"),
+    # key=value secret shapes (superset of the documented leak forms).
+    re.compile(
+        r"(?i)(token|password|passwd|passphrase|api[_-]?key|secret|client_secret|"
+        r"psk|refresh_token|access_token)=[^\s&\"]+"
+    ),
+    # E.164 phone number (PII — the 2026-05-18 SOPS leak shape).
+    re.compile(r"(?<!\d)\+\d{10,15}(?!\d)"),
+    # Pairing / registration / verification codes (the 2026-05-21 HomeKit shape).
+    re.compile(r"(?i)\b(?:pairing|registration|verification)\s+code[:\s]+\S+"),
 ]
 
 
@@ -83,6 +91,29 @@ def redact(s: str) -> str:
     return s
 
 
+def _safe_read_lines(path) -> list[str]:
+    """Read a file's lines, never raising (the report must never abort).
+
+    `errors="replace"` tolerates a non-UTF-8 byte in a rotated log; the
+    try/except covers a read-time race or permission flip the is_file()
+    check upstream cannot.
+    """
+    try:
+        return pathlib.Path(path).read_text(errors="replace").splitlines()
+    except OSError:
+        return []
+
+
+def _label(key: str, label: str) -> Optional[str]:
+    """Extract a label value from a `metric{...,label="value",...}` key.
+
+    Robust to label order and extra labels, and never raises — used so a
+    non-canonical series can't crash a section renderer (H1/M2).
+    """
+    m = re.search(label + r'="([^"]+)"', key)
+    return m.group(1) if m else None
+
+
 # ---------------------------------------------------------------------------
 # Prometheus textfile parsing (handles `name{label="v"}` keys)
 # ---------------------------------------------------------------------------
@@ -90,17 +121,17 @@ def redact(s: str) -> str:
 def parse_prom_textfile(path) -> dict[str, float]:
     """Return gauges from a node-exporter textfile, keeping label suffixes."""
     out: dict[str, float] = {}
-    p = pathlib.Path(path)
-    if not p.is_file():
-        return out
-    for line in p.read_text().splitlines():
+    for line in _safe_read_lines(path):
         if line.startswith("#") or not line.strip():
             continue
         k, _, v = line.rpartition(" ")
         try:
-            out[k.strip()] = float(v)
+            fv = float(v)
         except ValueError:
-            pass
+            continue
+        # Reject NaN/Inf so they never reach the email's arithmetic/formatting.
+        if math.isfinite(fv):
+            out[k.strip()] = fv
     return out
 
 
@@ -273,7 +304,7 @@ def parse_errors_log(path, grammar: str = "openclaw",
         cutoff = now - dt.timedelta(hours=window_hours)
         errors: collections.Counter = collections.Counter()
         total = 0
-        for line in p.read_text().splitlines():
+        for line in _safe_read_lines(p):
             m = _HERMES_TS_RE.match(line)
             if not m:
                 continue
@@ -299,7 +330,7 @@ def parse_errors_log(path, grammar: str = "openclaw",
     cutoff = now - dt.timedelta(hours=window_hours)
     err_counts: collections.Counter = collections.Counter()
     warn_counts: collections.Counter = collections.Counter()
-    for line in p.read_text().splitlines():
+    for line in _safe_read_lines(p):
         if not line.strip():
             continue
         m = _OC_TS_RE.match(line)
@@ -352,7 +383,7 @@ def _iter_gateway_events(path, now, window_hours=24):
     if not p.is_file():
         return
     cutoff = now - dt.timedelta(hours=window_hours)
-    for line in p.read_text().splitlines():
+    for line in _safe_read_lines(p):
         m = GATEWAY_TS_RE.match(line)
         if not m:
             continue
@@ -627,15 +658,20 @@ def _na(reason: str, kind: str = "unavailable") -> str:
 
 
 def _server_ok_map(live: dict[str, float], metric: Optional[str]) -> dict[str, int]:
-    """Extract {name: 0/1} from `metric{name="..."}` gauge keys in `live`."""
+    """Extract {name: 0/1} from `metric{...,name="...",...}` gauge keys.
+
+    Tolerant of extra labels / label order (M2) so a healthy server is never
+    misrendered as "not seen" just because the series gained a label.
+    """
     out: dict[str, int] = {}
     if not metric:
         return out
-    pat = re.compile(re.escape(metric) + r'\{name="([^"]+)"\}')
     for key, val in live.items():
-        m = pat.match(key)
-        if m:
-            out[m.group(1)] = int(val)
+        if not key.startswith(metric + "{"):
+            continue
+        name = _label(key, "name")
+        if name:
+            out[name] = int(val)
     return out
 
 
@@ -953,8 +989,10 @@ def render_gateway(profile, data) -> list[str]:
     lines.append(f"  plugins loaded:           {int(plugins_total) if plugins_total is not None else '?'}")
     chan_prefix = gw["channels"]
     chans = sorted(
-        re.match(re.escape(chan_prefix) + r'\{channel="([^"]+)"\}', k).group(1)
-        for k in live if k.startswith(chan_prefix + "{") and live[k] == 1.0
+        c
+        for k in live
+        if k.startswith(chan_prefix + "{") and live[k] == 1.0
+        and (c := _label(k, "channel"))
     )
     if chans:
         lines.append(f"  channels present:         {', '.join(chans)}")
@@ -1086,9 +1124,9 @@ def render_selfheal(profile, data) -> list[str]:
         except (OverflowError, ValueError):
             pass
     attempts = sorted(
-        (re.match(re.escape(prefix) + r'_attempts_total\{action="([^"]+)"\}', k).group(1), int(v))
+        (a, int(v))
         for k, v in sh.items()
-        if k.startswith(prefix + "_attempts_total{")
+        if k.startswith(prefix + "_attempts_total{") and (a := _label(k, "action"))
     )
     nonzero = [(a, c) for a, c in attempts if c]
     if nonzero:

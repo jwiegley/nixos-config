@@ -32,12 +32,17 @@ CLASS_PATH = 'QueryLogsSqlite.App'
 hostname_cache = {}
 
 # Prometheus metrics
-# NOTE: The 'domain' label can result in high cardinality if many unique domains are queried.
-# Consider monitoring metric cardinality and adding limits if needed.
+# dns_queries_total is intentionally LOW cardinality: aggregated by rcode/qtype/protocol
+# ONLY. The per-query detail (domain, client_ip, client_hostname) is deliberately NOT on
+# this counter -- it lives in the Loki log lines/labels below. domain x client cardinality
+# previously made this metric ~30k series and dominated the Prometheus TSDB on disk, with
+# no dashboard/alert actually using the high-cardinality labels. prometheus-client sums all
+# increments into the matching (rcode,qtype,protocol) series natively, so these are clean
+# aggregate counts; use Loki (LogQL) for per-domain / per-client breakdowns.
 dns_queries_total = Counter(
     'dns_queries_total',
-    'Total number of DNS queries processed',
-    ['client_hostname', 'rcode', 'qtype', 'protocol', 'domain']
+    'Total number of DNS queries processed, aggregated by rcode/qtype/protocol',
+    ['rcode', 'qtype', 'protocol']
 )
 
 dns_query_log_last_row = Gauge(
@@ -202,13 +207,12 @@ def format_loki_push(entries):
             'response_type': entry['responseType'].lower(),
         }
 
-        # Update Prometheus counter
+        # Update Prometheus counter (aggregate only -- domain/client_ip/client_hostname
+        # stay in the Loki stream/log line below, NOT on the metric, to keep cardinality low)
         dns_queries_total.labels(
-            client_hostname=client_hostname,
             rcode=labels['rcode'],
             qtype=labels['qtype'],
             protocol=labels['protocol'],
-            domain=entry['qname'].rstrip('.')
         ).inc()
 
         # Create label string (sorted for consistency)

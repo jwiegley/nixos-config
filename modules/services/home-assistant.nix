@@ -510,6 +510,9 @@ in
       # Utility Data
       "opower" # Energy usage from utility companies (SMUD)
 
+      # Financial
+      "simplefin" # SimpleFIN bank/financial account balances (requires simplefin4py; --skip-pip needs it listed here)
+
       # Weather
       "accuweather" # AccuWeather weather forecasts
       "nws" # National Weather Service (NOAA) weather forecasts

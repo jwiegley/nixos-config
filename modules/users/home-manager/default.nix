@@ -52,6 +52,12 @@
           };
         };
       })
+      # Only users with a live, imported Home Manager config belong here. Names of
+      # decommissioned users (technitium-dns-exporter, reverted to a system-level
+      # container; the retired container-db/web/misc/monitor shared-user scheme)
+      # were removed 2026-06-01 — they had no HM module to attach to, so the
+      # override produced ExecStart-less "bad-setting" units that systemd refused
+      # to start and that logged noise on every switch.
       [
         "changedetection"
         "litellm"
@@ -60,12 +66,7 @@
         "wallabag"
         "teable"
         "opnsense-exporter"
-        "technitium-dns-exporter"
         "openspeedtest"
-        "container-db"
-        "container-web"
-        "container-misc"
-        "container-monitor"
         "johnw"
       ]
   );

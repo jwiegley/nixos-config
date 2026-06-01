@@ -166,10 +166,14 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
    uses the **authoritative deployed inventory** (the 6 servers in
    `services.hermes-agent.mcpServers`: `vane`, `home-assistant`, `stock-trader`,
    `email-contacts`, `perplexity`, `org-db` — SearXNG is the native web backend,
-   not an MCP server), rendered `Struct=configured  Live=—`, **plus a real
-   aggregate MCP-liveness line from metrics** (`hermes_mcp_sse_open_ok` +
-   `hermes_mcp_ask_hermes_ok` round-trip). Per-server live tool counts are an
-   honest `n/a` for Hermes (no mcporter analog).
+   not an MCP server). **UPDATE (post-review, commit f7c22d5):** that "no
+   per-server counts" conclusion was premature — the NousResearch agent **logs
+   per-server tool counts** to `agent.log` at startup (`MCP server 'X' (stdio):
+   registered N tool(s)` + `MCP: registered 67 tool(s) from 6 server(s)`). So
+   Hermes §2 now renders a **real per-server table** (`parse_hermes_mcp_log`),
+   column-for-column identical to OpenClaw's mcporter table (`Struct=OK`,
+   `Live=N tools`), plus the aggregate `ask_hermes` liveness footer. No mcporter,
+   no VM restart. Hermes ends with **zero `n/a` sections**.
 3. **Gateway + plugins.** OpenClaw: ready age, plugins-loaded count + per-channel
    presence, init failures (all from `canary`). **Hermes: `n/a — not applicable
    (NousResearch agent has no plugin gateway; N MCP servers loaded)`** where N is
@@ -188,10 +192,12 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
    gateway log uses a different vocabulary; the canary already distills it).
 7. **HA-MCP.** OpenClaw: token-present / reachable / bearer-accepted + last-check
    age from `openclaw_mcporter_*` gauges (dedicated `openclaw-mcporter-check`
-   probe). **Hermes: explicit `n/a — not applicable`** — there is no dedicated
-   Hermes HA probe; `home-assistant` is one of the 6 configured MCP servers
-   (shown in §2) and aggregate MCP liveness is proven by the `ask_hermes`
-   round-trip. This is Hermes' second genuine `n/a` (with §3).
+   probe). **Hermes (UPDATE, commit f7c22d5): real** — `home-assistant`'s
+   successful tool registration in `agent.log` (N tools) proves token present +
+   endpoint reachable + bearer accepted (a bad token/endpoint registers 0 tools),
+   so §7 shows OK/OK/OK rather than `n/a`. §3 (Gateway) is likewise a real
+   Hermes analog now (discord-heartbeat platform liveness + loaded servers/tools
+   + MCP reconnects-24h). Net: Hermes has zero `n/a` sections.
 8. **Errors digest (24h).** Tail the agent's error log, bucket identical lines,
    show top patterns + total. **Both now apply redaction AND benign-warning
    filtering** (pattern lists are profile fields; OpenClaw keeps its existing

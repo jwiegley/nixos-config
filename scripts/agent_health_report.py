@@ -820,6 +820,10 @@ PROFILES: dict[str, dict] = {
         # heartbeat give a real platform/MCP-readiness analog (loaded servers,
         # tool total, reconnects, platform liveness).
         "gateway": {"mode": "hermes_agent_log"},
+        # SearXNG is Hermes' native web_search backend (settings.web.
+        # search_backend in hermes-vm.nix), NOT an MCP server — surfaced here so
+        # its absence from the MCP-servers table above isn't mistaken for a gap.
+        "web_search_backend": "SearXNG (native)",
         "units": ["microvm@hermes.service", "hermes-mcp.service",
                   "hermes-self-heal.service"],
         "probe_families": [{"label": "Hermes e2e chat",
@@ -1089,6 +1093,9 @@ def render_gateway(profile, data) -> list[str]:
         rc_srv = mlog.get("reconnect_servers", [])
         rc_str = str(rc) + (f"   {', '.join(rc_srv)}" if rc_srv else "")
         lines.append(f"  MCP reconnects (24h): {rc_str}")
+        wsb = profile.get("web_search_backend")
+        if wsb:
+            lines.append(f"  web_search backend:   {wsb}")
         return lines
     live = data["live"]
     ready_age = live.get(gw["ready_age"])

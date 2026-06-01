@@ -88,6 +88,7 @@ def test_render_hermes_gateway_real_analog():
     assert "platform:" in joined and "discord" in joined
     assert "MCP servers loaded:   6 (67 tools" in joined
     assert "MCP reconnects (24h): 1" in joined
+    assert "web_search backend:" in joined and "SearXNG (native)" in joined
     assert "n/a" not in joined
 
 

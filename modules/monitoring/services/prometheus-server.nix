@@ -161,8 +161,12 @@
       - database.yaml: Database-specific alerts
       - storage.yaml: Storage and backup alerts
       - certificates.yaml: Certificate expiration alerts
-      - home-assistant.yaml: Home Assistant IoT device alerts (security, safety, energy)
       - custom.yaml: Custom site-specific alerts (optional)
+
+      NOTE: Home Assistant safety/security/energy alerting is NOT in Prometheus.
+      HA telemetry is pushed to VictoriaMetrics (InfluxDB protocol), never scraped
+      into Prometheus, so homeassistant_* rules here could never fire. That alerting
+      lives in Node-RED (event-driven, can also remediate). See docs/HOME_ASSISTANT_ALERTING.md.
 
       ## Useful Commands
       - `validate-alerts`: Validate alert rule syntax

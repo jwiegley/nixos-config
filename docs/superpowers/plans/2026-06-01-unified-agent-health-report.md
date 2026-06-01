@@ -43,6 +43,7 @@ PROFILES = {
         "home-assistant","searxng","stock-trader","vane"),
     "mcporter_struct_textfile": f"{TF}/openclaw_mcporter.prom",
     "server_ok_metric": "openclaw_mcporter_server_ok",   # has {name="..."} label
+    "mcp_servers_mode": "mcporter",
     "mcporter_live": "host+ssh",
     "host_blind_servers": frozenset({"google-calendar-personal","google-calendar-work","home-assistant"}),
     "gateway": {"ready_age":"openclaw_gateway_ready_age_seconds",
@@ -81,13 +82,24 @@ PROFILES = {
     "default_from": "hermes-health@vulcan.lan",
     "live_textfiles": [f"{TF}/hermes_health.prom", f"{TF}/hermes_e2e_chat.prom",
                        f"{TF}/hermes_self_heal.prom"],
-    "expected_servers": (  # service-parity set; CONFIRM names vs VM mcporter.json in Task 1
+    # Authoritative inventory = deployed nix `services.hermes-agent.mcpServers`
+    # (hermes-vm.nix). SearXNG is the native web backend, NOT an MCP server.
+    "expected_servers": (
         "vane","home-assistant","stock-trader","email-contacts",
-        "perplexity","org-db","searxng"),
-    "mcporter_struct_textfile": None,    # struct column renders "—"
+        "perplexity","org-db"),
+    "mcporter_struct_textfile": None,
     "server_ok_metric": None,
-    "mcporter_live": "ssh",
-    "host_blind_servers": frozenset(),   # everything via the VM probe
+    # DISCOVERY 2026-06-01: the Hermes VM has NO mcporter CLI (only curl; no
+    # python3/jq in PATH). MCP servers load inside the NousResearch agent, not
+    # via mcporter. So per-server LIVE tool counts have no analog. Section 2
+    # renders the static configured inventory (struct="configured") + a REAL
+    # aggregate MCP-liveness line from metrics. (Not "ssh" — there is nothing
+    # to list in-VM.)
+    "mcp_servers_mode": "config_inventory",
+    "mcp_aggregate": {"sse":"hermes_mcp_sse_open_ok",
+                      "ask":"hermes_mcp_ask_hermes_ok",
+                      "ask_s":"hermes_mcp_ask_hermes_seconds"},
+    "host_blind_servers": frozenset(),
     "gateway": None,                      # → n/a section (no plugin gateway)
     "units": ["microvm@hermes.service","hermes-mcp.service","hermes-self-heal.service"],
     "probe_families": [{"label":"Hermes e2e chat",
@@ -98,7 +110,7 @@ PROFILES = {
     "discord": {"mode":"log",
                 "log":"/var/lib/hermes/.hermes/logs/gateway.log",
                 "heartbeat_age_metric":"hermes_discord_heartbeat_age_seconds"},
-    "ha_mcp": {"mode":"mcporter_row","server":"home-assistant"},
+    "ha_mcp": {"mode":"na_pointer"},   # no dedicated Hermes HA probe; HA is in the inventory above
     "errors_log": "/var/lib/hermes/.hermes/logs/errors.log",
     "errors_grammar": "hermes",          # ERRORS_TS_RE (ERROR|WARN), redact, no benign set yet
     "incidents_json": "/var/lib/hermes-self-heal/incidents.json",
@@ -221,9 +233,11 @@ def test_get_profile_rejects_unknown():
 - [ ] **Step 3: Implement** the 11 `render_*(profile, data) -> list[str]` helpers + a `_na(reason, kind="unavailable")` helper (`f"  n/a — {kind} ({reason})"`), and `render(profile, data) -> (subject, body)`:
   - Header line `f"{display} health report — {host} — {iso}"`, `=`*76.
   - Headline: compute `issues` from `verdict_fail_if_zero` over `data["live"]`, microvm-not-active, stuck incidents, `errors_total > errors_fail_threshold`, trader/invm failed, any struct-invalid server. `verdict = FAIL if issues else PASS`; `summary = issues[0] if issues else "all healthy"`. Subject `f"[{agent}-nightly] {host} {date} - {summary}"` (ASCII hyphen).
-  - `render_mcp_servers`: openclaw table logic (struct/live/blind handling) generalized; Hermes struct col `—`.
-  - `render_gateway`: if `profile["gateway"]` is None → `_na("NousResearch agent has no plugin gateway; " + (f"{n} MCP servers loaded" if n is not None else "MCP server count unavailable"), kind="not applicable")`.
-  - `render_ha_mcp`: `textfile` mode = openclaw 3-line + last-check age; `mcporter_row` mode = derive from `data["servers"]["home-assistant"]` (present & tool_count>0 → `bearer accepted: OK (via in-VM mcporter, N tools)`), else `_na`.
+  - `render_mcp_servers`: switch on `mcp_servers_mode`.
+    - `"mcporter"` (OpenClaw): existing table logic — `Server | Struct | Live | Status`, struct from `server_ok`, live tool counts from host+ssh `mcporter list`, blind-server handling.
+    - `"config_inventory"` (Hermes): one row per `expected_servers` entry, `Struct = configured`, `Live = —`, `Status = (configured in nix)`; then an aggregate footer line from `mcp_aggregate`: `MCP layer: sse_open={OK|FAIL} ask_hermes={OK|FAIL} (round-trip {ask_s}s)`; then a note `(per-server tool counts n/a — Hermes loads MCP via the agent, no mcporter CLI; aggregate liveness above)`. `n` for §3 = `len(expected_servers)`.
+  - `render_gateway`: if `profile["gateway"]` is None → `_na("NousResearch agent has no plugin gateway; " + (f"{n} MCP servers loaded" if n is not None else "MCP server count unavailable"), kind="not applicable")` where `n = len(profile["expected_servers"])`.
+  - `render_ha_mcp`: `textfile` mode = openclaw 3-line + last-check age; `na_pointer` mode (Hermes) → `_na("Hermes has no dedicated HA-MCP probe; home-assistant is one of N configured MCP servers (see MCP servers above); MCP liveness via ask_hermes round-trip", kind="not applicable")`.
   - `render_selfheal`: incidents (active/resolved/stuck) + attempts-by-action + heartbeat age from the `selfheal_*` gauges in `data["live_selfheal"]`.
   - `render_invm`: skipped → one `_na`; else one line per check result.
   - Footer `--` + `Sent by agent-health-report.service (--agent {agent})`.

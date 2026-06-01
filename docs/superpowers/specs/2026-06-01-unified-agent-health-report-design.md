@@ -157,15 +157,19 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
 2. **MCP-servers table.** `Server | Struct | Live | Status`. Struct from the
    `*_server_ok` gauge where available (OpenClaw), else `—`. Live tool counts via
    `mcporter list` — host-side for OpenClaw with an in-VM SSH probe for
-   `host_blind_servers`; **Hermes: in-VM `mcporter list` over its existing SSH
-   path** (`hermes@10.99.1.2`). Each profile carries an `expected_servers` tuple:
-   OpenClaw's is the existing `EXPECTED_SERVERS` set; **Hermes' is its
-   service-parity set** (`vane`, `home-assistant`, `stock-trader`,
-   `email-contacts`, `perplexity`, `org-db`, `searxng` — exact names confirmed
-   against the VM's `mcporter.json` at implementation time). Rows returned by
-   `mcporter list` but not in `expected_servers` are still shown; an
-   expected-but-absent server renders `Struct —  Live ?  (not seen)` so a
-   dropped server is visible rather than silently omitted.
+   `host_blind_servers`. OpenClaw rows returned by `mcporter list` but not in
+   `expected_servers` are still shown; an expected-but-absent server renders
+   `Struct —  Live ?  (not seen)` so a dropped server is visible.
+   **IMPLEMENTATION NOTE (2026-06-01):** the Hermes VM has **no `mcporter` CLI**
+   (verified: only `curl`; no `python3`/`jq` in PATH) — it loads MCP servers
+   inside the NousResearch agent, not via mcporter. So for Hermes this section
+   uses the **authoritative deployed inventory** (the 6 servers in
+   `services.hermes-agent.mcpServers`: `vane`, `home-assistant`, `stock-trader`,
+   `email-contacts`, `perplexity`, `org-db` — SearXNG is the native web backend,
+   not an MCP server), rendered `Struct=configured  Live=—`, **plus a real
+   aggregate MCP-liveness line from metrics** (`hermes_mcp_sse_open_ok` +
+   `hermes_mcp_ask_hermes_ok` round-trip). Per-server live tool counts are an
+   honest `n/a` for Hermes (no mcporter analog).
 3. **Gateway + plugins.** OpenClaw: ready age, plugins-loaded count + per-channel
    presence, init failures (all from `canary`). **Hermes: `n/a — not applicable
    (NousResearch agent has no plugin gateway; N MCP servers loaded)`** where N is
@@ -183,9 +187,11 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
    **OpenClaw: `ws_connected` 0/1 + last-ready age** from canary metrics (its
    gateway log uses a different vocabulary; the canary already distills it).
 7. **HA-MCP.** OpenClaw: token-present / reachable / bearer-accepted + last-check
-   age from `openclaw_mcporter_*` gauges. **Hermes: derived from the in-VM
-   `home-assistant` mcporter row** (present with tool_count>0 ⇒ reachable+auth ok);
-   `n/a` if the in-VM probe could not run.
+   age from `openclaw_mcporter_*` gauges (dedicated `openclaw-mcporter-check`
+   probe). **Hermes: explicit `n/a — not applicable`** — there is no dedicated
+   Hermes HA probe; `home-assistant` is one of the 6 configured MCP servers
+   (shown in §2) and aggregate MCP liveness is proven by the `ask_hermes`
+   round-trip. This is Hermes' second genuine `n/a` (with §3).
 8. **Errors digest (24h).** Tail the agent's error log, bucket identical lines,
    show top patterns + total. **Both now apply redaction AND benign-warning
    filtering** (pattern lists are profile fields; OpenClaw keeps its existing

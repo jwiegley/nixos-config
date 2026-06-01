@@ -17,6 +17,14 @@
     # Backup existing files when they conflict with home-manager files
     backupFileExtension = "hm-bak";
 
+    # Applied to every Home Manager user. The prune module self-targets only the
+    # rootless container users (home dir under /var/lib/containers/), closing the
+    # gap left by the root-level virtualisation.podman.autoPrune which never sees
+    # per-user rootless stores. See ./rootless-podman-image-prune.nix.
+    sharedModules = [
+      ./rootless-podman-image-prune.nix
+    ];
+
     # Pass hostname and inputs to home-manager modules so they can be used
     # by the shared johnw.nix cross-platform module
     extraSpecialArgs = {

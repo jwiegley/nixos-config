@@ -9,6 +9,16 @@
   # Enable ZFS support with 16K page size (Apple Silicon / Asahi Linux)
   boot = {
     supportedFilesystems = [ "zfs" ];
+
+    # Force the OWC Mercury Elite Pro Quad (USB VID:PID 1e91:a4a7) that hosts the
+    # `tank` pool off the UAS driver onto the slower but rock-solid BOT/usb-storage
+    # driver. The bridge's UAS firmware hangs under concurrent multi-bay load: on
+    # 2026-06-02 the 02:00 backup herd triggered a `uas_eh_abort_handler` storm ->
+    # `cmd cmplt err -108` (ESHUTDOWN) -> all four bays dropped off USB at once,
+    # taking the pool MISSING until a physical power-cycle. `:u` = US_FL_IGNORE_UAS.
+    # Takes effect on the next boot (kernel command line).
+    kernelParams = [ "usb-storage.quirks=1e91:a4a7:u" ];
+
     zfs = {
       forceImportAll = false;
       forceImportRoot = false;

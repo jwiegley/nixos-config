@@ -581,9 +581,31 @@ in
   # Stable nixpkgs-25.11 lags behind; unstable tracks HA releases closely.
   # HA 2026.x requires Python 3.14. Use packageOverrides to inject custom
   # packages (aiopnsense, pybose, pywaze, etc.) into HA's own Python 3.14 set.
-  home-assistant = inputs.nixpkgs-unstable.legacyPackages.${system}.home-assistant.override {
-    packageOverrides = haPackageOverrides;
-  };
+  home-assistant =
+    let
+      base = inputs.nixpkgs-unstable.legacyPackages.${system}.home-assistant.override {
+        packageOverrides = haPackageOverrides;
+      };
+    in
+    # Compat shim for a passthru rename in the 2026-05-31 nixpkgs-unstable bump:
+    # home-assistant's `python` passthru (the interpreter, whose `.pkgs` was the
+    # HA python set) became `python3Packages`. Our `buildHomeAssistantComponent`
+    # comes from the stable 25.11 channel and still calls
+    # `home-assistant.python.pkgs.buildPythonPackage` (and `.python.interpreter`
+    # via the manifest-requirements hook); several overlay/module call sites also
+    # use `home-assistant.python.pkgs.*` directly. Re-expose `.python` as the
+    # backing interpreter with `.pkgs` repointed at the new set so both the old
+    # and new idioms resolve — restoring the exact pre-bump behavior.
+    # Remove once the stable HA tooling also speaks `.python3Packages` (e.g.
+    # buildHomeAssistantComponent sourced from unstable, or stable bumped past the
+    # rename) and the remaining `.python.pkgs` call sites are migrated.
+    base.overrideAttrs (old: {
+      passthru = old.passthru // {
+        python = base.python3Packages.python // {
+          pkgs = base.python3Packages;
+        };
+      };
+    });
 
   # Radicale - Override with jwiegley's fork for vCard 4.0 support
   # https://github.com/jwiegley/Radicale

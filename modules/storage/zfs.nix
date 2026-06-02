@@ -52,6 +52,54 @@
     ];
   };
 
+  # Belt-and-suspenders for the /tank bind-mount boot race (see
+  # modules/lib/bindTankModule.nix and project_tank_uas_enclosure_failure). The
+  # fstab fix should mount the binds on its own, but this oneshot guarantees it:
+  # once ZFS has mounted the datasets, explicitly (re)mount every tank bind and
+  # start the nspawn containers that depend on them. Idempotent (no-op if they are
+  # already up) and a no-op when /tank is absent, so it never hangs or breaks a
+  # degraded boot. This codifies the manual recovery that has always worked.
+  systemd.services.tank-binds-ensure = {
+    description = "Ensure /tank bind mounts and their containers are up after ZFS";
+    after = [
+      "zfs-mount.service"
+      "local-fs.target"
+    ];
+    wants = [ "zfs-mount.service" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [
+      pkgs.util-linux
+      pkgs.gnugrep
+      pkgs.gawk
+      config.systemd.package
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      # Tolerate a dead/absent tank: do nothing if /tank is not mounted.
+      if ! mountpoint -q /tank; then
+        echo "/tank not mounted; skipping tank bind ensure"
+        exit 0
+      fi
+
+      # Mount every tank bind mount (each is tagged with the zfs-mount.service
+      # dependency in /etc/fstab by bindTankPath). Idempotent: a no-op if already
+      # mounted, mounts it otherwise.
+      grep 'x-systemd.requires=zfs-mount.service' /etc/fstab | awk '{print $2}' | while read -r mp; do
+        [ -z "$mp" ] && continue
+        unit="$(systemd-escape -p --suffix=mount "$mp")"
+        systemctl start "$unit" || true
+      done
+
+      # Ensure the nspawn containers that bind tank paths are up. Clear any
+      # skipped/failed state first; start async so we never block boot.
+      systemctl reset-failed container@copyparty.service container@static-nginx.service 2>/dev/null || true
+      systemctl start --no-block container@copyparty.service container@static-nginx.service || true
+    '';
+  };
+
   services.zfs = {
     autoScrub = {
       enable = true;

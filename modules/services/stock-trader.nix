@@ -70,6 +70,10 @@ let
       POLYGON_API_KEY="$(cat "$CREDENTIALS_DIRECTORY/polygon-api-key")"
       export POLYGON_API_KEY
     fi
+    if [ -f "$CREDENTIALS_DIRECTORY/alpha-vantage-api-key" ]; then
+      ALPHA_VANTAGE_API_KEY="$(cat "$CREDENTIALS_DIRECTORY/alpha-vantage-api-key")"
+      export ALPHA_VANTAGE_API_KEY
+    fi
 
     exec ${pkgs.stock-trader}/bin/stock-trader
   '';
@@ -112,6 +116,11 @@ in
       restartUnits = [ "stock-trader.service" ];
     };
     sops.secrets."stock-trader/polygon-api-key" = {
+      owner = "root";
+      mode = "0400";
+      restartUnits = [ "stock-trader.service" ];
+    };
+    sops.secrets."stock-trader/alpha-vantage-api-key" = {
       owner = "root";
       mode = "0400";
       restartUnits = [ "stock-trader.service" ];
@@ -207,6 +216,7 @@ in
           "finnhub-api-key:${config.sops.secrets."stock-trader/finnhub-api-key".path}"
           "fred-api-key:${config.sops.secrets."stock-trader/fred-api-key".path}"
           "polygon-api-key:${config.sops.secrets."stock-trader/polygon-api-key".path}"
+          "alpha-vantage-api-key:${config.sops.secrets."stock-trader/alpha-vantage-api-key".path}"
         ];
 
         # Hardening. Stricter than jupyterlab.nix because we don't

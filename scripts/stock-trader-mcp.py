@@ -226,5 +226,183 @@ def assess_trade_risk(
     return _request("POST", "/api/risk/assess", json_body=body)
 
 
+# --- Alpha Vantage tools -------------------------------------------------
+# These wrap stock-trader's /api/av/* endpoints (Alpha Vantage data). On the
+# FREE tier Alpha Vantage allows only ~25 requests/day shared across ALL of
+# these tools; stock-trader caches aggressively and enforces a daily quota, so
+# expect an occasional {"error": "...quota exceeded..."} and use them sparingly.
+# They cover asset classes and data Schwab/Finnhub do not. If a call returns
+# {"error": "...not configured..."}, stock-trader has no Alpha Vantage key set.
+
+
+@mcp.tool()
+def get_av_news_sentiment(symbol: str, limit: int = 50) -> str:
+    """Fetch Alpha Vantage structured news sentiment for a US stock.
+
+    `symbol` is a US ticker like ``AAPL``. `limit` (1-1000) caps the number of
+    articles. Unlike `get_news_sentiment` (an aggregated Finnhub-based summary),
+    this returns Alpha Vantage's per-article, per-ticker sentiment.
+
+    Returns JSON with `article_count` and an `articles` list — each has title,
+    url, time_published, source, an overall_sentiment_score/label, `topics`,
+    and a `ticker_sentiment` array (per-ticker relevance + bull/bear score).
+    Alpha Vantage data — see the free-tier budget note above.
+    """
+    return _request(
+        "GET",
+        f"/api/av/news/{symbol.upper()}",
+        params={"limit": limit},
+    )
+
+
+@mcp.tool()
+def get_forex_rate(from_currency: str, to_currency: str) -> str:
+    """Fetch a foreign-exchange spot rate from Alpha Vantage.
+
+    `from_currency` and `to_currency` are 3-letter fiat codes like ``EUR``,
+    ``USD``, ``JPY``, ``GBP``.
+
+    Returns JSON with the spot `rate`, `bid`, `ask`, and `last_refreshed`.
+    Alpha Vantage data — see the free-tier budget note above.
+    """
+    return _request(
+        "GET",
+        f"/api/av/forex/{from_currency.upper()}/{to_currency.upper()}",
+    )
+
+
+@mcp.tool()
+def get_crypto_quote(symbol: str, market: str = "USD") -> str:
+    """Fetch a cryptocurrency spot rate from Alpha Vantage.
+
+    `symbol` is a crypto code like ``BTC``, ``ETH``, ``SOL``. `market` is the
+    fiat quote currency (default ``USD``).
+
+    Returns JSON with the spot `rate`, `bid`, `ask`, and `last_refreshed`.
+    Alpha Vantage data — see the free-tier budget note above.
+    """
+    return _request(
+        "GET",
+        f"/api/av/crypto/{symbol.upper()}",
+        params={"market": market.upper()},
+    )
+
+
+@mcp.tool()
+def get_commodity(name: str, interval: str = "monthly") -> str:
+    """Fetch a commodity price/index series from Alpha Vantage.
+
+    `name` is one of ``WTI``, ``BRENT``, ``NATURAL_GAS``, ``COPPER``,
+    ``ALUMINUM``, ``WHEAT``, ``CORN``, ``COTTON``, ``SUGAR``, ``COFFEE``, or
+    ``ALL_COMMODITIES`` (global index). `interval` is ``daily``, ``weekly``,
+    ``monthly``, ``quarterly``, or ``annual`` (not all combos are valid).
+
+    Returns JSON with `name`, `unit`, `interval`, and a `data` list of
+    {date, value} points. Alpha Vantage data — see the free-tier budget note.
+    """
+    return _request(
+        "GET",
+        f"/api/av/commodities/{name.upper()}",
+        params={"interval": interval.lower()},
+    )
+
+
+@mcp.tool()
+def get_insider_transactions(symbol: str, limit: int = 50) -> str:
+    """Fetch recent insider transactions for a US stock from Alpha Vantage.
+
+    `symbol` is a US ticker like ``AAPL``. `limit` caps the number of records.
+
+    Returns JSON with a `transactions` list — each has transaction_date,
+    executive, executive_title, acquisition_or_disposal (``A``=buy/``D``=sell),
+    shares, and share_price. Alpha Vantage data — see the free-tier budget note.
+    """
+    return _request(
+        "GET",
+        f"/api/av/insider/{symbol.upper()}",
+        params={"limit": limit},
+    )
+
+
+@mcp.tool()
+def get_etf_profile(symbol: str) -> str:
+    """Fetch an ETF's profile (holdings + sector weights) from Alpha Vantage.
+
+    `symbol` is an ETF ticker like ``SPY``, ``QQQ``, ``VTI``.
+
+    Returns JSON with net_assets, net_expense_ratio, dividend_yield, a
+    `leveraged` flag, a `sectors` list (sector + weight), and a `holdings` list
+    (symbol + description + weight). Alpha Vantage data — see the budget note.
+    """
+    return _request("GET", f"/api/av/etf-profile/{symbol.upper()}")
+
+
+@mcp.tool()
+def get_earnings_calendar(symbol: str | None = None, horizon: str = "3month") -> str:
+    """Fetch the upcoming earnings calendar from Alpha Vantage.
+
+    `symbol` optionally restricts to one US ticker; omit for the whole market.
+    `horizon` is ``3month``, ``6month``, or ``12month``.
+
+    Returns JSON with an `entries` list — each has symbol, name, report_date,
+    fiscal_date_ending, and an estimate. Alpha Vantage data — see the budget note.
+    """
+    params: dict[str, Any] = {"horizon": horizon}
+    if symbol:
+        params["symbol"] = symbol.upper()
+    return _request("GET", "/api/av/calendar/earnings", params=params)
+
+
+@mcp.tool()
+def get_ipo_calendar() -> str:
+    """Fetch the upcoming IPO calendar from Alpha Vantage.
+
+    Returns JSON with an `entries` list — each has symbol, name, ipo_date,
+    price_range_low/high, currency, and exchange. Alpha Vantage data — see the
+    free-tier budget note above.
+    """
+    return _request("GET", "/api/av/calendar/ipo")
+
+
+@mcp.tool()
+def get_listing_status(state: str = "active", date: str | None = None) -> str:
+    """Fetch the equity listing universe from Alpha Vantage.
+
+    `state` is ``active`` or ``delisted``. `date` optionally requests a
+    historical snapshot (``YYYY-MM-DD``); omit for the current set. Useful for
+    survivorship-bias-free symbol universes. This is a large response.
+
+    Returns JSON with an `entries` list — each has symbol, name, exchange,
+    asset_type, ipo_date, delisting_date, and status. Alpha Vantage data.
+    """
+    params: dict[str, Any] = {"state": state}
+    if date:
+        params["date"] = date
+    return _request("GET", "/api/av/listing-status", params=params)
+
+
+@mcp.tool()
+def get_historical_options(symbol: str, date: str | None = None) -> str:
+    """Fetch a historical options chain (with Greeks) from Alpha Vantage.
+
+    `symbol` is a US ticker like ``AAPL``. `date` is the trade date
+    (``YYYY-MM-DD``, on or after 2008-01-01); omit for the most recent session.
+    Unlike the live `analyze_options`, this returns a full *historical* chain.
+
+    Returns JSON with `symbol`, `date`, and a `chain` of `calls`/`puts` — each
+    contract carries strike, expiration, bid/ask/last, volume, open interest,
+    implied volatility, and Greeks (delta/gamma/theta/vega/rho). Alpha Vantage
+    data — see the free-tier budget note above.
+    """
+    params: dict[str, Any] = {}
+    if date:
+        params["date"] = date
+    return _request(
+        "GET",
+        f"/api/av/historical-options/{symbol.upper()}",
+        params=params or None,
+    )
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

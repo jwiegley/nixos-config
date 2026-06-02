@@ -16,6 +16,11 @@ let
       path ? "/tank/${name}",
       bucket ? name,
       exclude ? [ ],
+      # Per-backup start time, staggered across the call sites below so the nine
+      # restic jobs don't all read the USB-attached tank enclosure at once.
+      # Concurrent multi-bay I/O hung the OWC bridge on 2026-06-02 (see the UAS
+      # quirk in modules/storage/zfs.nix). Heavy datasets (Photos, Video) run last.
+      time ? "02:00:00",
     }:
     {
       "${name}" = {
@@ -26,7 +31,7 @@ let
         passwordFile = "/run/secrets/restic-password";
         environmentFile = "/run/secrets/aws-keys";
         timerConfig = {
-          OnCalendar = "*-*-* 02:00:00"; # Daily at 2AM
+          OnCalendar = "*-*-* ${time}";
           Persistent = true;
         };
         pruneOpts = [
@@ -162,18 +167,24 @@ in
     # via the textfile collector approach (see prometheus-monitoring.nix)
   };
 
+  # Staggered start times (20-min spacing from 02:10) so the nine restic jobs
+  # don't hammer the USB tank enclosure simultaneously. postgresql-backup keeps
+  # 02:00 to itself; the heavy datasets (Photos, Video) run last with extra gaps.
   services.restic.backups = lib.mkMerge [
     (mkBackup {
       name = "Audio";
+      time = "02:10:00";
       exclude = audioExcludes;
     })
     (mkBackup {
       name = "Backups";
       bucket = "Backups-Misc";
+      time = "03:30:00";
       exclude = backupExcludes;
     })
     (mkBackup {
       name = "Databases";
+      time = "02:50:00";
       exclude = [
         "*.dtBase/Backup*"
         "*.zim"
@@ -183,26 +194,32 @@ in
     })
     (mkBackup {
       name = "Home";
+      time = "03:50:00";
       exclude = homeExcludes;
     })
     (mkBackup {
       name = "Photos";
+      time = "04:40:00";
       exclude = photosExcludes;
     })
     (mkBackup {
       name = "Video";
+      time = "05:30:00";
       exclude = videoExcludes;
     })
     (mkBackup {
       name = "doc";
+      time = "02:30:00";
       exclude = [ "*.dtBase/Backup*" ];
     })
     (mkBackup {
       name = "src";
+      time = "03:10:00";
       exclude = sourceExcludes;
     })
     (mkBackup {
       name = "Public";
+      time = "04:10:00";
     })
   ];
 

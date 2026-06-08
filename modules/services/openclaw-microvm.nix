@@ -390,11 +390,11 @@ in
   # We do NOT set networking.useNetworkd = true (that would conflict with NM).
   systemd.network.enable = true;
 
-  # Prevent systemd-networkd-wait-online from timing out.
-  # It waits for ALL networkd-managed interfaces, but our bridge may not have
-  # a carrier until the VM starts. Tell it to only require the bridge to be
-  # "degraded" (has an IP but no carrier) or ignore it entirely.
-  systemd.network.wait-online.anyInterface = true;
+  # NOTE: systemd-networkd-wait-online is disabled host-wide in
+  # modules/core/networking.nix. It deadlocked waiting on this very bridge, which
+  # only gains carrier after the VM boots — and the VM is ordered behind
+  # network-online.target. The old `anyInterface = true` override didn't help
+  # (all networkd-managed candidates are late), so it was removed.
 
   # Bridge netdev
   systemd.network.netdevs."50-${bridgeName}".netdevConfig = {

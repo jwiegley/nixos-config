@@ -139,6 +139,20 @@
     };
   };
 
+  # Disable systemd-networkd-wait-online on this host. networkd exists here ONLY
+  # to build the microVM/container bridges; the real uplinks (end0, wlp1s0f0) are
+  # NetworkManager-owned and networkd-`unmanaged`, so `networkd-wait-online --any`
+  # cannot count them. The only links it *can* count are the microVM bridges/taps
+  # (`configured`, RequiredForOnline=yes by default) — but a bridge gains carrier
+  # only once its VM boots, and the VMs are ordered behind network-online.target.
+  # That self-referential deadlock burns the full 120s --timeout every boot/switch
+  # (verified 2026-06-08: 12:21:57 → 12:23:57). NetworkManager-wait-online is the
+  # sole, correct owner of network-online.target here (gated on the real uplink).
+  # Only cloudflared-tunnel-data hard-Requires= the target (and it self-reconnects);
+  # every other consumer is a soft Wants=. See memory project_vulcan_wait_online_rca
+  # (2026-06-02 11-agent RCA, adversarially verified + re-confirmed live 2026-06-08).
+  systemd.network.wait-online.enable = false;
+
   # Override NetworkManager-wait-online to use `nm-online -x` instead of `-s -q`.
   # `-s` waits for NM's one-shot "startup complete" event, which only fires during
   # initial autoconnect activation. On a `nixos-rebuild switch` the unit gets
@@ -152,6 +166,54 @@
     ""
     "${pkgs.networkmanager}/bin/nm-online -x -q"
   ];
+
+  # ─── TEMPORARY (2026-06-08): NM-wait-online boot-state capture ──────────────
+  # The NM half of the wait-online failure is unvalidated: `nm-online -x -q`
+  # reportedly hangs ~60s at boot, which contradicts `-x` ("exit immediately if
+  # NM is starting up or connecting"). This oneshot logs NM's real state timeline
+  # plus a controlled, timed `nm-online -x -q` over the first ~100s of boot, so
+  # the NEXT natural reboot reveals the true mechanism. It gates nothing (no
+  # Before=), logs no secrets (states + rc codes only). After the next boot:
+  #   journalctl -u nm-boot-state-capture -b 0 -o short-precise | grep NMCAP
+  #   journalctl -u NetworkManager-wait-online -b 0 -o short-precise
+  # then choose the NM fix and DELETE this block. See project_vulcan_wait_online_rca.
+  systemd.services.nm-boot-state-capture = {
+    description = "TEMP: capture NM state during boot (diagnose nm-online -x hang)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "NetworkManager.service" ];
+    wants = [ "NetworkManager.service" ];
+    path = [
+      pkgs.networkmanager
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = 180;
+    };
+    script = ''
+      set +e
+      # Reproduce the wait-online unit's exact call, timed, in the background.
+      (
+        t0=$(date +%s)
+        timeout 90 nm-online -x -q; rcx=$?
+        t1=$(date +%s)
+        echo "NMCAP repro 'nm-online -x -q' rc=$rcx duration=$((t1 - t0))s finished=$(date +%H:%M:%S.%3N)"
+      ) &
+      # State timeline for ~100s.
+      stop=$(( $(date +%s) + 100 ))
+      while [ "$(date +%s)" -lt "$stop" ]; do
+        gen=$(nmcli -t -f STATE,CONNECTIVITY general status 2>/dev/null | tr '\n' ' ')
+        end0=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | grep '^end0:' || true)
+        q=$(nm-online -q -t 1 >/dev/null 2>&1; echo $?)
+        echo "NMCAP $(date +%H:%M:%S.%3N) general=[$gen] end0=[$end0] nm-online_-q_-t1=$q"
+        sleep 2
+      done
+      wait
+      exit 0
+    '';
+  };
+  # ─── end TEMPORARY block ────────────────────────────────────────────────────
 
   # Policy routing for asymmetric routing support
   # Problem: Clients on 192.168.3.x reach 192.168.1.2 via router (arrives on end0),

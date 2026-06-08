@@ -111,7 +111,8 @@ in
 
   # ---- systemd-networkd: bridge + TAP ----
   systemd.network.enable = true;
-  systemd.network.wait-online.anyInterface = lib.mkDefault true;
+  # systemd-networkd-wait-online is disabled host-wide (modules/core/networking.nix);
+  # the old `anyInterface` override here was moot and was removed.
   systemd.network.netdevs."50-${bridgeName}".netdevConfig = {
     Kind = "bridge";
     Name = bridgeName;

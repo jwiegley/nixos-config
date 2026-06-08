@@ -153,67 +153,27 @@
   # (2026-06-02 11-agent RCA, adversarially verified + re-confirmed live 2026-06-08).
   systemd.network.wait-online.enable = false;
 
-  # Override NetworkManager-wait-online to use `nm-online -x` instead of `-s -q`.
-  # `-s` waits for NM's one-shot "startup complete" event, which only fires during
-  # initial autoconnect activation. On a `nixos-rebuild switch` the unit gets
-  # restarted while NM is already in steady-state — no fresh startup-complete
-  # event ever arrives, so nm-online times out at NM_ONLINE_TIMEOUT (60s) and
-  # the unit lands in failed state. `-x` exits as soon as connectivity is
-  # present, working correctly for both fresh boots and hot switches.
+  # NetworkManager-wait-online: upstream default `nm-online -s -q` (wait-for-
+  # startup) with a generous 60s timeout. A previous override used `-x` ("exit
+  # immediately if NM is not running or connecting") on the theory that `-s`
+  # hangs on `nixos-rebuild switch`. Boot capture on 2026-06-08 proved that
+  # theory wrong both ways:
+  #   * `-x` FAST-FAILS at boot — the unit runs while NM is still connecting, so
+  #     `-x` exits rc=1 immediately (measured: failed 62ms after start at
+  #     13:32:23.5 while NM was `disconnected:none`; the link reached
+  #     `connected:full` ~10s later). It was releasing network-online.target
+  #     before the network was up, and logging a failure every boot.
+  #   * `-s -q` does NOT hang on switch — startup is already complete, so it
+  #     returns 0 in ~13ms in steady state (measured 2026-06-08).
+  # `-s -q` waits for startup-complete on boot and returns instantly on switch —
+  # correct for both. -t 60 covers slow boots (end0 has been seen routable ~32s).
   # The leading empty ExecStart= is required for drop-in overrides to replace
   # rather than append to the upstream unit's ExecStart line.
+  # See memory project_vulcan_wait_online_rca.
   systemd.services.NetworkManager-wait-online.serviceConfig.ExecStart = lib.mkForce [
     ""
-    "${pkgs.networkmanager}/bin/nm-online -x -q"
+    "${pkgs.networkmanager}/bin/nm-online -s -q -t 60"
   ];
-
-  # ─── TEMPORARY (2026-06-08): NM-wait-online boot-state capture ──────────────
-  # The NM half of the wait-online failure is unvalidated: `nm-online -x -q`
-  # reportedly hangs ~60s at boot, which contradicts `-x` ("exit immediately if
-  # NM is starting up or connecting"). This oneshot logs NM's real state timeline
-  # plus a controlled, timed `nm-online -x -q` over the first ~100s of boot, so
-  # the NEXT natural reboot reveals the true mechanism. It gates nothing (no
-  # Before=), logs no secrets (states + rc codes only). After the next boot:
-  #   journalctl -u nm-boot-state-capture -b 0 -o short-precise | grep NMCAP
-  #   journalctl -u NetworkManager-wait-online -b 0 -o short-precise
-  # then choose the NM fix and DELETE this block. See project_vulcan_wait_online_rca.
-  systemd.services.nm-boot-state-capture = {
-    description = "TEMP: capture NM state during boot (diagnose nm-online -x hang)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "NetworkManager.service" ];
-    wants = [ "NetworkManager.service" ];
-    path = [
-      pkgs.networkmanager
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      TimeoutStartSec = 180;
-    };
-    script = ''
-      set +e
-      # Reproduce the wait-online unit's exact call, timed, in the background.
-      (
-        t0=$(date +%s)
-        timeout 90 nm-online -x -q; rcx=$?
-        t1=$(date +%s)
-        echo "NMCAP repro 'nm-online -x -q' rc=$rcx duration=$((t1 - t0))s finished=$(date +%H:%M:%S.%3N)"
-      ) &
-      # State timeline for ~100s.
-      stop=$(( $(date +%s) + 100 ))
-      while [ "$(date +%s)" -lt "$stop" ]; do
-        gen=$(nmcli -t -f STATE,CONNECTIVITY general status 2>/dev/null | tr '\n' ' ')
-        end0=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | grep '^end0:' || true)
-        q=$(nm-online -q -t 1 >/dev/null 2>&1; echo $?)
-        echo "NMCAP $(date +%H:%M:%S.%3N) general=[$gen] end0=[$end0] nm-online_-q_-t1=$q"
-        sleep 2
-      done
-      wait
-      exit 0
-    '';
-  };
-  # ─── end TEMPORARY block ────────────────────────────────────────────────────
 
   # Policy routing for asymmetric routing support
   # Problem: Clients on 192.168.3.x reach 192.168.1.2 via router (arrives on end0),

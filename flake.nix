@@ -49,7 +49,15 @@
     };
 
     hermes-agent = {
-      url = "github:NousResearch/hermes-agent";
+      # Pinned to c47b9d12 (2026-06-02). Later revs (c3055d61, fd1e7c2b, HEAD)
+      # refactored npm packaging to a single shared npmDepsHash in nix/lib.nix
+      # that is x86_64-only: the lockfile carries per-arch esbuild/rollup native
+      # deps and prefetch-npm-deps hashes only the build platform's set. Upstream
+      # CI runs x86_64, so they ship sha256-cY+gM1FnTBjmld...; this aarch64 host
+      # computes sha256-hgnqcpKRPztHhDEpwC7HJrALuJp9wsrV4+GJ6t6HI2c=, breaking
+      # hermes-tui's fixed-output npm-deps. Unpin once upstream makes the
+      # npm-deps hash architecture-independent (or recomputes per-system).
+      url = "github:NousResearch/hermes-agent/c47b9d126f2f820f41059813a2c5b16ea4742bf8";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

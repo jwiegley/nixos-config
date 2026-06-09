@@ -51,7 +51,7 @@ groups:
       # Snapshot health - ensure daily backups are running
       - alert: PrometheusSnapshotStale
         expr: |
-          (time() - systemd_timer_last_trigger_seconds{name="prometheus-snapshot.timer"}) > 172800
+          (time() - node_systemd_timer_last_trigger_seconds{name="prometheus-snapshot.timer"}) > 172800
         for: 1h
         labels:
           severity: warning

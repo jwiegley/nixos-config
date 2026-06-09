@@ -16,7 +16,7 @@ groups:
 
       # Connection limits
       - alert: CopypartyHighConnections
-        expr: cpp_connections > 50
+        expr: cpp_http_conns > 50
         for: 15m
         labels:
           severity: warning
@@ -28,7 +28,7 @@ groups:
 
       # Ban activity monitoring
       - alert: CopypartyFrequentBans
-        expr: increase(cpp_bans[1h]) > 10
+        expr: increase(cpp_total_bans[1h]) > 10
         for: 5m
         labels:
           severity: warning
@@ -52,7 +52,7 @@ groups:
 
       # Volume availability
       - alert: CopypartyVolumeUnavailable
-        expr: cpp_volumes == 0
+        expr: (cpp_idle_vols + cpp_busy_vols) == 0
         for: 5m
         labels:
           severity: critical
@@ -79,7 +79,7 @@ groups:
 
       # Authentication failures (if metric exists)
       - alert: CopypartyAuthFailures
-        expr: increase(cpp_auth_failures[15m]) > 20
+        expr: increase(cpp_total_bans[15m]) > 0
         for: 5m
         labels:
           severity: warning

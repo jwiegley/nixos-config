@@ -21,11 +21,7 @@ groups:
 
       - alert: VaneServiceFailed
         expr: |
-          systemd_unit_state{
-            name="vane.service",
-            state="failed",
-            type="service"
-          } == 1
+          node_systemd_unit_state{name="home-manager-vane.service",state="failed"} == 1
         for: 1m
         labels:
           severity: critical

@@ -70,7 +70,7 @@ groups:
             Verify PostgreSQL: psql -U mailarchiver -d mailarchiver -c "SELECT 1;"
 
       - alert: MailArchiverDatabaseConnectionFailed
-        expr: probe_success{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} == 0 and node_systemd_unit_state{name="mailarchiver.service",state="active"} == 1
+        expr: probe_success{job="blackbox_https_local",instance="https://mailarchiver.vulcan.lan"} == 0
         for: 5m
         labels:
           severity: critical

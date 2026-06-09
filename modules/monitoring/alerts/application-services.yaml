@@ -16,10 +16,9 @@ groups:
 
       - alert: NodeRedServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="node-red.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -55,10 +54,9 @@ groups:
 
       - alert: VdirsyncerServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="vdirsyncer.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -71,10 +69,9 @@ groups:
 
       - alert: VdirsyncerStatusDashboardDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="vdirsyncer-status.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 5m
         labels:
@@ -88,10 +85,9 @@ groups:
       # Mosquitto MQTT Broker Alerts
       - alert: MosquittoServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="mosquitto.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -104,10 +100,9 @@ groups:
 
       - alert: MosquittoServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="mosquitto.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -121,10 +116,9 @@ groups:
       # Samba File Sharing Alerts
       - alert: SambaSMBDDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="samba-smbd.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -137,10 +131,9 @@ groups:
 
       - alert: SambaNMBDDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="samba-nmbd.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -153,10 +146,9 @@ groups:
 
       - alert: SambaWinbindDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="samba-winbindd.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -170,10 +162,9 @@ groups:
       # Radicale CalDAV/CardDAV Alerts
       - alert: RadicaleServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="radicale.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -186,10 +177,9 @@ groups:
 
       - alert: RadicaleServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="radicale.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -203,10 +193,9 @@ groups:
       # Glance Dashboard Alerts
       - alert: GlanceServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="glance.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 5m
         labels:
@@ -219,10 +208,9 @@ groups:
 
       - alert: GlanceGitHubExtensionDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="glance-github-extension.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 5m
         labels:
@@ -236,10 +224,9 @@ groups:
       # Glances System Monitoring Alerts
       - alert: GlancesServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="glances.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 5m
         labels:
@@ -253,10 +240,9 @@ groups:
       # Cockpit Web Console Alerts
       - alert: CockpitServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="cockpit.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 5m
         labels:

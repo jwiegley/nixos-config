@@ -4,29 +4,29 @@ groups:
     rules:
       # Alert for certificate expiration
       - alert: CertificateExpiringSoon
-        expr: (x509_cert_expiry - time()) / 86400 < 30
+        expr: certificate_days_until_expiry < 30
         for: 1h
         labels:
           severity: warning
           component: certificates
         annotations:
-          summary: "Certificate expiring soon for {{ $labels.subject_CN }}"
-          description: "Certificate {{ $labels.subject_CN }} will expire in {{ $value }} days"
+          summary: "Certificate expiring soon for {{ $labels.name }}"
+          description: "Certificate {{ $labels.name }} will expire in {{ $value }} days"
 
       # Alert for certificate already expired
       - alert: CertificateExpired
-        expr: x509_cert_expiry - time() <= 0
+        expr: certificate_days_until_expiry <= 0
         for: 1m
         labels:
           severity: critical
           component: certificates
         annotations:
-          summary: "Certificate expired for {{ $labels.subject_CN }}"
-          description: "Certificate {{ $labels.subject_CN }} has expired"
+          summary: "Certificate expired for {{ $labels.name }}"
+          description: "Certificate {{ $labels.name }} has expired"
 
       # Alert for Step-CA service down
       - alert: StepCADown
-        expr: systemd_unit_state{name="step-ca.service",state="active"} != 1
+        expr: node_systemd_unit_state{name="step-ca.service",state="active"} != 1
         for: 5m
         labels:
           severity: critical

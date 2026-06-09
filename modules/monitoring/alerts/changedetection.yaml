@@ -53,7 +53,7 @@ groups:
             Check fetch worker count: podman exec --user changedetection changedetection env | grep FETCH_WORKERS
 
       - alert: ChangeDetectionContainerRestarts
-        expr: rate(systemd_unit_state{name="changedetection.service",state="failed"}[15m]) > 0
+        expr: rate(node_systemd_unit_state{name="home-manager-changedetection.service",state="failed"}[15m]) > 0
         for: 5m
         labels:
           severity: warning

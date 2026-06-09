@@ -28,7 +28,7 @@ groups:
       # Snapshot health - ensure daily backups are running
       - alert: VictoriaMetricsSnapshotStale
         expr: |
-          (time() - systemd_timer_last_trigger_seconds{name="victoriametrics-snapshot.timer"}) > 172800
+          (time() - node_systemd_timer_last_trigger_seconds{name="victoriametrics-snapshot.timer"}) > 172800
         for: 1h
         labels:
           severity: warning
@@ -40,7 +40,7 @@ groups:
       # Service health
       - alert: VictoriaMetricsDown
         expr: |
-          up{job="victoriametrics"} == 0
+          node_systemd_unit_state{name="victoriametrics.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical

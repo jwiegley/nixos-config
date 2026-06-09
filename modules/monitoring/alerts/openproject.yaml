@@ -61,7 +61,7 @@ groups:
       # Database connection issues
       - alert: OpenProjectDatabaseErrors
         expr: |
-          increase(rails_active_record_connection_pool_errors_total{job="openproject"}[5m]) > 5
+          activerecord_connection_pool_waiting{job="openproject"} > 0
         for: 5m
         labels:
           severity: critical

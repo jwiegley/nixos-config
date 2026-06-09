@@ -27,8 +27,8 @@ groups:
       # High HTTP error rate
       - alert: ImmichHighHTTPErrorRate
         expr: |
-          rate(http_request_duration_seconds_count{job=~"immich.*",code=~"5.."}[5m]) /
-          rate(http_request_duration_seconds_count{job=~"immich.*"}[5m]) > 0.05
+          rate(http_server_duration_count{job=~"immich.*",status=~"5.."}[5m]) /
+          rate(http_server_duration_count{job=~"immich.*"}[5m]) > 0.05
         for: 5m
         labels:
           severity: warning
@@ -41,8 +41,8 @@ groups:
       - alert: ImmichSlowResponse
         expr: |
           histogram_quantile(0.95,
-            rate(http_request_duration_seconds_bucket{job=~"immich.*"}[5m])
-          ) > 10
+            rate(http_server_duration_bucket{job=~"immich.*"}[5m])
+          ) > 10000
         for: 10m
         labels:
           severity: warning
@@ -54,7 +54,7 @@ groups:
       # High memory usage (API)
       - alert: ImmichAPIHighMemoryUsage
         expr: |
-          process_resident_memory_bytes{job="immich-api"} > 2147483648
+          max without(otel_scope_name, otel_scope_version) (process_memory_usage{job="immich-api"}) > 2147483648
         for: 10m
         labels:
           severity: warning
@@ -66,7 +66,7 @@ groups:
       # High memory usage (Microservices)
       - alert: ImmichMicroservicesHighMemoryUsage
         expr: |
-          process_resident_memory_bytes{job="immich-microservices"} > 4294967296
+          process_memory_usage{job="immich-microservices"} > 4294967296
         for: 10m
         labels:
           severity: warning
@@ -90,7 +90,7 @@ groups:
       # Failed jobs accumulating
       - alert: ImmichJobFailures
         expr: |
-          increase(immich_jobs_failed_total[1h]) > 100
+          sum by (instance) (increase({__name__=~"immich_jobs_.*_failed_total"}[1h])) > 100
         for: 15m
         labels:
           severity: warning
@@ -103,8 +103,8 @@ groups:
       - alert: ImmichMLServiceSlow
         expr: |
           histogram_quantile(0.95,
-            rate(immich_ml_request_duration_seconds_bucket[5m])
-          ) > 30
+            rate(immich_machine_learning_repository_predict_duration_bucket[5m])
+          ) > 30000
         for: 15m
         labels:
           severity: warning
@@ -128,8 +128,8 @@ groups:
       # Storage space warning
       - alert: ImmichStorageSpaceLow
         expr: |
-          (node_filesystem_avail_bytes{mountpoint="/tank/Photos/Immich"} /
-           node_filesystem_size_bytes{mountpoint="/tank/Photos/Immich"}) * 100 < 10
+          (node_filesystem_avail_bytes{mountpoint="/tank/Photos"} /
+           node_filesystem_size_bytes{mountpoint="/tank/Photos"}) * 100 < 10
         for: 30m
         labels:
           severity: warning

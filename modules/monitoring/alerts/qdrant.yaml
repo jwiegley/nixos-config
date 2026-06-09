@@ -16,10 +16,9 @@ groups:
 
       - alert: QdrantServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="qdrant.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:

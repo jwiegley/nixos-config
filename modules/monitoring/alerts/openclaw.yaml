@@ -76,7 +76,7 @@ groups:
           and openclaw_gateway_ready_timestamp_seconds
               < openclaw_microvm_active_enter_timestamp_seconds
           and on()
-          (systemd_unit_state{name="microvm@openclaw.service", state="active"} == 1)
+          (node_systemd_unit_state{name="microvm@openclaw.service", state="active"} == 1)
         for: 10m
         labels:
           severity: critical
@@ -93,10 +93,9 @@ groups:
       # The microVM systemd unit entered failed state.
       - alert: OpenClawMicroVMDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="microvm@openclaw.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 2m
         labels:

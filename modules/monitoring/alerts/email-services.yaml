@@ -26,7 +26,7 @@ groups:
           description: "Dovecot has {{ $value }} active connections (threshold: 100). May indicate connection leak or attack."
 
       - alert: DovecotAuthenticationFailures
-        expr: rate(dovecot_auth_failures_total[5m]) > 5
+        expr: sum(rate(dovecot_user_auth_failures[5m])) > 5
         for: 5m
         labels:
           severity: warning
@@ -49,7 +49,7 @@ groups:
           description: "Postfix mail server exporter has been unreachable for more than 2 minutes. Mail delivery may be affected."
 
       - alert: PostfixMailQueueHigh
-        expr: postfix_queue_size > 100
+        expr: sum(postfix_showq_queue_depth) > 100
         for: 10m
         labels:
           severity: warning
@@ -60,7 +60,7 @@ groups:
           description: "Postfix has {{ $value }} messages in queue (threshold: 100). Mail delivery may be delayed."
 
       - alert: PostfixMailQueueCritical
-        expr: postfix_queue_size > 500
+        expr: sum(postfix_showq_queue_depth) > 500
         for: 5m
         labels:
           severity: critical
@@ -71,7 +71,7 @@ groups:
           description: "Postfix has {{ $value }} messages in queue (threshold: 500). Immediate attention required."
 
       - alert: PostfixBouncesHigh
-        expr: rate(postfix_bounces_total[15m]) > 0.1
+        expr: rate(postfix_bounce_non_delivery_notification_total[15m]) > 0.1
         for: 10m
         labels:
           severity: warning
@@ -82,7 +82,7 @@ groups:
           description: "Postfix is experiencing {{ $value | humanizePercentage }} bounce rate over the last 15 minutes."
 
       - alert: PostfixDeferralsHigh
-        expr: rate(postfix_deferrals_total[15m]) > 0.2
+        expr: rate(postfix_smtp_deferred_messages_total[15m]) > 0.2
         for: 10m
         labels:
           severity: warning
@@ -93,7 +93,7 @@ groups:
           description: "Postfix is deferring {{ $value | humanizePercentage }} of outbound messages. Check connectivity to remote servers."
 
       - alert: PostfixRejectsHigh
-        expr: rate(postfix_rejects_total[15m]) > 1
+        expr: rate(postfix_cleanup_messages_rejected_total[15m]) > 1
         for: 10m
         labels:
           severity: warning
@@ -106,10 +106,9 @@ groups:
       # Rspamd Spam Filter Alerts
       - alert: RspamdServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="rspamd.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -122,10 +121,9 @@ groups:
 
       - alert: RspamdServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="rspamd.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -151,10 +149,9 @@ groups:
 
       - alert: DovecotServiceFailed
         expr: |
-          systemd_unit_state{
-            name="dovecot2.service",
-            state="failed",
-            type="service"
+          node_systemd_unit_state{
+            name="dovecot.service",
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -167,10 +164,9 @@ groups:
 
       - alert: DovecotServiceInactive
         expr: |
-          systemd_unit_state{
-            name="dovecot2.service",
-            state="active",
-            type="service"
+          node_systemd_unit_state{
+            name="dovecot.service",
+            state="active"
           } == 0
         for: 2m
         labels:
@@ -224,10 +220,9 @@ groups:
 
       - alert: PostfixServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="postfix.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -240,10 +235,9 @@ groups:
 
       - alert: PostfixServiceInactive
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name="postfix.service",
-            state="active",
-            type="service"
+            state="active"
           } == 0
         for: 2m
         labels:

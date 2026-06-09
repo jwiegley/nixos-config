@@ -26,7 +26,7 @@ groups:
           description: "Pool {{ $labels.pool }} has accumulated read or checksum errors on a device, indicating hardware degradation."
 
       - alert: ZFSPoolDegraded
-        expr: node_zfs_zpool_health{state!="online"} > 0
+        expr: node_zfs_zpool_state{state!="online"} == 1
         for: 1m
         labels:
           severity: critical
@@ -34,10 +34,10 @@ groups:
           service: zfs
         annotations:
           summary: "ZFS pool degraded on {{ $labels.instance }}"
-          description: "ZFS pool {{ $labels.pool }} is in {{ $labels.state }} state"
+          description: "ZFS pool {{ $labels.zpool }} is in {{ $labels.state }} state"
 
       - alert: ZFSPoolCapacityHigh
-        expr: node_zfs_zpool_capacity > 80
+        expr: (zfs_pool_allocated_bytes / zfs_pool_size_bytes) * 100 > 80
         for: 5m
         labels:
           severity: warning
@@ -48,7 +48,7 @@ groups:
           description: "ZFS pool {{ $labels.pool }} is at {{ $value }}% capacity"
 
       - alert: ZFSPoolCapacityCritical
-        expr: node_zfs_zpool_capacity > 90
+        expr: (zfs_pool_allocated_bytes / zfs_pool_size_bytes) * 100 > 90
         for: 1m
         labels:
           severity: critical

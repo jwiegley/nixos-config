@@ -16,10 +16,9 @@ groups:
       # Critical services that should always be running
       - alert: CriticalServiceInactive
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name=~"(sshd|postgresql|nginx|prometheus|tailscaled|step-ca|docker)\\.service",
-            state="inactive",
-            type="service"
+            state="inactive"
           } == 1
         for: 2m
         labels:
@@ -31,7 +30,7 @@ groups:
 
       # Service restart detection - high restart count
       - alert: ServiceRestartingFrequently
-        expr: rate(systemd_unit_state{state="activating",type="service"}[15m]) > 0.1
+        expr: rate(node_systemd_unit_state{state="activating",name=~".*\\.service"}[15m]) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -43,7 +42,7 @@ groups:
       # Services in activating state for too long
       # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes), local-backup (can take up to 10 minutes)
       - alert: ServiceStuckActivating
-        expr: systemd_unit_state{state="activating",type="service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service",name!="local-backup.service"} == 1
+        expr: node_systemd_unit_state{state="activating",name=~".*\\.service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service",name!="local-backup.service"} == 1
         for: 15m
         labels:
           severity: warning
@@ -54,7 +53,7 @@ groups:
 
       # Services in deactivating state for too long
       - alert: ServiceStuckDeactivating
-        expr: systemd_unit_state{state="deactivating",type="service"} == 1
+        expr: node_systemd_unit_state{state="deactivating",name=~".*\\.service"} == 1
         for: 5m
         labels:
           severity: warning
@@ -66,10 +65,10 @@ groups:
       # Monitoring services specifically
       - alert: MonitoringServiceDown
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name=~"prometheus.*\\.service",
             state="active",
-            type="service"
+            type!="oneshot"
           } == 0
         for: 1m
         labels:
@@ -82,10 +81,9 @@ groups:
       # Backup services
       - alert: BackupServiceFailed
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name=~"restic-backups-.*\\.service",
-            state="failed",
-            type="service"
+            state="failed"
           } == 1
         for: 1m
         labels:
@@ -98,10 +96,9 @@ groups:
       # Timer units not active (backup timers, etc.)
       - alert: ImportantTimerInactive
         expr: |
-          systemd_unit_state{
+          node_systemd_unit_state{
             name=~"restic-backups-.*\\.timer",
-            state="active",
-            type="timer"
+            state="active"
           } == 0
         for: 5m
         labels:
@@ -129,12 +126,7 @@ groups:
 
       # Network services
       - alert: NetworkServiceDown
-        expr: |
-          systemd_unit_state{
-            name=~"(NetworkManager|tailscaled|nebula@.*)\\.service",
-            state="active",
-            type="service"
-          } == 0
+        expr: node_systemd_unit_state{name="NetworkManager.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical
@@ -145,12 +137,7 @@ groups:
 
       # Database services
       - alert: DatabaseServiceDown
-        expr: |
-          systemd_unit_state{
-            name=~"postgresql\\.service",
-            state="active",
-            type="service"
-          } == 0
+        expr: node_systemd_unit_state{name="postgresql.service",state="active"} == 0
         for: 1m
         labels:
           severity: critical
@@ -161,12 +148,7 @@ groups:
 
       # Certificate authority service
       - alert: CertificateAuthorityDown
-        expr: |
-          systemd_unit_state{
-            name="step-ca.service",
-            state="active",
-            type="service"
-          } == 0
+        expr: node_systemd_unit_state{name="step-ca.service",state="active"} == 0
         for: 2m
         labels:
           severity: critical

@@ -14,17 +14,6 @@ groups:
           summary: "Dovecot IMAP server is down"
           description: "Dovecot IMAP server has been unreachable for more than 2 minutes. Email access is unavailable."
 
-      - alert: DovecotHighConnectionCount
-        expr: dovecot_up_connections > 100
-        for: 5m
-        labels:
-          severity: warning
-          category: email
-          service: dovecot
-        annotations:
-          summary: "Dovecot has high connection count"
-          description: "Dovecot has {{ $value }} active connections (threshold: 100). May indicate connection leak or attack."
-
       - alert: DovecotAuthenticationFailures
         expr: sum(rate(dovecot_user_auth_failures[5m])) > 5
         for: 5m

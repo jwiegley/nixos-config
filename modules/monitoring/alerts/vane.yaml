@@ -5,11 +5,7 @@ groups:
       # Vane Container Service Alerts
       - alert: VaneServiceDown
         expr: |
-          systemd_unit_state{
-            name="vane.service",
-            state="active",
-            type="service"
-          } == 0
+          probe_success{job="blackbox_https_local",instance="https://vane.vulcan.lan"} == 0
         for: 3m
         labels:
           severity: critical

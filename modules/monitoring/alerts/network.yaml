@@ -52,7 +52,7 @@ groups:
 
       # Local network connectivity issues
       - alert: LocalNetworkIssue
-        expr: probe_success{job="blackbox_icmp",host_group="local"} == 0
+        expr: probe_success{job="blackbox_icmp",instance=~".+\\.lan"} == 0
         for: 3m
         labels:
           severity: warning

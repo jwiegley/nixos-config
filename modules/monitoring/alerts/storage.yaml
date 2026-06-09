@@ -69,17 +69,6 @@ groups:
           summary: "ZFS pool {{ $labels.pool }} has less than 500GB free"
           description: "Pool {{ $labels.pool }} has {{ $value | humanize1024 }}B available"
 
-      - alert: ZFSSnapshotAgeTooOld
-        expr: (time() - node_zfs_snapshot_timestamp) > 86400
-        for: 5m
-        labels:
-          severity: warning
-          category: storage
-          service: zfs
-        annotations:
-          summary: "ZFS snapshot is too old"
-          description: "ZFS snapshot {{ $labels.snapshot }} is older than 24 hours"
-
       # Backup alerts - Restic repository checks
       - alert: ResticCheckFailed
         expr: restic_check_success{repository!=""} == 0

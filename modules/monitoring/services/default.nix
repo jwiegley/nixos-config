@@ -13,6 +13,7 @@
     # Core monitoring infrastructure
     ./prometheus-server.nix
     ./victoriametrics.nix
+    ./self-scrape.nix # Prometheus + VictoriaMetrics self-monitoring scrape jobs
     ./alerting.nix # Auto-discovers alert rules from alerts/
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 

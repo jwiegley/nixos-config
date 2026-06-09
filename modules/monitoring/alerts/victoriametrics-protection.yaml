@@ -5,7 +5,7 @@ groups:
       # Memory monitoring
       - alert: VictoriaMetricsHighMemoryUsage
         expr: |
-          process_resident_memory_bytes{job="victoriametrics"} / 1024 / 1024 / 1024 > 2
+          process_resident_memory_bytes{job="victoriametrics"} / vm_allowed_memory_bytes{job="victoriametrics"} > 0.9
         for: 10m
         labels:
           severity: warning
@@ -16,7 +16,7 @@ groups:
 
       - alert: VictoriaMetricsApproachingOOMLimit
         expr: |
-          process_resident_memory_bytes{job="victoriametrics"} / 1024 / 1024 / 1024 > 2.3
+          vm_available_memory_bytes{job="victoriametrics"} / vm_allowed_memory_bytes{job="victoriametrics"} < 0.1
         for: 5m
         labels:
           severity: critical

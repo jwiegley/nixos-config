@@ -78,7 +78,7 @@ groups:
       # Job queue backing up
       - alert: ImmichJobQueueBacklog
         expr: |
-          immich_jobs_pending > 1000
+          sum by (instance) ({__name__=~"immich_queues_.+_active"}) > 50
         for: 30m
         labels:
           severity: warning
@@ -112,18 +112,6 @@ groups:
         annotations:
           summary: "Immich ML service is slow"
           description: "Immich ML 95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
-
-      # Database connection issues
-      - alert: ImmichDatabaseConnectionIssues
-        expr: |
-          immich_database_connection_errors_total > 0
-        for: 5m
-        labels:
-          severity: critical
-          service: immich
-        annotations:
-          summary: "Immich has database connection errors"
-          description: "Immich has {{ $value }} database connection errors on {{ $labels.instance }}"
 
       # Storage space warning
       - alert: ImmichStorageSpaceLow

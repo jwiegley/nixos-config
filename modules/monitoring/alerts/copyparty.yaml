@@ -62,21 +62,6 @@ groups:
           description: "Copyparty is not serving any volumes. Configuration or mount issue."
           action: "Check /tank/Public mount and copyparty configuration"
 
-      # High memory usage (if approaching limit)
-      - alert: CopypartyHighMemory
-        expr: |
-          (
-            process_resident_memory_bytes{job="copyparty"} / 1073741824 > 1.5
-          )
-        for: 10m
-        labels:
-          severity: warning
-          service: copyparty
-        annotations:
-          summary: "Copyparty memory usage high"
-          description: "Copyparty is using {{ $value | humanize }}GB of memory (limit: 2GB)."
-          action: "Monitor for memory leaks or consider adjusting resource limits"
-
       # Authentication failures (if metric exists)
       - alert: CopypartyAuthFailures
         expr: increase(cpp_total_bans[15m]) > 0

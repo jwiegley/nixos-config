@@ -92,14 +92,25 @@ def build_import_payload(
     by :func:`import_statistics` (it owns message ordering); this helper
     returns the type-specific body only.
     """
+    # HA validates `source` against the statistic_id: an EXTERNAL statistic
+    # (id contains a `:`, e.g. "flume_data:water_pool_autofill_total") MUST set
+    # source to the prefix before the colon; a recorder statistic (a "sensor.*"
+    # id, no colon) MUST use "recorder". Hardcoding "recorder" for the external
+    # backfill id made HA silently reject every import.
+    source = statistic_id.split(":", 1)[0] if ":" in statistic_id else "recorder"
+    # recorder/import_statistics nests the descriptor under `metadata`; the
+    # earlier flat layout was rejected by HA ("extra keys not allowed ...
+    # required key not provided @ data['metadata']").
     return {
         "type": "recorder/import_statistics",
-        "statistic_id": statistic_id,
-        "name": name,
-        "source": "recorder",
-        "unit_of_measurement": unit_of_measurement,
-        "has_sum": True,
-        "has_mean": False,
+        "metadata": {
+            "has_mean": False,
+            "has_sum": True,
+            "name": name,
+            "source": source,
+            "statistic_id": statistic_id,
+            "unit_of_measurement": unit_of_measurement,
+        },
         "stats": [
             {
                 "start": p.start.isoformat(),
@@ -130,6 +141,12 @@ def import_statistics(
             statistic_id, name, unit_of_measurement, points
         )
         ws.send(json.dumps({**msg, "id": 1}))
-        return json.loads(ws.recv())
+        ack = json.loads(ws.recv())
+        # HA acks every command with {"success": bool}. The backfill used to
+        # ignore this and print "imported" even when HA rejected the payload
+        # (e.g. a wrong `source`), so failures were silent. Fail loud instead.
+        if not ack.get("success", False):
+            raise RuntimeError(f"HA import_statistics rejected: {ack.get('error')}")
+        return ack
     finally:
         ws.close()

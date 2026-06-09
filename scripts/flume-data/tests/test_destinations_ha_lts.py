@@ -36,16 +36,26 @@ def test_build_import_payload_shapes_message_correctly():
         points=points,
     )
     assert payload["type"] == "recorder/import_statistics"
-    assert payload["statistic_id"] == "flume_data:water_pool_autofill_total"
-    assert payload["has_sum"] is True
-    assert payload["has_mean"] is False
-    assert payload["unit_of_measurement"] == "gal"
-    assert payload["source"] == "recorder"
+    # The descriptor is nested under `metadata` (HA rejects a flat layout).
+    md = payload["metadata"]
+    assert md["statistic_id"] == "flume_data:water_pool_autofill_total"
+    assert md["has_sum"] is True
+    assert md["has_mean"] is False
+    assert md["unit_of_measurement"] == "gal"
+    # External statistic (id has a colon) -> source is the colon prefix, NOT
+    # "recorder"; HA rejects the import otherwise. Both the flat layout and
+    # source="recorder" previously encoded the silent-rejection bug.
+    assert md["source"] == "flume_data"
     assert len(payload["stats"]) == 2
     assert payload["stats"][0]["sum"] == 100.0
     assert payload["stats"][1]["sum"] == 125.0
     # Hour-aligned ISO timestamps round-trip without loss.
     assert payload["stats"][0]["start"].startswith("2026-05-15T00:00:00")
+    # A recorder statistic (no colon in the id) keeps source="recorder".
+    rec = build_import_payload(
+        "sensor.water_pool_autofill_total", "x", "gal", points
+    )
+    assert rec["metadata"]["source"] == "recorder"
 
 
 class _FakeWebSocket:

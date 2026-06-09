@@ -1685,7 +1685,9 @@ The module consumes it via `sops.secrets."drafts/hera-ssh-private-key"` (§5) �
 
 ### 10.3 CREATE — `/Users/johnw/src/promptdeploy/mcp/drafts-hera.yaml`
 
-`name: drafts-hera` (≠ `drafts`, passes the dedup gate); `only: [claude-vulcan]` (host operator, full toolset). ssh args are the **hardened superset** of the design snippet (adds `-T` + `ConnectTimeout`/`ServerAlive*` to match the locked ssh-hardening string).
+`name: drafts-hera` (≠ `drafts`, passes the dedup gate); `only: [claude-vulcan]` (host operator, full toolset). ssh args add `-T` + `ConnectTimeout`/`ServerAlive*`.
+
+> **Correction (2026-06-09, verified):** `IdentitiesOnly=yes` is **OMITTED** for this operator path (an earlier draft included it). vulcan's `~/.ssh/config` pins `IdentityFile id_vulcan` under `Host *`, and hera does **not** authorize `id_vulcan`; with `IdentitiesOnly=yes` ssh offers only that key and fails `Permission denied`. Without it, ssh uses johnw's agent/default key (authorized on hera) and succeeds — confirmed end-to-end (vulcan→hera→`drafts-mcp-server`→`drafts_get_drafts`, no `-1743`). `IdentitiesOnly=yes` + a dedicated `-i` key belongs to the **bridge service** (§5) only, never this operator path.
 
 ```yaml
 name: drafts-hera
@@ -1695,8 +1697,6 @@ args:
   - "-T"
   - "-o"
   - "BatchMode=yes"
-  - "-o"
-  - "IdentitiesOnly=yes"
   - "-o"
   - "StrictHostKeyChecking=yes"
   - "-o"

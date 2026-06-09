@@ -50,16 +50,21 @@ groups:
           description: "VictoriaMetrics service is not responding. Home Assistant metrics are not being collected."
 
       # Storage health
+      # A steady low rate of slow inserts is NORMAL on this host (~0.18/s baseline
+      # from continuous HA ingestion — index cache churn, not a problem). Only a
+      # sustained HIGH rate signals the working set exceeding RAM (insert hot path
+      # spilling), so the threshold is 10/s (~55x baseline), not >0. (Tuned 2026-06-09
+      # when the rule was revived by adding the victoriametrics self-scrape.)
       - alert: VictoriaMetricsSlowInserts
         expr: |
-          rate(vm_slow_row_inserts_total[5m]) > 0
+          rate(vm_slow_row_inserts_total[5m]) > 10
         for: 10m
         labels:
           severity: warning
           category: monitoring
         annotations:
           summary: "VictoriaMetrics experiencing slow inserts"
-          description: "VictoriaMetrics is experiencing slow row inserts ({{ $value | printf \"%.2f\" }}/s). This may indicate storage or memory pressure."
+          description: "VictoriaMetrics slow row insert rate is {{ $value | printf \"%.2f\" }}/s (threshold 10/s). The index cache likely no longer fits in RAM; consider raising -memory.allowedPercent or adding RAM."
 
       - alert: VictoriaMetricsTooManyTimeSeries
         expr: |

@@ -86,12 +86,14 @@ def test_build_category_comparisons_pulls_ha_total_from_vm():
     assert comps[0].category == "pool_autofill"
     assert comps[0].ha_total_gal == pytest.approx(105.5)
     assert comps[0].phase2_total_gal == pytest.approx(110.0)
-    # Sanity: VM was queried for the weekly utility-meter sensor.
-    args, _kwargs = vm.query_range.call_args[:2] if False else (None, None)
+    # Sanity: VM was queried for the weekly utility-meter sensor, with the
+    # `sensor.` domain prefix stripped (VM stores it as a separate label) and
+    # pinned to the numeric value series.
     call = vm.query_range.call_args
-    assert "sensor.water_pool_autofill_weekly" in call.kwargs.get(
-        "metric", ""
-    )
+    metric = call.kwargs.get("metric", "")
+    assert 'entity_id="water_pool_autofill_weekly"' in metric
+    assert "sensor.water_pool_autofill_weekly" not in metric
+    assert '__name__=~".+_value"' in metric
 
 
 def test_build_category_comparisons_returns_zero_on_vm_failure():
@@ -171,8 +173,9 @@ def test_cross_check_run_writes_summary_max_delta(tmp_path, monkeypatch):
         return flume_series
 
     def vm_query_range(metric, start, end, step="60s"):
-        # All HA-tally lookups return a fixed value.
-        if "sensor.water_pool_autofill_weekly" in metric:
+        # All HA-tally lookups return a fixed value. The cross-check now
+        # strips the `sensor.` domain prefix before querying VM.
+        if "water_pool_autofill_weekly" in metric:
             return [(end, 42.0)]
         # Everything else (daily breakdown, etc.) returns empty.
         return []

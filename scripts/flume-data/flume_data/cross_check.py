@@ -101,9 +101,16 @@ def _query_ha_total_via_vm(
     — the cross-check degrades gracefully rather than crashing the report).
     """
     try:
+        # VM stores the entity name WITHOUT the `<domain>.` prefix (domain is a
+        # separate label), and exposes the numeric reading as `<unit>_value`
+        # alongside `_*_str` attribute series and (for utility_meter sensors)
+        # `_last_period` / `_last_reset` — the latter a TIMESTAMP. The old bare
+        # {entity_id="sensor.x"} selector matched nothing (prefix); stripping it
+        # without pinning the value series would risk returning last_reset as gal.
+        vm_id = entity_id.split(".", 1)[1] if "." in entity_id else entity_id
         series = vm.query_range(
             metric=(
-                f'last_over_time({{entity_id="{entity_id}"}}[5m])'
+                f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[5m])'
             ),
             start=at_time - timedelta(minutes=5),
             end=at_time,
@@ -206,8 +213,11 @@ def _build_daily_breakdown(
             # Use HA's `current_day` Flume sensor sampled at end-of-day.
             series = vm.query_range(
                 metric=(
+                    # entity_id has no `sensor.` prefix in VM; pin to the value
+                    # series (see _query_ha_total_via_vm).
                     'last_over_time({entity_id='
-                    '"sensor.flume_sensor_sierra_oaks_current_day"}[10m])'
+                    '"flume_sensor_sierra_oaks_current_day",'
+                    '__name__=~".+_value"}[10m])'
                 ),
                 start=day_end - timedelta(minutes=10),
                 end=day_end,

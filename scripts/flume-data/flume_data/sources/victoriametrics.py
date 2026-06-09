@@ -74,14 +74,13 @@ class VMSource:
         """Convenience: pull a single HA-entity GPM series at 1-minute resolution."""
         vm_id = self.vm_entity_id(entity_id)
         # The HA InfluxDB→VM bridge writes the numeric reading as
-        # `<unit>_value` AND four `<unit>_*_str` attribute series
-        # (attribution/device_class/friendly_name/state_class), all sharing
-        # the same {entity_id} labels. A bare {entity_id=...} selector matches
-        # all five; the four *_str series are 0-valued, so detection sees a
-        # zero-polluted stream (5× the points, rolling mean dragged toward 0)
-        # and finds nothing. Excluding *_str keeps only the real value series.
+        # `<unit>_value`, plus `<unit>_*_str` attribute series and — for
+        # utility_meter sensors — `<unit>_last_period` / `<unit>_last_reset`
+        # (last_reset is a TIMESTAMP). A bare {entity_id=...} selector matches
+        # all of them; flattening yields a polluted stream and `series[-1]` can
+        # even be a timestamp. Pin to the numeric value series.
         return self.query_range(
-            metric=f'last_over_time({{entity_id="{vm_id}",__name__!~".+_str"}}[1m])',
+            metric=f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[1m])',
             start=start,
             end=end,
             step="60s",

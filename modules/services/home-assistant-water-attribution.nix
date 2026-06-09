@@ -87,11 +87,21 @@ let
     state =
       let
         meanGuard = lib.optionalString cfg.autofill.enforceMeanCheck " and ${toString cfg.autofill.gpmMin} <= m <= ${toString cfg.autofill.gpmMax}";
+        # The post-2026-06 low-flow autofill band (~1.4-1.9 gpm) overlaps
+        # ordinary sustained draws the old 3-5 band never touched. Auto-fill is
+        # cold-only and never coincides with the sprinklers, so suppress when:
+        #   - a B-Hyve zone is positively open. Phrased as `not ... 'on'` so an
+        #     unknown/unavailable irrigation sensor fails OPEN (a B-Hyve outage
+        #     must not silently drop real fills); only a confirmed `on` blocks.
+        #   - the domestic hot leg is flowing (rejects showers/hot sinks/laundry);
+        #     `float(0)` fails open if the hot sensor is unavailable.
+        irrigationGuard = " and not is_state('binary_sensor.irrigation_active', 'on')";
+        hotGuard = lib.optionalString hasHot " and (states('${cfg.domesticHotFlowSensor}') | float(0)) < 0.1";
       in
       ''
         {% set mins = (states('sensor.flume_minutes_in_autofill_range_${windowSuffix}') | float(0)) * 60 %}
         {% set m = states('sensor.flume_gpm_${windowSuffix}_mean') | float(-1) %}
-        {{ mins >= ${toString cfg.autofill.minMinutesInRange}${meanGuard} }}
+        {{ mins >= ${toString cfg.autofill.minMinutesInRange}${meanGuard}${irrigationGuard}${hotGuard} }}
       '';
     delay_off = {
       minutes = 1;

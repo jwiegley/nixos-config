@@ -209,11 +209,18 @@
     flumeCurrentSensor = "sensor.flume_sensor_sierra_oaks_current";
     domesticHotFlowSensor = "sensor.water_heater_ch1_ch1_unit1_hot_water_flow";
 
+    # Auto-fill valve replaced 2026-06 — new valve trickles at ~1.4-1.8 gal/min
+    # (old valve was 3-5). Band [1.3, 1.9] brackets the observed range with a
+    # little headroom below; the longer 15-min window + 14-min sustain (plus the
+    # irrigation/hot guards in poolAutofillActiveBinarySensor) reject the showers
+    # and drip-zone runs that share this lower flow band. If real fills stop
+    # registering, the likely cause is the lower edge being too tight for valve
+    # jitter — widen toward [1.2, 2.2] before touching the sustain knobs.
     autofill = {
-      gpmMin = 3.0;
-      gpmMax = 5.0;
-      windowMinutes = 10;
-      minMinutesInRange = 9;
+      gpmMin = 1.3;
+      gpmMax = 1.9;
+      windowMinutes = 15;
+      minMinutesInRange = 14;
       enforceMeanCheck = true;
     };
 

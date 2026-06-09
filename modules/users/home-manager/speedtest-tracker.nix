@@ -55,7 +55,7 @@
           Environment = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
 
           # Wait for PostgreSQL before starting
-          ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 30";
+          ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
 
           # Start the container in foreground mode
           ExecStart = builtins.concatStringsSep " " [

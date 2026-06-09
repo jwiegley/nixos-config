@@ -238,7 +238,12 @@ in
             "zfs.target"
             "zfs-import-tank.service"
           ];
-          wantedBy = [ "tank.mount" ];
+          # NOT wantedBy=tank.mount: that pulled all 9 backups at once when the
+          # USB/UAS tank imported at boot -> simultaneous heavy B2 reads that hung
+          # the OWC bridge (2026-06-02). Staggered OnCalendar timers (02:10-05:30)
+          # + Persistent=true provide the spacing and missed-run catch-up, so the
+          # boot trigger was redundant and harmful. Mirrors the restic-check de-herd
+          # below. (Audit 2026-06-09.)
           unitConfig = {
             RequiresMountsFor = [ "/tank" ];
             ConditionPathIsMountPoint = "/tank";

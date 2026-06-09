@@ -109,9 +109,14 @@
     }
   ];
 
-  # Declarative NM connection profile for end0 with embedded routing rules
-  # NM re-applies these ip rules on every connection activation, making them
-  # survive NM restarts, DHCP renewals, and all interface events natively
+  # Declarative NM connection profile for end0. NOTE: NM does NOT materialize the
+  # ipv4.routing-rule1/2 declared below into the kernel (verified 2026-06-09 — the
+  # only live priority 50/51 rules are `proto unspec`, i.e. added by the
+  # asymmetric-routing oneshot, never `proto static` as NM would tag its own). The
+  # oneshot (re-run by the NM dispatcher on every end0 up/dhcp event) is the SINGLE
+  # authoritative writer. The dead routing-rule keys below are kept FOR NOW; remove
+  # them once a cold reboot confirms the (now fail-loud) oneshot lands the rules at
+  # boot — see docs/BOOT_SWITCH_ROBUSTNESS_AUDIT.md (asymmetric-routing, Phase B).
   networking.networkmanager.ensureProfiles.profiles = {
     "end0-wired" = {
       connection = {
@@ -227,8 +232,27 @@
       # Route ALL traffic from 192.168.1.2 destined to non-local subnets via the ethernet gateway.
       # Source-specific rules are critical: "from all" rules would intercept responses from
       # wlp1s0f0 (192.168.3.16) and misroute them via end0, breaking WiFi-interface services.
-      ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 192.168.0.0/16 table end0_return priority 50 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to 10.0.0.0/8 table end0_return priority 51 2>/dev/null || true
+      # Add the source-policy rules idempotently, then VERIFY they landed. No
+      # `|| true`: a silent add-failure means cross-subnet replies leave via the
+      # wrong interface (WiFi) with the wrong source IP, so this oneshot MUST fail
+      # loudly instead of reporting active(exited) with no rules in the kernel.
+      # (Audit 2026-06-09: priority 50/51 rules were found absent post-boot.)
+      add_rule_idempotent() {
+        # $1=to-prefix  $2=priority
+        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from 192.168.1.2 to $1 lookup end0_return"; then
+          ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to "$1" table end0_return priority "$2"
+        fi
+      }
+      add_rule_idempotent 192.168.0.0/16 50
+      add_rule_idempotent 10.0.0.0/8 51
+
+      # Verify both rules are present; fail the unit if not.
+      for prefix in 192.168.0.0/16 10.0.0.0/8; do
+        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from 192.168.1.2 to $prefix lookup end0_return"; then
+          echo "ERROR: asymmetric-routing rule for $prefix did not land" >&2
+          exit 1
+        fi
+      done
 
       echo "Asymmetric routing configured: all traffic from 192.168.1.2 routes via $GATEWAY"
     '';

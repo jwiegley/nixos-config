@@ -275,11 +275,16 @@ in
 
         serviceConfig = lib.mkMerge [
           (lib.optionalAttrs requiresPostgres {
-            # Wait for PostgreSQL to be ready to accept connections
-            # Rootless containers use localhost, root containers use podman gateway
-            ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${
+            # Wait for PostgreSQL to be ready to accept connections.
+            # Rootless containers use localhost, root containers use podman gateway.
+            # NOTE: `pg_isready -t N` is a per-attempt CONNECT timeout, not a retry
+            # loop -- against a not-yet-listening port it returns exit 2 in ~2ms, so a
+            # single shot is a no-op at cold boot. Poll instead (60 x 2s = 120s max,
+            # under TimeoutStartSec). Fully-qualified sleep + brace-expansion {1..60}
+            # so the gate needs no PATH and no systemd $-expansion.
+            ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h ${
               if containerUser != null then "127.0.0.1" else common.postgresDefaults.host
-            } -p ${toString common.postgresDefaults.port} -t 30";
+            } -p ${toString common.postgresDefaults.port} -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
           })
           # Add restart behavior to [Service] section
           common.restartPolicies.always.service

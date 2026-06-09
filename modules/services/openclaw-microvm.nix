@@ -558,7 +558,12 @@ in
     # Force re-stage when models.nix changes — Type=oneshot + RemainAfterExit
     # means switch-to-configuration would otherwise skip restarting this unit
     # on closure changes, leaving the staged openclaw-config out of sync.
-    restartTriggers = [ (builtins.toJSON models) ];
+    restartTriggers = [
+      (builtins.toJSON {
+        agent = models.llm.agent;
+        embedding = models.embedding.primary;
+      })
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -757,7 +762,12 @@ in
   # `nixos-rebuild switch` propagates new model selections automatically.
   systemd.services."microvm@openclaw" = {
     serviceConfig.TimeoutStartSec = "300";
-    restartTriggers = [ (builtins.toJSON models) ];
+    restartTriggers = [
+      (builtins.toJSON {
+        agent = models.llm.agent;
+        embedding = models.embedding.primary;
+      })
+    ];
   };
 
   # ============================================================================

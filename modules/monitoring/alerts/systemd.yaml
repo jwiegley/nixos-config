@@ -4,7 +4,7 @@ groups:
     rules:
       # Critical service failure - any service in failed state
       - alert: SystemdServiceFailed
-        expr: systemd_unit_state{state="failed",type="service"} == 1
+        expr: node_systemd_unit_state{state="failed",name=~".*\\.service"} == 1
         for: 1m
         labels:
           severity: critical

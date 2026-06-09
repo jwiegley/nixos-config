@@ -164,9 +164,11 @@ in
     };
 
     serviceConfig = {
-      # Wait for PostgreSQL to be ready before starting container
-      # pg_isready doesn't require authentication, perfect for pre-start checks
-      ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 60";
+      # Wait for PostgreSQL to be ready before starting container.
+      # pg_isready -t N is a per-attempt connect timeout, not a retry loop, so poll
+      # (60 x 2s = 120s max, under TimeoutStartSec=180s). Brace-expansion + qualified
+      # sleep so the gate needs no PATH and no systemd $-expansion.
+      ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h ${common.postgresDefaults.host} -p ${toString common.postgresDefaults.port} -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
       Restart = "always";
       RestartSec = "15s"; # Wait longer between restart attempts
       TimeoutStartSec = "180s"; # Allow up to 3 minutes for startup (includes DB migrations)

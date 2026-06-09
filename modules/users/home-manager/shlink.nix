@@ -60,7 +60,7 @@
           Type = "simple";
 
           # Wait for PostgreSQL before starting
-          ExecStartPre = "${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 30";
+          ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
 
           # Start the container in foreground mode (not detached)
           ExecStart = "${pkgs.podman}/bin/podman run --rm --name shlink --replace --label PODMAN_SYSTEMD_UNIT=shlink.service --network slirp4netns:allow_host_loopback=true -p 127.0.0.1:8580:8080 -e AUTO_RESOLVE_TITLES=true -e DB_DRIVER=postgres -e DB_HOST=host.containers.internal -e DB_NAME=shlink -e DB_PORT=5432 -e DB_USER=shlink -e DEFAULT_DOMAIN=s.newartisans.com -e DISABLE_TRACKING=false -e IS_HTTPS_ENABLED=true -e MEMORY_LIMIT=256M -e REDIRECT_STATUS_CODE=302 -e REDIS_SERVERS=tcp://host.containers.internal:6385 -e ROBOTS_ALLOW_ALL_SHORT_URLS=false -e TIMEZONE=America/Los_Angeles --env-file /run/secrets-shlink/shlink-secrets docker.io/shlinkio/shlink:stable";

@@ -134,7 +134,9 @@ def discover_coverage() -> SourceCoverage:
         vm_id = VMSource.vm_entity_id(cfg.flume_current_sensor)
         series = vm.query_range(
             metric=(
-                f'last_over_time({{entity_id="{vm_id}"}}'
+                # Exclude the *_str attribute series — see
+                # VMSource.query_flume_current for why the bare selector breaks.
+                f'last_over_time({{entity_id="{vm_id}",__name__!~".+_str"}}'
                 "[1d])"
             ),
             start=start,

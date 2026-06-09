@@ -17,7 +17,7 @@ backfill) of the water attribution feature.
 ## Running the tests
 
     cd /etc/nixos/scripts/flume-data
-    nix-shell -p 'python3.withPackages (ps: with ps; [ pytest pytest-mock responses freezegun requests psycopg2 websocket-client dateutil ])' \
+    nix-shell -p 'python3.withPackages (ps: with ps; [ pytest pytest-mock responses freezegun requests psycopg2 websocket-client python-dateutil ])' \
       --run 'python -m pytest -v'
 
 ## Configuration

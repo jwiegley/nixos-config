@@ -126,7 +126,12 @@ groups:
 
       # B-floor signal — Discord WebSocket disconnected.
       - alert: OpenClawDiscordWsDown
-        expr: openclaw_discord_ws_connected == 0
+        # VM-uptime warmup gate (see OpenClawHttpHealthDown). Here both series
+        # come from the same canary textfile, so the join is
+        # `ignoring(__name__)`.
+        expr: |
+          openclaw_discord_ws_connected == 0
+          and ignoring(__name__) (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
         for: 3m
         labels:
           severity: critical
@@ -146,7 +151,15 @@ groups:
 
       # B-floor signal — gateway HTTP /health probe failing.
       - alert: OpenClawHttpHealthDown
-        expr: probe_success{probe="openclaw-health"} == 0
+        # VM-uptime warmup gate: suppress for the first 600s after a (re)boot
+        # so a still-initializing gateway HTTP listener does not trip a
+        # self-heal restart of a healthy-but-warming VM. probe_success and the
+        # canary metric share no labels, so the join is `on()`. Genuine boot
+        # failures are still covered by OpenClawGatewayReadyStale (1800s gate)
+        # and OpenClawMicroVMDown (systemd-failed, 2m).
+        expr: |
+          probe_success{probe="openclaw-health"} == 0
+          and on() (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
         for: 1m
         labels:
           severity: critical

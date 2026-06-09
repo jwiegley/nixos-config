@@ -5,7 +5,7 @@ groups:
       # Shlink container down
       - alert: ShlinkContainerDown
         expr: |
-          time() - container_last_seen{container_name="shlink"} > 60
+          container_running{name="shlink"} == 0
         for: 3m
         labels:
           severity: critical
@@ -57,7 +57,7 @@ groups:
 
       - alert: ShlinkContainerRestarts
         expr: |
-          increase(container_restart_count{container_name="shlink"}[15m]) > 3
+          increase(container_restart_count{name="shlink"}[15m]) > 3
         for: 5m
         labels:
           severity: warning

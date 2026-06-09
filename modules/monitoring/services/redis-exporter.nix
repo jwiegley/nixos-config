@@ -48,6 +48,39 @@
       ];
       scrape_interval = "30s";
     }
+    # Multi-target: the single redis_exporter at :9121 can probe additional Redis
+    # instances via /scrape?target=. The per-app Redis servers (openproject:6383,
+    # shlink:6385) are not covered by the primary -redis.addr (litellm), so their
+    # redis_up never existed -> OpenProjectRedisDown / ShlinkRedisDown were dead.
+    # This relabel job points each target at the exporter and stamps instance with
+    # the redis URL, yielding redis_up{instance="redis://127.0.0.1:6383"} etc.
+    {
+      job_name = "redis-multi";
+      scrape_interval = "30s";
+      metrics_path = "/scrape";
+      static_configs = [
+        {
+          targets = [
+            "redis://127.0.0.1:6383" # openproject
+            "redis://127.0.0.1:6385" # shlink
+          ];
+        }
+      ];
+      relabel_configs = [
+        {
+          source_labels = [ "__address__" ];
+          target_label = "__param_target";
+        }
+        {
+          source_labels = [ "__param_target" ];
+          target_label = "instance";
+        }
+        {
+          target_label = "__address__";
+          replacement = "localhost:${toString config.services.prometheus.exporters.redis.port}";
+        }
+      ];
+    }
   ];
 
 }

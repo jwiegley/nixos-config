@@ -42,6 +42,8 @@
         # TYPE container_running gauge
         # HELP container_restart_count Container restart count
         # TYPE container_restart_count counter
+        # HELP container_memory_usage_bytes Container resident memory usage in bytes
+        # TYPE container_memory_usage_bytes gauge
         EOF
 
                 # Function to collect metrics for a podman instance
@@ -101,6 +103,19 @@
         container_running{name="$name",container="$name",user="$user"} $running
         container_restart_count{name="$name",container="$name",user="$user"} $restart_count
         EOF
+
+                    # Resident memory (best-effort; emitted only when stats parse cleanly).
+                    # MemUsage looks like "105.4MB / 66.84GB"; take the usage field, strip the
+                    # B/iB suffix, and convert via numfmt. No container memory LIMIT is emitted
+                    # (most containers run unlimited, so the limit field is just host RAM).
+                    mem_raw=$($podman_cmd stats --no-stream --format '{{.MemUsage}}' "$name" 2>/dev/null | ${pkgs.coreutils}/bin/cut -d' ' -f1) || mem_raw=""
+                    if [[ -n "$mem_raw" && "$mem_raw" != "--" ]]; then
+                      mem_clean="''${mem_raw%B}"; mem_clean="''${mem_clean%i}"
+                      mem_bytes=$(${pkgs.coreutils}/bin/numfmt --from=iec "$mem_clean" 2>/dev/null) || mem_bytes=""
+                      if [[ -n "$mem_bytes" ]]; then
+                        echo "container_memory_usage_bytes{name=\"$name\",container=\"$name\",user=\"$user\"} $mem_bytes" >> "$METRICS_TMP"
+                      fi
+                    fi
                   done
                 }
 
@@ -109,7 +124,7 @@
 
                 # Collect metrics from rootless podman users
                 # Add users who run rootless podman containers here
-                ROOTLESS_USERS="open-webui"
+                ROOTLESS_USERS="open-webui shlink openproject"
 
                 for user in $ROOTLESS_USERS; do
                   if id "$user" &>/dev/null; then

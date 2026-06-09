@@ -22,7 +22,7 @@ groups:
 
       - alert: OpenWebUIHighMemoryUsage
         expr: |
-          container_memory_usage_bytes{container="open-webui"} / container_memory_limit_bytes{container="open-webui"} > 0.9
+          container_memory_usage_bytes{container="open-webui"} > 4294967296
         for: 10m
         labels:
           severity: warning
@@ -30,8 +30,8 @@ groups:
         annotations:
           summary: "Open WebUI container memory usage is high"
           description: |
-            Open WebUI container is using {{ $value | humanizePercentage }} of its memory limit.
-            Consider increasing memory limits or investigating memory leaks.
+            Open WebUI container is using {{ $value | humanize1024 }}B of resident memory (threshold 4GiB).
+            The container runs without a memory limit; investigate a possible leak or heavy load.
 
       - alert: OpenWebUIUnhealthy
         expr: container_health_status{container="open-webui"} > 0 and container_health_status{container="open-webui"} < 3

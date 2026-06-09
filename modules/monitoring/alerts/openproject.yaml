@@ -96,15 +96,3 @@ groups:
         annotations:
           summary: "OpenProject Redis is down"
           description: "Redis server for OpenProject is unreachable"
-
-      # Container health check
-      - alert: OpenProjectContainerUnhealthy
-        expr: |
-          container_health_status{container_name="openproject"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          service: openproject
-        annotations:
-          summary: "OpenProject container is unhealthy"
-          description: "OpenProject container health check has been failing for more than 5 minutes"

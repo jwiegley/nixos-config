@@ -35,6 +35,10 @@ let
           Persistent = true;
         };
         pruneOpts = [
+          # forget --prune takes the repo lock too; wait it out instead of dying
+          # at the default retry-lock=0 if anything (e.g. the weekly restic-check)
+          # holds it. --retry-lock is a restic global flag honored by forget.
+          "--retry-lock=5m"
           "--keep-daily 7"
           "--keep-weekly 5"
           "--keep-monthly 12"
@@ -256,7 +260,11 @@ in
           "zfs.target"
           "zfs-import-tank.service"
         ];
-        wantedBy = [ "tank.mount" ];
+        # NOT wantedBy=tank.mount. restic-check takes an exclusive repo lock; when
+        # it co-started with the 9 backups' forget/prune at the tank.mount boot
+        # trigger it lost the lock race and exited 11 on every reboot. It is now
+        # driven ONLY by its weekly timer (Persistent=yes catches up a missed run),
+        # so it never races the boot herd. (Audit 2026-06-08.)
         unitConfig = {
           RequiresMountsFor = [ "/tank" ];
           ConditionPathIsMountPoint = "/tank";
@@ -272,9 +280,10 @@ in
   systemd.timers = {
     restic-check = {
       description = "Timer for restic check";
+      # Only timers.target — NOT tank.mount (which fired the check at every boot
+      # into the backup herd's lock race). Persistent=yes catches up a missed run.
       wantedBy = [
         "timers.target"
-        "tank.mount"
       ];
       timerConfig = {
         OnCalendar = "weekly";

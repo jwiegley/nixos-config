@@ -76,8 +76,17 @@ in
       "zfs.target"
       "tank-Photos-Immich.mount"
     ];
+    # Auto-(re)start when the Immich dataset mounts — covers a late or
+    # manually-recovered tank import; upstream wantedBy=multi-user.target still
+    # covers normal boot.
+    wantedBy = [ "tank-Photos-Immich.mount" ];
     unitConfig = {
       RequiresMountsFor = [ "/tank/Photos/Immich" ];
+      # SKIP cleanly (no crash-loop, no StartLimit exhaustion) when the dataset
+      # isn't mounted. RequiresMountsFor is a no-op against the runtime ZFS mount,
+      # so without this immich-server crash-looped and gave up PERMANENTLY on a
+      # late/missing tank. Mirrors aria2.nix / samba.nix. (Audit 2026-06-08.)
+      ConditionPathIsMountPoint = "/tank/Photos/Immich";
     };
   };
 
@@ -86,8 +95,10 @@ in
       "zfs.target"
       "tank-Photos-Immich.mount"
     ];
+    wantedBy = [ "tank-Photos-Immich.mount" ];
     unitConfig = {
       RequiresMountsFor = [ "/tank/Photos/Immich" ];
+      ConditionPathIsMountPoint = "/tank/Photos/Immich";
     };
   };
 
@@ -138,7 +149,11 @@ in
   systemd.services.immich-fix-permissions = {
     description = "Fix permissions on Immich external photo libraries";
     after = [ "zfs.target" ];
-    unitConfig.RequiresMountsFor = [ "/tank/Photos" ];
+    unitConfig = {
+      RequiresMountsFor = [ "/tank/Photos" ];
+      # Skip cleanly when /tank/Photos isn't mounted (don't fail the daily job).
+      ConditionPathIsMountPoint = "/tank/Photos";
+    };
     serviceConfig = {
       Type = "oneshot";
       ExecStart = immichFixPermsScript;

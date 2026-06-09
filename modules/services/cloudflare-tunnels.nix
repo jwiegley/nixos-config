@@ -56,6 +56,11 @@
     after = [
       "network-online.target"
       "nss-lookup.target"
+      # Wait for the LOCAL resolver (Technitium) to actually be SERVING. dns.nix
+      # now makes technitium Before=nss-lookup.target with a readiness probe, so
+      # After=nss-lookup.target genuinely means "DNS answers" — this explicit edge
+      # is belt-and-suspenders.
+      "technitium-dns-server.service"
     ];
     wants = [ "network-online.target" ];
     requires = [ "network-online.target" ];
@@ -66,9 +71,15 @@
       RestartSec = 10;
     };
     unitConfig = {
-      # Allow up to 10 restarts within a 5-minute window before giving up
-      StartLimitIntervalSec = 300;
-      StartLimitBurst = 10;
+      # Never permanently give up. cloudflared is the SOLE hard consumer of
+      # network-online.target and serves a public tunnel, so it must always
+      # recover. With the DNS-readiness ordering above it should not crash-loop at
+      # boot; StartLimitIntervalSec=0 disables the burst ceiling so a transient
+      # (resolver still warming, brief network blip) can never leave it
+      # permanently dead — it keeps retrying every RestartSec=10s until DNS
+      # answers. (Audit 2026-06-08: it had been exhausting StartLimitBurst=10
+      # ~8s before Technitium became ready and staying down ~9.5min on cold boot.)
+      StartLimitIntervalSec = 0;
     };
   };
 

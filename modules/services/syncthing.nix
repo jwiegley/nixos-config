@@ -50,10 +50,13 @@
 # with acltype=off, so the syncthing-folder-acls oneshot enables POSIX ACLs
 # on each folder's backing dataset and grants u:syncthing rwX (access +
 # default) across each folder tree — additive, reversible (zfs set
-# acltype=off), and ownership-preserving. johnw gets the same grant so files
-# arriving from hera (owned syncthing:syncthing) stay editable locally.
-# copyparty-ownership-fixup chowns are ACL-preserving, so the two mechanisms
-# coexist on tank/Public.
+# acltype=off), and ownership-preserving. Folders sitting below their
+# dataset mountpoint additionally get search-only (x) grants on the parent
+# directories in between (e.g. /tank/Video is 750 johnw:immich and would
+# otherwise block traversal entirely). johnw gets the same rwX grant so
+# files arriving from hera (owned syncthing:syncthing) stay editable
+# locally. copyparty-ownership-fixup chowns are ACL-preserving, so the two
+# mechanisms coexist on tank/Public.
 
 let
   guiPort = 8384; # loopback only — see docs/ports.txt
@@ -137,6 +140,20 @@ let
   datasetMounts = map mountpointOf datasets;
   mountUnits = map (mp: "${utils.escapeSystemdPath mp}.mount") datasetMounts;
 
+  # Directories between a folder's dataset mountpoint (inclusive) and the
+  # folder path (exclusive). The syncthing user needs search (x) on each of
+  # them to reach a folder that sits below its dataset mountpoint —
+  # /tank/Video is 750 johnw:immich, which stalled syncthing-init in a
+  # stat-permission-denied retry loop on first deploy of tank-video-inbox
+  # (2026-06-10). Empty when the folder path IS the mountpoint.
+  ancestorsWithin =
+    f:
+    let
+      mp = mountpointOf f.dataset;
+      between = lib.init (lib.splitString "/" (lib.removePrefix (mp + "/") f.path));
+    in
+    if f.path == mp then [ ] else lib.foldl' (acc: c: acc ++ [ "${lib.last acc}/${c}" ]) [ mp ] between;
+
   # 8 dash-separated groups of 7 base32 chars.
   deviceIdFormat = "[A-Z2-7]{7}(-[A-Z2-7]{7}){7}";
 in
@@ -159,6 +176,15 @@ in
       message = ''
         services/syncthing.nix: folders.${id}.devices references a device
         missing from the `devices` attrset.
+      '';
+    }) folders
+    # ancestorsWithin and the mount gating both assume the folder lives on
+    # its declared dataset.
+    ++ lib.mapAttrsToList (id: f: {
+      assertion = f.path == mountpointOf f.dataset || lib.hasPrefix (mountpointOf f.dataset + "/") f.path;
+      message = ''
+        services/syncthing.nix: folders.${id}.path (${f.path}) is not at or
+        below the mountpoint of its declared dataset (${f.dataset}).
       '';
     }) folders;
 
@@ -338,6 +364,12 @@ in
         let
           path' = lib.escapeShellArg f.path;
           mount' = lib.escapeShellArg (mountpointOf f.dataset);
+          # Search-only access ACLs (no default ACLs, nothing recursive) so
+          # the syncthing user can traverse 750-style parents down to the
+          # folder; see ancestorsWithin.
+          traversalGrants = lib.concatMapStrings (d: "setfacl -m u:syncthing:x ${lib.escapeShellArg d}\n") (
+            ancestorsWithin f
+          );
         in
         ''
           [ -d ${path'} ] || install -d -m 0755 -o syncthing -g syncthing ${path'}
@@ -350,6 +382,7 @@ in
             setfacl -m u:syncthing:rwX ${path'}
           fi
 
+          ${traversalGrants}
           setfacl -R \
             -m u:syncthing:rwX -m d:u:syncthing:rwX \
             -m u:johnw:rwX     -m d:u:johnw:rwX \

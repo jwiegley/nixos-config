@@ -5,6 +5,20 @@
   ...
 }:
 
+let
+  # Ingestion relabel config that drops Home Assistant attribute-metadata series
+  # (friendly_name/icon/device_class/... and the `_str` string-marker variants)
+  # pushed by HA's influxdb integration but consumed by nothing. See the file's
+  # header for the curated suffix set, the measured 62-63% drop, and the
+  # zero-_value-casualty proof. Prospective only (history retained). nixpkgs has
+  # no native relabelConfig option for the single-node service, so this is wired
+  # via -relabelConfig in extraOptions below. NOTE: the relabel YAML is parsed by
+  # VictoriaMetrics at unit START, not at nix build time — validate post-switch
+  # with `systemctl is-active victoriametrics` and a climbing
+  # `vm_relabel_metrics_dropped_total`.
+  haRelabelFile = ./victoriametrics-relabel.yml;
+in
+
 {
   # VictoriaMetrics time-series database
   # Receives Home Assistant metrics via InfluxDB line protocol (push-based)
@@ -40,6 +54,12 @@
 
       # Retention and storage optimizations
       "-retentionTimezoneOffset=0h"
+
+      # Drop HA attribute-metadata series (friendly_name/icon/device_class/...
+      # and `_str` variants) at ingestion. See victoriametrics-relabel.yml.
+      # Applies globally to all incoming data (the influx /write path HA uses
+      # and any future remote_write). Observable via vm_relabel_metrics_dropped_total.
+      "-relabelConfig=${haRelabelFile}"
     ];
   };
 

@@ -1,0 +1,58 @@
+# VictoriaMetrics ingestion relabel config — drop Home Assistant attribute-metadata series.
+#
+# WHAT THIS DOES
+# Home Assistant's `influxdb` push integration forwards the *string attributes* of
+# every entity it sends (friendly_name, icon, device_class, state_class, attribution,
+# entity_picture, supported_features, ...) into VictoriaMetrics as their own metric
+# series, named `<measurement>_<attr>[_str]` (see observation 5783). These carry no
+# measurement — they are pure HA entity metadata.
+#
+# WHY IT IS SAFE TO DROP THEM
+# Nothing consumes these series. Every Grafana dashboard, every vm-alert
+# (pool-sensors.yaml, ha-pipeline.yaml — the HAVMPushStalled/HAVMCanaryStalled
+# dead-man rules), and all flume water-attribution tooling
+# (flume_data/sources/victoriametrics.py, cross_check.py, backfill.py) select
+# positively on `__name__=~".+_value"`. The real numeric keepers (`*_value`,
+# `*_state`, `*_reset`) do NOT carry any of the suffixes below, so they are retained.
+#
+# CURATED SUFFIX SET (NOT a blanket "drop everything that isn't _value")
+# `_str` is HA's explicit string marker, but ~5% of attribute series arrive WITHOUT
+# it (e.g. `%_friendly_name`, `W_Status`-style names) because VM coerces the
+# unparseable string value to a numeric sample. The full "this is an attribute, not
+# a measurement" signature is the attribute-NAME suffix set below. A naive non-_value
+# drop would destroy legitimate numerics like `ppm_compensated_25c`, `%_idle`,
+# `gal_last_period`, `gal/min_source_value_valid` — verified present in the residual.
+#
+# MEASURED IMPACT (live VM 1.144.0, 2026-06-10, db="homeassistant")
+#   total HA series: 2,437
+#   curated suffix set drops: 1,525 (62.6%)
+#   _value survivors wrongly dropped: 0   (the load-bearing safety check)
+#   _state survivors wrongly dropped: 0
+#   _reset survivors wrongly dropped: 0
+# (At spec-write time the DB was 2,337 series / 1,482 curated-drops / 63.4%; the
+#  fleet has since grown — re-run the dry-run in docs/MONITORING_DEFERRED_SPECS.md
+#  §4b if extending this list.)
+#
+# PROSPECTIVE ONLY
+# This drops series at INGESTION going forward. The ~1,500 already-stored series are
+# NOT deleted (no retroactive VM delete-API purge) — they age out under retention.
+# The relabel stops the bleeding; it does not scrub history. Rollback is total:
+# remove the `-relabelConfig` flag in victoriametrics.nix and rebuild — ingestion
+# of the dropped series resumes immediately, no data was lost.
+#
+# FOLLOW-UP (do NOT do here — another session may touch these files)
+# Once verified live, the `__name__=~".+_value"` selectors in the flume tooling and
+# vm-alerts become belt-and-suspenders rather than load-bearing and MAY be simplified
+# in a later dedicated commit (re-run tests/test_cross_check.py, which asserts the
+# selector string). Leave them in place for now — removing them prematurely risks
+# re-introducing the bare-`{entity_id=}`-matches-_str-siblings bug documented in
+# project_pool_autofill_flume_detection.
+#
+# VERIFY DROP RATE LIVE (post-deploy):
+#   curl -s 127.0.0.1:8428/metrics | grep vm_relabel_metrics_dropped_total   # climbs from 0
+#
+- action: drop
+  source_labels: [__name__]
+  # Anchored, suffix-only. `_str` = explicit string marker; the rest are metadata
+  # attributes that can arrive without `_str` (VM-coerced numeric samples).
+  regex: '.*(_str|_friendly_name|_icon|_device_class|_state_class|_attribution|_entity_picture|_supported_features)'

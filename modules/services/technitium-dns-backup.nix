@@ -5,27 +5,60 @@
   ...
 }:
 
+# Nightly Technitium DNS Server backup
+#
+# DESIGN: this is an rsync MIRROR, not a dated tarball. The backup target
+# /var/lib/technitium-dns-backup is its own ZFS dataset (zstd) under
+# /tank/Backups/TechnitiumDNS, and sanoid keeps the archival snapshot
+# schedule (24 hourly / 30 daily / 8 weekly / 12 monthly / 5 yearly). With
+# ZFS snapshots as the retention/history layer, there is no reason to keep
+# accreting compressed dated artifacts here — each daily run simply makes
+# the mirror reflect the current live state, and the snapshot taken after it
+# is the immutable point-in-time copy. This replaces the old design, which
+# built a dated technitium-dns-backup-YYYY-MM-DD.tar.xz per run and leaned on
+# cleanup.py's DirScanner to age them out.
+#
+# Because the dataset already block-deduplicates and snapshots cheaply, the
+# mirror stays small (it is the live config, not N compressed copies), and a
+# restore is a plain rsync/cp back out of the dataset (or `zfs rollback` /
+# clone of a chosen snapshot) rather than untar.
+#
+# The very first run after this switch carries `rsync --delete`, which will
+# remove the legacy dated *.tar.xz tarballs and the orphan .files.dat left by
+# the old design from the dataset root — that deletion is INTENDED. The
+# existing ZFS snapshots still retain those artifacts if they are ever needed.
+#
+# Restore procedure:
+#   1. sudo systemctl stop technitium-dns-server
+#   2. choose a snapshot:  zfs list -t snapshot tank/Backups/TechnitiumDNS
+#   3. copy state back:    sudo rsync -a \
+#        /tank/Backups/TechnitiumDNS/.zfs/snapshot/<snap>/ \
+#        /var/lib/technitium-dns-server/
+#      (or restore the current mirror without a snapshot prefix)
+#   4. sudo chown -R technitium-dns-server:technitium-dns-server \
+#        /var/lib/technitium-dns-server
+#   5. sudo systemctl start technitium-dns-server
+
 let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
   inherit (bindTankLib) bindTankPath;
 
   sourceDir = "/var/lib/technitium-dns-server";
   backupDir = "/var/lib/technitium-dns-backup";
-  backupFile = "${backupDir}/technitium-dns-backup-$(date '+%Y-%m-%d').tar";
 
   metricsDir = "/var/lib/prometheus-node-exporter-textfiles";
   metricsFile = "${metricsDir}/technitium_backup.prom";
 
-  # Integrity / freshness emitter for the Technitium DNS backup artifact, mirroring
+  # Integrity / freshness emitter for the Technitium DNS backup mirror, mirroring
   # the postgresql-backup triad (a green Type=oneshot exit is NOT proof of a complete
   # backup — the UAS-backed /tank can drop mid-write). Records, every run:
   #   technitium_backup_last_success            1 iff $SERVICE_RESULT == "success"
   #   technitium_backup_last_run_timestamp_seconds  emission wall-clock (or newest mtime on seed)
-  #   technitium_backup_size_bytes              byte size of the NEWEST .tar.xz artifact
+  #   technitium_backup_size_bytes              byte size of the whole mirror (du -sb)
   # Runs via ExecStopPost with a '+' prefix (root) so it fires on success AND failure.
   # $1 = run result ("success"/other from $SERVICE_RESULT, or explicit 1/0).
   # $2 = timestamp source: "now" (default) or "mtime" (activation seeding — anchor to
-  #      the newest artifact so a mid-day rebuild does not mask a stale backup).
+  #      the newest file in the mirror so a mid-day rebuild does not mask a stale backup).
   technitiumBackupMetricsScript = pkgs.writeShellScript "technitium-backup-metrics" ''
     set -euo pipefail
 
@@ -37,14 +70,22 @@ let
 
     ${pkgs.coreutils}/bin/mkdir -p "${metricsDir}"
 
+    # Size := total bytes of the mirror tree (the backup is now a live copy,
+    # not a single compressed artifact). du -sb sums the whole directory.
     size=0
-    newest=$(${pkgs.coreutils}/bin/ls -1t ${backupDir}/technitium-dns-backup-*.tar.xz 2>/dev/null | ${pkgs.coreutils}/bin/head -n1 || true)
-    if [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
-      size=$(${pkgs.coreutils}/bin/stat -c %s "$newest" 2>/dev/null || echo 0)
+    if [ -d "${backupDir}" ]; then
+      size=$(${pkgs.coreutils}/bin/du -sb "${backupDir}" 2>/dev/null | ${pkgs.coreutils}/bin/cut -f1 || echo 0)
     fi
 
-    if [ "$ts_mode" = mtime ] && [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
-      now=$(${pkgs.coreutils}/bin/stat -c %Y "$newest" 2>/dev/null || ${pkgs.coreutils}/bin/date +%s)
+    # Timestamp seed anchors to the newest file in the mirror (so a mid-day
+    # rebuild reflects the last real backup's freshness), else falls back to now.
+    if [ "$ts_mode" = mtime ]; then
+      newest=$(${pkgs.findutils}/bin/find "${backupDir}" -type f -printf '%T@\n' 2>/dev/null | ${pkgs.coreutils}/bin/sort -nr | ${pkgs.coreutils}/bin/head -n1 || true)
+      if [ -n "''${newest:-}" ]; then
+        now=$(${pkgs.coreutils}/bin/printf '%.0f' "$newest")
+      else
+        now=$(${pkgs.coreutils}/bin/date +%s)
+      fi
     else
       now=$(${pkgs.coreutils}/bin/date +%s)
     fi
@@ -58,7 +99,7 @@ let
       echo "# HELP technitium_backup_last_run_timestamp_seconds Unix timestamp of the most recent Technitium DNS backup run"
       echo "# TYPE technitium_backup_last_run_timestamp_seconds gauge"
       echo "technitium_backup_last_run_timestamp_seconds $now"
-      echo "# HELP technitium_backup_size_bytes Byte size of the newest Technitium DNS backup artifact"
+      echo "# HELP technitium_backup_size_bytes Total byte size of the Technitium DNS backup mirror"
       echo "# TYPE technitium_backup_size_bytes gauge"
       echo "technitium_backup_size_bytes $size"
     } > "$tmp"
@@ -81,7 +122,7 @@ let
     if [ ! -d "${backupDir}" ]; then
       log "Creating backup directory: ${backupDir}"
       ${pkgs.coreutils}/bin/mkdir -p "${backupDir}"
-      ${pkgs.coreutils}/bin/chmod 755 "${backupDir}"
+      ${pkgs.coreutils}/bin/chmod 0700 "${backupDir}"
     fi
 
     # Verify source directory exists
@@ -90,85 +131,75 @@ let
       exit 1
     fi
 
-    # Create temporary directory for selective backup
-    TMPDIR=$(${pkgs.coreutils}/bin/mktemp -d)
-    trap "${pkgs.coreutils}/bin/rm -rf $TMPDIR" EXIT
+    log "Mirroring ${sourceDir} -> ${backupDir}"
 
-    log "Creating backup archive"
-
-    # Retry loop to ensure clean backup without file changes
-    # Tar exit codes: 0=success, 1=files changed, 2=fatal error
-    max_retries=10
+    # Mirror the live state with rsync --delete. The first --delete run after
+    # the migration removes the legacy dated *.tar.xz tarballs and the orphan
+    # .files.dat from the dataset root — that is intended; ZFS snapshots retain
+    # them. cache.bin / logs / stats are rebuildable runtime cruft, excluded.
+    #
+    # Small retry loop in the spirit of the old tar-retry: rsync can race a
+    # live config dir. exit 0 (clean) or 24 (some source files vanished mid-run
+    # — benign on a live tree) count as success; exit 23 (partial transfer /
+    # transient error) or any other non-zero is retried after 5s, up to 3
+    # attempts. We do NOT chase per-file point-in-time consistency beyond that:
+    # that guarantee now belongs to the ZFS snapshot taken after this run, not
+    # to the rsync pass (this replaces the old tar exit-1 "files changed" loop,
+    # which tried to win the consistency race in userspace).
+    max_attempts=3
     retry_delay=5  # seconds
     attempt=1
-    tar_exit=1
+    rsync_exit=1
 
-    while [ $attempt -le $max_retries ] && [ $tar_exit -eq 1 ]; do
+    while [ $attempt -le $max_attempts ]; do
       if [ $attempt -gt 1 ]; then
-        log "Retry attempt $attempt/$max_retries after ''${retry_delay}s delay..."
+        log "Retry attempt $attempt/$max_attempts after ''${retry_delay}s delay..."
         ${pkgs.coreutils}/bin/sleep $retry_delay
       else
-        log "Starting backup attempt $attempt/$max_retries"
+        log "Starting mirror attempt $attempt/$max_attempts"
       fi
 
-      # Remove partial backup if it exists from previous attempt
-      if [ -f "${backupFile}" ]; then
-        ${pkgs.coreutils}/bin/rm -f "${backupFile}"
-      fi
-
-      # Backup critical files and directories, exclude cache and logs
-      set +e  # Temporarily disable exit on error to capture tar's exit code
-      ${pkgs.gnutar}/bin/tar \
-        --create \
-        --file="${backupFile}" \
-        --directory="${sourceDir}" \
-        --exclude='cache.bin' \
-        --exclude='logs' \
-        --exclude='stats' \
-        --warning=no-file-changed \
-        --verbose \
-        .
-      tar_exit=$?
+      set +e  # Temporarily disable exit on error to capture rsync's exit code
+      ${pkgs.rsync}/bin/rsync \
+        -a \
+        --delete \
+        --exclude=/cache.bin \
+        --exclude=/logs \
+        --exclude=/stats \
+        "${sourceDir}/" \
+        "${backupDir}/"
+      rsync_exit=$?
       set -e  # Re-enable exit on error
 
-      # Check tar exit code
-      if [ $tar_exit -eq 0 ]; then
-        log "Backup completed successfully without file changes"
+      if [ $rsync_exit -eq 0 ] || [ $rsync_exit -eq 24 ]; then
+        if [ $rsync_exit -eq 24 ]; then
+          log "Mirror completed (exit 24: some source files vanished mid-run, benign on a live dir)"
+        else
+          log "Mirror completed cleanly"
+        fi
         break
-      elif [ $tar_exit -eq 2 ]; then
-        log "ERROR: tar command failed with fatal error"
-        exit 2
-      elif [ $tar_exit -eq 1 ]; then
-        log "Files changed during backup attempt $attempt"
+      elif [ $rsync_exit -eq 23 ]; then
+        log "Partial transfer (exit 23) on attempt $attempt"
+        attempt=$((attempt + 1))
+      else
+        log "rsync failed with exit $rsync_exit on attempt $attempt"
         attempt=$((attempt + 1))
       fi
     done
 
-    # Final check: did we succeed or exhaust retries?
-    if [ $tar_exit -ne 0 ]; then
-      log "ERROR: Failed to create clean backup after $max_retries attempts"
-      log "Files are changing too frequently - backup may be inconsistent"
+    if [ $rsync_exit -ne 0 ] && [ $rsync_exit -ne 24 ]; then
+      log "ERROR: Failed to produce a clean mirror after $max_attempts attempts (last exit $rsync_exit)"
       exit 1
     fi
 
-    if [ -f "${backupFile}" ]; then
-      log "Archive created successfully, compressing with xz"
+    # Tighten at-rest perms on the mirror root. Zone files and config may carry
+    # TSIG keys / API tokens; the old design left dated *.tar.xz at 0644 in a
+    # 0755 dir (world-readable), which was too loose for credential-bearing
+    # state. 0700 keeps the live copy readable only by root.
+    ${pkgs.coreutils}/bin/chmod 0700 "${backupDir}"
 
-      # Compress the backup
-      ${pkgs.xz}/bin/xz --compress --force "${backupFile}"
-
-      # Set permissions on backup file
-      ${pkgs.coreutils}/bin/chmod 644 "${backupFile}.xz"
-
-      # Log backup size
-      size=$(${pkgs.coreutils}/bin/du -h "${backupFile}.xz" | ${pkgs.coreutils}/bin/cut -f1)
-      log "Backup size: $size"
-      log "Backup location: ${backupFile}.xz"
-    else
-      log "ERROR: Backup archive creation failed!"
-      exit 1
-    fi
-
+    size=$(${pkgs.coreutils}/bin/du -sh "${backupDir}" | ${pkgs.coreutils}/bin/cut -f1)
+    log "Mirror size: $size (history/retention handled by ZFS snapshots, not dated artifacts)"
     log "Technitium DNS Server backup completed successfully"
   '';
 in
@@ -208,9 +239,9 @@ in
     };
 
     # Seed technitium_backup.prom at activation so the freshness/integrity metrics
-    # exist immediately (with the current newest-backup stats) rather than being
-    # absent until the next 03:00 run. Marks success=1 because a present artifact
-    # reflects the last good backup; anchors the timestamp to the artifact mtime.
+    # exist immediately (with the current mirror stats) rather than being absent
+    # until the next 03:00 run. Marks success=1 because a present mirror reflects
+    # the last good backup; anchors the timestamp to the newest file's mtime.
     services.technitium-dns-backup-metrics-seed = {
       description = "Seed technitium_backup.prom textfile metrics at activation";
       wantedBy = [ "multi-user.target" ];

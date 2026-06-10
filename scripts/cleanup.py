@@ -54,35 +54,15 @@ if not args or "trash" in args:
                    **opts).scanEntries()
 
 if not args or "backups" in args:
-    # NOTE: every backup directory below sets evictOldest, so the size cap
-    # trims the OLDEST backups first. Without it the scanner purges
-    # largest-first, and since dumps grow over time the largest file is the
-    # newest backup — each nightly dump was deleted minutes after creation
-    # once the directory exceeded its cap (caught by PgDumpStale 2026-06-10).
-    if exists('/tank/Backups/PostgreSQL'):
-        DirScanner(directory        = '/tank/Backups/PostgreSQL',
-                   days             = 28,
-                   mtime            = True,
-                   sudo             = True,
-                   depth            = 0,
-                   maxSize          = '200000000000',  # 200 GB
-                   evictOldest      = True,
-                   minimalScan      = True,
-                   onEntryPastLimit = safeRemove,
-                   **opts).scanEntries()
-
-    if exists('/tank/Backups/TechnitiumDNS'):
-        DirScanner(directory        = '/tank/Backups/TechnitiumDNS',
-                   days             = 28,
-                   mtime            = True,
-                   sudo             = True,
-                   depth            = 0,
-                   maxSize          = '10000000000',
-                   evictOldest      = True,
-                   minimalScan      = True,
-                   onEntryPastLimit = safeRemove,
-                   **opts).scanEntries()
-
+    # NOTE: /tank/Backups/{PostgreSQL,NodeRED,TechnitiumDNS} are deliberately
+    # ABSENT here since 2026-06-10: they are flat rsync mirrors now (one
+    # current copy, history via each dataset's sanoid archival snapshots),
+    # not dated-artifact series. A DirScanner over a mirror is data loss —
+    # days=28 mtime aging reaps any file unchanged for a month, and the size
+    # cap evicts live mirror content. Only dirs holding DATED artifacts
+    # belong in this section; any such dir must set evictOldest so the size
+    # cap trims the OLDEST artifacts first (the largest-first default purges
+    # the newest backup of any growing series — PgDumpStale, 2026-06-10).
     if exists('/tank/Backups/OPNsense'):
         DirScanner(directory        = '/tank/Backups/OPNsense',
                    days             = 28,
@@ -90,18 +70,6 @@ if not args or "backups" in args:
                    sudo             = True,
                    depth            = 0,
                    maxSize          = '10000000000',
-                   evictOldest      = True,
-                   minimalScan      = True,
-                   onEntryPastLimit = safeRemove,
-                   **opts).scanEntries()
-
-    if exists('/tank/Backups/NodeRED'):
-        DirScanner(directory        = '/tank/Backups/NodeRED',
-                   days             = 28,
-                   mtime            = True,
-                   sudo             = True,
-                   depth            = 0,
-                   maxSize          = '1000000000',   # 1 GB cap (each backup ~128 KB)
                    evictOldest      = True,
                    minimalScan      = True,
                    onEntryPastLimit = safeRemove,

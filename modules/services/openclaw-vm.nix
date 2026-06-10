@@ -858,8 +858,23 @@ in
                 }
               '
 
-              # Drafts (removed 2026-05-18 — hera-side server retired)
-              apply_mcporter_jq 'del(.mcpServers["drafts"])'
+              # Drafts on hera via the host drafts-mcp SSE bridge (re-added
+              # 2026-06 after the 2026-05-18 removal; binds 127.0.0.1:9082,
+              # reached over the guest OUTPUT DNAT 127.0.0.1:9082 →
+              # 10.99.0.1:9082 → host PREROUTING → 127.0.0.1:9082, same
+              # loopback pattern as the hermes entry below). The bridge's
+              # stdio filter shim (drafts-tool-filter, drafts-mcp.nix) is the
+              # SOLE enforcement point for this autonomous VM: it strips all
+              # 9 write tools (incl. drafts_run_action) from tools/list and
+              # rejects them on tools/call, so the description states the
+              # read-only surface honestly (advertising writes would cause
+              # wasted denied calls).
+              apply_mcporter_jq '
+                .mcpServers["drafts-hera"] = {
+                  "url": "http://127.0.0.1:9082/sse",
+                  "description": "Drafts.app (macOS, on hera) via the host drafts-mcp SSE bridge. READ-ONLY surface: list/search/get drafts, tags, workspaces, and actions (drafts_search, drafts_get_draft, drafts_get_drafts, drafts_get_current, drafts_get_current_workspace, drafts_get_workspace_drafts, drafts_get_tag, drafts_list_tags, drafts_list_workspaces, drafts_list_actions, drafts_open). All write tools — including drafts_run_action — are NOT available here; the bridge filters them out."
+                }
+              '
 
               # Hermes Agent bridge — same loopback pattern as the
               # home-assistant entry above. The host hermes-mcp service

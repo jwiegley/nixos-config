@@ -113,3 +113,52 @@ groups:
         annotations:
           summary: "Matter server container is down"
           description: "matter-server container has been stopped for 3 minutes — all Home Assistant Matter devices are unavailable until it recovers"
+
+      # Moving-tag image drift (container-image-staleness-exporter.nix, daily
+      # textfile). container_image_outdated_since_days is computed in the
+      # collector from a persisted first-seen-outdated timestamp, so it spans
+      # days without a restart-fragile Prometheus `for:`. The nightly
+      # update-containers pull normally re-aligns a drifted image within ~24h, so
+      # >30 days outdated means that pull has demonstrably failed to advance this
+      # image for a month — a periodic-refresh nudge, deliberately NOT a critical.
+      # 30d (not 7d) keeps this from nagging on briefly-stale images that the
+      # next nightly pull fixes. There is intentionally NO alert on
+      # container_image_local_age_days (a project pausing upstream releases is not
+      # actionable here) — that gauge is for Grafana/manual review only.
+      - alert: ContainerImageOutdated
+        expr: container_image_outdated_since_days > 30
+        for: 1h
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "{{ $labels.name }} image behind upstream {{ $labels.image }} for >30d"
+          description: "Running arch digest of {{ $labels.name }} ({{ $labels.image }}) has differed from its moving tag for {{ $value | printf \"%.0f\" }} days — the nightly update-containers pull is likely failing for this image; check `journalctl -u update-containers` and `podman pull {{ $labels.image }}`"
+
+      # Collector dead-man. Daily timer + 30m jitter + slack -> >36h means the
+      # staleness sweep has not completed (timer wedged or the oneshot is
+      # failing). Drift detection is blind until it recovers.
+      - alert: ContainerImageStalenessCheckStale
+        expr: time() - image_staleness_scan_last_success_timestamp_seconds > 36 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Container image-staleness collector has not run in >36h"
+          description: "image_staleness_scan_last_success_timestamp_seconds is >36h stale — check `systemctl status container-image-staleness-exporter`; drift detection is blind until it recovers"
+
+      # Persistent inability to reach a registry to check one image. A single
+      # daily failure is noise (anonymous rate-limit / transient DNS); 3d of
+      # consecutive failures is a real pattern (registry outage, image renamed
+      # upstream, or a moving tag that 404s). image_staleness_scan_failed is
+      # re-emitted every run, so `for: 3d` requires it to stay 1 across runs.
+      - alert: ContainerImageCheckFailing
+        expr: image_staleness_scan_failed == 1
+        for: 3d
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Cannot reach registry to check {{ $labels.image }} for 3d"
+          description: "skopeo could not fetch the upstream manifest for {{ $labels.name }} ({{ $labels.image }}) for 3 days — registry outage, anonymous rate-limit, or the moving tag no longer exists upstream"

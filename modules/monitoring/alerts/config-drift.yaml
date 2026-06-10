@@ -1,0 +1,128 @@
+# Config-drift alerting — docs/MONITORING_DEFERRED_SPECS.md "Config-Drift
+# Auditing" (Option B). Three signals:
+#   * config_file_drift / config_file_present / config_drift_last_run_*  from
+#     modules/monitoring/services/config-drift-exporter.nix (crown-jewel sha +
+#     deploy-window suppression).
+#   * aide_changes_detected / aide_last_check_timestamp_seconds  from the
+#     additive ExecStopPost on aide-check (modules/security/aide.nix) — driven
+#     by the authoritative aide exit code, not the brittle count parse.
+#   * nixos_config_uncommitted_changes  from config-drift-exporter (forgotten
+#     live edits diverging from git).
+# All thresholds baseline-justified inline. Metrics are post-deploy (the
+# collectors do not run until switch), so live would-fire checks for the new
+# series are noted as such in the workstream report.
+groups:
+  - name: config_drift
+    interval: 15m
+    rules:
+      # The crown-jewel sharpshooter. Fires only when a watched file's sha
+      # changed AND the change did NOT coincide with a deploy window (the
+      # collector silently re-baselines legitimate rebuild / Node-RED-deploy
+      # churn, and db_url is sha-normalized out of configuration.yaml). for: 1h
+      # is generous: a deliberate hand edit re-baselines on the next rebuild or
+      # via `systemctl start config-drift-rebaseline.service`; only a genuinely
+      # out-of-band change survives an hour. Live baseline: metric is
+      # post-deploy (absent until the exporter first runs).
+      - alert: ConfigFileChangedOutsideDeploy
+        expr: config_file_drift == 1
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Crown-jewel config {{ $labels.file }} changed outside a deploy window"
+          description: |
+            {{ $labels.file }} differs from its approved baseline and the change
+            did not coincide with a nixos-rebuild / Node-RED deploy.
+              - HA YAML (configuration/automations/scripts/scenes): was this a
+                hand edit or a UI change? If approved, it re-baselines on the
+                next rebuild, or run: systemctl start config-drift-rebaseline.service
+              - flows.json: a legitimate NR deploy advances .flows.json.backup
+                in lockstep and re-baselines silently; if this fired, the backup
+                mtime did NOT advance — investigate an out-of-band edit.
+              - secrets.yaml: an encrypted-file change outside a sops edit window.
+            Contents are deliberately NOT logged; only the file name.
+
+      # Dead-man for the collector itself (mirrors the openclaw probe idiom).
+      # > 2 days because the timer is hourly with a 5m jitter — anything beyond
+      # two days is a genuinely stuck/missing exporter.
+      - alert: ConfigDriftExporterStale
+        expr: time() - config_drift_last_run_timestamp_seconds > 2 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "config-drift-exporter has not run in >48h"
+          description: |
+            The crown-jewel config-drift collector's last-run timestamp is stale.
+            Check: systemctl status config-drift-exporter.service
+            Logs:  journalctl -u config-drift-exporter
+
+      # A watched config file vanished. for: 1h tolerates a transient read race
+      # (e.g. an atomic rewrite mid-scan). present=0 persists only if the file
+      # is genuinely gone.
+      - alert: CrownJewelFileMissing
+        expr: config_file_present == 0
+        for: 1h
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Watched config file {{ $labels.file }} is missing"
+          description: |
+            The crown-jewel file {{ $labels.file }} could not be read for >1h.
+            A missing HA YAML / flows.json / sshd_config is a real incident.
+            Check the path on host and the config-drift-exporter logs.
+
+      # Authoritative AIDE change signal, exit-code-driven (aide.nix ExecStopPost),
+      # independent of aide-metrics.nix's count parse. Like the existing
+      # AIDEChangesDetected (aide_check_status==1) it is re-baselined 60s after
+      # every rebuild by aide-post-rebuild, so it is a low-noise daily heads-up
+      # for a change AIDE saw that was NOT yet folded into the database.
+      # for: 1h lets the post-rebuild aide-update settle before paging.
+      - alert: AideChangesDetected
+        expr: aide_changes_detected == 1
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "AIDE reported file changes (authoritative exit code)"
+          description: |
+            The last aide --check exited 1-7 (changes detected) and the change
+            was not yet folded into the AIDE database. After a nixos-rebuild this
+            re-baselines automatically within 60s (aide-post-rebuild). If it
+            persists, review: journalctl -u aide-check --since "1 day ago"
+            and approve with: systemctl start aide-update.service
+
+      # Dead-man for the additive aide-check result emitter. > 2 days because
+      # the underlying aide-check timer is daily.
+      - alert: AideResultStale
+        expr: time() - aide_last_check_timestamp_seconds > 2 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "aide-check result metric is stale (>48h)"
+          description: |
+            aide_last_check_timestamp_seconds has not advanced in >48h — the
+            daily aide-check may be failing to run.
+            Check: systemctl status aide-check.service
+
+      # Forgotten uncommitted drift in /etc/nixos. for: 24h is the whole point:
+      # live edits during an active session are normal; only drift left a full
+      # day is the signal. Info severity (a hygiene nudge, not a page). The
+      # .nixos-build lock is excluded by the collector.
+      - alert: NixosConfigUncommittedDrift
+        expr: nixos_config_uncommitted_changes > 0
+        for: 24h
+        labels:
+          severity: info
+          category: maintenance
+        annotations:
+          summary: "{{ $value }} uncommitted change(s) in /etc/nixos for >24h"
+          description: |
+            Live /etc/nixos diverges from git for over a day. Commit or revert:
+              cd /etc/nixos && git status

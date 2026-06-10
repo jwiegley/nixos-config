@@ -1,0 +1,19 @@
+# Accepted / acknowledged container-image CVEs (trivy --ignorefile).
+#
+# Referenced by modules/monitoring/services/container-cve-exporter.nix via
+# TRIVY_IGNOREFILE. Any CVE ID listed here is dropped from the per-image counts
+# emitted to Prometheus, so it neither pages (ExposedImageFixableCriticalCVE /
+# …HighCVE on shlink) nor shows in the Grafana digest gauges.
+#
+# Format: one public CVE identifier per line (e.g. CVE-2024-12345). Comments
+# (# …) and blank lines are ignored. NO secrets ever belong in this file — CVE
+# IDs are public references only.
+#
+# Workflow: after the first weekly scan, inspect the per-image JSON under
+#   /var/lib/container-cve/reports/<name>.json   (0640 root:root)
+# and add IDs here for CVEs you have evaluated and accepted (unfixable noise,
+# not-applicable to our usage, or risk-accepted). Re-run:
+#   sudo systemctl start container-cve-exporter.service
+#
+# Empty initially — populate after the baseline scan establishes which findings
+# are real signal vs accepted noise.

@@ -214,6 +214,69 @@ groups:
             misrouting (config.yaml regression) and LiteLLM master_key
             mismatch.
 
+      # Direct liveness of the hera-side llama-swap/MLX model router — the
+      # terminal upstream every `hera/*` LiteLLM model routes to, and thus the
+      # terminal dependency of all Hermes chat. blackbox_hera_mlx GETs
+      # hera.lan:8080/v1/models (HTTP 200 unauth, no secrets). When this is 0
+      # the model backend itself is down — this is the CAUSE rule that isolates
+      # an MLX outage from the generic downstream HermesAskFailing /
+      # HermesE2eChatFailing symptoms (which surface 2-3 hops later and cannot
+      # name the layer). It is a LIVENESS signal only: /v1/models answers 200 as
+      # long as the router is alive; "router up but a model won't load" is caught
+      # by HermesE2eChatFailing's content check, not here — a green
+      # MLXBackendDown does NOT prove chat works.
+      #
+      # `and on() up{job="darwin-hera"} == 1` gates on hera being reachable at
+      # all (probe_success and up share no labels, so on() does the intended
+      # scalar conjunction — both are single series):
+      #   - probe down + hera up   -> THIS fires: hera alive but llama-swap dead
+      #                               (actionable — restart llama-swap on hera).
+      #   - probe down + hera down -> THIS stays silent; DNSServerDown /
+      #                               LocalNetworkIssue / the darwin-hera host
+      #                               rules own "hera unreachable".
+      # hera is effectively 24/7 (avg_up_7d=0.9989), so NO sleep-window
+      # suppression is needed. for: 8m: the longest contiguous darwin-hera gap in
+      # 7d was a single ~11-min hera-DOWN block (2026-06-08 boot-work) — but the
+      # gate suppresses MLXBackendDown for the entire hera-down window, so 8m only
+      # has to outlast the brief recovery edge where node-exporter (:9100) returns
+      # before llama-swap (:8080) finishes warming. 8m clears that comfortably
+      # while still surfacing a genuine MLX outage well before Discord users do.
+      # severity: warning (not critical) — the e2e/ask probes already page
+      # critical for the user-visible symptom and self-heal cannot restart hera;
+      # this rule is cause-isolation, not a new page path.
+      - alert: MLXBackendDown
+        expr: probe_success{job="blackbox_hera_mlx"} == 0 and on() up{job="darwin-hera"} == 1
+        for: 8m
+        labels:
+          severity: warning
+          category: availability
+          service: mlx-backend
+        annotations:
+          summary: "hera MLX/llama-swap model router down (Hermes chat terminal dependency)"
+          description: |
+            The llama-swap model router on hera
+            (http://hera.lan:8080/v1/models) has not answered HTTP 200 for
+            8 minutes WHILE hera itself is reachable (up{job="darwin-hera"}==1).
+            This is the terminal upstream of every `hera/*` LiteLLM model, so
+            Hermes Discord chat (and OpenClaw's hera-routed models) will fail
+            until it recovers — expect HermesE2eChatFailing / HermesAskFailing /
+            HermesFallbackChainTriggered to be firing alongside this as
+            DOWNSTREAM symptoms; THIS rule names the root cause.
+
+            This is a LIVENESS probe of the router only — a clear MLXBackendDown
+            does not guarantee a specific model can load (that is
+            HermesE2eChatFailing's job).
+
+            Runbook (hera-side, manual — vulcan cannot ssh hera):
+              1. On hera: confirm the llama-swap process / launchd job is alive
+                 and re-listening on :8080 (`curl -s localhost:8080/v1/models`).
+              2. Restart llama-swap on hera; once /v1/models returns 200 this
+                 clears within one scrape interval (~30s + the 8m for-window
+                 only delays the initial fire, not the resolve).
+              3. If hera itself is wedged (also see DNSServerDown /
+                 LocalNetworkIssue for hera.lan), recover hera first — this rule
+                 self-suppresses while hera is unreachable.
+
       # E2E probe hasn't run recently. Catches the case where the
       # probe service is failing to start (e.g., EnvironmentFile
       # missing) — distinct from "probe ran but got non-200".

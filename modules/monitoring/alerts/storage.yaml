@@ -289,3 +289,31 @@ groups:
         annotations:
           summary: "Restic repository {{ $labels.repository }} shrank sharply"
           description: "Repository {{ $labels.repository }} is now {{ $value | humanize1024 }}B — under 60% of its 14-day average size. A bucket may have been emptied, a backup misdirected, or a prune ran away. Verify with `restic -r <repo> snapshots` and `stats` before trusting the offsite copy."
+
+      # Collector-run freshness for the offsite B2 path. restic-metrics.timer runs
+      # every 6h (OnUnitActiveSec=6h, OnBootSec=5min, Persistent=true). If the timer
+      # dies or the collector stops rewriting restic.prom, EVERY restic_* metric
+      # freezes at its last value (restic_check_success stays 1 forever) and all the
+      # restic.* alerts above silently read stale data. SystemdServiceFailed does NOT
+      # catch this: the collector swallows per-repo errors and always reaches its
+      # final mv + exit 0, and a dead timer produces no failed unit at all.
+      # node_textfile_mtime would also work, but restic.prom is intentionally
+      # excluded from the generic TextfileCollectorStale tiers (meta-monitoring.yaml)
+      # — this is its dedicated freshness guard. Threshold 8h = 6h cadence + ~2h
+      # grace: one missed boot-window run is normal under Persistent catch-up and the
+      # collector can take many minutes across 9 repos (TimeoutSec=30m, worst-case
+      # file age ~6.5h); two missed runs (a real dead timer) is wrong. max() collapses
+      # the 9 per-repo series to one timestamp (all written in one collector pass);
+      # absent() deliberately NOT used so a fresh deploy with the collector never-run
+      # does not alarm (same convention as ResticIntegrityCheckStale). Baseline
+      # verified live 2026-06-10: file age ~3.9h, rule not firing.
+      - alert: ResticMetricsStale
+        expr: (time() - max(restic_last_check_timestamp_seconds)) > 28800
+        for: 10m
+        labels:
+          severity: warning
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic B2 metrics collector is stale"
+          description: "restic-metrics has not refreshed restic.prom in over 8 hours (last collector pass {{ $value | humanizeDuration }} ago; expected every 6h). All restic_check_success / snapshot-freshness / repo-size alerts are now reading FROZEN values — a B2 outage or credential failure would not be detected. Check `systemctl status restic-metrics.timer` and `journalctl -u restic-metrics`."

@@ -48,6 +48,27 @@ groups:
           summary: "High Dovecot authentication failure rate"
           description: "Dovecot is experiencing {{ $value | humanize }} authentication failures per second over the last 5 minutes. Possible brute force attack."
 
+      # ── RETIRED: DovecotHighConnectionCount (consciously closed, do not re-add) ──
+      # Intent: alert when concurrent IMAP connections spike. CLOSED PERMANENTLY
+      # 2026-06-10, NOT deferred. The dovecot Prometheus exporter (:9166,
+      # job="dovecot") exposes only dovecot_user_* auth/IO/cache counters — there
+      # is NO concurrent-connection gauge to alert against (the rule was deleted in
+      # the 2026-06-09 dead-metric sweep for exactly this reason). vulcan is a
+      # single-user mail server with mail_max_userip_connections = 100 for the LAN
+      # (dovecot.nix:318), so a connection-count alert would guard a load profile
+      # that cannot occur. Reviving it would require a bespoke exporter scraping
+      # `doveadm who`/proc for a metric of zero operational value here. Liveness is
+      # already covered by up{job="dovecot"}, DovecotExporterStale (absent(dovecot_up)),
+      # and the IMAPS blackbox probe. See docs/MONITORING_COVERAGE_PLAN.md and
+      # docs/MONITORING_DEFERRED_SPECS.md (#email-fts-staleness).
+      #
+      # FTS (full-text search) index-staleness coverage — the genuine correctness
+      # gap in this stack — is monitored separately: a daily textfile collector
+      # emits fts_index_lag_seconds{user} and the FtsIndexStale / FtsIndexSeverelyStale
+      # / FtsStalenessCheckStale rules live INLINE in
+      # modules/services/dovecot-fts-monitor.nix (not this file), so they are NOT
+      # duplicated here.
+
       # Postfix Mail Server Alerts
       - alert: PostfixDown
         expr: up{job="postfix"} == 0

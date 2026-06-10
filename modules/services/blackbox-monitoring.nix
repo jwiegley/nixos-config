@@ -813,6 +813,60 @@ in
             scrape_timeout = "10s";
           }
 
+          # Direct liveness probe of the hera-side llama-swap / MLX model router
+          # (hera.lan:8080), the terminal upstream LiteLLM's `hera/*` models route
+          # to and thus the terminal dependency of all Hermes Discord chat. GET
+          # /v1/models returns HTTP 200 UNAUTHENTICATED (verified live through the
+          # exporter: owned_by=llama-swap, 30 models, ~1ms once warm), so the
+          # strict http_2xx module suffices — no auth, no secrets. This is a
+          # LIVENESS probe of the router; per-model load correctness is covered by
+          # the hermes-e2e-chat-probe content check. NOTE this is the HERA
+          # instance, distinct from the vulcan-side llama-swap.vulcan.lan already
+          # in blackbox_https_local. host_group is intentionally NOT set so the
+          # ICMP host_group-based rules in network.yaml never match it. The
+          # MLXBackendDown alert in hermes.yaml owns this target (gated by
+          # `and on() up{job="darwin-hera"}==1`); the generic HostUnreachable rule
+          # (network.yaml, job=~"blackbox_.*") should exclude blackbox_hera_mlx so
+          # a hera reboot does not double-fire an ungated critical — that
+          # exclusion is requested as a userAction (network.yaml not owned here).
+          # (coverage plan deferred: mlx-hera-probe)
+          {
+            job_name = "blackbox_hera_mlx";
+            metrics_path = "/probe";
+            params = {
+              module = [ "http_2xx" ];
+            };
+            static_configs = [
+              {
+                targets = [ "http://hera.lan:8080/v1/models" ];
+                labels = {
+                  service = "mlx-backend";
+                  probe = "hera-mlx";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "http_remote";
+              }
+            ];
+            scrape_interval = "30s";
+            scrape_timeout = "10s";
+          }
+
           # Node-RED /alert HTTP-In endpoint on 127.0.0.1:1880 — the listener
           # the Alertmanager iphone-notifier receiver POSTs critical pages to.
           # GET /alert returns 404 (it is a POST-only HTTP-In node), which the

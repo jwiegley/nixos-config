@@ -26,6 +26,13 @@
     # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
     ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
+    # Deferred-spec implementations (docs/MONITORING_DEFERRED_SPECS.md)
+    ./container-cve-exporter.nix # trivy CVE scan of running images
+    ./port-drift-exporter.nix # listening-socket drift vs ports.txt registry
+    ./config-drift-exporter.nix # crown-jewel config-file change detection + AIDE result metrics
+    ./container-image-staleness-exporter.nix # skopeo moving-tag digest drift
+    ./microvm-resource-exporter.nix # host-cgroup CPU/mem + backing-volume gauges for the agent VMs
+    ./vm-egress-exporter.nix # per-VM egress counters (agent microVM network visibility)
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters

@@ -69,6 +69,7 @@
     ../../modules/services/dirscan-share.nix
     ../../modules/services/dovecot-archive.nix
     ../../modules/services/dovecot-imapsieve-monitor.nix
+    ../../modules/services/dovecot-fts-monitor.nix
     ../../modules/services/dovecot.nix
     ../../modules/services/gitea-actions-runner.nix
     ../../modules/services/gitea.nix

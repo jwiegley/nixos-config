@@ -3,7 +3,10 @@ groups:
     rules:
       # Host unreachable - any probe that fails completely
       - alert: HostUnreachable
-        expr: probe_success{job=~"blackbox_.*"} == 0
+        # blackbox_hera_mlx is excluded: the gated MLXBackendDown alert in
+        # hermes.yaml owns that target (fires only when hera itself is up), so
+        # a hera reboot must not also trip this ungated critical.
+        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx"} == 0
         for: 2m
         labels:
           severity: critical

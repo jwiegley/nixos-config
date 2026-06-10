@@ -1,0 +1,50 @@
+groups:
+  - name: port-drift
+    rules:
+      # ----------------------------------------------------------------------
+      # The one high-signal tripwire. Baseline measured 2026-06-10: TCP=0,
+      # UDP=1 (jellyfin discovery :7359 — a registry omission the orchestrator
+      # is adding to docs/ports.txt; once added + rebuilt, this goes to 0).
+      # A wildcard (0.0.0.0/::) listener on a non-ephemeral port that nobody
+      # declared in docs/ports.txt is the canonical "a service just exposed
+      # something to the LAN" event. Loopback drift and loopback->wildcard
+      # widening (rootless podman port-forward artifacts on 6383/6385/8084)
+      # are DELIBERATELY NOT alerted — info gauges only, for Grafana / digest.
+      #
+      # max_over_time[5m] tolerates a single missed 5-min scrape; for: 15m
+      # absorbs the CLAUDE.md "assign port, THEN update ports.txt" window so a
+      # deliberate add-service rebuild does not page before the registry edit
+      # lands and the next rebuild copies it into the store.
+      # ----------------------------------------------------------------------
+      - alert: UnexpectedWildcardListener
+        expr: max_over_time(port_drift_unexpected_wildcard_listeners[5m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A wildcard (0.0.0.0/::) listener is not in docs/ports.txt ({{ $labels.proto }})"
+          description: >-
+            {{ $value }} externally-bound {{ $labels.proto }} listener(s) on a
+            non-ephemeral port have no matching docs/ports.txt entry — a service
+            may have exposed a new port, or the registry is stale. Identify the
+            port via port_drift_unexpected_wildcard_listener_info, then compare
+            `sudo ss -tlnpH`/`-ulnpH` against docs/ports.txt.
+
+      # ----------------------------------------------------------------------
+      # Staleness watchdog: the collector runs every 5m, so >30m without a
+      # fresh timestamp means the oneshot crashed or the timer stopped. The
+      # collector writes its timestamp even on a partial parse, so silence
+      # (not a wrong count) is what this catches.
+      # ----------------------------------------------------------------------
+      - alert: PortDriftExporterStale
+        expr: time() - port_drift_exporter_run_timestamp_seconds > 1800
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "port-drift exporter has not run in >30m"
+          description: >-
+            port_drift_exporter_run_timestamp_seconds is older than 30 minutes.
+            The port-drift-exporter oneshot/timer may have failed; the
+            wildcard-listener tripwire is blind until it recovers. Check
+            `systemctl status port-drift-exporter.service`.

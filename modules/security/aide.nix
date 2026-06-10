@@ -131,6 +131,32 @@
     /etc/systemd CONFIG
     /etc/security CONFIG
 
+    # ===== CROWN-JEWEL MUTABLE CONFIG =====
+    # Home Assistant hand-edited YAML + Node-RED flows.json are high-value
+    # config artifacts that change OUTSIDE a nixos-rebuild (HA UI / NR deploy).
+    # AIDE gives the broad daily heads-up here; the per-file deploy-window
+    # sharpshooter is config-drift-exporter.nix (config_file_drift). We watch
+    # ONLY the human-authored YAML and the flows file — NEVER the churning,
+    # token-bearing .storage/ tree or runtime state.
+    /var/lib/hass/configuration.yaml CONFIG
+    /var/lib/hass/automations.yaml CONFIG
+    /var/lib/hass/scripts.yaml CONFIG
+    /var/lib/hass/scenes.yaml CONFIG
+    /var/lib/node-red/flows.json CONFIG
+
+    # Exclude everything else under these dirs (constantly-churning runtime
+    # state, OAuth/refresh tokens in .storage, logs, deps). The explicit file
+    # rules above still apply; these negations cover the siblings.
+    !/var/lib/hass/\.storage
+    !/var/lib/hass/home-assistant_v2\.db
+    !/var/lib/hass/home-assistant\.log
+    !/var/lib/hass/deps
+    !/var/lib/hass/tts
+    !/var/lib/node-red/\.flows\.json\.backup
+    !/var/lib/node-red/node_modules
+    !/var/lib/node-red/\.config
+    !/var/lib/node-red/lib
+
     # ===== EXCLUSIONS =====
 
     # Temporary files
@@ -202,6 +228,41 @@
         6
         7
       ];
+      # Additive result-emission (does NOT conflict with aide-metrics.nix's
+      # ExecStartPost full-walk nor aide-nagios-check's check_aide). ExecStopPost
+      # runs after the primary `aide --check` ExecStart and reads $EXIT_STATUS
+      # (the REAL numeric exit code, before SuccessExitStatus masks it to 0) to
+      # emit two metrics into a SEPARATE textfile (aide_result.prom), so the
+      # change-detection signal is driven by the authoritative exit code, not by
+      # aide-metrics.nix's brittle count parse:
+      #   aide_changes_detected         1 if exit 1-7 (changes), 0 if exit 0
+      #   aide_last_check_timestamp_seconds  wall-clock of this check
+      # COUNTS/BOOLEANS/TIMESTAMPS ONLY — never AIDE report lines / paths.
+      ExecStopPost = "${pkgs.writeShellScript "aide-result-emit" ''
+        set -u
+        DIR=/var/lib/prometheus-node-exporter-textfiles
+        OUT="$DIR/aide_result.prom"
+        TMP="$OUT.$$"
+        # $EXIT_STATUS is the real exit code (numeric for an exited service).
+        # Treat non-numeric / missing as unknown -> changes=0 but timestamp still
+        # advances so AideResultStale catches a dead check.
+        EC="''${EXIT_STATUS:-}"
+        case "$EC" in
+          1|2|3|4|5|6|7) CHANGES=1 ;;
+          *)             CHANGES=0 ;;
+        esac
+        [ -d "$DIR" ] || ${pkgs.coreutils}/bin/mkdir -p "$DIR"
+        {
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_changes_detected 1 if the last aide --check reported changes (exit 1-7), 0 if clean'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_changes_detected gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_changes_detected %s\n' "$CHANGES"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_last_check_timestamp_seconds Unix time the last aide --check completed'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_last_check_timestamp_seconds gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_last_check_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
+        } > "$TMP"
+        ${pkgs.coreutils}/bin/chmod 0644 "$TMP"
+        ${pkgs.coreutils}/bin/mv -f "$TMP" "$OUT"
+      ''}";
     };
   };
 

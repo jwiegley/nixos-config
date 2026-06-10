@@ -284,6 +284,80 @@
           ];
         }
 
+        # Agent microVM egress journal scrape (security monitoring)
+        # The openclaw/hermes microVM firewall modules emit netfilter LOG lines
+        # ("openclaw-egress: ..." on every NEW outbound conn, and
+        # "hermes-egress-rejected: ..." when Hermes tries to leave its 443/53
+        # allowlist). Those LOG lines come from the kernel at --log-level info
+        # (priority 6), which the consolidated systemd-journal scrape above
+        # DROPS (priority 5-7), so the egress audit log NEVER reaches Loki
+        # (verified 2026-06-10: 163 openclaw-egress lines/24h in the kernel
+        # journal, 0 streams in Loki). Same failure mode as the sshd/postgresql
+        # priority-drop fixes. This dedicated scrape ingests the SAME journal,
+        # KEEPS ONLY kernel-transport lines, and has NO priority-drop stage.
+        # Kernel lines carry no _SYSTEMD_UNIT, so we can't relabel-keep on a
+        # unit like the sshd block does; instead we keep on __journal__transport
+        # == kernel and then drop everything that isn't one of our two egress
+        # prefixes in a pipeline match stage (promtail relabel can't match the
+        # MESSAGE body). Only the egress_kind label is promoted (no SRC/DST IP
+        # becomes a Loki label -> no cardinality blowup, no IP in alert labels).
+        {
+          job_name = "vm-egress";
+          journal = {
+            json = true;
+            max_age = "5m"; # Match the main journal scrape window
+            labels = {
+              job = "vm-egress";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            # Keep ONLY kernel-transport lines (the netfilter LOG target emits
+            # via the kernel ring buffer; no unit, syslog identifier "kernel").
+            {
+              source_labels = [ "__journal__transport" ];
+              regex = "kernel";
+              action = "keep";
+            }
+            # Carry over the same descriptive labels as the other scrapes.
+            {
+              source_labels = [ "__journal__hostname" ];
+              target_label = "hostname";
+            }
+            {
+              source_labels = [ "__journal_priority" ];
+              target_label = "priority";
+            }
+            {
+              source_labels = [ "__journal_syslog_identifier" ];
+              target_label = "syslog_identifier";
+            }
+          ];
+          pipeline_stages = [
+            # Drop every kernel line that is NOT one of our two egress prefixes
+            # (this is the bulk of the kernel ring buffer). promtail relabel
+            # cannot match the MESSAGE body, so this prefix filter lives here.
+            {
+              match = {
+                selector = ''{job="vm-egress"} !~ "openclaw-egress:|hermes-egress-rejected:"'';
+                action = "drop";
+              };
+            }
+            # Tag the source VM so alerts can label by egress_kind without
+            # parsing SRC/DST IPs into Loki labels.
+            {
+              regex = {
+                expression = "(?P<egress_kind>openclaw-egress|hermes-egress-rejected)";
+              };
+            }
+            {
+              labels = {
+                egress_kind = "";
+              };
+            }
+          ];
+        }
+
         # Nginx access logs
         {
           job_name = "nginx-access";

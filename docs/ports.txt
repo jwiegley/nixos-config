@@ -90,6 +90,7 @@
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)
 8089 127.0.0.1 vdirsyncer
 8090 127.0.0.1 Calendar publisher (Sacramento Cluster .ics → calendar.newartisans.com)
+7359 0.0.0.0 :: Jellyfin client auto-discovery (UDP broadcast listener)
 8096 0.0.0.0 Jellyfin (user johnw, host networking)
 8123 127.0.0.1 Home Assistant
 8180 127.0.0.1 OpenProject web interface

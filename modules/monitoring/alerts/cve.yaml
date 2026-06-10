@@ -1,0 +1,117 @@
+groups:
+  - name: container_cve
+    interval: 1m
+    rules:
+      # ===================================================================
+      # PAGING TIER — fixable CRITICAL/HIGH on INTERNET-EXPOSED images only.
+      #
+      # Scoped to internet-exposed images (cve_scan_image_internet_exposed==1;
+      # today: shlink, the sole cloudflared-ingress podman image). The `and on`
+      # join restricts to fixable CVEs on an exposed image: there is a concrete
+      # remediation (bump the moving tag / patch). Severity is WARNING, NOT
+      # critical — CVE remediation is not a 3am page; this lands in the normal
+      # warning channel, not the wake-you path. fixable=false CVEs and all
+      # MEDIUM/LOW deliberately never alert (Grafana/weekly-digest only): there
+      # is no action for an unfixable CVE.
+      #
+      # for: 30m debounces a mid-scan partial textfile write (the collector
+      # writes atomically via mv, but 30m also rides out a single transient
+      # weekly run cleanly).
+      # ===================================================================
+      - alert: ExposedImageFixableCriticalCVE
+        expr: |
+          (cve_fixable_critical_count > 0)
+            and on(name, image, user) (cve_scan_image_internet_exposed == 1)
+        for: 30m
+        labels:
+          severity: warning
+          component: container-cve
+        annotations:
+          summary: "Internet-exposed image {{ $labels.name }} has {{ $value }} fixable CRITICAL CVE(s)"
+          description: |
+            The internet-exposed container image {{ $labels.name }}
+            ({{ $labels.image }}, user {{ $labels.user }}) has {{ $value }}
+            FIXABLE CRITICAL CVE(s). A patched upstream image exists.
+
+            Remediation: pull a newer image tag (the container tracks a moving
+            tag with no digest pin) and recreate the container.
+            Inspect detail: sudo cat /var/lib/container-cve/reports/{{ $labels.name }}.json | jq '.Results[].Vulnerabilities[] | select(.Severity=="CRITICAL" and .FixedVersion)'
+            Accept a finding: add its CVE ID to /etc/nixos/.trivyignore and rebuild.
+            Re-scan now: sudo systemctl start container-cve-exporter.service
+
+      - alert: ExposedImageFixableHighCVE
+        expr: |
+          (cve_fixable_high_count > 0)
+            and on(name, image, user) (cve_scan_image_internet_exposed == 1)
+        for: 30m
+        labels:
+          severity: info
+          component: container-cve
+        annotations:
+          summary: "Internet-exposed image {{ $labels.name }} has {{ $value }} fixable HIGH CVE(s)"
+          description: |
+            The internet-exposed container image {{ $labels.name }}
+            ({{ $labels.image }}, user {{ $labels.user }}) has {{ $value }}
+            FIXABLE HIGH CVE(s). Review and patch when convenient (info tier —
+            does not page).
+
+            Inspect detail: sudo cat /var/lib/container-cve/reports/{{ $labels.name }}.json | jq '.Results[].Vulnerabilities[] | select(.Severity=="HIGH" and .FixedVersion)'
+            Accept a finding: add its CVE ID to /etc/nixos/.trivyignore and rebuild.
+
+      # ===================================================================
+      # HYGIENE TIER — the scan itself broke or went stale (silent-failure
+      # guard). Counts that silently go stale or to zero look like "all clear"
+      # — these rules make a broken scanner visible instead.
+      # ===================================================================
+      - alert: ContainerCVEScanStale
+        expr: time() - cve_scan_last_success_timestamp_seconds > 10 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          component: container-cve
+        annotations:
+          summary: "Container CVE scan has not completed in >10 days"
+          description: |
+            The weekly trivy CVE sweep last completed
+            {{ $value | humanizeDuration }} ago (weekly cadence = Sun 04:00; a
+            >10-day gap means two runs were missed). CVE counts are aging.
+
+            Check timer: systemctl status container-cve-exporter.timer
+            Check last run: systemctl status container-cve-exporter.service
+            Run manually: sudo systemctl start container-cve-exporter.service
+
+      - alert: ContainerCVEScanFailed
+        expr: cve_scan_failed == 1
+        for: 2h
+        labels:
+          severity: info
+          component: container-cve
+        annotations:
+          summary: "CVE scan of image {{ $labels.name }} (user {{ $labels.user }}) failed"
+          description: |
+            trivy could not scan {{ $labels.name }} (user {{ $labels.user }}) on
+            the last sweep — its CVE counts are absent, not zero. A single
+            transient per-image failure (rootless runtime dir down, image
+            pulling) is tolerated by for:2h; persistence across two weekly runs
+            is a real problem.
+
+            View scan logs: journalctl -u container-cve-exporter.service --since "10 days ago"
+            Test the user's podman store: sudo -u {{ $labels.user }} podman ps
+
+      - alert: ContainerCVEDBStale
+        expr: cve_scan_db_age_seconds > 14 * 24 * 3600
+        for: 1h
+        labels:
+          severity: info
+          component: container-cve
+        annotations:
+          summary: "Trivy vulnerability DB is stale (>14 days old)"
+          description: |
+            The trivy vuln DB is {{ $value | humanizeDuration }} old. The weekly
+            scan failed to refresh it (no egress to ghcr.io at scan time), so CVE
+            counts reflect an aging database and may miss newly-disclosed CVEs.
+
+            Check egress at scan time / DB pull:
+              journalctl -u container-cve-exporter.service --since "10 days ago"
+            Force a DB refresh:
+              sudo systemctl start container-cve-exporter.service

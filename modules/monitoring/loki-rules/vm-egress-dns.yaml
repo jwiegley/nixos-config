@@ -1,0 +1,55 @@
+groups:
+  - name: vm_agent_egress_dns
+    interval: 5m
+    rules:
+      # New-destination detection for the OpenClaw agent microVM (10.99.0.2).
+      # Technitium logs every DNS query into Loki keyed by the REAL VM source
+      # IP (client_ip="10.99.0.2"), as JSON with a `domain` field. OpenClaw's
+      # baseline is genuinely tiny and stable (verified via a 14-day Loki sweep
+      # 2026-06-10: 16 distinct FQDNs / ~11 registrable bases), so a static,
+      # auditable, checked-in allowlist is the right tool. The negative regexp
+      # below encodes the allowlist (registrable bases seen in the 14d sweep
+      # PLUS the config-declared agent endpoints anthropic/openrouter/perplexity
+      # /sentry, included proactively even if not yet observed). Anything else
+      # is flagged. This rule was confirmed to return 0 results against live
+      # Loki at deploy time, so it starts quiet.
+      #
+      # SCOPE NOTE — OpenClaw only, deliberately. The Hermes VM (10.99.1.2) is
+      # an open-ended web-research agent: the same 14d sweep showed it resolving
+      # 23+ registrable bases (aljazeera/bbc/nytimes/reddit/techcrunch/reuters/
+      # yelp/tripadvisor/...), a long tail that grows continuously. A static
+      # allowlist for Hermes would chronically fire (noise), which violates the
+      # threshold discipline this fleet follows. Hermes egress is still fully
+      # covered by the INDEPENDENT byte-rate (VMAgentEgressVolumeHigh, on
+      # Prometheus node_network) and reject-log (HermesEgressRejected) tiers,
+      # and Hermes already enforces a 443/53 port-allowlist with a final DROP.
+      #
+      # SECURITY — counts-and-domain only. The rule surfaces the FACT that a
+      # non-allowlisted base was resolved and labels by client_ip; it never
+      # touches the resolved IP/`answer` field. The annotation directs the
+      # operator to Loki for the exact name rather than embedding it.
+      - alert: VMAgentDNSNewDestination
+        expr: |
+          sum by (client_ip) (count_over_time(
+            {job="dns_query_logs", client_ip="10.99.0.2"}
+            | json
+            | domain !~ "(^|\\.)(discord\\.com|discord\\.gg|discordapp\\.com|github\\.com|githubusercontent\\.com|githubassets\\.com|npmjs\\.org|whatsapp\\.net|whatsapp\\.com|ntp\\.org|perplexity\\.ai|openrouter\\.ai|anthropic\\.com|googleapis\\.com|sentry\\.io|chatgpt\\.com|example\\.com|vulcan\\.lan)$"
+            | domain != ""
+            [10m]
+          )) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: security
+          service: agent-vm-egress
+        annotations:
+          summary: "OpenClaw VM {{ $labels.client_ip }} resolved a non-allowlisted domain"
+          description: |
+            The OpenClaw microVM at {{ $labels.client_ip }} resolved a DNS name
+            whose registrable base is outside the approved egress allowlist in
+            the last 10m. Inspect the exact name in Loki:
+            {job="dns_query_logs", client_ip="{{ $labels.client_ip }}"} | json.
+            Either a legitimate new service (add its base to the negative-regexp
+            allowlist in modules/monitoring/loki-rules/vm-egress-dns.yaml) or an
+            exfil/compromise indicator. Resolved IPs are intentionally NOT
+            surfaced here.

@@ -1,0 +1,68 @@
+# microVM guest-OOM detection (Option A — docs/MONITORING_DEFERRED_SPECS.md
+# "microVM Guest Visibility"). Loki ruler rule — needs an L+ symlink in
+# modules/services/loki.nix (loki-rules/*.yaml are NOT auto-discovered); see
+# the userActions in the workstream report.
+#
+# WHY a host-side journal rule (not the in-guest probe / cgroup heuristic):
+# the worklist decision is to detect guest-OOM via the HOST kernel journal.
+# The guests run a tmpfs root with ZERO swap; memory pressure there is invisible
+# to Prometheus today. There are two OOM-kill signatures the HOST kernel emits
+# that reach Loki:
+#
+#   1. HOST cgroup-OOM targeting the QEMU process — if the microVM cgroup ever
+#      hits its memory limit, the kernel logs a "Memory cgroup out of memory"
+#      line naming the cgroup path (system-microvm.slice/microvm@<vm>.service).
+#      (cgroup MemoryMax is currently `infinity`, so this needs a host-global
+#      OOM, but the line still references the qemu task / microvm slice.)
+#   2. HOST global-OOM killing the qemu-microvm process — the OOM killer logs
+#      "Out of memory: Killed process <pid> (qemu-system-aarch...)".
+#
+# A GUEST-INTERNAL OOM (the guest's own kernel killing an in-guest process)
+# does NOT cross into the host journal — that case is covered (heuristically)
+# by the MicroVMMemoryHigh Prometheus alert in alerts/microvm.yaml. This rule
+# catches the host-observable half: when the microVM process itself is the OOM
+# victim or the microvm cgroup is the OOM source.
+#
+# Transport (verified live 2026-06-10): the Linux OOM killer logs at KERN_ERR
+# (priority 3), within promtail.nix's 0-4 keep band, so these lines reach Loki
+# as {job="systemd-journal", syslog_identifier="kernel"} — the same path the
+# UAS-enclosure kernel rules use. Zero OOM lines in the last 30d (no false
+# baseline), and `syslog_identifier="kernel"` is a live label (121 kernel
+# lines/7d). count_over_time > 0 because even a single host OOM-kill of a VM is
+# an incident.
+groups:
+  - name: microvm_oom
+    interval: 1m
+    rules:
+      # Host kernel OOM-killed the microVM QEMU process, OR the microvm cgroup
+      # was the OOM source. Anchored on the qemu task name and the microvm
+      # cgroup/slice path so a routine OOM elsewhere on the host does NOT match
+      # (that is owned by node-level memory alerts). The patterns:
+      #   "Killed process <pid> (qemu-system" — qemu was the victim
+      #   "qemu-system" + same line as "Out of memory" — OOM killer chose qemu
+      #   "system-microvm.slice" / "microvm@" — the microvm cgroup is named in
+      #     a "Memory cgroup out of memory" / "oom-kill:" line
+      - alert: MicroVMGuestOOM
+        expr: |
+          sum(count_over_time(
+            {job="systemd-journal", syslog_identifier="kernel"}
+            |~ "(?i)(Killed process [0-9]+ \\(qemu-system|oom-kill:.*qemu-system|Memory cgroup out of memory.*(system-microvm\\.slice|microvm@)|oom-kill:.*(system-microvm\\.slice|microvm@))"
+            [5m]
+          )) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: logs
+          service: microvm
+        annotations:
+          summary: "A microVM QEMU process was OOM-killed (or a microvm cgroup hit its OOM limit)"
+          description: |
+            The host kernel OOM killer logged an out-of-memory kill involving a
+            microVM QEMU process or the system-microvm.slice cgroup in the last
+            5 minutes. One of the agent VMs (openclaw 10.99.0.2 / hermes
+            10.99.1.2) was likely terminated by the host — its tmpfs root has no
+            swap, so a runaway allocation kills the whole VM. Check
+            `journalctl -k | grep -iE 'oom|killed process'` for the victim PID
+            and cgroup, then confirm the VM came back
+            (`systemctl status microvm@openclaw microvm@hermes`). The companion
+            MicroVMMemoryHigh Prometheus alert should have warned ahead of this.

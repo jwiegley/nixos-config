@@ -131,3 +131,50 @@ groups:
             authenticate to Schwab without it. Re-bootstrap on hera and install
             the token (mode 0600), then restart stock-trader.
             Runbook: memory project_stock_trader.
+
+  - name: stock_trader_freshness
+    interval: 60s
+    rules:
+      - alert: StockTraderSchwabDataSourceDown
+        expr: |
+          stock_trader_data_source_up{source="schwab"} == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "stock-trader: Schwab data source is down"
+          description: |
+            The live Schwab probe has reported available=0 for 30m (window > the
+            25m pinger gauge-masking interval + 45s probe cache). Quotes are
+            served by the EOD fallback or failing. Likely a revoked/expired
+            Schwab OAuth refresh token -- run the re-auth runbook and copy the
+            new token to %S/stock-trader/schwab_token.json, then restart.
+      - alert: StockTraderQuotesUnavailable
+        expr: |
+          increase(stock_trader_quote_unavailable_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "stock-trader: quotes returning no live source (503)"
+          description: |
+            get_quote raised DataUnavailableError (all sources stale/failed) in
+            the last 15m and is still doing so. In enforce mode the service is
+            correctly 503-ing rather than serving stale data. Usually a Schwab
+            auth problem -- see StockTraderSchwabDataSourceDown.
+      - alert: StockTraderStaleQuotesRejected
+        expr: |
+          increase(stock_trader_quote_stale_rejected_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: info
+          component: stock-trader
+        annotations:
+          summary: "stock-trader: freshness gate rejecting stale quotes"
+          description: |
+            The freshness gate rejected stale quotes from {{ $labels.source }}
+            for 15m. In warn mode stale data is served labeled (stale=true); in
+            enforce mode the source is falling through. Brief during an outage;
+            sustained means the degraded path is the steady state -- re-auth.

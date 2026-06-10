@@ -177,6 +177,16 @@ in
 
         LOG_LEVEL = "INFO";
 
+        # Live-data freshness kill-switch. Deploy in "warn" first
+        # (serve labeled-stale, never 503) until the live probe is verified
+        # green, then flip to "enforce". See docs/deploy/freshness-rollout-runbook.md.
+        DATA_FRESHNESS_ENFORCE = "warn";
+
+        # zoneinfo.ZoneInfo() needs the tz DB; DynamicUser+ProtectSystem=strict
+        # does not inherit the system TZDIR, so pin the world-readable store path
+        # (spec §10). /etc/zoneinfo -> /etc/static/zoneinfo -> nix store.
+        TZDIR = "/etc/zoneinfo";
+
         # claude-code persists session metadata under $HOME/.claude/.
         # DynamicUser units default HOME to "/", which is read-only
         # under ProtectSystem=strict. Point HOME at the writable

@@ -21,6 +21,22 @@ let
   # Uses the deprecated-but-functional --extend.query-path mechanism (the
   # classic queries.yaml schema) so the emitted metric names are fully under our
   # control and the alert exprs in alerts/database.yaml are guaranteed to match.
+  #
+  # pg_stat_statements_top (P2, database domain): bounded top-N-by-cumulative-
+  # exec-time per-query latency. Reuses the SAME single `postgres`-DB master
+  # connection — pg_stat_statements is cluster-wide so this row set spans all 26
+  # DBs. The extension is loaded via shared_preload_libraries and CREATE'd by
+  # the postgresql-pgstatstatements-setup oneshot in databases.nix; BOTH require
+  # a planned PostgreSQL RESTART, so these metrics are ABSENT until that window
+  # lands (the query errors harmlessly meanwhile, surfaced by
+  # PostgreSQLExporterScrapeError via pg_scrape_collector_success).
+  #
+  # CARDINALITY: LIMIT 12 rows × 4 GAUGE columns = 48 series, inside the ≤50
+  # budget. NEVER select the `query` text column — query text can embed literal
+  # values (emails/tokens/search terms) and is a PII + cardinality risk. We emit
+  # only queryid (opaque hash), datname, rolname as labels + numeric timers.
+  # Operators look up the actual SQL ad-hoc:
+  #   SELECT query FROM pg_stat_statements WHERE queryid = <id>;  (as postgres)
   pgCustomQueries = pkgs.writeText "postgres-custom-queries.yaml" ''
     pg_database_frozenxid:
       query: |
@@ -41,6 +57,46 @@ let
         - mxid_age:
             usage: "GAUGE"
             description: "Multixact-ID age of the database's datminmxid (multixact wraparound danger near 2.1e9)"
+
+    pg_stat_statements_top:
+      query: |
+        SELECT s.queryid::text                   AS queryid,
+               d.datname                          AS datname,
+               r.rolname                          AS rolname,
+               s.mean_exec_time                   AS mean_exec_time_ms,
+               s.total_exec_time                  AS total_exec_time_ms,
+               s.calls::float8                    AS calls,
+               s.rows::float8                     AS rows
+        FROM pg_stat_statements s
+        JOIN pg_roles    r ON r.oid = s.userid
+        JOIN pg_database d ON d.oid = s.dbid
+        WHERE s.calls > 0
+        ORDER BY s.total_exec_time DESC
+        LIMIT 12
+      master: true
+      cache_seconds: 60
+      metrics:
+        - queryid:
+            usage: "LABEL"
+            description: "pg_stat_statements queryid (stable hash; NO query text)"
+        - datname:
+            usage: "LABEL"
+            description: "Database name"
+        - rolname:
+            usage: "LABEL"
+            description: "Executing role"
+        - mean_exec_time_ms:
+            usage: "GAUGE"
+            description: "Mean execution time per call (ms)"
+        - total_exec_time_ms:
+            usage: "GAUGE"
+            description: "Cumulative execution time since stats reset (ms)"
+        - calls:
+            usage: "GAUGE"
+            description: "Total call count since stats reset"
+        - rows:
+            usage: "GAUGE"
+            description: "Total rows returned/affected since stats reset"
   '';
 in
 {

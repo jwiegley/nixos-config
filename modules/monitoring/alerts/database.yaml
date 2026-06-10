@@ -257,3 +257,55 @@ groups:
         annotations:
           summary: "PostgreSQL exporter scrape erroring"
           description: "postgres-exporter reported a scrape error (pg_exporter_last_scrape_error==1) or a failing collector{{ if $labels.collector }} ({{ $labels.collector }}){{ end }} for 10m. The exporter is up but its data may be stale/incomplete — Postgres-derived alerts could be silently blind. Check: journalctl -u prometheus-postgres-exporter."
+
+      # Per-statement latency regression (pg_stat_statements top-N custom query
+      # in postgres-exporter.nix; metric is in MILLISECONDS). These metrics do
+      # NOT exist until the planned PostgreSQL restart loads
+      # shared_preload_libraries=pg_stat_statements — before that the rules are
+      # simply inert (no series → no fire), which is correct.
+      #
+      # THRESHOLD DISCIPLINE: 1000ms is a CONSERVATIVE absolute starter that
+      # mirrors the existing log_min_duration_statement=1000 slow-query log
+      # cutoff, so it surfaces exactly the statements that already hit the text
+      # log — but as a queryable, attributable metric. Baseline cannot be
+      # checked pre-deploy (the metric is absent until the restart). After
+      # 24-48h of post-restart observation this should be SHARPENED to a
+      # regression-vs-history form, e.g.
+      #   pg_stat_statements_top_mean_exec_time_ms
+      #     > 3 * avg_over_time(pg_stat_statements_top_mean_exec_time_ms[7d])
+      #   and pg_stat_statements_top_mean_exec_time_ms > 200
+      # once the 7d window exists. Known-heavy queryids (immich CLIP vector
+      # scans, mailarchiver bulk INSERTs, litellm SpendLogs aggregations) that
+      # legitimately average >1s should get a per-queryid `unless` exclusion
+      # rather than raising the global floor (queryids are stable across
+      # restarts of the same PG major). for:30m filters cold-cache outliers.
+      - alert: PostgreSQLSlowStatements
+        expr: pg_stat_statements_top_mean_exec_time_ms > 1000
+        for: 30m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "Slow PostgreSQL statement (queryid {{ $labels.queryid }} in {{ $labels.datname }})"
+          description: "Statement queryid={{ $labels.queryid }} (db {{ $labels.datname }}, role {{ $labels.rolname }}) averages {{ $value | humanize }}ms/call, sustained 30m. Inspect the SQL as postgres: SELECT query FROM pg_stat_statements WHERE queryid = {{ $labels.queryid }};"
+
+      # A single statement dominating cluster exec time. If one queryid's
+      # cumulative total_exec_time is >50% of the top-N total, something is
+      # pathological (missing index, runaway loop). The ratio is self-
+      # normalising, so it is immune to pg_stat_statements_reset()/save=off
+      # restart zeroing (both numerator and denominator reset together).
+      # for:30m avoids firing on a brief warm-up where one query transiently
+      # leads. Inert until the restart (same as above).
+      - alert: PostgreSQLStatementDominatesCPU
+        expr: |
+          max(pg_stat_statements_top_total_exec_time_ms)
+            / clamp_min(sum(pg_stat_statements_top_total_exec_time_ms), 1) > 0.5
+        for: 30m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "One PostgreSQL statement dominates exec time"
+          description: "A single queryid accounts for >50% of the top-N cumulative exec time, sustained 30m. Likely a missing index or runaway query — identify the dominant queryid via topk(1, pg_stat_statements_top_total_exec_time_ms), then read its SQL: SELECT query FROM pg_stat_statements WHERE queryid = <id>; (as postgres)."

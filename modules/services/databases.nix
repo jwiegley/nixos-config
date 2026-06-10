@@ -124,6 +124,39 @@ in
 
         # Include more context in logs
         log_line_prefix = "%m [%p] %q%u@%d "; # timestamp [pid] app_name user@database
+
+        # pg_stat_statements: per-query aggregate latency telemetry.
+        #
+        # RESTART BLAST RADIUS: shared_preload_libraries is NOT reloadable —
+        # changing it requires a full `systemctl restart postgresql.service`,
+        # which bounces ~26 user databases and the 33 reverse-dependent units
+        # (immich-server, immich-machine-learning, gitea, home-assistant,
+        # budget-board-server, nagios, pgadmin, litellm, + ~14
+        # postgresql-*-setup oneshots). A `nixos-rebuild switch` only RELOADS
+        # PostgreSQL on a settings change — it does NOT restart it — so the
+        # library does not actually load until an EXPLICIT restart. Fold that
+        # restart into a planned maintenance window; do NOT ride a routine
+        # unattended switch. The StartLimitBurst=30/RestartSec hardening below
+        # + the exporter's Restart=always mean the dependents self-recover.
+        #
+        # The immich nixpkgs module owns shared_preload_libraries as a plain
+        # list assignment ([ "vchord.so" ]); use lib.mkAfter so we APPEND
+        # pg_stat_statements rather than clobber vchord (vector index for
+        # immich CLIP search). Post-restart SHOW must read
+        # "vchord.so, pg_stat_statements".
+        shared_preload_libraries = lib.mkAfter [ "pg_stat_statements" ];
+
+        # Bound the in-memory statement ring (~16 MB shared mem at 1k entries —
+        # noise on a 62 GB box). track=top records only top-level statements
+        # (excludes PL/pgSQL-internal SQL, keeps memory + queryid set bounded).
+        # save=off does NOT persist stats across restarts (no /var growth, no
+        # stale baselines). queryid is auto-computed because compute_query_id
+        # is already 'auto' (verified live) — if that is ever set to 'off',
+        # queryid collapses to 0 and the exporter join folds all statements
+        # into one row, so leave compute_query_id alone.
+        "pg_stat_statements.max" = 1000;
+        "pg_stat_statements.track" = "top";
+        "pg_stat_statements.save" = false;
       };
 
       ensureDatabases = [
@@ -409,6 +442,43 @@ in
 
       ${config.services.postgresql.package}/bin/psql -d org -c \
         'ANALYZE entry_log_entries;'
+    '';
+  };
+
+  # Create the pg_stat_statements extension in the `postgres` database.
+  #
+  # The postgres-exporter connects database=postgres over /run/postgresql as
+  # the postgres superuser (runAsLocalSuperUser=true). pg_stat_statements is
+  # CLUSTER-WIDE, so a single CREATE EXTENSION here lets the exporter's
+  # master:true custom query read per-statement stats for ALL 26 databases
+  # from that one connection — no --auto-discover-databases (which would
+  # re-activate the per-table collectors and explode cardinality).
+  #
+  # CREATE EXTENSION only SUCCEEDS once the .so is preloaded, i.e. AFTER the
+  # planned restart that loads shared_preload_libraries. On a switch without a
+  # restart it errors ("could not access file ... shared_preload_libraries")
+  # and this oneshot is simply retried on the next boot/activation — harmless;
+  # the pg_stat_statements_* metrics stay absent until the restart happens.
+  systemd.services.postgresql-pgstatstatements-setup = {
+    description = "Create pg_stat_statements extension in postgres DB";
+    after = [ "postgresql.service" ];
+    wants = [ "postgresql.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      # Wait for PostgreSQL to be ready
+      until ${config.services.postgresql.package}/bin/psql -d postgres -c "SELECT 1" 2>/dev/null; do
+        sleep 1
+      done
+
+      ${config.services.postgresql.package}/bin/psql -d postgres -c \
+        'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;'
     '';
   };
 

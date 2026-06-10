@@ -49,4 +49,4 @@ node_modules/
 /.env.example
 /.mcp.json
 /.taskmaster/
-/prd.md
+/prd.md.nixos-build

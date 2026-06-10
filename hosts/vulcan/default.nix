@@ -150,6 +150,7 @@
     ../../modules/services/hermes-nightly-report.nix
     ../../modules/services/hermes-microvm.nix
     ../../modules/services/hermes-mcp.nix
+    ../../modules/services/drafts-mcp.nix
     ../../modules/services/hermes-self-heal.nix
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
@@ -190,6 +191,7 @@
   services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
   services.hermes-mcp.enable = true;
+  services.drafts-mcp.enable = true;
   services.hermesHealthCheck.enable = true;
   services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;

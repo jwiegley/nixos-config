@@ -68,6 +68,7 @@ let
     5232
     5432
     8123
+    9082
   ];
   # NO-SPACE comma join: this string feeds both `iptables -m multiport
   # --dports` (host isolate chain below) and the guest's nftables

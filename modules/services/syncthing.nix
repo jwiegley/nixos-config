@@ -225,8 +225,13 @@ in
         LockPersonality = true;
 
         # Resource limits (initial scan hashes the full 5.4G dataset).
+        # TasksMax counts OS threads: under bulk-transfer load the Go runtime
+        # plus SQLite's blocking cgo calls exceeded 128 and pthread_create
+        # EAGAIN'd into SIGABRT (two crashes during the 2026-06-10 initial
+        # sync). 512 covers peak thread fan-out with margin while still
+        # bounding a runaway.
         MemoryMax = "2G";
-        TasksMax = 128;
+        TasksMax = 512;
       };
     };
 

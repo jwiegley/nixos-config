@@ -3053,11 +3053,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1781113472,
-        "narHash": "sha256-+SQea0F8y6H8L+DHO/By2KBKJ6xX35u/qjzdFt1Y9Ms=",
+        "lastModified": 1781127714,
+        "narHash": "sha256-9J4kqpXX6fcUOHtF92DNlqS6xo0oK3ocs2mDdEcGP44=",
         "ref": "refs/heads/main",
-        "rev": "3ddfa9cf2e8ef55505211a991802f0c51f601f45",
-        "revCount": 149,
+        "rev": "039e1c619445140ad28143ee800ee2cdad36acb4",
+        "revCount": 150,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

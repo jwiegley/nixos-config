@@ -456,19 +456,41 @@ in
                   "hubspace-porch-light.lan" # 192.168.3.178
                   "miele-dishwasher.lan" # 192.168.3.98
                   "myq-garage-door.lan" # 192.168.3.99
-                  "nest-downstairs.lan" # 192.168.3.57
-                  "nest-family-room.lan" # 192.168.3.83
-                  "nest-upstairs.lan" # 192.168.3.161
                   "pentair-intellicenter.lan" # 192.168.3.115
                   "pentair-intelliflo.lan" # 192.168.3.23
                   "ring-chime-kitchen.lan" # 192.168.3.163
-                  "ring-chime-office.lan" # 192.168.3.88
                   "ring-doorbell.lan" # 192.168.3.185
                   "tesla-wall-connector.lan" # 192.168.3.119
                   "traeger-grill.lan" # 192.168.3.196
                 ];
                 labels = {
                   host_group = "iot";
+                };
+              }
+              # ICMP-silent IoT devices (host_group="iot-noping"). These never
+              # answer ICMP at all — 0% probe_success since probing began —
+              # because they firewall ping outright and/or are battery
+              # deep-sleepers that never surface for an echo request. They are
+              # ALSO absent from Nagios's host list (verified against
+              # status.dat), so nobody has ever successfully pinged them: they
+              # were originally commented out for exactly this reason, not as
+              # Nagios-only coverage. We keep probing them for visibility (so a
+              # newly-reachable device shows up), but they are placed in this
+              # separate group so that BlackboxICMPIoTDeviceDown (network.yaml)
+              # deliberately EXCLUDES them — otherwise they would be chronic
+              # never-clearing warnings, violating the no-chronic-firing
+              # discipline. If one of these ever starts answering ICMP, move it
+              # back into the "iot" group above so it gets warning coverage.
+              {
+                targets = [
+                  "august-lock-garage-door.lan" # 192.168.3.14
+                  "nest-downstairs.lan" # 192.168.3.57
+                  "nest-family-room.lan" # 192.168.3.83
+                  "nest-upstairs.lan" # 192.168.3.161
+                  "ring-chime-office.lan" # 192.168.3.88
+                ];
+                labels = {
+                  host_group = "iot-noping";
                 };
               }
             ];

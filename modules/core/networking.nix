@@ -180,6 +180,26 @@
     "${pkgs.networkmanager}/bin/nm-online -s -q -t 60"
   ];
 
+  # Keep systemd-networkd from deleting the asymmetric-routing oneshot's work.
+  #
+  # networkd here owns ONLY the microVM/container bridges (vm-hermes, vm-openclaw,
+  # podman0, …). But with the systemd defaults ManageForeignRoutingPolicyRules=yes
+  # and ManageForeignRoutes=yes, every time networkd RECONFIGURES a bridge — which
+  # it does on EVERY `nixos-rebuild switch` that restarts a microvm@ unit — it also
+  # flushes all routing rules and routes it did not itself create. That silently
+  # wiped the priority 50/51 `ip rule`s and the `end0_return` table routes added by
+  # the asymmetric-routing oneshot below (verified 2026-06-10: gauge
+  # asymmetric_routing_rules_present went 1→0 at the 12:11 and 15:15 switches, each
+  # coinciding with a "vm-*: Configuring with …" networkd log line; the NM
+  # dispatcher only re-applies on end0 events, so a switch left the rules gone and
+  # AsymmetricRoutingRulesMissing firing). Those rules/routes are owned by the
+  # oneshot and by NetworkManager — never by networkd — so tell networkd to leave
+  # all foreign rules/routes alone. networkd still fully manages its own bridges.
+  systemd.network.config.networkConfig = {
+    ManageForeignRoutingPolicyRules = false;
+    ManageForeignRoutes = false;
+  };
+
   # Policy routing for asymmetric routing support
   # Problem: Clients on 192.168.3.x reach 192.168.1.2 via router (arrives on end0),
   # but responses would go out via wlp1s0f0 with source IP 192.168.3.16 (wrong!)

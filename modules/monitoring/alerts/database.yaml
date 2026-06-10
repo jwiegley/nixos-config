@@ -295,17 +295,27 @@ groups:
       # pathological (missing index, runaway loop). The ratio is self-
       # normalising, so it is immune to pg_stat_statements_reset()/save=off
       # restart zeroing (both numerator and denominator reset together).
-      # for:30m avoids firing on a brief warm-up where one query transiently
-      # leads. Inert until the restart (same as above).
+      # Share-of-top-N alone is the WRONG predicate on this box: with most of
+      # the 26 DBs idle, one healthy poller (e.g. flume-data's once-a-minute
+      # SUM(gpm) at ~6ms mean) "dominates" >50% forever and the alert becomes a
+      # permanent false positive (fired 2026-06-10 within 3h of the extension
+      # going live). Dominance only matters when the dominant statement is ALSO
+      # slow — a missing index / runaway query has a high mean, a busy-but-
+      # healthy poller does not. Per-series share (instead of max/sum) keeps
+      # queryid/datname labels on the alert. for:30m still rides out warm-up.
       - alert: PostgreSQLStatementDominatesCPU
         expr: |
-          max(pg_stat_statements_top_total_exec_time_ms)
-            / clamp_min(sum(pg_stat_statements_top_total_exec_time_ms), 1) > 0.5
+          (
+            pg_stat_statements_top_total_exec_time_ms
+              / on () group_left () sum(pg_stat_statements_top_total_exec_time_ms)
+            > 0.5
+          )
+          and pg_stat_statements_top_mean_exec_time_ms > 100
         for: 30m
         labels:
           severity: warning
           category: database
           service: postgresql
         annotations:
-          summary: "One PostgreSQL statement dominates exec time"
-          description: "A single queryid accounts for >50% of the top-N cumulative exec time, sustained 30m. Likely a missing index or runaway query — identify the dominant queryid via topk(1, pg_stat_statements_top_total_exec_time_ms), then read its SQL: SELECT query FROM pg_stat_statements WHERE queryid = <id>; (as postgres)."
+          summary: "PostgreSQL statement {{ $labels.queryid }} ({{ $labels.datname }}) dominates exec time and is slow"
+          description: "queryid {{ $labels.queryid }} in {{ $labels.datname }} accounts for >50% of the top-N cumulative exec time AND averages >100ms/call, sustained 30m. Likely a missing index or runaway query — read its SQL: SELECT query FROM pg_stat_statements WHERE queryid = {{ $labels.queryid }}; (as postgres)."

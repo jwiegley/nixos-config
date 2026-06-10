@@ -1,0 +1,31 @@
+groups:
+  - name: litellm_gateway
+    interval: 30s
+    rules:
+      # LiteLLM is the single shared model gateway for BOTH agent microVMs
+      # (OpenClaw + Hermes) and the stock-trader Anthropic path. Until
+      # 2026-06-09 litellm_availability was scraped but referenced by ZERO
+      # alert rules — when the gateway died, only downstream e2e probes went
+      # red and the root cause was unalerted (coverage plan P0 #8).
+      - alert: LitellmBackendDown
+        expr: litellm_availability == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: ai-gateway
+        annotations:
+          summary: "LiteLLM gateway is down"
+          description: "litellm_availability has been 0 for 3 minutes — the shared model backend for OpenClaw, Hermes, and stock-trader is unavailable. Check the litellm container (rootless user litellm) and its Redis."
+
+      # The availability gauge comes from the litellm-exporter timer; if the
+      # exporter dies, the series goes stale and LitellmBackendDown can never
+      # fire. absent() distinguishes a dead collector from a dead gateway.
+      - alert: LitellmMetricsAbsent
+        expr: absent(litellm_availability) == 1
+        for: 15m
+        labels:
+          severity: warning
+          category: ai-gateway
+        annotations:
+          summary: "LiteLLM availability metric has disappeared"
+          description: "litellm_availability has been absent from the TSDB for 15 minutes — the litellm-exporter is no longer producing samples, so gateway-down conditions are currently invisible. Check litellm-exporter.service/timer."

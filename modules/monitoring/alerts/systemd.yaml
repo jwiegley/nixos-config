@@ -40,9 +40,9 @@ groups:
           description: "Service {{ $labels.name }} has restarted multiple times in the last 15 minutes"
 
       # Services in activating state for too long
-      # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes), local-backup (can take up to 10 minutes)
+      # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes), local-backup (can take up to 10 minutes), git-workspace-archive (nightly 00:00 sweep of ~600 repos, runs >15m by design)
       - alert: ServiceStuckActivating
-        expr: node_systemd_unit_state{state="activating",name=~".*\\.service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service",name!="local-backup.service"} == 1
+        expr: node_systemd_unit_state{state="activating",name=~".*\\.service",name!="restic-metrics.service",name!~"restic-backups-.*\\.service",name!~"mbsync-.*\\.service",name!="update-containers.service",name!="local-backup.service",name!="git-workspace-archive.service"} == 1
         for: 15m
         labels:
           severity: warning

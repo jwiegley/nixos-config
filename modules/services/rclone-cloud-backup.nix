@@ -229,11 +229,26 @@ in
       }
 
       # Always record the attempt (run-ts + exit code) per remote, success or not.
-      if sync_google assembly /tank/Backups/GoogleDrive/assembly; then metric assembly 0; else metric assembly 1; overall=1; fi
-      if sync_google bia      /tank/Backups/GoogleDrive/bia;      then metric bia      0; else metric bia      1; overall=1; fi
+      #
+      # DISABLED 2026-06-10 — assembly, bia, positron, git-ai: their Google OAuth
+      # client sits in "Testing" publishing status, so Google expires every refresh
+      # token after exactly 7 days (all four died together 06-02/03, 7 days after
+      # the 05-27 deploy; weekly interactive re-auth is not sustainable). gdrive +
+      # onedrive use long-lived tokens and stay enabled. A final full snapshot of
+      # all 6 remotes succeeded 2026-06-10 10:48-10:50 with freshly transplanted
+      # tokens; the datasets keep that state (sanoid snapshots continue).
+      # TO RE-ENABLE: publish the OAuth app to "In production" (Google console →
+      # APIs & Services → OAuth consent screen), re-auth the four remotes once
+      # (rclone config reconnect on hera → sops secrets/rclone-cloudbackup.conf →
+      # commit → nix flake update secrets → rebuild), then uncomment these lines.
+      # Their stale rclone-<remote>.prom textfiles must be deleted when disabling
+      # (else RcloneCloudBackupStale fires forever) — and that's automatic on
+      # re-enable (the metric() helper recreates them).
+      # if sync_google assembly /tank/Backups/GoogleDrive/assembly; then metric assembly 0; else metric assembly 1; overall=1; fi
+      # if sync_google bia      /tank/Backups/GoogleDrive/bia;      then metric bia      0; else metric bia      1; overall=1; fi
       if sync_google gdrive   /tank/Backups/GoogleDrive/jwiegley; then metric gdrive   0; else metric gdrive   1; overall=1; fi
-      if sync_google positron /tank/Backups/GoogleDrive/positron; then metric positron 0; else metric positron 1; overall=1; fi
-      if sync_google git-ai   /tank/Backups/GoogleDrive/git-ai;   then metric git-ai   0; else metric git-ai   1; overall=1; fi
+      # if sync_google positron /tank/Backups/GoogleDrive/positron; then metric positron 0; else metric positron 1; overall=1; fi
+      # if sync_google git-ai   /tank/Backups/GoogleDrive/git-ai;   then metric git-ai   0; else metric git-ai   1; overall=1; fi
       if sync_onedrive onedrive /tank/Backups/OneDrive;           then metric onedrive 0; else metric onedrive 1; overall=1; fi
 
       exit $overall

@@ -331,16 +331,22 @@ in
         refresh_hdr
         cur=$(api http://127.0.0.1:${toString guiPort}/rest/config/gui)
         if [ "$(jq -r .user <<<"$cur")" = "$gui_user" ] \
-           && [ "$(jq -r .apiKey <<<"$cur")" = "$want_key" ]; then
-          echo "GUI user and API key already pinned"
+           && [ "$(jq -r .apiKey <<<"$cur")" = "$want_key" ] \
+           && [ "$(jq -r .insecureSkipHostcheck <<<"$cur")" = "true" ]; then
+          echo "GUI user, API key, and host-check setting already pinned"
           exit 0
         fi
 
         # --rawfile keeps the key value off argv (only the sops path appears
         # in /proc cmdline); rtrimstr drops the file's trailing newline.
+        # insecureSkipHostcheck: the GUI sits behind the nginx vhost, whose
+        # proxied Host header (syncthing.vulcan.lan) otherwise trips
+        # syncthing's DNS-rebinding host check (403). Safe here: GUI auth is
+        # enabled, and the listener never leaves loopback — the host check
+        # exists to protect unauthenticated localhost GUIs.
         jq -n --arg u "$gui_user" \
           --rawfile k ${config.sops.secrets."syncthing/api-key".path} \
-          '{user: $u, apiKey: ($k | rtrimstr("\n"))}' \
+          '{user: $u, apiKey: ($k | rtrimstr("\n")), insecureSkipHostcheck: true}' \
           | api -X PATCH --json @- http://127.0.0.1:${toString guiPort}/rest/config/gui
 
         # The PATCH may invalidate the old key mid-session; re-read it for

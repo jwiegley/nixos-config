@@ -74,8 +74,13 @@ let
         # folder with no new mail keeps lag ~0 by construction (both mtimes old).
         while IFS= read -r ftsdir; do
           d=$(dirname "$ftsdir")
-          mail=$(find "$d/cur" "$d/new" -type f -printf '%T@\n' 2>/dev/null | cut -d. -f1 | sort -nr | head -1)
-          idx=$(find "$ftsdir" -type f -name '*.glass' -printf '%T@\n' 2>/dev/null | cut -d. -f1 | sort -nr | head -1)
+          # Single-pass awk max instead of `sort -nr | head -1`: head closes the
+          # pipe after one line, sort then dies on SIGPIPE, and `set -o pipefail`
+          # turns that into a script failure (broken-pipe, exit 2) on any folder
+          # with >1 file. awk reads the whole stream, so no pipe ever breaks.
+          # Prints nothing for an empty folder, preserving the `-z` checks below.
+          mail=$(find "$d/cur" "$d/new" -type f -printf '%T@\n' 2>/dev/null | awk '{t=int($1); if (NR==1 || t>m) m=t} END {if (NR) print m}')
+          idx=$(find "$ftsdir" -type f -name '*.glass' -printf '%T@\n' 2>/dev/null | awk '{t=int($1); if (NR==1 || t>m) m=t} END {if (NR) print m}')
           [ -z "$mail" ] && continue
           [ -z "$idx" ] && idx=0
           lag=$((mail - idx))
@@ -120,6 +125,7 @@ in
     path = with pkgs; [
       coreutils
       findutils
+      gawk # newest-mtime max is computed with awk (SIGPIPE-safe vs sort|head)
     ];
   };
 

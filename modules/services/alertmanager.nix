@@ -112,6 +112,27 @@
             repeat_interval = "4h";
             continue = true;
           }
+          # Drafts MCP self-heal pipeline — service=drafts-mcp alerts go to
+          # the drafts-mcp-self-heal webhook receiver. continue=true keeps the
+          # email/critical/iPhone paths firing so a human still sees it.
+          # NOTE: DraftsMcpTccAutomationLost also carries service=drafts-mcp and
+          # so reaches the daemon, but the daemon's HEALABLE allowlist excludes
+          # it (a lost hera GUI grant is not restart-fixable) — delivered but
+          # no-ops, then continues to email/iPhone for a human.
+          # NOTE: any future drafts-self-heal watchdog alert MUST carry a
+          # distinct service label (e.g. service=drafts-mcp-self-heal) so it
+          # never loops back to the possibly-dead daemon, mirroring the openclaw
+          # / hermes self-watchdog exclusions above.
+          {
+            match = {
+              service = "drafts-mcp";
+            };
+            receiver = "drafts-mcp-self-heal";
+            group_wait = "10s";
+            group_interval = "5m";
+            repeat_interval = "4h";
+            continue = true;
+          }
           # Backup and storage alerts - group by category and reduce noise
           {
             match = {
@@ -265,6 +286,15 @@
           webhook_configs = [
             {
               url = "http://127.0.0.1:9098/alert";
+              send_resolved = true;
+            }
+          ];
+        }
+        {
+          name = "drafts-mcp-self-heal";
+          webhook_configs = [
+            {
+              url = "http://127.0.0.1:9085/alert";
               send_resolved = true;
             }
           ];

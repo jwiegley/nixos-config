@@ -1,0 +1,21 @@
+#!/run/current-system/sw/bin/bash
+# drafts-mcp-self-heal action: restart drafts-mcp.service.
+#
+# Pure, idempotent transport restart — re-execs mcp-proxy's single shared ssh
+# child to hera, recovering the silent-green-zombie failure mode where the
+# backend died but the proxy keeps returning tool errors forever (design D9).
+# Orthogonal to drafts_run_action: this touches ONLY the systemd unit, never a
+# Drafts tool call — so the "no autonomous remediator on hera" guarantee holds.
+#
+# Output: one line of JSON to stdout describing the result.
+set -euo pipefail
+start_ts=$(date +%s)
+rc=0
+/run/current-system/sw/bin/systemctl restart drafts-mcp.service || rc=$?
+end_ts=$(date +%s)
+duration=$((end_ts - start_ts))
+if [ "$rc" -eq 0 ]; then
+  printf '{"ok": true, "duration_s": %d, "notes": "drafts-mcp restarted"}\n' "$duration"
+else
+  printf '{"ok": false, "duration_s": %d, "notes": "systemctl restart returned %d"}\n' "$duration" "$rc"
+fi

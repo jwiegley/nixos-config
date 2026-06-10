@@ -144,6 +144,7 @@
 8123 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:8123 (Home Assistant)
 
 # Prometheus Stack
+9085 127.0.0.1 Drafts MCP Self-Heal webhook receiver
 9090 127.0.0.1 Prometheus Server
 9092 127.0.0.1 OpenClaw Self-Heal webhook receiver
 9093 127.0.0.1 Alertmanager

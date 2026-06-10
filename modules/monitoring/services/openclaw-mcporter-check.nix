@@ -45,6 +45,7 @@ let
         "google-calendar-work",
         "searxng",
         "vane",
+        "drafts-hera",
     )
 
 

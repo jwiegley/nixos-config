@@ -67,6 +67,7 @@
     ./openclaw-canary.nix
     ./openclaw-mcporter-check.nix
     ./hermes-health-check.nix
+    ./drafts-mcp-check.nix
 
     # External systems monitoring
     ./opnsense-monitoring.nix

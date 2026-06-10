@@ -130,6 +130,7 @@
     "L+ /var/lib/loki/rules/fake/auth-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/auth-security.yaml"
     "L+ /var/lib/loki/rules/fake/microvm-oom.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/microvm-oom.yaml"
     "L+ /var/lib/loki/rules/fake/vm-egress-dns.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/vm-egress-dns.yaml"
+    "L+ /var/lib/loki/rules/fake/vm-egress-tripwires.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/vm-egress-tripwires.yaml"
   ];
 
   # Loki nginx upstream with retry logic

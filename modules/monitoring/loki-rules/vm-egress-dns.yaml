@@ -33,7 +33,7 @@ groups:
           sum by (client_ip) (count_over_time(
             {job="dns_query_logs", client_ip="10.99.0.2"}
             | json
-            | domain !~ "(^|\\.)(discord\\.com|discord\\.gg|discordapp\\.com|github\\.com|githubusercontent\\.com|githubassets\\.com|npmjs\\.org|whatsapp\\.net|whatsapp\\.com|ntp\\.org|perplexity\\.ai|openrouter\\.ai|anthropic\\.com|googleapis\\.com|sentry\\.io|chatgpt\\.com|example\\.com|vulcan\\.lan)$"
+            | domain !~ "^(.*\\.)?(discord\\.com|discord\\.gg|discordapp\\.com|github\\.com|githubusercontent\\.com|githubassets\\.com|npmjs\\.org|whatsapp\\.net|whatsapp\\.com|ntp\\.org|perplexity\\.ai|openrouter\\.ai|anthropic\\.com|googleapis\\.com|sentry\\.io|chatgpt\\.com|example\\.com|vulcan\\.lan)$"
             | domain != ""
             [10m]
           )) > 0

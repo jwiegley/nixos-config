@@ -59,6 +59,7 @@ let
       iproute2
       coreutils
       gnugrep
+      gnused # used by the section-3 port-extraction pipeline; do not rely on the inherited unit PATH
       gawk
     ];
     text = ''
@@ -199,11 +200,15 @@ let
             # 3. Reverse-drift lint: registered ports with NO live listener.
             #    Build the live-port set once, then count registry keys missing from it.
             # ---------------------------------------------------------------------
+            # `|| true`: grep exits 1 when nothing matches, and under
+            # errexit+pipefail that would abort the whole run before the
+            # atomic emit. An empty live set then counts every registered
+            # port as stale — loud, visible failure instead of a silent one.
             live_ports=$( { ss -tlnH; ss -ulnH; } 2>/dev/null \
               | awk '{print $4}' \
               | sed -E 's/^.*:([0-9]+)$/\1/' \
               | grep -E '^[0-9]+$' \
-              | sort -un )
+              | sort -un || true )
             stale=0
             for p in "''${!REGISTERED[@]}"; do
               if ! printf '%s\n' "$live_ports" | grep -qx "$p"; then

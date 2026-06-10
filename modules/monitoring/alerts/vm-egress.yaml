@@ -29,47 +29,11 @@ groups:
             log ({job="vm-egress"}), plus `iptables -L FORWARD -v -n` counters.
             If the agents do legitimate bulk work, raise the floor to >5 MB/s.
 
-      # New-outbound-connection storm from the bypass-scraped egress log.
-      # OpenClaw's firewall LOGs every NEW public connection at info priority;
-      # the dedicated job="vm-egress" promtail scrape preserves those lines
-      # (the main journal scrape drops priority 5-7). Baseline ~163 lines/24h
-      # (verified 2026-06-10) = ~7/hr; >120 new conns in 10m (~12/min) is a
-      # connection storm well above any normal agent activity.
-      - alert: VMAgentEgressConnectionStorm
-        expr: |
-          sum by (egress_kind) (count_over_time({job="vm-egress", egress_kind="openclaw-egress"} [10m])) > 120
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-          service: agent-vm-egress
-        annotations:
-          summary: "OpenClaw VM opened >120 new outbound connections in 10m"
-          description: |
-            Burst of new outbound connections from the OpenClaw microVM, far
-            above the ~7/hr baseline. Correlate with VMAgentDNSNewDestination
-            and VMAgentEgressVolumeHigh. Inspect destinations in the egress log:
-            {job="vm-egress", egress_kind="openclaw-egress"}. (Source/dest IPs
-            live only in the log body, never in alert labels.)
-
-      # Hermes should NEVER hit its reject log: it lives inside a 443/53
-      # port-allowlist with a final DROP, and the reject-LOG counter has been 0
-      # over 24h (verified 2026-06-10). Any rejected egress is either a new
-      # legitimate endpoint that needs a non-443/53 port opened, OR a compromised
-      # process probing other ports. Fire on the first occurrence.
-      - alert: HermesEgressRejected
-        expr: |
-          sum(count_over_time({job="vm-egress", egress_kind="hermes-egress-rejected"} [10m])) > 0
-        for: 0m
-        labels:
-          severity: warning
-          category: security
-          service: agent-vm-egress
-        annotations:
-          summary: "Hermes VM attempted egress outside its 443/53 allowlist"
-          description: |
-            The Hermes microVM tried to open an outbound connection that the
-            egress allowlist DROPped (logged as hermes-egress-rejected). Either
-            a new legitimate endpoint needs a port opened in hermes-microvm.nix,
-            or the Hermes process is probing. Investigate the destination in the
-            egress log: {job="vm-egress", egress_kind="hermes-egress-rejected"}.
+      # The two LOG-stream tripwires (VMAgentEgressConnectionStorm,
+      # HermesEgressRejected) are LogQL over the promtail job="vm-egress"
+      # stream and therefore live in
+      # modules/monitoring/loki-rules/vm-egress-tripwires.yaml (Loki ruler,
+      # L+ symlink in loki.nix) — NOT here. They were originally written into
+      # this Prometheus-ruler file, where they parsed as valid PromQL but
+      # matched zero series and could never fire (caught by the 2026-06-10
+      # session review). Do not move them back.

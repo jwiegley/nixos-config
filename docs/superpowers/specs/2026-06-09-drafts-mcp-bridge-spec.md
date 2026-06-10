@@ -883,14 +883,20 @@ Anchor: `mcpServers = {` opens at `:669`; the `org-db` entry closes at `:749`; t
       # Drafts.app on hera via the host drafts-mcp SSE bridge (binds
       # 127.0.0.1:9082; reached over the hermes-br0 guest OUTPUT DNAT
       # 127.0.0.1:9082 → 10.99.1.1:9082 → host PREROUTING → 127.0.0.1:9082).
-      # This is the autonomous Hermes agent, so writes are denied: an
-      # `include` allowlist (default-deny) blocks any tool the upstream server
-      # adds in future until explicitly listed. drafts_run_action (code-exec
-      # as johnw on hera) and all destructive write tools are intentionally
-      # absent. NO `description` field — the upstream mcpServers submodule
+      # This is the autonomous Hermes agent, so writes are denied twice over:
+      # the bridge's stdio filter shim strips all 9 write tools server-side
+      # for EVERY consumer, and this `include` allowlist (default-deny) is
+      # the client-side belt-and-suspenders. drafts_run_action (code-exec
+      # as johnw on hera) and all write tools are intentionally absent.
+      # NO `description` field — the upstream mcpServers submodule
       # (see the NOTE at the top of this block) rejects it.
+      #
+      # URL is /mcp/ (Streamable HTTP), NOT /sse: hermes-agent's mcp_tool
+      # speaks Streamable HTTP for `url` entries and the submodule exposes
+      # no transport knob; mcp-proxy 0.8.2 mounts Streamable HTTP at /mcp/
+      # — TRAILING SLASH REQUIRED (bare /mcp is a 404, no redirect).
       drafts-hera = {
-        url = "http://127.0.0.1:9082/sse";
+        url = "http://127.0.0.1:9082/mcp/";
         connect_timeout = 10;
         timeout = 60;
         tools.include = [
@@ -901,15 +907,16 @@ Anchor: `mcpServers = {` opens at `:669`; the `org-db` entry closes at `:749`; t
           "drafts_list_workspaces"
           "drafts_get_current"
           "drafts_list_actions"
-          "drafts_create_draft"
-          "drafts_update_draft"
-          "drafts_add_tags"
         ];
       };
     };
 ```
 
-> The allowlist is **7 reads + 3 benign writes** (`create_draft`, `update_draft`, `add_tags`), deliberately excluding `drafts_run_action` and the destructive set (`flag`, `archive`, `inbox`, `trash`, `open_workspace`). **Belt-and-suspenders:** the Hermes leg of the SSE endpoint is NOT shimmed (only OpenClaw goes through `drafts-tool-filter`), so `tools.include` is Hermes' client-side gate. **Phase-3 gate (security-review medium):** prove `tools.include` is enforcing default-deny by attempting a `tools/call drafts_run_action` from inside the Hermes VM and confirming it is *refused client-side* (not merely absent from `tools/list`). If enforcement cannot be proven, route the Hermes leg through its own filter-shim instance too.
+> **As-built corrections (2026-06-10, deployed):** two parts of the original EDIT 2 were invalidated during Phase 3.
+> 1. **URL/transport:** the original `url = ".../sse"` assumed hermes-agent would speak SSE. It speaks **Streamable HTTP** for `url` entries (its `mcp_tool` POSTs JSON-RPC to the URL itself; observed live as `POST /sse → 405` ×4 then give-up, from `10.99.1.2` — which at least proved the two-stage DNAT path end-to-end). hermes-agent 0.15.x does support `transport: sse` in its own config.yaml, but the pinned nixosModules submodule exposes no such option, so the declarative fix is mcp-proxy 0.8.2's Streamable HTTP mount: `http://127.0.0.1:9082/mcp/` (trailing slash required; bare `/mcp` 404s). Verified: a full initialize → tools/list handshake over `/mcp/` returns the filtered 11-tool surface.
+> 2. **Allowlist trimmed to 7 reads, no writes:** the original "7 reads + 3 benign writes" and the "Hermes leg is NOT shimmed" premise were wrong as built — there is ONE bridge endpoint and the `drafts-tool-filter` shim sits in its stdio chain for every consumer, so `create_draft`/`update_draft`/`add_tags` would be server-denied regardless of the client allowlist. Listing them would only invite wasted denied calls. If Hermes should ever get those writes, stand up a second, unfiltered bridge instance on its own port and point only Hermes at it.
+>
+> **Phase-3 gate (security-review medium), unchanged:** prove `tools.include` is enforcing default-deny by attempting a `tools/call drafts_run_action` from inside the Hermes VM and confirming it is *refused client-side* (not merely absent from `tools/list`).
 
 ---
 

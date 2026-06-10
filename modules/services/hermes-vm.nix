@@ -764,8 +764,17 @@ in
       # second unfiltered bridge instance on its own port.)
       # NO `description` field — the upstream mcpServers submodule (see the
       # NOTE at the top of this block) rejects it.
+      #
+      # URL is /mcp/ (Streamable HTTP), NOT /sse: hermes-agent's mcp_tool
+      # speaks Streamable HTTP for `url` entries (it POSTs JSON-RPC to the
+      # URL itself), and the submodule exposes no `transport = "sse"` knob,
+      # so pointing it at mcp-proxy's /sse mount yields POST /sse → 405
+      # Method Not Allowed (observed live 2026-06-10). mcp-proxy 0.8.2
+      # mounts Streamable HTTP at /mcp/ — TRAILING SLASH REQUIRED (bare
+      # /mcp is a 404, no redirect). Both mounts front the same filtered
+      # stdio chain, so the write-tool strip applies identically.
       drafts-hera = {
-        url = "http://127.0.0.1:9082/sse";
+        url = "http://127.0.0.1:9082/mcp/";
         connect_timeout = 10;
         timeout = 60;
         tools.include = [

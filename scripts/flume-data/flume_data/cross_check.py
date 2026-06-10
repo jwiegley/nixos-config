@@ -109,10 +109,15 @@ def _query_ha_total_via_vm(
         # without pinning the value series would risk returning last_reset as gal.
         vm_id = entity_id.split(".", 1)[1] if "." in entity_id else entity_id
         series = vm.query_range(
+            # Lookback widened 5m->2h: utility-meter samples are sparse (they
+            # only update when water flows), so a 5-min window often found
+            # nothing and read 0. Stays under the period-reset offset -- the
+            # weekly cross-check reads ~3.5h after the Monday reset, so <=3h is
+            # safe; a meter idle >2h still best-efforts to 0 (documented).
             metric=(
-                f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[5m])'
+                f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[2h])'
             ),
-            start=at_time - timedelta(minutes=5),
+            start=at_time - timedelta(hours=2),
             end=at_time,
             step="60s",
         )
@@ -174,8 +179,13 @@ def _read_weekly_categories(
     cats = ["pool_autofill", "irrigation_total", "other"]
     if domestic_hot_present:
         cats.append("domestic_hot")
+    # The internal category key differs from the HA entity slug for irrigation:
+    # the aggregate utility meter is `sensor.water_irrigation_weekly`, not
+    # `..._irrigation_total_weekly`. Keep the key (report labels + promote rely
+    # on it) but query the real entity.
+    entity_slug = {"irrigation_total": "irrigation"}
     for cat in cats:
-        eid = f"sensor.water_{cat}_weekly"
+        eid = f"sensor.water_{entity_slug.get(cat, cat)}_weekly"
         this_v = _query_ha_total_via_vm(vm, eid, end)
         last_v = _query_ha_total_via_vm(vm, eid, last_week)
         category_totals[cat] = (this_v, last_v)

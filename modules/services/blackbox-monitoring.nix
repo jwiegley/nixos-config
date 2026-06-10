@@ -699,6 +699,7 @@ in
                   "https://qdrant.vulcan.lan"
                   "https://radicale.vulcan.lan"
                   "https://rspamd.vulcan.lan"
+                  "https://syncthing.vulcan.lan"
                   "https://vdirsyncer.vulcan.lan"
                   "https://zimit.vulcan.lan"
                 ];

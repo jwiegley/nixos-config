@@ -224,6 +224,17 @@ in
     (mkBackup {
       name = "Public";
       time = "04:10:00";
+      # Syncthing folder metadata (two-way sync with hera; see
+      # modules/services/syncthing.nix) — marker dir, ignore file, version
+      # history, and in-flight temp files have no place in B2.
+      exclude = [
+        ".stfolder"
+        ".stignore"
+        ".stversions"
+        "*.sync-conflict-*"
+        ".syncthing.*.tmp"
+        "~syncthing~*.tmp"
+      ];
     })
   ];
 

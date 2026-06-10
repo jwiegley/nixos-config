@@ -199,6 +199,10 @@ with lib;
                           title = "Qdrant";
                           url = "https://qdrant.vulcan.lan";
                         }
+                        {
+                          title = "Syncthing";
+                          url = "https://syncthing.vulcan.lan";
+                        }
                       ];
                     }
                     {

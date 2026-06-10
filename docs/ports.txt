@@ -95,6 +95,7 @@
 8123 127.0.0.1 Home Assistant
 8180 127.0.0.1 OpenProject web interface
 8234 127.0.0.1 Stock Trader web service - trader.vulcan.lan (uvicorn FastAPI)
+8384 127.0.0.1 Syncthing GUI/REST API/metrics - syncthing.vulcan.lan
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
 8580 127.0.0.1 Shlink API (URL shortener backend)
@@ -107,6 +108,10 @@
 9099 127.0.0.1 Cockpit
 13923 127.0.0.1 Copyparty container (socket-activated)
 18080 127.0.0.1 Static nginx container (socket-activated)
+
+# Syncthing sync transport (LAN-facing; the GUI on 8384 above stays loopback-only)
+22000 0.0.0.0 :: Syncthing sync transport (TCP + UDP/QUIC, peer: hera)
+21027 0.0.0.0 :: Syncthing local discovery (UDP broadcast)
 
 # Voice Assistant (Wyoming protocol)
 10300 127.0.0.1 wyoming-openai STT bridge to LiteLLM (cohere-transcribe via hera)

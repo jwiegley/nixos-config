@@ -6,7 +6,12 @@ groups:
         # blackbox_hera_mlx is excluded: the gated MLXBackendDown alert in
         # hermes.yaml owns that target (fires only when hera itself is up), so
         # a hera reboot must not also trip this ungated critical.
-        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx"} == 0
+        # host_group="iot" is excluded: the sleepy IoT devices (locks, nests,
+        # rings, sprinkler, vacuum, solar, flume, etc.) drop off ICMP for long
+        # stretches by design and must not page this always-on critical. They
+        # are covered instead by BlackboxICMPIoTDeviceDown (warning, for: 10m)
+        # below.
+        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx",host_group!="iot"} == 0
         for: 2m
         labels:
           severity: critical
@@ -15,6 +20,28 @@ groups:
         annotations:
           summary: "Host {{ $labels.instance }} is unreachable"
           description: "Host {{ $labels.instance }} has been unreachable for more than 2 minutes via {{ $labels.job }} probe."
+
+      # IoT device ICMP coverage (warning, not critical). The host_group="iot"
+      # targets in the blackbox_icmp job (modules/services/blackbox-monitoring.nix)
+      # are intentionally "sleepy" devices that routinely stop answering ICMP
+      # for long stretches, so they are excluded from the always-on
+      # HostUnreachable critical and warned-only here with a 10-minute buffer to
+      # ride out normal low-power sleep windows.
+      #
+      # This intentionally MIRRORS the existing Nagios IoT ping coverage on this
+      # host. The cross-stack duplication (Nagios + Prometheus both pinging the
+      # IoT devices) is deliberate and is NOT a defect to consolidate — do not
+      # remove the Nagios side.
+      - alert: BlackboxICMPIoTDeviceDown
+        expr: probe_success{job="blackbox_icmp",host_group="iot"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: network
+          service: connectivity
+        annotations:
+          summary: "IoT device {{ $labels.instance }} is not answering ICMP"
+          description: "IoT device {{ $labels.instance }} has not answered ICMP for more than 10 minutes (host_group=iot). This mirrors the Nagios IoT ping coverage and is warning-only because these devices sleep by design."
 
       # High latency warning for ICMP probes
       # TL-WPA8630 is a powerline adapter with inherently higher latency - excluded

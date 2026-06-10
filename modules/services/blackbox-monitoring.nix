@@ -394,38 +394,20 @@ in
               module = [ "icmp_ping" ];
             };
             static_configs = [
+              # Always-on hosts: local infra (host/peers + network gear) plus
+              # the public DNS / internet-backbone reachability checks. These
+              # are expected to be up 24/7; HostUnreachable (critical) owns
+              # them. host_group is attached by the relabel_configs below.
               {
                 targets = [
                   "vulcan.lan" # 192.168.1.2
                   "hera.lan" # 192.168.1.4
                   # "clio.lan"                          # 192.168.1.5
 
-                  # "adt-home-security.lan"             # 192.168.3.118
                   "asus-bq16-pro-ap.lan" # 192.168.3.2
                   "asus-bq16-pro-node.lan" # 192.168.3.3
                   "asus-rt-ax88u.lan" # 192.168.3.8
-                  # "august-lock-front-door.lan"        # 192.168.3.12
-                  # "august-lock-garage-door.lan"       # 192.168.3.14
-                  # "august-lock-side-door.lan"         # 192.168.3.173
-                  # "b-hyve-sprinkler.lan"              # 192.168.3.89
-                  # "dreamebot-vacuum.lan"              # 192.168.3.195
-                  # "enphase-solar-inverter.lan"        # 192.168.3.26
-                  # "flume-water-meter.lan"             # 192.168.3.183
-                  "google-home-hub.lan" # 192.168.3.106
                   "hera-wifi.lan" # 192.168.3.6
-                  # "hubspace-porch-light.lan"          # 192.168.3.178
-                  "miele-dishwasher.lan" # 192.168.3.98
-                  "myq-garage-door.lan" # 192.168.3.99
-                  # "nest-downstairs.lan"               # 192.168.3.57
-                  # "nest-family-room.lan"              # 192.168.3.83
-                  # "nest-upstairs.lan"                 # 192.168.3.161
-                  "pentair-intellicenter.lan" # 192.168.3.115
-                  # "pentair-intelliflo.lan"            # 192.168.3.23
-                  # "ring-chime-kitchen.lan"            # 192.168.3.163
-                  # "ring-chime-office.lan"             # 192.168.3.88
-                  # "ring-doorbell.lan"                 # 192.168.3.185
-                  # "tesla-wall-connector.lan"          # 192.168.3.119
-                  # "traeger-grill.lan"                 # 192.168.3.196
 
                   "TL-WPA8630.lan" # 192.168.30.49
 
@@ -448,6 +430,47 @@ in
                   "osuosl.org"
                 ];
               }
+              # IoT devices (host_group="iot"). These are intentionally
+              # "sleepy": locks, thermostats, doorbells/chimes, sprinkler,
+              # vacuum, solar inverter, water meter, dishwasher, garage door,
+              # smart-home hub, pool controller, etc. They routinely drop off
+              # ICMP for long stretches (low-power radios, deep sleep), so they
+              # are carried in their own group and EXCLUDED from the always-on
+              # HostUnreachable critical. The warning-only BlackboxICMPIoTDevice
+              # Down alert (network.yaml, for: 10m) covers them and mirrors the
+              # existing Nagios IoT ping coverage (the cross-stack duplication
+              # on this host is intentional). The explicit host_group label here
+              # is authoritative — the relabel_configs "local/dns/backbone"
+              # rules below are guarded so they never overwrite it.
+              {
+                targets = [
+                  # "adt-home-security.lan"             # 192.168.3.118
+                  "august-lock-front-door.lan" # 192.168.3.12
+                  "august-lock-garage-door.lan" # 192.168.3.14
+                  "august-lock-side-door.lan" # 192.168.3.173
+                  "b-hyve-sprinkler.lan" # 192.168.3.89
+                  "dreamebot-vacuum.lan" # 192.168.3.195
+                  "enphase-solar-inverter.lan" # 192.168.3.26
+                  "flume-water-meter.lan" # 192.168.3.183
+                  "google-home-hub.lan" # 192.168.3.106
+                  "hubspace-porch-light.lan" # 192.168.3.178
+                  "miele-dishwasher.lan" # 192.168.3.98
+                  "myq-garage-door.lan" # 192.168.3.99
+                  "nest-downstairs.lan" # 192.168.3.57
+                  "nest-family-room.lan" # 192.168.3.83
+                  "nest-upstairs.lan" # 192.168.3.161
+                  "pentair-intellicenter.lan" # 192.168.3.115
+                  "pentair-intelliflo.lan" # 192.168.3.23
+                  "ring-chime-kitchen.lan" # 192.168.3.163
+                  "ring-chime-office.lan" # 192.168.3.88
+                  "ring-doorbell.lan" # 192.168.3.185
+                  "tesla-wall-connector.lan" # 192.168.3.119
+                  "traeger-grill.lan" # 192.168.3.196
+                ];
+                labels = {
+                  host_group = "iot";
+                };
+              }
             ];
             relabel_configs = [
               {
@@ -462,23 +485,44 @@ in
                 target_label = "__address__";
                 replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
               }
-              # Add host group labels based on target
+              # Add host group labels based on target. Each rule keys on BOTH
+              # __param_target AND the existing host_group so it only fires when
+              # host_group is still empty — this preserves the authoritative
+              # static label (host_group="iot") set on the IoT static_config
+              # above and never clobbers it. The first capture group matches the
+              # target, the second requires host_group="" (the "<sep>" between
+              # the two source labels is the default ";").
+              #
+              # "local" now also matches .lan hostnames (not just 192.168.* IPs):
+              # every local probe uses a .lan name, so the old IP-only regex
+              # never attached host_group="local" to any of them. The IP forms
+              # are kept so group membership for any raw-IP local target is
+              # unchanged.
               {
-                source_labels = [ "__param_target" ];
+                source_labels = [
+                  "__param_target"
+                  "host_group"
+                ];
                 target_label = "host_group";
-                regex = "(192\\.168\\..*)|(127\\.0\\.0\\.1)|(localhost)";
+                regex = "((192\\.168\\..*)|(127\\.0\\.0\\.1)|(localhost)|(.+\\.lan));";
                 replacement = "local";
               }
               {
-                source_labels = [ "__param_target" ];
+                source_labels = [
+                  "__param_target"
+                  "host_group"
+                ];
                 target_label = "host_group";
-                regex = "(8\\.8\\.[48]\\.[48])|(1\\.[01]\\.0\\.[01])|(208\\.67\\.222\\.222)";
+                regex = "((8\\.8\\.[48]\\.[48])|(1\\.[01]\\.0\\.[01])|(208\\.67\\.222\\.222));";
                 replacement = "dns";
               }
               {
-                source_labels = [ "__param_target" ];
+                source_labels = [
+                  "__param_target"
+                  "host_group"
+                ];
                 target_label = "host_group";
-                regex = ".+\\.(com|org|net|edu)";
+                regex = "(.+\\.(com|org|net|edu));";
                 replacement = "backbone";
               }
             ];

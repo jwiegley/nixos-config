@@ -368,6 +368,51 @@
           };
           equal = [ "name" ];
         }
+        # Parent/child network topology for the IoT ICMP coverage. The IoT
+        # devices all hang off the IoT-subnet network gear (the ASUS
+        # router/AP/mesh-node). If that gateway itself goes unreachable, EVERY
+        # downstream IoT device will fail its ICMP probe at once — that is a
+        # single root-cause event, not N independent device failures. This
+        # mirrors the Nagios parent/child host-dependency behaviour.
+        #
+        # source: HostUnreachable firing for the gateway/AP/router instances
+        # (those infra hosts live in host_group="local", so a gateway outage
+        # trips the always-on HostUnreachable critical). target: the
+        # BlackboxICMPIoTDeviceDown warnings for the child devices.
+        #
+        # equal = [] (no shared label): when the gateway is down we suppress ALL
+        # IoT-down warnings regardless of which specific device, since the
+        # gateway being unreachable explains every child failure. The gateway
+        # instances are matched by name via source_match_re.
+        {
+          source_match = {
+            alertname = "HostUnreachable";
+          };
+          source_match_re = {
+            instance = "(asus-rt-ax88u\\.lan|asus-bq16-pro-ap\\.lan|asus-bq16-pro-node\\.lan)";
+          };
+          target_match = {
+            alertname = "BlackboxICMPIoTDeviceDown";
+          };
+          equal = [ ];
+        }
+        # Same parent/child suppression, but for the case where the gateway/AP
+        # itself is also (mis)classified into the IoT coverage and reported via
+        # BlackboxICMPIoTDeviceDown rather than HostUnreachable. Keyed on the
+        # same gateway instance names so the child IoT warnings are still
+        # inhibited by a single upstream failure.
+        {
+          source_match = {
+            alertname = "BlackboxICMPIoTDeviceDown";
+          };
+          source_match_re = {
+            instance = "(asus-rt-ax88u\\.lan|asus-bq16-pro-ap\\.lan|asus-bq16-pro-node\\.lan)";
+          };
+          target_match = {
+            alertname = "BlackboxICMPIoTDeviceDown";
+          };
+          equal = [ ];
+        }
       ];
     };
   };

@@ -1,18 +1,23 @@
-#!/usr/bin/env python3
-"""MCP server exposing stock-trader research tools to OpenClaw.
+"""MCP server exposing stock-trader research tools over the REST API.
 
-Designed to run inside the OpenClaw microVM as an mcporter stdio child.
-Wraps the stock-trader REST API at https://trader.vulcan.lan with eight
-named MCP tools.
+A thin FastMCP **stdio** server that wraps the stock-trader REST API
+(default ``https://trader.vulcan.lan``) with named MCP tools — the same 18
+tools OpenClaw/Hermes use (8 core + 10 Alpha Vantage). It depends only on
+``requests`` + ``mcp``, so it can be packaged as a standalone Nix executable
+(see ``~/src/nix`` overlay ``stock-trader-mcp``) and pointed at any
+stock-trader deployment.
 
 Environment variables:
   STOCK_TRADER_BASE_URL   default: https://trader.vulcan.lan
   STOCK_TRADER_TIMEOUT_S  default: 30 (seconds)
+  REQUESTS_CA_BUNDLE      standard requests/urllib3 CA-bundle override; set
+                          this when the deployment uses a private CA (the Nix
+                          package bakes in the merged Vulcan CA bundle).
 
-The script trusts the system CA bundle. The microVM's
-security.pki.certificates already includes the Vulcan Step-CA root, so
-TLS validation succeeds for trader.vulcan.lan.
+Run directly: python stock-trader-mcp.py
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -23,6 +28,44 @@ from mcp.server.fastmcp import FastMCP
 
 BASE_URL = os.getenv("STOCK_TRADER_BASE_URL", "https://trader.vulcan.lan").rstrip("/")
 TIMEOUT_S = float(os.getenv("STOCK_TRADER_TIMEOUT_S", "30"))
+
+
+def _format_error_response(resp: Any, path: str) -> str:
+    """Map an HTTP error response (status >= 400) to a JSON string.
+
+    Prefer a STRUCTURED form when the body is JSON in stock-trader's FastAPI
+    error shape ``{"detail": {"error", "code", "reasons"}}`` (or a plain-string
+    ``detail``): the per-source ``reasons`` are already sanitized (closed-set)
+    server-side, so forward them as-is. This lets the LLM see *why* each source
+    failed instead of an opaque truncated blob.
+
+    Fall back to the legacy truncated-text form (``HTTP <status> from <path>:
+    <body[:500]>``) only when the body isn't JSON or lacks that shape. Never
+    raises and never introduces a new raw-text path beyond that bounded fallback.
+    """
+    status = resp.status_code
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+
+    if isinstance(body, dict) and "detail" in body:
+        detail = body["detail"]
+        if isinstance(detail, dict):
+            return json.dumps(
+                {
+                    "error": detail.get("error", "request failed"),
+                    "code": detail.get("code"),
+                    "reasons": detail.get("reasons", {}),
+                    "status": status,
+                }
+            )
+        if isinstance(detail, str):
+            # FastAPI's default HTTPException renders detail as a plain string.
+            return json.dumps({"error": detail, "status": status})
+
+    # Fallback: body isn't JSON or lacks the recognized shape.
+    return json.dumps({"error": f"HTTP {status} from {path}: {resp.text[:500]}"})
 
 
 def _request(
@@ -55,10 +98,7 @@ def _request(
         return json.dumps({"error": f"request failed: {exc}"})
 
     if resp.status_code >= 400:
-        body = resp.text[:500]
-        return json.dumps(
-            {"error": f"HTTP {resp.status_code} from {path}: {body}"}
-        )
+        return _format_error_response(resp, path)
 
     try:
         return json.dumps(resp.json())

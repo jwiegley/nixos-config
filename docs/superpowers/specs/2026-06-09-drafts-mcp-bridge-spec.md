@@ -103,7 +103,8 @@ This is the host-side bridge unit. Modeled on `stock-trader.nix` (`DynamicUser` 
 **Review fixes applied:**
 - **MERGED ExecStart** — the single source of truth is the **filter-shim form** (`lib.escapeShellArgs`, with `draftsToolFilter` interposed before the ssh wrapper). The svc-module's competing no-shim `concatStringsSep` ExecStart is **deleted** (shipping it would silently remove OpenClaw's write-tool denial).
 - **`StartLimitIntervalSec`/`StartLimitBurst` under `unitConfig`** (verified `litellm.nix:89-94`); placing them in `serviceConfig` is silently ignored.
-- **`LoadCredential` id `hera-ssh-key`** matches the wrapper's `$CREDENTIALS_DIRECTORY/hera-ssh-key` exactly (a mismatch builds clean but fails at runtime with "no such identity").
+- **`LoadCredential` id `hera-ssh-key`** matches the basename the wrapper hardcodes at `/run/credentials/drafts-mcp.service/hera-ssh-key` (a mismatch builds clean but fails at runtime with "no such identity").
+  > **Correction (2026-06-10, deployed):** the wrapper must **NOT** use `"$CREDENTIALS_DIRECTORY/hera-ssh-key"` as originally specified. mcp-proxy spawns the stdio backend through the MCP Python SDK's `stdio_client`, which scrubs the child env down to `get_default_environment()`'s allowlist (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER` on POSIX) — `$CREDENTIALS_DIRECTORY` is stripped, expands to `""`, ssh sees `-i /hera-ssh-key` → "Identity file not accessible" → publickey auth fails while the unit stays `active` (the silent-green-zombie failure mode, observed live 2026-06-09). The fix references the stable documented systemd path `/run/credentials/<unit>/` directly.
 - **Build-time assertion** that `pinnedKnownHosts` does not contain `REPLACE_ME` — the `writeText` placeholder does **NOT** break the build by itself (verified: `writeText` with any string body evaluates fine); the failure would otherwise be runtime-only (StrictHostKeyChecking). The assertion makes `enable` fail closed at eval until the real Phase-1 host key lands.
 
 ### NEW FILE — `/Users/johnw/src/nixos/modules/services/drafts-mcp.nix`
@@ -185,9 +186,13 @@ let
   #   ServerAliveInterval=30 / ServerAliveCountMax=3 : detect a dead peer
   #                              within ~90s so the child exits (then the
   #                              probe-driven restart can recover).
+  # CREDENTIAL PATH IS HARDCODED, NOT $CREDENTIALS_DIRECTORY: the MCP Python
+  # SDK's stdio_client scrubs the child env to its default allowlist, which
+  # drops $CREDENTIALS_DIRECTORY (see §"Review fixes applied"). We use the
+  # stable systemd path /run/credentials/<unit>/ instead.
   sshWrapper = pkgs.writeShellScript "drafts-mcp-ssh" ''
     exec ${pkgs.openssh}/bin/ssh -T \
-      -i "$CREDENTIALS_DIRECTORY/hera-ssh-key" \
+      -i /run/credentials/drafts-mcp.service/hera-ssh-key \
       -o IdentitiesOnly=yes \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=yes \
@@ -316,7 +321,8 @@ in
         RuntimeDirectoryMode = "0700";
 
         # Dedicated ssh private key, read-only in the unit namespace. The id
-        # `hera-ssh-key` MUST match the wrapper's $CREDENTIALS_DIRECTORY path.
+        # `hera-ssh-key` MUST match the basename the wrapper hardcodes at
+        # /run/credentials/drafts-mcp.service/hera-ssh-key.
         LoadCredential = [
           "hera-ssh-key:${config.sops.secrets."drafts/hera-ssh-private-key".path}"
         ];
@@ -1681,20 +1687,26 @@ git -C /etc/nixos/secrets commit -m "Add drafts/hera-ssh-private-key for drafts-
 git -C /etc/nixos/secrets push
 ```
 
-The module consumes it via `sops.secrets."drafts/hera-ssh-private-key"` (§5) → `LoadCredential` → `$CREDENTIALS_DIRECTORY/hera-ssh-key` (DynamicUser-safe; systemd reads it as root before the user switch).
+The module consumes it via `sops.secrets."drafts/hera-ssh-private-key"` (§5) → `LoadCredential` → `/run/credentials/drafts-mcp.service/hera-ssh-key` (DynamicUser-safe; systemd reads it as root before the user switch; the wrapper hardcodes the path because the MCP SDK strips `$CREDENTIALS_DIRECTORY` — see §"Review fixes applied").
 
 ### 10.3 CREATE — `/Users/johnw/src/promptdeploy/mcp/drafts-hera.yaml`
 
-`name: drafts-hera` (≠ `drafts`, passes the dedup gate); `only: [claude-vulcan]` (host operator, full toolset). ssh args add `-T` + `ConnectTimeout`/`ServerAlive*`.
+`name: drafts-hera` (≠ `drafts`, passes the dedup gate); `only: [claude-vulcan]` (host operator, full toolset). ssh args add `-T`, the dedicated `-i` key + `IdentitiesOnly=yes`, and `ConnectTimeout`/`ServerAlive*`.
 
 > **Correction (2026-06-09, verified):** `IdentitiesOnly=yes` is **OMITTED** for this operator path (an earlier draft included it). vulcan's `~/.ssh/config` pins `IdentityFile id_vulcan` under `Host *`, and hera does **not** authorize `id_vulcan`; with `IdentitiesOnly=yes` ssh offers only that key and fails `Permission denied`. Without it, ssh uses johnw's agent/default key (authorized on hera) and succeeds — confirmed end-to-end (vulcan→hera→`drafts-mcp-server`→`drafts_get_drafts`, no `-1743`). `IdentitiesOnly=yes` + a dedicated `-i` key belongs to the **bridge service** (§5) only, never this operator path.
 
+> **Correction superseded (2026-06-10, deployed):** the above assumed the operator path could lean on johnw's agent/YubiKey — but **vulcan has no YubiKey and never will**, so the agent route cannot run unattended. The final operator entry authenticates with the **dedicated forced-command key** (the same key the bridge service uses), read directly by johnw from the sops-decrypted `/run/secrets/drafts/hera-ssh-private-key` (owner johnw, mode 0400 — dual-use by design, §5). With an explicit `-i`, `IdentitiesOnly=yes` is back **on** (it pins ssh to exactly that key, avoiding the `id_vulcan` trap that motivated the first correction). Verified end-to-end 2026-06-10: this exact invocation returned the full 20-tool `tools/list` from Drafts. Because the key is forced-command-pinned on hera, the remote-command arg is ignored and the connection can only ever run `drafts-mcp-server`.
+
 ```yaml
 name: drafts-hera
-description: Drafts.app on hera (macOS) via SSH-stdio to drafts-mcp-server — host Claude Code (claude-vulcan, operator context, FULL toolset incl. drafts_run_action). Bypasses the SSE bridge; the autonomous VMs use the write-gated SSE endpoint instead.
+description: Drafts.app on hera (macOS) via SSH-stdio to drafts-mcp-server — host Claude Code (claude-vulcan, operator context, FULL toolset incl. drafts_run_action). Bypasses the SSE bridge; the autonomous OpenClaw/Hermes microVMs use the write-gated SSE endpoint instead.
 command: ssh
 args:
   - "-T"
+  - "-i"
+  - "/run/secrets/drafts/hera-ssh-private-key"
+  - "-o"
+  - "IdentitiesOnly=yes"
   - "-o"
   - "BatchMode=yes"
   - "-o"
@@ -1713,7 +1725,7 @@ only:
   - claude-vulcan
 ```
 
-> **Privilege-boundary note (security-review):** `claude-vulcan` authenticates as johnw via the normal `keyFiles`/Yubikey identity (an *unrestricted* login shell) and selects the server via the explicit remote-command arg. Only the `DynamicUser` bridge service uses the dedicated forced-command key. This is the intended operator/agent split — the operator path is NOT forced-command-pinned. (Optional future hardening: give `claude-vulcan` its own dedicated forced-command key whose command is `drafts-mcp-server` with the full toolset, so even the operator path cannot be repurposed into an arbitrary hera shell.)
+> **Privilege-boundary note (security-review, updated 2026-06-10):** both the operator path and the `DynamicUser` bridge service authenticate with the **same dedicated forced-command key**, so neither can be repurposed into an arbitrary hera shell — the `restrict,no-pty,...` forced command pins every connection to `drafts-mcp-server` (full toolset; the explicit remote-command arg above is ignored and kept only as documentation). The operator/agent split is enforced one layer up instead: the operator path gets the full toolset, while the VM-facing SSE endpoint passes through `drafts-tool-filter`, which strips the 9 write tools. The original plan to let the operator ride johnw's unrestricted YubiKey identity was dropped — vulcan has no YubiKey, and the forced-command pin is strictly stronger anyway.
 
 ### 10.4 EDIT — `/Users/johnw/src/promptdeploy/mcp/drafts.yaml` (comment only)
 

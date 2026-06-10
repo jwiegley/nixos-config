@@ -2,10 +2,18 @@
   config,
   lib,
   pkgs,
+  utils,
   ...
 }:
 
-# Syncthing — two-way sync of /tank/Public with hera (~/Public).
+# Syncthing — declarative two-way LAN sync of tank directories with hera.
+#
+# Folders are declared exactly once in the `folders` attrset below. The
+# syncthing folder settings, the ZFS mount gating, the sandbox write grants,
+# and the ACL oneshot are all derived from that attrset, and the Nagios
+# folder-completion check follows it automatically (syncthing-nagios.nix
+# reads config.services.syncthing.settings.folders). Adding a synced
+# directory is a single new entry — see the comment above `folders`.
 #
 # This is the 2026 restoration of the service dropped in June 2025. The 2025
 # attempt failed on four self-inflicted wounds, each structurally prevented
@@ -14,8 +22,9 @@
 #      dedicated vhost at https://syncthing.vulcan.lan proxying at /
 #      (grafana.nix:289-309 pattern; *.vulcan.lan is a Technitium wildcard).
 #   2. Placeholder device IDs ("DEVICE-ID-OF-LAPTOP") with overrideDevices
-#      — hera's REAL device ID is pinned below and guarded by a fail-closed
-#      assertion (modeled on drafts-mcp.nix's pinned-hostkey assertion).
+#      — every peer's REAL device ID is pinned in `devices` and guarded by a
+#      fail-closed assertion (modeled on drafts-mcp.nix's pinned-hostkey
+#      assertion).
 #   3. GUI credentials committed to git — the GUI password and API key live
 #      only in sops (secrets.yaml: syncthing/gui-password, syncthing/api-key).
 #   4. guiAddress 0.0.0.0 — the GUI binds 127.0.0.1 only; the LAN sees it
@@ -36,14 +45,15 @@
 # check (syncthing-nagios.nix); nagios and prometheus can both read it
 # because they are members of the johnw group (gid 990).
 #
-# Write access to /tank/Public (two-way sync): the dataset is multi-owner
-# (root parent; aria2/copyparty/johnw subtrees) and had acltype=off, so the
-# syncthing-public-acls oneshot enables POSIX ACLs on tank/Public and grants
-# u:syncthing rwX (access + default) across the tree — additive, reversible
-# (zfs set acltype=off), and ownership-preserving. johnw gets the same grant
-# so files arriving from hera (owned syncthing:syncthing) stay editable
-# locally. copyparty-ownership-fixup chowns are ACL-preserving, so the two
-# mechanisms coexist.
+# Write access to synced folders (two-way sync): tank datasets are
+# multi-owner (e.g. tank/Public: aria2/copyparty/johnw subtrees) and shipped
+# with acltype=off, so the syncthing-folder-acls oneshot enables POSIX ACLs
+# on each folder's backing dataset and grants u:syncthing rwX (access +
+# default) across each folder tree — additive, reversible (zfs set
+# acltype=off), and ownership-preserving. johnw gets the same grant so files
+# arriving from hera (owned syncthing:syncthing) stay editable locally.
+# copyparty-ownership-fixup chowns are ACL-preserving, so the two mechanisms
+# coexist on tank/Public.
 
 let
   guiPort = 8384; # loopback only — see docs/ports.txt
@@ -51,31 +61,106 @@ let
   discoveryPort = 21027; # LAN UDP, local discovery broadcast
 
   vhost = "syncthing.vulcan.lan";
-  publicDir = "/tank/Public";
   seedDir = "/var/lib/syncthing-seed";
   configDir = "/var/lib/syncthing/.config/syncthing";
 
-  # hera's real syncthing device ID (generated 2026-06-10 on hera from the
-  # key pair in ~/.syncthing-staging, installed to
-  # ~/Library/Application Support/Syncthing at deploy). A hera reinstall that
-  # regenerates keys MUST update this pin — sync silently stops otherwise.
-  heraDeviceId = "BZLR7L3-232RGLB-HWRZNFV-W3IPNB2-NRXL4XE-ZTV2IXC-5DBDPH5-NLPYPQT";
+  # -------------------------------------------------------------------------
+  # Peers. Attr name = syncthing device name (referenced from
+  # folders.<id>.devices); the body lands in settings.devices verbatim.
+  # Device IDs are public key fingerprints — safe in git, but they MUST be
+  # real: a reinstall that regenerates a peer's keys has to update the pin
+  # here, or sync silently stops. A malformed ID aborts evaluation (see
+  # assertions below).
+  devices = {
+    # hera's real syncthing device ID (generated 2026-06-10 on hera from the
+    # key pair in ~/.syncthing-staging, installed to
+    # ~/Library/Application Support/Syncthing at deploy).
+    hera = {
+      id = "BZLR7L3-232RGLB-HWRZNFV-W3IPNB2-NRXL4XE-ZTV2IXC-5DBDPH5-NLPYPQT";
+      # Explicit address first; "dynamic" falls back to local discovery.
+      addresses = [
+        "tcp://hera.lan:${toString syncPort}"
+        "dynamic"
+      ];
+    };
+  };
 
-  # 8 dash-separated groups of 7 base32 chars. Fail-closed guard against the
-  # 2025 placeholder-ID mistake: an unfilled/typo'd ID aborts evaluation.
-  deviceIdOk = builtins.match "[A-Z2-7]{7}(-[A-Z2-7]{7}){7}" heraDeviceId != null;
+  # macOS metadata junk that hera would otherwise sync over. Written to
+  # <folder>/.stignore via the REST API by syncthing-init; ignores are
+  # per-device and NOT synced, so hera mirrors these (plus macOS-only
+  # entries like "Drop Box") in its own .stignore.
+  macosJunk = [
+    ".DS_Store"
+    "._*"
+    ".Spotlight-V100"
+    ".Trashes"
+    ".fseventsd"
+    ".TemporaryItems"
+    ".localized"
+    "desktop.ini"
+    "Thumbs.db"
+  ];
+
+  # -------------------------------------------------------------------------
+  # Synced folders — the ONE place to declare a sync. Attr name = syncthing
+  # folder ID. `dataset` names the backing ZFS dataset (it drives the mount
+  # gating and the ACL oneshot; the folder path may sit below the dataset
+  # mountpoint). Everything except `dataset` is passed to
+  # settings.folders.<id> verbatim (label, path, devices, type,
+  # ignorePatterns, versioning, ...); type defaults to "sendreceive".
+  # No versioning on any folder: vulcan-side history is already covered by
+  # sanoid snapshots of tank.
+  #
+  # Adding a folder:
+  #   1. Add an entry here. A missing folder directory is created (and
+  #      ACL-granted) by syncthing-folder-acls before syncthing starts.
+  #   2. Rebuild: syncthing-init applies the config and offers the share to
+  #      the listed peers.
+  #   3. Accept the share on each peer, choosing its local path there.
+  folders = {
+    tank-public = {
+      label = "Public";
+      path = "/tank/Public";
+      dataset = "tank/Public";
+      devices = [ "hera" ];
+      ignorePatterns = macosJunk;
+    };
+  };
+
+  # ---- derived from `folders` — nothing below changes per folder ----------
+  folderList = lib.attrValues folders;
+  folderPaths = map (f: f.path) folderList;
+  # Backing datasets (deduped: folders may share one). All tank datasets
+  # mount at /<dataset-name>, so the mountpoint is derived, not declared.
+  datasets = lib.unique (map (f: f.dataset) folderList);
+  mountpointOf = ds: "/${ds}";
+  datasetMounts = map mountpointOf datasets;
+  mountUnits = map (mp: "${utils.escapeSystemdPath mp}.mount") datasetMounts;
+
+  # 8 dash-separated groups of 7 base32 chars.
+  deviceIdFormat = "[A-Z2-7]{7}(-[A-Z2-7]{7}){7}";
 in
 {
-  assertions = [
-    {
-      assertion = deviceIdOk;
+  assertions =
+    # Fail-closed guard against the 2025 placeholder-ID mistake: an
+    # unfilled/typo'd device ID aborts evaluation.
+    lib.mapAttrsToList (name: dev: {
+      assertion = builtins.match deviceIdFormat dev.id != null;
       message = ''
-        services/syncthing.nix: heraDeviceId is not a well-formed syncthing
-        device ID. Refusing to deploy a placeholder (the 2025 failure mode):
-        overrideDevices=true would delete the real peer.
+        services/syncthing.nix: devices.${name}.id is not a well-formed
+        syncthing device ID. Refusing to deploy a placeholder (the 2025
+        failure mode): overrideDevices=true would delete the real peer.
       '';
-    }
-  ];
+    }) devices
+    # A folder referencing an undeclared device would otherwise fail only at
+    # runtime, inside syncthing-init.
+    ++ lib.mapAttrsToList (id: f: {
+      assertion = lib.all (d: lib.hasAttr d devices) (f.devices or [ ]);
+      message = ''
+        services/syncthing.nix: folders.${id}.devices references a device
+        missing from the `devices` attrset.
+      '';
+    }) folders;
 
   services.syncthing = {
     enable = true;
@@ -99,41 +184,15 @@ in
       # the top of this file. GUI user + API key are PATCHed by
       # syncthing-gui-pin instead.
 
-      devices.hera = {
-        id = heraDeviceId;
-        # Explicit address first; "dynamic" falls back to local discovery.
-        addresses = [
-          "tcp://hera.lan:${toString syncPort}"
-          "dynamic"
-        ];
-      };
+      inherit devices;
 
-      folders."tank-public" = {
-        path = publicDir;
-        label = "Public";
-        devices = [ "hera" ];
-        type = "sendreceive";
-        # Written to /tank/Public/.stignore via the REST API by
-        # syncthing-init. hera mirrors these (plus macOS-only entries like
-        # "Drop Box") in its own .stignore — ignores are per-device and NOT
-        # synced, so both sides need them. No versioning: vulcan-side history
-        # is already covered by hourly sanoid snapshots of tank.
-        ignorePatterns = [
-          ".DS_Store"
-          "._*"
-          ".Spotlight-V100"
-          ".Trashes"
-          ".fseventsd"
-          ".TemporaryItems"
-          ".localized"
-          "desktop.ini"
-          "Thumbs.db"
-        ];
-      };
+      # `dataset` is vulcan-side metadata, not a syncthing folder option.
+      folders = lib.mapAttrs (_: f: { type = "sendreceive"; } // removeAttrs f [ "dataset" ]) folders;
 
       options = {
         # LAN-only posture: no global discovery, no relays, no NAT traversal,
-        # no phone-home. Local discovery + the pinned address are sufficient.
+        # no phone-home. Local discovery + the pinned addresses are
+        # sufficient.
         globalAnnounceEnabled = false;
         relaysEnabled = false;
         natEnabled = false;
@@ -192,17 +251,19 @@ in
   systemd.services = {
     syncthing = {
       # ZFS gating per immich.nix:74-103 (mirrors aria2.nix / samba.nix):
-      # wait for the dataset, start when it appears, skip cleanly when tank
-      # is absent (flaky USB enclosure — bindTankModule.nix rationale).
+      # wait for every folder's backing dataset, start when they appear, and
+      # skip cleanly while any is absent (flaky USB enclosure —
+      # bindTankModule.nix rationale). Multiple Condition entries of the same
+      # type AND together: a partially-mounted tank also skips.
       after = [
         "zfs.target"
         "zfs-import-tank.service"
-        "tank-Public.mount"
-      ];
-      wantedBy = [ "tank-Public.mount" ];
+      ]
+      ++ mountUnits;
+      wantedBy = mountUnits;
       unitConfig = {
-        RequiresMountsFor = [ publicDir ];
-        ConditionPathIsMountPoint = publicDir;
+        RequiresMountsFor = folderPaths;
+        ConditionPathIsMountPoint = datasetMounts;
       };
       # Upstream hardening lacks filesystem confinement entirely (no
       # ProtectSystem/ProtectHome/ReadWritePaths) — add the repo-canonical
@@ -211,10 +272,7 @@ in
       serviceConfig = {
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [
-          "/var/lib/syncthing"
-          publicDir
-        ];
+        ReadWritePaths = [ "/var/lib/syncthing" ] ++ folderPaths;
         # AF_NETLINK: syncthing enumerates interfaces for local discovery.
         RestrictAddressFamilies = [
           "AF_UNIX"
@@ -224,7 +282,7 @@ in
         ];
         LockPersonality = true;
 
-        # Resource limits (initial scan hashes the full 5.4G dataset).
+        # Resource limits (the initial scan hashes every synced tree).
         # TasksMax counts OS threads: under bulk-transfer load the Go runtime
         # plus SQLite's blocking cgo calls exceeded 128 and pthread_create
         # EAGAIN'd into SIGABRT (two crashes during the 2026-06-10 initial
@@ -235,24 +293,26 @@ in
       };
     };
 
-    # Enables POSIX ACLs on tank/Public (acltype was `off`) and grants the
-    # syncthing and johnw users rwX across the tree — access ACLs for
-    # existing entries, default ACLs so future files/dirs created by ANY
-    # owner (copyparty, aria2, johnw, syncthing) inherit the grants. ~3.6k
-    # files, so the recursive pass is instant; it re-runs before every
-    # syncthing start, which also heals ACL-less files restored from backup.
-    syncthing-public-acls = {
-      description = "POSIX ACL grants for syncthing on /tank/Public";
+    # Enables POSIX ACLs on each backing dataset (tank datasets shipped with
+    # acltype=off) and grants the syncthing and johnw users rwX across every
+    # folder tree — access ACLs for existing entries, default ACLs so future
+    # files/dirs created by ANY owner (copyparty, aria2, johnw, syncthing)
+    # inherit the grants. It re-runs before every syncthing start, which also
+    # heals ACL-less files restored from backup, and it creates folder roots
+    # that do not exist yet, so freshly-declared folders need no manual
+    # mkdir.
+    syncthing-folder-acls = {
+      description = "POSIX ACL grants for syncthing folders";
       requiredBy = [ "syncthing.service" ];
       before = [ "syncthing.service" ];
       after = [
         "zfs.target"
         "zfs-import-tank.service"
-        "tank-Public.mount"
-      ];
+      ]
+      ++ mountUnits;
       unitConfig = {
-        RequiresMountsFor = [ publicDir ];
-        ConditionPathIsMountPoint = publicDir;
+        RequiresMountsFor = folderPaths;
+        ConditionPathIsMountPoint = datasetMounts;
       };
       path = [
         config.boot.zfs.package
@@ -265,26 +325,37 @@ in
       };
       script = ''
         set -euo pipefail
-
-        acltype=$(zfs get -H -o value acltype tank/Public)
+      ''
+      + lib.concatMapStrings (ds: ''
+        acltype=$(zfs get -H -o value acltype ${lib.escapeShellArg ds})
         if [ "$acltype" != "posix" ] && [ "$acltype" != "posixacl" ]; then
-          echo "Enabling POSIX ACLs on tank/Public (was: $acltype)"
-          zfs set acltype=posix tank/Public
+          echo "Enabling POSIX ACLs on ${ds} (was: $acltype)"
+          zfs set acltype=posix ${lib.escapeShellArg ds}
         fi
+      '') datasets
+      + lib.concatMapStrings (
+        f:
+        let
+          path' = lib.escapeShellArg f.path;
+          mount' = lib.escapeShellArg (mountpointOf f.dataset);
+        in
+        ''
+          [ -d ${path'} ] || install -d -m 0755 -o syncthing -g syncthing ${path'}
 
-        # acltype is normally applied live; remount once if the VFS layer
-        # hasn't picked it up yet.
-        if ! setfacl -m u:syncthing:rwX ${publicDir} 2>/dev/null; then
-          echo "setfacl failed post-property-change; remounting ${publicDir}"
-          mount -o remount ${publicDir}
-          setfacl -m u:syncthing:rwX ${publicDir}
-        fi
+          # acltype is normally applied live; remount once if the VFS layer
+          # hasn't picked it up yet.
+          if ! setfacl -m u:syncthing:rwX ${path'} 2>/dev/null; then
+            echo "setfacl failed post-property-change; remounting ${mountpointOf f.dataset}"
+            mount -o remount ${mount'}
+            setfacl -m u:syncthing:rwX ${path'}
+          fi
 
-        setfacl -R \
-          -m u:syncthing:rwX -m d:u:syncthing:rwX \
-          -m u:johnw:rwX     -m d:u:johnw:rwX \
-          ${publicDir}
-      '';
+          setfacl -R \
+            -m u:syncthing:rwX -m d:u:syncthing:rwX \
+            -m u:johnw:rwX     -m d:u:johnw:rwX \
+            ${path'}
+        ''
+      ) folderList;
     };
 
     # Pins the GUI user and the sops API key via PATCH /rest/config/gui.

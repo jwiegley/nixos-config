@@ -6,11 +6,16 @@
 }:
 
 let
-  # Nagios checks for the syncthing service (two-way /tank/Public <-> hera).
+  # Nagios checks for the syncthing service (two-way tank folders <-> hera).
   # Modeled on qdrant-nagios.nix; the sync-status check additionally uses the
   # sops API key (group johnw 0440 — nagios is a member), the same credential
   # the Prometheus scrape uses. Both REST checks talk to the loopback GUI
   # listener directly, not the nginx vhost.
+
+  # Folder IDs baked in at build time from the single source of truth
+  # (the `folders` attrset in modules/services/syncthing.nix) — a folder
+  # added there is monitored here automatically.
+  syncthingFolderIds = lib.attrNames config.services.syncthing.settings.folders;
 
   # /rest/noauth/health needs no authentication and returns {"status": "OK"}.
   checkSyncthingHealth = pkgs.writeShellScript "check_syncthing_health.sh" ''
@@ -43,10 +48,10 @@ let
   # Peer connectivity + folder completion via the authenticated REST API.
   # Device-agnostic: discovers remote peers from the live config rather than
   # pinning hera's ID a second time (single source of truth stays in
-  # modules/services/syncthing.nix). WARNING (not CRITICAL) states: a
-  # disconnected peer usually means hera is rebooting/asleep and transfers
-  # in flight are normal; nagios retry logic (standard-service) absorbs
-  # transients before notifying.
+  # modules/services/syncthing.nix); folder-agnostic via syncthingFolderIds
+  # above. WARNING (not CRITICAL) states: a disconnected peer usually means
+  # hera is rebooting/asleep and transfers in flight are normal; nagios
+  # retry logic (standard-service) absorbs transients before notifying.
   checkSyncthingSync = pkgs.writeShellScript "check_syncthing_sync.sh" ''
     set -euo pipefail
 
@@ -92,31 +97,43 @@ let
       '.connections | to_entries
        | map(select(.key != $me and .value.connected)) | length' <<<"$CONNS")
 
-    # Local pending work for the shared folder.
-    DBSTATUS=$(api "/rest/db/status?folder=tank-public") || {
-      echo "CRITICAL: folder tank-public not present in the running config"
+    # Local pending work for every declared folder.
+    MISSING=""
+    SYNCING=""
+    for FOLDER in ${lib.escapeShellArgs syncthingFolderIds}; do
+      if ! DBSTATUS=$(api "/rest/db/status?folder=$FOLDER"); then
+        MISSING="$MISSING $FOLDER"
+        continue
+      fi
+      NEED=$($JQ -r '.needTotalItems' <<<"$DBSTATUS")
+      STATE=$($JQ -r '.state' <<<"$DBSTATUS")
+      if [ "$NEED" -gt 0 ]; then
+        SYNCING="$SYNCING $FOLDER($NEED pending, $STATE)"
+      fi
+    done
+
+    if [ -n "$MISSING" ]; then
+      echo "CRITICAL: folder(s) missing from the running config:$MISSING"
       exit "$STATE_CRITICAL"
-    }
-    NEED=$($JQ -r '.needTotalItems' <<<"$DBSTATUS")
-    STATE=$($JQ -r '.state' <<<"$DBSTATUS")
+    fi
 
     if [ -n "$DISCONNECTED" ]; then
-      echo "WARNING: peer(s) disconnected: $DISCONNECTED (folder state: $STATE)"
+      echo "WARNING: peer(s) disconnected: $DISCONNECTED"
       exit "$STATE_WARNING"
     fi
 
-    if [ "$NEED" -gt 0 ]; then
-      echo "WARNING: tank-public syncing - $NEED items pending (state: $STATE)"
+    if [ -n "$SYNCING" ]; then
+      echo "WARNING: folder(s) syncing:$SYNCING"
       exit "$STATE_WARNING"
     fi
 
-    echo "OK: tank-public in sync, $CONNECTED_COUNT peer(s) connected (state: $STATE)"
+    echo "OK: ${toString (lib.length syncthingFolderIds)} folder(s) in sync, $CONNECTED_COUNT peer(s) connected"
     exit "$STATE_OK"
   '';
 
   syncthingNagiosObjectDefs = pkgs.writeText "syncthing-nagios.cfg" ''
     # ============================================================================
-    # Syncthing (two-way /tank/Public <-> hera) - Commands
+    # Syncthing (two-way tank folders <-> hera) - Commands
     # ============================================================================
 
     define command {
@@ -133,9 +150,11 @@ let
     # Syncthing - Services
     # ============================================================================
 
-    # systemd unit state, gated on the /tank/Public mount: the unit carries
-    # ConditionPathIsMountPoint=/tank/Public, so the plain systemd check
-    # would false-CRITICAL whenever tank is unavailable (nagios.nix:1340).
+    # systemd unit state, gated on the /tank/Public mount. The unit carries
+    # ConditionPathIsMountPoint on every synced dataset; they all ride the
+    # tank pool, which appears and disappears as one, so /tank/Public stands
+    # in for "tank is available" and the plain systemd check would
+    # false-CRITICAL whenever tank is unavailable (nagios.nix:1340).
     define service {
       use                     standard-service
       host_name               vulcan

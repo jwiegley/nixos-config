@@ -66,6 +66,20 @@
     requires = [ "network-online.target" ];
     description = "CloudFlare Tunnel for data.newartisans.com";
 
+    # Expose cloudflared's Prometheus metrics endpoint so the tunnel's health is
+    # actually observable. Without this, the public tunnel had ZERO metric
+    # visibility — it was only watched via the systemd-unit-active check, which
+    # cannot see a tunnel that is "running" but has lost all its edge (HA)
+    # connections. The upstream nixpkgs cloudflared module hardcodes ExecStart
+    # and exposes no metrics option, but cloudflared honours TUNNEL_METRICS
+    # identically to the `--metrics` flag, so we set it on the unit environment
+    # (merges with the module's own `environment` block — no ExecStart override).
+    # 127.0.0.1:9301 is loopback-only (scraped locally by Prometheus, see
+    # modules/monitoring/services/self-scrape.nix); port registered in
+    # docs/ports.txt. Yields cloudflared_tunnel_ha_connections and the rest of
+    # the cloudflared_* metric family.
+    environment.TUNNEL_METRICS = "127.0.0.1:9301";
+
     serviceConfig = {
       # Wait 10 seconds between restart attempts to allow network to stabilize
       RestartSec = 10;

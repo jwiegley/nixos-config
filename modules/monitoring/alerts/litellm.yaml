@@ -29,3 +29,34 @@ groups:
         annotations:
           summary: "LiteLLM availability metric has disappeared"
           description: "litellm_availability has been absent from the TSDB for 15 minutes — the litellm-exporter is no longer producing samples, so gateway-down conditions are currently invisible. Check litellm-exporter.service/timer."
+
+      # The Anthropic-compat "fixup" proxy on 127.0.0.1:4001 is a separate
+      # uvicorn listener that the stock-trader Anthropic path rides through —
+      # if it dies, trader requests fail even while the main litellm gateway is
+      # up. Probed by the blackbox_litellm_fixup job added in
+      # blackbox-monitoring.nix (web-blackbox); probe_success=0 means the
+      # listener is gone or not answering HTTP.
+      - alert: LitellmAnthropicFixupDown
+        expr: probe_success{job="blackbox_litellm_fixup"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: ai-gateway
+        annotations:
+          summary: "LiteLLM Anthropic fixup proxy is down"
+          description: "The blackbox probe to the litellm-fixup proxy (http://127.0.0.1:4001/) has reported probe_success=0 for 3 minutes — the entire stock-trader Anthropic path rides this proxy. Check the litellm-fixup listener on port 4001."
+
+      # litellm_response_time_seconds is a textfile gauge from the
+      # litellm-exporter (job=node). Steady-state baseline is ~0; sustained
+      # values >10s mean the gateway is up but degraded (slow upstream model
+      # responses), which still breaks agent/trader timeouts. (coverage plan
+      # P1 #5, web-blackbox — "scraped but unalerted" pattern.)
+      - alert: LitellmSlowResponse
+        expr: litellm_response_time_seconds > 10
+        for: 10m
+        labels:
+          severity: warning
+          category: ai-gateway
+        annotations:
+          summary: "LiteLLM gateway responses are slow"
+          description: "litellm_response_time_seconds has exceeded 10s for over 10 minutes (currently {{ $value }}s) — the shared model gateway is up but degraded, which can time out OpenClaw, Hermes, and stock-trader requests."

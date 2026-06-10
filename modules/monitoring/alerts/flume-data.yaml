@@ -1,0 +1,97 @@
+groups:
+  - name: flume_data_alerts
+    interval: 60s
+    rules:
+      # ── Flume 6-hourly DB sync (flume-data-daily-sync.timer) ──────────
+      # The sync pulls the last 3 days from the Flume API + cache and UPSERTs
+      # into flume_history.flume_segments. That table is the historical spine
+      # the pool auto-fill attribution cross-check reconciles against (memory:
+      # project_pool_autofill_flume_detection). A green Type=oneshot exit is
+      # NOT proof it UPSERTed anything; these metrics are emitted by the
+      # service ExecStopPost (modules/services/flume-data.nix) and so catch a
+      # non-zero exit directly. NO activation seeder: the sync runs every 6h,
+      # so coverage begins within hours of deploy (the series is absent until
+      # the first post-deploy run, which is why absent() is intentionally NOT
+      # used — a fresh deploy must not alarm before the first run populates it).
+      - alert: FlumeSyncFailed
+        expr: flume_daily_sync_last_success == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: home-automation
+          service: flume-data-daily-sync
+        annotations:
+          summary: "Flume 6-hourly DB sync failed on {{ $labels.instance }}"
+          description: |
+            The most recent flume-data-daily-sync run exited non-zero
+            (flume_daily_sync_last_success == 0). Recent per-segment Flume
+            data is not being UPSERTed into flume_history.flume_segments,
+            which silently degrades the pool auto-fill attribution
+            cross-check (memory: project_pool_autofill_flume_detection).
+            Action: journalctl -u flume-data-daily-sync.
+
+      # 14h = 6h cadence + tolerance for one fully-missed run (a single skipped
+      # 6h slot would otherwise go stale at ~12h; 14h leaves a 2h buffer for
+      # the 5m RandomizedDelaySec). The metric refreshes only on a run.
+      - alert: FlumeSyncStale
+        expr: (time() - flume_daily_sync_last_run_timestamp_seconds) > 14 * 3600
+        for: 10m
+        labels:
+          severity: warning
+          category: home-automation
+          service: flume-data-daily-sync
+        annotations:
+          summary: "Flume 6-hourly DB sync is stale on {{ $labels.instance }}"
+          description: |
+            flume-data-daily-sync has not run in over 14 hours
+            (last run {{ $value | humanizeDuration }} ago; expected every 6h
+            at 00:30/06:30/12:30/18:30). Recent Flume per-segment data is not
+            reaching flume_history.flume_segments.
+            Action: check systemctl status flume-data-daily-sync.timer and
+            journalctl -u flume-data-daily-sync.
+
+      # ── Flume weekly cross-check (flume-data-weekly.timer, Mon 03:30) ────
+      # The weekly cross-check reconciles the inferred pool auto-fill (band
+      # classifier on the Flume whole-house GPM) against the live HA sensors
+      # and the zones.json Python cross-check, and emails a water report. A
+      # silent failure means the autofill attribution drifts uncaught (memory:
+      # project_pool_autofill_flume_detection). Metrics via ExecStopPost;
+      # coverage begins at the FIRST weekly run after deploy.
+      - alert: FlumeCrossCheckFailed
+        expr: flume_weekly_cross_check_last_success == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: home-automation
+          service: flume-data-weekly
+        annotations:
+          summary: "Flume weekly cross-check failed on {{ $labels.instance }}"
+          description: |
+            The most recent flume-data-weekly cross-check run exited non-zero
+            (flume_weekly_cross_check_last_success == 0). The pool auto-fill
+            attribution reconciliation + weekly water report may not have
+            completed (memory: project_pool_autofill_flume_detection).
+            Action: journalctl -u flume-data-weekly.
+
+      # 8.5 days = weekly Monday cadence + grace (Persistent=true catches up a
+      # missed run; the +0.5d absorbs the 10m RandomizedDelaySec and any boot
+      # catch-up jitter without alarming on a normal week). The metric is
+      # absent until the first post-deploy weekly run, so this rule cannot fire
+      # until then; absent() is intentionally NOT used so a fresh deploy does
+      # not alarm before the first run has populated it.
+      - alert: FlumeCrossCheckStale
+        expr: (time() - flume_weekly_cross_check_last_run_timestamp_seconds) > 8.5 * 86400
+        for: 10m
+        labels:
+          severity: warning
+          category: home-automation
+          service: flume-data-weekly
+        annotations:
+          summary: "Flume weekly cross-check is stale on {{ $labels.instance }}"
+          description: |
+            flume-data-weekly has not run in over 8.5 days
+            (last run {{ $value | humanizeDuration }} ago; expected weekly on
+            Mon 03:30). The pool auto-fill attribution cross-check is not being
+            refreshed (memory: project_pool_autofill_flume_detection).
+            Action: check systemctl status flume-data-weekly.timer and
+            journalctl -u flume-data-weekly.

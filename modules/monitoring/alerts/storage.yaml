@@ -88,6 +88,67 @@ groups:
           summary: "ZFS pool {{ $labels.pool }} has less than 500GB free"
           description: "Pool {{ $labels.pool }} has {{ $value | humanize1024 }}B available"
 
+      # Scrub is the monthly bit-rot / integrity sweep (zfs-scrub.timer). The
+      # textfile collector parses the completed-scrub "scan:" line of `zpool
+      # status`. If the timestamp stops advancing the monthly sweep silently
+      # stopped (timer disabled, scrub never finishing, or the collector itself
+      # producing only the seed 0). 45d = monthly cadence + ~2-week grace.
+      # Excludes the seed value 0 so a brand-new pool / never-scrubbed pool does
+      # not alarm before its first scrub completes.
+      - alert: ZFSScrubStale
+        expr: zfs_pool_last_scrub_timestamp_seconds > 0 and (time() - zfs_pool_last_scrub_timestamp_seconds) > 45 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} scrub is overdue"
+          description: "Pool {{ $labels.pool }} has not completed a scrub in over 45 days (last finished {{ $value | humanizeDuration }} ago; scrubs run monthly via zfs-scrub.timer). The monthly bit-rot integrity sweep may have stopped."
+
+      # A completed scrub that found errors means latent corruption was detected
+      # (and possibly repaired on a redundant vdev; on the single-device OS pool
+      # it is unrecoverable). for:0 — surface immediately once a scrub finishes.
+      - alert: ZFSScrubErrors
+        expr: zfs_pool_last_scrub_errors > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} last scrub found errors"
+          description: "Pool {{ $labels.pool }}'s most recent scrub reported {{ $value }} error(s). Latent corruption was detected. Investigate `zpool status -v {{ $labels.pool }}` and the underlying devices (see project_tank_uas_enclosure_failure)."
+
+      # Sanoid (sanoid.timer, hourly) is the snapshot engine. If it stalls the
+      # newest snapshot creation time stops advancing — point-in-time recovery
+      # silently degrades while everything else looks healthy. >6h = several
+      # missed hourly runs. Excludes 0 (a pool with no snapshots at all).
+      - alert: ZFSSnapshotStale
+        expr: zfs_newest_snapshot_timestamp_seconds > 0 and (time() - zfs_newest_snapshot_timestamp_seconds) > 6 * 3600
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} has no recent snapshots"
+          description: "The newest snapshot under pool {{ $labels.pool }} is over 6 hours old (last: {{ $value | humanizeDuration }} ago). Sanoid (sanoid.timer, hourly) may have stopped taking snapshots — check systemctl status sanoid.timer and journalctl -u sanoid."
+
+      # Collector liveness. The zfs-pool-health-metrics timer runs every 2min; if
+      # the textfile stops being refreshed every other ZFS rule above goes quietly
+      # stale (last value frozen, never "firing"). >15m = several missed runs.
+      - alert: ZFSPoolHealthCollectorStale
+        expr: (time() - zfs_pool_health_collector_run_timestamp_seconds) > 900
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool-health textfile collector is stale"
+          description: "zfs-pool-health-metrics has not produced a fresh textfile in over 15 minutes (last run {{ $value | humanizeDuration }} ago; expected every 2 min). All ZFS pool/scrub/snapshot/suspended alerts are reading frozen data. Check systemctl status zfs-pool-health-metrics.timer."
+
       # Backup alerts - Restic repository checks
       - alert: ResticCheckFailed
         expr: restic_check_success{repository!=""} == 0
@@ -137,3 +198,22 @@ groups:
         annotations:
           summary: "Restic repository growing rapidly"
           description: "Repository {{ $labels.repository }} is growing by more than 10GB per day"
+
+      # Size-regression / bit-rot-of-intent detector. Restic repos are
+      # append-only-ish: with forget+prune they fluctuate but never collapse to a
+      # fraction of their trailing-2-week average unless something is wrong (a
+      # bucket emptied, a misdirected backup, an over-aggressive prune). The
+      # restic-metrics collector writes restic_repo_size_bytes=0 for a repo whose
+      # `restic snapshots` call FAILED, which would otherwise trip this rule — so
+      # gate on the value being a real nonzero size (> 0). The ResticCheckFailed /
+      # ResticNoSnapshots rules already cover the failure/zero case.
+      - alert: ResticRepoSizeShrunk
+        expr: restic_repo_size_bytes{repository!=""} > 0 and restic_repo_size_bytes{repository!=""} < 0.6 * avg_over_time(restic_repo_size_bytes{repository!=""}[14d])
+        for: 6h
+        labels:
+          severity: warning
+          category: storage
+          service: restic
+        annotations:
+          summary: "Restic repository {{ $labels.repository }} shrank sharply"
+          description: "Repository {{ $labels.repository }} is now {{ $value | humanize1024 }}B — under 60% of its 14-day average size. A bucket may have been emptied, a backup misdirected, or a prune ran away. Verify with `restic -r <repo> snapshots` and `stats` before trusting the offsite copy."

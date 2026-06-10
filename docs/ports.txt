@@ -195,3 +195,5 @@
 # - ::1 = IPv6 localhost only
 # - Specific IPs (192.168.x.x, 10.x.x.x) = Interface-specific binding
 # - "container" = Port used within container, may not be exposed to host
+9301 127.0.0.1 cloudflared tunnel metrics (data.newartisans.com tunnel /metrics, scraped by job=cloudflared)
+8880 127.0.0.1 vmalert (VictoriaMetrics alerting engine — web/API + self-metrics)

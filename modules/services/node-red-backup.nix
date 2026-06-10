@@ -26,9 +26,63 @@ let
 
   backupDir = "/var/lib/node-red-backup";
 
+  metricsDir = "/var/lib/prometheus-node-exporter-textfiles";
+  metricsFile = "${metricsDir}/nodered_backup.prom";
+
   # Retention is centrally managed by /etc/nixos/scripts/cleanup.py
   # (cleanup.timer at 03:00 daily) — keep entries here in lockstep with
   # the corresponding DirScanner block over /tank/Backups/NodeRED.
+
+  # Integrity / freshness emitter for the Node-RED backup artifact, mirroring the
+  # postgresql-backup triad (a green Type=oneshot exit is NOT proof of a complete
+  # backup — the UAS-backed /tank dropped mid-write on 2026-06-02, and this very
+  # backup once ran against a shadow root). Records, every run:
+  #   nodered_backup_last_success            1 iff $SERVICE_RESULT == "success"
+  #   nodered_backup_last_run_timestamp_seconds  emission wall-clock (or newest mtime on seed)
+  #   nodered_backup_size_bytes              byte size of the NEWEST .tar.zst artifact
+  # Runs via ExecStopPost with a '+' prefix (root) so it fires on success AND failure.
+  # $1 = run result ("success"/other from $SERVICE_RESULT, or explicit 1/0).
+  # $2 = timestamp source: "now" (default) or "mtime" (activation seeding).
+  noderedBackupMetricsScript = pkgs.writeShellScript "nodered-backup-metrics" ''
+    set -euo pipefail
+
+    case "''${1:-0}" in
+      success|1) success=1 ;;
+      *)         success=0 ;;
+    esac
+    ts_mode="''${2:-now}"
+
+    ${pkgs.coreutils}/bin/mkdir -p "${metricsDir}"
+
+    size=0
+    newest=$(${pkgs.coreutils}/bin/ls -1t ${backupDir}/node-red-*.tar.zst 2>/dev/null | ${pkgs.coreutils}/bin/head -n1 || true)
+    if [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
+      size=$(${pkgs.coreutils}/bin/stat -c %s "$newest" 2>/dev/null || echo 0)
+    fi
+
+    if [ "$ts_mode" = mtime ] && [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
+      now=$(${pkgs.coreutils}/bin/stat -c %Y "$newest" 2>/dev/null || ${pkgs.coreutils}/bin/date +%s)
+    else
+      now=$(${pkgs.coreutils}/bin/date +%s)
+    fi
+
+    tmp="${metricsFile}.$$"
+
+    {
+      echo "# HELP nodered_backup_last_success Whether the most recent Node-RED backup run succeeded (1=success, 0=failure)"
+      echo "# TYPE nodered_backup_last_success gauge"
+      echo "nodered_backup_last_success $success"
+      echo "# HELP nodered_backup_last_run_timestamp_seconds Unix timestamp of the most recent Node-RED backup run"
+      echo "# TYPE nodered_backup_last_run_timestamp_seconds gauge"
+      echo "nodered_backup_last_run_timestamp_seconds $now"
+      echo "# HELP nodered_backup_size_bytes Byte size of the newest Node-RED backup artifact"
+      echo "# TYPE nodered_backup_size_bytes gauge"
+      echo "nodered_backup_size_bytes $size"
+    } > "$tmp"
+
+    ${pkgs.coreutils}/bin/mv "$tmp" "${metricsFile}"
+    ${pkgs.coreutils}/bin/chmod 644 "${metricsFile}"
+  '';
 
   nodeRedBackupScript = pkgs.writeShellScript "node-red-backup" ''
     set -euo pipefail
@@ -87,15 +141,43 @@ in
         Group = "root";
         ExecStart = nodeRedBackupScript;
 
+        # Emit integrity/freshness metrics on EVERY exit (success and failure).
+        # Leading '+' runs as root and bypasses the unit sandbox so it can write
+        # the textfile atomically despite ProtectSystem=strict. $SERVICE_RESULT
+        # is "success" on a clean run.
+        ExecStopPost = "+${noderedBackupMetricsScript} $SERVICE_RESULT";
+
         # Hardening
         PrivateTmp = true;
         NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadOnlyPaths = [ "/var/lib/node-red" ];
-        ReadWritePaths = [ backupDir ];
+        ReadWritePaths = [
+          backupDir
+          metricsDir
+        ];
 
         TimeoutStartSec = "15m";
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+    };
+
+    # Seed nodered_backup.prom at activation so the freshness/integrity metrics
+    # exist immediately (with the current newest-backup stats) rather than being
+    # absent until the next 02:30 run. Marks success=1 because a present artifact
+    # reflects the last good backup; anchors the timestamp to the artifact mtime.
+    services.node-red-backup-metrics-seed = {
+      description = "Seed nodered_backup.prom textfile metrics at activation";
+      wantedBy = [ "multi-user.target" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        Group = "root";
+        RemainAfterExit = false;
+        ExecStart = "${noderedBackupMetricsScript} 1 mtime";
         StandardOutput = "journal";
         StandardError = "journal";
       };

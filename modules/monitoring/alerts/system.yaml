@@ -114,3 +114,89 @@ groups:
         annotations:
           summary: "High CPU usage on {{ $labels.instance }}"
           description: "CPU usage has been above 80% for 10 minutes"
+
+      # Thermal monitoring (Apple Silicon / Asahi).
+      # Scoped to the macsmc_hwmon SoC sensor (chip 290400000_smc_macsmc_hwmon),
+      # which is the real CPU/SoC die temperature. We deliberately exclude the
+      # other hwmon sensors so they don't skew the signal:
+      #   - end0 (chip 0000:00:02_0_0000:03:00_0): Ethernet PHY, runs ~63C
+      #     normally — high for a PHY, not the CPU.
+      #   - tas2764 (chip i2c_0_0_0038): audio amp, reports a bogus -93C.
+      #   - nvme_nvme0: NVMe temp (~34C idle) — better covered by smartctl.
+      # Observed SoC baseline: 31-46C over 24h. 85C is a conservative warning
+      # well below the M-series throttle point.
+      - alert: HostThermalHigh
+        expr: node_hwmon_temp_celsius{chip="290400000_smc_macsmc_hwmon"} > 85
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High SoC temperature on {{ $labels.instance }}"
+          description: "SoC sensor {{ $labels.sensor }} ({{ $labels.chip }}) on {{ $labels.instance }} has been above 85C for 10 minutes (currently {{ $value | humanize }}C). Baseline is ~31-46C; sustained high temp suggests cooling failure or runaway load."
+
+      # Fan-stopped detection. Both SMC fans (fan1/fan2) idle at ~1320rpm and
+      # never dropped below ~1310rpm over 24h, so 0rpm sustained 10m is a clean
+      # stopped/failed-fan signal (not a normal spin-down).
+      - alert: HostFanStopped
+        expr: node_hwmon_fan_rpm{chip="290400000_smc_macsmc_hwmon"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Cooling fan stopped on {{ $labels.instance }}"
+          description: "Fan {{ $labels.sensor }} on {{ $labels.instance }} has read 0 RPM for 10 minutes. Baseline is ~1320 RPM; a stopped fan risks thermal runaway. Check the chassis fan and macsmc."
+
+      # NTP clock sync health. node_timex_sync_status is 1 when the kernel clock
+      # is disciplined by NTP, 0 when unsynced. Baseline on vulcan is 1.
+      - alert: HostClockUnsynced
+        expr: node_timex_sync_status == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "System clock not NTP-synchronized on {{ $labels.instance }}"
+          description: "node_timex_sync_status has been 0 for 15 minutes on {{ $labels.instance }} — the kernel clock is no longer disciplined by NTP. Certificate validation, TOTP, log correlation and scheduled jobs depend on accurate time."
+
+      # NTP offset magnitude. Baseline abs(offset) is ~25us, peaking ~0.9ms over
+      # 24h, so 0.25s is a wide margin that only fires on a genuinely drifting
+      # clock (not normal jitter).
+      - alert: HostClockOffsetHigh
+        expr: abs(node_timex_offset_seconds) > 0.25
+        for: 15m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "System clock offset high on {{ $labels.instance }}"
+          description: "abs(NTP offset) has exceeded 0.25s for 15 minutes on {{ $labels.instance }} (currently {{ $value | humanize }}s). Baseline is ~25us; a large offset indicates the clock is drifting despite NTP."
+
+      # Unexpected reboot breadcrumb. The user never reboots vulcan casually, so a
+      # surprise fire here = a power event, kernel panic, or watchdog reset. Fires
+      # for ~10m after any boot and auto-resolves; scoped to vulcan because hera
+      # and the opnsense router reboot on their own cadence (they also export
+      # node_boot_time_seconds). Info-severity visibility signal.
+      - alert: HostUnexpectedReboot
+        expr: time() - node_boot_time_seconds{alias="vulcan"} < 600
+        for: 0m
+        labels:
+          severity: info
+          category: system
+        annotations:
+          summary: "{{ $labels.instance }} rebooted recently"
+          description: "{{ $labels.instance }} booted less than 10 minutes ago (uptime {{ $value | humanizeDuration }}). This auto-resolves once uptime passes 10m. If you did not intentionally reboot, investigate a power loss, kernel panic, or watchdog reset."
+
+      # Kernel OOM-kill counter. Complements the Loki SystemdOOMKill log-pattern
+      # rule with a metric-based detector straight from /proc/vmstat. Baseline is
+      # 0; any increase over 15m means the kernel killed a process for memory.
+      - alert: KernelOOMKill
+        expr: increase(node_vmstat_oom_kill[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Kernel OOM killer fired on {{ $labels.instance }}"
+          description: "The kernel OOM killer terminated {{ $value | humanize }} process(es) in the last 15 minutes on {{ $labels.instance }}. A process was killed to reclaim memory — check which service and whether memory limits need tuning."

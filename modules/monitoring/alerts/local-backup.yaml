@@ -92,3 +92,72 @@ groups:
             The weekly `restic check` has not run in over 8 days
             (last run {{ $value | humanizeDuration }} ago; expected weekly).
             Action: check systemctl status restic-check.timer and journalctl -u restic-check.
+
+      # Technitium DNS backup last-success triad (technitium-dns-backup.timer,
+      # daily 03:00). A green Type=oneshot exit is NOT proof of a complete backup
+      # — the metrics are emitted by ExecStopPost so this catches a non-zero exit
+      # directly. Seeded at activation so the series exists immediately.
+      - alert: TechnitiumBackupFailed
+        expr: technitium_backup_last_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: technitium-dns-backup
+        annotations:
+          summary: "Technitium DNS backup failed on {{ $labels.instance }}"
+          description: |
+            The most recent technitium-dns-backup run exited non-zero
+            (technitium_backup_last_success == 0). The DNS server config backup
+            under /tank/Backups/TechnitiumDNS may be missing or incomplete.
+            Action: journalctl -u technitium-dns-backup.
+
+      # 30h = daily cadence + grace (the textfile is refreshed only on a run, so
+      # a missed daily run goes stale at ~24h; 30h leaves a 6h buffer).
+      - alert: TechnitiumBackupStale
+        expr: (time() - technitium_backup_last_run_timestamp_seconds) > 108000
+        for: 10m
+        labels:
+          severity: warning
+          category: storage
+          service: technitium-dns-backup
+        annotations:
+          summary: "Technitium DNS backup is stale on {{ $labels.instance }}"
+          description: |
+            technitium-dns-backup has not run successfully in over 30 hours
+            (last run {{ $value | humanizeDuration }} ago; expected daily at 03:00).
+            Action: check systemctl status technitium-dns-backup.timer and journalctl -u technitium-dns-backup.
+
+      # Node-RED backup last-success triad (node-red-backup.timer, daily 02:30).
+      # Node-RED holds the entire home-automation/safety flow set; a silently
+      # failed backup means no restore point. Metrics via ExecStopPost; seeded at
+      # activation.
+      - alert: NodeRedBackupFailed
+        expr: nodered_backup_last_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: node-red-backup
+        annotations:
+          summary: "Node-RED backup failed on {{ $labels.instance }}"
+          description: |
+            The most recent node-red-backup run exited non-zero
+            (nodered_backup_last_success == 0). The flows/credentials backup under
+            /tank/Backups/NodeRED may be missing or incomplete (note: the script
+            refuses to run if the bind mount is absent, which would surface here).
+            Action: journalctl -u node-red-backup.
+
+      - alert: NodeRedBackupStale
+        expr: (time() - nodered_backup_last_run_timestamp_seconds) > 108000
+        for: 10m
+        labels:
+          severity: warning
+          category: storage
+          service: node-red-backup
+        annotations:
+          summary: "Node-RED backup is stale on {{ $labels.instance }}"
+          description: |
+            node-red-backup has not run successfully in over 30 hours
+            (last run {{ $value | humanizeDuration }} ago; expected daily at 02:30).
+            Action: check systemctl status node-red-backup.timer and journalctl -u node-red-backup.

@@ -1,0 +1,51 @@
+groups:
+  - name: zimit
+    interval: 60s
+    rules:
+      # New Zimit crawl/archive job failed.
+      #
+      # zimit_jobs_failed is a cumulative gauge (NOT a Prometheus _total
+      # counter): it sits at a plateau and is mostly monotonic, but it CAN
+      # decrease when old jobs are purged (observed 5 -> 4 on 2026-05-26).
+      # Therefore a bare `> 0` would fire chronically (baseline has been 4-5
+      # for 30+ days) and `increase()` would misread the purge as a counter
+      # reset. delta() over the window correctly detects a NET RISE (a new
+      # failure) and is negative/zero otherwise. Baseline delta = 0.
+      - alert: ZimitJobsFailed
+        expr: |
+          delta(zimit_jobs_failed{job="zimit"}[6h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: zimit
+        annotations:
+          summary: "Zimit archive job(s) failed"
+          description: |
+            {{ $value }} Zimit archive job(s) failed in the last 6 hours on {{ $labels.instance }}.
+
+            Check the Zimit dashboard / logs for the failing crawl.
+            Inspect service: systemctl status zimit
+            View logs: journalctl -u zimit --since "6 hours ago"
+
+      # Pending Zimit jobs not draining — stuck queue.
+      #
+      # zimit_jobs_pending has been flat at 0 for the whole observed window, so
+      # `> 0 for 24h` only fires if a queued job has genuinely failed to start
+      # / complete for a full day (a worker stall or stuck crawl), not for a
+      # normal in-flight job.
+      - alert: ZimitJobsStuck
+        expr: |
+          zimit_jobs_pending{job="zimit"} > 0
+        for: 24h
+        labels:
+          severity: warning
+          service: zimit
+        annotations:
+          summary: "Zimit has jobs stuck pending"
+          description: |
+            Zimit has {{ $value }} job(s) pending for over 24 hours on {{ $labels.instance }}.
+            The crawl worker may be stalled or a job may be wedged.
+
+            Inspect service: systemctl status zimit
+            Check running jobs: zimit_jobs_running gauge
+            View logs: journalctl -u zimit --since "24 hours ago"

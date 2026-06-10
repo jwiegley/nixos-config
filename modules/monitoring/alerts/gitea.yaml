@@ -36,3 +36,21 @@ groups:
         annotations:
           summary: "Gitea has excessive goroutines"
           description: "Gitea has {{ $value }} goroutines running on {{ $labels.instance }}, possible resource leak"
+
+      # End-to-end web latency via the blackbox HTTPS probe. Gitea exposes no
+      # request-latency histogram (only gitea_* gauges + go/process), so the
+      # blackbox probe_duration_seconds is the only available p-latency signal
+      # — this restores the deleted GiteaSlowResponse intent on a real metric.
+      # The gitea vhost was added to the blackbox_https_local target list in
+      # blackbox-monitoring.nix (web-blackbox workstream); the instance label
+      # is the probed URL.
+      - alert: GiteaSlowResponse
+        expr: |
+          probe_duration_seconds{job="blackbox_https_local",instance="https://gitea.vulcan.lan"} > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "Gitea is responding slowly"
+          description: "The blackbox HTTPS probe to {{ $labels.instance }} has taken more than 5s for over 10 minutes (currently {{ $value }}s) — Gitea web responses are degraded."

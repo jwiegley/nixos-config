@@ -25,6 +25,35 @@ groups:
           summary: "Technitium DNS service appears to be down"
           description: "Technitium DNS exporter is down or no DNS query metrics are being reported."
 
+      # Frozen-counter detection (the gap the census flagged as "technitium status").
+      #
+      # NOTE on technitium_dns_status: the census recommended alerting on
+      # `technitium_dns_status == 0 for 5m`. Live evidence (2026-06-10) shows that
+      # is UNWORKABLE on this exporter image: technitium_dns_status sits at 0 for
+      # ~99.93% of the time (avg_over_time[24h] ≈ 0.0007) WHILE the DNS server is
+      # fully healthy and the query counters are advancing (sum(rate(
+      # technitium_dns_request_result_count[10m])) ≈ 2.5/s with status==0). The
+      # gauge is effectively stuck at 0, so `== 0 for 5m` would fire on deploy and
+      # never clear — a permanent false positive. The REAL failure the census
+      # wanted to catch ("exporter present, up==1, but query metrics silently
+      # frozen/stale") is detected directly and correctly on the counters: zero
+      # query throughput for 15m while clients are present and the exporter is up.
+      # Baseline check: min query rate over 24h is 1.45/s (traffic never legitimately
+      # reaches 0, even overnight, with 15 active clients), so this will not false-fire.
+      - alert: TechnitiumDNSMetricsFrozen
+        expr: |
+          up{job="technitium_dns"} == 1
+          and sum(rate(technitium_dns_request_result_count[15m])) == 0
+          and technitium_dns_client_count > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Technitium DNS query metrics are frozen"
+          description: "The Technitium exporter is up (up==1) but has reported ZERO DNS queries for the last 15 minutes despite {{ with query \"technitium_dns_client_count\" }}{{ . | first | value }}{{ end }} active clients. The exporter has likely lost its connection to the Technitium API, so all query-outcome counters are stale/frozen — TechnitiumDNSExporterDown stays green because the scrape still succeeds. Check the exporter→Technitium API (:5380) connection and API token."
+
       # DNS Query Latency (Speed) Alerts
       # Note: Latency metrics not available in current Technitium exporter
       # These alerts are disabled until latency metrics are added
@@ -261,3 +290,52 @@ groups:
         annotations:
           summary: "Internal DNS resolution for *.vulcan.lan is broken"
           description: "The local resolver (127.0.0.1) failed to return the expected A record (192.168.1.2) for vulcan.lan for more than 3 minutes. This indicates NXDOMAIN, SERVFAIL, a wrong/poisoned answer, or the internal zone being unavailable — internal name resolution for *.vulcan.lan is likely failing host-wide."
+
+  # CloudFlare Tunnel (data.newartisans.com et al.) edge-connection health.
+  #
+  # The public tunnel now exposes Prometheus metrics on 127.0.0.1:9301 (set via
+  # TUNNEL_METRICS in modules/services/cloudflare-tunnels.nix; scraped by the
+  # job_name="cloudflared" config in modules/monitoring/services/self-scrape.nix).
+  # cloudflared maintains multiple HA (high-availability) connections to the
+  # Cloudflare edge — normally 4. A tunnel can be "running" per systemd while
+  # having silently lost some or all of those edge connections, which the
+  # systemd-unit-active check and the host-wide TargetDown (up==0) catch-all
+  # both miss: the process is alive, /metrics still scrapes (up==1), but no
+  # public traffic flows. cloudflared_tunnel_ha_connections is the gauge that
+  # surfaces this.
+  #
+  # POST-DEPLOY VERIFICATION REQUIRED: these rules reference
+  # cloudflared_tunnel_ha_connections, which does NOT exist in the TSDB until
+  # the tunnel restarts with TUNNEL_METRICS set and Prometheus scrapes the new
+  # job. The metric name is the documented cloudflared standard
+  # (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/monitor-tunnels/metrics/),
+  # but the exact name/label shape on this cloudflared build (2025.11.1) MUST be
+  # confirmed live after switch: query `cloudflared_tunnel_ha_connections` and
+  # `count(up{job="cloudflared"})`. If the metric name differs, update the exprs
+  # below. Until the series exists these alerts simply do not fire (no series),
+  # so they are safe to ship; the case of a totally-dead tunnel is meanwhile
+  # covered by the host-wide TargetDown (up{job="cloudflared"}==0).
+  - name: cloudflared_tunnel
+    interval: 30s
+    rules:
+      - alert: CloudflaredTunnelDegraded
+        expr: cloudflared_tunnel_ha_connections < 2
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: cloudflared
+        annotations:
+          summary: "CloudFlare tunnel has degraded edge connectivity"
+          description: "cloudflared reports fewer than 2 healthy HA connections to the Cloudflare edge ({{ $value }}) for more than 5 minutes (normal is ~4). The public tunnel (data/gitea/s/calendar.newartisans.com) is running with reduced redundancy and may drop traffic. Check 'systemctl status cloudflared-tunnel-data' and its logs."
+
+      - alert: CloudflaredTunnelDisconnected
+        expr: cloudflared_tunnel_ha_connections == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+          component: cloudflared
+        annotations:
+          summary: "CloudFlare tunnel has lost all edge connections"
+          description: "cloudflared reports ZERO HA connections to the Cloudflare edge for more than 2 minutes while the process is still running (up==1). The public tunnel is effectively offline — data/gitea/s/calendar.newartisans.com are unreachable from the internet even though the systemd unit looks healthy. Restart with 'systemctl restart cloudflared-tunnel-data'."

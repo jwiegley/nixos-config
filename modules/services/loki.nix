@@ -126,6 +126,8 @@
     "L+ /var/lib/loki/rules/fake/openclaw-plugin-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/openclaw-plugin-errors.yaml"
     "L+ /var/lib/loki/rules/fake/uas-enclosure.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/uas-enclosure.yaml"
     "L+ /var/lib/loki/rules/fake/ssh-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/ssh-security.yaml"
+    "L+ /var/lib/loki/rules/fake/nginx-web.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/nginx-web.yaml"
+    "L+ /var/lib/loki/rules/fake/auth-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/auth-security.yaml"
   ];
 
   # Loki nginx upstream with retry logic

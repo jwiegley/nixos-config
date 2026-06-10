@@ -52,8 +52,27 @@ groups:
             View recent activity: podman logs --user changedetection changedetection --tail 50
             Check fetch worker count: podman exec --user changedetection changedetection env | grep FETCH_WORKERS
 
+      - alert: ChangeDetectionDown
+        expr: |
+          container_running{name="changedetection"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: changedetection
+        annotations:
+          summary: "ChangeDetection.io container is not running"
+          description: |
+            ChangeDetection.io container (user 'changedetection') is stopped.
+            Website change monitoring is not running.
+
+            Check container: sudo -u changedetection podman ps -a | grep changedetection
+            Check service: systemctl --user -M changedetection@ status podman-changedetection.service
+            View logs: sudo -u changedetection podman logs changedetection --tail 50
+            Check the sockpuppetbrowser sidecar: sudo -u changedetection podman ps | grep sockpuppet
+
       - alert: ChangeDetectionContainerRestarts
-        expr: rate(node_systemd_unit_state{name="home-manager-changedetection.service",state="failed"}[15m]) > 0
+        expr: |
+          increase(container_restart_count{name="changedetection"}[30m]) > 2
         for: 5m
         labels:
           severity: warning
@@ -61,10 +80,10 @@ groups:
         annotations:
           summary: "ChangeDetection.io container is restarting frequently"
           description: |
-            ChangeDetection.io container has restarted {{ $value }} times in the last 15 minutes.
+            ChangeDetection.io container has restarted {{ $value }} times in the last 30 minutes.
             This indicates instability.
 
-            View recent logs: journalctl -u changedetection.service --since "15 minutes ago"
-            Check container logs: podman logs --user changedetection changedetection --tail 100
+            View recent logs: sudo -u changedetection podman logs changedetection --tail 100
+            Check service: systemctl --user -M changedetection@ status podman-changedetection.service
             Check for OOM: dmesg | grep -i "changedetection\|oom"
             Check datastore integrity: ls -la /var/lib/changedetection

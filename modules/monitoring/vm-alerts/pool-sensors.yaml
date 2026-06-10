@@ -1,0 +1,73 @@
+# Staleness alerts for the pool/spa sensor series that Home Assistant pushes into
+# VictoriaMetrics (InfluxDB line protocol). These series live ONLY in VM (port
+# 8428) — Prometheus cannot see them — so until vmalert was deployed they had no
+# alerting at all. Evaluated by services.vmalert.instances."" against
+# http://127.0.0.1:8428.
+#
+# IMPORTANT naming note (verified live 2026-06-10): HA pushes by *unit* — the
+# measurement name becomes the unit and the entity is a label. So the salt
+# concentration sensor is `ppm_value{entity_id="intellichlor_1_salt"}`, NOT a
+# metric literally named `ppm_raw_salt`; the water temperature is
+# `°F_value{entity_id="water_sensor_1"}` (queried via the __name__ regex below to
+# avoid the `°` in a bare identifier), NOT `ppm_water_temp`. The census' literal
+# names (`ppm_raw_salt`, `ppm_water_temp`, `state_low_water` as a *pool* sensor)
+# do not exist under those names — `state_low_water` is actually a vacuum-robot
+# state, and `state_HEATER` is an event-driven (push-on-change) switch series, so
+# none of those get a naive staleness alert here (a heater that hasn't toggled in
+# hours is normal, not a failure).
+#
+# Thresholds are sized off the observed maximum inter-sample gap over 14 days so a
+# normal slow-cadence push does not false-fire:
+#   - water_sensor_1            : p95 gap 1.6h, max 3.3h  -> alert > 6h
+#   - intellichlor_1_salt       : p95 gap 0.1h, max 65.3h -> alert > 72h (the
+#                                 IntelliChlor stops reporting when the pump/flow
+#                                 is off for long stretches)
+#   - pool_salt_temp_compensated: p95 gap 7.0h, max 14.9h -> alert > 24h
+# The `time() - timestamp(last_over_time(... [Nd]))` idiom finds the age of the
+# most recent sample even when it is older than VM's default ~5m lookback (these
+# series are sparse), so the alert measures true staleness, not query-window miss.
+groups:
+  - name: pool_sensors_staleness
+    interval: 5m
+    rules:
+      # Pool/spa water temperature — the most reliable, highest-cadence pool
+      # sensor (the one referenced as sensor.water_sensor_1). If it goes quiet for
+      # > 6h while everything else is fine, the sensor or its HA integration is
+      # likely dead.
+      - alert: PoolWaterTempStale
+        expr: |
+          (time() - timestamp(last_over_time({entity_id="water_sensor_1", __name__=~".+_value"}[1d]))) > 21600
+        for: 30m
+        labels:
+          severity: warning
+          category: home-assistant
+        annotations:
+          summary: "Pool water temperature sensor stale (>6h)"
+          description: "sensor.water_sensor_1 (water_sensor_1) has pushed no sample to VictoriaMetrics in over 6 hours. Normal max gap is ~3.3h; the sensor/integration may be dead. Pool-time TTS and the heater-flow logic depend on this reading."
+
+      # IntelliChlor salt reading. The cell stops reporting whenever the pump/flow
+      # is off, so the normal gap can be as long as ~65h — alert only past 72h.
+      - alert: PoolSaltSensorStale
+        expr: |
+          (time() - timestamp(last_over_time(ppm_value{entity_id="intellichlor_1_salt"}[10d]))) > 259200
+        for: 1h
+        labels:
+          severity: warning
+          category: home-assistant
+        annotations:
+          summary: "Pool salt (IntelliChlor) sensor stale (>72h)"
+          description: "ppm_value{entity_id=\"intellichlor_1_salt\"} has pushed no sample to VictoriaMetrics in over 72 hours. Even accounting for pump-off periods (max observed gap ~65h) this is past normal; the IntelliChlor or its HA integration may be offline."
+
+      # The temperature-compensated virtual salt sensor (sensor.pool_salt_temp_
+      # _compensated). It is derived/recomputed less often (max gap ~15h), so a
+      # 24h threshold flags a genuinely-stuck template/derivation.
+      - alert: PoolSaltCompensatedStale
+        expr: |
+          (time() - timestamp(last_over_time(ppm_value{entity_id="pool_salt_temp_compensated"}[10d]))) > 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: home-assistant
+        annotations:
+          summary: "Temp-compensated pool salt sensor stale (>24h)"
+          description: "ppm_value{entity_id=\"pool_salt_temp_compensated\"} has not updated in VictoriaMetrics for over 24 hours (normal max gap ~15h). The virtual sensor's template/derivation may be stuck or its source (intellichlor salt + water temp) is missing."

@@ -1,0 +1,46 @@
+# Dead-man's switch for the entire Home Assistant -> VictoriaMetrics push pipeline.
+#
+# All of the HA pool/water/energy series in VM arrive by push (InfluxDB line
+# protocol from HA's influxdb integration). If that push path dies — HA down, the
+# integration mis-configured, the VM ingest endpoint unreachable — every rule that
+# reads those series goes quietly STALE rather than firing: the last value just
+# sits there frozen and nothing complains. This canary makes that failure loud.
+#
+# Two layers, evaluated against http://127.0.0.1:8428 by vmalert:
+#
+#  1. HAVMPushStalled (critical) — the AGGREGATE signal, resilient to any single
+#     sensor dropping out: count how many distinct HA `*_value` series received a
+#     sample in the last 15m. Live baseline (verified 2026-06-10): 42-79 such
+#     series stay fresh every 15m; the 24h floor is 42. `absent(...)` fires only
+#     when that count collapses to nothing, i.e. the whole push pipeline is dead.
+#
+#  2. HAVMCanaryStalled (warning) — a faster, more specific probe on a single
+#     always-on, high-frequency canary. `smart_plug_8_current_consumption` pushes
+#     a `W_value` sample roughly every 15s (>=236 samples/hour, min over 24h), so
+#     a 15m gap on it alone is already suspicious (either that plug, or the
+#     pipeline starting to falter before the aggregate collapses).
+groups:
+  - name: ha_vm_pipeline
+    interval: 1m
+    rules:
+      - alert: HAVMPushStalled
+        expr: |
+          absent(count(last_over_time({db="homeassistant", __name__=~".+_value"}[15m])))
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Home Assistant -> VictoriaMetrics push pipeline is dead"
+          description: "No Home Assistant metric (db=\"homeassistant\", *_value) has been pushed into VictoriaMetrics in the last 15 minutes. Normally 42-79 distinct series stay fresh per 15m window. Every HA-pushed pool/water/energy series in VM is now frozen and all rules reading them are silently stale. Check home-assistant.service, its influxdb integration, and victoriametrics ingest."
+
+      - alert: HAVMCanaryStalled
+        expr: |
+          absent(last_over_time(W_value{entity_id="smart_plug_8_current_consumption"}[15m]))
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "HA->VM canary sensor stalled (>15m)"
+          description: "The high-frequency HA->VM canary W_value{entity_id=\"smart_plug_8_current_consumption\"} (normally ~one sample every 15s) has pushed nothing for over 15 minutes. Either that smart plug is offline or the HA->VictoriaMetrics push path is faltering. If HAVMPushStalled is also firing, the whole pipeline is down."

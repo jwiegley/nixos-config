@@ -2,23 +2,32 @@ groups:
   - name: container_health
     interval: 30s
     rules:
+      # Only fires on health=1 (unhealthy). health=3 (no healthcheck configured,
+      # the common case) and health=2 (starting) are intentionally excluded.
+      # As of 2026-06-10 only budget-board-{client,server} expose a real healthcheck.
       - alert: ContainerUnhealthy
         expr: container_health_status{name!=""} == 1
-        for: 2m
+        for: 5m
         labels:
           severity: warning
         annotations:
           summary: "Container {{ $labels.name }} is unhealthy"
-          description: "Container {{ $labels.name }} has failed health checks for 2 minutes"
+          description: "Container {{ $labels.name }} has been failing its health check for 5 minutes"
 
+      # Generic catch-all: any tracked container (rootless or root) stopped for 5m.
+      # No exclusions needed — every container the exporter tracks is a long-running
+      # quadlet service; transient/on-demand containers (e.g. zimit archive jobs)
+      # carry no PODMAN_SYSTEMD_UNIT label and are not tracked. Per-service rules
+      # (OpenWebUIContainerDown, ShlinkContainerDown) add service-specific context
+      # on top of this backstop.
       - alert: ContainerDown
         expr: container_running{name!=""} == 0
-        for: 3m
+        for: 5m
         labels:
           severity: critical
         annotations:
           summary: "Container {{ $labels.name }} is not running"
-          description: "Container {{ $labels.name }} has been stopped for 3 minutes"
+          description: "Container {{ $labels.name }} has been stopped for 5 minutes"
 
       - alert: ContainerRestarting
         expr: rate(container_restart_count[5m]) > 0.1
@@ -37,3 +46,17 @@ groups:
         annotations:
           summary: "Container {{ $labels.name }} health check stuck in starting state"
           description: "Container {{ $labels.name }} has been in 'starting' health state for 5 minutes"
+
+      # Per-user podman store disk usage (container_store_size_bytes, daily textfile).
+      # Reference incident: litellm accumulated 48G of dangling <none> images from
+      # moving-tag pulls; the weekly per-user `podman image prune -af` keeps stores
+      # small (largest is ~7G as of 2026-06-10). A store >60G means prune is not
+      # keeping up (or a runaway pull) and warrants a manual `podman image prune -af`.
+      - alert: ContainerStoreSizeHigh
+        expr: container_store_size_bytes > 60 * 1024 * 1024 * 1024
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container store for {{ $labels.user }} is {{ $value | humanize1024 }}B"
+          description: "Podman store /var/lib/containers/{{ $labels.user }} exceeds 60GB — likely dangling-image bloat; run `podman image prune -af` for that user"

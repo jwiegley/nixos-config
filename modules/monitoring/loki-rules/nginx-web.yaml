@@ -1,0 +1,78 @@
+groups:
+  - name: nginx_web_errors
+    interval: 1m
+    rules:
+      # nginx access logs reach Loki as {job="nginx-access"} from
+      # /var/log/nginx/access.log, with promtail extracting the HTTP status
+      # code into a parsed `status` stream label (verified live: values seen
+      # include 200/301/302/401/404/499/500/502). NOTE: there is NO separate
+      # nginx *error*-log stream in Loki on this host (no job="nginx-error",
+      # no nginx error.log filename), so these rules key off the access log's
+      # status label rather than error-log severity text — the only nginx web
+      # signal Loki actually carries. (coverage plan P1, web-blackbox)
+      #
+      # 5xx burst. Steady-state is ~0 (24h median per-10m window = 2); genuine
+      # spikes were 25/52/91 in the trailing 24h, so >30 in 10m is well above
+      # background and catches a real upstream/app failure burst without
+      # flapping on the occasional single 500.
+      - alert: Nginx5xxBurst
+        expr: |
+          sum(count_over_time({job="nginx-access", status=~"5.."}[10m])) > 30
+        for: 0m
+        labels:
+          severity: warning
+          category: logs
+          service: nginx
+        annotations:
+          summary: "nginx is serving a burst of 5xx responses"
+          description: |
+            More than 30 HTTP 5xx responses were logged by nginx in the last
+            10 minutes. Steady-state is near zero, so this is an upstream or
+            application failure burst — check which vhost/upstream is erroring
+            (Grafana Loki, status=~"5.." on job="nginx-access") and the
+            backing service's logs.
+
+      # Gateway / upstream-connect failures specifically (502/503/504). This
+      # is the access-log proxy for the deleted "upstream connect failure"
+      # intent (the error-log line that would carry "connect() failed" /
+      # "upstream timed out" is not shipped to Loki on this host). Same 24h
+      # baseline as the 5xx burst (these dominate the 5xx count here); >10 in
+      # 10m flags a backend that nginx can't reach or that is timing out.
+      - alert: NginxUpstreamFailureBurst
+        expr: |
+          sum(count_over_time({job="nginx-access", status=~"50[234]"}[10m])) > 10
+        for: 0m
+        labels:
+          severity: warning
+          category: logs
+          service: nginx
+        annotations:
+          summary: "nginx upstream/gateway failures (502/503/504)"
+          description: |
+            More than 10 HTTP 502/503/504 responses were logged by nginx in
+            the last 10 minutes — an upstream service is unreachable, refusing
+            connections, or timing out behind the proxy. Identify the vhost
+            (status=~"50[234]" on job="nginx-access") and restart/inspect the
+            backing service.
+
+      # Auth-failure burst (401/403). Baseline is tiny (24h peak per-10m
+      # window = 2), but LAN/internet scanners probing the reverse proxy can
+      # produce short 401 bursts; the threshold is set well above the observed
+      # peak (>60 in 10m, ~30x baseline) so only a sustained credential-stuffing
+      # / scanner storm against a protected vhost (Nagios, etc.) fires it.
+      - alert: NginxAuthFailureBurst
+        expr: |
+          sum(count_over_time({job="nginx-access", status=~"40[13]"}[10m])) > 60
+        for: 0m
+        labels:
+          severity: warning
+          category: security
+          service: nginx
+        annotations:
+          summary: "nginx auth-failure burst (401/403)"
+          description: |
+            More than 60 HTTP 401/403 responses were logged by nginx in the
+            last 10 minutes — far above the normal background of a couple per
+            window. This is likely credential stuffing or a scanner hammering
+            an auth-gated vhost. Identify the source (status=~"40[13]" on
+            job="nginx-access", group by client_ip) and consider blocking it.

@@ -122,9 +122,17 @@
                 # Collect metrics from root podman
                 collect_container_metrics "${pkgs.podman}/bin/podman" "root"
 
-                # Collect metrics from rootless podman users
-                # Add users who run rootless podman containers here
-                ROOTLESS_USERS="open-webui shlink openproject"
+                # Collect metrics from rootless podman users.
+                # Every user here was verified (2026-06-10) to run at least one
+                # quadlet/podman container under /var/lib/containers/<user>.
+                # Excluded on purpose:
+                #   - technitium-dns-exporter: runs as a ROOT podman container
+                #     (already covered by the root sweep above), no rootless store.
+                #   - zimit: spawns transient on-demand containers per archive job
+                #     (no persistent PODMAN_SYSTEMD_UNIT container to track).
+                # A full rootless sweep measures ~1.7s wall (ps+inspect+stats per
+                # container across 13 users), comfortably inside the 2-min cadence.
+                ROOTLESS_USERS="changedetection litellm mailarchiver openspeedtest opnsense-exporter open-webui openproject shlink shlink-web-client speedtest-tracker teable vane wallabag"
 
                 for user in $ROOTLESS_USERS; do
                   if id "$user" &>/dev/null; then
@@ -160,6 +168,75 @@
   # Ensure node_exporter can read the metrics file
   # Note: The directory /var/lib/prometheus-node-exporter-textfiles is
   # created by the prometheus node_exporter service configuration
+
+  # ---------------------------------------------------------------------------
+  # Per-user container store size exporter
+  # ---------------------------------------------------------------------------
+  # Emits container_store_size_bytes{user="<user>"} for each podman store under
+  # /var/lib/containers/. This is the early-warning signal for dangling-image
+  # bloat (the litellm 48G incident: moving-tag pulls leave <none> copies that
+  # the weekly per-user `podman image prune -af` is meant to keep down).
+  #
+  # `du -sb` is the only accurate measure but is expensive (~11s over all stores
+  # as of 2026-06-10), so this runs on its OWN daily timer rather than piggybacking
+  # on the 2-minute health-exporter cadence. It writes a SEPARATE textfile so the
+  # two collectors never clobber each other's atomic temp file.
+  systemd.services.container-store-size-exporter = {
+    description = "Container Store Size Exporter for Prometheus";
+    after = [ "local-fs.target" ];
+    # No wantedBy - service only runs via timer
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "container-store-size-exporter" ''
+        set -euo pipefail
+
+        METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/container_store_size.prom"
+        METRICS_TMP="$METRICS_FILE.tmp"
+
+        mkdir -p "$(dirname "$METRICS_FILE")"
+
+        {
+          echo "# HELP container_store_size_bytes Disk usage of a podman store under /var/lib/containers (bytes, du -sb)"
+          echo "# TYPE container_store_size_bytes gauge"
+        } > "$METRICS_TMP"
+
+        # One entry per top-level dir under /var/lib/containers. The root graphroot
+        # is the directory literally named "storage"; relabel it user="root" so the
+        # series matches the convention used by container_running{user="root"}.
+        for dir in /var/lib/containers/*/; do
+          [[ -d "$dir" ]] || continue
+          name="$(${pkgs.coreutils}/bin/basename "$dir")"
+          # Skip the shared image-pull cache (not attributable to a single user).
+          [[ "$name" == "cache" ]] && continue
+          user="$name"
+          [[ "$name" == "storage" ]] && user="root"
+          size="$(${pkgs.coreutils}/bin/du -sb "$dir" 2>/dev/null | ${pkgs.coreutils}/bin/cut -f1)" || size=""
+          [[ -n "$size" ]] || continue
+          echo "container_store_size_bytes{user=\"$user\"} $size" >> "$METRICS_TMP"
+        done
+
+        mv "$METRICS_TMP" "$METRICS_FILE"
+        chmod 644 "$METRICS_FILE"
+      '';
+
+      # Needs root to traverse the 0700 per-user store directories.
+      User = "root";
+      Group = "root";
+    };
+  };
+
+  # Daily timer for the store-size exporter (du is too heavy for the 2-min cadence)
+  systemd.timers.container-store-size-exporter = {
+    description = "Container Store Size Exporter Timer";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "10m";
+      AccuracySec = "1m";
+    };
+  };
 
   # Container health alerting rules
   # Alert rules are defined in /etc/nixos/modules/monitoring/alerts/container-health.yaml

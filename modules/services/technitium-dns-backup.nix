@@ -13,6 +13,60 @@ let
   backupDir = "/var/lib/technitium-dns-backup";
   backupFile = "${backupDir}/technitium-dns-backup-$(date '+%Y-%m-%d').tar";
 
+  metricsDir = "/var/lib/prometheus-node-exporter-textfiles";
+  metricsFile = "${metricsDir}/technitium_backup.prom";
+
+  # Integrity / freshness emitter for the Technitium DNS backup artifact, mirroring
+  # the postgresql-backup triad (a green Type=oneshot exit is NOT proof of a complete
+  # backup — the UAS-backed /tank can drop mid-write). Records, every run:
+  #   technitium_backup_last_success            1 iff $SERVICE_RESULT == "success"
+  #   technitium_backup_last_run_timestamp_seconds  emission wall-clock (or newest mtime on seed)
+  #   technitium_backup_size_bytes              byte size of the NEWEST .tar.xz artifact
+  # Runs via ExecStopPost with a '+' prefix (root) so it fires on success AND failure.
+  # $1 = run result ("success"/other from $SERVICE_RESULT, or explicit 1/0).
+  # $2 = timestamp source: "now" (default) or "mtime" (activation seeding — anchor to
+  #      the newest artifact so a mid-day rebuild does not mask a stale backup).
+  technitiumBackupMetricsScript = pkgs.writeShellScript "technitium-backup-metrics" ''
+    set -euo pipefail
+
+    case "''${1:-0}" in
+      success|1) success=1 ;;
+      *)         success=0 ;;
+    esac
+    ts_mode="''${2:-now}"
+
+    ${pkgs.coreutils}/bin/mkdir -p "${metricsDir}"
+
+    size=0
+    newest=$(${pkgs.coreutils}/bin/ls -1t ${backupDir}/technitium-dns-backup-*.tar.xz 2>/dev/null | ${pkgs.coreutils}/bin/head -n1 || true)
+    if [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
+      size=$(${pkgs.coreutils}/bin/stat -c %s "$newest" 2>/dev/null || echo 0)
+    fi
+
+    if [ "$ts_mode" = mtime ] && [ -n "''${newest:-}" ] && [ -f "$newest" ]; then
+      now=$(${pkgs.coreutils}/bin/stat -c %Y "$newest" 2>/dev/null || ${pkgs.coreutils}/bin/date +%s)
+    else
+      now=$(${pkgs.coreutils}/bin/date +%s)
+    fi
+
+    tmp="${metricsFile}.$$"
+
+    {
+      echo "# HELP technitium_backup_last_success Whether the most recent Technitium DNS backup run succeeded (1=success, 0=failure)"
+      echo "# TYPE technitium_backup_last_success gauge"
+      echo "technitium_backup_last_success $success"
+      echo "# HELP technitium_backup_last_run_timestamp_seconds Unix timestamp of the most recent Technitium DNS backup run"
+      echo "# TYPE technitium_backup_last_run_timestamp_seconds gauge"
+      echo "technitium_backup_last_run_timestamp_seconds $now"
+      echo "# HELP technitium_backup_size_bytes Byte size of the newest Technitium DNS backup artifact"
+      echo "# TYPE technitium_backup_size_bytes gauge"
+      echo "technitium_backup_size_bytes $size"
+    } > "$tmp"
+
+    ${pkgs.coreutils}/bin/mv "$tmp" "${metricsFile}"
+    ${pkgs.coreutils}/bin/chmod 644 "${metricsFile}"
+  '';
+
   technitiumDnsBackupScript = pkgs.writeShellScript "technitium-dns-backup" ''
     set -euo pipefail
 
@@ -132,14 +186,41 @@ in
         Group = "root";
         ExecStart = technitiumDnsBackupScript;
 
+        # Emit integrity/freshness metrics on EVERY exit (success and failure).
+        # Leading '+' runs as root regardless of User= so it can always write the
+        # textfile atomically. $SERVICE_RESULT is "success" on a clean run.
+        ExecStopPost = "+${technitiumBackupMetricsScript} $SERVICE_RESULT";
+
         # Security hardening
         PrivateTmp = true;
         NoNewPrivileges = true;
-        ReadWritePaths = [ backupDir ];
+        ReadWritePaths = [
+          backupDir
+          metricsDir
+        ];
         ReadOnlyPaths = [ sourceDir ];
 
         # Timeout and logging
         TimeoutStartSec = "15m";
+        StandardOutput = "journal";
+        StandardError = "journal";
+      };
+    };
+
+    # Seed technitium_backup.prom at activation so the freshness/integrity metrics
+    # exist immediately (with the current newest-backup stats) rather than being
+    # absent until the next 03:00 run. Marks success=1 because a present artifact
+    # reflects the last good backup; anchors the timestamp to the artifact mtime.
+    services.technitium-dns-backup-metrics-seed = {
+      description = "Seed technitium_backup.prom textfile metrics at activation";
+      wantedBy = [ "multi-user.target" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = "root";
+        Group = "root";
+        RemainAfterExit = false;
+        ExecStart = "${technitiumBackupMetricsScript} 1 mtime";
         StandardOutput = "journal";
         StandardError = "journal";
       };

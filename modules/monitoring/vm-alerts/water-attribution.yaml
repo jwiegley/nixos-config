@@ -1,0 +1,33 @@
+# Watchdog for the pool auto-fill DETECTION pipeline (Flume whole-house GPM ->
+# water-attribution -> water_pool_autofill_* series in VictoriaMetrics).
+#
+# Background (see project_pool_autofill_flume_detection): pool auto-fill is not
+# metered; it is INFERRED from a narrow Flume GPM band. On 2026-06 a valve swap
+# dropped the fill flow below the old detection band and the weekly autofill total
+# silently flatlined into "other" for weeks before anyone noticed — exactly the
+# class of silent-correctness failure that has no soundness signal (the job kept
+# exiting 0). This alert makes a frozen detector loud.
+#
+# Signal (verified live 2026-06-10): `gal_value{entity_id="water_pool_autofill_
+# total"}` is a lifetime gallons counter that climbs each time a fill is detected.
+# Post-band-retune it advanced ~176 gal over the last 8 days (~daily top-offs), so
+# `increase(...[8d])` is solidly positive in healthy operation. If detection dies
+# (band wrong again, Flume offline, attribution broken) the counter stops moving
+# and the 8d increase falls to 0 -> alert. `increase()` is counter-reset-safe, so
+# an HA restart that re-bases the counter does not false-fire. 8 days is chosen
+# because fills are ~daily; a full 8-day silence means detection, not just a quiet
+# week, has broken.
+groups:
+  - name: water_attribution
+    interval: 1h
+    rules:
+      - alert: AutofillDetectionSilent
+        expr: |
+          increase(gal_value{entity_id="water_pool_autofill_total"}[8d]) <= 0.1
+        for: 6h
+        labels:
+          severity: warning
+          category: home-assistant
+        annotations:
+          summary: "Pool auto-fill detection has gone silent (>8d, no gallons attributed)"
+          description: "water_pool_autofill_total has not increased in 8 days (healthy baseline: ~176 gal / 8d). The inferred-from-Flume auto-fill detection has likely broken again — e.g. the GPM band no longer matches the fill flow (the 2026-06 valve-swap regression), the Flume feed is offline, or the water-attribution pipeline is stuck. Cross-check the Flume GPM band against current fill flow and the home-assistant-water-attribution service."

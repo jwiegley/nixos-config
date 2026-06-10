@@ -1,0 +1,44 @@
+groups:
+  - name: auth_security
+    interval: 1m
+    rules:
+      # Sudo authentication failures. The promtail "sudo" job tails
+      # /var/log/sudo.log (see modules/services/promtail.nix), which captures
+      # sudo invocations including failures, independent of the journal
+      # priority-5..7 drop. On this host every automated sudo runs NOPASSWD and
+      # SUCCEEDS, so the failure baseline is ~0 (verified 2026-06-09: zero
+      # matches of this pattern over 7 days; the job="sudo" stream is otherwise
+      # near-empty). More than 3 failures in 15 minutes therefore means a real
+      # bad-password / not-in-sudoers / privilege-probe burst worth surfacing.
+      - alert: SudoAuthFailures
+        expr: |
+          count_over_time({job="sudo"} |~ "authentication failure|NOT in sudoers|incorrect password" [15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Repeated sudo authentication failures"
+          description: "More than 3 sudo failures (authentication failure / NOT in sudoers / incorrect password) in the last 15 minutes. On this host sudo normally runs NOPASSWD and never fails, so this is a privilege-escalation probe or a misconfigured automation. Inspect job=\"sudo\" in Loki for the user and command."
+
+      # NOTE — PostgresAuthFailures intentionally NOT shipped here.
+      #
+      # The spec proposed a Loki rule on postgres auth failures
+      # (`password authentication failed` / `no pg_hba.conf entry`). Live
+      # evidence on this host makes that rule un-fireable as written:
+      # postgresql.service logs to the journal via StandardOutput=journal, but
+      # its stderr lines carry NO sd-daemon "<N>" priority prefix, so EVERY
+      # postgres line lands at the unit default priority 6 (info) — even FATAL
+      # auth failures. The consolidated systemd-journal promtail scrape drops
+      # priority 5..7, so postgres lines never reach Loki (verified 2026-06-09:
+      # 0 postgres lines at priority <=4 in 30 days; 0 series for
+      # {unit="postgresql.service"} in Loki over 24h). A rule here would be a
+      # placeholder that can never fire.
+      #
+      # To genuinely cover postgres auth failures, add a dedicated promtail
+      # journal scrape for postgresql.service WITHOUT the priority drop (mirror
+      # the job="sshd" scrape in modules/services/promtail.nix), then add a rule
+      # like:
+      #   count_over_time({job="postgresql"} |~ "password authentication failed|no pg_hba.conf entry" [15m]) > 5
+      # That promtail change is outside this workstream's owned files and is
+      # reported back to the orchestrator.

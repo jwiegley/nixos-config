@@ -62,3 +62,71 @@ groups:
             AIDE integrity database is missing - file integrity monitoring is not active.
 
             Initialize database: systemctl start aide-init.service
+
+  # ===========================================================================
+  # System patch-currency ("is the system being patched?")
+  # Backed by the system-age-exporter textfile collector
+  # (modules/monitoring/services/system-age-exporter.nix), scraped via job=node.
+  # Baseline verified 2026-06-09: flake.lock mtime was updated the same day and
+  # the current generation went live the same day, so a 30-day staleness
+  # threshold sits far above the normal cadence and only fires on genuine drift.
+  # ===========================================================================
+  - name: security_system_age
+    interval: 1h
+    rules:
+      - alert: SystemUpdatesStale
+        expr: time() - system_flake_lock_mtime_seconds > 30 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "NixOS flake inputs have not been updated in over 30 days"
+          description: |
+            /etc/nixos/flake.lock was last modified {{ $value | humanizeDuration }} ago.
+            `nix flake update` has not been run for over a month, so the system is
+            drifting away from upstream nixpkgs (and its security fixes).
+
+            Refresh inputs and rebuild:
+              cd /etc/nixos && nix flake update
+              sudo nixos-rebuild switch --flake '.#vulcan'
+
+      - alert: SystemGenerationStale
+        expr: time() - system_current_generation_build_timestamp_seconds > 30 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Current NixOS generation is over 30 days old"
+          description: |
+            The current NixOS generation went live {{ $value | humanizeDuration }} ago
+            (mtime of /nix/var/nix/profiles/system). The system has not been
+            rebuilt/switched in over a month — pending updates are not being applied.
+
+            Rebuild and switch:
+              sudo nixos-rebuild switch --flake '.#vulcan'
+
+  # ===========================================================================
+  # Core security daemon liveness
+  # node_systemd_unit_state is a continuous state-set metric (the active series
+  # exists at value 1 normally), so compare == 0 to catch sshd being down.
+  # Verified live 2026-06-09: exactly one sshd.service active series, value 1.
+  # ===========================================================================
+  - name: security_sshd
+    interval: 1m
+    rules:
+      - alert: SSHDDown
+        expr: node_systemd_unit_state{name="sshd.service",state="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "sshd is not active"
+          description: |
+            sshd.service is not in the active state. Remote SSH access to vulcan
+            is unavailable, and any in-flight administration depends on an
+            already-open session or out-of-band (console) access.
+
+            Investigate: systemctl status sshd; journalctl -u sshd -e

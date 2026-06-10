@@ -87,17 +87,13 @@ groups:
           summary: "Immich job queue has large backlog"
           description: "Immich has {{ $value }} pending jobs on {{ $labels.instance }}"
 
-      # Failed jobs accumulating
-      - alert: ImmichJobFailures
-        expr: |
-          sum by (instance) (increase({__name__=~"immich_jobs_.*_failed_total"}[1h])) > 100
-        for: 15m
-        labels:
-          severity: warning
-          service: immich
-        annotations:
-          summary: "Immich has high job failure rate"
-          description: "Immich has {{ $value }} failed jobs in the last hour on {{ $labels.instance }}"
+      # NOTE (2026-06-10): ImmichJobFailures REMOVED. It matched
+      # {__name__=~"immich_jobs_.*_failed_total"}, which is ZERO live series —
+      # Immich's OTel exporter publishes NO per-queue failed counter. The only
+      # job-health signal Immich exposes is immich_queues_<name>_active (a
+      # per-queue depth gauge). A stuck/backed-up queue is already covered by
+      # ImmichJobQueueBacklog above (sum of *_active sustained > 50 for 30m),
+      # which is the correct proxy for "jobs are not draining / failing".
 
       # Machine learning service issues
       - alert: ImmichMLServiceSlow

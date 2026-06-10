@@ -33,3 +33,88 @@ groups:
         annotations:
           summary: "redis_exporter cannot scrape {{ $labels.instance }}"
           description: "redis_exporter_last_scrape_error=1 for {{ $labels.instance }} for more than 10 minutes. The exporter is reachable but cannot connect to that Redis target (likely a wrong -redis.addr / multi-target address). Verify the address in modules/monitoring/services/redis-exporter.nix matches the live bind."
+
+      # Generic multi-target down: covers EVERY redis://… probed by job="redis-multi"
+      # (openproject 6383, shlink 6385, searxng 6386, rspamd 6381,
+      # speedtest-tracker 6387). redis_up=1 normally; ==0 means the exporter
+      # reached but the Redis instance did not answer PING. This intentionally
+      # overlaps OpenProjectRedisDown / ShlinkRedisDown (kept as-is) and adds
+      # coverage for the three instances that previously had none — rspamd's
+      # Bayes/fuzzy backend in particular (the dead RspamdRedisUnavailable rule
+      # pointed at a job="redis-rspamd" that never existed).
+      - alert: RedisMultiTargetDown
+        expr: redis_up{job="redis-multi"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: redis
+        annotations:
+          summary: "Redis instance {{ $labels.instance }} is down"
+          description: "redis_up{job=redis-multi, instance={{ $labels.instance }}} has been 0 for more than 5 minutes — the redis_exporter at :9121 reached out but that Redis did not answer PING. Check the owning service (redis-cli -u {{ $labels.instance }} ping) and the matching redis-<app>.service unit."
+
+      # Memory pressure: only meaningful where maxmemory is set (>0). Instances
+      # without maxmemory report redis_memory_max_bytes=0 (litellm, rspamd) — the
+      # `and … > 0` guard drops them so the ratio is never 0/0 or used/0=+Inf.
+      # Live baseline 2026-06-10: 6383=0.5%, 6385=1.1% — far below 0.9.
+      - alert: RedisMemoryPressure
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+            and redis_memory_max_bytes > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} near its maxmemory limit"
+          description: "{{ $labels.instance }} is using {{ $value | humanizePercentage }} of its configured maxmemory for more than 15 minutes. For allkeys-lru caches this means heavy eviction churn (raise maxmemory or accept cache misses); for non-evicting instances it risks OOM write failures."
+
+      # RDB persistence health: the exporter emits redis_rdb_last_bgsave_status=1
+      # on a successful background save, 0 on failure. Most relevant to rspamd
+      # (RDB-persisted Bayes/fuzzy data) and any instance with save points; the
+      # ephemeral caches (searxng save=[], etc.) simply never bgsave so the
+      # series stays 1. Live baseline 2026-06-10: all targets =1.
+      - alert: RedisRDBSaveFailed
+        expr: redis_rdb_last_bgsave_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} last RDB bgsave FAILED"
+          description: "redis_rdb_last_bgsave_status=0 for {{ $labels.instance }} for more than 5 minutes — the most recent background save did not complete. On-disk state is now stale; a restart would lose data written since the last good save. Check disk space and journalctl for the owning redis-<app>.service (rspamd's learning DB is the data-loss-sensitive one)."
+
+      # Anomalous evictions: openproject/shlink/searxng/speedtest-tracker are
+      # configured allkeys-lru, so eviction there is BY DESIGN — alerting on it
+      # would be chronic noise. We scope this to instances whose maxmemory_policy
+      # is "noeviction" (litellm, rspamd today; the redis_instance_info label
+      # makes it auto-adapt as instances change). A noeviction instance returns
+      # OOM errors instead of evicting, so ANY rise in redis_evicted_keys_total
+      # there is genuinely anomalous. Live baseline 2026-06-10: evicted=0 on all
+      # instances over 7d. (Memory-pressure on lru caches is covered above.)
+      - alert: RedisEvictions
+        expr: |
+          increase(redis_evicted_keys_total[30m]) > 0
+            and on(instance) redis_instance_info{maxmemory_policy="noeviction"}
+        for: 0m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} (noeviction) is evicting keys"
+          description: "{{ $labels.instance }} is configured maxmemory-policy=noeviction yet redis_evicted_keys_total rose by {{ $value | humanize }} over 30m — it has hit its memory ceiling and is shedding keys it was told never to evict. Raise maxmemory or investigate the workload."
+
+      # Socket-only instances: redis-gitea and redis-immich listen on UNIX sockets
+      # in 0750 dirs owned by their own service users, so the DynamicUser
+      # redis_exporter cannot probe them. Fall back to systemd unit state (the
+      # established node-exporter idiom). node_systemd_unit_state is a continuous
+      # state-set metric — the state="active" series exists at 0 when inactive,
+      # so the ==0 comparison is required.
+      - alert: RedisSocketInstanceDown
+        expr: node_systemd_unit_state{name=~"redis-(gitea|immich)\\.service",state="active"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "{{ $labels.name }} is not active"
+          description: "{{ $labels.name }} (a UNIX-socket Redis the exporter cannot reach) has not been in the active state for more than 5 minutes. The owning app (gitea sessions/cache, or immich queue/session store) loses its Redis backend. Check: systemctl status {{ $labels.name }}."

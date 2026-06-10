@@ -38,6 +38,55 @@ let
   # is laid out as flume_data/ inside scripts/flume-data/.
   scriptDir = ../../scripts/flume-data;
 
+  metricsDir = "/var/lib/prometheus-node-exporter-textfiles";
+
+  # Last-success/last-run "did this oneshot work, and when" emitter for the
+  # flume-data oneshots. A green Type=oneshot exit (code 0) is NOT proof the
+  # cross-check actually reconciled, nor that the 6-hourly sync UPSERTed
+  # anything — these jobs reconcile the inferred pool auto-fill attribution
+  # (memory: project_pool_autofill_flume_detection) and previously failed or
+  # succeeded INVISIBLY. This collector records, on every run:
+  #   <prefix>_last_success                 1 iff $SERVICE_RESULT == "success", else 0
+  #   <prefix>_last_run_timestamp_seconds   wall-clock of this emission
+  # so FlumeSyncFailed / FlumeSyncStale / FlumeCrossCheckFailed /
+  # FlumeCrossCheckStale can catch a silently-broken pipeline.
+  #
+  # Runs via ExecStopPost with a '+' prefix (as root) so it always fires on
+  # success AND failure and can write atomically into the (sticky) textfile
+  # dir regardless of the unit's User=flume-data. Mirrors the proven
+  # pg_dump emitter in modules/services/postgresql-backup.nix.
+  #   $1 = metric prefix (e.g. "flume_weekly_cross_check")
+  #   $2 = textfile basename (e.g. "flume_cross_check.prom")
+  #   $3 = run result ("success"/other from $SERVICE_RESULT)
+  flumeMetricsScript = pkgs.writeShellScript "flume-data-metrics" ''
+    set -euo pipefail
+
+    prefix="$1"
+    fname="$2"
+    case "''${3:-0}" in
+      success|1) success=1 ;;
+      *)         success=0 ;;
+    esac
+
+    ${pkgs.coreutils}/bin/mkdir -p "${metricsDir}"
+    now=$(${pkgs.coreutils}/bin/date +%s)
+
+    target="${metricsDir}/$fname"
+    tmp="$target.$$"
+
+    {
+      echo "# HELP ''${prefix}_last_success Whether the most recent run exited successfully (1=success, 0=failure)"
+      echo "# TYPE ''${prefix}_last_success gauge"
+      echo "''${prefix}_last_success $success"
+      echo "# HELP ''${prefix}_last_run_timestamp_seconds Unix timestamp of the most recent run"
+      echo "# TYPE ''${prefix}_last_run_timestamp_seconds gauge"
+      echo "''${prefix}_last_run_timestamp_seconds $now"
+    } > "$tmp"
+
+    ${pkgs.coreutils}/bin/mv "$tmp" "$target"
+    ${pkgs.coreutils}/bin/chmod 644 "$target"
+  '';
+
 in
 {
   options.services.flume-data = {
@@ -182,6 +231,12 @@ in
           ${pyenv}/bin/python -m flume_data cross-check --days 7
         '';
 
+        # Emit last-success/last-run metrics on EVERY exit (success and
+        # failure). The leading '+' runs this as root (ignoring
+        # User=flume-data) so it can always write the textfile atomically.
+        # $SERVICE_RESULT is "success" on a clean run; normalized to 1/0.
+        ExecStopPost = "+${flumeMetricsScript} flume_weekly_cross_check flume_cross_check.prom $SERVICE_RESULT";
+
         LoadCredential = [
           "client_id:${config.sops.secrets."flume/client_id".path}"
           "client_secret:${config.sops.secrets."flume/client_secret".path}"
@@ -250,6 +305,12 @@ in
         Group = "flume-data";
         WorkingDirectory = "/var/lib/flume-data";
         ExecStart = "${pyenv}/bin/python -m flume_db_sync --days 3";
+
+        # Last-success/last-run emitter on EVERY exit. Root via '+' so it can
+        # write the textfile atomically regardless of User=flume-data and the
+        # ProtectSystem=strict sandbox (which the '+' prefix bypasses).
+        ExecStopPost = "+${flumeMetricsScript} flume_daily_sync flume_sync.prom $SERVICE_RESULT";
+
         LoadCredential = [
           "client_id:${config.sops.secrets."flume/client_id".path}"
           "client_secret:${config.sops.secrets."flume/client_secret".path}"

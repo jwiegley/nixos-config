@@ -100,6 +100,42 @@ let
             insecure_skip_verify: false
             ca_file: /etc/ssl/certs/step-ca/root_ca.crt
 
+      # Permissive variant of https_2xx_local for vhosts that are alive and
+      # correctly TLS-terminated but answer an anonymous GET / with 401/403
+      # (auth-gated apps like Nagios) or 404 (no handler bound at /, like the
+      # Loki API vhost). For these, "auth-gated-but-listening" is the healthy
+      # state — the strict module would flap them to probe_success=0 forever
+      # and chronically fire HostUnreachable. The cert is still validated
+      # against the step-ca root, so a TLS/cert failure still trips the probe.
+      https_2xx_or_auth:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: [200, 301, 302, 303, 307, 308, 401, 403, 404]
+          method: GET
+          preferred_ip_protocol: "ip4"
+          follow_redirects: true
+          fail_if_ssl: false
+          tls_config:
+            insecure_skip_verify: false
+            ca_file: /etc/ssl/certs/step-ca/root_ca.crt
+
+      # Plain-HTTP liveness probe for localhost-only listeners that have no
+      # GET-able root or whose intended verb is POST (e.g. the Node-RED
+      # /alert HTTP-In endpoint, which 404s on GET but proves the listener is
+      # up). Accepts 404/405 so "the socket answered HTTP" counts as success.
+      http_alive:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: [200, 301, 302, 303, 307, 308, 401, 403, 404, 405]
+          method: GET
+          preferred_ip_protocol: "ip4"
+          follow_redirects: false
+          fail_if_ssl: false
+
       dns_query:
         prober: dns
         timeout: 5s
@@ -575,6 +611,26 @@ in
                   "https://vane.vulcan.lan"
                   "https://speedtracker.vulcan.lan"
                   "https://trader.vulcan.lan"
+
+                  # Previously-unprobed vhosts (coverage plan P1, web-blackbox).
+                  # Each verified anonymous-GET 2xx/3xx through the blackbox
+                  # https_2xx_local module (step-ca CA) before being added here,
+                  # so each currently reports probe_success=1. Auth-gated (401)
+                  # and no-root-handler (404) vhosts go to blackbox_https_auth
+                  # below instead. notebook.vulcan.lan is a serverAlias of
+                  # jupyter (covered) and is intentionally omitted.
+                  "https://atd.vulcan.lan"
+                  "https://gitea.vulcan.lan"
+                  "https://immich.vulcan.lan"
+                  "https://jupyter.vulcan.lan"
+                  "https://kiwix.vulcan.lan"
+                  "https://llama-swap.vulcan.lan"
+                  "https://promtail.vulcan.lan"
+                  "https://qdrant.vulcan.lan"
+                  "https://radicale.vulcan.lan"
+                  "https://rspamd.vulcan.lan"
+                  "https://vdirsyncer.vulcan.lan"
+                  "https://zimit.vulcan.lan"
                 ];
               }
             ];
@@ -598,6 +654,137 @@ in
             ];
             scrape_interval = "60s";
             scrape_timeout = "15s";
+          }
+
+          # Auth-gated / no-root-handler local vhosts. These are alive and
+          # correctly TLS-terminated but answer an anonymous GET / with 401
+          # (Nagios requires basic auth) or 404 (the Loki API vhost has no
+          # handler at /). The https_2xx_or_auth module treats those as healthy
+          # while still validating the step-ca cert, so HostUnreachable (which
+          # matches job=~"blackbox_.*") only fires on a genuine outage/TLS
+          # failure rather than flapping on the auth challenge. (coverage plan
+          # P1, web-blackbox)
+          {
+            job_name = "blackbox_https_auth";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_2xx_or_auth" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "https://nagios.vulcan.lan"
+                  "https://loki.vulcan.lan"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https_auth";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
+          }
+
+          # LiteLLM "fixup" proxy on 127.0.0.1:4001 — the Anthropic-compat
+          # shim that the stock-trader Anthropic path rides through. It exposes
+          # a uvicorn listener whose GET / returns 200, so the strict http_2xx
+          # module suffices. A dedicated job lets litellm.yaml alert on this
+          # instance precisely (LitellmAnthropicFixupDown); it is also
+          # backstopped by the generic HostUnreachable rule. (coverage plan
+          # P1 #4, web-blackbox)
+          {
+            job_name = "blackbox_litellm_fixup";
+            metrics_path = "/probe";
+            params = {
+              module = [ "http_2xx" ];
+            };
+            static_configs = [
+              {
+                targets = [ "http://127.0.0.1:4001/" ];
+                labels = {
+                  service = "litellm-fixup";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "http_local";
+              }
+            ];
+            scrape_interval = "30s";
+            scrape_timeout = "10s";
+          }
+
+          # Node-RED /alert HTTP-In endpoint on 127.0.0.1:1880 — the listener
+          # the Alertmanager iphone-notifier receiver POSTs critical pages to.
+          # GET /alert returns 404 (it is a POST-only HTTP-In node), which the
+          # http_alive module accepts: a 404 still proves the listener is up
+          # and accepting connections, so a dead Node-RED (= no iPhone paging)
+          # is caught. The ALERT for this target is owned by the
+          # meta-monitoring workstream; this only adds the probe target.
+          # (coverage plan P1 #6, web-blackbox)
+          {
+            job_name = "blackbox_iphone_relay";
+            metrics_path = "/probe";
+            params = {
+              module = [ "http_alive" ];
+            };
+            static_configs = [
+              {
+                targets = [ "http://127.0.0.1:1880/alert" ];
+                labels = {
+                  service = "nodered-alert-relay";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "http_local";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "10s";
           }
 
           # DNS query monitoring

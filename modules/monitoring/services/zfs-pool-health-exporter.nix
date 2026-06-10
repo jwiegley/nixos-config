@@ -12,6 +12,7 @@ let
       pkgs.zfs
       pkgs.gawk
       pkgs.gnugrep
+      pkgs.gnused
       pkgs.coreutils
     ];
     text = ''
@@ -31,6 +32,14 @@ let
       # TYPE zfs_pool_suspended gauge
       # HELP zfs_pool_unavail 1 if the pool top-level state is UNAVAIL (devices missing/unreadable), 0 otherwise
       # TYPE zfs_pool_unavail gauge
+      # HELP zfs_pool_last_scrub_timestamp_seconds Unix timestamp the last completed scrub finished (0 if never scrubbed)
+      # TYPE zfs_pool_last_scrub_timestamp_seconds gauge
+      # HELP zfs_pool_last_scrub_errors Number of errors reported by the last completed scrub (0 = clean)
+      # TYPE zfs_pool_last_scrub_errors gauge
+      # HELP zfs_newest_snapshot_timestamp_seconds Creation time of the newest snapshot anywhere under the pool (0 if none)
+      # TYPE zfs_newest_snapshot_timestamp_seconds gauge
+      # HELP zfs_pool_health_collector_run_timestamp_seconds Unix timestamp this textfile collector last ran to completion
+      # TYPE zfs_pool_health_collector_run_timestamp_seconds gauge
       HEADER
 
             while IFS= read -r pool; do
@@ -96,7 +105,43 @@ let
                 echo "zfs_pool_unavail{pool=\"$pool\"} 0" >> "$TEMP_FILE"
               fi
 
+              # Last completed scrub timestamp + error count. The "scan:" line of a
+              # finished scrub reads e.g.
+              #   scan: scrub repaired 0B in 15:13:45 with 0 errors on Mon Jun  1 19:03:39 2026
+              # Scrubs run monthly (zfs-scrub.timer), so a stale scrub means the
+              # monthly integrity sweep stopped happening. Only parse the completed
+              # form: a scrub IN PROGRESS ("scrub in progress since ...") or a pool
+              # never scrubbed ("none requested") leaves the previous value at 0,
+              # which the ZFSScrubStale rule tolerates via the for: window.
+              SCAN_LINE=$(echo "$STATUS" | grep -E "^[[:space:]]*scan:" || true)
+              SCRUB_TS=0
+              SCRUB_ERRORS=0
+              if echo "$SCAN_LINE" | grep -q "scrub repaired"; then
+                # Date tail follows the last " on " in the completed-scrub line.
+                SCRUB_DATE=$(echo "$SCAN_LINE" | sed -E 's/.* on //')
+                if [ -n "$SCRUB_DATE" ]; then
+                  SCRUB_TS=$(date -d "$SCRUB_DATE" +%s 2>/dev/null || echo 0)
+                fi
+                # "with N errors" -> N; absent/unparsable defaults to 0.
+                SCRUB_ERRORS=$(echo "$SCAN_LINE" | grep -oP '\d+(?= errors)' || echo 0)
+              fi
+              echo "zfs_pool_last_scrub_timestamp_seconds{pool=\"$pool\"} ''${SCRUB_TS:-0}" >> "$TEMP_FILE"
+              echo "zfs_pool_last_scrub_errors{pool=\"$pool\"} ''${SCRUB_ERRORS:-0}" >> "$TEMP_FILE"
+
+              # Newest snapshot anywhere under this pool. Sanoid (sanoid.timer,
+              # hourly) takes the snapshots; if it stalls the newest creation time
+              # stops advancing. `zfs list -t snapshot` with -p gives the creation
+              # time as a raw epoch, sorted ascending, so the last line is newest.
+              # Recursing on the pool root covers every dataset cheaply (one call).
+              NEWEST_SNAP_TS=$(zfs list -t snapshot -r -H -p -o creation -s creation "$pool" 2>/dev/null | tail -n1 || true)
+              echo "zfs_newest_snapshot_timestamp_seconds{pool=\"$pool\"} ''${NEWEST_SNAP_TS:-0}" >> "$TEMP_FILE"
+
             done < <(zpool list -H -o name 2>/dev/null)
+
+            # Collector liveness: record when this run finished so a stalled or
+            # crashed collector (no fresh textfile) is detectable even while the
+            # last-written values look healthy. Emitted once (no pool label).
+            echo "zfs_pool_health_collector_run_timestamp_seconds $(date +%s)" >> "$TEMP_FILE"
 
             mv "$TEMP_FILE" "$OUTPUT_FILE"
     '';

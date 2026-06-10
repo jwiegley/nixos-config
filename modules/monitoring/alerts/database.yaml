@@ -14,16 +14,34 @@ groups:
           summary: "PostgreSQL is down"
           description: "PostgreSQL exporter cannot connect to database"
 
+      # Connection saturation. NOTE: the obvious form
+      #   pg_stat_database_numbackends / pg_settings_max_connections
+      # is a DEAD expr on this host — numbackends carries datname+server labels
+      # while max_connections is a single cluster-wide series, so the vector
+      # match yields no result (verified empty live 2026-06-10). Use the total
+      # backend count over the scalar limit instead. max_connections=200,
+      # baseline ~89 backends (~0.45).
       - alert: PostgreSQLTooManyConnections
-        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        expr: sum(pg_stat_activity_count) / scalar(pg_settings_max_connections) > 0.8
         for: 5m
         labels:
           severity: warning
           category: database
           service: postgresql
         annotations:
-          summary: "PostgreSQL has too many connections"
-          description: "PostgreSQL instance has more than 80% of max connections in use"
+          summary: "PostgreSQL connection pool over 80%"
+          description: "PostgreSQL is using {{ $value | humanizePercentage }} of max_connections (200). Approaching saturation — connection leak or runaway client?"
+
+      - alert: PostgreSQLConnectionsCritical
+        expr: sum(pg_stat_activity_count) / scalar(pg_settings_max_connections) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL connection pool over 95%"
+          description: "PostgreSQL is using {{ $value | humanizePercentage }} of max_connections (200). New connections (incl. superuser_reserved) will start failing imminently."
 
       - alert: PostgreSQLSlowQueries
         expr: rate(pg_stat_database_blks_read[5m]) > 1000
@@ -83,3 +101,79 @@ groups:
         annotations:
           summary: "PostgreSQL backup is suspiciously small"
           description: "The newest pg_dumpall artifact ({{ $value | humanize1024 }}B) is under half its 14d average size — likely a truncated/corrupt dump (cf. the 2026-06-02 2.7 GB truncation)."
+
+      # Long-running transactions. pg_stat_activity_max_tx_duration is the max
+      # transaction age (seconds) per state (default exporter metric). A
+      # transaction open >1h holds back vacuum (bloat/wraparound) and can pin
+      # locks. We watch the states a stuck client produces — active and
+      # idle-in-transaction — and EXCLUDE plain idle / fastpath / disabled.
+      # Caveat: a legitimately long autovacuum or backup query runs as
+      # state="active"; at >1h sustained 10m that is itself worth surfacing.
+      - alert: PostgreSQLLongRunningTransaction
+        expr: |
+          max (pg_stat_activity_max_tx_duration{state=~"active|idle in transaction|idle in transaction \\(aborted\\)"}) > 3600
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL transaction running over 1 hour"
+          description: "A transaction has been open for {{ $value | humanizeDuration }}. Long transactions block vacuum (bloat + wraparound) and may hold locks. Inspect pg_stat_activity for stuck sessions."
+
+      # Idle-in-transaction sessions. idle_in_transaction_session_timeout is
+      # 10min cluster-wide, so a SUSTAINED count of idle-in-tx sessions means
+      # the timeout is not reaping them (e.g. a pooler holding open txns) — they
+      # pin xmin and starve vacuum. Baseline is 0; >5 for 10m is a real backlog.
+      - alert: PostgreSQLIdleInTransaction
+        expr: sum(pg_stat_activity_count{state="idle in transaction"}) > 5
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL has many idle-in-transaction sessions"
+          description: "{{ $value }} sessions are idle in transaction (sustained 10m, past the 10min idle_in_transaction_session_timeout). These pin xmin and block vacuum — look for a client leaking open transactions."
+
+      # TXID / multixact wraparound (custom query in postgres-exporter.nix).
+      # age(datfrozenxid) counts transactions since the database was last frozen;
+      # at ~2.1e9 PostgreSQL forces a shutdown to avoid data loss. Baseline ~22M,
+      # autovacuum_freeze_max_age=200M — so 1e9 (warning) / 1.5e9 (critical) fire
+      # with large headroom but well before the cliff. mxid_age tracks the
+      # parallel multixact-ID wraparound vector (baseline ~16k).
+      - alert: PostgreSQLTxidWraparoundApproaching
+        expr: max(pg_database_frozenxid_age) > 1e9 or max(pg_database_frozenxid_mxid_age) > 1e9
+        for: 30m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL transaction-ID age approaching wraparound"
+          description: "A database's xid/multixact age has passed 1 billion (hard limit ~2.1 billion → forced shutdown). Aggressive autovacuum should be freezing — check for a long transaction / replication slot / prepared xact blocking it."
+
+      - alert: PostgreSQLTxidWraparoundCritical
+        expr: max(pg_database_frozenxid_age) > 1.5e9 or max(pg_database_frozenxid_mxid_age) > 1.5e9
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL transaction-ID age critically near wraparound"
+          description: "A database's xid/multixact age has passed 1.5 billion (hard limit ~2.1 billion → forced shutdown that requires single-user-mode VACUUM to recover). Act now: find and clear whatever is blocking freeze, then VACUUM FREEZE."
+
+      # Home Assistant recorder DB growth. The hass DB is recorder-dominated; a
+      # purge failure shows as unbounded growth (not an error). Baseline ~1.72
+      # GiB; 5 GiB warning at 1h flags a recorder/purge regression early.
+      - alert: HassRecorderDBLarge
+        expr: pg_database_size_bytes{datname="hass"} > 5 * 1024 * 1024 * 1024
+        for: 1h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "Home Assistant recorder database is large"
+          description: "The hass PostgreSQL database is {{ $value | humanize1024 }}B (warn at 5 GiB, baseline ~1.7 GiB). Likely a recorder purge failure or a runaway high-frequency entity — check recorder purge_keep_days and excluded entities."

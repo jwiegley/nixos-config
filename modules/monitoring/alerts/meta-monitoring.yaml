@@ -85,3 +85,117 @@ groups:
         annotations:
           summary: "Alertmanager failing to deliver notifications via {{ $labels.integration }}"
           description: "Alertmanager integration {{ $labels.integration }} is failing to deliver notifications ({{ $value | printf \"%.4f\" }}/s over 10m). The iPhone/email/Discord delivery path may be broken."
+
+      # Prometheus rule evaluation failures (P1, monitoring-self).
+      #
+      # prometheus_rule_evaluation_failures_total increments when a recording or
+      # alerting rule's expr errors out at eval time (bad PromQL, missing function,
+      # etc). A failing rule produces NO data — so any alert built on it silently
+      # never fires. Live baseline 2026-06-09: counter flat, increase over 15m = 0
+      # firing series, so this does NOT fire on deploy.
+      - alert: PrometheusRuleEvaluationFailures
+        expr: |
+          increase(prometheus_rule_evaluation_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus rule evaluation is failing in group {{ $labels.rule_group }}"
+          description: "Prometheus has logged {{ $value | printf \"%.0f\" }} rule evaluation failure(s) in the last 15 minutes (rule group {{ $labels.rule_group }}). A rule whose expr errors produces no data, so any alert built on it is silently blind — fix the expr."
+
+      # Prometheus rule-group evaluation falling behind (P1, monitoring-self).
+      #
+      # prometheus_rule_group_iterations_missed_total increments when a rule group
+      # cannot complete an evaluation before its next scheduled iteration (eval
+      # slower than the group interval). Missed iterations mean alerts are
+      # evaluated late or skipped. Live baseline 2026-06-09: counter flat,
+      # increase over 15m = 0 firing series, so this does NOT fire on deploy.
+      - alert: PrometheusRuleGroupMissed
+        expr: |
+          increase(prometheus_rule_group_iterations_missed_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus rule group {{ $labels.rule_group }} is missing evaluations"
+          description: "Prometheus rule group {{ $labels.rule_group }} missed {{ $value | printf \"%.0f\" }} evaluation iteration(s) in the last 15 minutes (evaluation is slower than the group interval). Alerts in this group are being evaluated late or skipped."
+
+      # Promtail (log shipper) down (P1, monitoring-self).
+      #
+      # Promtail tails the systemd journal and ships it to Loki. If promtail is
+      # down, NO new log lines reach Loki, so EVERY Loki-based alert goes silently
+      # blind: the UAS enclosure abort-storm early warning, SSH brute-force /
+      # invalid-user detection, OOM-killer detection, nginx 5xx/auth bursts, and
+      # every other LogQL rule stop firing without any error. Live baseline
+      # 2026-06-09: up{job="promtail"}=1, so ==0 yields no series and does NOT fire.
+      - alert: PromtailDown
+        expr: up{job="promtail"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Promtail (log shipper to Loki) is down"
+          description: "Promtail has been unreachable for over 5 minutes. No new journal lines are reaching Loki, so EVERY Loki-based alert (UAS enclosure abort-storm, SSH brute-force/invalid-user, OOM-killer, nginx 5xx/auth bursts) is silently blind until promtail recovers."
+
+      # Loki (log store + ruler) down (P1, monitoring-self).
+      #
+      # Loki stores the logs promtail ships and evaluates the LogQL ruler rules. If
+      # Loki is down the blast radius is the same as PromtailDown — every Loki-based
+      # alert goes silently blind — and additionally any already-shipped logs cannot
+      # be queried. Critical because the UAS/SSH/OOM safety rules live here. Live
+      # baseline 2026-06-09: up{job="loki"}=1, so ==0 yields no series and does NOT
+      # fire.
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Loki (log store and LogQL ruler) is down"
+          description: "Loki has been unreachable for over 5 minutes. The LogQL ruler is not evaluating, so EVERY Loki-based alert (UAS enclosure abort-storm, SSH brute-force/invalid-user, OOM-killer, nginx 5xx/auth bursts) is silently blind, and shipped logs cannot be queried until Loki recovers."
+
+      # iPhone critical-push relay listener down (P1, monitoring-self).
+      #
+      # Alertmanager's `iphone-notifier` receiver POSTs critical alerts to the
+      # Node-RED HTTP-In endpoint at http://127.0.0.1:1880/alert (see
+      # modules/services/alertmanager.nix). If that listener is down, critical
+      # alerts never reach the phone — even though Alertmanager itself reports
+      # success at the queue level. The blackbox probe target is added by the
+      # web-blackbox workstream (a GET probe of the /alert endpoint, accepting
+      # 404/405 since it is a POST-only route — any response proves the listener is
+      # up). The instance is matched by host:port regex because the exact target
+      # string (path / trailing slash) is owned by the other workstream. Until that
+      # target lands, probe_success{instance=~"...1880..."} has no series, so ==0
+      # yields nothing and this does NOT fire (dormant by design).
+      - alert: IphoneRelayEndpointDown
+        expr: |
+          probe_success{instance=~"https?://127\\.0\\.0\\.1:1880(/.*)?"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "iPhone critical-push relay listener is down"
+          description: "iPhone critical-push relay listener down — critical alerts will not reach the phone. The Node-RED /alert HTTP endpoint that Alertmanager's iphone-notifier receiver POSTs to (http://127.0.0.1:1880/alert) has failed its blackbox probe for over 5 minutes. Critical alerts may be silently undelivered to the phone even while Alertmanager reports queue-level success."
+
+      # vmalert down (P1, monitoring-self).
+      #
+      # vmalert evaluates alerting/recording rules against VictoriaMetrics (the
+      # HA-pushed pool/water/sensor series). The `vmalert` scrape job is added by
+      # the vmalert workstream in this same deploy; until that job exists,
+      # up{job="vmalert"} has no series, so ==0 yields nothing and this is dormant
+      # by design (does NOT fire on absent series). Once vmalert is scraped, this
+      # catches the VM-side rule evaluator going down.
+      - alert: VMAlertDown
+        expr: up{job="vmalert"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "vmalert (VictoriaMetrics rule evaluator) is down"
+          description: "vmalert has been unreachable for over 5 minutes. Alerting and recording rules evaluated against VictoriaMetrics (HA-pushed pool/water/sensor series) are not running, so VM-backed alerts are silently blind until vmalert recovers."

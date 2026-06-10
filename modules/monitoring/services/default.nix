@@ -20,6 +20,9 @@
     ./asymmetric-routing-exporter.nix # ip-rule presence gauge (post-boot drift)
     ./nodered-safety-exporter.nix # HA-safety-flow deadman (nodered_events)
     ./schwab-token-exporter.nix # Schwab OAuth refresh-token expiry
+    # P1 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 3)
+    ./vmalert.nix # alerting on the VictoriaMetrics TSDB (HA-pushed series)
+    ./system-age-exporter.nix # is-the-system-being-patched gauges
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters

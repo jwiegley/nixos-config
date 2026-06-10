@@ -243,3 +243,89 @@ groups:
         annotations:
           summary: "OpnSense node exporter is down"
           description: "The OpnSense node exporter (job=node_opnsense, {{ $labels.instance }}) has been unreachable for more than 3 minutes — host-level router metrics are stale."
+
+  - name: opnsense_wireguard
+    rules:
+      # WireGuard tunnel interface down. opnsense_wireguard_interfaces_status is a
+      # gauge (1 = up, 0 = down). Both WG1 (wg0) and WG2 (wg1) are always-on
+      # site tunnels and sit at a steady 1 (verified min_over_time[24h] == 1 for
+      # both), so == 0 will not fire spuriously. Per-peer status is intentionally
+      # NOT alerted here: opnsense_wireguard_peer_status (1=up,0=down,2=unknown,
+      # 3=stale) tracks road-warrior client devices that are dormant (down/stale,
+      # handshake ts 0) most of the time by design — a peer==0 rule would be
+      # chronic noise. The interface gauge is the always-on signal.
+      - alert: WireGuardInterfaceDown
+        expr: opnsense_wireguard_interfaces_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: wireguard
+        annotations:
+          summary: "WireGuard interface {{ $labels.device_name }} is down"
+          description: "OPNsense WireGuard interface {{ $labels.device_name }} ({{ $labels.device }}) has reported down (status 0) for more than 5 minutes — the VPN tunnel is offline."
+
+  - name: host_network_interfaces
+    rules:
+      # Physical-NIC receive errors. node_network_receive_errs_total accumulates
+      # RX errors; scoped to the two real interfaces (end0 wired, wlp1s0f0 wifi)
+      # to avoid veth/bridge noise. Baseline verified: increase[1h] == 0 on both,
+      # so > 10 errors/hour is a real "cable/duplex/NIC half-dead" signal.
+      - alert: HostNICReceiveErrors
+        expr: increase(node_network_receive_errs_total{device=~"end0|wlp1s0f0"}[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: host_nic
+        annotations:
+          summary: "RX errors on host NIC {{ $labels.device }}"
+          description: "Interface {{ $labels.device }} accumulated {{ $value | printf \"%.0f\" }} receive errors in the last hour (>10) — possible cable, duplex, or NIC fault."
+
+      # Physical-NIC transmit errors, same rationale/baseline as RX.
+      - alert: HostNICTransmitErrors
+        expr: increase(node_network_transmit_errs_total{device=~"end0|wlp1s0f0"}[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: host_nic
+        annotations:
+          summary: "TX errors on host NIC {{ $labels.device }}"
+          description: "Interface {{ $labels.device }} accumulated {{ $value | printf \"%.0f\" }} transmit errors in the last hour (>10) — possible cable, duplex, or NIC fault."
+
+      # Carrier flapping on the wired uplink. node_network_carrier_changes_total
+      # accumulates from boot, so we use increase() over a 1h window (NOT the
+      # absolute value, which is just 1-2 from the boot transition). Baseline
+      # verified: increase[1h] == 0 on end0, so > 4 link transitions/hour catches
+      # the boot-fragility / flapping-link class directly via the real signal.
+      - alert: HostNICCarrierFlap
+        expr: increase(node_network_carrier_changes_total{device="end0"}[1h]) > 4
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: host_nic
+        annotations:
+          summary: "Carrier flapping on host NIC {{ $labels.device }}"
+          description: "Interface {{ $labels.device }} changed carrier state {{ $value | printf \"%.0f\" }} times in the last hour (>4) — the physical link is flapping."
+
+  - name: host_node_exporter_health
+    rules:
+      # The host node_exporter (job=node, localhost:9100) is the SOLE source of
+      # every node_network_*, node_systemd_unit_state, node_nf_conntrack_*, and
+      # textfile-collector series. If it dies, all of the above (and the existing
+      # systemd-state alerts) go silently blind. The host-wide TargetDown catch-all
+      # in meta-monitoring.yaml covers this at warning/5m; this gives a faster,
+      # critical-severity page specifically for the host's primary metrics source.
+      # Live baseline: up{job="node"} == 1.
+      - alert: NodeExporterDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: monitoring
+          service: node_exporter
+        annotations:
+          summary: "Host node_exporter is down"
+          description: "The host node_exporter (job=node, {{ $labels.instance }}) has been unreachable for more than 2 minutes — all host-level metrics (network, systemd unit state, textfile collectors) are blind."

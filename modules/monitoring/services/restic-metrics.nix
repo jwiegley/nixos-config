@@ -16,12 +16,19 @@ let
             TEMP_FILE="$OUTPUT_FILE.$$"
             S3_BASE="s3:s3.us-west-001.backblazeb2.com"
 
+            # Keep in lockstep with services.restic.backups in
+            # modules/storage/backups.nix. "Public" was missing here (census
+            # 2026-06-09) so the offsite B2 'Public' repo had zero B2-side
+            # coverage — no snapshot freshness, no check, no size sanity. Each
+            # name maps to bucket jwiegley-<name> (Backups -> Backups-Misc, see
+            # the case below); Public uses the default mapping (jwiegley-Public).
             REPOSITORIES=(
               "Audio"
               "Backups"
               "Databases"
               "Home"
               "Photos"
+              "Public"
               "Video"
               "doc"
               "src"

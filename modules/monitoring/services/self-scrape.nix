@@ -41,5 +41,21 @@
         { targets = [ "localhost:9093" ]; }
       ];
     }
+    # cloudflared public tunnel (data.newartisans.com et al.). The tunnel now
+    # exposes its Prometheus metrics on 127.0.0.1:9301 via TUNNEL_METRICS (set in
+    # modules/services/cloudflare-tunnels.nix). Scraping it yields the
+    # cloudflared_* family — most importantly cloudflared_tunnel_ha_connections
+    # (count of live edge/HA connections, normally ~4), which lets the
+    # CloudflaredTunnel* alerts in alerts/dns.yaml catch a tunnel that is
+    # "running" per systemd but has silently lost all its edge connections.
+    # 9301 is loopback-only and already listening once the tunnel is up; no new
+    # externally-exposed port. (Lives here rather than a standalone module to
+    # follow the established self-scrape pattern for locally-exposed /metrics.)
+    {
+      job_name = "cloudflared";
+      static_configs = [
+        { targets = [ "127.0.0.1:9301" ]; }
+      ];
+    }
   ];
 }

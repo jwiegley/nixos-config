@@ -1,0 +1,71 @@
+--- a/dirscan.py
++++ b/dirscan.py
+@@ -481,6 +481,7 @@
+                  days              = -1.0,
+                  depth             = -1,
+                  dryrun            = False,
++                 evictOldest       = False,
+                  ignoreFiles       = None,
+                  maxSize           = None,
+                  minimalScan       = False,
+@@ -549,6 +550,7 @@
+         self.depth             = depth
+         self.directory         = directory
+         self.dryrun            = dryrun
++        self.evictOldest       = evictOldest
+         self.ignoreFiles       = ignoreFiles
+         self.maxSize           = None
+         self.minimalScan       = minimalScan
+@@ -1021,10 +1023,19 @@
+                         safeRemove(entry)
+                         self._dirty = True
+ 
+-                for size in sizes:
+-                    entries = size_map[size]
+-                    entries.sort(key = attrgetter('timestamp'))
+-                    for entry in entries:
++                if self.evictOldest:
++                    # Retention mode for dated backups: purge strictly
++                    # oldest-first, so the newest artifacts are the last to
++                    # go. The default mode below ("largest, oldest first")
++                    # removes the biggest files first -- but backups tend to
++                    # grow over time, so the biggest file is usually the
++                    # *newest* one, and purging it discards the freshest
++                    # backup while keeping stale ones.
++                    candidates = [(entry, size)
++                                  for size in sizes if size > 0
++                                  for entry in size_map[size]]
++                    candidates.sort(key = lambda pair: pair[0].timestamp)
++                    for entry, size in candidates:
+                         l.info(f"Purging entry {entry.path} to reduce size (saves {bytestring(size)})")
+ 
+                         safeRemove(entry)
+@@ -1032,11 +1043,25 @@
+                         self._dirty = True
+ 
+                         if total_size <= self.maxSize:
++                            l.info(f"Directory is now within size limits ({bytestring(total_size)} <= {bytestring(self.maxSize)})")
+                             break
++                else:
++                    for size in sizes:
++                        entries = size_map[size]
++                        entries.sort(key = attrgetter('timestamp'))
++                        for entry in entries:
++                            l.info(f"Purging entry {entry.path} to reduce size (saves {bytestring(size)})")
++
++                            safeRemove(entry)
++                            total_size -= size
++                            self._dirty = True
++
++                            if total_size <= self.maxSize:
++                                break
+ 
+-                    if total_size <= self.maxSize:
+-                        l.info(f"Directory is now within size limits ({bytestring(total_size)} <= {bytestring(self.maxSize)})")
+-                        break
++                        if total_size <= self.maxSize:
++                            l.info(f"Directory is now within size limits ({bytestring(total_size)} <= {bytestring(self.maxSize)})")
++                            break
+             else:
+                 l.info(f"Directory is within size limits ({bytestring(total_size)} <= {bytestring(self.maxSize)})")
+ 

@@ -15,8 +15,16 @@ self: super: {
         # date = "2025-11-13";
       };
 
+      # Size-cap eviction fix (2026-06-10): upstream purges largest-first,
+      # which for ever-growing dated backups deletes the NEWEST dump every
+      # night (ate the fresh PostgreSQL dump minutes after creation, daily).
+      # Adds an opt-in evictOldest mode used by scripts/cleanup.py for the
+      # backup directories. Drop when merged upstream (jwiegley/dirscan).
+      patches = [ ./dirscan-evict-oldest.patch ];
+
       phases = [
         "unpackPhase"
+        "patchPhase"
         "installPhase"
       ];
 

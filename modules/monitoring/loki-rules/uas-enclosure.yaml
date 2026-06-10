@@ -1,0 +1,77 @@
+groups:
+  - name: uas_enclosure_failure
+    interval: 1m
+    rules:
+      # The host's #1 failure mode: the OWC Mercury Elite Pro Quad USB
+      # enclosure (VID:PID 1e91:a4a7, disks sda-sdd = the ZFS `tank` pool)
+      # hangs under heavy I/O — usually during the nightly backup window.
+      # The UAS bridge throws a `uas_eh_abort` storm, the SCSI layer reports
+      # `err -108` / `ESHUTDOWN`, all four disks drop, the bridge
+      # re-enumerates (`reset SuperSpeed USB device`) but never re-presents
+      # the disks, so `tank` goes MISSING and the Immich / Copyparty / aria2 /
+      # backup stack cascades.  Today the cascade is only detected AFTER the
+      # pool is gone (ImmichAPIDown etc.).  This rule fires on the abort storm
+      # BEFORE the pool fully drops, giving a chance to physically
+      # power-cycle the enclosure first.
+      #
+      # Kernel transport lines reach Loki as
+      # {job="systemd-journal", syslog_identifier="kernel"} (priority 3-4,
+      # within the 0-4 keep band in promtail.nix).  The patterns below are
+      # anchored on the UAS/SCSI/sd[a-d] driver context so routine USB
+      # events (keyboard / phone replug) do NOT match.  First occurrence
+      # 2026-06-02; runbook lives in the tank-uas-enclosure-failure memory.
+      - alert: UASEnclosureAbortStorm
+        expr: |
+          sum(count_over_time(
+            {job="systemd-journal", syslog_identifier="kernel"}
+            |~ "uas_eh_abort|tag#[0-9]+ uas_eh|err -108|ESHUTDOWN|reset SuperSpeed USB device"
+            [5m]
+          )) > 3
+        for: 1m
+        labels:
+          severity: critical
+          category: logs
+          service: tank-enclosure
+        annotations:
+          summary: "UAS enclosure abort storm — tank pool is about to drop"
+          description: |
+            More than 3 UAS/SCSI transport errors (uas_eh_abort, err -108,
+            ESHUTDOWN, or SuperSpeed-reset) appeared in the kernel journal in
+            the last 5 minutes.  This is the leading symptom of the OWC USB
+            enclosure (1e91:a4a7, disks sda-sdd) hanging under heavy I/O —
+            the precursor to all four `tank` disks dropping and the pool
+            going MISSING.  ACT NOW: throttle the nightly backup if running,
+            then prepare to physically power-cycle the enclosure and
+            `zpool import tank`.  Recovery runbook is in the
+            tank-uas-enclosure-failure project memory.
+
+      # The disconnect signal that follows the abort storm: the enclosure
+      # drops off the USB bus and the bridge re-enumerates.  Anchored on the
+      # UAS/SCSI/sd[a-d] driver context (NOT a bare "USB disconnect", which a
+      # keyboard or phone replug would trip).  `reset SuperSpeed USB device`
+      # is the enclosure's xHCI re-enumeration; the sd[a-d] ESHUTDOWN line is
+      # one of the four tank disks going away.  Warning severity — by the time
+      # this fires the pool may already be gone, so the abort-storm alert
+      # above is the actionable early warning; this is corroboration.
+      - alert: UASDeviceDisconnect
+        expr: |
+          sum(count_over_time(
+            {job="systemd-journal", syslog_identifier="kernel"}
+            |~ "uas_eh_abort|scsi host[0-9].*uas|sd[a-d].*ESHUTDOWN|reset SuperSpeed USB device|usb [0-9]+-[0-9.]+: USB disconnect, device number"
+            [10m]
+          )) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: logs
+          service: tank-enclosure
+        annotations:
+          summary: "UAS enclosure disconnect / re-enumeration detected"
+          description: |
+            The kernel logged a UAS/SCSI disconnect or SuperSpeed
+            re-enumeration for the tank enclosure (1e91:a4a7, sda-sdd) in the
+            last 10 minutes.  If accompanied by UASEnclosureAbortStorm, the
+            `tank` pool has likely already dropped — check `zpool status` and
+            the Immich/Copyparty/backup cascade.  Fix = power-cycle the
+            enclosure then `zpool import tank` (tank-uas-enclosure-failure
+            memory).

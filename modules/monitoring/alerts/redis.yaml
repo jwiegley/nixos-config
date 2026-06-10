@@ -1,0 +1,35 @@
+groups:
+  - name: redis_alerts
+    interval: 60s
+    rules:
+      # litellm Redis availability (primary -redis.addr target, job="redis").
+      # After the 127.0.0.1:8085 addr fix this reads 1; it currently reads 0
+      # only because the old 10.88.0.1 addr is unreachable. The per-app Redis
+      # instances (openproject:6383, shlink:6385) are job="redis-multi" and
+      # are covered by OpenProjectRedisDown / ShlinkRedisDown elsewhere.
+      - alert: RedisLitellmDown
+        expr: redis_up{job="redis"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: redis
+          service: redis-litellm
+        annotations:
+          summary: "litellm Redis is unreachable"
+          description: "redis_up{job=redis} (litellm Redis at 127.0.0.1:8085) has been 0 for more than 5 minutes. The shared LLM gateway loses its cache/queue backend. Check: redis-cli -p 8085 ping; journalctl -u prometheus-redis-exporter."
+
+      # Meta-alert: catches future exporter address drift on ANY redis target.
+      # redis_exporter_last_scrape_error=1 means the exporter could not connect
+      # to / probe a configured Redis (the exact failure mode the wrong
+      # 10.88.0.1 addr produced silently). max by (instance) keeps one series
+      # per probed Redis URL.
+      - alert: RedisExporterScrapeError
+        expr: max by (instance) (redis_exporter_last_scrape_error) == 1
+        for: 10m
+        labels:
+          severity: warning
+          category: redis
+          service: redis-exporter
+        annotations:
+          summary: "redis_exporter cannot scrape {{ $labels.instance }}"
+          description: "redis_exporter_last_scrape_error=1 for {{ $labels.instance }} for more than 10 minutes. The exporter is reachable but cannot connect to that Redis target (likely a wrong -redis.addr / multi-target address). Verify the address in modules/monitoring/services/redis-exporter.nix matches the live bind."

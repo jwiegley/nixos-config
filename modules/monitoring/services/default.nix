@@ -15,6 +15,11 @@
     ./victoriametrics.nix
     ./self-scrape.nix # Prometheus + VictoriaMetrics self-monitoring scrape jobs
     ./alerting.nix # Auto-discovers alert rules from alerts/
+    # P0 monitoring-coverage collectors (docs/MONITORING_COVERAGE_PLAN.md)
+    ./smartctl-exporter.nix # SMART health of UAS disks + NVMe
+    ./asymmetric-routing-exporter.nix # ip-rule presence gauge (post-boot drift)
+    ./nodered-safety-exporter.nix # HA-safety-flow deadman (nodered_events)
+    ./schwab-token-exporter.nix # Schwab OAuth refresh-token expiry
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters

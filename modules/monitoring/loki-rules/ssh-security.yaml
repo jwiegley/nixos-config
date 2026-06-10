@@ -1,0 +1,61 @@
+groups:
+  - name: ssh_security
+    interval: 1m
+    rules:
+      # SSH brute-force: a burst of authentication failures.
+      # sshd logs "Failed password for ..." and "Invalid user ..." at info,
+      # which the main journal scrape drops; the dedicated job="sshd" promtail
+      # scrape preserves them. >20 failures in 10m is well above the handful
+      # produced by an occasional fat-fingered key/typo on this key-only host
+      # (PasswordAuthentication is disabled), so this is genuinely anomalous.
+      - alert: SSHBruteForce
+        expr: |
+          count_over_time({job="sshd"} |~ "Failed password|Invalid user" [10m]) > 20
+        for: 2m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "SSH brute-force in progress"
+          description: "More than 20 SSH authentication failures (Failed password / Invalid user) in the last 10 minutes. A brute-force or credential-stuffing attempt is likely underway (fail2ban is disabled on this host)."
+
+      # Sustained high-volume brute-force — escalate to critical.
+      - alert: SSHBruteForceCritical
+        expr: |
+          count_over_time({job="sshd"} |~ "Failed password|Invalid user" [10m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Heavy SSH brute-force in progress"
+          description: "More than 100 SSH authentication failures in the last 10 minutes. An aggressive brute-force attack is underway against sshd; investigate the source and consider blocking it at opnsense."
+
+      # sshd logs "POSSIBLE BREAK-IN ATTEMPT!" when a reverse-DNS mismatch is
+      # detected, and "refused connect from ..." for denied connections. Any
+      # occurrence is worth surfacing on a host with no fail2ban.
+      - alert: SSHAuthBreakinAttempt
+        expr: |
+          count_over_time({job="sshd"} |~ "POSSIBLE BREAK-IN ATTEMPT|refused connect" [10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "SSH break-in attempt detected"
+          description: "sshd reported a POSSIBLE BREAK-IN ATTEMPT (reverse-DNS mismatch) or refused connection in the last 10 minutes. Inspect the source address in the journal (job=\"sshd\")."
+
+      # PasswordAuthentication is set to false in the host openssh config, so a
+      # successful PASSWORD login should be IMPOSSIBLE. If sshd ever logs
+      # "Accepted password", either the config drifted/regressed or the daemon
+      # is not honoring it — treat as a critical misconfiguration.
+      - alert: SSHPasswordLoginAccepted
+        expr: |
+          count_over_time({job="sshd"} |~ "Accepted password" [10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "SSH password login accepted (should be impossible)"
+          description: "sshd accepted a PASSWORD login, but PasswordAuthentication is disabled in the NixOS openssh config. The SSH config has likely regressed or the daemon is not enforcing key-only auth — investigate immediately."

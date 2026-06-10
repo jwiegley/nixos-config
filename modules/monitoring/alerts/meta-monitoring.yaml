@@ -1,0 +1,87 @@
+groups:
+  - name: meta_monitoring
+    interval: 30s
+    rules:
+      # Dead-man's switch (P0 #4).
+      #
+      # This rule ALWAYS fires — that is the entire point. It is routed by
+      # Alertmanager to an EXTERNAL heartbeat endpoint (e.g. healthchecks.io or a
+      # cron on hera). As long as the alerting pipeline (Prometheus -> rule eval ->
+      # Alertmanager -> notification) is alive, this alert keeps the external
+      # endpoint pinged. The instant the pipeline dies for any reason, the pings
+      # stop and the external watchdog raises the alarm. It is SUPPOSED to fire
+      # forever; do NOT silence it locally and do NOT route it to the normal
+      # iPhone/email/Discord receivers.
+      #
+      # The `severity: watchdog` label is LOAD-BEARING: Alertmanager routes on it
+      # to the external heartbeat. Do not change it.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: watchdog
+          category: monitoring
+        annotations:
+          summary: "Alerting pipeline dead-man's switch"
+          description: "This is an always-firing alert meant to ensure the entire alerting pipeline is functional. It is routed to an external heartbeat endpoint; if these pings stop arriving, the external watchdog should alarm because Prometheus/Alertmanager/notification delivery has died."
+
+      # Host-wide catch-all for any scrape target that goes down (P0 #12).
+      #
+      # Backstops every current and future scrape job in one rule. Verified live
+      # on 2026-06-09: zero targets are down (`up == 0` -> empty), so this does NOT
+      # fire on deploy.
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Scrape target {{ $labels.job }} is down"
+          description: "Prometheus has been unable to scrape target {{ $labels.instance }} (job {{ $labels.job }}) for over 5 minutes. Metrics and alerts depending on this target are blind."
+
+      # Notification delivery health on the Prometheus side (P0 #5).
+      #
+      # prometheus_notifications_errors_total counts errors talking to Alertmanager.
+      # Live baseline 2026-06-09: value 0, rate over 10m = 0 firing series.
+      - alert: PrometheusNotificationErrors
+        expr: |
+          rate(prometheus_notifications_errors_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus is failing to send notifications to Alertmanager"
+          description: "Prometheus is erroring while pushing alerts to Alertmanager ({{ $value | printf \"%.4f\" }}/s over 10m). Alerts may not be reaching the notification path."
+
+      # Alerts dropped before reaching Alertmanager (P0 #5).
+      #
+      # prometheus_notifications_dropped_total counts alerts dropped (queue full /
+      # no Alertmanager available). Live baseline 2026-06-09: value 0.
+      - alert: PrometheusNotificationsDropped
+        expr: |
+          increase(prometheus_notifications_dropped_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus is dropping alert notifications"
+          description: "Prometheus dropped {{ $value | printf \"%.0f\" }} alert notification(s) in the last 10 minutes (no Alertmanager reachable or send queue full). Alerts are being lost before delivery."
+
+      # Notification delivery health on the Alertmanager side (P0 #5).
+      #
+      # alertmanager_notifications_failed_total is broken down per integration
+      # (email/discord/webhook/etc). This metric only becomes available once the
+      # new `alertmanager` scrape job lands (same deploy as this file). The metric
+      # NAME is confirmed present at the 9093 /metrics endpoint.
+      - alert: AlertmanagerNotificationsFailed
+        expr: |
+          rate(alertmanager_notifications_failed_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Alertmanager failing to deliver notifications via {{ $labels.integration }}"
+          description: "Alertmanager integration {{ $labels.integration }} is failing to deliver notifications ({{ $value | printf \"%.4f\" }}/s over 10m). The iPhone/email/Discord delivery path may be broken."

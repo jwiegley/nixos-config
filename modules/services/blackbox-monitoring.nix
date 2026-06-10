@@ -118,6 +118,33 @@ let
             fail_if_matches_regexp: []
             fail_if_not_matches_regexp: []
 
+      # Internal-zone resolution correctness: query the local Technitium
+      # resolver for a known internal name and assert the answer carries the
+      # expected A record. Catches NXDOMAIN, SERVFAIL, wrong/poisoned answers,
+      # and a dead local resolver for *.vulcan.lan — none of which the external
+      # dns_query module (google.com) can see. The answer-RR text blackbox
+      # validates is the miekg/dns RR .String() form (tab-separated, same as
+      # dig: "vulcan.lan.\t3600\tIN\tA\t192.168.1.2"); the regex is kept
+      # whitespace-permissive so a TTL/format change can't silently break it.
+      dns_internal:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: "vulcan.lan"
+          query_type: "A"
+          valid_rcodes:
+            - NOERROR
+          validate_answer_rrs:
+            fail_if_matches_regexp: []
+            fail_if_not_matches_regexp:
+              - ".*\\bIN\\b.*\\bA\\b.*192\\.168\\.1\\.2"
+          validate_authority_rrs:
+            fail_if_matches_regexp: []
+            fail_if_not_matches_regexp: []
+          validate_additional_rrs:
+            fail_if_matches_regexp: []
+            fail_if_not_matches_regexp: []
+
       tcp_connect:
         prober: tcp
         timeout: 5s
@@ -610,6 +637,43 @@ in
               {
                 target_label = "probe_type";
                 replacement = "dns";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "10s";
+          }
+
+          # Internal-zone DNS resolution correctness (probes the local
+          # Technitium resolver at 127.0.0.1 for vulcan.lan -> expected A record)
+          {
+            job_name = "blackbox_dns_internal";
+            metrics_path = "/probe";
+            params = {
+              module = [ "dns_internal" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "127.0.0.1"
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "dns_internal";
               }
             ];
             scrape_interval = "60s";

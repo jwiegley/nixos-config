@@ -1,0 +1,34 @@
+groups:
+  - name: node_red_safety_alerts
+    rules:
+      # The Node-RED "Away" tab (id ba13e5bae3dfce24) IS the home-safety
+      # alerting layer — it scans per minute for leak / high-flow /
+      # door-open+unlocked / freeze and pushes notifications. Every node it
+      # touches logs a row to PostgreSQL nodered_events.msg_events. Live
+      # baseline is ~4 events/min, so >300s with no event means the flow has
+      # stopped scanning (deploy error, websocket auth drop, Node-RED crash)
+      # and the house is silently unprotected. 5min is deliberately
+      # conservative against a 4/min baseline.
+      - alert: HASafetyFlowStalled
+        expr: time() - nodered_safety_last_event_timestamp_seconds > 300
+        for: 2m
+        labels:
+          severity: critical
+          component: node_red_safety
+        annotations:
+          summary: "Node-RED home-safety scan has stopped logging ({{ $value | humanizeDuration }} since last event)"
+          description: "The HA safety scan (leak/flow/door/freeze) on the Away tab has logged no msg_events for {{ $value | humanizeDuration }} (baseline ~4 events/min). The home-safety alerting layer is likely dead — check Node-RED (`systemctl status node-red`, the editor) and the Away tab (ba13e5bae3dfce24) for a deploy error or websocket auth drop."
+
+      # Distinguish a dead collector from a dead flow: if the exporter itself
+      # stops running, HASafetyFlowStalled would also fire but for the wrong
+      # reason. This warning surfaces a stalled exporter (timer stopped, psql
+      # failing, postgres down) so the critical above is interpreted correctly.
+      - alert: HASafetyExporterStale
+        expr: time() - nodered_safety_exporter_run_timestamp_seconds > 600
+        for: 2m
+        labels:
+          severity: warning
+          component: node_red_safety
+        annotations:
+          summary: "nodered-safety-exporter hasn't run in {{ $value | humanizeDuration }}"
+          description: "The deadman collector for the Node-RED safety flow has not produced fresh metrics for {{ $value | humanizeDuration }} (runs every 60s). A stale exporter makes HASafetyFlowStalled untrustworthy — check `systemctl status nodered-safety-exporter.timer nodered-safety-exporter.service` and PostgreSQL availability."

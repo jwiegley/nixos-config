@@ -182,6 +182,55 @@
           ];
         }
 
+        # SSH authentication journal scrape (security monitoring)
+        # The consolidated systemd-journal scrape above DROPS priority 5-7
+        # (notice/info/debug), which silently discards sshd auth events
+        # (Failed password / Invalid user / Accepted ... all log at info).
+        # This dedicated scrape ingests the SAME journal but KEEPS ONLY the
+        # sshd.service unit (relabel action=keep) and has NO priority-drop
+        # stage, so auth events reach Loki under job="sshd".
+        {
+          job_name = "sshd";
+          journal = {
+            json = true;
+            max_age = "5m"; # Match the main journal scrape window
+            labels = {
+              job = "sshd";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            # Keep ONLY sshd.service lines so nothing else is duplicated
+            # into Loki by this second journal reader.
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "sshd\\.service";
+              action = "keep";
+            }
+            # Carry over the same descriptive labels as the main scrape
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__hostname" ];
+              target_label = "hostname";
+            }
+            {
+              source_labels = [ "__journal_priority" ];
+              target_label = "priority";
+            }
+            {
+              source_labels = [ "__journal_syslog_identifier" ];
+              target_label = "syslog_identifier";
+            }
+            {
+              source_labels = [ "__journal__comm" ];
+              target_label = "process";
+            }
+          ];
+        }
+
         # Nginx access logs
         {
           job_name = "nginx-access";

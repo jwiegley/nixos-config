@@ -46,3 +46,40 @@ groups:
         annotations:
           summary: "PostgreSQL deadlocks detected"
           description: "Database {{ $labels.datname }} is experiencing deadlocks"
+
+      # pg_dump backup integrity / freshness (textfile collector from
+      # modules/services/postgresql-backup.nix). A green systemd exit is NOT
+      # proof of a complete dump: on 2026-06-02 the run exited 0 but truncated
+      # to 2.7 GB when /tank dropped mid-xz. These rules catch silent failures.
+      - alert: PgDumpFailed
+        expr: pg_dump_last_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL backup (pg_dumpall) failed"
+          description: "The most recent postgresql-backup run did not exit successfully (pg_dump_last_success == 0). Inspect: journalctl -u postgresql-backup"
+
+      - alert: PgDumpStale
+        expr: time() - pg_dump_last_run_timestamp_seconds > 97200
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL backup is stale"
+          description: "No successful postgresql-backup run in over 27h (daily 02:00 job + 3h grace). Last run {{ $value | humanizeDuration }} ago."
+
+      - alert: PgDumpSizeShrunk
+        expr: pg_dump_size_bytes < 0.5 * avg_over_time(pg_dump_size_bytes[14d])
+        for: 1h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL backup is suspiciously small"
+          description: "The newest pg_dumpall artifact ({{ $value | humanize1024 }}B) is under half its 14d average size — likely a truncated/corrupt dump (cf. the 2026-06-02 2.7 GB truncation)."

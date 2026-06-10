@@ -18,7 +18,10 @@
     # Export metrics for all Redis instances
     # Format: redis://host:port or unix:///path/to/socket
     extraFlags = [
-      "-redis.addr=redis://10.88.0.1:8085" # litellm
+      # litellm Redis binds 127.0.0.1:8085 (verified live: 127.0.0.1 PONGs,
+      # 10.88.0.1 refuses). The old 10.88.0.1 addr made redis_up=0 +
+      # redis_exporter_last_scrape_error=1 permanently with no alert.
+      "-redis.addr=redis://127.0.0.1:8085" # litellm
     ];
   };
 

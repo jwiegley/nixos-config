@@ -124,6 +124,8 @@
     "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
     "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
     "L+ /var/lib/loki/rules/fake/openclaw-plugin-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/openclaw-plugin-errors.yaml"
+    "L+ /var/lib/loki/rules/fake/uas-enclosure.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/uas-enclosure.yaml"
+    "L+ /var/lib/loki/rules/fake/ssh-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/ssh-security.yaml"
   ];
 
   # Loki nginx upstream with retry logic

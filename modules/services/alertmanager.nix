@@ -34,6 +34,29 @@
 
         # Special routing rules
         routes = [
+          # Dead-man's switch (P0 #4). The always-firing Watchdog rule
+          # (severity=watchdog, expr vector(1)) must be peeled off FIRST
+          # and sent ONLY to the watchdog-deadman webhook receiver, which
+          # pings an EXTERNAL heartbeat endpoint (healthchecks.io). It
+          # fires forever by design, so continue=false is mandatory:
+          # without this carve-out it would fall through to
+          # default-receiver and email constantly, and a severity match
+          # below could also page the iPhone. This route MUST stay the
+          # first entry in routes[] so the watchdog never reaches any
+          # other receiver. repeat_interval (4m) is the heartbeat cadence;
+          # configure the healthchecks.io check's grace period to a small
+          # multiple of it so a stalled alerting pipeline trips the
+          # external check.
+          {
+            match = {
+              severity = "watchdog";
+            };
+            receiver = "watchdog-deadman";
+            group_wait = "15s";
+            group_interval = "3m";
+            repeat_interval = "4m";
+            continue = false;
+          }
           # OpenClawConfigDrift is an informational warning-severity
           # alert (for: 24h) about live-config vs. Nix-template schema
           # drift.  It must NOT trigger restart_microvm — restarting
@@ -263,6 +286,31 @@
                   credentials_file = "/run/alertmanager/nr-token";
                 };
               };
+            }
+          ];
+        }
+        # Dead-man's switch delivery (P0 #4). The Watchdog alert is routed
+        # here (and ONLY here) by the severity=watchdog route. Each
+        # notification POSTs to the EXTERNAL heartbeat URL stored in
+        # url_file — keeping the secret URL out of the Nix store / git.
+        # url_file is read on every notify, so the URL can be installed or
+        # rotated without a rebuild (Alertmanager 0.29 supports url_file).
+        # send_resolved=false: a heartbeat is a ping, never a "resolved".
+        # max_alerts=1: the body carries no useful per-alert payload, so
+        # cap it. The file must be created by the operator at
+        # /var/lib/alertmanager/watchdog-ping-url (the StateDirectory,
+        # owned alertmanager:alertmanager, mode 0600) and hold a single
+        # healthchecks.io ping URL. Until it exists, notify fails and
+        # alertmanager_notifications_failed_total rises — intentional
+        # loud-until-configured behavior (the delivery-failure alert, once
+        # AM is scraped, surfaces the missing config).
+        {
+          name = "watchdog-deadman";
+          webhook_configs = [
+            {
+              url_file = "/var/lib/alertmanager/watchdog-ping-url";
+              send_resolved = false;
+              max_alerts = 1;
             }
           ];
         }

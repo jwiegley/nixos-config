@@ -198,3 +198,48 @@ groups:
         annotations:
           summary: "Blackbox probe timeout for {{ $labels.instance }}"
           description: "Blackbox probe to {{ $labels.instance }} is taking {{ $value }}s (>10s), indicating potential exporter overload."
+
+  - name: asymmetric_routing
+    rules:
+      # Continuous post-boot drift detector for the source-policy ip rules.
+      # The pri 50/51 rules (cross-subnet routing from 192.168.1.2) have silently
+      # vanished from the kernel after boot despite the fail-loud oneshot's success;
+      # the asymmetric-routing-exporter re-checks them every minute and emits this
+      # gauge. == 0 means at least one rule is missing and cross-subnet replies will
+      # leave with the wrong source IP.
+      - alert: AsymmetricRoutingRulesMissing
+        expr: asymmetric_routing_rules_present == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: network
+          service: routing
+        annotations:
+          summary: "Asymmetric-routing ip rules missing from kernel"
+          description: "One or both source-policy ip rules (pri 50/51 from 192.168.1.2 to 192.168.0.0/16 and 10.0.0.0/8 lookup end0_return) have been absent for more than 2 minutes. Cross-subnet replies will use the wrong source IP. Fix: `systemctl restart asymmetric-routing`."
+
+  - name: opnsense_exporter_health
+    rules:
+      # OpnSense Telegraf exporter (job=opnsense) is down
+      - alert: OpnsenseExporterDown
+        expr: up{job="opnsense"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: monitoring
+          service: opnsense_exporter
+        annotations:
+          summary: "OpnSense exporter is down"
+          description: "The OpnSense exporter (job=opnsense, {{ $labels.instance }}) has been unreachable for more than 3 minutes — firewall/router metrics are stale."
+
+      # OpnSense node exporter (job=node_opnsense) is down
+      - alert: OpnsenseNodeExporterDown
+        expr: up{job="node_opnsense"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: monitoring
+          service: opnsense_node_exporter
+        annotations:
+          summary: "OpnSense node exporter is down"
+          description: "The OpnSense node exporter (job=node_opnsense, {{ $labels.instance }}) has been unreachable for more than 3 minutes — host-level router metrics are stale."

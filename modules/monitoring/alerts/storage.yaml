@@ -36,6 +36,25 @@ groups:
           summary: "ZFS pool degraded on {{ $labels.instance }}"
           description: "ZFS pool {{ $labels.zpool }} is in {{ $labels.state }} state"
 
+      # Pool I/O frozen. ZFS suspends a pool when it can no longer reach its
+      # vdevs (the UAS-enclosure cascade: bridge hangs -> all 4 disks drop ->
+      # pool SUSPENDED -> Immich/Copyparty/aria2/backups all stall). node_exporter's
+      # zpool_state can still report ONLINE in this case, so this fires off the
+      # textfile collector that greps "zpool status" directly. for:0 — every
+      # second the pool is frozen is data loss / cascade in progress.
+      # Runbook: physically power-cycle the OWC enclosure, then `zpool import tank`
+      # (see memory project_tank_uas_enclosure_failure).
+      - alert: ZFSPoolSuspended
+        expr: zfs_pool_suspended == 1 or zfs_pool_unavail == 1
+        for: 0m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} I/O is SUSPENDED — cascade in progress"
+          description: "Pool {{ $labels.pool }} is SUSPENDED/UNAVAIL: all I/O is frozen and every dependent service (Immich, Copyparty, aria2, backups) is stalling. Likely the UAS-enclosure abort-storm. RUNBOOK: physically power-cycle the OWC Mercury Elite Pro Quad enclosure, then `zpool import tank` (see project_tank_uas_enclosure_failure)."
+
       - alert: ZFSPoolCapacityHigh
         expr: (zfs_pool_allocated_bytes / zfs_pool_size_bytes) * 100 > 80
         for: 5m

@@ -241,3 +241,23 @@ groups:
         annotations:
           summary: "DNS Query Log Exporter experiencing API timeouts"
           description: "API request timeouts detected ({{ $value | humanize }} timeouts/sec). Technitium DNS API may be overloaded or experiencing performance issues."
+
+  # Internal-zone DNS resolution correctness (blackbox dns_internal probe)
+  - name: dns_internal_resolution
+    interval: 30s
+    rules:
+      # The blackbox dns_internal module queries the local Technitium resolver
+      # for vulcan.lan and validates the answer carries A 192.168.1.2.
+      # probe_success == 0 covers ALL of: NXDOMAIN, SERVFAIL, a wrong/poisoned
+      # A record, and the local resolver being down for the internal zone —
+      # none of which the external dns_query (google.com) probe can detect.
+      - alert: InternalDNSResolutionBroken
+        expr: probe_success{job="blackbox_dns_internal"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: dns
+          component: dns
+        annotations:
+          summary: "Internal DNS resolution for *.vulcan.lan is broken"
+          description: "The local resolver (127.0.0.1) failed to return the expected A record (192.168.1.2) for vulcan.lan for more than 3 minutes. This indicates NXDOMAIN, SERVFAIL, a wrong/poisoned answer, or the internal zone being unavailable — internal name resolution for *.vulcan.lan is likely failing host-wide."

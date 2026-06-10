@@ -12,9 +12,14 @@
 #                 process_resident_memory_bytes{job="prometheus"}, etc.
 # - VictoriaMetrics : http://127.0.0.1:8428/metrics -> vm_* (vm_allowed_memory_bytes,
 #                 vm_available_memory_bytes, vm_slow_row_inserts_total, vm_rows, ...)
+# - Alertmanager : http://localhost:9093/metrics -> alertmanager_* (notably
+#                 alertmanager_notifications_failed_total per integration, which
+#                 the meta-monitoring rules use to tell whether the iPhone/email/
+#                 Discord delivery path itself is broken — the notification path
+#                 must be monitored too, P0 #5).
 #
-# No new listening ports are introduced (9090/8428 already listen), so the port
-# registry is unchanged.
+# No new listening ports are introduced (9090/8428/9093 already listen), so the
+# port registry is unchanged.
 
 {
   services.prometheus.scrapeConfigs = [
@@ -28,6 +33,12 @@
       job_name = "victoriametrics";
       static_configs = [
         { targets = [ "127.0.0.1:8428" ]; }
+      ];
+    }
+    {
+      job_name = "alertmanager";
+      static_configs = [
+        { targets = [ "localhost:9093" ]; }
       ];
     }
   ];

@@ -273,10 +273,49 @@ in
         unitConfig = {
           RequiresMountsFor = [ "/tank" ];
           ConditionPathIsMountPoint = "/tank";
+          # Reuse the same alert template the restic-backups-* jobs use
+          # (defined in backup-monitoring.nix). %n expands to this unit's full
+          # name "restic-check.service", which the alert script logs as $1.
+          # Previously empty: a corrupt repo / bit-rot detection failed silently.
+          OnFailure = "backup-alert@%n.service";
         };
         serviceConfig = {
           ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
           User = "root";
+          # Export the integrity-check outcome as node-exporter textfile metrics so
+          # a silent failure (exit != 0, lock loss, repo corruption) becomes alertable.
+          # ExecStopPost runs in both success and failure paths; $SERVICE_RESULT is
+          # "success" only on a clean exit. Written atomically (tmp + mv), mode 644,
+          # mirroring container-health-exporter.nix. Runs as root (User=root) so it
+          # can write into the world-writable textfile dir and chmod the result.
+          ExecStopPost = pkgs.writeShellScript "restic-check-metrics" ''
+            set -u
+
+            METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/restic_check.prom"
+            METRICS_TMP="$METRICS_FILE.tmp"
+
+            mkdir -p "$(dirname "$METRICS_FILE")"
+
+            if [ "''${SERVICE_RESULT:-}" = "success" ]; then
+              SUCCESS=1
+            else
+              SUCCESS=0
+            fi
+
+            NOW=$(${pkgs.coreutils}/bin/date +%s)
+
+            cat > "$METRICS_TMP" <<EOF
+            # HELP restic_integrity_check_success Whether the last weekly restic check completed successfully (1=ok, 0=failed)
+            # TYPE restic_integrity_check_success gauge
+            restic_integrity_check_success $SUCCESS
+            # HELP restic_integrity_check_timestamp_seconds Unix time of the last restic integrity check run
+            # TYPE restic_integrity_check_timestamp_seconds gauge
+            restic_integrity_check_timestamp_seconds $NOW
+            EOF
+
+            mv "$METRICS_TMP" "$METRICS_FILE"
+            chmod 644 "$METRICS_FILE"
+          '';
         };
       };
     }

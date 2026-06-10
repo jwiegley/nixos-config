@@ -27,6 +27,10 @@ let
       # TYPE zfs_pool_device_read_errors gauge
       # HELP zfs_pool_device_checksum_errors Total checksum errors across all devices in the pool
       # TYPE zfs_pool_device_checksum_errors gauge
+      # HELP zfs_pool_suspended 1 if the pool is in the SUSPENDED state (I/O frozen, e.g. UAS-enclosure cascade), 0 otherwise
+      # TYPE zfs_pool_suspended gauge
+      # HELP zfs_pool_unavail 1 if the pool top-level state is UNAVAIL (devices missing/unreadable), 0 otherwise
+      # TYPE zfs_pool_unavail gauge
       HEADER
 
             while IFS= read -r pool; do
@@ -72,6 +76,25 @@ let
 
               echo "zfs_pool_device_read_errors{pool=\"$pool\"} ''${READ_ERRORS:-0}" >> "$TEMP_FILE"
               echo "zfs_pool_device_checksum_errors{pool=\"$pool\"} ''${CKSUM_ERRORS:-0}" >> "$TEMP_FILE"
+
+              # Pool I/O frozen? "zpool status" prints a "state: SUSPENDED" line and a
+              # "status:" warning when ZFS has suspended I/O (the UAS-enclosure cascade:
+              # see project_tank_uas_enclosure_failure). Detect it directly from the
+              # status text rather than relying on node-exporter's zpool_state, which
+              # has reported the pool ONLINE while the underlying bridge hung.
+              if echo "$STATUS" | grep -qE "^[[:space:]]*state:[[:space:]]+SUSPENDED"; then
+                echo "zfs_pool_suspended{pool=\"$pool\"} 1" >> "$TEMP_FILE"
+              else
+                echo "zfs_pool_suspended{pool=\"$pool\"} 0" >> "$TEMP_FILE"
+              fi
+
+              # Pool top-level UNAVAIL (devices missing/unreadable) — suspended-equivalent
+              # for alerting purposes but emitted separately for diagnosis.
+              if echo "$STATUS" | grep -qE "^[[:space:]]*state:[[:space:]]+UNAVAIL"; then
+                echo "zfs_pool_unavail{pool=\"$pool\"} 1" >> "$TEMP_FILE"
+              else
+                echo "zfs_pool_unavail{pool=\"$pool\"} 0" >> "$TEMP_FILE"
+              fi
 
             done < <(zpool list -H -o name 2>/dev/null)
 

@@ -62,3 +62,72 @@ groups:
               STOCK_TRADER_LIVE_CHAT_TESTS=1 \
                 pytest tests/test_chat_live.py -v --noconftest \
                 in /tmp/stock-trader-work to reproduce.
+
+      # ----------------------------------------------------------------------
+      # Schwab OAuth refresh-token lifetime (docs/MONITORING_COVERAGE_PLAN.md
+      # P0 #15; memory: project_stock_trader). The refresh token dies ~every 7
+      # days and renewal is a manual hera re-bootstrap that today is always
+      # REACTIVE (the trader breaks first). The schwab-token-exporter textfile
+      # collector emits schwab_refresh_token_expiry_timestamp_seconds so we can
+      # warn ~2 days out — while the runbook is still comfortable — and escalate
+      # to critical in the final hours.
+      #
+      # Renewal runbook (when these fire):
+      #   1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
+      #   2. Push the token to vulcan (vulcan cannot ssh hera; push from hera).
+      #   3. Install at /var/lib/stock-trader/schwab_token.json mode 0600.
+      #   4. systemctl restart stock-trader; verify /api/quote is live.
+      # ----------------------------------------------------------------------
+      - alert: SchwabTokenExpiringSoon
+        expr: |
+          schwab_refresh_token_expiry_timestamp_seconds - time() < 2 * 86400
+        for: 30m
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "Schwab refresh token expires in less than 2 days"
+          description: |
+            The Schwab OAuth refresh token expires in {{ $value | humanizeDuration }}.
+            It dies ~every 7 days and renewal is MANUAL — start the re-bootstrap on
+            hera now, while there is still slack:
+              1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
+              2. Push the token to vulcan (vulcan can't ssh hera; push from hera).
+              3. Install /var/lib/stock-trader/schwab_token.json mode 0600.
+              4. systemctl restart stock-trader; confirm /api/quote is live.
+            Runbook: memory project_stock_trader.
+
+      - alert: SchwabTokenExpiryCritical
+        expr: |
+          schwab_refresh_token_expiry_timestamp_seconds - time() < 6 * 3600
+        for: 10m
+        labels:
+          severity: critical
+          component: stock-trader
+        annotations:
+          summary: "Schwab refresh token expires in less than 6 hours"
+          description: |
+            The Schwab OAuth refresh token expires in {{ $value | humanizeDuration }}.
+            Once it dies the trader's Schwab calls fail until re-bootstrapped. Renew
+            immediately on hera:
+              1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
+              2. Push the token to vulcan (vulcan can't ssh hera; push from hera).
+              3. Install /var/lib/stock-trader/schwab_token.json mode 0600.
+              4. systemctl restart stock-trader; confirm /api/quote is live.
+            Runbook: memory project_stock_trader.
+
+      - alert: SchwabTokenFileMissing
+        expr: |
+          schwab_token_file_exists == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: stock-trader
+        annotations:
+          summary: "Schwab OAuth token file is missing"
+          description: |
+            /var/lib/stock-trader/schwab_token.json is absent — the Schwab OAuth
+            token has not been provisioned (or was removed). The trader cannot
+            authenticate to Schwab without it. Re-bootstrap on hera and install
+            the token (mode 0600), then restart stock-trader.
+            Runbook: memory project_stock_trader.

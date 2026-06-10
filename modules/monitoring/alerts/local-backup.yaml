@@ -54,3 +54,41 @@ groups:
             Local backup {{ $labels.backup }} ({{ $labels.source }}) hasn't run in over 7 hours.
             Last backup: {{ $value | humanizeDuration }} ago.
             Normal interval is 4x daily (every 6 hours). Check if the backup timer is functioning correctly.
+
+      # The weekly `restic check` is the only repo-integrity / bit-rot detector.
+      # It used to fail silently (empty OnFailure, exit status never exported).
+      # restic_integrity_check_success/_timestamp_seconds are emitted by the
+      # restic-check service ExecStopPost (modules/storage/backups.nix) and only
+      # appear after the first weekly run following deploy.
+      - alert: ResticIntegrityCheckFailed
+        expr: restic_integrity_check_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: restic-check
+        annotations:
+          summary: "restic repository integrity check FAILED on {{ $labels.instance }}"
+          description: |
+            The weekly `restic check` (repo integrity / bit-rot detector) exited non-zero.
+            This may indicate repository corruption, a lost repo lock, or a tank/B2 I/O fault.
+            Action: review journalctl -u restic-check and run `sudo restic-doc check` manually.
+
+      # Staleness: the check runs weekly (Persistent=true catches up a missed run).
+      # 8d = weekly cadence + 1d grace. NOTE: coverage only begins at the NEXT
+      # weekly run after deploy (the metric is absent until then, so this rule
+      # cannot fire yet); absent() is intentionally NOT used so a fresh deploy
+      # doesn't alarm before the first run has had a chance to populate it.
+      - alert: ResticIntegrityCheckStale
+        expr: (time() - restic_integrity_check_timestamp_seconds) > 8 * 86400
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: restic-check
+        annotations:
+          summary: "restic integrity check is stale on {{ $labels.instance }}"
+          description: |
+            The weekly `restic check` has not run in over 8 days
+            (last run {{ $value | humanizeDuration }} ago; expected weekly).
+            Action: check systemctl status restic-check.timer and journalctl -u restic-check.

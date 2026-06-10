@@ -124,6 +124,7 @@
 # microVM Bridge Services
 9081 127.0.0.1 hermes-mcp (OpenClaw↔Hermes MCP bridge; OpenClaw VM reaches via br-openclaw DNAT 10.99.0.1:9081→127.0.0.1:9081)
 9081 127.0.0.1 openclaw-hermes-smoke (15-min synthetic ask_hermes probe; second loopback consumer of the same bridge port)
+9082 127.0.0.1 drafts-mcp (Drafts(hera) MCP SSE bridge; OpenClaw via br-openclaw 10.99.0.1:9082→127.0.0.1:9082 and Hermes via hermes-br0 10.99.1.1:9082→127.0.0.1:9082)
 18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
 # Hermes VM bridge DNAT (hermes-br0 gateway 10.99.1.1): host PREROUTING maps 10.99.1.1:PORT→127.0.0.1:PORT
 # so the Hermes microVM (10.99.1.2) can reach EXISTING host loopback listeners. NOT new listeners — see the
@@ -164,6 +165,7 @@
 9284 127.0.0.1 Immich Microservices Metrics
 9374 127.0.0.1 aria2 Exporter
 9394 127.0.0.1 OpenProject Prometheus metrics
+9633 127.0.0.1 Smartctl exporter (SMART disk health)
 
 # Cloudflare Tunnels
 18873 127.0.0.1 rsync Cloudflare tunnel backend (bound only while rsync running)

@@ -168,7 +168,10 @@
             {
               to = "johnw@vulcan.lan";
               headers = {
-                Subject = "[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }} on vulcan";
+                # CommonLabels (not GroupLabels) so severity renders even
+                # though it isn't in this route's group_by — otherwise the
+                # subject prefix is an empty "[]".
+                Subject = "[{{ .CommonLabels.severity | toUpper }}] {{ .GroupLabels.alertname }} on vulcan";
               };
               text = ''
                 {{ range .Alerts }}
@@ -291,24 +294,26 @@
         }
         # Dead-man's switch delivery (P0 #4). The Watchdog alert is routed
         # here (and ONLY here) by the severity=watchdog route. Each
-        # notification POSTs to the EXTERNAL heartbeat URL stored in
-        # url_file — keeping the secret URL out of the Nix store / git.
-        # url_file is read on every notify, so the URL can be installed or
-        # rotated without a rebuild (Alertmanager 0.29 supports url_file).
-        # send_resolved=false: a heartbeat is a ping, never a "resolved".
-        # max_alerts=1: the body carries no useful per-alert payload, so
-        # cap it. The file must be created by the operator at
-        # /var/lib/alertmanager/watchdog-ping-url (the StateDirectory,
-        # owned alertmanager:alertmanager, mode 0600) and hold a single
-        # healthchecks.io ping URL. Until it exists, notify fails and
-        # alertmanager_notifications_failed_total rises — intentional
-        # loud-until-configured behavior (the delivery-failure alert, once
-        # AM is scraped, surfaces the missing config).
+        # notification POSTs to the EXTERNAL heartbeat URL (healthchecks.io)
+        # read from url_file on every notify (Alertmanager 0.29 supports
+        # url_file). send_resolved=false: a heartbeat is a ping, never a
+        # "resolved". max_alerts=1: the body carries no useful per-alert
+        # payload, so cap it.
+        #
+        # The URL is a SOPS secret ("watchdog-ping-url", declared below).
+        # sops-install-secrets drops it root-only at /run/secrets, and
+        # because alertmanager runs as a DynamicUser (no stable uid to chown
+        # to), systemd LoadCredential= (see the service block) copies it into
+        # the per-service credential store — which is where url_file points.
+        # To rotate: edit the secrets repo with `sops`, commit, bump the
+        # flake lock for the `secrets` input, then rebuild. If the secret is
+        # ever missing, alertmanager fails to start (LoadCredential is a hard
+        # dependency) — fail-loud rather than silently un-monitored.
         {
           name = "watchdog-deadman";
           webhook_configs = [
             {
-              url_file = "/var/lib/alertmanager/watchdog-ping-url";
+              url_file = "/run/credentials/alertmanager.service/watchdog-ping-url";
               send_resolved = false;
               max_alerts = 1;
             }
@@ -379,6 +384,15 @@
     }
   ];
 
+  # Dead-man's-switch heartbeat URL (healthchecks.io) consumed by the
+  # watchdog-deadman receiver. Root-owned in /run/secrets; alertmanager
+  # (DynamicUser) reads it from its credential store via LoadCredential
+  # below, never directly. Lives in the `secrets` flake input.
+  sops.secrets."watchdog-ping-url" = {
+    mode = "0400";
+    owner = "root";
+  };
+
   # Ensure alertmanager starts after network
   systemd.services.alertmanager = {
     after = [
@@ -397,6 +411,13 @@
     # newer systemd; we use ExecStartPre with +/ prefix (run as root)
     # to do the privileged extraction without giving alertmanager.service
     # broader perms.
+    # Hand the SOPS-managed healthchecks.io heartbeat URL to alertmanager's
+    # credential store. DynamicUser has no stable uid to chown /run/secrets
+    # to, so the watchdog-deadman receiver reads it from
+    # /run/credentials/alertmanager.service/watchdog-ping-url (its url_file).
+    serviceConfig.LoadCredential = [
+      "watchdog-ping-url:${config.sops.secrets."watchdog-ping-url".path}"
+    ];
     serviceConfig.RuntimeDirectory = lib.mkForce [ "alertmanager" ];
     serviceConfig.RuntimeDirectoryMode = "0750";
     serviceConfig.ExecStartPre = [

@@ -36,6 +36,11 @@
       "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker)($|/)"
       "--collector.netclass.ignored-devices=^(lo|podman[0-9]|br-|veth).*"
       "--collector.textfile.directory=/var/lib/prometheus-node-exporter-textfiles"
+      # Emit node_systemd_service_restart_total (one series per .service unit, ~400
+      # series here — modest cardinality). Backs the ServiceRestartLooping alert,
+      # which catches Restart=-driven flapping that the activating-rate heuristic
+      # (ServiceRestartingFrequently) can miss.
+      "--collector.systemd.enable-restarts-metrics"
     ];
   };
 
@@ -105,6 +110,24 @@
           labels = {
             alias = "vulcan";
           };
+        }
+      ];
+      # Timer-series hygiene: drop transient systemd timer series so they do not
+      # accumulate as dead, high-cardinality TSDB churn. On this host the transient
+      # timers are podman healthcheck units created via `systemd-run`
+      # (`<64-hex-container-id>-<hex>.timer`, Transient=yes). The run-r.* / snap.*
+      # patterns are kept as a defensive catch for generic systemd-run / snapd
+      # transients (they match nothing here today). Scoped to the timer metric
+      # ONLY — no other metric or named timer is affected.
+      metric_relabel_configs = [
+        {
+          source_labels = [
+            "__name__"
+            "name"
+          ];
+          separator = "@";
+          regex = "node_systemd_timer_last_trigger_seconds@([0-9a-f]{64}-[0-9a-f]+|run-r.*|snap.*)\\.timer";
+          action = "drop";
         }
       ];
     }

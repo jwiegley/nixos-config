@@ -134,6 +134,26 @@ let
           check_certificate "${stepCaDir}/intermediate_ca.crt" "intermediate-ca" "ca"
         fi
 
+        # Genuinely-stale leftover cert files for services that no longer exist.
+        # The loop below scans every *.crt in nginxCertDir, so a leftover .crt
+        # from a removed service would keep emitting certificate_* series and
+        # would eventually trip CertificateExpiringSoon/CertificateExpired for a
+        # dead name. These were verified stale (no nginx vhost, no systemd unit,
+        # no repo reference) during the 2026-06 monitoring-coverage sweep:
+        #   - kibana.vulcan.lan      (Elastic/Kibana removed; zero git history)
+        #   - perplexica.vulcan.lan  (renamed to vane.vulcan.lan, commit 93a4b56;
+        #                             vane.vulcan.lan.crt is the live replacement)
+        # (copyparty.vulcan.lan is NOT listed — it is a live containerised service
+        #  served by its own nginx, so its cert is legitimately tracked.)
+        # The leftover .crt files themselves still want manual removal from
+        # ${nginxCertDir}; this skip-list just stops them generating dead alerts.
+        skip_stale_cert() {
+          case "$1" in
+            kibana.vulcan.lan | perplexica.vulcan.lan) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
         # Check Nginx service certificates
         if [[ -d "${nginxCertDir}" ]]; then
           for cert_file in "${nginxCertDir}"/*.crt; do
@@ -141,6 +161,10 @@ let
               cert_name=$(basename "$cert_file" .crt)
               # Skip chain files
               if [[ "$cert_name" == *"chain"* || "$cert_name" == *"fullchain"* ]]; then
+                continue
+              fi
+              # Skip genuinely-stale dead-service cert leftovers (see above)
+              if skip_stale_cert "$cert_name"; then
                 continue
               fi
               check_certificate "$cert_file" "$cert_name" "nginx"

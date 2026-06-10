@@ -96,3 +96,23 @@ groups:
         annotations:
           summary: "OpenProject Redis is down"
           description: "Redis server for OpenProject is unreachable"
+
+      # Puma thread-pool saturation. OpenProject exposes per-worker puma_busy_threads
+      # and puma_max_threads (verified live: 2 workers × 8 max threads = 16 capacity).
+      # Aggregating busy/max across all workers gives overall request-handling
+      # utilization; sustained >90% means Puma is nearly out of capacity and new
+      # requests start queuing (puma_backlog). Distinct from OpenProjectNoWorkers
+      # (zero workers) and OpenProjectHighRequestQueue (zero capacity) — this is the
+      # early-warning "running hot" signal between healthy and saturated. Observed
+      # 7d peak utilization ~6%, so 0.9 will not fire spuriously.
+      - alert: OpenProjectPumaSaturated
+        expr: |
+          sum(puma_busy_threads{job="openproject"})
+          / sum(puma_max_threads{job="openproject"}) > 0.9
+        for: 15m
+        labels:
+          severity: warning
+          service: openproject
+        annotations:
+          summary: "OpenProject Puma thread pool is saturated"
+          description: "OpenProject Puma busy/max thread utilization has been above 90% for 15 minutes (currently {{ $value | humanizePercentage }}); web requests are starting to queue."

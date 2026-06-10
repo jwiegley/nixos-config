@@ -130,3 +130,71 @@ groups:
             already-open session or out-of-band (console) access.
 
             Investigate: systemctl status sshd; journalctl -u sshd -e
+
+  # ===========================================================================
+  # Grafana authentication failures
+  # grafana exposes grafana_authn_authn_failed_login_total (a counter). On a
+  # host that has never had a failed Grafana login, the counter series does
+  # not exist yet — Grafana only creates it on the first failure. An
+  # increase()-over-an-absent-series simply yields no result and cannot fire,
+  # so this rule is dormant until the first real failure and then trips on a
+  # burst. Verified live 2026-06-10: the metric NAME is registered (grafana up,
+  # job="grafana") but 0 series exist (no failures to date) — baseline 0, so
+  # >5 in 15m is well clear of normal and only a brute-force / credential-probe
+  # burst against the Grafana login form will reach it.
+  # ===========================================================================
+  - name: security_grafana_auth
+    interval: 1m
+    rules:
+      - alert: GrafanaLoginFailureBurst
+        expr: |
+          increase(grafana_authn_authn_failed_login_total[15m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+          category: security
+          service: grafana
+        annotations:
+          summary: "Burst of failed Grafana logins"
+          description: |
+            More than 5 failed Grafana logins in the last 15 minutes
+            ({{ $value | printf "%.0f" }} failures). On this host the failed-login
+            counter is normally absent (no failures), so a sustained burst is a
+            brute-force or credential-stuffing attempt against the Grafana login
+            form.
+
+            Inspect: journalctl -u grafana --since "30 min ago" (look for
+            "Invalid username or password"); review Grafana's auth audit and
+            consider tightening exposure / enabling lockout.
+
+  # ===========================================================================
+  # SOPS runtime-secret permission drift
+  # Backed by the secrets-perms-exporter textfile collector
+  # (modules/security/aide.nix), an hourly root oneshot that counts (count only,
+  # no names/values) /run/secrets files that are other-readable (-perm -o+r) or
+  # group-writable (-perm -g+w) and emits secrets_world_readable_count. A
+  # correctly-deployed SOPS tree is 0400/0600 owner-only, so the expected value
+  # is 0 and ANY nonzero count is a real exposure worth a critical page.
+  # ===========================================================================
+  - name: security_secrets_perms
+    interval: 5m
+    rules:
+      - alert: SecretsWorldReadable
+        expr: secrets_world_readable_count > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Runtime SOPS secrets have loosened permissions"
+          description: |
+            {{ $value | printf "%.0f" }} file(s) under /run/secrets are
+            other-readable or group-writable. Decrypted secrets must be
+            owner-only (0400/0600). This is a credential-exposure regression —
+            most likely a NixOS module declared a secret with an over-broad
+            `mode`/`group`.
+
+            Find the offenders (root):
+              sudo find -L /run/secrets -type f \( -perm -o+r -o -perm -g+w \) -printf '%M %u:%g %p\n'
+            Then tighten the owning module's sops secret `mode`/`owner`/`group`
+            and rebuild. Do NOT print secret contents while investigating.

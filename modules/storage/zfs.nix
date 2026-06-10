@@ -108,6 +108,30 @@
         "tank"
       ];
     };
+
+    # ZFS Event Daemon (zed) kernel-level email notification — defense in depth,
+    # entirely independent of the Prometheus/Alertmanager pipeline. zed fires the
+    # instant the kernel emits a ZFS event (vdev FAULTED/REMOVED, checksum/IO
+    # errors, pool SUSPENDED, scrub finished, resilver, etc.), which is exactly
+    # the UAS-enclosure failure mode the textfile collector can only catch on its
+    # 2-minute poll. Before this, ZED_EMAIL_ADDR was unset, so zed sent nothing.
+    #
+    # Delivery: ZED_EMAIL_PROG is the mailutils `mail` (absolute store path — zed's
+    # own PATH does not include mailutils, so a bare "mail" would not resolve), which
+    # hands off to the local postfix sendmail; root is redirected to the real mailbox
+    # by the existing postfix aliases. ZED_NOTIFY_INTERVAL_SECS=3600 rate-limits
+    # repeat notifications for the same class of event to once per hour so a flapping
+    # device cannot mail-bomb. enableMail already defaults true on this host (a
+    # sendmail setuid wrapper exists), but ZED only mails when ZED_EMAIL_ADDR is set.
+    zed.settings = {
+      ZED_EMAIL_ADDR = [ "root" ];
+      ZED_EMAIL_PROG = "${pkgs.mailutils}/bin/mail";
+      ZED_EMAIL_OPTS = "-s '@SUBJECT@' @ADDRESS@";
+      ZED_NOTIFY_INTERVAL_SECS = 3600;
+      # Notify on every event class, not only those that changed state, so a
+      # completed scrub / cleared error is reported too (verbose is cheap here).
+      ZED_NOTIFY_VERBOSE = true;
+    };
   };
 
   services.sanoid = {

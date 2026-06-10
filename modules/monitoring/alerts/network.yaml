@@ -199,6 +199,101 @@ groups:
           summary: "Blackbox probe timeout for {{ $labels.instance }}"
           description: "Blackbox probe to {{ $labels.instance }} is taking {{ $value }}s (>10s), indicating potential exporter overload."
 
+  - name: nginx_web
+    rules:
+      # Nginx worker-connection saturation. nginx runs with the compiled-in
+      # default worker_connections=512 (the events{} block in the generated
+      # nginx.conf is empty, so no override is set). 0.8 * 512 = ~410; we use
+      # 400 as the warning floor. Live baseline (7d): nginx_connections_active
+      # max=23, p99=9 — so 400 is ~17x the observed peak and will not fire
+      # spuriously. nginx_connections_active counts active client connections
+      # (reading + writing + waiting); sustained proximity to the worker-
+      # connection limit means new connections will start being dropped.
+      - alert: NginxConnectionsHigh
+        expr: nginx_connections_active{job="nginx"} > 400
+        for: 10m
+        labels:
+          severity: warning
+          category: web
+          service: nginx
+        annotations:
+          summary: "Nginx active connections high"
+          description: "nginx_connections_active is {{ $value | printf \"%.0f\" }} (>400, i.e. >0.8 of the 512 worker_connections limit) for more than 10 minutes — connection saturation; new connections may be dropped."
+
+      # Nginx prometheus exporter unable to scrape stub_status. nginx_up is 1
+      # when the last scrape of /nginx_status succeeded, 0 otherwise. Live
+      # baseline: nginx_up == 1. A 0 means the exporter is up but stub_status
+      # is unreachable (nginx down/misconfigured) — connection metrics go blind.
+      - alert: NginxExporterDown
+        expr: nginx_up == 0
+        for: 3m
+        labels:
+          severity: warning
+          category: monitoring
+          service: nginx_exporter
+        annotations:
+          summary: "Nginx exporter cannot scrape stub_status"
+          description: "nginx_up == 0 for more than 3 minutes — the nginx prometheus exporter (localhost:9113) cannot read /nginx_status, so nginx connection/request metrics are stale."
+
+  - name: tls_security
+    rules:
+      # TLS protocol floor. probe_tls_version_info{version=...} == 1 marks the
+      # negotiated TLS version for each blackbox HTTPS probe target. Live
+      # baseline: all 45 probed vhosts negotiate TLS 1.3 (zero on 1.0/1.1/1.2),
+      # so this rule stays silent today and only fires if a vhost ever
+      # downgrades to a deprecated TLS 1.0/1.1 protocol.
+      - alert: TLSVersionWeak
+        expr: probe_tls_version_info{version=~"TLS 1.0|TLS 1.1"} == 1
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+          service: tls
+        annotations:
+          summary: "Weak TLS version negotiated for {{ $labels.instance }}"
+          description: "{{ $labels.instance }} negotiated {{ $labels.version }} (a deprecated TLS protocol) for more than 1 hour — raise the minimum TLS version on this vhost."
+
+  - name: public_edge
+    rules:
+      # Public-edge reachability for the cloudflared-tunnelled vhosts. The
+      # blackbox_https_public job probes the FULL public path (Cloudflare edge
+      # -> tunnel -> origin nginx), so probe_success==0 means the public surface
+      # is genuinely down, not a LAN-internal hiccup. The generic HostUnreachable
+      # rule (job=~"blackbox_.*") also backstops this; this dedicated rule gives
+      # public-edge-specific context. Live baseline: probe_success==1 for both
+      # data.newartisans.com (200) and calendar.newartisans.com (404 accepted by
+      # the https_public module).
+      - alert: PublicEdgeDown
+        expr: probe_success{job="blackbox_https_public"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: network
+          service: public_edge
+        annotations:
+          summary: "Public edge {{ $labels.instance }} is unreachable"
+          description: "Public-tunnel probe to {{ $labels.instance }} (via cloudflared) has been failing for more than 5 minutes — the public path (Cloudflare edge / tunnel / origin nginx / cert) is broken."
+
+  - name: probe_latency
+    rules:
+      # Generic internal-vhost latency. probe_duration_seconds for the local
+      # HTTPS job catches any internal vhost grinding (slow backend, swap
+      # pressure, GC pause). Live baseline: every instance is well under 1.5s
+      # even at 7d-max (slowest is litellm at 1.478s; current p-values are all
+      # <0.25s), so the >10s floor is ~7x above the observed worst case and
+      # needs no per-instance exclusions. A sustained >10s means a vhost is
+      # genuinely pathological, not merely a heavyweight app.
+      - alert: ProbeSlowResponse
+        expr: probe_duration_seconds{job="blackbox_https_local"} > 10
+        for: 15m
+        labels:
+          severity: warning
+          category: network
+          service: web_latency
+        annotations:
+          summary: "Slow HTTPS response from {{ $labels.instance }}"
+          description: "Blackbox probe to {{ $labels.instance }} is taking {{ $value | printf \"%.1f\" }}s (>10s) for more than 15 minutes — the vhost or its backend is grinding."
+
   - name: asymmetric_routing
     rules:
       # Continuous post-boot drift detector for the source-policy ip rules.

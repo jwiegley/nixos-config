@@ -199,3 +199,140 @@ groups:
         annotations:
           summary: "vmalert (VictoriaMetrics rule evaluator) is down"
           description: "vmalert has been unreachable for over 5 minutes. Alerting and recording rules evaluated against VictoriaMetrics (HA-pushed pool/water/sensor series) are not running, so VM-backed alerts are silently blind until vmalert recovers."
+
+  # =====================================================================
+  # Config-reload health (P2). A failed config reload means Prometheus or
+  # Alertmanager is still running on the OLD config — newly-added rules /
+  # routes silently never take effect. Both metrics confirmed live
+  # 2026-06-10: prometheus_config_last_reload_successful=1,
+  # alertmanager_config_last_reload_successful=1. ==0 yields no series, so
+  # neither fires on deploy.
+  # =====================================================================
+  - name: meta_config_reload
+    interval: 30s
+    rules:
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus failed to reload its configuration (prometheus_config_last_reload_successful=0) for over 5 minutes. Prometheus is running on the LAST-GOOD config — any newly-added scrape jobs or alert rules are silently not in effect until the config is fixed and reloaded."
+
+      - alert: AlertmanagerConfigReloadFailed
+        expr: alertmanager_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Alertmanager configuration reload failed"
+          description: "Alertmanager failed to reload its configuration (alertmanager_config_last_reload_successful=0) for over 5 minutes. Alertmanager is running on the LAST-GOOD config — any newly-added routes/receivers/inhibitions are silently not in effect, so alerts may route or suppress incorrectly until fixed."
+
+  # =====================================================================
+  # Loki ruler health (P2). Loki's ruler embeds the Prometheus rule engine, so
+  # its metrics are prefixed `loki_prometheus_*`. The UAS-enclosure, SSH/auth,
+  # nginx-web and other LogQL safety rules run here; if the ruler fails to
+  # evaluate, those alerts go silently blind. Verified live 2026-06-10 (7 ruler
+  # groups): evaluation_failures=0, iterations_missed=0, notifications_errors=0,
+  # ring_check_errors=0, config_last_reload_successful=1. None fire on deploy.
+  # (Loki on this version exposes no ruler "evaluation duration too high" gauge
+  # worth alerting on; these four are the solid, verified signals.)
+  # =====================================================================
+  - name: meta_loki_ruler
+    interval: 30s
+    rules:
+      # A ruler rule's expr errored at eval time -> that rule produced no data,
+      # so any Loki alert built on it is silently blind. Per rule_group.
+      - alert: LokiRulerEvaluationFailures
+        expr: |
+          increase(loki_prometheus_rule_evaluation_failures_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ruler rule evaluation failing in group {{ $labels.rule_group }}"
+          description: "Loki's ruler has logged {{ $value | printf \"%.0f\" }} rule evaluation failure(s) in the last 15 minutes (group {{ $labels.rule_group }}). A LogQL rule whose expr errors produces no data, so any alert built on it (UAS abort-storm, SSH/auth, nginx 5xx) is silently blind — fix the expr."
+
+      # Ruler eval falling behind its group interval -> alerts evaluated late
+      # or skipped.
+      - alert: LokiRulerEvaluationsMissed
+        expr: |
+          increase(loki_prometheus_rule_group_iterations_missed_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ruler is missing evaluations in group {{ $labels.rule_group }}"
+          description: "Loki's ruler missed {{ $value | printf \"%.0f\" }} evaluation iteration(s) in the last 15 minutes (group {{ $labels.rule_group }}); evaluation is slower than the group interval, so LogQL alerts in this group are evaluated late or skipped."
+
+      # Ruler failing to push its firing alerts to Alertmanager.
+      - alert: LokiRulerNotificationErrors
+        expr: |
+          increase(loki_prometheus_notifications_errors_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ruler is failing to deliver alerts to Alertmanager"
+          description: "Loki's ruler has logged {{ $value | printf \"%.0f\" }} notification error(s) in the last 15 minutes pushing firing LogQL alerts to Alertmanager. Loki-based alerts may not be reaching the notification path."
+
+      # Ruler config failed to load -> the LogQL ruler is not running the rules
+      # at all. (config_last_reload_successful is a 0/1 gauge, baseline 1.)
+      - alert: LokiRulerConfigReloadFailed
+        expr: loki_ruler_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ruler failed to load its rule configuration"
+          description: "Loki's ruler failed to load its rule configuration (loki_ruler_config_last_reload_successful=0) for over 5 minutes. The LogQL safety rules (UAS abort-storm, SSH/auth, nginx 5xx) may not be loaded/evaluating at all."
+
+  # =====================================================================
+  # Generic textfile-collector staleness (P2). One pair of rules covers EVERY
+  # textfile collector. node_textfile_mtime_seconds carries the file path as the
+  # `file` label; if a collector's timer dies or its oneshot starts failing, the
+  # .prom file stops being rewritten and every metric it produces goes silently
+  # FROZEN at its last value (not "absent", not "down" — just stale and wrong).
+  #
+  # Files are split into TWO cadence groups by an explicit allowlist (verified
+  # live 2026-06-10 — every listed file is present and within its cadence):
+  #   * fast (sub-hourly timers): >30m stale is anomalous.
+  #   * daily (24h timers): >26h stale is anomalous.
+  # Files NOT listed (weekly restic, ~24h-but-bursty rclone mirrors, hourly
+  # schwab, certificates, etc.) are intentionally excluded from the generic rule
+  # because their legitimate cadence is slow/irregular; they have their own
+  # last-success triads. Baseline: 0 firing series in either group.
+  # =====================================================================
+  - name: meta_textfile_staleness
+    interval: 1m
+    rules:
+      # Fast-cadence collectors (1-2 min timers).
+      - alert: TextfileCollectorStaleFast
+        expr: |
+          time() - node_textfile_mtime_seconds{file=~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status)\\.prom"} > 1800
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Fast-cadence textfile collector {{ $labels.file }} is stale"
+          description: "{{ $labels.file }} has not been rewritten in over 30 minutes (its timer runs every 1-2 min). Every metric this collector produces is now FROZEN at its last value, so any alert reading those metrics is silently stale. Check the corresponding *-exporter oneshot/timer."
+
+      # Daily-cadence collectors (~24h timers).
+      - alert: TextfileCollectorStaleDaily
+        expr: |
+          time() - node_textfile_mtime_seconds{file=~".*/(container_store_size|system_age|pg_dump|technitium_backup|nodered_backup)\\.prom"} > 93600
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Daily textfile collector {{ $labels.file }} is stale"
+          description: "{{ $labels.file }} has not been rewritten in over 26 hours (its timer runs ~daily). The metrics it produces are FROZEN at their last value, so freshness/size/last-success signals derived from it are no longer trustworthy. Check the corresponding daily job/timer."

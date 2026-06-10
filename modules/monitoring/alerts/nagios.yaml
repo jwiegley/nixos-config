@@ -23,3 +23,63 @@ groups:
         annotations:
           summary: "Nagios web interface/exporter is unreachable"
           description: "Cannot scrape metrics from Nagios exporter on {{ $labels.instance }}"
+
+      # ---------------------------------------------------------------------
+      # Nagios result-aggregate bridge (P2, restores the deleted Nagios-aggregate
+      # intent). Fed by the textfile collector nagios-status-exporter.nix, which
+      # parses /var/lib/nagios/status.dat every 2 minutes and emits COUNTS ONLY.
+      # All counts are HARD states (matching Nagios's own notification logic, so
+      # these page on the same things Nagios would). The `for:` durations filter
+      # transient soft->hard flapping. Live baseline 2026-06-10 (manual parse):
+      # critical=1, warning=1 (both unacknowledged, in-state ~0.1-0.3h, i.e.
+      # transient), hosts_down=0 hard (one soft host-down was mid-retry), stale=0.
+      # See wouldFire note: NagiosServicesCritical/Warning may fire on deploy IF
+      # those transient states are still HARD and persist past the `for:` window;
+      # that is a real Nagios condition (a genuinely failing check), not noise.
+      # ---------------------------------------------------------------------
+
+      # One or more Nagios services in a HARD CRITICAL state.
+      - alert: NagiosServicesCritical
+        expr: nagios_services_critical_total > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios reports {{ $value | printf \"%.0f\" }} service(s) in HARD CRITICAL"
+          description: "Nagios has {{ $value | printf \"%.0f\" }} service check(s) in a hard CRITICAL state for over 15 minutes (parsed from status.dat). Open the Nagios web UI for the specific hosts/services — this bridge intentionally emits counts only."
+
+      # One or more Nagios hosts in a HARD DOWN/UNREACHABLE state.
+      - alert: NagiosHostsDown
+        expr: nagios_hosts_down_total > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios reports {{ $value | printf \"%.0f\" }} host(s) DOWN/UNREACHABLE"
+          description: "Nagios has {{ $value | printf \"%.0f\" }} host(s) in a hard DOWN or UNREACHABLE state for over 10 minutes (parsed from status.dat). Open the Nagios web UI for the specific hosts."
+
+      # Nagios active checks not running (stale results) — Nagios itself may be
+      # wedged or a check plugin is hanging.
+      - alert: NagiosResultsStale
+        expr: nagios_stale_results_total > 5
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios has {{ $value | printf \"%.0f\" }} stale check results"
+          description: "{{ $value | printf \"%.0f\" }} active Nagios checks have a last_check older than 2x their interval for over 30 minutes (parsed from status.dat). Nagios scheduling may be wedged or check plugins are hanging, so its results are no longer trustworthy."
+
+      # Meta: the status.dat parser itself failed (file missing / unreadable /
+      # malformed). If this fires, all the counts above are silently frozen.
+      - alert: NagiosStatusExporterFailed
+        expr: nagios_status_parse_success == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios status.dat exporter failed to parse"
+          description: "nagios-status-exporter could not parse /var/lib/nagios/status.dat for over 10 minutes. The Nagios aggregate-count metrics (critical/warning/down/stale) are frozen and no longer reflect Nagios state."

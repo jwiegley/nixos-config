@@ -177,3 +177,83 @@ groups:
         annotations:
           summary: "Home Assistant recorder database is large"
           description: "The hass PostgreSQL database is {{ $value | humanize1024 }}B (warn at 5 GiB, baseline ~1.7 GiB). Likely a recorder purge failure or a runaway high-frequency entity — check recorder purge_keep_days and excluded entities."
+
+      # WAL accumulation. pg_wal_size_bytes is the total bytes in pg_wal/ (single
+      # cluster-wide series). It normally cycles between ~80 MiB and the
+      # max_wal_size ceiling; the observed 7d range here is 80 MiB → ~1.09 GiB.
+      # A sustained climb past 2 GiB means WAL is NOT being recycled — almost
+      # always an inactive/lagging replication slot pinning the LSN, a stuck
+      # archive_command (archiver backlog), or a long-open transaction. Threshold
+      # 2 GiB gives ~1.8x headroom over the observed peak; 30m avoids flapping on
+      # a transient checkpoint-driven spike.
+      - alert: PostgreSQLWALGrowth
+        expr: pg_wal_size_bytes > 2 * 1024 * 1024 * 1024
+        for: 30m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL WAL directory growing unbounded"
+          description: "pg_wal/ holds {{ $value | humanize1024 }}B (sustained 30m, baseline 80 MiB–1.1 GiB). WAL is not being recycled — check for an inactive/lagging replication slot (pg_replication_slots), an archiver backlog (archive_command failing), or a long-running transaction pinning the LSN."
+
+      # Buffer-cache hit ratio (rate-based). The lifetime blks_hit/blks_read
+      # counters carry massive inertia, so we use rate() over a 5m window to see
+      # the CURRENT working-set behaviour. Live steady state is ~99%; over 7d the
+      # ratio dipped below 0.85 in only ~10 isolated 5m samples (cold-cache after
+      # a restart / one-off big sequential scan) and was NEVER below 0.85 for a
+      # continuous hour (max low-samples in any rolling 1h = 2 of 12). The
+      # for: 1h clause therefore filters those transients and only fires on a
+      # genuinely sustained working set that no longer fits shared_buffers —
+      # the signal that the cache is undersized or a query is thrashing it.
+      - alert: PostgreSQLCacheHitLow
+        expr: |
+          sum(rate(pg_stat_database_blks_hit[5m]))
+            /
+          (sum(rate(pg_stat_database_blks_hit[5m])) + sum(rate(pg_stat_database_blks_read[5m])))
+            < 0.85
+        for: 1h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL buffer-cache hit ratio low"
+          description: "Cluster-wide buffer-cache hit ratio is {{ $value | humanizePercentage }} (rate-based 5m, sustained 1h; steady state ~99%). The active working set no longer fits shared_buffers — expect elevated disk reads. Check for a new heavy scan/query or an undersized shared_buffers."
+
+      # Surprise database growth. Largest non-excluded DB is mailarchiver at
+      # ~7.3 GiB; 20 GiB leaves ample headroom so this fires on UNEXPECTED growth
+      # rather than steady state. litellm is EXCLUDED: it is legitimately the
+      # largest DB (~13.7 GiB) and grows steadily ~3 GiB/week (request-log
+      # accumulation), so a flat 20 GiB cap would chronically alarm on it within
+      # ~2 weeks — that is steady-state, not a surprise. hass has its own
+      # dedicated HassRecorderDBLarge rule above (5 GiB) and is also caught here.
+      - alert: PostgreSQLDatabaseLarge
+        expr: pg_database_size_bytes{datname!~"litellm"} > 20 * 1024 * 1024 * 1024
+        for: 6h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL database unexpectedly large"
+          description: "Database {{ $labels.datname }} is {{ $value | humanize1024 }}B (warn at 20 GiB, sustained 6h; largest monitored DB is normally ~7 GiB). litellm is excluded as known-large. Investigate unexpected growth — a runaway table, missing purge/retention, or bloat."
+
+      # Exporter self-health. pg_exporter_last_scrape_error == 1 means the
+      # postgres-exporter could not complete its scrape (baseline 0); the
+      # PostgreSQLDown rule (up==0) only catches a total scrape failure, this
+      # catches a partial/erroring scrape where the process is still up but the
+      # data is stale or wrong. The companion pg_scrape_collector_success == 0
+      # catches a single collector (e.g. the custom wraparound query) failing
+      # while the overall scrape still succeeds — baseline is 1 for all 11
+      # collectors over 7d, so this is clean.
+      - alert: PostgreSQLExporterScrapeError
+        expr: pg_exporter_last_scrape_error == 1 or pg_scrape_collector_success == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL exporter scrape erroring"
+          description: "postgres-exporter reported a scrape error (pg_exporter_last_scrape_error==1) or a failing collector{{ if $labels.collector }} ({{ $labels.collector }}){{ end }} for 10m. The exporter is up but its data may be stale/incomplete — Postgres-derived alerts could be silently blind. Check: journalctl -u prometheus-postgres-exporter."

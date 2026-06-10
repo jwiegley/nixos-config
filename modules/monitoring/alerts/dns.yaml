@@ -291,6 +291,119 @@ groups:
           summary: "Internal DNS resolution for *.vulcan.lan is broken"
           description: "The local resolver (127.0.0.1) failed to return the expected A record (192.168.1.2) for vulcan.lan for more than 3 minutes. This indicates NXDOMAIN, SERVFAIL, a wrong/poisoned answer, or the internal zone being unavailable — internal name resolution for *.vulcan.lan is likely failing host-wide."
 
+  # DNS correctness — resolver SEMANTICS, not just reachability.
+  #
+  # These three alerts read the dns-correctness-exporter textfile gauges
+  # (modules/monitoring/services/technitium-dns-monitoring.nix), which probe the
+  # local resolver every 5min. Availability is already covered (TechnitiumDNS*,
+  # blackbox_dns_internal); these catch the resolver being UP but WRONG.
+  #
+  # Live baseline (2026-06-10): DNSSEC validation is ACTIVE (dnssec-failed.org
+  # -> SERVFAIL) and the PTR for 192.168.1.2 resolves to `vulcan.`, so both
+  # gauges read 1 and NEITHER alert fires on deploy. The collector run-timestamp
+  # gauge (dns_correctness_run_timestamp_seconds) lets us tell a stuck collector
+  # from a real regression; we gate each alert on a fresh run (< 15m old) so a
+  # dead collector trips the dedicated freshness alert rather than silently
+  # asserting a stale 0/1.
+  - name: dns_correctness
+    interval: 30s
+    rules:
+      # DNSSEC validation OFF: the resolver accepted the deliberately-broken
+      # dnssec-failed.org zone (NOERROR) instead of SERVFAILing it. A validating
+      # resolver MUST reject it; a 0 means forged/expired signatures would be
+      # served to clients. Severity warning per spec (it is a security-posture
+      # regression, not an outage). probe_errors==0 ensures we are asserting a
+      # real NOERROR answer, not a resolver timeout (which separately trips
+      # InternalDNSResolutionBroken / DnsCorrectnessExporterStale).
+      - alert: DNSSECValidationInactive
+        expr: |
+          dns_dnssec_validation_active == 0
+          and dns_correctness_probe_errors == 0
+          and (time() - dns_correctness_run_timestamp_seconds) < 900
+        for: 30m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "DNSSEC validation is INACTIVE on the local resolver"
+          description: "The local resolver (127.0.0.1) returned NOERROR for dnssec-failed.org, which a validating resolver MUST SERVFAIL. DNSSEC validation has been OFF for more than 30 minutes — the resolver will accept forged or expired DNSSEC signatures, undermining the integrity guarantees of every signed zone it answers. Re-enable DNSSEC validation in Technitium (Settings → Proxy & Forwarders / Recursion), or confirm this is a deliberate change."
+
+      # PTR (reverse) resolution broken: the host's own reverse record no longer
+      # resolves to `vulcan.`. Catches a dropped/renamed reverse zone or a
+      # changed PTR record — invisible to the forward-only blackbox_dns_internal
+      # probe. probe_errors==0 distinguishes a wrong record from an unreachable
+      # resolver.
+      - alert: DNSPTRBroken
+        expr: |
+          dns_ptr_correct == 0
+          and dns_correctness_probe_errors == 0
+          and (time() - dns_correctness_run_timestamp_seconds) < 900
+        for: 30m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "Reverse (PTR) resolution for 192.168.1.2 is broken"
+          description: "The local resolver returned an unexpected (or empty) PTR for 192.168.1.2 — expected `vulcan.` — for more than 30 minutes. Reverse lookups for the host are failing, which breaks PTR-dependent consumers (mail HELO checks, logs that resolve IPs, ACLs). Check the Technitium reverse zone for 1.168.192.in-addr.arpa."
+
+      # Collector liveness: if the dns-correctness-exporter stops running, its
+      # gauges go stale and the two correctness alerts above silently disable
+      # themselves (the freshness gate fails). This catches that.
+      - alert: DnsCorrectnessExporterStale
+        expr: (time() - dns_correctness_run_timestamp_seconds) > 1800
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "DNS-correctness exporter has stopped updating"
+          description: "dns_correctness_run_timestamp_seconds has not advanced in over 30 minutes (timer interval is 5min). The DNSSEC/PTR correctness checks are no longer running, so DNSSECValidationInactive and DNSPTRBroken are effectively disabled. Check 'systemctl status dns-correctness-exporter.service' and its timer."
+
+  # Technitium software-update availability (P2, info). The exporter publishes
+  # technitium_dns_update_available: -1 = unknown/not-checked, 0 = up to date,
+  # 1 = an update is available. We alert ONLY on ==1 (live value today is -1, so
+  # this does not fire on deploy). Long `for:` (6h) because a new release is not
+  # urgent and the value flaps as the daily update-check runs.
+  - name: dns_software_update
+    interval: 1m
+    rules:
+      - alert: TechnitiumUpdateAvailable
+        expr: technitium_dns_update_available == 1
+        for: 6h
+        labels:
+          severity: info
+          category: dns
+          component: dns
+        annotations:
+          summary: "A Technitium DNS update is available"
+          description: "technitium_dns_update_available has reported an available update for more than 6 hours. Review the Technitium release notes and update the pinned version when convenient (this is informational, not urgent)."
+
+  # DNS probe latency (P2, performance). probe_duration_seconds for the blackbox
+  # DNS jobs (blackbox_dns external resolvers + blackbox_dns_internal local
+  # resolver). Baseline (7d): the local/internal resolvers peak at ~92ms /
+  # ~7ms; external public resolvers occasionally hit the 5s probe TIMEOUT but
+  # only as isolated single-scrape blips (4 scrapes each over 7d for 1.1.1.1 /
+  # 208.67.222.222) — NO target sustained >1s across any contiguous 15m window
+  # in 7d. So `> 1 for 15m` clears the transient external timeouts and fires
+  # only on genuine sustained DNS latency degradation. Per-target so a single
+  # bad upstream is identifiable.
+  - name: dns_latency
+    interval: 30s
+    rules:
+      - alert: DNSProbeLatencyHigh
+        expr: probe_duration_seconds{job=~"blackbox_dns.*"} > 1
+        for: 15m
+        labels:
+          severity: warning
+          category: dns
+          component: dns
+        annotations:
+          summary: "DNS probe latency is high for {{ $labels.instance }}"
+          description: "The blackbox DNS probe to {{ $labels.instance }} ({{ $labels.job }}) has taken more than 1 second for over 15 minutes (current: {{ $value | humanizeDuration }}). For the local/internal resolver this indicates real DNS performance degradation; for an external resolver it indicates a sustained upstream/connectivity problem. Baseline for local resolvers is <100ms."
+
   # CloudFlare Tunnel (data.newartisans.com et al.) edge-connection health.
   #
   # The public tunnel now exposes Prometheus metrics on 127.0.0.1:9301 (set via

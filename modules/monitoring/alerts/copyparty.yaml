@@ -73,3 +73,22 @@ groups:
           summary: "High rate of Copyparty authentication failures"
           description: "{{ $value }} authentication failures in the last 15 minutes."
           action: "Review logs for potential brute force attacks"
+
+      # Suspicious request probing (404/path-traversal/scanner-shaped requests).
+      # copyparty exposes cpp_sus_reqs_total (a counter of requests it flags as
+      # suspicious). Baseline-checked live 2026-06-10: the counter is 0 now and
+      # the max increase over ANY 30-minute window in the last 7 days is also 0
+      # (no scanner activity reached copyparty in that window). A threshold of
+      # >20 in 30m therefore sits far above the observed peak (3x+ headroom over
+      # any realistic LAN-scanner tick) and only fires on a genuine probing
+      # burst, not on the occasional stray 404.
+      - alert: CopypartySuspiciousRequests
+        expr: increase(cpp_sus_reqs_total[30m]) > 20
+        for: 0m
+        labels:
+          severity: warning
+          service: copyparty
+        annotations:
+          summary: "Burst of suspicious requests to Copyparty"
+          description: "Copyparty flagged {{ $value | printf \"%.0f\" }} suspicious requests in the last 30 minutes (path-traversal / scanner-shaped probes). Normal baseline is ~0."
+          action: "Review copyparty logs for the source IP and request pattern; ban or firewall if it is an external scanner."

@@ -128,6 +128,27 @@ groups:
             (last run {{ $value | humanizeDuration }} ago; expected daily at 03:00).
             Action: check systemctl status technitium-dns-backup.timer and journalctl -u technitium-dns-backup.
 
+      # Output-sanity: a green Type=oneshot exit is NOT proof of a complete backup
+      # — the tar source could be empty or the artifact truncated when /tank drops
+      # mid-write. Mirrors PgDumpSizeShrunk (database.yaml). The >0 guard avoids a
+      # divide-by-baseline false-fire while the 14d window is still filling in (the
+      # technitium artifact is steady ~100 MB, so a sudden <50% drop is a real
+      # red flag). for:6h because the size is only refreshed on the daily 03:00 run.
+      - alert: TechnitiumBackupSizeShrunk
+        expr: technitium_backup_size_bytes > 0 and technitium_backup_size_bytes < 0.5 * avg_over_time(technitium_backup_size_bytes[14d])
+        for: 6h
+        labels:
+          severity: warning
+          category: storage
+          service: technitium-dns-backup
+        annotations:
+          summary: "Technitium DNS backup is suspiciously small on {{ $labels.instance }}"
+          description: |
+            The newest Technitium DNS backup artifact ({{ $value | humanize1024 }}B) is
+            under half its 14d average size — likely a truncated/empty config backup
+            (e.g. the tar captured an empty source, or /tank dropped mid-write).
+            Action: inspect /tank/Backups/TechnitiumDNS and journalctl -u technitium-dns-backup.
+
       # Node-RED backup last-success triad (node-red-backup.timer, daily 02:30).
       # Node-RED holds the entire home-automation/safety flow set; a silently
       # failed backup means no restore point. Metrics via ExecStopPost; seeded at
@@ -161,3 +182,26 @@ groups:
             node-red-backup has not run successfully in over 30 hours
             (last run {{ $value | humanizeDuration }} ago; expected daily at 02:30).
             Action: check systemctl status node-red-backup.timer and journalctl -u node-red-backup.
+
+      # Output-sanity: catches a tar that ran clean but captured no flows (e.g. a
+      # shadow /var/lib/node-red with only skeleton files, the documented failure
+      # mode). Mirrors PgDumpSizeShrunk / TechnitiumBackupSizeShrunk. The current
+      # artifact is ~290 KB; flows shrinking below half the 14d average is a strong
+      # signal of an incomplete capture. >0 guard prevents a baseline-fill false-fire;
+      # for:6h because the size only refreshes on the daily 02:30 run. NOTE: the
+      # backup compresses with zstd, so normal flow edits move the size only modestly
+      # — a sub-50% drop is well outside ordinary variation.
+      - alert: NodeRedBackupSizeShrunk
+        expr: nodered_backup_size_bytes > 0 and nodered_backup_size_bytes < 0.5 * avg_over_time(nodered_backup_size_bytes[14d])
+        for: 6h
+        labels:
+          severity: warning
+          category: storage
+          service: node-red-backup
+        annotations:
+          summary: "Node-RED backup is suspiciously small on {{ $labels.instance }}"
+          description: |
+            The newest Node-RED backup artifact ({{ $value | humanize1024 }}B) is under
+            half its 14d average size — the flows/credentials capture may be incomplete
+            (e.g. a tar against a shadow /var/lib/node-red, or a truncated write).
+            Action: inspect /tank/Backups/NodeRED and journalctl -u node-red-backup.

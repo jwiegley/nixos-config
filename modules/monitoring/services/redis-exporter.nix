@@ -9,9 +9,9 @@
   # Redis exporter for multiple Redis instances.
   # Primary -redis.addr target (job="redis"): redis-litellm (127.0.0.1:8085).
   # Multi-target /scrape probes (job="redis-multi"): openproject(6383),
-  # shlink(6385), searxng(6386), rspamd(6381), speedtest-tracker(6387).
-  # Socket-only instances (redis-gitea, redis-immich) are unreachable by the
-  # DynamicUser exporter and are alerted via systemd unit state instead.
+  # shlink(6385), searxng(6386), rspamd(6381), speedtest-tracker(6387), plus the
+  # two UNIX-socket instances gitea + immich (via unix:// targets — see below).
+  # The systemd-unit-state alert for the socket pair is kept as a backstop.
 
   services.prometheus.exporters.redis = {
     enable = true;
@@ -44,6 +44,23 @@
   # Saves ~2,880 lines/day by only logging warnings and above
   systemd.services.prometheus-redis-exporter.serviceConfig.LogLevelMax = "warning";
 
+  # Grant the exporter access to the gitea/immich UNIX-socket Redis instances.
+  # Those sockets live in 0750 dirs owned by their own service users, with the
+  # socket itself srw-rw---- group-owned by the matching group. Joining both
+  # groups gives the exporter directory traversal (dir g+rx) AND socket read
+  # (socket g+rw), so it can probe redis://...unix:///run/redis-<n>/redis.sock.
+  # SupplementaryGroups is honored even though the unit runs DynamicUser=yes
+  # (systemd applies supplementary groups to the transient dynamic user). The
+  # group names are verified to exist (redis-gitea gid 947, redis-immich gid
+  # 922) and own the 0750 socket dirs. POST-DEPLOY VERIFY: the exporter version
+  # must accept /scrape?target=unix:///... — after switch, confirm
+  # redis_up{instance=~".*redis.sock"}==1 in Prometheus; if it fails, the
+  # RedisSocketInstanceDown systemd-state backstop still covers these two.
+  systemd.services.prometheus-redis-exporter.serviceConfig.SupplementaryGroups = [
+    "redis-gitea"
+    "redis-immich"
+  ];
+
   # Prometheus scrape configuration
   services.prometheus.scrapeConfigs = [
     {
@@ -62,12 +79,13 @@
     # This relabel job points each target at the exporter and stamps instance with
     # the redis URL, yielding redis_up{instance="redis://127.0.0.1:6383"} etc.
     #
-    # All six TCP-listening instances are reachable on 127.0.0.1 (verified live;
+    # All five TCP-listening instances are reachable on 127.0.0.1 (verified live;
     # openproject/shlink bind 0.0.0.0 but answer on loopback too). The two
     # remaining instances, redis-gitea and redis-immich, use UNIX SOCKETS in
-    # 0750 dirs owned by their own service users (redis-gitea / redis-immich);
-    # the DynamicUser redis-exporter cannot reach those sockets, so they are
-    # covered by node_systemd_unit_state alerts in alerts/redis.yaml instead.
+    # 0750 dirs owned by their own service users (redis-gitea / redis-immich).
+    # The exporter is now in both groups (SupplementaryGroups above) so it can
+    # reach those sockets; they are probed here as unix:// targets. The
+    # node_systemd_unit_state alert in alerts/redis.yaml is kept as a backstop.
     {
       job_name = "redis-multi";
       scrape_interval = "30s";
@@ -80,6 +98,8 @@
             "redis://127.0.0.1:6386" # searxng (allkeys-lru, maxmemory 64mb)
             "redis://127.0.0.1:6381" # rspamd (noeviction; Bayes/fuzzy backend, RDB-persisted)
             "redis://127.0.0.1:6387" # speedtest-tracker (allkeys-lru, maxmemory 64mb)
+            "unix:///run/redis-gitea/redis.sock" # gitea sessions/cache (socket; needs redis-gitea group)
+            "unix:///run/redis-immich/redis.sock" # immich queue/session store (socket; needs redis-immich group)
           ];
         }
       ];

@@ -60,3 +60,56 @@ groups:
         annotations:
           summary: "Container store for {{ $labels.user }} is {{ $value | humanize1024 }}B"
           description: "Podman store /var/lib/containers/{{ $labels.user }} exceeds 60GB — likely dangling-image bloat; run `podman image prune -af` for that user"
+
+      # Per-container CPU saturation (container_cpu_percent from podman stats CPUPerc,
+      # 100 == one full core). Baseline (2026-06-10) is 0–1% across all containers, so
+      # >90% sustained for 30m is a genuinely stuck/runaway container, not noise. A
+      # multi-vCPU container can exceed 100 legitimately; 90 is a per-core floor that
+      # only an actually-pegged single core reaches, so this is conservative.
+      - alert: ContainerCPUSaturated
+        expr: container_cpu_percent{name!=""} > 90
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} CPU at {{ $value | printf \"%.0f\" }}%"
+          description: "Container {{ $labels.name }} (user {{ $labels.user }}) has held CPU above 90% for 30 minutes — likely a stuck/runaway workload"
+
+      # Rootless weekly image-prune freshness. The timer runs weekly
+      # (rootless-podman-image-prune.nix); >9d since last trigger means a missed
+      # window (cadence + slack). container_image_prune_last_trigger_seconds is only
+      # emitted for users whose timer exists AND has fired at least once, so a
+      # never-fired timer shows up as absent — caught by the absent() arm below.
+      - alert: ContainerPruneStale
+        expr: time() - container_image_prune_last_trigger_seconds > 9 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rootless image-prune for {{ $labels.user }} is stale"
+          description: "podman-image-prune.timer for user {{ $labels.user }} last fired {{ $value | humanizeDuration }} ago (weekly cadence) — dangling images may be accumulating"
+
+      # The prune unit's last run reported a non-success Result (failed/timeout/
+      # exit-code). 0 == success; only ==1 fires.
+      - alert: ContainerPruneFailed
+        expr: container_image_prune_failed == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rootless image-prune failed for {{ $labels.user }}"
+          description: "podman-image-prune.service for user {{ $labels.user }} last run did not succeed — check `systemctl --user -M {{ $labels.user }}@ status podman-image-prune.service`"
+
+      # MatterServerDown — stronger than the generic ContainerDown (warning→critical,
+      # 5m→3m). The matter-server container is the Matter fabric controller; when it
+      # dies every Home Assistant Matter device (plugs, purifier, etc.) goes
+      # unavailable, silently breaking presence/HVAC flows. matter-server runs as a
+      # root podman container, so user="root".
+      - alert: MatterServerDown
+        expr: container_running{name="matter-server"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Matter server container is down"
+          description: "matter-server container has been stopped for 3 minutes — all Home Assistant Matter devices are unavailable until it recovers"

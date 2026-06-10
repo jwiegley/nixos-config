@@ -200,3 +200,69 @@ groups:
         annotations:
           summary: "Kernel OOM killer fired on {{ $labels.instance }}"
           description: "The kernel OOM killer terminated {{ $value | humanize }} process(es) in the last 15 minutes on {{ $labels.instance }}. A process was killed to reclaim memory — check which service and whether memory limits need tuning."
+
+      # Run-queue saturation. HighCPUUsage measures % busy of the CPUs, which
+      # misses load driven by D-state (uninterruptible) tasks blocked on IO —
+      # exactly the signature of the UAS enclosure hang (tank stalls, processes
+      # pile up in D-state, %CPU can even look LOW while the run queue explodes).
+      # node_load15 / nCPU normalizes the 15-min load average by core count
+      # (vulcan = 10 cores). Baseline ratio over 7d: avg 0.18, max 1.57, ZERO
+      # samples above 2. >2 sustained 15m means the run queue is 2x the cores for
+      # a quarter hour — genuine saturation, not a transient build/scrub spike.
+      # The `without (cpu, mode)` on the count preserves alias/instance/job so the
+      # division matches node_load15 one-to-one and annotations keep $labels.instance.
+      - alert: HostLoadHigh
+        expr: node_load15{alias="vulcan"} / count(node_cpu_seconds_total{mode="idle",alias="vulcan"}) without (cpu, mode) > 2
+        for: 15m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Run-queue saturation on {{ $labels.instance }}"
+          description: "15-min load average per CPU has exceeded 2.0 for 15 minutes on {{ $labels.instance }} (currently {{ $value | humanize }}x cores). Baseline is ~0.18x (7d max 1.57x). Sustained run-queue saturation — often D-state IO stalls (e.g. the UAS enclosure hang) that HighCPUUsage misses, since blocked tasks raise load without raising %CPU."
+
+      # File-descriptor exhaustion. node_filefd_allocated/node_filefd_maximum is
+      # the system-wide open-FD utilization (fs.file-max). A descriptor leak in any
+      # daemon eventually trips EMFILE/ENFILE across the whole host. Baseline here is
+      # microscopic (~2.4e-15, i.e. a few thousand of a ~1e18 max), so >0.8 is an
+      # enormous margin that only fires on a real runaway leak.
+      - alert: HostFileDescriptorsHigh
+        expr: node_filefd_allocated{alias="vulcan"} / node_filefd_maximum{alias="vulcan"} > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "File-descriptor usage high on {{ $labels.instance }}"
+          description: "System-wide allocated file descriptors have exceeded 80% of the maximum for 10 minutes on {{ $labels.instance }} (currently {{ $value | humanizePercentage }}). Baseline is near zero; this indicates an FD leak that will eventually hit EMFILE/ENFILE host-wide. Find the leaking process (ls /proc/*/fd | wc -l per pid)."
+
+      # Inode exhaustion on the real (ext4/xfs) filesystems. A filesystem can have
+      # plenty of free BYTES yet run out of inodes (e.g. a flood of tiny files),
+      # which DiskSpaceLow would never catch. Scoped to ext4|xfs because those have
+      # a fixed inode table; ZFS allocates inodes dynamically (no meaningful ratio).
+      # vulcan's ext4 mounts (/ and /nix/store, both nvme0n1p5) sit at ~0.87 free
+      # (7d min 0.87), so <0.1 free is a wide margin. Per-mountpoint, like DiskSpaceLow.
+      - alert: HostInodesLow
+        expr: node_filesystem_files_free{fstype=~"ext4|xfs",alias="vulcan"} / node_filesystem_files{fstype=~"ext4|xfs",alias="vulcan"} < 0.1
+        for: 15m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Low free inodes on {{ $labels.instance }} {{ $labels.mountpoint }}"
+          description: "{{ $labels.mountpoint }} ({{ $labels.device }}, {{ $labels.fstype }}) on {{ $labels.instance }} has less than 10% free inodes for 15 minutes (currently {{ $value | humanizePercentage }}). Inode exhaustion blocks file creation even with free space — usually a flood of tiny files. Baseline free is ~87%."
+
+      # Hardware-asserted thermal alarm bit. node_hwmon_temp_alarm == 1 means the
+      # sensor's OWN over-temperature alarm threshold tripped (set by firmware/the
+      # chip), independent of our HostThermalHigh fixed-celsius rule. On vulcan only
+      # the NVMe (nvme_nvme0) exposes this bit; verified == 0 for the full 7d window.
+      # for:5m debounces a momentary blip without masking a real sustained alarm.
+      - alert: HwmonAlarm
+        expr: node_hwmon_temp_alarm{alias="vulcan"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Hardware thermal alarm on {{ $labels.instance }} ({{ $labels.chip }})"
+          description: "Hardware-asserted temperature alarm bit is set on sensor {{ $labels.sensor }} ({{ $labels.chip }}) on {{ $labels.instance }} for 5 minutes. The device firmware tripped its own over-temp threshold — distinct from the fixed-celsius HostThermalHigh rule. Baseline is 0. Check cooling/airflow for that device (NVMe on this host)."

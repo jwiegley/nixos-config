@@ -257,4 +257,62 @@
         ${pkgs.systemd}/bin/systemctl start aide-update.service 2>/dev/null || true
     fi
   '';
+
+  # ===========================================================================
+  # SOPS runtime-secret permission drift monitor
+  # ---------------------------------------------------------------------------
+  # /run/secrets/* are decrypted at runtime and MUST stay owner-only (0400/0600,
+  # owned by the consuming service). A world-readable or group-writable secret
+  # is a real exposure. node-exporter has no metric for this, so this tiny root
+  # oneshot counts (COUNTS ONLY — never names, never contents; the values are
+  # forbidden) the runtime secret files that are other-readable or group-writable
+  # and emits a single gauge via the textfile-collector pattern (atomic tmp+mv,
+  # 0644, /var/lib/prometheus-node-exporter-textfiles/, picked up by job=node).
+  # Alert SecretsWorldReadable (security.yaml) fires on count > 0.
+  # ===========================================================================
+  systemd.services.secrets-perms-exporter = {
+    description = "Export count of world-readable/group-writable /run/secrets files";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+      ExecStart = pkgs.writeShellScript "secrets-perms-exporter" ''
+        set -euo pipefail
+        DIR=/var/lib/prometheus-node-exporter-textfiles
+        OUT="$DIR/secrets-perms.prom"
+        TMP="$OUT.$$"
+
+        # Count regular files under /run/secrets that are readable by "other"
+        # (-perm -o+r) OR writable by "group" (-perm -g+w). -L follows the
+        # symlinks that SOPS lays down. Emit ONLY the integer count.
+        if [ -d /run/secrets ]; then
+          COUNT=$(${pkgs.findutils}/bin/find -L /run/secrets -type f \
+            \( -perm -o+r -o -perm -g+w \) 2>/dev/null | ${pkgs.coreutils}/bin/wc -l)
+        else
+          COUNT=0
+        fi
+
+        # Write the exposition file with printf so no heredoc indentation leaks
+        # into the .prom (Prometheus text format requires metric lines to start
+        # at column 0).
+        {
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP secrets_world_readable_count Number of /run/secrets files that are other-readable or group-writable'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE secrets_world_readable_count gauge'
+          ${pkgs.coreutils}/bin/printf 'secrets_world_readable_count %s\n' "$COUNT"
+        } > "$TMP"
+        ${pkgs.coreutils}/bin/chmod 0644 "$TMP"
+        ${pkgs.coreutils}/bin/mv -f "$TMP" "$OUT"
+      '';
+    };
+  };
+
+  systemd.timers.secrets-perms-exporter = {
+    description = "Hourly /run/secrets permission-drift check";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnUnitActiveSec = "1h";
+      Persistent = true;
+      RandomizedDelaySec = "2min";
+    };
+  };
 }

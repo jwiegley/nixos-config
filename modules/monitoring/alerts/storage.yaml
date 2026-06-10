@@ -25,6 +25,28 @@ groups:
           summary: "ZFS pool {{ $labels.pool }} device has I/O errors"
           description: "Pool {{ $labels.pool }} has accumulated read or checksum errors on a device, indicating hardware degradation."
 
+      # Sustained disk saturation across the four tank-backing UAS disks
+      # (sda-sdd, the OWC enclosure bays). node_disk_io_time_seconds_total is
+      # cumulative busy-seconds; rate over 10m gives the fraction of wall time the
+      # device spent doing I/O (1.0 = pegged). Averaged across the four bays, >0.9
+      # sustained for 20m means the pool is the bottleneck — slow services, growing
+      # backup windows, and an early sign the enclosure bridge is struggling before
+      # it aborts outright. Baseline-checked: current avg ~0.56, 7-day max ~0.73,
+      # and ZERO 5-minute samples exceeded 0.9 in the last 7 days (nightly backups
+      # and the monthly scrub — scrub is throttled to 1 active vdev — do NOT reach
+      # it), so 0.9/20m will not chronically fire. Warning, not critical: this is a
+      # performance/early-degradation signal, not data loss.
+      - alert: ZFSPoolIOSaturated
+        expr: avg(rate(node_disk_io_time_seconds_total{device=~"sd[a-d]"}[10m])) > 0.9
+        for: 20m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "tank disks saturated (sustained ~100% busy)"
+          description: "The four tank-backing UAS disks (sda-sdd) have averaged over 90% busy for 20 minutes ({{ $value | humanizePercentage }} of wall time spent on I/O). The pool is the bottleneck; check for a runaway backup/sync, a scrub, or — given the OWC enclosure history — an early sign the UAS bridge is struggling (see project_tank_uas_enclosure_failure)."
+
       - alert: ZFSPoolDegraded
         expr: node_zfs_zpool_state{state!="online"} == 1
         for: 1m
@@ -87,6 +109,56 @@ groups:
         annotations:
           summary: "ZFS pool {{ $labels.pool }} has less than 500GB free"
           description: "Pool {{ $labels.pool }} has {{ $value | humanize1024 }}B available"
+
+      # Per-dataset space exhaustion. The pool-level ZFSPoolFreeSpaceLow /
+      # ZFSPoolCapacity* rules above watch the whole pool; this watches an
+      # INDIVIDUAL dataset filling up while the pool overall still has room — a
+      # dataset with an effective limit (quota/refquota, or simply a heavy
+      # consumer) can hit ENOSPC and break its service long before the pool does.
+      # The zfs_exporter emits zfs_dataset_{used,available}_bytes per dataset
+      # (58 filesystems live; cardinality already present, no new series). Guard
+      # on BOTH a small absolute headroom (<5 GiB) AND a high fill ratio (>90%)
+      # so large datasets with terabytes free don't trip on the ratio alone and a
+      # tiny dataset that is 95% full but has gigabytes free isn't flagged. Both
+      # conditions false across all 58 datasets at deploy (baseline-checked).
+      - alert: ZFSDatasetSpaceLow
+        expr: |
+          zfs_dataset_available_bytes{type="filesystem"} < 5 * 1024 * 1024 * 1024
+          and
+          (
+            zfs_dataset_used_bytes{type="filesystem"}
+            / (zfs_dataset_used_bytes{type="filesystem"} + zfs_dataset_available_bytes{type="filesystem"})
+          ) > 0.9
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS dataset {{ $labels.name }} is nearly full"
+          description: "Dataset {{ $labels.name }} has only {{ $value | humanize1024 }}B available and is over 90% full. A service writing to it may hit ENOSPC even though pool {{ $labels.pool }} as a whole still has space. Check `zfs list -o name,used,avail,quota {{ $labels.name }}`."
+
+      # Direct /tank availability alert, independent of the zfs_exporter and the
+      # textfile collector. node-exporter's systemd collector does NOT expose a
+      # `tank.mount` unit series on this host (verified absent), so a mount-unit
+      # state rule is impossible; instead detect the pool's filesystem vanishing
+      # from node_exporter's filesystem collector. When the UAS enclosure drops
+      # and `tank` is exported/unmounted, node_filesystem_size_bytes{mountpoint=
+      # "/tank"} disappears entirely, so absent() flips to 1. This is the simplest,
+      # most direct "is /tank actually mounted" signal and complements the
+      # ZFSPoolSuspended / collector-stale rules (which read the textfile that the
+      # collector cannot write once /tank is gone). 5m tolerates a brief
+      # export/reimport during maintenance.
+      - alert: TankMountGone
+        expr: absent(node_filesystem_size_bytes{mountpoint="/tank"}) == 1
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "/tank is not mounted"
+          description: "node_exporter no longer reports a filesystem at /tank — the tank pool is unmounted or gone. Every dependent service (Immich, Copyparty, aria2, backups, bind mounts) is broken. Likely the UAS-enclosure drop: power-cycle the OWC Mercury Elite Pro Quad enclosure, then `zpool import tank` (see project_tank_uas_enclosure_failure)."
 
       # Scrub is the monthly bit-rot / integrity sweep (zfs-scrub.timer). The
       # textfile collector parses the completed-scrub "scan:" line of `zpool

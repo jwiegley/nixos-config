@@ -14,6 +14,29 @@ groups:
           summary: "Dovecot IMAP server is down"
           description: "Dovecot IMAP server has been unreachable for more than 2 minutes. Email access is unavailable."
 
+      # The entire Dovecot alert family (DovecotDown, DovecotAuthenticationFailures,
+      # DovecotNoRecentActivity, dovecot_user_*) rides a SINGLE exporter that reads
+      # the old_stats unix socket. If that exporter or the old_stats fifo wedges,
+      # dovecot_up disappears (the target stops being scraped) and every dovecot_*
+      # series goes silently absent rather than flipping to 0 — so the family quietly
+      # goes blind with no signal. This is the single-point-of-failure backstop:
+      # absent(dovecot_up) fires when the exporter target produces no dovecot_up
+      # sample at all. Baseline 2026-06-10: dovecot_up present (=1), absent() empty,
+      # so this does not fire on deploy. up{job="dovecot"} is the scrape-liveness of
+      # the same target; this catches the case where the target is up but the metric
+      # vanishes. NOTE: liveness of the IMAPS:993 listener itself, independent of this
+      # exporter, would need a separate blackbox tcp probe (not added here).
+      - alert: DovecotExporterStale
+        expr: absent(dovecot_up) == 1
+        for: 15m
+        labels:
+          severity: warning
+          category: email
+          service: dovecot
+        annotations:
+          summary: "Dovecot stats exporter is not reporting"
+          description: "dovecot_up has been absent for more than 15 minutes. The entire Dovecot alert family rides this one old_stats-socket exporter, so its absence means all dovecot_* signals are blind (not 0 — gone). Check the dovecot exporter and the old_stats socket: systemctl status prometheus-dovecot-exporter; the alerts that depend on this are currently silent."
+
       - alert: DovecotAuthenticationFailures
         expr: sum(rate(dovecot_user_auth_failures[5m])) > 5
         for: 5m

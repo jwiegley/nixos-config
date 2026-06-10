@@ -44,6 +44,12 @@
         # TYPE container_restart_count counter
         # HELP container_memory_usage_bytes Container resident memory usage in bytes
         # TYPE container_memory_usage_bytes gauge
+        # HELP container_cpu_percent Container CPU utilization percent (podman stats CPUPerc, 100=one full core)
+        # TYPE container_cpu_percent gauge
+        # HELP container_image_prune_last_trigger_seconds Unix time the user's rootless podman-image-prune timer last triggered
+        # TYPE container_image_prune_last_trigger_seconds gauge
+        # HELP container_image_prune_failed Whether the user's last rootless podman-image-prune run failed (1=failed, 0=ok)
+        # TYPE container_image_prune_failed gauge
         EOF
 
                 # Function to collect metrics for a podman instance
@@ -104,16 +110,34 @@
         container_restart_count{name="$name",container="$name",user="$user"} $restart_count
         EOF
 
-                    # Resident memory (best-effort; emitted only when stats parse cleanly).
-                    # MemUsage looks like "105.4MB / 66.84GB"; take the usage field, strip the
-                    # B/iB suffix, and convert via numfmt. No container memory LIMIT is emitted
-                    # (most containers run unlimited, so the limit field is just host RAM).
-                    mem_raw=$($podman_cmd stats --no-stream --format '{{.MemUsage}}' "$name" 2>/dev/null | ${pkgs.coreutils}/bin/cut -d' ' -f1) || mem_raw=""
-                    if [[ -n "$mem_raw" && "$mem_raw" != "--" ]]; then
-                      mem_clean="''${mem_raw%B}"; mem_clean="''${mem_clean%i}"
-                      mem_bytes=$(${pkgs.coreutils}/bin/numfmt --from=iec "$mem_clean" 2>/dev/null) || mem_bytes=""
-                      if [[ -n "$mem_bytes" ]]; then
-                        echo "container_memory_usage_bytes{name=\"$name\",container=\"$name\",user=\"$user\"} $mem_bytes" >> "$METRICS_TMP"
+                    # Resident memory + CPU (best-effort; emitted only when stats parse
+                    # cleanly). ONE podman stats call returns both fields tab-separated so
+                    # we never double the (expensive) per-container stats invocation.
+                    #   MemUsage looks like "105.4MB / 66.84GB" — take the usage field, strip
+                    #     the B/iB suffix, convert via numfmt. No memory LIMIT is emitted
+                    #     (most containers run unlimited, so the limit field is just host RAM).
+                    #   CPUPerc looks like "0.31%" — strip the trailing '%'. 100 == one full
+                    #     core (podman normalizes per-CPU like docker), so a 4-vCPU container
+                    #     can legitimately read up to ~400.
+                    # Tab built via printf to avoid a doubled single-quote (the Nix
+                    # indented-string terminator) adjacent to the Go-template braces
+                    # in the --format argument.
+                    tab=$(${pkgs.coreutils}/bin/printf '\t')
+                    stats_line=$($podman_cmd stats --no-stream --format "{{.MemUsage}}''${tab}{{.CPUPerc}}" "$name" 2>/dev/null) || stats_line=""
+                    if [[ -n "$stats_line" ]]; then
+                      mem_raw="''${stats_line%%"''${tab}"*}"
+                      cpu_raw="''${stats_line##*"''${tab}"}"
+                      mem_raw="$(echo "$mem_raw" | ${pkgs.coreutils}/bin/cut -d' ' -f1)"
+                      if [[ -n "$mem_raw" && "$mem_raw" != "--" ]]; then
+                        mem_clean="''${mem_raw%B}"; mem_clean="''${mem_clean%i}"
+                        mem_bytes=$(${pkgs.coreutils}/bin/numfmt --from=iec "$mem_clean" 2>/dev/null) || mem_bytes=""
+                        if [[ -n "$mem_bytes" ]]; then
+                          echo "container_memory_usage_bytes{name=\"$name\",container=\"$name\",user=\"$user\"} $mem_bytes" >> "$METRICS_TMP"
+                        fi
+                      fi
+                      cpu_clean="''${cpu_raw%\%}"
+                      if [[ -n "$cpu_clean" && "$cpu_clean" != "--" && "$cpu_clean" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                        echo "container_cpu_percent{name=\"$name\",container=\"$name\",user=\"$user\"} $cpu_clean" >> "$METRICS_TMP"
                       fi
                     fi
                   done
@@ -137,6 +161,36 @@
                 for user in $ROOTLESS_USERS; do
                   if id "$user" &>/dev/null; then
                     collect_container_metrics "${pkgs.sudo}/bin/sudo -u $user ${pkgs.podman}/bin/podman" "$user"
+
+                    # Rootless weekly image-prune health (HM user unit
+                    # podman-image-prune.{timer,service} from
+                    # rootless-podman-image-prune.nix). Only emit for users that
+                    # actually have the timer installed — list-unit-files prints a
+                    # row iff the unit exists, so an empty result means skip (a
+                    # rootless user with no prune unit shouldn't carry the series).
+                    if systemctl --user -M "$user@" list-unit-files podman-image-prune.timer --no-legend 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q 'podman-image-prune.timer'; then
+                      # LastTriggerUSec is a human-formatted timestamp on this
+                      # systemd ("Mon 2026-06-08 00:52:11 PDT"); date -d parses it
+                      # to epoch. A never-triggered timer reports "n/a"/"0"/empty,
+                      # which date -d rejects -> we omit the series (alert treats
+                      # absent as stale, which is correct: it has never run).
+                      last_trigger_raw=$(systemctl --user -M "$user@" show podman-image-prune.timer --property=LastTriggerUSec --value 2>/dev/null || echo "")
+                      last_trigger_epoch=$(${pkgs.coreutils}/bin/date -d "$last_trigger_raw" +%s 2>/dev/null || echo "")
+                      if [[ -n "$last_trigger_epoch" ]]; then
+                        echo "container_image_prune_last_trigger_seconds{user=\"$user\"} $last_trigger_epoch" >> "$METRICS_TMP"
+                      fi
+
+                      # Result=success -> 0; anything else (failed/timeout/exit-code)
+                      # -> 1. Default to 0 when the property can't be read so a
+                      # transient query miss doesn't fire ContainerPruneFailed.
+                      prune_result=$(systemctl --user -M "$user@" show podman-image-prune.service --property=Result --value 2>/dev/null || echo "success")
+                      if [[ "$prune_result" == "success" || -z "$prune_result" ]]; then
+                        prune_failed=0
+                      else
+                        prune_failed=1
+                      fi
+                      echo "container_image_prune_failed{user=\"$user\"} $prune_failed" >> "$METRICS_TMP"
+                    fi
                   fi
                 done
 

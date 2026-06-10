@@ -39,6 +39,30 @@ groups:
           summary: "Service {{ $labels.name }} is restarting frequently"
           description: "Service {{ $labels.name }} has restarted multiple times in the last 15 minutes"
 
+      # Restart-loop detection via the systemd restart counter.
+      # node_systemd_service_restart_total counts auto-restarts (systemd NRestarts,
+      # driven by Restart=), exported via --collector.systemd.enable-restarts-metrics.
+      # This catches Restart=-policy flapping that ServiceRestartingFrequently (which
+      # samples the transient "activating" state) can miss between scrapes. The two
+      # rules are complementary — keep both. Excludes the per-fire transient podman
+      # healthcheck units (<64-hex-id>-<hex>.service) which are one-shots, never
+      # auto-restart, and would only add label churn.
+      - alert: ServiceRestartLooping
+        expr: |
+          increase(
+            node_systemd_service_restart_total{
+              name=~".*\\.service",
+              name!~"[0-9a-f]{64}-.*\\.service"
+            }[30m]
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Service {{ $labels.name }} is restart-looping"
+          description: "Service {{ $labels.name }} has auto-restarted more than 3 times in the last 30 minutes on {{ $labels.instance }} (Restart= flapping)"
+
       # Services in activating state for too long
       # Excludes: restic-metrics, restic-backups-* (can take hours), mbsync-* (can take up to 30 minutes), update-containers (can take up to 10 minutes), local-backup (can take up to 10 minutes), git-workspace-archive (nightly 00:00 sweep of ~600 repos, runs >15m by design)
       - alert: ServiceStuckActivating

@@ -47,3 +47,57 @@ groups:
 
             Renew with: sudo /etc/nixos/certs/renew-certificate.sh speedtracker.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner root:nginx
             Then reload: sudo systemctl reload nginx
+
+  - name: speedtest_tracker_results
+    interval: 60s
+    rules:
+      # Result-freshness (correctness, not soundness). speedtest-tracker is
+      # scheduled to run hourly and persist a row to the `results` table; the
+      # speedtest-results-exporter reads the newest COMPLETED row's created_at
+      # into speedtest_last_result_timestamp_seconds. If the schedule silently
+      # stops or every run comes back `failed`, this timestamp freezes while the
+      # container stays green and the blackbox probe keeps passing. 26h is
+      # generous against the hourly cadence (allows ~26 missed runs of slop).
+      # A 0 value (empty table / dead collector) makes time()-0 enormous → fires.
+      - alert: SpeedtestResultsStale
+        expr: time() - speedtest_last_result_timestamp_seconds > 26 * 3600
+        for: 30m
+        labels:
+          severity: warning
+          component: speedtest-tracker
+        annotations:
+          summary: "Speedtest Tracker results are stale"
+          description: |
+            No completed speedtest result has been recorded in over 26h
+            (newest completed row is {{ $value | humanizeDuration }} old). The
+            hourly speedtest schedule has likely stalled or every run is failing,
+            even though the container/web UI may still be up.
+
+            Check the collector: systemctl status speedtest-results-exporter.service
+            Check the schedule:  sudo -u speedtest-tracker podman logs speedtest-tracker --tail 50
+            Check failed runs:   psql -d speedtest_tracker -c "SELECT count(*) FROM results WHERE status='failed' AND created_at > now() - interval '1 day'"
+
+      # Throughput regression. Fires only once a 7-day baseline has accrued AND
+      # there is a current reading (both guarded > 0 so a stale/empty 0 does not
+      # masquerade as a "degraded" 0 — that is the SpeedtestResultsStale case).
+      # Sustained download below 20% of the 7d average for 6h indicates a real
+      # WAN/ISP degradation rather than a single bad run. Baseline observed
+      # ~109 Mbit/s; 20% = ~22 Mbit/s.
+      - alert: SpeedtestDownloadDegraded
+        expr: |
+          speedtest_last_download_bps > 0
+          and avg_over_time(speedtest_last_download_bps[7d]) > 0
+          and speedtest_last_download_bps
+              < 0.2 * avg_over_time(speedtest_last_download_bps[7d])
+        for: 6h
+        labels:
+          severity: warning
+          component: speedtest-tracker
+        annotations:
+          summary: "Speedtest download throughput degraded"
+          description: |
+            Measured download throughput ({{ $value | humanize }}bps) has been
+            below 20% of the 7-day average for over 6 hours — a sustained WAN/ISP
+            degradation, not a single bad run.
+
+            Review history at https://speedtracker.vulcan.lan

@@ -54,3 +54,39 @@ groups:
         annotations:
           summary: "Gitea is responding slowly"
           description: "The blackbox HTTPS probe to {{ $labels.instance }} has taken more than 5s for over 10 minutes (currently {{ $value }}s) — Gitea web responses are degraded."
+
+      # GitHub→Gitea mirror discovery health. The host runs `github-mirror.service`
+      # (oneshot, daily 03:00 timer) which discovers GitHub repos and creates the
+      # pull-mirror entries in Gitea; Gitea then performs the actual per-repo pull
+      # internally on its own mirror_interval (8h) — that internal cron is NOT a
+      # host systemd unit and exposes no per-mirror freshness metric (gitea only
+      # exports the gitea_mirrors COUNT gauge), so the monitorable surface is the
+      # host-side discovery unit. node-exporter sees the unit, so no collector is
+      # needed: state="failed"==1 means the last discovery run errored
+      # (failed_count>0 → exit 1). for:0 because a oneshot stays failed until the
+      # next run a day later, so we want it surfaced promptly.
+      - alert: GiteaMirrorSyncFailed
+        expr: |
+          node_systemd_unit_state{name="github-mirror.service",state="failed"} == 1
+        for: 0m
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "GitHub→Gitea mirror discovery failed"
+          description: "github-mirror.service last run failed (one or more repos could not be mirrored). Check: journalctl -u github-mirror.service --since '-1 day'"
+
+      # Mirror discovery cadence. The timer is daily; if it has not triggered in
+      # over 30h the schedule has stalled (timer masked, system clock issue, etc.)
+      # and mirrors stop tracking new GitHub repos. 30h > daily + 30min jitter, so
+      # it will not fire under normal cadence (observed last-trigger age ~21h).
+      - alert: GiteaMirrorSyncStale
+        expr: |
+          time() - node_systemd_timer_last_trigger_seconds{name="github-mirror.timer"} > 30 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          service: gitea
+        annotations:
+          summary: "GitHub→Gitea mirror discovery has not run"
+          description: "github-mirror.timer last triggered {{ $value | humanizeDuration }} ago (daily schedule); the mirror-discovery job appears to have stopped running. Check: systemctl list-timers github-mirror.timer"

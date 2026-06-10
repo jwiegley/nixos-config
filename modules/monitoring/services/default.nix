@@ -23,6 +23,9 @@
     # P1 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 3)
     ./vmalert.nix # alerting on the VictoriaMetrics TSDB (HA-pushed series)
     ./system-age-exporter.nix # is-the-system-being-patched gauges
+    # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
+    ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
+    ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters

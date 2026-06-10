@@ -231,6 +231,59 @@
           ];
         }
 
+        # PostgreSQL authentication journal scrape (security monitoring)
+        # postgresql.service logs to the journal (StandardOutput=journal,
+        # StandardError=inherit), but its stderr lines carry NO sd-daemon
+        # "<N>" priority prefix, so even FATAL auth failures land at the unit
+        # default priority 6 (info). The consolidated systemd-journal scrape
+        # above DROPS priority 5-7, so postgres auth events never reach Loki
+        # (verified 2026-06-10: 0 postgres lines at priority <=4 in the journal,
+        # 0 {job="postgresql"} streams in Loki). This dedicated scrape ingests
+        # the SAME journal but KEEPS ONLY postgresql.service (relabel
+        # action=keep) and has NO priority-drop stage, so auth events reach Loki
+        # under job="postgresql". Mirrors the job="sshd" scrape exactly.
+        {
+          job_name = "postgresql";
+          journal = {
+            json = true;
+            max_age = "5m"; # Match the main journal scrape window
+            labels = {
+              job = "postgresql";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            # Keep ONLY postgresql.service lines so nothing else is duplicated
+            # into Loki by this journal reader.
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "postgresql\\.service";
+              action = "keep";
+            }
+            # Carry over the same descriptive labels as the main scrape
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__hostname" ];
+              target_label = "hostname";
+            }
+            {
+              source_labels = [ "__journal_priority" ];
+              target_label = "priority";
+            }
+            {
+              source_labels = [ "__journal_syslog_identifier" ];
+              target_label = "syslog_identifier";
+            }
+            {
+              source_labels = [ "__journal__comm" ];
+              target_label = "process";
+            }
+          ];
+        }
+
         # Nginx access logs
         {
           job_name = "nginx-access";

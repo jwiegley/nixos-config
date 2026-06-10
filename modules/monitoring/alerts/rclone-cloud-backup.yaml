@@ -21,3 +21,49 @@ groups:
         annotations:
           summary: "Cloud-drive mirror metric absent"
           description: "No rclone_last_success_timestamp_seconds present — the cloud-drive backup has not reported a successful sync in over a day."
+
+      # Distinguish an actively-FAILING remote from one that is merely idle/empty.
+      # The emitter now writes rclone_last_run_timestamp_seconds (attempt wall-clock,
+      # every run) and rclone_last_exit_code (0/1) in addition to the sticky
+      # success timestamp. When a remote is attempted nightly but its sync keeps
+      # failing (e.g. expired OAuth refresh token — the documented rclone failure
+      # mode), the run timestamp advances while the success timestamp stays frozen,
+      # so (run - success) grows without bound. This is the signal RcloneCloudBackupStale
+      # alone cannot give: a perpetually-stale remote on a broken token looks identical
+      # to "nothing to copy" with the success timestamp only. EXPECTED to fire on
+      # deploy for the remotes whose nightly sync is currently broken (assembly, bia,
+      # git-ai, positron were last successful 2026-06-02/06-03) — that is the finding.
+      - alert: RcloneRemoteSyncFailing
+        expr: |
+          (rclone_last_run_timestamp_seconds - on(remote)
+            rclone_last_success_timestamp_seconds) > 36 * 3600
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: rclone-cloud-backup
+        annotations:
+          summary: "Cloud-drive remote failing repeatedly: {{ $labels.remote }}"
+          description: |
+            rclone remote {{ $labels.remote }} is being attempted on schedule but has
+            not produced a successful sync in over 36h (last attempt is far newer than
+            last success). This is a remote that is broken, not idle — investigate the
+            OAuth token / remote config rather than ignoring it as routine staleness.
+
+      # Backstop: the most recent attempt for a remote returned a non-zero exit.
+      # Lower-noise companion to the divergence rule — fires the morning after a
+      # single failed run, before 36h of divergence accrues. Both reference the
+      # per-run exit code the emitter now writes on every attempt.
+      - alert: RcloneRemoteLastRunErrored
+        expr: rclone_last_exit_code > 0
+        for: 2h
+        labels:
+          severity: warning
+          category: storage
+          service: rclone-cloud-backup
+        annotations:
+          summary: "Cloud-drive remote's last sync errored: {{ $labels.remote }}"
+          description: |
+            The most recent rclone sync of remote {{ $labels.remote }} exited non-zero
+            (rclone_last_exit_code = {{ $value }}). Check journalctl -u rclone-cloud-backup
+            for the failing pass; recurring failures will also trip RcloneRemoteSyncFailing.

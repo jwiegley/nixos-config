@@ -136,6 +136,29 @@ let
           follow_redirects: false
           fail_if_ssl: false
 
+      # Public-edge probe for the cloudflared-tunnelled vhosts
+      # (data.newartisans.com, calendar.newartisans.com). Unlike the *_local
+      # modules these certs are PUBLIC (Google Trust Services), so this module
+      # uses the system CA bundle (no step-ca ca_file override) and validates
+      # the full public path: Cloudflare edge -> tunnel -> origin nginx. 404 is
+      # accepted because calendar.newartisans.com answers an anonymous GET / with
+      # 404 (no handler bound at /) — the 404 still proves the tunnel + origin are
+      # alive, exactly the "auth-gated-but-listening" rationale of
+      # https_2xx_or_auth. A genuine outage (tunnel down, origin down, cert
+      # invalid) still trips probe_success=0. (coverage plan P2, web-extra)
+      https_public:
+        prober: http
+        timeout: 10s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: [200, 301, 302, 303, 307, 308, 401, 403, 404]
+          method: GET
+          preferred_ip_protocol: "ip4"
+          follow_redirects: true
+          fail_if_ssl: false
+          tls_config:
+            insecure_skip_verify: false
+
       dns_query:
         prober: dns
         timeout: 5s
@@ -566,6 +589,53 @@ in
               {
                 target_label = "probe_type";
                 replacement = "https";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
+          }
+
+          # Public-edge HTTPS probes for the cloudflared-tunnelled vhosts.
+          # These ride the FULL public path (Cloudflare edge -> tunnel ->
+          # origin nginx) so a probe failure means the public surface is down,
+          # not merely a LAN-internal hiccup. Both verified live before adding:
+          # data -> 200, calendar -> 404 (handled by the https_public module's
+          # 404 acceptance). The dedicated PublicEdgeDown alert in network.yaml
+          # pages on probe_success==0 here; the generic HostUnreachable
+          # (job=~"blackbox_.*") also backstops it. (coverage plan P2, web-extra)
+          {
+            job_name = "blackbox_https_public";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_public" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "https://data.newartisans.com"
+                  "https://calendar.newartisans.com"
+                ];
+                labels = {
+                  probe = "public-edge";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https_public";
               }
             ];
             scrape_interval = "60s";

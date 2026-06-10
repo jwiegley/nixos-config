@@ -15,17 +15,36 @@ groups:
           summary: "Vane service is down"
           description: "Vane AI answering container is not active. Service is unavailable."
 
-      - alert: VaneServiceFailed
+      # Vane runs as a ROOTLESS podman container (systemd --user), so it has no
+      # system-level systemd unit that node-exporter can see — the previous
+      # node_systemd_unit_state{name="home-manager-vane.service"} selector could
+      # never match (home-manager-vane is the inactive activation oneshot, not a
+      # running service). Monitor the container via the container-health-exporter
+      # instead. Verified live 2026-06-10: container_running{name="vane"}=1,
+      # container_restart_count{name="vane"}=0 (the exporter scans user "vane").
+      - alert: VaneContainerDown
         expr: |
-          node_systemd_unit_state{name="home-manager-vane.service",state="failed"} == 1
-        for: 1m
+          container_running{name="vane"} == 0
+        for: 5m
         labels:
-          severity: critical
+          severity: warning
           category: ai-search
           service: vane
         annotations:
-          summary: "Vane service has failed"
-          description: "Vane container is in failed state. Check logs with: journalctl -u vane"
+          summary: "Vane container is not running"
+          description: "The rootless vane container is not running (container_running=0). Check: sudo -u vane env XDG_RUNTIME_DIR=/run/user/$(id -u vane) podman ps; journalctl --user-unit vane (as the vane user)."
+
+      - alert: VaneContainerRestarting
+        expr: |
+          increase(container_restart_count{name="vane"}[30m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+          category: ai-search
+          service: vane
+        annotations:
+          summary: "Vane container is restart-looping"
+          description: "The vane container restarted {{ $value | printf \"%.0f\" }} times in the last 30 minutes — it is crash-looping rather than staying up. Inspect the container logs for the crash cause."
 
       # HTTP Health Check (via blackbox exporter)
       - alert: VaneHTTPDown

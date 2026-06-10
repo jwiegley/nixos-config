@@ -111,6 +111,7 @@ in
       pkgs.rclone
       pkgs.jq
       pkgs.coreutils
+      pkgs.gnugrep
     ];
     serviceConfig = {
       Type = "oneshot";
@@ -161,13 +162,39 @@ in
 
       overall=0
 
-      metric() {  # $1 = remote label
-        local f
-        f=$(mktemp "${textfileDir}/rclone-$1.prom.XXXXXX") || return 0
-        printf 'rclone_last_success_timestamp_seconds{remote="%s"} %s\n' \
-          "$1" "$(date +%s)" > "$f"
-        chmod 0644 "$f"
-        mv -f "$f" "${textfileDir}/rclone-$1.prom"
+      # Per-remote textfile metrics. Emitted on EVERY attempt so a remote that is
+      # being synced but failing every night is distinguishable from one that is
+      # idle/empty (the census P2 finding: a perpetual RcloneCloudBackupStale on a
+      # broken OAuth token looks identical to "nothing to copy" with the
+      # success-timestamp alone). Each run writes, per remote:
+      #   rclone_last_run_timestamp_seconds{remote}     attempt wall-clock (always)
+      #   rclone_last_exit_code{remote}                 0 on success, 1 on failure (always)
+      #   rclone_last_success_timestamp_seconds{remote} wall-clock (ONLY on success)
+      # The success timestamp is sticky: on a failed run it is preserved from the
+      # previous .prom file so RcloneCloudBackupStale keeps measuring true success
+      # age, while (run_ts - success_ts) reveals an actively-failing remote.
+      metric() {  # $1 = remote label  $2 = exit code (0 success / non-zero failure)
+        local remote="$1" rc="$2" now success_line prev f
+        now=$(date +%s)
+        f="${textfileDir}/rclone-$remote.prom"
+
+        if [ "$rc" -eq 0 ]; then
+          success_line="rclone_last_success_timestamp_seconds{remote=\"$remote\"} $now"
+        else
+          # Preserve the last known success timestamp across a failed run.
+          prev=$(grep -h '^rclone_last_success_timestamp_seconds' "$f" 2>/dev/null | tail -n1 || true)
+          success_line="$prev"
+        fi
+
+        local tmp
+        tmp=$(mktemp "$f.XXXXXX") || return 0
+        {
+          printf 'rclone_last_run_timestamp_seconds{remote="%s"} %s\n' "$remote" "$now"
+          printf 'rclone_last_exit_code{remote="%s"} %s\n' "$remote" "$rc"
+          [ -n "$success_line" ] && printf '%s\n' "$success_line"
+        } > "$tmp"
+        chmod 0644 "$tmp"
+        mv -f "$tmp" "$f"
       }
 
       sync_google() {  # $1 = remote  $2 = dest
@@ -201,12 +228,13 @@ in
         return 0
       }
 
-      if sync_google assembly /tank/Backups/GoogleDrive/assembly; then metric assembly; else overall=1; fi
-      if sync_google bia      /tank/Backups/GoogleDrive/bia;      then metric bia;      else overall=1; fi
-      if sync_google gdrive   /tank/Backups/GoogleDrive/jwiegley; then metric gdrive;   else overall=1; fi
-      if sync_google positron /tank/Backups/GoogleDrive/positron; then metric positron; else overall=1; fi
-      if sync_google git-ai   /tank/Backups/GoogleDrive/git-ai;   then metric git-ai;   else overall=1; fi
-      if sync_onedrive onedrive /tank/Backups/OneDrive;           then metric onedrive; else overall=1; fi
+      # Always record the attempt (run-ts + exit code) per remote, success or not.
+      if sync_google assembly /tank/Backups/GoogleDrive/assembly; then metric assembly 0; else metric assembly 1; overall=1; fi
+      if sync_google bia      /tank/Backups/GoogleDrive/bia;      then metric bia      0; else metric bia      1; overall=1; fi
+      if sync_google gdrive   /tank/Backups/GoogleDrive/jwiegley; then metric gdrive   0; else metric gdrive   1; overall=1; fi
+      if sync_google positron /tank/Backups/GoogleDrive/positron; then metric positron 0; else metric positron 1; overall=1; fi
+      if sync_google git-ai   /tank/Backups/GoogleDrive/git-ai;   then metric git-ai   0; else metric git-ai   1; overall=1; fi
+      if sync_onedrive onedrive /tank/Backups/OneDrive;           then metric onedrive 0; else metric onedrive 1; overall=1; fi
 
       exit $overall
     '';

@@ -103,12 +103,51 @@ groups:
           summary: "Redis {{ $labels.instance }} (noeviction) is evicting keys"
           description: "{{ $labels.instance }} is configured maxmemory-policy=noeviction yet redis_evicted_keys_total rose by {{ $value | humanize }} over 30m — it has hit its memory ceiling and is shedding keys it was told never to evict. Raise maxmemory or investigate the workload."
 
+      # Rejected connections: redis refuses a connection when it would exceed
+      # maxclients (or hits an OOM/protected-mode block). This is a monotonic
+      # counter, 0 on every scraped instance at the 2026-06-10 baseline (7d max
+      # 15m-increase = 0), so increase(...[15m]) > 0 is a real signal, not noise:
+      # any rejection means an app failed to get a connection. Covers both the
+      # primary litellm target (job="redis") and every multi-target instance
+      # (no job filter), so future instances are covered automatically.
+      - alert: RedisRejectedConnections
+        expr: increase(redis_rejected_connections_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} is rejecting connections"
+          description: "{{ $labels.instance }} rejected {{ $value | humanize }} connection(s) in the last 15 minutes (redis_rejected_connections_total rose). Redis refuses connections when it would exceed maxclients or under an OOM/protected-mode block — an app is failing to acquire a Redis connection. Check the owning service and redis-cli -u {{ $labels.instance }} info clients."
+
+      # Connected-clients saturation: alert when the live client count approaches
+      # the configured maxclients ceiling (the limit RedisRejectedConnections
+      # fires past). maxclients is 10000 on every instance and live usage is
+      # tiny (max ratio 0.0011 = 11/10000 on shlink at the 2026-06-10 baseline),
+      # so 0.8 has enormous headroom and will only fire on a genuine connection
+      # leak / runaway client. The `> 0` guard on maxclients avoids a 0/0 = NaN
+      # comparison should an instance ever report maxclients=0.
+      - alert: RedisConnectedClientsHigh
+        expr: |
+          redis_connected_clients / redis_config_maxclients > 0.8
+            and redis_config_maxclients > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: redis
+        annotations:
+          summary: "Redis {{ $labels.instance }} near its maxclients limit"
+          description: "{{ $labels.instance }} has been using more than 80% of its configured maxclients ({{ $value | humanizePercentage }}) for over 15 minutes. New connections will start being rejected (see RedisRejectedConnections) once the ceiling is hit — usually a client-side connection leak. Check redis-cli -u {{ $labels.instance }} info clients and the owning app's pool config."
+
       # Socket-only instances: redis-gitea and redis-immich listen on UNIX sockets
-      # in 0750 dirs owned by their own service users, so the DynamicUser
-      # redis_exporter cannot probe them. Fall back to systemd unit state (the
-      # established node-exporter idiom). node_systemd_unit_state is a continuous
-      # state-set metric — the state="active" series exists at 0 when inactive,
-      # so the ==0 comparison is required.
+      # in 0750 dirs owned by their own service users. The DynamicUser
+      # redis_exporter is now granted SupplementaryGroups=[redis-gitea redis-immich]
+      # and probes them via job="redis-multi" unix:// targets (see
+      # redis-exporter.nix). This systemd-unit-state alert is KEPT as a backstop:
+      # if the group-membership / unix-socket probe ever regresses (e.g. a future
+      # nixpkgs change to the exporter's socket handling), this still catches a
+      # down instance. node_systemd_unit_state is a continuous state-set metric —
+      # the state="active" series exists at 0 when inactive, so ==0 is required.
       - alert: RedisSocketInstanceDown
         expr: node_systemd_unit_state{name=~"redis-(gitea|immich)\\.service",state="active"} == 0
         for: 5m
@@ -117,4 +156,4 @@ groups:
           category: redis
         annotations:
           summary: "{{ $labels.name }} is not active"
-          description: "{{ $labels.name }} (a UNIX-socket Redis the exporter cannot reach) has not been in the active state for more than 5 minutes. The owning app (gitea sessions/cache, or immich queue/session store) loses its Redis backend. Check: systemctl status {{ $labels.name }}."
+          description: "{{ $labels.name }} (a UNIX-socket Redis) has not been in the active state for more than 5 minutes. The owning app (gitea sessions/cache, or immich queue/session store) loses its Redis backend. Check: systemctl status {{ $labels.name }}."

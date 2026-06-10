@@ -128,6 +128,17 @@ let
       devices = [ "hera" ];
       ignorePatterns = macosJunk;
     };
+
+    # Staging inbox for new videos: drop files into the mirror on hera and
+    # they land here for later filing into /tank/Video. The directory is
+    # created by syncthing-folder-acls on first deploy.
+    tank-video-inbox = {
+      label = "Video-Inbox";
+      path = "/tank/Video/Inbox";
+      dataset = "tank/Video";
+      devices = [ "hera" ];
+      ignorePatterns = macosJunk;
+    };
   };
 
   # ---- derived from `folders` — nothing below changes per folder ----------

@@ -177,10 +177,11 @@ in
 
         LOG_LEVEL = "INFO";
 
-        # Live-data freshness kill-switch. Deploy in "warn" first
-        # (serve labeled-stale, never 503) until the live probe is verified
-        # green, then flip to "enforce". See docs/deploy/freshness-rollout-runbook.md.
-        DATA_FRESHNESS_ENFORCE = "warn";
+        # Live-data freshness kill-switch (enforce|warn|off). "enforce" = a
+        # stale quote is a source failure -> 503 with sanitized reasons, never
+        # silently served. Rollback lever: set "warn" (serve labeled-stale) or
+        # "off". See docs/deploy/freshness-rollout-runbook.md in stock-trader.
+        DATA_FRESHNESS_ENFORCE = "enforce";
 
         # zoneinfo.ZoneInfo() needs the tz DB; DynamicUser+ProtectSystem=strict
         # does not inherit the system TZDIR, so pin the world-readable store path

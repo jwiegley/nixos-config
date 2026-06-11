@@ -88,9 +88,12 @@ in
         # hermes-mcp.service.
         EnvironmentFile = config.sops.secrets."hermes/env".path;
         ExecStart = "${probeScript}/bin/hermes-e2e-chat-probe";
-        # 90s probe budget inside the script; 120s wall to leave
-        # margin for python startup and atomic write.
-        RuntimeMaxSec = "120s";
+        # 90s per-attempt budget inside the script, with one retry on
+        # failure (2 attempts x 90s + ~2s backoff); 210s wall leaves
+        # margin for python startup and the atomic write. The retry
+        # absorbs transient flaps (Qwen reasoning truncation, a one-off
+        # MLX cold-load timeout) so only a persistent breakage pages.
+        RuntimeMaxSec = "210s";
         # Hardening (matches openclaw-hermes-smoke.nix and hermes-health-check.nix)
         ProtectSystem = "strict";
         ProtectHome = true;

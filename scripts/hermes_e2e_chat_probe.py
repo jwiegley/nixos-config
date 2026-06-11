@@ -47,13 +47,26 @@ MODEL = os.environ.get("HERMES_E2E_CHAT_MODEL", "hera/omlx/Qwen3.6-27B-MLX-8bit"
 EXPECTED_TOKEN = os.environ.get("HERMES_E2E_CHAT_TOKEN", "ROVER")
 PROMPT = os.environ.get(
     "HERMES_E2E_CHAT_PROMPT",
-    f"Reply with the single word {EXPECTED_TOKEN} and nothing else.",
+    # `/no_think` is Qwen3's soft switch to disable the <think> preamble
+    # (the chat template strips it; harmless trailing noise if the backend
+    # ignores it). Keeps the reply deterministic and short so the
+    # EXPECTED_TOKEN substring check is reliable.
+    f"Reply with the single word {EXPECTED_TOKEN} and nothing else. /no_think",
 )
 TIMEOUT_SECONDS = float(os.environ.get("HERMES_E2E_CHAT_TIMEOUT", "90"))
 METRIC_PATH = os.environ.get(
     "HERMES_E2E_CHAT_METRIC_PATH",
     "/var/lib/prometheus-node-exporter-textfiles/hermes_e2e_chat.prom",
 )
+# Retry once on failure before scoring ok=0. A single transient miss must
+# not page: the Qwen reasoning model occasionally spends its whole token
+# budget on a <think> preamble and truncates before emitting the expected
+# token, a one-off MLX cold-load can blow the per-attempt timeout, and the
+# upstream can return a momentary 5xx. A genuine, persistent breakage
+# (wrong base_url, 401, model unavailable) fails every attempt and still
+# flips the gauge within one probe interval.
+RETRIES = int(os.environ.get("HERMES_E2E_CHAT_RETRIES", "1"))
+RETRY_DELAY_SECONDS = float(os.environ.get("HERMES_E2E_CHAT_RETRY_DELAY", "2"))
 
 
 @dataclasses.dataclass
@@ -78,9 +91,13 @@ def run_probe() -> ProbeResult:
     body = json.dumps({
         "model": MODEL,
         "messages": [{"role": "user", "content": PROMPT}],
-        # Cap output — we only need ~10 tokens to verify EXPECTED_TOKEN.
-        # Smaller cap = lower probe cost. Hermes' default is much larger.
-        "max_tokens": 32,
+        # Reasoning models (Qwen3) spend tokens on a <think> preamble
+        # before answering; a tight cap truncates the reply before the
+        # expected token is ever emitted (empty/partial content → false
+        # fail). 256 leaves room to think AND answer while staying ~10x
+        # smaller than Hermes' default; the /no_think prompt switch keeps
+        # most replies short anyway.
+        "max_tokens": 256,
         # Force non-streaming (Hermes config also sets this) so we
         # exercise the same path Discord uses.
         "stream": False,
@@ -174,7 +191,15 @@ def write_metrics(result: ProbeResult, target: str = METRIC_PATH) -> None:
 
 
 def main() -> int:
+    # Probe, then retry up to RETRIES more times on failure before scoring
+    # ok=0 (see RETRIES comment above). The diagnostic gauges reflect the
+    # decisive (last) attempt.
     result = run_probe()
+    attempts = 1
+    while not result.ok and attempts <= RETRIES:
+        time.sleep(RETRY_DELAY_SECONDS)
+        result = run_probe()
+        attempts += 1
     write_metrics(result)
     return 0 if result.ok else 1
 

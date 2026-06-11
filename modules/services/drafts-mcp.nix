@@ -185,8 +185,10 @@ in
         # Server mode: bind the SSE listener on loopback, spawn the filter
         # shim, which spawns the single ssh child. NO --transport (a
         # client-only no-op; server mode mounts /sse + /mcp unconditionally).
-        # The shim denies the 9 write tools (incl. drafts_run_action) on this
-        # VM-facing SSE endpoint — it is the SOLE OpenClaw enforcement point.
+        # The shim denies drafts_run_action on this VM-facing SSE endpoint —
+        # it is the SOLE OpenClaw enforcement point. (All other write tools
+        # are allowed since the 2026-06-10 owner decision to give the agent
+        # VMs the full read/write draft surface.)
         #
         # Chain: mcp-proxy ─► drafts-tool-filter ─► ssh johnw@hera.lan
         #        ─(forced-command)► drafts-mcp-server ─osascript► Drafts.app

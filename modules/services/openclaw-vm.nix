@@ -864,15 +864,19 @@ in
               # 10.99.0.1:9082 → host PREROUTING → 127.0.0.1:9082, same
               # loopback pattern as the hermes entry below). The bridge's
               # stdio filter shim (drafts-tool-filter, drafts-mcp.nix) is the
-              # SOLE enforcement point for this autonomous VM: it strips all
-              # 9 write tools (incl. drafts_run_action) from tools/list and
-              # rejects them on tools/call, so the description states the
-              # read-only surface honestly (advertising writes would cause
-              # wasted denied calls).
+              # SOLE enforcement point for this autonomous VM. READ/WRITE
+              # surface (owner decision 2026-06-10, superseding the launch
+              # read-only posture): agents are meant to MAKE drafts on
+              # request, not just see them. The shim's single remaining
+              # denial is drafts_run_action — arbitrary Drafts action
+              # execution (incl. script actions) as johnw inside hera's GUI
+              # session is code execution, not draft management, and stays
+              # operator-only. The description states that surface honestly
+              # (advertising run_action would cause wasted denied calls).
               apply_mcporter_jq '
                 .mcpServers["drafts-hera"] = {
                   "url": "http://127.0.0.1:9082/sse",
-                  "description": "Drafts.app (macOS, on hera) via the host drafts-mcp SSE bridge. READ-ONLY surface: list/search/get drafts, tags, workspaces, and actions (drafts_search, drafts_get_draft, drafts_get_drafts, drafts_get_current, drafts_get_current_workspace, drafts_get_workspace_drafts, drafts_get_tag, drafts_list_tags, drafts_list_workspaces, drafts_list_actions, drafts_open). All write tools — including drafts_run_action — are NOT available here; the bridge filters them out."
+                  "description": "Drafts.app (macOS, on hera) via the host drafts-mcp SSE bridge. READ/WRITE surface: list/search/get drafts, tags, workspaces, and actions (drafts_search, drafts_get_draft, drafts_get_drafts, drafts_get_current, drafts_get_current_workspace, drafts_get_workspace_drafts, drafts_get_tag, drafts_list_tags, drafts_list_workspaces, drafts_list_actions, drafts_open) PLUS create/update/manage (drafts_create_draft, drafts_update_draft, drafts_add_tags, drafts_flag, drafts_archive, drafts_inbox, drafts_trash, drafts_open_workspace). The ONLY unavailable tool is drafts_run_action (arbitrary action execution) — the bridge filters it out."
                 }
               '
 

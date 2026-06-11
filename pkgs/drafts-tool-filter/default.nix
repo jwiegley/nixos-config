@@ -4,7 +4,7 @@
 # argv, e.g. the drafts ssh wrapper), pumps bytes both ways, and rewrites
 # JSON-RPC ONLY where policy requires:
 #
-#   (a) tools/list RESULTS from the child  -> strip the 9 Drafts write tools
+#   (a) tools/list RESULTS from the child  -> strip the denied tools
 #       from .result.tools (discovery hygiene).
 #   (b) tools/call REQUESTS to the child whose .params.name is in the deny
 #       set -> DO NOT forward; synthesize a JSON-RPC result with isError:true
@@ -15,13 +15,19 @@
 #   (d) UNPARSEABLE client->child lines -> DROP (fail closed). The reverse
 #       direction (child->client) passes unparseable lines verbatim.
 #
-# This is the ONLY write-tool enforcement point for OpenClaw (mcporter has no
-# per-server tool filter; mcp-proxy is transparent). Hermes is gated by a
-# tools.include allowlist at registration; host operator (claude-vulcan)
-# bypasses the bridge and gets the full toolset.
+# This is the ONLY tool enforcement point for OpenClaw (mcporter has no
+# per-server tool filter; mcp-proxy is transparent). Hermes is additionally
+# gated by a tools.include allowlist at registration; host operator
+# (claude-vulcan) bypasses the bridge and gets the full toolset.
 #
-# Deny set verified against drafts-mcp-server v1.0.12 dist/index.js: exactly
-# the nine readOnlyHint:false tools.
+# POLICY (owner decision 2026-06-10, superseding the launch read-only
+# posture): the agent VMs get the full READ/WRITE draft surface — create,
+# update, tag, flag, archive, inbox, trash, open workspace — because the
+# point of the bridge is that agents can MAKE drafts on request, not just
+# see them. The single remaining denial is drafts_run_action: it executes
+# arbitrary Drafts actions (including script actions) as johnw inside
+# hera's GUI session — code execution, not draft management — and stays
+# operator-only.
 #
 # No overlay / flake entry: callers do
 #   `import ../../pkgs/drafts-tool-filter { inherit pkgs; }`.
@@ -47,25 +53,20 @@ pkgs.writers.writePython3Bin "drafts-tool-filter"
     import threading
     import subprocess
 
-    # The nine readOnlyHint:false Drafts tools (v1.0.12). Denied to the
-    # autonomous OpenClaw VM. drafts_run_action is code-exec as johnw on hera,
-    # so it is the single most important entry.
+    # drafts_run_action is code-exec as johnw on hera (arbitrary Drafts
+    # actions, including script actions) and stays operator-only. Every
+    # other write tool (create/update/tag/flag/archive/inbox/trash/
+    # open_workspace) is deliberately ALLOWED for the agent VMs — owner
+    # decision 2026-06-10; see the header comment.
     DENY = frozenset({
-        "drafts_create_draft",
-        "drafts_update_draft",
-        "drafts_add_tags",
-        "drafts_flag",
-        "drafts_archive",
-        "drafts_inbox",
-        "drafts_trash",
-        "drafts_open_workspace",
         "drafts_run_action",
     })
 
     POLICY_MSG = (
-        "Tool denied by the drafts-mcp bridge policy: write/action tools "
-        "(including drafts_run_action) are not available to autonomous agents "
-        "on this endpoint. Read-only Drafts tools only."
+        "Tool denied by the drafts-mcp bridge policy: drafts_run_action "
+        "(arbitrary Drafts action execution on hera) is not available to "
+        "autonomous agents on this endpoint. All other draft read/write "
+        "tools are available."
     )
 
 

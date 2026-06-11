@@ -751,17 +751,19 @@ in
       # Drafts.app on hera via the host drafts-mcp SSE bridge (binds
       # 127.0.0.1:9082; reached over the hermes-br0 guest OUTPUT DNAT
       # 127.0.0.1:9082 → 10.99.1.1:9082 → host PREROUTING → 127.0.0.1:9082).
-      # This is the autonomous Hermes agent, so writes are denied twice over:
-      # the bridge's stdio filter shim (drafts-tool-filter, drafts-mcp.nix)
-      # strips all 9 write tools server-side for EVERY consumer of the SSE
-      # endpoint, and this `include` allowlist (default-deny) is the
-      # client-side belt-and-suspenders that also pins the read surface to
-      # the subset Hermes actually needs. drafts_run_action (code-exec as
-      # johnw on hera) and every write tool are intentionally absent.
-      # (The spec's "3 benign writes" for Hermes — create_draft,
-      # update_draft, add_tags — assumed an unshimmed Hermes leg; as built
-      # there is ONE filtered endpoint, so granting writes would need a
-      # second unfiltered bridge instance on its own port.)
+      #
+      # READ/WRITE surface (owner decision 2026-06-10, superseding the
+      # launch read-only posture): the point of giving agents Drafts access
+      # is that they can MAKE drafts on request, not just see them. The
+      # include allowlist below is everything drafts-mcp-server exposes
+      # EXCEPT drafts_run_action — arbitrary Drafts action execution
+      # (including script actions) as johnw inside hera's GUI session is
+      # code execution, not draft management, and stays operator-only. The
+      # bridge's stdio filter shim (drafts-tool-filter, drafts-mcp.nix)
+      # enforces the same single denial server-side for every consumer;
+      # this default-deny `include` list is the client-side
+      # belt-and-suspenders that also pins the surface against future
+      # upstream tool additions.
       # NO `description` field — the upstream mcpServers submodule (see the
       # NOTE at the top of this block) rejects it.
       #
@@ -772,19 +774,33 @@ in
       # Method Not Allowed (observed live 2026-06-10). mcp-proxy 0.8.2
       # mounts Streamable HTTP at /mcp/ — TRAILING SLASH REQUIRED (bare
       # /mcp is a 404, no redirect). Both mounts front the same filtered
-      # stdio chain, so the write-tool strip applies identically.
+      # stdio chain, so the run_action denial applies identically.
       drafts-hera = {
         url = "http://127.0.0.1:9082/mcp/";
         connect_timeout = 10;
         timeout = 60;
         tools.include = [
+          # reads
           "drafts_search"
           "drafts_get_draft"
           "drafts_get_drafts"
+          "drafts_get_tag"
+          "drafts_get_current"
+          "drafts_get_current_workspace"
+          "drafts_get_workspace_drafts"
           "drafts_list_tags"
           "drafts_list_workspaces"
-          "drafts_get_current"
           "drafts_list_actions"
+          "drafts_open"
+          # writes (everything except drafts_run_action)
+          "drafts_create_draft"
+          "drafts_update_draft"
+          "drafts_add_tags"
+          "drafts_flag"
+          "drafts_archive"
+          "drafts_inbox"
+          "drafts_trash"
+          "drafts_open_workspace"
         ];
       };
     };

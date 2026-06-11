@@ -94,13 +94,28 @@ let
     }) fileEntries
   );
 
-  # --- exclusions (spec 2.4) — the COMPLETE list, 7 rules -------------------
+  # --- exclusions (spec 2.4) — the COMPLETE list, 8 rules -------------------
   #   * Watchdog (meta-monitoring.yaml): fires-by-design dead-man; mirroring it
   #     is meaningless (it would page Nagios constantly by design).
+  #   * ServiceStuckActivating (systemd.yaml): un-mirrorable by instant
+  #     sampling. The expr is a broad multi-series selector where short-lived
+  #     `activating` blips are NORMAL (a dozen frequent exporter oneshots are
+  #     each activating for seconds-to-a-minute, many times an hour). The
+  #     ruler's `for: 15m` requires ONE series continuously true; the mirror's
+  #     max_check_attempts emulation only sees "some series true" at sparse
+  #     5-minute instants, so a rotating cast of unrelated blips reads as one
+  #     sustained condition. Observed 2026-06-11: mirror went HARD WARNING
+  #     twice (04:26, 06:31) on different exporters each sample while the
+  #     ruler stayed correctly silent — and missed the one genuine 17-minute
+  #     event (02:00 postgresql-backup) to sampling phase. Tier-3 divergence
+  #     auto-skips excluded rules (no mirror service => outside its universe).
   #   * Every rule whose source file is alerts/nagios.yaml: Nagios checking "is
   #     Nagios up" through its own scheduler is circular; the Prometheus side
   #     owns those 6 rules.
-  excludedAlertnames = [ "Watchdog" ];
+  excludedAlertnames = [
+    "Watchdog"
+    "ServiceStuckActivating"
+  ];
   excludedFileKeys = [ "alerts/nagios.yaml" ];
 
   # --- flatten groups[].rules[] into a rule list -----------------------------
@@ -364,7 +379,7 @@ let
     # Nagios <-> Prometheus reverse mirror — Tier 2 (GENERATED, do not hand-edit)
     # docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md
     # ${toString (builtins.length mirrorRules)} mirror services
-    # (484 rules - 7 excluded [Watchdog + 6 in alerts/nagios.yaml]).
+    # (484 rules - 8 excluded [Watchdog + ServiceStuckActivating + 6 in alerts/nagios.yaml]).
     # ==========================================================================
 
     define command {

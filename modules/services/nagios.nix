@@ -1350,10 +1350,15 @@ let
           SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
           RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
           CONDITION_RESULT=$(${pkgs.systemd}/bin/systemctl show -p ConditionResult --value "$SERVICE")
+          CONDITION_TS=$(${pkgs.systemd}/bin/systemctl show -p ConditionTimestamp --value "$SERVICE")
 
           # For oneshot services: inactive+dead with Result=success and ConditionResult=yes is OK
           # For running services: active+running is OK
           # For services currently executing: activating state is OK (backup in progress)
+          # Never started this boot: ConditionResult=no with an EMPTY
+          # ConditionTimestamp is systemd's pre-first-start default, not a
+          # condition failure (a weekly timer unit like restic-check sits in
+          # this state for days after a reboot).
           if [ "$ACTIVE_STATE" = "active" ] && [ "$RESULT" = "success" ]; then
             echo "OK: $SERVICE is active (mount $MOUNTPOINT available)"
             exit 0
@@ -1363,6 +1368,9 @@ let
             exit 0
           elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ] && [ "$RESULT" = "success" ] && [ "$CONDITION_RESULT" = "yes" ]; then
             echo "OK: $SERVICE completed successfully (mount $MOUNTPOINT available)"
+            exit 0
+          elif [ "$CONDITION_RESULT" = "no" ] && [ -z "$CONDITION_TS" ]; then
+            echo "OK: $SERVICE not started since boot; condition never evaluated, timer trigger pending (mount $MOUNTPOINT available)"
             exit 0
           elif [ "$CONDITION_RESULT" = "no" ]; then
             echo "CRITICAL: $SERVICE condition not met but $MOUNTPOINT IS mounted - service should be running"

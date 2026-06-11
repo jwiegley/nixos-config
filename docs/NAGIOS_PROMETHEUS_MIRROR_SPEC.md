@@ -110,11 +110,26 @@ check_prom_rule --datasource {prometheus|loki|vm} --query-file <store path>
 
 - `Watchdog` (meta-monitoring.yaml) — fires-by-design dead-man; mirroring is
   meaningless.
+- `ServiceStuckActivating` (systemd.yaml, added 2026-06-11) — un-mirrorable
+  by instant sampling. The expr is a broad multi-series selector where
+  short-lived `activating` blips are normal (a dozen frequent exporter
+  oneshots each spend seconds-to-a-minute activating, many times an hour).
+  The ruler's `for: 15m` requires ONE series continuously true; the mirror's
+  max_check_attempts emulation only sees "some series true" at sparse 5-min
+  instants, so a rotating cast of unrelated blips reads as one sustained
+  condition. Observed 2026-06-11: two HARD WARNINGs (04:26, 06:31) on
+  different exporters each sample — two ~45m `nagios_only` divergences —
+  while the ruler stayed correctly silent; the one genuine 17-minute event
+  (02:00 postgresql-backup) was missed to sampling phase. The general
+  lesson: any rule whose expr matches MANY series where brief trueness is
+  normal cannot be approximated by point sampling + retries; exclude it.
 - All 6 rules in `nagios.yaml` — Nagios checking "is Nagios up" through its
   own scheduler is circular; the Prometheus side owns those.
-- (That is the complete list — 7 rules. Everything else mirrors, including
+- (That is the complete list — 8 rules. Everything else mirrors, including
   the 13 `absent()`-based dead-man rules, which evaluate correctly through
-  the query API.)
+  the query API. Tier 3 needs no parallel list: an excluded rule has no
+  mirror service, so it is outside the reconciler's universe in both
+  directions by construction.)
 
 ## 3. Tier 1 — independent measurements
 

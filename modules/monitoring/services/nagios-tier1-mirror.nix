@@ -475,10 +475,15 @@ let
   # target a per-vhost SNI name through 127.0.0.1, so one new command is
   # defined here.) Verified live: an unauth vhost returns 2xx/3xx -> exit 0.
   #
-  # The two auth-gated vhosts (nagios, loki — blackbox_https_auth) answer an
-  # anonymous GET with 401, so they use `check_https_vhost_auth`, which adds
-  # `-e` to accept a 401 (or 200/302) status line as OK — verified live
-  # (nagios.vulcan.lan 401 -> exit 0 with -e).
+  # The two auth-gated / no-root-handler vhosts (nagios, loki —
+  # blackbox_https_auth) are probed by `check_https_vhost_auth`, whose `-e`
+  # list mirrors the blackbox https_2xx_or_auth module's valid_status_codes
+  # (200/301/302/303/307/308/401/403/404) exactly: the assertion is TLS +
+  # nginx vhost reachability, not app-level routing. loki returns 404 from
+  # localhost (the / location proxies straight to Loki, which has no root
+  # handler) — accepting only 401/200/302 made the check born-CRITICAL
+  # (2026-06-11). Verified live with the full list: nagios -> exit 0,
+  # loki 404 -> exit 0.
   #
   # KEEP-IN-SYNC: this list duplicates the blackbox target arrays as plain
   # data. Tier 3 (the divergence reconciler) catches semantic drift.
@@ -573,10 +578,12 @@ let
       command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $ARG1$ -S --sni -I 127.0.0.1 -w 5 -c 10
     }
 
-    # Auth-gated variant: a 401 challenge counts as healthy (TLS + nginx are up).
+    # Auth-gated variant: a 401 challenge (or any status the blackbox
+    # https_2xx_or_auth module accepts, incl. loki's no-root-handler 404)
+    # counts as healthy — TLS + nginx are up.
     define command {
       command_name    check_https_vhost_auth
-      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $ARG1$ -S --sni -I 127.0.0.1 -w 5 -c 10 -e 'HTTP/1.1 401,HTTP/2 401,HTTP/1.1 200,HTTP/2 200,HTTP/1.1 302,HTTP/2 302'
+      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $ARG1$ -S --sni -I 127.0.0.1 -w 5 -c 10 -e 'HTTP/1.1 200,HTTP/2 200,HTTP/1.1 301,HTTP/2 301,HTTP/1.1 302,HTTP/2 302,HTTP/1.1 303,HTTP/2 303,HTTP/1.1 307,HTTP/2 307,HTTP/1.1 308,HTTP/2 308,HTTP/1.1 401,HTTP/2 401,HTTP/1.1 403,HTTP/2 403,HTTP/1.1 404,HTTP/2 404'
     }
 
     # --- Family 1: textfile-collector freshness (${toString (builtins.length textfileChecks)} checks) ---

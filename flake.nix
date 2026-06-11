@@ -135,7 +135,10 @@
       };
     in
     {
-      formatter.aarch64-linux = inputs.nixpkgs.legacyPackages."${system}".nixfmt-rfc-style;
+      # nixfmt-tree = treefmt pre-configured with nixfmt: walks the git tree
+      # itself, so it works with `nix fmt` on Nix >= 2.24 (which no longer
+      # passes the tree root as an argument — bare nixfmt would read stdin).
+      formatter.aarch64-linux = inputs.nixpkgs.legacyPackages."${system}".nixfmt-tree;
 
       packages.${system} = {
         hermes-mcp = pkgs.callPackage ./pkgs/hermes-mcp { };

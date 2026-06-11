@@ -109,14 +109,17 @@
     }
   ];
 
-  # Declarative NM connection profile for end0. NOTE: NM does NOT materialize the
-  # ipv4.routing-rule1/2 declared below into the kernel (verified 2026-06-09 — the
-  # only live priority 50/51 rules are `proto unspec`, i.e. added by the
-  # asymmetric-routing oneshot, never `proto static` as NM would tag its own). The
-  # oneshot (re-run by the NM dispatcher on every end0 up/dhcp event) is the SINGLE
-  # authoritative writer. The dead routing-rule keys below are kept FOR NOW; remove
-  # them once a cold reboot confirms the (now fail-loud) oneshot lands the rules at
-  # boot — see docs/BOOT_SWITCH_ROBUSTNESS_AUDIT.md (asymmetric-routing, Phase B).
+  # Declarative NM connection profile for end0. The asymmetric source-policy
+  # routing rules (priority 50/51, table 200) are NOT declared here: NM never
+  # materialized ipv4.routing-rule* into the kernel (verified 2026-06-09 — the
+  # only live prio 50/51 rules were `proto unspec`, added by the asymmetric-routing
+  # oneshot, never `proto static` as NM would tag its own). The oneshot
+  # (systemd.services.asymmetric-routing above, re-run by the NM dispatcher on
+  # every end0 up/dhcp event, fail-loud, and protected from networkd by
+  # ManageForeignRoutingPolicyRules=false) is the SINGLE authoritative writer.
+  # The dead routing-rule1/2 keys were removed 2026-06-10 (Phase B) after a cold
+  # reboot confirmed the oneshot lands the rules at boot (post-reboot-validation
+  # check 4 PASS). Do NOT re-add them — see docs/BOOT_SWITCH_ROBUSTNESS_AUDIT.md.
   networking.networkmanager.ensureProfiles.profiles = {
     "end0-wired" = {
       connection = {
@@ -131,11 +134,6 @@
       ipv4 = {
         method = "auto";
         "route-metric" = "100";
-        # Force all traffic from 192.168.1.2 destined for 192.168.x.x back via
-        # the wired gateway (192.168.1.1) so asymmetric replies use correct source IP
-        "routing-rule1" = "priority 50 from 192.168.1.2/32 to 192.168.0.0/16 table 200";
-        # Same fix for container network range (10.x.x.x)
-        "routing-rule2" = "priority 51 from 192.168.1.2/32 to 10.0.0.0/8 table 200";
       };
       ipv6 = {
         method = "auto";

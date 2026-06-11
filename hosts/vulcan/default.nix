@@ -161,6 +161,8 @@
     ../../modules/services/syncthing.nix
     ../../modules/monitoring/services/syncthing-metrics.nix
     ../../modules/monitoring/services/syncthing-nagios.nix
+    ../../modules/monitoring/services/nagios-prometheus-mirror.nix
+    ../../modules/monitoring/services/nagios-tier1-mirror.nix
 
     # Containers
     ../../modules/containers/default.nix

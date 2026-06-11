@@ -1,0 +1,65 @@
+groups:
+  - name: nagios_prometheus_mirror
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # Tier-3 divergence detection for the Nagios <-> Prometheus reverse mirror
+      # (docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md section 4). Fed by the textfile
+      # collector nagios-mirror-divergence.nix, which every 5 minutes compares
+      # the HARD state of each PROM-MIRROR Nagios service against the firing
+      # sets of the three rulers (Prometheus, Loki ruler, vmalert) and emits
+      # COUNTS + diverged ALERTNAMES ONLY. This is the "each validates the
+      # other" payoff: a rule firing in one stack but not the other is itself
+      # an alert.
+      # -----------------------------------------------------------------------
+
+      # Sustained disagreement between the Nagios mirror and the rulers.
+      - alert: NagiosMirrorDivergence
+        expr: max by (direction) (nagios_mirror_divergence_total) > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios mirror diverges from the ruler ({{ $labels.direction }})"
+          description: >-
+            {{ $value }} alert(s) disagree between the Nagios mirror and the
+            Prometheus/Loki/vmalert rulers in the "{{ $labels.direction }}"
+            direction. nagios_only = a mirror service is HARD WARNING/CRITICAL
+            but the matching ruler rule is NOT firing, so the ruler-side rule
+            is likely dead or broken (the 2026-06-09 dead-rules class).
+            ruler_only = a ruler is firing an alertname whose Nagios mirror is
+            HARD OK, so the mirror is broken. Transient skew under 30m is
+            NORMAL: the two stacks have independent for:-timers and check
+            schedules, so brief disagreement during state transitions is
+            expected. Inspect nagios_mirror_diverged_alert for the alertnames.
+
+      # The reconciler stopped producing fresh output. Bare comparison stays
+      # inert until the metric first appears (house convention) so it does not
+      # false-fire before deploy.
+      - alert: NagiosMirrorReconcilerStale
+        expr: time() - nagios_mirror_reconciler_timestamp_seconds > 1800
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios mirror divergence reconciler is stale"
+          description: >-
+            nagios-mirror-divergence has not written its textfile in over 30
+            minutes (timer is OnUnitActiveSec=5min). Divergence detection
+            between the Nagios mirror and the rulers is no longer running.
+
+      # The reconciler ran but could not read status.dat.
+      - alert: NagiosMirrorReconcilerFailed
+        expr: nagios_mirror_reconciler_success == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios mirror divergence reconciler failed to read status.dat"
+          description: >-
+            nagios-mirror-divergence ran but could not read
+            /var/lib/nagios/status.dat, so it cannot compare the Nagios mirror
+            against the rulers. Check that Nagios is running and writing
+            status.dat.

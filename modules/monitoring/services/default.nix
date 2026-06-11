@@ -25,6 +25,7 @@
     ./system-age-exporter.nix # is-the-system-being-patched gauges
     # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
     ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
+    ./nagios-mirror-divergence.nix # Nagios↔Prometheus mirror divergence reconciler (tier 3)
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
     # Deferred-spec implementations (docs/MONITORING_DEFERRED_SPECS.md)
     ./container-cve-exporter.nix # trivy CVE scan of running images

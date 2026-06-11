@@ -2140,11 +2140,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1781128597,
-        "narHash": "sha256-D2OjUM6Zoly9k2/2ErhqTxjdzykyaOYyi3h/r+0WPHQ=",
+        "lastModified": 1781157766,
+        "narHash": "sha256-InNpK3w0V6odvKtC5wCXZZiluiWAD6uLElz3to+sQA0=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "ca51e92a8a2cc8bb8bc993b9b3ad29fa11216471",
+        "rev": "0b3a6a2dc43576f223d036ba70a29a2f0de99061",
         "type": "github"
       },
       "original": {
@@ -2865,11 +2865,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781116814,
-        "narHash": "sha256-NCzKkuJIS/tHju3LrDV0FGWNlZ/I/MsoNiR1m4seYo8=",
+        "lastModified": 1781139065,
+        "narHash": "sha256-xYdlQd9qO1l3N0XeQ0RZUWBMw96akqcE60phT/1ksGU=",
         "ref": "refs/heads/main",
-        "rev": "b7024dccb1dd938cc47f35dfc13e5aeaa6a33bca",
-        "revCount": 352,
+        "rev": "b0e7961927c2e92a3d1bb4096715eb4cbc6fe58c",
+        "revCount": 359,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },

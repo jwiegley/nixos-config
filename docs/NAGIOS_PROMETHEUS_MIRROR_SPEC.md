@@ -123,9 +123,21 @@ check_prom_rule --datasource {prometheus|loki|vm} --query-file <store path>
   (02:00 postgresql-backup) was missed to sampling phase. The general
   lesson: any rule whose expr matches MANY series where brief trueness is
   normal cannot be approximated by point sampling + retries; exclude it.
+- `BlackboxICMPIoTDeviceDown` (network.yaml, added 2026-06-12) — same class
+  as ServiceStuckActivating. The expr spans the sleepy Wi-Fi IoT fleet
+  (host_group="iot", ~17 devices) probed by single-shot 5s-timeout ICMP;
+  power-save wakeup latency (ring-doorbell measured 0% real loss yet 1.2s
+  avg / 2.9s max RTT) makes per-instant blips routine, so at nearly every
+  sample SOME device reads as down. The ruler's `for: 10m` requires ONE
+  device continuously down; the mirror latched HARD WARNING for hours on a
+  rotating cast (13 distinct devices in 2h, ≥1 failing at every 10-min
+  sample, observed 2026-06-12) while the ruler stayed correctly silent —
+  chronic `nagios_only` divergence, surfacing two days after the IoT
+  blackbox probes landed (66e1ec8). Coverage retained: the live ruler rule
+  plus the native Nagios PING services on the IoT fleet.
 - All 6 rules in `nagios.yaml` — Nagios checking "is Nagios up" through its
   own scheduler is circular; the Prometheus side owns those.
-- (That is the complete list — 8 rules. Everything else mirrors, including
+- (That is the complete list — 9 rules. Everything else mirrors, including
   the 13 `absent()`-based dead-man rules, which evaluate correctly through
   the query API. Tier 3 needs no parallel list: an excluded rule has no
   mirror service, so it is outside the reconciler's universe in both
@@ -181,7 +193,7 @@ nagios-status-exporter — root oneshot + 5 min timer + textfile):
    `NagiosMirrorDivergence` (warning, `for: 30m` — state-machine timing skew
    between the stacks makes transient divergence NORMAL; only sustained
    disagreement is real) and `NagiosMirrorReconcilerStale`. Info-severity
-   rules and the 7 exclusions are skipped in the comparison. These two rules
+   rules and the exclusions (§2.4) are skipped in the comparison. These two rules
    are themselves auto-mirrored into Nagios by tier 2 — harmless, and means
    Nagios also sees the divergence.
 

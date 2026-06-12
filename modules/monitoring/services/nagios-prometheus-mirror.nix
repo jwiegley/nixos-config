@@ -94,7 +94,7 @@ let
     }) fileEntries
   );
 
-  # --- exclusions (spec 2.4) — the COMPLETE list, 8 rules -------------------
+  # --- exclusions (spec 2.4) — the COMPLETE list, 9 rules -------------------
   #   * Watchdog (meta-monitoring.yaml): fires-by-design dead-man; mirroring it
   #     is meaningless (it would page Nagios constantly by design).
   #   * ServiceStuckActivating (systemd.yaml): un-mirrorable by instant
@@ -109,12 +109,28 @@ let
   #     ruler stayed correctly silent — and missed the one genuine 17-minute
   #     event (02:00 postgresql-backup) to sampling phase. Tier-3 divergence
   #     auto-skips excluded rules (no mirror service => outside its universe).
+  #   * BlackboxICMPIoTDeviceDown (network.yaml): un-mirrorable by instant
+  #     sampling — same class as ServiceStuckActivating. The expr spans the
+  #     sleepy Wi-Fi IoT fleet (host_group="iot", ~17 devices) probed by
+  #     single-shot 5s-timeout ICMP (blackbox-monitoring.nix); power-save
+  #     wakeup latency makes per-instant blips routine (ring-doorbell
+  #     measured 0% real loss yet 1.2s avg / 2.9s max RTT), so at nearly
+  #     every sample SOME device reads as down. The ruler's `for: 10m`
+  #     requires ONE device continuously down; the mirror's instant samples
+  #     see "some series true" at almost every check, so a rotating cast of
+  #     wakeup blips reads as one sustained condition. Observed 2026-06-12:
+  #     mirror HARD WARNING for hours (13 distinct devices blipping in 2h,
+  #     >=1 at every 10-min sample) while the ruler correctly stayed silent
+  #     => chronic nagios_only divergence. Coverage retained: the live ruler
+  #     rule (fires on any device down >=10m) plus Nagios's native PING
+  #     services on the IoT fleet.
   #   * Every rule whose source file is alerts/nagios.yaml: Nagios checking "is
   #     Nagios up" through its own scheduler is circular; the Prometheus side
   #     owns those 6 rules.
   excludedAlertnames = [
     "Watchdog"
     "ServiceStuckActivating"
+    "BlackboxICMPIoTDeviceDown"
   ];
   excludedFileKeys = [ "alerts/nagios.yaml" ];
 

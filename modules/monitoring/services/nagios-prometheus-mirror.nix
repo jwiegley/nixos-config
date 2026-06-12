@@ -112,10 +112,11 @@ let
   #   * BlackboxICMPIoTDeviceDown (network.yaml): un-mirrorable by instant
   #     sampling — same class as ServiceStuckActivating. The expr spans the
   #     sleepy Wi-Fi IoT fleet (host_group="iot", ~17 devices) probed by
-  #     single-shot 5s-timeout ICMP (blackbox-monitoring.nix); power-save
-  #     wakeup latency makes per-instant blips routine (ring-doorbell
-  #     measured 0% real loss yet 1.2s avg / 2.9s max RTT), so at nearly
-  #     every sample SOME device reads as down. The ruler's `for: 10m`
+  #     single-shot ICMP (5s at observation; 10s same-day via icmp_ping_iot
+  #     in blackbox-monitoring.nix — softens but cannot eliminate the
+  #     class); power-save wakeup latency makes per-instant blips routine
+  #     (ring-doorbell measured 0% real loss yet 1.2s avg / 2.9s max RTT),
+  #     so at nearly every sample SOME device reads as down. The ruler's `for: 10m`
   #     requires ONE device continuously down; the mirror's instant samples
   #     see "some series true" at almost every check, so a rotating cast of
   #     wakeup blips reads as one sustained condition. Observed 2026-06-12:

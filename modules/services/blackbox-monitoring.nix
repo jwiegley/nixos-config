@@ -55,6 +55,26 @@ let
           payload_size: 56
           dont_fragment: false
 
+      # Long-timeout variant for the sleepy Wi-Fi IoT fleet (host_group
+      # iot/iot-noping). Battery devices park their radios in power-save and
+      # answer only on beacon wakeups: ring-doorbell measured 0% real loss
+      # yet 1.2s avg / 2.9s max RTT, and deeper sleeps blow the 5s icmp_ping
+      # budget entirely — at 5s, probe_success under-reported that healthy
+      # doorbell as 31% (observed 2026-06-12). 10s keeps probe_success
+      # truthful for "is it on the network at all", which is all the iot
+      # rules ask (BlackboxICMPIoTDeviceDown, for: 10m); the latency rules
+      # already exclude these host_groups. Routed per-target by the
+      # __param_module relabel in the blackbox_icmp job — same job, so every
+      # series keeps job="blackbox_icmp" and no rule expr changes.
+      icmp_ping_iot:
+        prober: icmp
+        timeout: 10s
+        icmp:
+          preferred_ip_protocol: "ip4"
+          source_ip_address: ""
+          payload_size: 56
+          dont_fragment: false
+
       icmp_ping_ipv6:
         prober: icmp
         timeout: 5s
@@ -348,6 +368,9 @@ in
 
         ## Available Probe Modules
         - **icmp_ping**: IPv4 ICMP echo requests (standard ping)
+        - **icmp_ping_iot**: IPv4 ICMP with a 10s timeout for the sleepy IoT
+          fleet (power-save wakeups exceed the 5s budget); auto-selected for
+          host_group iot/iot-noping via relabeling
         - **icmp_ping_ipv6**: IPv6 ICMP echo requests
         - **http_2xx**: HTTP endpoint checks
         - **https_2xx**: HTTPS endpoint checks with SSL validation
@@ -547,9 +570,28 @@ in
                 regex = "(.+\\.(com|org|net|edu));";
                 replacement = "backbone";
               }
+              # Route the sleepy IoT fleet to the long-timeout icmp_ping_iot
+              # module (see blackbox.yml above). Safe to key on host_group:
+              # both groups carry it as an authoritative static label, so this
+              # never depends on the defaulting rules above. Rewriting
+              # __param_module overrides the job-level params.module for just
+              # these targets while keeping job="blackbox_icmp" on every
+              # series — BlackboxICMPIoTDeviceDown and the latency-rule
+              # exclusions select on that label and must not churn.
+              {
+                source_labels = [ "host_group" ];
+                target_label = "__param_module";
+                regex = "iot|iot-noping";
+                replacement = "icmp_ping_iot";
+              }
             ];
             scrape_interval = "30s";
-            scrape_timeout = "10s";
+            # 12s, not the 10s default: must exceed the icmp_ping_iot module
+            # timeout (10s) or the probe loses its window — blackbox caps the
+            # effective deadline at min(module timeout, scrape_timeout - 0.5s
+            # offset). Plain icmp_ping targets are unaffected; their 5s module
+            # timeout still bounds the probe.
+            scrape_timeout = "12s";
           }
 
           # HTTP monitoring for web services

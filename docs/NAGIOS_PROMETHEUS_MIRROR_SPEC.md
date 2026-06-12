@@ -125,9 +125,11 @@ check_prom_rule --datasource {prometheus|loki|vm} --query-file <store path>
   normal cannot be approximated by point sampling + retries; exclude it.
 - `BlackboxICMPIoTDeviceDown` (network.yaml, added 2026-06-12) — same class
   as ServiceStuckActivating. The expr spans the sleepy Wi-Fi IoT fleet
-  (host_group="iot", ~17 devices) probed by single-shot 5s-timeout ICMP;
-  power-save wakeup latency (ring-doorbell measured 0% real loss yet 1.2s
-  avg / 2.9s max RTT) makes per-instant blips routine, so at nearly every
+  (host_group="iot", ~17 devices) probed by single-shot ICMP (5s at
+  observation; 10s same-day via icmp_ping_iot — softens but cannot
+  eliminate the class); power-save wakeup latency (ring-doorbell measured
+  0% real loss yet 1.2s avg / 2.9s max RTT) makes per-instant blips
+  routine, so at nearly every
   sample SOME device reads as down. The ruler's `for: 10m` requires ONE
   device continuously down; the mirror latched HARD WARNING for hours on a
   rotating cast (13 distinct devices in 2h, ≥1 failing at every 10-min

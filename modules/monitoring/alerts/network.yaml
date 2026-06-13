@@ -245,9 +245,18 @@ groups:
           summary: "Massive network outage detected"
           description: "More than 50% of monitored hosts are unreachable. This may indicate a local network or internet connectivity issue."
 
-      # Probe duration taking too long (potential blackbox exporter overload)
+      # Probe duration taking too long (potential blackbox exporter overload).
+      # host_group iot/iot-noping excluded: these sleepy / ICMP-silent devices
+      # are routed to the 10s-timeout icmp_ping_iot module
+      # (blackbox-monitoring.nix), so a non-responding device's
+      # probe_duration_seconds sits at ~10.0001s every scrape and chronically
+      # trips this >10 meta-rule — that is the configured module timeout doing
+      # its job, not exporter overload. The always-on ICMP hosts plus all
+      # HTTP/HTTPS/DNS jobs (which carry no host_group) stay in scope, so a
+      # genuine exporter overload is still caught. Mirrors the exclusion on the
+      # sibling blackbox rules (HostUnreachable, HighLatency, CriticalLatency).
       - alert: BlackboxProbeTimeout
-        expr: probe_duration_seconds{job=~"blackbox_.*"} > 10
+        expr: probe_duration_seconds{job=~"blackbox_.*",host_group!~"iot|iot-noping"} > 10
         for: 2m
         labels:
           severity: warning

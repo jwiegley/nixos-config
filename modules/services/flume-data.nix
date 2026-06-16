@@ -248,7 +248,21 @@ in
         # ── Hardening ───────────────────────────────────────────────
         ProtectSystem = "strict";
         ProtectHome = true;
-        NoNewPrivileges = true;
+        # NoNewPrivileges MUST stay false here: the email step shells out
+        # to /run/wrappers/bin/sendmail, which is setgid `postdrop`, and
+        # postdrop needs that setgid to write into postfix's 0730 maildrop
+        # queue. With NoNewPrivileges=true the kernel ignores the setgid
+        # bit, so postdrop runs as group flume-data, fails with
+        # "mail_queue_enter: ... Permission denied", and the
+        # sendmail/postdrop chain HANGS until TimeoutStartSec kills the
+        # unit (FlumeCrossCheckFailed, root-caused 2026-06-15).
+        # hermes-nightly-report keeps NNP=true only because it runs as
+        # User=root (DAC override bypasses the queue perms); this unit runs
+        # unprivileged as flume-data, so the setgid must actually take
+        # effect. Matches the *-self-heal.nix pattern (setgid/setuid wrapper
+        # ⇒ NoNewPrivileges=false + RestrictSUIDSGID=false).
+        NoNewPrivileges = false;
+        RestrictSUIDSGID = false; # postdrop sendmail wrapper is setgid
         PrivateTmp = true;
         # Required for HTTPS to api.flumewater.com, HTTP to localhost VM
         # + HA, and AF_NETLINK + AF_PACKET for postfix's getifaddrs() at

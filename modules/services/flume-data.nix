@@ -30,6 +30,11 @@ let
       websocket-client
       python-dateutil
       pyyaml
+      # Explicit tz database for zoneinfo.ZoneInfo("America/Los_Angeles"), used
+      # by the weekly report's daily breakdown (local-midnight meter-reset
+      # alignment). Redundant with CPython's compiled TZPATH on this nixpkgs
+      # build, but pins zone resolution independent of interpreter build flags.
+      tzdata
     ]
   );
 

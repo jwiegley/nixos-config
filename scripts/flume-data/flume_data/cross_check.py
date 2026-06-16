@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from .config import load_config
 
@@ -221,49 +222,116 @@ def _read_weekly_categories(
     return category_totals, per_zone_totals
 
 
+def _completed_period_total(vm, daily_entity: str, reset_utc: datetime) -> float:
+    """Gallons for the local-day period that ENDED at ``reset_utc``.
+
+    Reads the utility meter's ``gal_last_period`` series shortly after the
+    reset. ``last_period`` is captured atomically at the reset instant, so it
+    is immune to the sparse HA->VM mirroring (event-on-change) that made the
+    old trailing-window read return 0 for intermittent categories. Verified to
+    reconcile exactly (sum of daily last_period == the weekly last_period).
+    0.0 on any miss — one absent meter must not suppress the rest.
+    """
+    try:
+        series = vm.query_range(
+            metric=(
+                f'last_over_time({{entity_id="{daily_entity}",'
+                f'__name__="gal_last_period"}}[1h])'
+            ),
+            start=reset_utc,
+            end=reset_utc + timedelta(minutes=30),
+            step="300s",
+        )
+        return float(series[-1][1]) if series else 0.0
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: daily read for {daily_entity} failed: {type(exc).__name__}")
+        return 0.0
+
+
+def _whole_house_day_total(vm, reset_utc: datetime) -> float:
+    """Whole-house gallons for the local day that ENDED at ``reset_utc``.
+
+    ``flume_sensor_sierra_oaks_current_day`` is a Flume-native daily counter
+    (no ``last_period``) that climbs monotonically within a local day and
+    zeroes at the local-midnight reset, so its peak in the window just before
+    the reset is that day's total. ``max_over_time`` over the trailing window
+    captures that peak regardless of sparse sampling — the old
+    ``last_over_time([10m])`` read at the boundary instead caught the meter
+    at/after its reset (e.g. read 41 gal for a 1,410 gal day, or 0 on the
+    reset). 0.0 on miss.
+    """
+    try:
+        series = vm.query_range(
+            metric=(
+                'max_over_time({entity_id='
+                '"flume_sensor_sierra_oaks_current_day",'
+                '__name__=~".+_value"}[3h])'
+            ),
+            start=reset_utc - timedelta(minutes=1),
+            end=reset_utc,
+            step="60s",
+        )
+        return float(series[-1][1]) if series else 0.0
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: daily total read failed: {type(exc).__name__}")
+        return 0.0
+
+
 def _build_daily_breakdown(
     vm,
-    flume_entity_id: str,
     end: datetime,
+    zones: list,
+    domestic_hot_present: bool,
 ) -> list[tuple]:
-    """Per-day total water (best-effort) for the trailing 7 days.
+    """Per-day whole-house total + per-category split for the trailing 7 days.
 
-    Returns ``[(date, total_gal, parts_dict), ...]``. ``parts_dict`` is a
-    rough categorisation that today only records the bucket name; per-
-    bucket gallons land in a v2 once detection is wired across all
-    categories. The current entry serves as a placeholder so the email
-    layout stays consistent.
+    Each entry is ``(local_date, total_gal, parts)`` where ``parts`` maps the
+    four report buckets to integer gallons. Days are aligned to the LOCAL
+    midnight reset of the HA daily utility meters (the boundary current_day /
+    current_week also reset on), so the daily totals reconcile to the
+    whole-house weekly meter (~0.6%). Totals come from the whole-house Flume
+    counter; the per-category split is read from each category's ``*_daily``
+    utility meter, with irrigation summed over the per-zone daily meters
+    (mirroring the weekly report's robust sum-of-zones derivation rather than
+    the broken ``water_irrigation_*`` aggregate).
     """
+    # Local TZ resolved here (not at import) so a missing tzdata can never
+    # break the package import for the other flume_data subcommands.
+    tz = ZoneInfo("America/Los_Angeles")
     out: list[tuple] = []
     for offset in range(7, 0, -1):
-        day_end = end - timedelta(days=offset - 1)
-        day_start = day_end - timedelta(days=1)
-        try:
-            # Use HA's `current_day` Flume sensor sampled at end-of-day.
-            series = vm.query_range(
-                metric=(
-                    # entity_id has no `sensor.` prefix in VM; pin to the value
-                    # series (see _query_ha_total_via_vm).
-                    'last_over_time({entity_id='
-                    '"flume_sensor_sierra_oaks_current_day",'
-                    '__name__=~".+_value"}[10m])'
-                ),
-                start=day_end - timedelta(minutes=10),
-                end=day_end,
-                step="60s",
-            )
-            total = float(series[-1][1]) if series else 0.0
-        except Exception as exc:  # noqa: BLE001
-            print(
-                f"WARN: daily breakdown for {day_start.date()} failed: "
-                f"{type(exc).__name__}"
-            )
-            total = 0.0
+        day = (end - timedelta(days=offset)).date()
+        # The day ENDS at the next local midnight; express that instant in UTC
+        # (DST-aware: 07:00Z in PDT, 08:00Z in PST).
+        reset_local = datetime(
+            day.year, day.month, day.day, tzinfo=tz
+        ) + timedelta(days=1)
+        reset_utc = reset_local.astimezone(timezone.utc)
+
+        total = _whole_house_day_total(vm, reset_utc)
+        autofill = _completed_period_total(
+            vm, "water_pool_autofill_daily", reset_utc
+        )
+        hot = (
+            _completed_period_total(vm, "water_domestic_hot_daily", reset_utc)
+            if domestic_hot_present
+            else 0.0
+        )
+        other = _completed_period_total(vm, "water_other_daily", reset_utc)
+        irrig = sum(
+            _completed_period_total(vm, f"water_{z.slug}_daily", reset_utc)
+            for z in zones
+        )
         out.append(
             (
-                day_start.date(),
+                day,
                 total,
-                {"autofill": 0, "hot": 0, "irrig": 0, "other": 0},
+                {
+                    "autofill": round(autofill),
+                    "hot": round(hot),
+                    "irrig": round(irrig),
+                    "other": round(other),
+                },
             )
         )
     return out
@@ -504,7 +572,7 @@ def run(days: int = 7) -> int:
         vm, end, domestic_hot_present, cfg.zones
     )
     daily_breakdown = _build_daily_breakdown(
-        vm, cfg.flume_current_sensor, end
+        vm, end, cfg.zones, domestic_hot_present
     )
 
     # Grand totals from the authoritative whole-house `current_week` meter

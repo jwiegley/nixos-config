@@ -335,3 +335,80 @@ def test_grand_totals_prefer_authoritative_whole_house_meter():
     assert this_v == pytest.approx(4997.6)
     # last week's current_week missing -> fall back to sum of last-week cats.
     assert last_v == pytest.approx(300.0)  # 10 + 290
+
+
+def test_completed_period_total_reads_last_period():
+    """A finished daily period's gallons come from the meter's gal_last_period
+    (captured atomically at the reset), which is sparse-immune."""
+    from datetime import datetime, timezone
+
+    from flume_data.cross_check import _completed_period_total
+
+    vm = MagicMock()
+    vm.query_range.return_value = [
+        (datetime(2026, 6, 9, 7, 30, tzinfo=timezone.utc), 177.888)
+    ]
+    reset = datetime(2026, 6, 9, 7, tzinfo=timezone.utc)
+    val = _completed_period_total(vm, "water_other_daily", reset)
+
+    assert val == pytest.approx(177.888)
+    metric = vm.query_range.call_args.kwargs["metric"]
+    assert 'entity_id="water_other_daily"' in metric
+    assert '__name__="gal_last_period"' in metric
+    # graceful zero on a missing meter
+    vm.query_range.return_value = []
+    assert _completed_period_total(vm, "water_other_daily", reset) == 0.0
+
+
+def test_build_daily_breakdown_local_day_totals_and_real_categories():
+    """Daily breakdown now yields real per-day totals (whole-house Flume peak
+    via max_over_time, NOT the reset-skewed [10m] read) and a real per-category
+    split (each category's *_daily last_period; irrigation = sum of zones),
+    anchored at the local-midnight (07:00Z PDT) meter reset."""
+    from datetime import datetime, timezone
+
+    from flume_data.config import Zone
+    from flume_data.cross_check import _build_daily_breakdown
+
+    zones = [
+        Zone("front_yard", "Front Yard", "spray"),
+        Zone("zone_5", "Zone 5", None),  # placeholder zone -> dead meter -> 0
+    ]
+    end = datetime(2026, 6, 15, tzinfo=timezone.utc)
+    calls = []
+
+    def qr(metric, start, end, step="60s"):
+        calls.append((metric, start, end, step))
+        if "max_over_time" in metric and "current_day" in metric:
+            return [(end, 500.0)]
+        if '__name__="gal_last_period"' in metric:
+            if "water_pool_autofill_daily" in metric:
+                return [(end, 5.0)]
+            if "water_domestic_hot_daily" in metric:
+                return [(end, 100.0)]
+            if "water_other_daily" in metric:
+                return [(end, 50.0)]
+            if "water_front_yard_daily" in metric:
+                return [(end, 200.0)]
+            if "water_zone_5_daily" in metric:
+                return []  # dead placeholder zone -> 0
+        return []
+
+    vm = MagicMock()
+    vm.query_range.side_effect = qr
+    out = _build_daily_breakdown(vm, end, zones, domestic_hot_present=True)
+
+    assert len(out) == 7
+    assert [d.isoformat() for d, _, _ in out] == [
+        f"2026-06-{n:02d}" for n in range(8, 15)
+    ]
+    day, total, parts = out[0]
+    assert total == 500.0
+    # irrig = front_yard(200) + zone_5(0); others from their daily meters
+    assert parts == {"autofill": 5, "hot": 100, "irrig": 200, "other": 50}
+    # whole-house total uses max_over_time[3h], never the old reset-skewed [10m]
+    cd = [c for c in calls if "current_day" in c[0]]
+    assert cd and all("max_over_time" in c[0] and "[3h]" in c[0] for c in cd)
+    assert all("[10m]" not in c[0] for c in calls)
+    # every read is anchored at the local-midnight reset = 07:00 UTC (PDT June)
+    assert all(c[2].hour == 7 for c in cd)

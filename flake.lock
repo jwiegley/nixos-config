@@ -2193,11 +2193,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1781282000,
-        "narHash": "sha256-fH8wERt1yHLSiKFHpo7+0Qi0p/+s+d/gpCuu4tqQW20=",
+        "lastModified": 1781635466,
+        "narHash": "sha256-ClPt7jDJIkUemCBh09EY9J4eTbLsRFCFg4yylalq4hw=",
         "ref": "refs/heads/main",
-        "rev": "ecc8f308813cc9fa32141eae543c2bf9b40a5d94",
-        "revCount": 1884,
+        "rev": "cc471c386f99c15919a53b12bdfed8476e96a5bb",
+        "revCount": 1894,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2730,11 +2730,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1780952837,
-        "narHash": "sha256-Fwd1+spDtQ0hDyBwme6ufG3n4mY0UrjjFdYHv+G/Hds=",
+        "lastModified": 1781509190,
+        "narHash": "sha256-uJZs9Di8I6ciTp6jiojj0HzlNpBkud8ax5aT/O5aJkw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "e820eb4a444b46a19b2e03e8dfd2359439ff30fe",
+        "rev": "d6df3513510aa548c83868fd22bfddd0a8c0a0d4",
         "type": "github"
       },
       "original": {
@@ -2865,11 +2865,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781340395,
-        "narHash": "sha256-lFTITjqV1+rIuKAe1BqI23d0DKaiiLkl1ihkYaMv9Nk=",
+        "lastModified": 1781587578,
+        "narHash": "sha256-e+zpHVkG/YL/Dt9df21+MkUDRGGZvxqhgZAps4ZDigY=",
         "ref": "refs/heads/main",
-        "rev": "237daf8fa171f7e70400c8dd9c8a972b2b07e890",
-        "revCount": 398,
+        "rev": "85e77f5602982df32383a0f494f6d735a9f347da",
+        "revCount": 408,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },

@@ -538,12 +538,11 @@ def run(days: int = 7) -> int:
         ha_token = None  # type: ignore[assignment]
 
     # 8. Email.
-    email_to = os.environ.get(
-        "FLUME_AUTOFILL_EMAIL_TO", "johnw@newartisans.com"
-    )
-    from_addr = os.environ.get(
-        "FLUME_AUTOFILL_FROM", "vulcan@vulcan.newartisans.com"
-    )
+    # Defaults mirror modules/services/flume-data.nix (emailTo /
+    # reportFromAddress); the module always sets these env vars, so the
+    # fallbacks only matter for ad-hoc local runs.
+    email_to = os.environ.get("FLUME_AUTOFILL_EMAIL_TO", "johnw@vulcan.lan")
+    from_addr = os.environ.get("FLUME_AUTOFILL_FROM", "flume-data@vulcan.lan")
     msg = EmailMessage()
     msg["Subject"] = (
         f"[vulcan] Weekly water report — "

@@ -109,17 +109,24 @@ def _query_ha_total_via_vm(
         # without pinning the value series would risk returning last_reset as gal.
         vm_id = entity_id.split(".", 1)[1] if "." in entity_id else entity_id
         series = vm.query_range(
-            # Lookback widened 5m->2h: utility-meter samples are sparse (they
-            # only update when water flows), so a 5-min window often found
-            # nothing and read 0. Stays under the period-reset offset -- the
-            # weekly cross-check reads ~3.5h after the Monday reset, so <=3h is
-            # safe; a meter idle >2h still best-efforts to 0 (documented).
+            # Lookback = one full weekly cycle (was 2h, before that 5m). HA
+            # mirrors these utility meters into VM only when their value
+            # CHANGES, so an intermittent category (pool_autofill, any
+            # irrigation zone) emits no sample in the final hours before the
+            # period boundary even though its weekly total has been sitting in
+            # VM since its last run hours or days earlier. A short trailing
+            # window therefore read 0 for everything not flowing right at the
+            # boundary; continuous base load (domestic_hot/other) was
+            # unaffected, which is why the bug hid. `last_over_time` returns
+            # the most-recent sample in the window, so a 7d span recovers the
+            # true value — and it never bleeds in the PRIOR week because the
+            # weekly reset emits a 0-sample more recent than any pre-reset tail.
             metric=(
-                f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[2h])'
+                f'last_over_time({{entity_id="{vm_id}",__name__=~".+_value"}}[7d])'
             ),
-            start=at_time - timedelta(hours=2),
+            start=at_time - timedelta(days=7),
             end=at_time,
-            step="60s",
+            step="1h",
         )
         if not series:
             return 0.0
@@ -175,26 +182,38 @@ def _read_weekly_categories(
     asymmetries.
     """
     last_week = end - timedelta(days=7)
-    category_totals: dict[str, tuple[float, float]] = {}
-    cats = ["pool_autofill", "irrigation_total", "other"]
-    if domestic_hot_present:
-        cats.append("domestic_hot")
-    # The internal category key differs from the HA entity slug for irrigation:
-    # the aggregate utility meter is `sensor.water_irrigation_weekly`, not
-    # `..._irrigation_total_weekly`. Keep the key (report labels + promote rely
-    # on it) but query the real entity.
-    entity_slug = {"irrigation_total": "irrigation"}
-    for cat in cats:
-        eid = f"sensor.water_{entity_slug.get(cat, cat)}_weekly"
-        this_v = _query_ha_total_via_vm(vm, eid, end)
-        last_v = _query_ha_total_via_vm(vm, eid, last_week)
-        category_totals[cat] = (this_v, last_v)
 
+    # Per-zone weekly totals FIRST — irrigation is reconstructed from these.
     per_zone_totals: dict[str, tuple[float, float]] = {}
     for z in zones:
         eid = f"sensor.water_{z.slug}_weekly"
         display = getattr(z, "name", z.slug)
         per_zone_totals[display] = (
+            _query_ha_total_via_vm(vm, eid, end),
+            _query_ha_total_via_vm(vm, eid, last_week),
+        )
+    irrigation_this = sum(tv for (tv, _lv) in per_zone_totals.values())
+    irrigation_last = sum(lv for (_tv, lv) in per_zone_totals.values())
+
+    category_totals: dict[str, tuple[float, float]] = {}
+    cats = ["pool_autofill", "irrigation_total", "other"]
+    if domestic_hot_present:
+        cats.append("domestic_hot")
+    for cat in cats:
+        if cat == "irrigation_total":
+            # The HA aggregate `sensor.water_irrigation_weekly` (a template
+            # summing the zone totals) is unreliable — it can stick at 0 or go
+            # unavailable while the per-zone meters keep accumulating, which is
+            # exactly what zeroed the "Irrigation (total)" line. Reconstruct it
+            # from the per-zone reads instead: the same definition the HA
+            # template intends (sum of zones), but robust to the aggregate
+            # breaking. Keeps the `irrigation_total` key for report labels.
+            category_totals[cat] = (irrigation_this, irrigation_last)
+            continue
+        # pool_autofill / other / domestic_hot map directly to
+        # `sensor.water_<cat>_weekly` (verified entity names in VM).
+        eid = f"sensor.water_{cat}_weekly"
+        category_totals[cat] = (
             _query_ha_total_via_vm(vm, eid, end),
             _query_ha_total_via_vm(vm, eid, last_week),
         )
@@ -248,6 +267,30 @@ def _build_daily_breakdown(
             )
         )
     return out
+
+
+def _grand_totals(
+    vm,
+    category_totals: dict[str, tuple[float, float]],
+    end: datetime,
+    week_sensor: str = "sensor.flume_sensor_sierra_oaks_current_week",
+) -> tuple[float, float]:
+    """Return ``(this_week_total, last_week_total)`` whole-house gallons.
+
+    Prefer the authoritative whole-house ``current_week`` Flume meter — it is
+    continuously sampled, so it reads reliably regardless of the lookback
+    window — over the sum of the per-category reads. The category sum both
+    under-counts (the categories don't partition the meter exactly) and is
+    itself vulnerable to any single missing series, so it serves only as a
+    fallback when the whole-house meter is unavailable.
+    """
+    this_v = _query_ha_total_via_vm(vm, week_sensor, end)
+    if this_v == 0:
+        this_v = sum(tv for (tv, _lv) in category_totals.values())
+    last_v = _query_ha_total_via_vm(vm, week_sensor, end - timedelta(days=7))
+    if last_v == 0:
+        last_v = sum(lv for (_tv, lv) in category_totals.values())
+    return this_v, last_v
 
 
 def _notable_observations(
@@ -464,20 +507,11 @@ def run(days: int = 7) -> int:
         vm, cfg.flume_current_sensor, end
     )
 
-    # Last week's grand total — sum of category last_week values, or fall
-    # back to HA's existing `current_week` sensor at the prior boundary.
-    last_week_total_gal = sum(lv for (_tv, lv) in category_totals.values())
-    if last_week_total_gal == 0:
-        last_week_total_gal = _query_ha_total_via_vm(
-            vm,
-            "sensor.flume_sensor_sierra_oaks_current_week",
-            end - timedelta(days=7),
-        )
-    this_week_total_gal = sum(
-        tv for (tv, _lv) in category_totals.values()
+    # Grand totals from the authoritative whole-house `current_week` meter
+    # (falls back to the category sum only when that read is unavailable).
+    this_week_total_gal, last_week_total_gal = _grand_totals(
+        vm, category_totals, end
     )
-    if this_week_total_gal == 0:
-        this_week_total_gal = pool_autofill_total
 
     observations = _notable_observations(category_totals)
     observations.insert(

@@ -227,3 +227,111 @@ def test_cross_check_run_writes_summary_max_delta(tmp_path, monkeypatch):
     assert (
         "sensor.water_attribution_cross_check_delta_gal" in posted["url"]
     )
+
+
+def test_query_ha_total_uses_full_cycle_window_for_sparse_meters():
+    """Headline water-report regression.
+
+    HA mirrors its utility-meter sensors into VM only when their value
+    CHANGES, so an intermittent category (pool_autofill, any irrigation
+    zone) emits no sample in the final hours before the weekly boundary —
+    even though its weekly total has been sitting in VM since its last run
+    hours or days earlier. A short trailing window therefore read 0 for
+    everything that wasn't flowing right at the boundary (continuous base
+    load like domestic_hot/other was unaffected, which is why the bug hid).
+
+    The read must span a full weekly cycle so ``last_over_time`` returns the
+    most-recent in-cycle sample.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from flume_data.cross_check import _query_ha_total_via_vm
+
+    vm = MagicMock()
+    # A single sample ~18h before the boundary (a Sunday-morning zone run).
+    # The old [2h] window missed it; a weekly window catches it.
+    vm.query_range.return_value = [
+        (datetime(2026, 6, 14, 6, tzinfo=timezone.utc), 754.4)
+    ]
+    at = datetime(2026, 6, 15, tzinfo=timezone.utc)
+    val = _query_ha_total_via_vm(vm, "sensor.water_front_yard_weekly", at)
+
+    assert val == pytest.approx(754.4)
+    call = vm.query_range.call_args
+    metric = call.kwargs.get("metric", "")
+    start = call.kwargs.get("start")
+    assert "[2h]" not in metric
+    assert "[7d]" in metric
+    assert start <= at - timedelta(days=6)
+
+
+def test_irrigation_total_is_sum_of_zones_not_the_broken_aggregate():
+    """``sensor.water_irrigation_weekly`` (the HA template that sums the zone
+    totals) can stick at 0 or go unavailable while the per-zone meters keep
+    accumulating — which is exactly what zeroed the "Irrigation (total)"
+    line. The report must reconstruct irrigation as the sum of the per-zone
+    reads and must never consult the aggregate meter.
+    """
+    from datetime import datetime, timezone
+
+    from flume_data.config import Zone
+    from flume_data.cross_check import _read_weekly_categories
+
+    zones = [
+        Zone(slug="front_yard", name="Front Yard", type="spray"),
+        Zone(slug="zone_5", name="Zone 5", type=None),
+    ]
+    end = datetime(2026, 6, 15, tzinfo=timezone.utc)
+
+    def qr(metric, start, end, step="60s"):
+        if 'entity_id="water_front_yard_weekly"' in metric:
+            return [(end, 700.0)]
+        if 'entity_id="water_zone_5_weekly"' in metric:
+            return [(end, 49.0)]
+        # The broken aggregate would (wrongly) report 0 — must be ignored.
+        if 'entity_id="water_irrigation_weekly"' in metric:
+            return [(end, 0.0)]
+        return []  # pool_autofill / other / domestic_hot
+
+    vm = MagicMock()
+    vm.query_range.side_effect = qr
+    cats, per_zone = _read_weekly_categories(
+        vm, end, domestic_hot_present=False, zones=zones
+    )
+
+    assert cats["irrigation_total"][0] == pytest.approx(749.0)  # 700 + 49
+    assert per_zone["Front Yard"][0] == pytest.approx(700.0)
+    assert per_zone["Zone 5"][0] == pytest.approx(49.0)
+    queried = [c.kwargs["metric"] for c in vm.query_range.call_args_list]
+    assert not any("water_irrigation_weekly" in m for m in queried)
+
+
+def test_grand_totals_prefer_authoritative_whole_house_meter():
+    """``this_week``/``last_week`` totals come from the whole-house
+    ``current_week`` Flume meter (continuously sampled, reliable at any
+    window), falling back to the sum of category reads only when that meter
+    is unavailable.
+    """
+    from datetime import datetime, timezone
+
+    from flume_data.cross_check import _grand_totals
+
+    end = datetime(2026, 6, 15, tzinfo=timezone.utc)
+
+    def qr(metric, start, end, step="60s"):
+        # current_week present at the this-week boundary, absent a week ago.
+        if "current_week" in metric and end == datetime(
+            2026, 6, 15, tzinfo=timezone.utc
+        ):
+            return [(end, 4997.6)]
+        return []
+
+    vm = MagicMock()
+    vm.query_range.side_effect = qr
+    cats = {"irrigation_total": (4149.0, 10.0), "other": (476.0, 290.0)}
+    this_v, last_v = _grand_totals(vm, cats, end)
+
+    # Whole-house meter wins over sum(categories) == 4625.
+    assert this_v == pytest.approx(4997.6)
+    # last week's current_week missing -> fall back to sum of last-week cats.
+    assert last_v == pytest.approx(300.0)  # 10 + 290

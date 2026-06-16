@@ -111,19 +111,19 @@ let
   #     auto-skips excluded rules (no mirror service => outside its universe).
   #   * BlackboxICMPIoTDeviceDown (network.yaml): un-mirrorable by instant
   #     sampling — same class as ServiceStuckActivating. The expr spans the
-  #     sleepy Wi-Fi IoT fleet (host_group="iot", ~17 devices) probed by
+  #     sleepy Wi-Fi IoT fleet (host_group="iot", ~15 devices) probed by
   #     single-shot ICMP (5s at observation; 10s same-day via icmp_ping_iot
   #     in blackbox-monitoring.nix — softens but cannot eliminate the
   #     class); power-save wakeup latency makes per-instant blips routine
   #     (ring-doorbell measured 0% real loss yet 1.2s avg / 2.9s max RTT),
-  #     so at nearly every sample SOME device reads as down. The ruler's `for: 10m`
+  #     so at nearly every sample SOME device reads as down. The ruler's `for: 1h`
   #     requires ONE device continuously down; the mirror's instant samples
   #     see "some series true" at almost every check, so a rotating cast of
   #     wakeup blips reads as one sustained condition. Observed 2026-06-12:
   #     mirror HARD WARNING for hours (13 distinct devices blipping in 2h,
   #     >=1 at every 10-min sample) while the ruler correctly stayed silent
   #     => chronic nagios_only divergence. Coverage retained: the live ruler
-  #     rule (fires on any device down >=10m) plus Nagios's native PING
+  #     rule (fires on any device down >=1h) plus Nagios's native PING
   #     services on the IoT fleet.
   #   * Every rule whose source file is alerts/nagios.yaml: Nagios checking "is
   #     Nagios up" through its own scheduler is circular; the Prometheus side

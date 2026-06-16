@@ -370,7 +370,7 @@ in
         - **icmp_ping**: IPv4 ICMP echo requests (standard ping)
         - **icmp_ping_iot**: IPv4 ICMP with a 10s timeout for the sleepy IoT
           fleet (power-save wakeups exceed the 5s budget); auto-selected for
-          host_group iot/iot-noping via relabeling
+          host_group iot/iot-noping/iot-quiet via relabeling
         - **icmp_ping_ipv6**: IPv6 ICMP echo requests
         - **http_2xx**: HTTP endpoint checks
         - **https_2xx**: HTTPS endpoint checks with SSL validation
@@ -482,9 +482,7 @@ in
                   "pentair-intellicenter.lan" # 192.168.3.115
                   "pentair-intelliflo.lan" # 192.168.3.23
                   "ring-chime-kitchen.lan" # 192.168.3.163
-                  "ring-doorbell.lan" # 192.168.3.185
                   "tesla-wall-connector.lan" # 192.168.3.119
-                  "traeger-grill.lan" # 192.168.3.196
                 ];
                 labels = {
                   host_group = "iot";
@@ -506,7 +504,6 @@ in
               # back into the "iot" group above so it gets warning coverage.
               {
                 targets = [
-                  "august-lock-garage-door.lan" # 192.168.3.14
                   "nest-downstairs.lan" # 192.168.3.57
                   "nest-family-room.lan" # 192.168.3.83
                   "nest-upstairs.lan" # 192.168.3.161
@@ -514,6 +511,30 @@ in
                 ];
                 labels = {
                   host_group = "iot-noping";
+                };
+              }
+              # Quiet-by-design IoT devices (host_group="iot-quiet"). Unlike
+              # "iot-noping" (which never answers ICMP at all), these DO answer
+              # when awake but are powered-off or in deep power-save for long,
+              # routine stretches by design, so a missed ping is not an
+              # incident:
+              #   - traeger-grill  (~78% reachable; off for days between cooks)
+              #   - ring-doorbell  (~92% reachable; long power-save windows;
+              #     measured 0% real loss but multi-second wakeup RTT)
+              # They are still probed for visibility (a genuine extended outage
+              # remains visible on dashboards) but, exactly like iot-noping, are
+              # EXCLUDED from every blackbox alert — both the warning-only
+              # BlackboxICMPIoTDeviceDown (which selects host_group="iot") and
+              # the always-on HostUnreachable critical. This honors the
+              # no-chronic-firing discipline. If one of these stops sleeping and
+              # should alert again, move it back into the "iot" group above.
+              {
+                targets = [
+                  "ring-doorbell.lan" # 192.168.3.185
+                  "traeger-grill.lan" # 192.168.3.196
+                ];
+                labels = {
+                  host_group = "iot-quiet";
                 };
               }
             ];
@@ -572,7 +593,7 @@ in
               }
               # Route the sleepy IoT fleet to the long-timeout icmp_ping_iot
               # module (see blackbox.yml above). Safe to key on host_group:
-              # both groups carry it as an authoritative static label, so this
+              # all three groups carry it as an authoritative static label, so this
               # never depends on the defaulting rules above. Rewriting
               # __param_module overrides the job-level params.module for just
               # these targets while keeping job="blackbox_icmp" on every
@@ -581,7 +602,7 @@ in
               {
                 source_labels = [ "host_group" ];
                 target_label = "__param_module";
-                regex = "iot|iot-noping";
+                regex = "iot|iot-noping|iot-quiet";
                 replacement = "icmp_ping_iot";
               }
             ];

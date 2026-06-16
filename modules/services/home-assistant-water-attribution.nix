@@ -54,6 +54,12 @@ let
 
   # Jinja literal arrays used by template state expressions.
   zoneTotalsLiteral = lib.concatMapStringsSep ", " (z: "'sensor.water_${z.slug}_total'") cfg.zones;
+  # Real zones only (placeholders carry no `type` and have no physical valve,
+  # so their `_total` never reports). Used by the irrigation aggregate's
+  # availability gate so a placeholder can't hold the whole aggregate down.
+  realZoneTotalsLiteral = lib.concatMapStringsSep ", " (z: "'sensor.water_${z.slug}_total'") (
+    lib.filter (z: z.type != null) cfg.zones
+  );
   zoneValveLiteral = lib.concatMapStringsSep ", " (
     z: "'valve.sprinkler_control_${z.slug}_zone'"
   ) cfg.zones;
@@ -217,8 +223,22 @@ let
       {% set tol = ${toString cfg.aggregateDropToleranceGal} %}
       {{ (([s, last] | max | round(3)) if ((last - s) < tol) else (s | round(3))) }}
     '';
+    # Available iff every REAL zone's total is reporting. The old gate required
+    # ALL zones incl. the placeholder `zone_5` (no physical valve, so
+    # sensor.water_zone_5_total is perpetually unavailable) -> the gate was
+    # permanently False -> the aggregate never published and the HA Energy
+    # dashboard showed 0 irrigation. Excluding placeholders fixes that.
+    #
+    # We deliberately do NOT fail-open here: gating on the full real-zone set
+    # means the sensor only ever publishes the COMPLETE sum — during a zone
+    # dropout or a staggered restart it goes `unavailable` (a recorder gap),
+    # never a partial downward dip. That matters because this sensor is
+    # `total_increasing`: a transient dip (one lifetime-accumulating zone
+    # momentarily 0) would be mis-read as a meter reset and double-count the
+    # zone's volume on recovery. The state template still sums ALL zones
+    # (placeholders coerce to float(0)), so the published value is correct.
     availability = ''
-      {% set zones = [ ${zoneTotalsLiteral} ] %}
+      {% set zones = [ ${realZoneTotalsLiteral} ] %}
       {{ zones | map('states') | reject('in', ['unknown','unavailable']) | list | length == zones | length }}
     '';
     attributes = {

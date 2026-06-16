@@ -174,49 +174,56 @@ def _read_weekly_categories(
     domestic_hot_present: bool,
     zones: list,
 ) -> tuple[dict[str, tuple[float, float]], dict[str, tuple[float, float]]]:
-    """Best-effort: pull this-week / last-week numbers for every category + zone.
+    """This-week / last-week per-category and per-zone gallons.
 
-    Reads HA's existing ``*_weekly`` utility-meter sensors at the period
-    boundary (this week's value as of ``end``, last week's as of ``end -
-    7d``). On any failure for a given metric we land 0.0 in that slot and
-    move on — the report's `notable_observations` flags any zero-vs-real
-    asymmetries.
+    Summed from each category's per-day ``*_daily`` completed-period meter
+    (``gal_last_period``) over the two trailing 7-day windows, so these numbers
+    are aligned to the report window and consistent with the daily breakdown.
+
+    We deliberately do NOT read the ``*_weekly`` utility meters: those are
+    Mon-Sun cycle-aligned and reset Monday 07:00Z, so reading them at ``end``
+    returns only a PARTIAL new week whenever the job runs after that reset
+    (e.g. an off-schedule run whose ``end`` has rolled past the Monday reset),
+    which contradicted the per-day daily breakdown. Irrigation is the sum of
+    the per-zone daily meters (the ``water_irrigation_*`` aggregate is derived
+    HA-side and not needed here). 0.0 per missing meter, never fatal.
     """
-    last_week = end - timedelta(days=7)
+    this_resets = _local_day_resets(end, 7)
+    last_resets = _local_day_resets(end - timedelta(days=7), 7)
 
-    # Per-zone weekly totals FIRST — irrigation is reconstructed from these.
-    per_zone_totals: dict[str, tuple[float, float]] = {}
-    for z in zones:
-        eid = f"sensor.water_{z.slug}_weekly"
-        display = getattr(z, "name", z.slug)
-        per_zone_totals[display] = (
-            _query_ha_total_via_vm(vm, eid, end),
-            _query_ha_total_via_vm(vm, eid, last_week),
+    def cat_sum(daily_entity: str, resets: list) -> float:
+        return sum(
+            _completed_period_total(vm, daily_entity, r) for (_d, r) in resets
         )
-    irrigation_this = sum(tv for (tv, _lv) in per_zone_totals.values())
-    irrigation_last = sum(lv for (_tv, lv) in per_zone_totals.values())
 
-    category_totals: dict[str, tuple[float, float]] = {}
-    cats = ["pool_autofill", "irrigation_total", "other"]
+    per_zone_totals: dict[str, tuple[float, float]] = {
+        getattr(z, "name", z.slug): (
+            cat_sum(f"water_{z.slug}_daily", this_resets),
+            cat_sum(f"water_{z.slug}_daily", last_resets),
+        )
+        for z in zones
+    }
+
+    # Order is the report's display order: pool_autofill, irrigation_total,
+    # other, (domestic_hot).
+    category_totals: dict[str, tuple[float, float]] = {
+        "pool_autofill": (
+            cat_sum("water_pool_autofill_daily", this_resets),
+            cat_sum("water_pool_autofill_daily", last_resets),
+        ),
+        "irrigation_total": (
+            sum(tv for (tv, _lv) in per_zone_totals.values()),
+            sum(lv for (_tv, lv) in per_zone_totals.values()),
+        ),
+        "other": (
+            cat_sum("water_other_daily", this_resets),
+            cat_sum("water_other_daily", last_resets),
+        ),
+    }
     if domestic_hot_present:
-        cats.append("domestic_hot")
-    for cat in cats:
-        if cat == "irrigation_total":
-            # The HA aggregate `sensor.water_irrigation_weekly` (a template
-            # summing the zone totals) is unreliable — it can stick at 0 or go
-            # unavailable while the per-zone meters keep accumulating, which is
-            # exactly what zeroed the "Irrigation (total)" line. Reconstruct it
-            # from the per-zone reads instead: the same definition the HA
-            # template intends (sum of zones), but robust to the aggregate
-            # breaking. Keeps the `irrigation_total` key for report labels.
-            category_totals[cat] = (irrigation_this, irrigation_last)
-            continue
-        # pool_autofill / other / domestic_hot map directly to
-        # `sensor.water_<cat>_weekly` (verified entity names in VM).
-        eid = f"sensor.water_{cat}_weekly"
-        category_totals[cat] = (
-            _query_ha_total_via_vm(vm, eid, end),
-            _query_ha_total_via_vm(vm, eid, last_week),
+        category_totals["domestic_hot"] = (
+            cat_sum("water_domestic_hot_daily", this_resets),
+            cat_sum("water_domestic_hot_daily", last_resets),
         )
 
     return category_totals, per_zone_totals
@@ -277,6 +284,27 @@ def _whole_house_day_total(vm, reset_utc: datetime) -> float:
         return 0.0
 
 
+def _local_day_resets(end: datetime, n_days: int) -> list[tuple]:
+    """``[(local_date, reset_utc), ...]`` for the ``n_days`` local days ending
+    the day before ``end`` (chronological).
+
+    ``reset_utc`` is the UTC instant of that local day's midnight meter reset
+    (DST-aware: 07:00Z in PDT, 08:00Z in PST) — the instant its ``*_daily``
+    last_period is captured and ``current_day`` peaks just before zeroing. The
+    TZ is resolved here (not at import) so absent tzdata can't break the
+    package import for the other flume_data subcommands.
+    """
+    tz = ZoneInfo("America/Los_Angeles")
+    out: list[tuple] = []
+    for offset in range(n_days, 0, -1):
+        day = (end - timedelta(days=offset)).date()
+        reset_local = datetime(
+            day.year, day.month, day.day, tzinfo=tz
+        ) + timedelta(days=1)
+        out.append((day, reset_local.astimezone(timezone.utc)))
+    return out
+
+
 def _build_daily_breakdown(
     vm,
     end: datetime,
@@ -287,27 +315,14 @@ def _build_daily_breakdown(
 
     Each entry is ``(local_date, total_gal, parts)`` where ``parts`` maps the
     four report buckets to integer gallons. Days are aligned to the LOCAL
-    midnight reset of the HA daily utility meters (the boundary current_day /
-    current_week also reset on), so the daily totals reconcile to the
-    whole-house weekly meter (~0.6%). Totals come from the whole-house Flume
-    counter; the per-category split is read from each category's ``*_daily``
-    utility meter, with irrigation summed over the per-zone daily meters
-    (mirroring the weekly report's robust sum-of-zones derivation rather than
-    the broken ``water_irrigation_*`` aggregate).
+    midnight reset of the HA daily utility meters. Totals come from the
+    whole-house Flume counter's pre-reset peak; the per-category split is read
+    from each category's ``*_daily`` last_period, irrigation summed over the
+    per-zone daily meters. Uses the SAME per-day reads as the weekly category /
+    grand-total rollups, so the daily rows sum exactly to those figures.
     """
-    # Local TZ resolved here (not at import) so a missing tzdata can never
-    # break the package import for the other flume_data subcommands.
-    tz = ZoneInfo("America/Los_Angeles")
     out: list[tuple] = []
-    for offset in range(7, 0, -1):
-        day = (end - timedelta(days=offset)).date()
-        # The day ENDS at the next local midnight; express that instant in UTC
-        # (DST-aware: 07:00Z in PDT, 08:00Z in PST).
-        reset_local = datetime(
-            day.year, day.month, day.day, tzinfo=tz
-        ) + timedelta(days=1)
-        reset_utc = reset_local.astimezone(timezone.utc)
-
+    for day, reset_utc in _local_day_resets(end, 7):
         total = _whole_house_day_total(vm, reset_utc)
         autofill = _completed_period_total(
             vm, "water_pool_autofill_daily", reset_utc
@@ -337,27 +352,23 @@ def _build_daily_breakdown(
     return out
 
 
-def _grand_totals(
-    vm,
-    category_totals: dict[str, tuple[float, float]],
-    end: datetime,
-    week_sensor: str = "sensor.flume_sensor_sierra_oaks_current_week",
-) -> tuple[float, float]:
-    """Return ``(this_week_total, last_week_total)`` whole-house gallons.
+def _grand_totals(vm, end: datetime) -> tuple[float, float]:
+    """Return ``(this_week_total, last_week_total)`` whole-house gallons, summed
+    from the per-day whole-house totals over the two trailing 7-day windows.
 
-    Prefer the authoritative whole-house ``current_week`` Flume meter — it is
-    continuously sampled, so it reads reliably regardless of the lookback
-    window — over the sum of the per-category reads. The category sum both
-    under-counts (the categories don't partition the meter exactly) and is
-    itself vulnerable to any single missing series, so it serves only as a
-    fallback when the whole-house meter is unavailable.
+    Deriving the headline from the same per-day reads as the daily breakdown
+    makes it EQUAL the sum of the daily rows and aligned to the report window.
+    The cycle-aligned ``current_week`` meter is intentionally NOT used: read at
+    ``end`` it reflects only the partial new Mon-Sun week whenever the job runs
+    after the Monday 07:00Z reset.
     """
-    this_v = _query_ha_total_via_vm(vm, week_sensor, end)
-    if this_v == 0:
-        this_v = sum(tv for (tv, _lv) in category_totals.values())
-    last_v = _query_ha_total_via_vm(vm, week_sensor, end - timedelta(days=7))
-    if last_v == 0:
-        last_v = sum(lv for (_tv, lv) in category_totals.values())
+    this_v = sum(
+        _whole_house_day_total(vm, r) for (_d, r) in _local_day_resets(end, 7)
+    )
+    last_v = sum(
+        _whole_house_day_total(vm, r)
+        for (_d, r) in _local_day_resets(end - timedelta(days=7), 7)
+    )
     return this_v, last_v
 
 
@@ -575,11 +586,10 @@ def run(days: int = 7) -> int:
         vm, end, cfg.zones, domestic_hot_present
     )
 
-    # Grand totals from the authoritative whole-house `current_week` meter
-    # (falls back to the category sum only when that read is unavailable).
-    this_week_total_gal, last_week_total_gal = _grand_totals(
-        vm, category_totals, end
-    )
+    # Grand totals summed from the same per-day whole-house reads as the daily
+    # breakdown, so the headline equals the sum of the daily rows and is
+    # window-aligned (not the cycle-aligned current_week meter).
+    this_week_total_gal, last_week_total_gal = _grand_totals(vm, end)
 
     observations = _notable_observations(category_totals)
     observations.insert(

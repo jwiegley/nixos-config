@@ -265,12 +265,12 @@ def test_query_ha_total_uses_full_cycle_window_for_sparse_meters():
     assert start <= at - timedelta(days=6)
 
 
-def test_irrigation_total_is_sum_of_zones_not_the_broken_aggregate():
-    """``sensor.water_irrigation_weekly`` (the HA template that sums the zone
-    totals) can stick at 0 or go unavailable while the per-zone meters keep
-    accumulating — which is exactly what zeroed the "Irrigation (total)"
-    line. The report must reconstruct irrigation as the sum of the per-zone
-    reads and must never consult the aggregate meter.
+def test_weekly_categories_summed_from_per_day_daily_meters():
+    """Per-category / per-zone weekly numbers are summed from the per-day
+    water_<x>_daily last_period over the report window — NOT the cycle-aligned
+    *_weekly meters (which drift to a partial new week when the job runs after
+    the Monday reset), and NOT the broken water_irrigation_* aggregate.
+    Irrigation = sum of the per-zone daily meters.
     """
     from datetime import datetime, timezone
 
@@ -284,14 +284,12 @@ def test_irrigation_total_is_sum_of_zones_not_the_broken_aggregate():
     end = datetime(2026, 6, 15, tzinfo=timezone.utc)
 
     def qr(metric, start, end, step="60s"):
-        if 'entity_id="water_front_yard_weekly"' in metric:
-            return [(end, 700.0)]
-        if 'entity_id="water_zone_5_weekly"' in metric:
-            return [(end, 49.0)]
-        # The broken aggregate would (wrongly) report 0 — must be ignored.
-        if 'entity_id="water_irrigation_weekly"' in metric:
-            return [(end, 0.0)]
-        return []  # pool_autofill / other / domestic_hot
+        # Each day's last_period returns a fixed per-zone value.
+        if 'entity_id="water_front_yard_daily"' in metric:
+            return [(end, 100.0)]
+        if 'entity_id="water_zone_5_daily"' in metric:
+            return [(end, 7.0)]
+        return []  # pool_autofill / other dailies -> 0
 
     vm = MagicMock()
     vm.query_range.side_effect = qr
@@ -299,18 +297,21 @@ def test_irrigation_total_is_sum_of_zones_not_the_broken_aggregate():
         vm, end, domestic_hot_present=False, zones=zones
     )
 
-    assert cats["irrigation_total"][0] == pytest.approx(749.0)  # 700 + 49
+    # 7 days each: front_yard 7*100=700, zone_5 7*7=49, irrigation 749.
     assert per_zone["Front Yard"][0] == pytest.approx(700.0)
     assert per_zone["Zone 5"][0] == pytest.approx(49.0)
+    assert cats["irrigation_total"][0] == pytest.approx(749.0)
     queried = [c.kwargs["metric"] for c in vm.query_range.call_args_list]
-    assert not any("water_irrigation_weekly" in m for m in queried)
+    assert any("water_front_yard_daily" in m for m in queried)
+    assert all('__name__="gal_last_period"' in m for m in queried)
+    assert not any("_weekly" in m for m in queried)
+    assert not any("water_irrigation_" in m for m in queried)
 
 
-def test_grand_totals_prefer_authoritative_whole_house_meter():
-    """``this_week``/``last_week`` totals come from the whole-house
-    ``current_week`` Flume meter (continuously sampled, reliable at any
-    window), falling back to the sum of category reads only when that meter
-    is unavailable.
+def test_grand_totals_summed_from_per_day_whole_house():
+    """this_week / last_week totals are summed from the per-day whole-house
+    current_day peaks over the window (window-aligned), NOT the cycle-aligned
+    current_week meter.
     """
     from datetime import datetime, timezone
 
@@ -319,22 +320,47 @@ def test_grand_totals_prefer_authoritative_whole_house_meter():
     end = datetime(2026, 6, 15, tzinfo=timezone.utc)
 
     def qr(metric, start, end, step="60s"):
-        # current_week present at the this-week boundary, absent a week ago.
-        if "current_week" in metric and end == datetime(
-            2026, 6, 15, tzinfo=timezone.utc
-        ):
-            return [(end, 4997.6)]
+        if "max_over_time" in metric and "current_day" in metric:
+            return [(end, 500.0)]
         return []
 
     vm = MagicMock()
     vm.query_range.side_effect = qr
-    cats = {"irrigation_total": (4149.0, 10.0), "other": (476.0, 290.0)}
-    this_v, last_v = _grand_totals(vm, cats, end)
+    this_v, last_v = _grand_totals(vm, end)
 
-    # Whole-house meter wins over sum(categories) == 4625.
-    assert this_v == pytest.approx(4997.6)
-    # last week's current_week missing -> fall back to sum of last-week cats.
-    assert last_v == pytest.approx(300.0)  # 10 + 290
+    # 7 days * 500 in each of the two windows
+    assert this_v == pytest.approx(3500.0)
+    assert last_v == pytest.approx(3500.0)
+    queried = [c.kwargs["metric"] for c in vm.query_range.call_args_list]
+    assert all("current_day" in m for m in queried)
+    assert not any("current_week" in m for m in queried)
+
+
+def test_headline_total_equals_sum_of_daily_breakdown():
+    """Regression for the self-contradictory report (headline 21 gal vs daily
+    rows summing to thousands): the headline this-week total MUST equal the sum
+    of the daily-breakdown row totals, because both now derive from the same
+    per-day whole-house reads over the same window.
+    """
+    from datetime import datetime, timezone
+
+    from flume_data.cross_check import _build_daily_breakdown, _grand_totals
+
+    end = datetime(2026, 6, 15, tzinfo=timezone.utc)
+
+    def qr(metric, start, end, step="60s"):
+        if "max_over_time" in metric and "current_day" in metric:
+            # Vary per day (by the reset-instant date) so a coincidental match
+            # can't mask a bug; both callers query the same reset instants.
+            return [(end, 100.0 + (end.toordinal() % 50))]
+        return []
+
+    vm = MagicMock()
+    vm.query_range.side_effect = qr
+    daily = _build_daily_breakdown(vm, end, [], domestic_hot_present=False)
+    this_v, _last = _grand_totals(vm, end)
+
+    assert this_v == pytest.approx(sum(total for (_d, total, _p) in daily))
 
 
 def test_completed_period_total_reads_last_period():

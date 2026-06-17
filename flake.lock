@@ -2140,11 +2140,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1781700620,
-        "narHash": "sha256-n1/qGJMy/KdY8hVxNNwOrT1ISXoeXnWpV7rOwqOrmOw=",
+        "lastModified": 1781722919,
+        "narHash": "sha256-16rglXnvbmekmMWk6LFpmPFacMe7ZWCjSuuOGLGVFI4=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "9bbc8a186eb5fa1e570179a61d870b7cb929a578",
+        "rev": "12fa390a62a3a8a86e1094e9e24c954d2e46c9bd",
         "type": "github"
       },
       "original": {
@@ -2193,11 +2193,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1781635466,
-        "narHash": "sha256-ClPt7jDJIkUemCBh09EY9J4eTbLsRFCFg4yylalq4hw=",
+        "lastModified": 1781717001,
+        "narHash": "sha256-GwSlHK0rtGzsepL42/ywVduOTud0q2iioBn5V99eGKg=",
         "ref": "refs/heads/main",
-        "rev": "cc471c386f99c15919a53b12bdfed8476e96a5bb",
-        "revCount": 1894,
+        "rev": "70fc8ef3e5ee0c02f1b7b8b4d39f3dfdc5f6e9d9",
+        "revCount": 1898,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2650,11 +2650,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1781074563,
-        "narHash": "sha256-md8WlXOlfnIeHeOScMTTHFyf2d6iaTwPl2apR5EQ3P4=",
+        "lastModified": 1781577229,
+        "narHash": "sha256-lrp67w8AulE9Ks53n27I45ADSzbOCn4H+CNW1Ck8B+8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+        "rev": "567a49d1913ce81ac6e9582e3553dd90a955875f",
         "type": "github"
       },
       "original": {
@@ -2865,11 +2865,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781587578,
-        "narHash": "sha256-e+zpHVkG/YL/Dt9df21+MkUDRGGZvxqhgZAps4ZDigY=",
+        "lastModified": 1781663558,
+        "narHash": "sha256-8vXhljiZtOlCTJNW16o//BYusBtRGEM9WqJm0HoAnDc=",
         "ref": "refs/heads/main",
-        "rev": "85e77f5602982df32383a0f494f6d735a9f347da",
-        "revCount": 408,
+        "rev": "2a1e8262b68328ce4702ca23f0f093992a462765",
+        "revCount": 415,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },

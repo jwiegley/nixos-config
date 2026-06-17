@@ -48,6 +48,11 @@
       url = "github:numtide/llm-agents.nix";
     };
 
+    ai-nix = {
+      url = "github:jwiegley/ai-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     hermes-agent = {
       # Pinned to c47b9d12 (2026-06-02). Later revs (c3055d61, fd1e7c2b, HEAD)
       # refactored npm packaging to a single shared npmDepsHash in nix/lib.nix
@@ -130,7 +135,10 @@
       # be built standalone with `nix build .#<name>`.
       pkgs = import inputs.nixpkgs {
         inherit system;
-        overlays = [ (import ./overlays inputs system) ];
+        overlays = [
+          inputs.ai-nix.overlays.default
+          (import ./overlays inputs system)
+        ];
         config.allowUnfree = true;
       };
     in
@@ -244,6 +252,7 @@
           inputs.home-manager.nixosModules.home-manager
           {
             nixpkgs.overlays = [
+              inputs.ai-nix.overlays.default
               (import ./overlays inputs system)
             ];
           }

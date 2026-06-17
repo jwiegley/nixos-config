@@ -282,31 +282,6 @@ in
     nix-scripts
     ;
 
-  # AI MCP servers — mirror nix-config's overlays/30-ai-mcp.nix so Claude Code's
-  # context-hub (chub-mcp) and pal MCP servers resolve their nix-profile
-  # binaries. nix-config is imported flake=false here, so its own
-  # `pal-mcp-server` flake input (a Mac-local git+file:// path) is absent;
-  # inject the source through the same `inputs.pal-mcp-server` slot the overlay
-  # expects, fetched from GitHub instead. We only pull context-hub and
-  # pal-mcp-server (their derivations are reused verbatim from nix-config).
-  inherit
-    (import "${inputs.nix-config}/overlays/30-ai-mcp.nix" final (
-      prevWithMyLib
-      // {
-        inputs = inputs // {
-          pal-mcp-server = prev.fetchFromGitHub {
-            owner = "BeehiveInnovations";
-            repo = "pal-mcp-server";
-            rev = "v9.8.2";
-            hash = "sha256-/YkoqnWdhrtlfUZ0tiKDAwobDGKR443nB2W92hhHP7Y=";
-          };
-        };
-      }
-    ))
-    context-hub
-    pal-mcp-server
-    ;
-
   # mcp-server-sequential-thinking: nix-config overrideAttrs's a base nixpkgs
   # package that this channel lacks, so take it from nixpkgs-unstable (which
   # has it), the same way JupyterLab/Immich pull newer packages from unstable.
@@ -732,9 +707,6 @@ in
         platforms = [ "aarch64-linux" ];
       };
     };
-  # claude-vault: Archive Claude Code conversations into searchable SQLite
-  inherit (import "${inputs.nix-config}/overlays/30-claude-vault.nix" final prev) claude-vault;
-
   # cozempic: Context cleaning for Claude Code
   inherit (import ./30-cozempic.nix final prev) cozempic;
 

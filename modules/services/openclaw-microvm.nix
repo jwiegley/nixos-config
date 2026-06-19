@@ -136,6 +136,7 @@ let
     8123 # Home Assistant (direct HTTP)
     9081 # hermes-mcp — OpenClaw↔Hermes MCP bridge (SSE)
     9082 # drafts-mcp — OpenClaw→Drafts(hera) SSE bridge (read-only surface; writes gated by the bridge filter shim)
+    8236 # memory-vault-mcp — OpenClaw→Memory Vault MCP (streamable-http) via mcp-proxy bridge
   ];
 
   # Helper: format a list of ports for nftables "dnat to" rules

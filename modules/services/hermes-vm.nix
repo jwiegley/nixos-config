@@ -748,6 +748,20 @@ in
         args = [ ];
       };
 
+      # Memory Vault — long-term memory store on the host (recall/remember/
+      # forget/memory_status). Native Streamable HTTP `url` (hermes-agent POSTs
+      # JSON-RPC to the URL), reached over the 8236 guest OUTPUT DNAT
+      # (127.0.0.1:8236 → 10.99.1.1:8236 → host PREROUTING → 127.0.0.1:8236,
+      # the host's memory-vault-mcp container). FastMCP serves at /mcp with NO
+      # trailing slash (/mcp/ 307-redirects, which the agent's POST won't
+      # follow). No auth (gated by the host IP-allowlist / loopback). NO
+      # `description` field — the submodule rejects it.
+      memory-vault = {
+        url = "http://127.0.0.1:8236/mcp";
+        connect_timeout = 10;
+        timeout = 120;
+      };
+
       # Drafts.app on hera via the host drafts-mcp SSE bridge (binds
       # 127.0.0.1:9082; reached over the hermes-br0 guest OUTPUT DNAT
       # 127.0.0.1:9082 → 10.99.1.1:9082 → host PREROUTING → 127.0.0.1:9082).

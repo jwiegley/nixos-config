@@ -69,6 +69,7 @@ let
     5432
     8123
     9082
+    8236 # memory-vault-mcp — Hermes→Memory Vault MCP (streamable-http, native url)
   ];
   # NO-SPACE comma join: this string feeds both `iptables -m multiport
   # --dports` (host isolate chain below) and the guest's nftables

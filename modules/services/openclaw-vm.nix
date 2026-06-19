@@ -121,6 +121,20 @@ let
       "http://127.0.0.1:8123/api/mcp"
   '';
 
+  # Memory Vault MCP — unauthenticated (the host nginx vhost + IP-allowlist
+  # gate it; the MCP container itself has no auth). Connect to the host's
+  # memory-vault-mcp streamable-http endpoint over the 8236 loopback DNAT and
+  # present it to mcporter as stdio: mcporter's `url` entries assume SSE and
+  # auto-probe OAuth, both of which the stdio bridge sidesteps. FastMCP serves
+  # at /mcp with NO trailing slash (/mcp/ 307-redirects).
+  memoryVaultMcpBridge = pkgs.writeShellScript "mcp-proxy-memory-vault-bridge" ''
+    set -eu
+    exec ${pkgs.mcp-proxy}/bin/mcp-proxy \
+      --transport=streamablehttp \
+      --stateless \
+      "http://127.0.0.1:8236/mcp"
+  '';
+
   # TOOLS.MD content sections — kept as writeText derivations so they don't
   # affect Nix's indentation stripping of the preStart ''...'' block.
   toolsSherlockMd = pkgs.writeText "tools-sherlock.md" ''
@@ -927,6 +941,15 @@ in
                   "command": $cmd,
                   "args": [],
                   "description": "Home Assistant (state, services, automation, devices) via mcp-proxy stdio bridge to /api/mcp with static long-lived access token"
+                }
+              '
+
+              # Memory Vault — long-term memory store (see memoryVaultMcpBridge above).
+              apply_mcporter_jq --arg cmd "${memoryVaultMcpBridge}" '
+                .mcpServers["memory-vault"] = {
+                  "command": $cmd,
+                  "args": [],
+                  "description": "Long-term memory (Memory Vault): semantic + keyword recall over saved notes/decisions/context, and store new memories across sessions. Tools: recall(query, spaces?, since?, limit?), remember(text, space?), forget(chunk_id), memory_status()."
                 }
               '
 

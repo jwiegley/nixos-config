@@ -1024,6 +1024,16 @@ let
       runAs = "teable";
     }
     {
+      name = "memory-vault";
+      display = "Memory Vault App";
+      runAs = "memory-vault";
+    }
+    {
+      name = "memory-vault-mcp";
+      display = "Memory Vault MCP";
+      runAs = "memory-vault";
+    }
+    {
       name = "wallabag";
       display = "Wallabag Read-Later";
       runAs = "wallabag";
@@ -1834,6 +1844,14 @@ let
       service_groups          application-services
     }
 
+    define service {
+      use                     standard-service
+      host_name               vulcan
+      service_description     Memory-Vault Health
+      check_command           check_https!-H memory.vulcan.lan -u /api/health -s "ok"
+      service_groups          application-services
+    }
+
     ###############################################################################
     # SERVICES - OPENCLAW AVAILABILITY
     ###############################################################################
@@ -2046,6 +2064,22 @@ let
       host_name               vulcan
       service_description     SSL Cert: loki.vulcan.lan
       check_command           check_ssl_cert!loki.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: memory.vulcan.lan
+      check_command           check_ssl_cert!memory.vulcan.lan
+      service_groups          ssl-certificates
+    }
+
+    define service {
+      use                     daily-service
+      host_name               vulcan
+      service_description     SSL Cert: memory-mcp.vulcan.lan
+      check_command           check_ssl_cert!memory-mcp.vulcan.lan
       service_groups          ssl-certificates
     }
 

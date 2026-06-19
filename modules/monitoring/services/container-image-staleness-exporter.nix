@@ -70,6 +70,7 @@ let
     "changedetection"
     "litellm"
     "mailarchiver"
+    "memory-vault"
     "openspeedtest"
     "opnsense-exporter"
     "open-webui"

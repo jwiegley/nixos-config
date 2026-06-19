@@ -203,6 +203,10 @@ with lib;
                           title = "Syncthing";
                           url = "https://syncthing.vulcan.lan";
                         }
+                        {
+                          title = "Memory Vault";
+                          url = "https://memory.vulcan.lan";
+                        }
                       ];
                     }
                     {

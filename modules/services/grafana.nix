@@ -56,6 +56,7 @@ let
     "openclaw-hermes-integration.json" = ../monitoring/dashboards/openclaw-hermes-integration.json;
     "technitium-dns.json" = ../monitoring/dashboards/technitium-dns.json;
     "water-attribution.json" = ../monitoring/grafana-dashboards/water-attribution.json;
+    "memory-vault.json" = ../monitoring/dashboards/memory-vault.json;
   };
 
   # Combined derivation containing all dashboards

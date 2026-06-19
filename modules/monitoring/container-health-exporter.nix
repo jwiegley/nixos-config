@@ -156,7 +156,7 @@
                 #     (no persistent PODMAN_SYSTEMD_UNIT container to track).
                 # A full rootless sweep measures ~1.7s wall (ps+inspect+stats per
                 # container across 13 users), comfortably inside the 2-min cadence.
-                ROOTLESS_USERS="changedetection litellm mailarchiver openspeedtest opnsense-exporter open-webui openproject shlink shlink-web-client speedtest-tracker teable vane wallabag"
+                ROOTLESS_USERS="changedetection litellm mailarchiver memory-vault openspeedtest opnsense-exporter open-webui openproject shlink shlink-web-client speedtest-tracker teable vane wallabag"
 
                 for user in $ROOTLESS_USERS; do
                   if id "$user" &>/dev/null; then

@@ -345,6 +345,17 @@ in
         sleep 1
       done
 
+      # Force the planner away from "ORDER BY SentDate DESC LIMIT n" + per-row
+      # to_tsvector() filter scans, which bypass the full-text GIN index below.
+      # For terms the planner estimates as common it walks IX_ArchivedEmails_SentDate
+      # backward and re-tokenizes every (detoasted) Body as a filter — ~22 s when
+      # matches are sparse/old, vs <1 ms via the GIN index. Disabling plain index
+      # scans for this role makes search use the GIN bitmap scan reliably; the
+      # sync/dedup MailAccountId+MessageId lookups stay indexed via bitmap scans.
+      # Role-scoped and reversible: ALTER ROLE mailarchiver RESET enable_indexscan;
+      ${config.services.postgresql.package}/bin/psql -c \
+        'ALTER ROLE mailarchiver SET enable_indexscan = off;'
+
       # Check if the mail_archiver schema and ArchivedEmails table exist
       # (they are created by the application on first run via EF Core migrations)
       if ${config.services.postgresql.package}/bin/psql -d mailarchiver -tAc \
@@ -355,6 +366,15 @@ in
         # Without this index, queries do expensive sequential scans on 200k+ rows
         ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \
           'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_archivedemails_mailaccountid_messageid ON mail_archiver."ArchivedEmails" ("MailAccountId", "MessageId");'
+
+        # Full-text search GIN index backing the application's optimized search
+        # query (to_tsvector('simple', Subject||Body||From||To||Cc||Bcc) @@ to_tsquery).
+        # The expression MUST match the app's SearchEmailsOptimizedAsync query
+        # verbatim for the planner to use it. The app does NOT create this index
+        # itself, so without it search falls back to full-table tsvector scans.
+        # Written via writeText + psql -f so the empty-string and quoted
+        # identifier literals in the expression do not collide with quoting.
+        ${config.services.postgresql.package}/bin/psql -d mailarchiver -f ${pkgs.writeText "mailarchiver-fts-index.sql" "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_archivedemails_fulltext_search ON mail_archiver.\"ArchivedEmails\" USING gin (to_tsvector('simple', COALESCE(\"Subject\", '') || ' ' || COALESCE(\"Body\", '') || ' ' || COALESCE(\"From\", '') || ' ' || COALESCE(\"To\", '') || ' ' || COALESCE(\"Cc\", '') || ' ' || COALESCE(\"Bcc\", '')));\n"}
 
         # Update table statistics after index creation
         ${config.services.postgresql.package}/bin/psql -d mailarchiver -c \

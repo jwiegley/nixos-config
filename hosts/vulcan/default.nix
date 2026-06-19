@@ -51,6 +51,7 @@
     ../../modules/users/home-manager/shlink-web-client.nix
     ../../modules/users/home-manager/teable.nix
     ../../modules/users/home-manager/wallabag.nix
+    ../../modules/users/home-manager/memory-vault.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/openspeedtest.nix
@@ -169,6 +170,7 @@
     ../../modules/containers/matter-server-quadlet.nix
     ../../modules/containers/openproject-quadlet.nix
     ../../modules/containers/teable-quadlet.nix
+    ../../modules/containers/memory-vault-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

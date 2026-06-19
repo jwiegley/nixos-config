@@ -57,6 +57,18 @@
         description = "Container user for Teable database service";
       };
 
+      memory-vault = {
+        isSystemUser = true;
+        group = "memory-vault";
+        home = "/var/lib/containers/memory-vault";
+        createHome = true;
+        shell = pkgs.bash;
+        autoSubUidGidRange = true;
+        linger = true;
+        extraGroups = [ "podman" ];
+        description = "Container user for Memory Vault AI memory service";
+      };
+
       # Monitoring services (formerly container-monitor)
       opnsense-exporter = {
         isSystemUser = true;
@@ -201,6 +213,7 @@
       litellm = { };
       wallabag = { };
       teable = { };
+      memory-vault = { };
       opnsense-exporter = { };
       technitium-dns-exporter = { };
       openspeedtest = { };
@@ -221,6 +234,7 @@
     "changedetection"
     "litellm"
     "mailarchiver"
+    "memory-vault"
     "open-webui"
     "openproject"
     "vane"
@@ -259,6 +273,9 @@
     "L+ /run/secrets-wallabag/wallabag - - - - /run/secrets/wallabag"
     "d /run/secrets-teable 0750 teable teable - -"
     "L+ /run/secrets-teable/teable - - - - /run/secrets/teable"
+    # memory-vault: sops.templates renders /run/secrets-memory-vault/env directly
+    # (no /run/secrets symlink needed), so only the dir is required here.
+    "d /run/secrets-memory-vault 0750 memory-vault memory-vault - -"
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
     "L+ /run/secrets-opnsense-exporter/opnsense-exporter - - - - /run/secrets/opnsense-exporter"
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"

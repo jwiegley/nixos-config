@@ -21,12 +21,13 @@ let
   apiPort = 8235; # 127.0.0.1 — REST API + dashboard (container :8000)
   mcpPort = 8236; # 127.0.0.1 — MCP Streamable HTTP
 
-  # LAN + microVM subnets only. The dashboard additionally enforces its own
+  # LAN + microVM + VPN subnets only. The dashboard additionally enforces its own
   # bearer-token auth; the MCP endpoint has no app-level auth, so this allow
   # list is its only access control (per design decision).
   lanOnly = ''
     allow 192.168.0.0/16;
     allow 10.99.0.0/16;
+    allow 10.6.0.0/24;
     allow 127.0.0.1/8;
     deny all;
   '';

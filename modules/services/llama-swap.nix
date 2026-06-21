@@ -60,7 +60,7 @@
     sslCertificate = "/var/lib/nginx-certs/llama-swap.vulcan.lan.crt";
     sslCertificateKey = "/var/lib/nginx-certs/llama-swap.vulcan.lan.key";
     locations."/" = {
-      proxyPass = "http://localhost:8080";
+      proxyPass = "http://127.0.0.1:8080";
       recommendedProxySettings = true;
     };
   };

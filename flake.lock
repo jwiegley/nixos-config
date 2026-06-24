@@ -2318,11 +2318,11 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1782327068,
-        "narHash": "sha256-6lQEVhLJlPshvpyKjX3o6s/Sdt61LehlkL+Oj3BFstg=",
+        "lastModified": 1782330012,
+        "narHash": "sha256-ukPjA1PTH+HEDIkdZ6Rd1q81PgC/fNMMJv5vRXbjs/4=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "b63143f3409f464a5ef1a6b8fb8cd2cb0fb7654c",
+        "rev": "8f291eb5f7277274a75689a2c38b8a79e832a860",
         "type": "github"
       },
       "original": {
@@ -2392,11 +2392,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1782323777,
-        "narHash": "sha256-hHReHpWWrM9hHIB+036KW3V5W6ec4mKXfJfFud7oqAY=",
+        "lastModified": 1782330520,
+        "narHash": "sha256-Ycpghf3Sqf4CMk81dIzm48qwCY+i3ITj162hTkka+9w=",
         "ref": "refs/heads/main",
-        "rev": "4452f6fb8fbfc87fb7bfe704fa2e9b90b251d240",
-        "revCount": 1928,
+        "rev": "3d021bcf2eb4c2522ba3cd8ff2b4945402678ad1",
+        "revCount": 1929,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2929,11 +2929,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1781509190,
-        "narHash": "sha256-uJZs9Di8I6ciTp6jiojj0HzlNpBkud8ax5aT/O5aJkw=",
+        "lastModified": 1782188297,
+        "narHash": "sha256-imdcA5fgbHK259bhHlyiiSr7bMY1AZ6onOWDdAcydc4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d6df3513510aa548c83868fd22bfddd0a8c0a0d4",
+        "rev": "9a1a7dbb18f0eb31c49b031babb8def7eab0af54",
         "type": "github"
       },
       "original": {

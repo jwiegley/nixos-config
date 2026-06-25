@@ -114,11 +114,19 @@ in
   # Fetchmail systemd service for Good folder (IDLE mode)
   systemd.services.fetchmail-good = {
     description = "Fetchmail daemon for Good folder (IDLE mode)";
+    # nss-lookup.target ordering added 2026-06-24 (RCA: docs/BOOT_SLOWNESS_RCA_2026-06-24.md).
+    # Without it, fetchmail started ~120s before the local Technitium resolver was
+    # answering (network-online.target fires long before nss-lookup.target) and
+    # restart-looped 23x on "Name or service not known", firing ServiceRestartLooping.
     after = [
       "network-online.target"
+      "nss-lookup.target"
       "dovecot.service"
     ];
-    wants = [ "network-online.target" ];
+    wants = [
+      "network-online.target"
+      "nss-lookup.target"
+    ];
     requires = [ "dovecot.service" ];
     wantedBy = [ "multi-user.target" ];
 

@@ -1131,7 +1131,11 @@ in
       "nginx.service"
     ];
     wants = [ "nginx.service" ];
-    wantedBy = [ "multi-user.target" ];
+    # Pulled in by nginx (runs at boot once nginx is up) rather than by
+    # multi-user.target, so a slow ZIM scan over the USB tank can never gate
+    # multi-user.target. nginx.preStart seeds an empty map, so nginx serves fine
+    # before this finishes. RCA: docs/BOOT_SLOWNESS_RCA_2026-06-24.md.
+    wantedBy = [ "nginx.service" ];
 
     path = with pkgs; [
       zim-tools

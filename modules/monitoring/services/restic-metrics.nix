@@ -206,8 +206,14 @@ in
       "tank.mount"
     ];
     timerConfig = {
-      OnBootSec = "5min"; # Run 5 minutes after boot
+      # Was OnBootSec=5min. Running this ~9.5min sweep over the USB tank during the
+      # boot window held is-system-running in "starting" for ~15min (boot reached
+      # multi-user.target at ~3min — system was usable then) and caused boot-window
+      # I/O contention. Defer the post-boot run well past boot-settle; the periodic
+      # 6h cadence is unchanged. RCA: docs/BOOT_SLOWNESS_RCA_2026-06-24.md.
+      OnBootSec = "30min"; # First post-boot run, safely after boot has settled
       OnUnitActiveSec = "6h"; # Run every 6 hours
+      RandomizedDelaySec = "10min"; # Spread load, avoid herding with other timers
       Persistent = true; # Run missed timers on boot
     };
   };

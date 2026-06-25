@@ -124,9 +124,20 @@ in
         RemainAfterExit = false;
       };
 
+      # Was a blind `sleep 30`, which was the literal edge that gated
+      # multi-user.target at +180s (RCA: docs/BOOT_SLOWNESS_RCA_2026-06-24.md).
+      # Poll for HA actually binding its HTTP socket instead, exiting as soon as
+      # it is up (typically a few seconds) and falling through after a 30s cap so
+      # worst-case behavior is no worse than before.
       script = ''
-        echo "Waiting 30 seconds for Home Assistant to fully start and bind..."
-        sleep 30
+        echo "Waiting for Home Assistant to bind its HTTP socket (up to 30s)..."
+        for i in $(seq 1 30); do
+          if ${pkgs.iproute2}/bin/ss -H -tln 2>/dev/null | grep -qE ':8123 '; then
+            echo "Home Assistant is listening on :8123 after ''${i}s"
+            break
+          fi
+          sleep 1
+        done
 
         echo "Restoring normal metrics: Ethernet to 100 (primary), WiFi to 600 (secondary)"
         ${pkgs.iproute2}/bin/ip route replace default via ${ethernetGateway} dev ${ethernetInterface} metric 100 src ${ethernetIP}

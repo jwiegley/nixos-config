@@ -49,7 +49,18 @@
     };
 
     ai-nix = {
-      url = "github:jwiegley/ai-nix";
+      # Pinned to 4690e999 — the last rev whose llama-cpp overlay is compatible
+      # with our nixpkgs pin. Later revs (94b7f45+) redefine llama-cpp as
+      # `prev.llama-cpp.override { inherit (final) nodejs_latest; }`, which assumes
+      # a newer nixpkgs whose llama-cpp/package.nix takes a `nodejs_latest` arg
+      # (the in-tree tools/ui webui era, llama-cpp ≳ 9190). Our nixpkgs is pinned
+      # to nixos-25.11 @ d6df351 (llama-cpp 6981, pre-webui), which has no such
+      # parameter, so the override fails with "function 'anonymous lambda' called
+      # with unexpected argument 'nodejs_latest'". 4690e999's overlay uses
+      # overrideAttrs only and builds the bundled webui via the nodejs /
+      # npmConfigHook that overlays/default.nix layers on. Unpin once our nixpkgs
+      # is bumped past the llama-cpp webui-in-tools/ui change.
+      url = "github:jwiegley/ai-nix/4690e999a0ac";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

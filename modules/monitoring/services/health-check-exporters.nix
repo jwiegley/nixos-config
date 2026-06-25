@@ -85,23 +85,37 @@ let
             TIMER_ACTIVE=0
           fi
 
-          # Get last run timestamp (use real timestamp, not monotonic)
-          # If service is currently running, ExecMainExitTimestamp is "n/a"
-          # In that case, use ExecMainStartTimestamp (a running backup is "recent")
-          LAST_RUN_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainExitTimestamp --value "$service" || echo "")
-          if [ -z "$LAST_RUN_TS" ] || [ "$LAST_RUN_TS" = "n/a" ]; then
-            # Service might be running or never ran - check start timestamp
-            START_TS=$(${pkgs.systemd}/bin/systemctl show -p ExecMainStartTimestamp --value "$service" || echo "")
-            if [ -n "$START_TS" ] && [ "$START_TS" != "n/a" ]; then
-              # Service is running or has run before - use start timestamp
-              LAST_RUN_EPOCH=$(${pkgs.coreutils}/bin/date -d "$START_TS" +%s 2>/dev/null || echo "0")
-            else
-              # Service has never run
-              LAST_RUN_EPOCH=0
+          # Get last run timestamp (real timestamp, not monotonic). Fall back
+          # through several systemd properties so a backup caught mid-run never
+          # reports epoch 0 -- a spurious 0 makes (time() - 0) > 36h and
+          # false-trips BackupNotRunRecently:
+          #   1. ExecMainExitTimestamp  - last completed run (normal idle case)
+          #   2. ExecMainStartTimestamp - main process started (running, past
+          #                               ExecStartPre)
+          #   3. InactiveExitTimestamp  - unit began activating; the ONLY one of
+          #                               the three set during ExecStartPre,
+          #                               which for restic can last minutes (B2
+          #                               repo prep). Without this rung a timer
+          #                               tick landing in ExecStartPre wrote 0
+          #                               and paged (Home: 03:50 activate, main
+          #                               at 03:54:43 -> ~4m43s pre-start window
+          #                               that coincides with the :50 tick).
+          # All three are "n/a" only for a unit that has genuinely never started,
+          # which correctly yields 0 so a never-run backup still alerts.
+          LAST_RUN_TS=""
+          for prop in ExecMainExitTimestamp ExecMainStartTimestamp InactiveExitTimestamp; do
+            CANDIDATE=$(${pkgs.systemd}/bin/systemctl show -p "$prop" --value "$service" || echo "")
+            if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "n/a" ]; then
+              LAST_RUN_TS="$CANDIDATE"
+              break
             fi
-          else
+          done
+          if [ -n "$LAST_RUN_TS" ]; then
             # Convert systemd timestamp to epoch seconds
             LAST_RUN_EPOCH=$(${pkgs.coreutils}/bin/date -d "$LAST_RUN_TS" +%s 2>/dev/null || echo "0")
+          else
+            # Service has never run
+            LAST_RUN_EPOCH=0
           fi
 
           # Get result of last run
@@ -244,10 +258,13 @@ in
       description = "Timer for backup status metrics exporter";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        # Run at :05, :20, :35, :50 to avoid race condition with backup services
-        # which start at :00 (e.g., restic-backups at 02:00). Running 5 minutes
-        # after allows services to either be fully running or have completed,
-        # ensuring ExecMainStartTimestamp/ExecMainExitTimestamp are valid.
+        # Every 15 minutes. Correctness no longer depends on dodging the backup
+        # windows: backupStatusExporter resolves "last run" through an
+        # ExecMainExit -> ExecMainStart -> InactiveExitTimestamp fallback chain,
+        # so a tick landing mid-run reports the activation time, not 0. The :05
+        # offset is kept only as harmless belt-and-suspenders -- staggered restic
+        # backups (e.g. Home 03:50, Databases 02:50) otherwise collide with the
+        # :50 tick during their multi-minute ExecStartPre (B2 repo prep).
         OnCalendar = "*:5/15"; # Every 15 minutes, offset by 5
         OnBootSec = "10min";
         Persistent = true;

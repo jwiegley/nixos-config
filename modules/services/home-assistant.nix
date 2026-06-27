@@ -413,6 +413,14 @@ in
       ps.awsiotpythonsdk # Required for Navien NaviLink Water Heater integration
       ps.pyalarmdotcomajax # Required for Alarm.com / ADT Control custom integration
       ps.vtherm_api # Required for Versatile Thermostat custom component (>=0.3.0)
+      # Mail and Packages (HACS: moralmunky/Home-Assistant-Mail-And-Packages).
+      # HACS installs it as a plain directory, so its manifest requirements are
+      # never pip-installed under --skip-pip; declare the two not already in the
+      # closure here (Pillow ships with HA core; beautifulsoup4 comes via the
+      # multiscrape component). Without these the config flow import fails with
+      # "No module named 'aioimaplib'" -> UI "Invalid handler specified".
+      ps.aioimaplib # Required for Mail and Packages — async IMAP client
+      ps.dateparser # Required for Mail and Packages — email date parsing
     ];
 
     # Components that don't require YAML configuration

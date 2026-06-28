@@ -11,37 +11,44 @@ groups:
       # status label rather than error-log severity text — the only nginx web
       # signal Loki actually carries. (coverage plan P1, web-blackbox)
       #
-      # 5xx burst. Steady-state is ~0 (24h median per-10m window = 2); genuine
-      # spikes were 25/52/91 in the trailing 24h, so >30 in 10m is well above
-      # background and catches a real upstream/app failure burst without
-      # flapping on the occasional single 500.
+      # 5xx burst. Steady-state is ~0. We want a SUSTAINED failure, not the
+      # ~1-2 minute spike a Home Assistant restart produces: when HA goes down
+      # to restart, its websocket clients reconnect-storm /api/websocket through
+      # the proxy at ~60-80 req/s for the ~minute HA is unavailable, logging
+      # ~4000 502s per restart. The old raw `count_over_time[10m] > 30, for:0m`
+      # turned every routine HA restart / nixos switch into a 10-minute page
+      # (diagnosed 2026-06-27). So we count 5xx in a trailing 2m window (>30 =
+      # >15/min) and require it to hold for a full 10m: a brief restart blip
+      # decays out of the 2m window long before 10m elapses, while a real,
+      # lasting outage keeps 5xx flowing and still fires (~10m after onset).
       - alert: Nginx5xxBurst
         expr: |
-          sum(count_over_time({job="nginx-access", status=~"5.."}[10m])) > 30
-        for: 0m
+          sum(count_over_time({job="nginx-access", status=~"5.."}[2m])) > 30
+        for: 10m
         labels:
           severity: warning
           category: logs
           service: nginx
         annotations:
-          summary: "nginx is serving a burst of 5xx responses"
+          summary: "nginx is serving a sustained burst of 5xx responses"
           description: |
-            More than 30 HTTP 5xx responses were logged by nginx in the last
-            10 minutes. Steady-state is near zero, so this is an upstream or
-            application failure burst — check which vhost/upstream is erroring
-            (Grafana Loki, status=~"5.." on job="nginx-access") and the
-            backing service's logs.
+            nginx has logged more than 30 HTTP 5xx responses per 2-minute
+            window continuously for 10 minutes — a sustained upstream or
+            application failure (not a brief backend restart). Check which
+            vhost/upstream is erroring (Grafana Loki, status=~"5.." on
+            job="nginx-access") and the backing service's logs.
 
-      # Gateway / upstream-connect failures specifically (502/503/504). This
-      # is the access-log proxy for the deleted "upstream connect failure"
-      # intent (the error-log line that would carry "connect() failed" /
-      # "upstream timed out" is not shipped to Loki on this host). Same 24h
-      # baseline as the 5xx burst (these dominate the 5xx count here); >10 in
-      # 10m flags a backend that nginx can't reach or that is timing out.
+      # Gateway / upstream-connect failures specifically (502/503/504) — the
+      # access-log proxy for "upstream unreachable / refused / timed out" (the
+      # nginx error-log lines that carry "connect() failed" / "upstream timed
+      # out" are not shipped to Loki on this host). Same sustained shape as the
+      # 5xx burst above (>10 in a trailing 2m window held for 10m, for:10m), so
+      # a backend that stays down fires while the brief 502 reconnect-storm of a
+      # routine HA restart does not (see the Nginx5xxBurst note, 2026-06-27).
       - alert: NginxUpstreamFailureBurst
         expr: |
-          sum(count_over_time({job="nginx-access", status=~"50[234]"}[10m])) > 10
-        for: 0m
+          sum(count_over_time({job="nginx-access", status=~"50[234]"}[2m])) > 10
+        for: 10m
         labels:
           severity: warning
           category: logs
@@ -49,11 +56,11 @@ groups:
         annotations:
           summary: "nginx upstream/gateway failures (502/503/504)"
           description: |
-            More than 10 HTTP 502/503/504 responses were logged by nginx in
-            the last 10 minutes — an upstream service is unreachable, refusing
-            connections, or timing out behind the proxy. Identify the vhost
-            (status=~"50[234]" on job="nginx-access") and restart/inspect the
-            backing service.
+            More than 10 HTTP 502/503/504 responses per 2-minute window for 10
+            minutes straight — an upstream service is persistently unreachable,
+            refusing connections, or timing out behind the proxy (a one-off
+            restart blip is excluded). Identify the vhost (status=~"50[234]" on
+            job="nginx-access") and restart/inspect the backing service.
 
       # Auth-failure burst (401/403). Baseline is tiny (24h peak per-10m
       # window = 2), but LAN/internet scanners probing the reverse proxy can

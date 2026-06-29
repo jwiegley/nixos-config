@@ -72,6 +72,7 @@
     ../../modules/services/dovecot-imapsieve-monitor.nix
     ../../modules/services/dovecot-fts-monitor.nix
     ../../modules/services/dovecot.nix
+    ../../modules/services/eternal-terminal.nix
     ../../modules/services/gitea-actions-runner.nix
     ../../modules/services/gitea.nix
     ../../modules/services/github-gitea-mirror.nix

@@ -45,7 +45,19 @@
     };
 
     llm-agents = {
-      url = "github:numtide/llm-agents.nix";
+      # Pinned to be5813ba (2026-06-27, gemini-cli 0.47.0). The next locked rev
+      # (552400b0, 2026-06-28) bumps gemini-cli to 0.49.0 and adds a postPatch
+      # that runs `node align-pins-to-lock.mjs`. buildNpmPackage replays
+      # postPatch inside the `gemini-cli-0.49.0-npm-deps` fixed-output
+      # derivation, which carries no nodejs on PATH, so on aarch64 — where that
+      # FOD isn't in numtide's binary cache and must build locally — it dies
+      # with "node: command not found" (exit 127) in patchPhase, breaking
+      # johnw's home-manager-path (gemini-cli is in the nix-config shared
+      # package list). x86_64 substitutes the FOD from cache and never hits it.
+      # Unpin once upstream adds nodejs to the gemini-cli npm-deps inputs (or
+      # drops the node postPatch from the FOD); no fix exists as of HEAD
+      # (70e4e3d5, 2026-06-29).
+      url = "github:numtide/llm-agents.nix/be5813ba4f71c49494d530c9a0b79132f089270e";
     };
 
     ai-nix = {

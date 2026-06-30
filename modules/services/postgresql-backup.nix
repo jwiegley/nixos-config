@@ -181,6 +181,20 @@ in
       after = [ "postgresql.service" ];
       requires = [ "postgresql.service" ];
 
+      # Silence the slow-query log for the backup's OWN sessions. pg_dump's
+      # directory format dumps every table via `COPY <table> TO stdout`; any
+      # table over ~100 MB trivially exceeds log_min_duration_statement=1000ms
+      # (databases.nix), flooding the slow-query log nightly with benign backup
+      # COPYs (LiteLLM_SpendLogs ~5min, mailarchiver/immich ~min, msg_events ~1s)
+      # that the DB health report then surfaces as bogus "slow query" events.
+      # PGOPTIONS passes `-c log_min_duration_statement=-1` as a libpq startup
+      # option, disabling slow-query logging for THESE connections only (the
+      # backup runs as the postgres superuser, so the SUSET GUC is honored). Real
+      # application slow queries (>=1s) are still logged globally; backup-duration
+      # regressions are covered separately by the pg_dump_* freshness/size metrics
+      # and the PgDumpStale / PgDumpSizeShrunk alerts.
+      environment.PGOPTIONS = "-c log_min_duration_statement=-1";
+
       serviceConfig = {
         Type = "oneshot";
         User = "postgres";

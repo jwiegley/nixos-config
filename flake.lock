@@ -2361,11 +2361,11 @@
         "spectrum": "spectrum"
       },
       "locked": {
-        "lastModified": 1782324740,
-        "narHash": "sha256-EpaYlgijQUv8nvbhMStQEFoO7aDWxJmVTOlsoHWqHpg=",
+        "lastModified": 1782764610,
+        "narHash": "sha256-CzCF8RD9a9kwRrpeQ+z67sqqADUG0tf+4+YBSUG30y0=",
         "owner": "astro",
         "repo": "microvm.nix",
-        "rev": "49a3e9fe33d33f189d24dafca36096766faa60ad",
+        "rev": "3904edd282a7166cdad6c597964718e6d018baa6",
         "type": "github"
       },
       "original": {
@@ -2393,11 +2393,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1782687174,
-        "narHash": "sha256-paEQpNxTM+OXikxXijeQ/QJRpdz3v4jP2p4FGEF2Zvc=",
+        "lastModified": 1782924381,
+        "narHash": "sha256-sbWXAZCatucvHc9FDGmBbh0FcAbjqHMwaC7GNMZTTnw=",
         "ref": "refs/heads/main",
-        "rev": "56ff0e22689863a0587b41453d18dce248ff2c95",
-        "revCount": 1949,
+        "rev": "5fe0f3261ec29b17d665e7f7f06ab116fa34a36b",
+        "revCount": 1972,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2850,11 +2850,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1782467914,
-        "narHash": "sha256-pGvFkM8N0xEkIIXDe5YYfbEAvHrk4IxBrjB/x8OomhE=",
+        "lastModified": 1782723713,
+        "narHash": "sha256-oPXCU/SSUokcGaJREHibG1CBX3+s/W7orDWQOZDsEeQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "e73de5be04e0eff4190a1432b946d469c794e7b4",
+        "rev": "b5aa0fbd538984f6e3d201be0005b4463d8b09f8",
         "type": "github"
       },
       "original": {
@@ -2930,11 +2930,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1782498288,
-        "narHash": "sha256-8/X3yyTXiE82b38n32ItbOqfWOVBl+gKa8fILyZfR4Q=",
+        "lastModified": 1782847189,
+        "narHash": "sha256-twXPFqFsrrY5r28Zh7Homgcp2gUMBgQ6WDS98Q/3xFI=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "3cac626ec5e3703e835f227687e88aa9e2f25701",
+        "rev": "b6018f87da91d19d0ab4cf979885689b469cdd41",
         "type": "github"
       },
       "original": {
@@ -3081,11 +3081,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782683126,
-        "narHash": "sha256-oFvDQNYRkW2nDf3yv+/TfubyDWa9XpeDP401YTcfBuc=",
+        "lastModified": 1782924079,
+        "narHash": "sha256-Voq3xcObfNfbyVZXUnp5bq/erXF4fwVRkHVbXktbCG4=",
         "ref": "refs/heads/main",
-        "rev": "09153e5e306287ec6e9875aa4484f498e190f646",
-        "revCount": 440,
+        "rev": "b910d5f3a9a4b49db4e2b285a4bb2d8f9dc3939c",
+        "revCount": 456,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },
@@ -3314,11 +3314,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781829612,
-        "narHash": "sha256-dZWB8gGTGo05E5exRArqKPJRiAP/3TdRP4Hhowi8mNA=",
+        "lastModified": 1782849242,
+        "narHash": "sha256-3M4o0+O3OVDOlnwybYzPqF8uDSG7iUcj7z8ZiwHKlV8=",
         "owner": "jwiegley",
         "repo": "sizes",
-        "rev": "dceb5b81d8f28f211adf452352bbb17ca26e7b52",
+        "rev": "2f3df65c451628718c252ffcf8234450dd7270b3",
         "type": "github"
       },
       "original": {
@@ -3350,11 +3350,11 @@
     "spectrum": {
       "flake": false,
       "locked": {
-        "lastModified": 1778940603,
-        "narHash": "sha256-voSM8dZNlaOWN3kbYFky+FNY6fFQOEw0xF+ZMpZKkCQ=",
+        "lastModified": 1782480951,
+        "narHash": "sha256-jrfyAgv5XfYDXJJ28OzANQOQIlsfNaI1kM9Mt13n+5k=",
         "ref": "refs/heads/main",
-        "rev": "367dd227f539267eae2b62770b4c17b88ac8c1f1",
-        "revCount": 1265,
+        "rev": "e4562d4c7646fea3cbb7306ff9b7ff41154c75c3",
+        "revCount": 1400,
         "type": "git",
         "url": "https://spectrum-os.org/git/spectrum"
       },

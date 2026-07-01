@@ -723,6 +723,12 @@ in
   # cozempic: Context cleaning for Claude Code
   inherit (import ./30-cozempic.nix final prev) cozempic;
 
+  # agent-deck: tmux TUI session manager for AI coding agents. Mirrored from
+  # ai-nix because our ai-nix pin predates it (llama-cpp compat); the shared
+  # nix-config package list installs it via `optPkg "agent-deck"`.
+  # See overlays/30-agent-deck.nix for the full rationale.
+  inherit (import ./30-agent-deck.nix final prev) agent-deck;
+
   # stock-trader: Python overrides for pip-only deps not in nixpkgs.
   # See pkgs/stock-trader.deps.md for the audit that drives this list.
   # Scoped to the stock-trader derivation only — not injected into

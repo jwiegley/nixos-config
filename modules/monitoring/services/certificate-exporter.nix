@@ -143,8 +143,11 @@ let
         #   - kibana.vulcan.lan      (Elastic/Kibana removed; zero git history)
         #   - perplexica.vulcan.lan  (renamed to vane.vulcan.lan, commit 93a4b56;
         #                             vane.vulcan.lan.crt is the live replacement)
-        # (copyparty.vulcan.lan is NOT listed — it is a live containerised service
-        #  served by its own nginx, so its cert is legitimately tracked.)
+        # (copyparty.vulcan.lan is NOT listed, but note (2026-07-03 audit): no
+        #  host nginx vhost serves that name — requests fell through to the
+        #  default :443 server — so its cert in ${nginxCertDir} is currently an
+        #  orphan. Either wire up a host vhost for it or retire the cert; until
+        #  then the exporter legitimately tracks a cert nothing serves.)
         # The leftover .crt files themselves still want manual removal from
         # ${nginxCertDir}; this skip-list just stops them generating dead alerts.
         skip_stale_cert() {

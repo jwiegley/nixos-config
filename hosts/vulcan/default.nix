@@ -138,6 +138,7 @@
     ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/cockpit.nix
+    ../../modules/services/nginx-default-vhost.nix
     ../../modules/services/llama-swap.nix
     ../../modules/services/aria2.nix
     ../../modules/services/atd.nix

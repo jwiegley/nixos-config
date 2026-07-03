@@ -86,5 +86,19 @@
     serviceConfig.User = "gitea-runner";
     serviceConfig.Group = "gitea-runner";
     serviceConfig.StateDirectory = lib.mkForce "gitea-runner";
+
+    # Backoff added 2026-07-03 (post-reboot audit): with the upstream
+    # RestartSec=2s the runner churned ~30 restarts/min whenever gitea or
+    # local DNS was down. Exponential backoff 10s -> 300s, never give up
+    # (StartLimitIntervalSec=0 — same never-strand pattern as cloudflared),
+    # and order after gitea + DNS readiness so boot doesn't race either.
+    after = [
+      "gitea.service"
+      "nss-lookup.target"
+    ];
+    serviceConfig.RestartSec = lib.mkForce "10s";
+    serviceConfig.RestartSteps = 5;
+    serviceConfig.RestartMaxDelaySec = "300s";
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
   };
 }

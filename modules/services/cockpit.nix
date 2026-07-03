@@ -137,4 +137,11 @@
 
   # Ensure johnw user can access cockpit (wheel group has admin access)
   # No additional configuration needed - PAM authentication uses system users
+
+  # The two *-socket-user units are /bin/true DynamicUser placeholders shipped
+  # by cockpit; their implicit After=basic.target logged an ordering-cycle
+  # warning on every shutdown (2026-07-03 audit, cosmetic). Safe because the
+  # units do nothing.
+  systemd.services.cockpit-session-socket-user.unitConfig.DefaultDependencies = false;
+  systemd.services.cockpit-wsinstance-socket-user.unitConfig.DefaultDependencies = false;
 }

@@ -206,8 +206,16 @@ in
         # `sync` would try to delete previously-mirrored copies, hit --max-delete,
         # and fatally abort the pass mid-run. `copy` (additive, no delete phase)
         # lets the pass finish and never fails the remote — MyDrive is authoritative.
+        # Three shares whose owners disabled download (403 cannotDownloadFile)
+        # retried 3x and logged errors every night (2026-07-03 audit). Excluded
+        # until/unless the owners re-enable download for viewers.
         rclone copy "$remote": "$dest/SharedWithMe" ${commonFlags} ${driveFlags} \
-          --drive-shared-with-me || echo "WARNING: $remote SharedWithMe had errors (continuing)"
+          --drive-shared-with-me \
+          --exclude "/Crypto Events 2023 by Simplicity Consultancy.xlsx" \
+          --exclude "/ETHDenver 2024 Side Events.xlsx" \
+          --exclude "/Kadena DEX Demo - 2025／04／24 16:55 EEST - Recording" \
+          --exclude "/Kadena DEX Demo - 2025／04／24 16:55 EEST - Recording/**" \
+          || echo "WARNING: $remote SharedWithMe had errors (continuing)"
         drives=$(rclone backend drives "$remote": 2>/dev/null || echo '[]')
         printf '%s' "$drives" | jq -r '.[]? | "\(.id)\t\(.name)"' \
           | while IFS=$'\t' read -r id name; do

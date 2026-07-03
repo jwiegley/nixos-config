@@ -122,6 +122,11 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = false;
+        # Tolerate a link-down interface like the sibling metric-manager above:
+        # `ip route replace` exits 2 when the NIC has no carrier (end0 was
+        # carrier-less for the first 10 min of the 2026-07-03 boot), and a
+        # oneshot failure here sticks until manual restart.
+        SuccessExitStatus = "0 2";
       };
 
       # Was a blind `sleep 30`, which was the literal edge that gated

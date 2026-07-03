@@ -58,10 +58,10 @@ let
     METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/fts_staleness.prom"
     TMP="$METRICS_FILE.tmp"
 
-    # Mail users (matches the maildirs declared in dovecot.nix:463-465). Could be
+    # Mail users (matches the maildirs declared in dovecot.nix:463-466). Could be
     # derived from /var/spool/mail/* dirs, but an explicit list keeps the loop
     # from accidentally scanning non-mailbox entries under the spool dir.
-    USERS="johnw assembly bia"
+    USERS="johnw assembly bia rbcca"
 
     {
       echo "# HELP fts_index_lag_seconds Max over folders of (newest mail mtime - newest flatcurve index mtime), clamped >=0"

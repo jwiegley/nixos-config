@@ -279,8 +279,14 @@ groups:
       # legitimately average >1s should get a per-queryid `unless` exclusion
       # rather than raising the global floor (queryids are stable across
       # restarts of the same PG major). for:30m filters cold-cache outliers.
+      # calls>1 gate added 2026-07-03: one-shot maintenance statements (post-boot
+      # backup churn: ANALYZE, restore-time DDL) land in the top-N with a single
+      # slow call and pinned the alert firing all day after the reboot. A mean
+      # over a single call is not a trend — require repetition before paging.
       - alert: PostgreSQLSlowStatements
-        expr: pg_stat_statements_top_mean_exec_time_ms > 1000
+        expr: >-
+          pg_stat_statements_top_mean_exec_time_ms > 1000
+          and on(queryid, datname, rolname) pg_stat_statements_top_calls > 1
         for: 30m
         labels:
           severity: warning

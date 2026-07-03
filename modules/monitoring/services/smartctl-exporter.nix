@@ -32,7 +32,12 @@
       "/dev/sdb" # tank — Seagate Exos X18 (UAS enclosure)
       "/dev/sdc" # tank — Seagate Exos X18 (UAS enclosure)
       "/dev/sdd" # tank — Seagate Exos X18 (UAS enclosure)
-      "/dev/nvme0n1" # root NVMe
+      # /dev/nvme0n1 removed 2026-07-03: the exporter's hardcoded --log=error
+      # hits an unsupported log page (0x109) on Apple ANS NVMe, smartctl exits
+      # 4, and exporter 0.14.0 discards the device — it never appeared in
+      # smartctl_devices despite being listed (SmartDeviceMissing fired on
+      # every boot). Health `smartctl -H /dev/nvme0n1` works fine; boot-NVMe
+      # coverage via a textfile gauge is a deferred follow-up.
     ];
     # Limit how often each disk is polled. Spinning the UAS bridge harder than
     # necessary is exactly what triggers its abort-storm, so keep it gentle.

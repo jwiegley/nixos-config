@@ -91,12 +91,14 @@ groups:
 
       # A disk vanishing from the SMART scan = the enclosure dropping a device.
       # smartctl_devices is a label-less gauge of how many devices the exporter
-      # successfully scanned. Five are configured (sda-sdd + nvme0n1); fewer
-      # means one fell off the bus — the classic UAS-enclosure failure mode that
+      # successfully scanned. Four are configured (sda-sdd; nvme0n1 was removed
+      # 2026-07-03 — Apple ANS NVMe rejects the exporter's --log=error page and
+      # was silently discarded, making <5 fire constantly); fewer than 4 means
+      # one fell off the bus — the classic UAS-enclosure failure mode that
       # precedes / accompanies the pool dropping. for:10m rides out a transient
       # re-enumeration without missing a real drop.
       - alert: SmartDeviceMissing
-        expr: smartctl_devices < 5
+        expr: smartctl_devices < 4
         for: 10m
         labels:
           severity: critical
@@ -104,4 +106,4 @@ groups:
           service: smartctl
         annotations:
           summary: "A SMART device has disappeared from the scan"
-          description: "smartctl_exporter now sees {{ $value }} of 5 configured devices. A disk has dropped off the bus — almost certainly the OWC/UAS enclosure dropping a tank member (see project_tank_uas_enclosure_failure). Check `lsblk` / `zpool status` and the enclosure."
+          description: "smartctl_exporter now sees {{ $value }} of 4 configured devices. A disk has dropped off the bus — almost certainly the OWC/UAS enclosure dropping a tank member (see project_tank_uas_enclosure_failure). Check `lsblk` / `zpool status` and the enclosure."

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - uid/gid **1013** for user/group `rbcca` (next free after assembly=1011, bia=1012).
-- SOPS secret name: **`rbcca-imap-bahai-org`** (as created in sops, following the `bia-imap-bahai-org` style).
+- SOPS secret name: **`rbcca-imap-gmail-com`** (matches `carmichael-imap-gmail-com` convention).
 - Remote: `imap.gmail.com:993` / user `jwiegley@rbcca.org`; sync **INBOX only, Pull**, timer **15min**, `trash = "[Gmail]/Trash"`.
 - **NEVER display the app password or any decrypted secret in terminal output.** The user performs all `sops` edits interactively. Never run `sops -d`.
 - Do not change `system.stateVersion` (25.11).
@@ -30,7 +30,7 @@
 - Modify: `/etc/nixos/flake.lock` (via `nix flake update secrets`)
 
 **Interfaces:**
-- Produces: SOPS key `rbcca-imap-bahai-org` (raw app password, 16 chars, **spaces removed**) consumed by Task 3's `PassCmd`; a new line inside the existing `postfix-secrets` value consumed by Postfix `smtp_sasl_password_maps` (Task 5).
+- Produces: SOPS key `rbcca-imap-gmail-com` (raw app password, 16 chars, **spaces removed**) consumed by Task 3's `PassCmd`; a new line inside the existing `postfix-secrets` value consumed by Postfix `smtp_sasl_password_maps` (Task 5).
 
 - [ ] **Step 1 (USER): Edit the secrets file**
 
@@ -45,7 +45,7 @@ Make two changes:
 1. Add a new top-level key (value = the 16-character Google app password with the display spaces removed):
 
    ```yaml
-   rbcca-imap-bahai-org: abcdabcdabcdabcd
+   rbcca-imap-gmail-com: abcdabcdabcdabcd
    ```
 
 2. Inside the existing multi-line `postfix-secrets` value, add a line for the new sender, copying the exact format of the existing `john@bia.bahai.org` line:
@@ -63,7 +63,7 @@ cd /etc/nixos && nix flake update secrets
 
 - [ ] **Step 3: Verify (safe — key names only, values stay encrypted)**
 
-Run: `grep -c '^rbcca-imap-bahai-org:' /etc/nixos/secrets/secrets.yaml`
+Run: `grep -c '^rbcca-imap-gmail-com:' /etc/nixos/secrets/secrets.yaml`
 Expected: `1`
 
 Run: `grep -A2 '"secrets"' /etc/nixos/flake.lock | grep rev` and confirm the rev changed (matches `git -C /etc/nixos/secrets rev-parse HEAD`).
@@ -145,7 +145,7 @@ git commit -m "users: add rbcca mirror user (jwiegley@rbcca.org)"
 - Modify: `modules/services/mbsync.nix:125-126` (append a `mkMbsyncService` block after the bia block, inside `imports`)
 
 **Interfaces:**
-- Consumes: user/group `rbcca` (Task 2); SOPS key `rbcca-imap-bahai-org` (Task 1).
+- Consumes: user/group `rbcca` (Task 2); SOPS key `rbcca-imap-gmail-com` (Task 1).
 - Produces: `mbsync-rbcca.service` + `.timer`, `mbsync-rbcca-health-check.service` + `.timer`, `/etc/mbsync/mbsyncrc-rbcca`, log dir `/var/log/mbsync-rbcca/`, metrics file `mbsync_rbcca.prom` — consumed by Tasks 6 and 8.
 
 - [ ] **Step 1: Append the block**
@@ -158,13 +158,13 @@ In `modules/services/mbsync.nix`, the bia block ends at line 125 with `})` follo
       name = "rbcca";
       user = "rbcca";
       group = "rbcca";
-      secretName = "rbcca-imap-bahai-org";
+      secretName = "rbcca-imap-gmail-com";
       trash = "[Gmail]/Trash";
 
       remoteConfig = ''
         Host imap.gmail.com
         User jwiegley@rbcca.org
-        PassCmd "cat /run/secrets/rbcca-imap-bahai-org"
+        PassCmd "cat /run/secrets/rbcca-imap-gmail-com"
         Port 993
         TLSType IMAPS
         CertificateFile /etc/ssl/certs/ca-certificates.crt
@@ -424,7 +424,7 @@ git commit -m "monitoring: nagios + promtail coverage for mbsync-rbcca"
 
 ### Task 7: Full build verification
 
-**Files:** none (verification only). **Requires Task 1 complete** (sops-nix validates the `rbcca-imap-bahai-org` key at build time).
+**Files:** none (verification only). **Requires Task 1 complete** (sops-nix validates the `rbcca-imap-gmail-com` key at build time).
 
 - [ ] **Step 1: Build**
 
@@ -432,7 +432,7 @@ git commit -m "monitoring: nagios + promtail coverage for mbsync-rbcca"
 cd /etc/nixos && sudo nixos-rebuild build --flake '.#vulcan'
 ```
 
-Expected: builds to completion with no errors. If it fails with a sops key-validation error naming `rbcca-imap-bahai-org`, Task 1 wasn't completed/flake-updated. Any other failure: fix the offending edit and rebuild (use `--show-trace` if the error is opaque).
+Expected: builds to completion with no errors. If it fails with a sops key-validation error naming `rbcca-imap-gmail-com`, Task 1 wasn't completed/flake-updated. Any other failure: fix the offending edit and rebuild (use `--show-trace` if the error is opaque).
 
 ---
 

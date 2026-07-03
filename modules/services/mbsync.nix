@@ -129,13 +129,13 @@ in
       name = "rbcca";
       user = "rbcca";
       group = "rbcca";
-      secretName = "rbcca-imap-bahai-org";
+      secretName = "rbcca-imap-gmail-com";
       trash = "[Gmail]/Trash";
 
       remoteConfig = ''
         Host imap.gmail.com
         User jwiegley@rbcca.org
-        PassCmd "cat /run/secrets/rbcca-imap-bahai-org"
+        PassCmd "cat /run/secrets/rbcca-imap-gmail-com"
         Port 993
         TLSType IMAPS
         CertificateFile /etc/ssl/certs/ca-certificates.crt

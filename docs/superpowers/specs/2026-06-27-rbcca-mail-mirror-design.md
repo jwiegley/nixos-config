@@ -43,10 +43,9 @@ for the outbound SMTP relay.
   OAuth2.
 - **Local user/group name:** `rbcca`, uid/gid **1013** (next free after
   assembly=1011, bia=1012).
-- **SOPS secret name:** `rbcca-imap-bahai-org` (the design proposed
-  `rbcca-imap-gmail-com` per the carmichael convention; the key was created in
-  sops following the `bia-imap-bahai-org` style instead, and the config follows
-  the key as created).
+- **SOPS secret name:** `rbcca-imap-gmail-com` (matches the
+  `carmichael-imap-gmail-com` convention; briefly deployed as
+  `rbcca-imap-bahai-org` before the key was renamed on 2026-07-02).
 
 ## Detailed design — Nix changes (1 new file + 7 edits)
 
@@ -96,13 +95,13 @@ before the closing `]`):
       name = "rbcca";
       user = "rbcca";
       group = "rbcca";
-      secretName = "rbcca-imap-bahai-org";
+      secretName = "rbcca-imap-gmail-com";
       trash = "[Gmail]/Trash";
 
       remoteConfig = ''
         Host imap.gmail.com
         User jwiegley@rbcca.org
-        PassCmd "cat /run/secrets/rbcca-imap-bahai-org"
+        PassCmd "cat /run/secrets/rbcca-imap-gmail-com"
         Port 993
         TLSType IMAPS
         CertificateFile /etc/ssl/certs/ca-certificates.crt
@@ -206,7 +205,7 @@ stateful, hand-maintained password file.
    enabled. One app password serves both IMAP (mirror) and SMTP (send-as).
 
 2. **Add the secrets** with `sops /etc/nixos/secrets/secrets.yaml`:
-   - new key `rbcca-imap-bahai-org: <app-password>`
+   - new key `rbcca-imap-gmail-com: <app-password>`
    - append to the `postfix-secrets` block:
      `jwiegley@rbcca.org    jwiegley@rbcca.org:<app-password>`
 

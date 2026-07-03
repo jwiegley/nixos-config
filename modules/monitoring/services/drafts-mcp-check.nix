@@ -46,7 +46,7 @@ let
     Read-only by construction: the single tools/call is
     drafts_list_workspaces (readOnlyHint: true). run_action and every write
     tool are never invoked. All probes have hard timeouts so the unit cannot
-    hang past RuntimeMaxSec.
+    hang past TimeoutStartSec.
     """
     from __future__ import annotations
 
@@ -258,7 +258,7 @@ in
         # 1777 textfile dir is the smallest footprint.
         DynamicUser = true;
         ExecStart = "${healthScript}";
-        RuntimeMaxSec = "120s";
+        TimeoutStartSec = "120s";
         ReadWritePaths = [ textfileDir ];
         ProtectSystem = "strict";
         ProtectHome = true;

@@ -93,7 +93,7 @@ in
         # margin for python startup and the atomic write. The retry
         # absorbs transient flaps (Qwen reasoning truncation, a one-off
         # MLX cold-load timeout) so only a persistent breakage pages.
-        RuntimeMaxSec = "210s";
+        TimeoutStartSec = "210s";
         # Hardening (matches openclaw-hermes-smoke.nix and hermes-health-check.nix)
         ProtectSystem = "strict";
         ProtectHome = true;

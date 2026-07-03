@@ -72,7 +72,7 @@ in
       User = "root";
       Group = "root";
       ExecStart = "${driftScript}/bin/config-drift-exporter";
-      RuntimeMaxSec = "120s";
+      TimeoutStartSec = "120s";
       # Hardening mirrors system-age-exporter.nix / openclaw-config-drift-check.
       # Runs as root: must read root-0600 /var/lib/hass/configuration.yaml and
       # the SOPS ciphertext. It can write nothing it reads back except its own
@@ -116,7 +116,7 @@ in
       User = "root";
       Group = "root";
       ExecStart = "${driftScript}/bin/config-drift-exporter --rebaseline";
-      RuntimeMaxSec = "120s";
+      TimeoutStartSec = "120s";
       PrivateTmp = true;
       NoNewPrivileges = true;
       ProtectSystem = "strict";

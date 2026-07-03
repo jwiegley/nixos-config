@@ -49,7 +49,7 @@ in
         # Cap runtime so a wedged read doesn't pile up zombie units.
         # Budget is BUDGET_SECONDS (90s) inside the script; 120s on
         # the systemd side leaves margin for python startup.
-        RuntimeMaxSec = "120s";
+        TimeoutStartSec = "120s";
         # Hardening (matches modules/monitoring/services/hermes-health-check.nix)
         ProtectSystem = "strict";
         ProtectHome = true;

@@ -145,7 +145,7 @@ in
       # (mode 0600, ephemeral uid). Reads only a timestamp; writes only epochs.
       User = "root";
       Group = "root";
-      RuntimeMaxSec = "30s";
+      TimeoutStartSec = "30s";
       # Security hardening
       PrivateTmp = true;
       NoNewPrivileges = true;

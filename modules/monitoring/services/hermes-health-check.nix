@@ -45,7 +45,7 @@ let
     """End-to-end Hermes health probe → Prometheus textfile.
 
     All probes have hard timeouts so the unit cannot hang past
-    `RuntimeMaxSec` in the systemd unit. On any probe failure the
+    `TimeoutStartSec` in the systemd unit. On any probe failure the
     metric is 0; only `_age_seconds` and the run timestamp use real
     values regardless of probe success.
     """
@@ -430,7 +430,7 @@ in
         ExecStart = "${healthScript}";
 
         # Hard cap: the ask_hermes probe alone allows 60s; pad for the others.
-        RuntimeMaxSec = "120s";
+        TimeoutStartSec = "120s";
 
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];
         ReadOnlyPaths = [

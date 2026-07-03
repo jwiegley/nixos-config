@@ -78,7 +78,7 @@ in
         # supplementary group access; SupplementaryGroups= here would
         # be the alternative if we didn't want a dedicated user.
         ExecStart = "${counterScript}/bin/hermes-fallback-counter";
-        RuntimeMaxSec = "30s";
+        TimeoutStartSec = "30s";
 
         # Hardening
         ProtectSystem = "strict";

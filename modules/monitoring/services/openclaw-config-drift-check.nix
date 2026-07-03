@@ -50,7 +50,7 @@ in
         Environment = [
           "OPENCLAW_PROBE_SSH_KEY=%d/probe-ssh-key"
         ];
-        RuntimeMaxSec = "120s";
+        TimeoutStartSec = "120s";
         # Hardening
         ProtectSystem = "strict";
         ProtectHome = true;

@@ -84,6 +84,7 @@
     # lookups happen against bia@vulcan.lan and miss.
     mapFiles."sender_canonical_regexp" = pkgs.writeText "sender_canonical_regexp" ''
       /^bia(\+.*)?@vulcan\.lan$/    john@bia.bahai.org
+      /^rbcca(\+.*)?@vulcan\.lan$/    jwiegley@rbcca.org
     '';
 
     # Sender-dependent relayhost map: route specific envelope senders through
@@ -92,6 +93,7 @@
     # so Postfix looks up SASL credentials keyed by sender address.
     mapFiles."sender_relay" = pkgs.writeText "sender_relay" ''
       john@bia.bahai.org    [smtp.gmail.com]:587
+      jwiegley@rbcca.org    [smtp.gmail.com]:587
     '';
 
     settings.main = {

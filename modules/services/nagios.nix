@@ -928,6 +928,10 @@ let
       display = "Email Sync (bia)";
     }
     {
+      name = "mbsync-rbcca.timer";
+      display = "Email Sync (rbcca)";
+    }
+    {
       name = "mbsync-johnw-health-check.timer";
       display = "Email Sync Health Check (johnw)";
     }
@@ -938,6 +942,10 @@ let
     {
       name = "mbsync-bia-health-check.timer";
       display = "Email Sync Health Check (bia)";
+    }
+    {
+      name = "mbsync-rbcca-health-check.timer";
+      display = "Email Sync Health Check (rbcca)";
     }
     {
       name = "imapdedup.timer";

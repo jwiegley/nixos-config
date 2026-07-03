@@ -123,6 +123,43 @@ in
       # The service needs to become inactive for the timer to schedule the next run
       extraServiceConfig = { };
     })
+
+    # RBCCA configuration (jwiegley@rbcca.org via Google Workspace)
+    (mkMbsyncService {
+      name = "rbcca";
+      user = "rbcca";
+      group = "rbcca";
+      secretName = "rbcca-imap-bahai-org";
+      trash = "[Gmail]/Trash";
+
+      remoteConfig = ''
+        Host imap.gmail.com
+        User jwiegley@rbcca.org
+        PassCmd "cat /run/secrets/rbcca-imap-bahai-org"
+        Port 993
+        TLSType IMAPS
+        CertificateFile /etc/ssl/certs/ca-certificates.crt
+      '';
+
+      channels = ''
+        # Google Workspace to Dovecot channel
+        Channel gmail-all
+        Far :rbcca-remote:
+        Near :dovecot-local:
+        Patterns INBOX !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred" !"[Gmail]/Trash"
+        Create Near
+        Remove Near
+        Expunge Near
+        Sync Pull
+        SyncState /var/lib/mbsync-rbcca/
+      '';
+
+      timerInterval = "15min";
+
+      # Don't use RemainAfterExit with OnUnitActiveSec timer
+      # The service needs to become inactive for the timer to schedule the next run
+      extraServiceConfig = { };
+    })
   ];
 
   # Install isync package to make mbsync available

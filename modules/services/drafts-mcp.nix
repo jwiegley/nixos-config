@@ -155,12 +155,20 @@ in
 
     systemd.services.drafts-mcp = {
       description = "Drafts.app (hera) MCP SSE bridge";
+      # nss-lookup.target ordering added 2026-07-03 (post-reboot audit): on the
+      # 11:37 boot the unit started while local DNS was not yet answering, ssh
+      # failed "could not resolve hera.lan", and mcp-proxy kept serving as a
+      # silent green zombie with a dead child (Restart=on-failure never fires
+      # because mcp-proxy stays up). Same fix class as fetchmail-good and
+      # cloudflared (docs/BOOT_SLOWNESS_RCA_2026-06-24.md).
       after = [
         "network-online.target"
+        "nss-lookup.target"
         "sops-install-secrets.service"
       ];
       wants = [
         "network-online.target"
+        "nss-lookup.target"
         "sops-install-secrets.service"
       ];
       wantedBy = [ "multi-user.target" ];

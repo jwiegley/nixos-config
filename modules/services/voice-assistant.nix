@@ -71,6 +71,11 @@
 
       # STT_OPENAI_KEY=<litellm-virtual-key> comes from SOPS.
       environmentFiles = [ "/run/secrets/wyoming-openai-env" ];
+
+      # Python installs a SIGINT handler even as container PID 1; the quadlet
+      # default SIGTERM was ignored, so every stop rode the 10s timeout into
+      # SIGKILL/exit 137 and logged a spurious unit failure (2026-07-03 audit).
+      stopSignal = "SIGINT";
     };
 
     unitConfig = {

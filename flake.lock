@@ -3292,11 +3292,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1781834091,
-        "narHash": "sha256-kNl6XJEyqUkSI8cbDuFE8JAN+vmKyq64L8uJ8fi5Lp8=",
+        "lastModified": 1783059115,
+        "narHash": "sha256-eJJDqmbY9N0bTgdHOYboRGfvcXzwQiLZ7+6R9F1i16Y=",
         "ref": "refs/heads/main",
-        "rev": "8b407e49973b2bbf7d68c33d57ccf6ed7ee448e1",
-        "revCount": 151,
+        "rev": "457377307bcf329af95c3bb07ffbc8fccda968f1",
+        "revCount": 152,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

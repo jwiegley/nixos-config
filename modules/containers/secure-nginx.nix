@@ -63,16 +63,20 @@ in
     restartUnits = [ "copyparty-password-setup.service" ];
   };
 
-  # Ensure directories exist on host
+  # Ensure directories exist on host.
+  # /var/www/home.newartisans.com is a BIND MOUNT of /tank/Public: mode/owner
+  # fields are '-' so tmpfiles only creates the mountpoint and never chmods
+  # the mounted dataset (an explicit mode here re-applied chmod 0755 on every
+  # boot/resetup, resetting the POSIX ACL mask that syncthing needs — the
+  # 2026-07-03 audit's /tank/Public write-loss root cause).
+  # /tank/Public/{johnw,nasimw} rules removed same day: persistent ZFS-backed
+  # data dirs owned syncthing/nasimw must not be tmpfiles-managed (CLAUDE.md).
   systemd.tmpfiles.rules = [
-    "d /var/www/home.newartisans.com 0755 root root -"
+    "d /var/www/home.newartisans.com - - - -"
     "d /var/lib/copyparty-container 0755 root root -"
     "d /var/lib/copyparty-container/.hist 0755 root root -"
     "d /var/lib/copyparty-container/.th 0755 root root -"
     "d /var/lib/copyparty-passwords 0755 root root -"
-    # Personal directories for copyparty shares
-    "d /tank/Public/johnw 0755 root root -"
-    "d /tank/Public/nasimw 0755 root root -"
   ];
 
   # Bind mount ZFS dataset to host directory (container will access via bindMount)

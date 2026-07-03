@@ -27,6 +27,21 @@
   # Enable container runtime support (required for rootless containers)
   virtualisation.containers.enable = true;
 
+  # Pin host.containers.internal to the podman0 bridge address (2026-07-03
+  # post-reboot audit). Without this, rootless quadlets started by lingering
+  # user managers race NetworkManager at boot: podman picks the first
+  # non-loopback host IP — the microVM bridge 10.99.0.1 — freezes it into the
+  # container's /etc/hosts for the container's lifetime, and every DB client
+  # then hits pg_hba's reject catch-all in a retry storm (hit speedtest-tracker,
+  # memory-vault, shlink, openproject, litellm on the 2026-07-03 boot).
+  # 10.88.0.1 is config-static (defaultNetwork below), host-owned regardless of
+  # which LAN interface has carrier, PostgreSQL binds it, and pg_hba admits
+  # 10.88.0.0/16. Do NOT use a LAN address here — vulcan is multi-homed
+  # (end0 + WiFi) and either can be down at boot.
+  virtualisation.containers.containersConf.settings.containers = {
+    host_containers_internal_ip = "10.88.0.1";
+  };
+
   # Configure container storage for rootless support
   virtualisation.containers.storage.settings = {
     storage = {

@@ -82,6 +82,11 @@ in
 
       timerInterval = "1day";
 
+      # 1x/day cadence: 26h warn / 50h crit, matching the nagios-tier1-mirror
+      # values (the 1h/4h defaults left this CRITICAL ~20h of every day).
+      healthWarningAge = 93600;
+      healthCriticalAge = 180000;
+
       # Don't use RemainAfterExit with OnUnitActiveSec timer
       # The service needs to become inactive for the timer to schedule the next run
       extraServiceConfig = { };

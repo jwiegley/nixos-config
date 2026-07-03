@@ -22,6 +22,12 @@
       },
       channels,
       timerInterval ? "15min",
+      # Health-check staleness thresholds (seconds). Defaults suit a 15min
+      # timer; accounts with slower cadence MUST scale these (2026-07-03
+      # audit: assembly syncs 1x/day but inherited 1h/4h and sat CRITICAL
+      # ~20h of every day). Keep in step with nagios-tier1-mirror values.
+      healthWarningAge ? 3600,
+      healthCriticalAge ? 14400,
       logLevel ? "info",
       extraServiceConfig ? { },
     }:
@@ -220,14 +226,14 @@
 
             CURRENT_TIME=$(date +%s)
             SYNC_AGE=$((CURRENT_TIME - LAST_SYNC_TIMESTAMP))
-            WARNING_AGE=$((60 * 60))      # 1 hour in seconds
-            CRITICAL_AGE=$((4 * 60 * 60)) # 4 hours in seconds
+            WARNING_AGE=${toString healthWarningAge}
+            CRITICAL_AGE=${toString healthCriticalAge}
 
             if [ "$SYNC_AGE" -gt "$CRITICAL_AGE" ]; then
-              echo "CRITICAL: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over 4 hours)"
+              echo "CRITICAL: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over $((CRITICAL_AGE / 60)) minutes)"
               exit 2  # Exit code 2 for critical issues
             elif [ "$SYNC_AGE" -gt "$WARNING_AGE" ]; then
-              echo "WARNING: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over 1 hour)"
+              echo "WARNING: Last successful sync was $((SYNC_AGE / 60)) minutes ago (over $((WARNING_AGE / 60)) minutes)"
               exit 1  # Exit code 1 for warnings
             else
               echo "OK: Last sync was $((SYNC_AGE / 60)) minutes ago"

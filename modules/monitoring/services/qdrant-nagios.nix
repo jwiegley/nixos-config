@@ -79,7 +79,10 @@ let
       use                     critical-service
       host_name               vulcan
       service_description     Qdrant HTTPS (qdrant.vulcan.lan)
-      check_command           check_https!qdrant.vulcan.lan!/healthz
+      # Flag-style args (2026-07-05): the old two-arg form silently dropped
+      # $ARG2$ (/healthz was never actually checked) and sent no usable SNI,
+      # which the rejectSSL default :443 server refuses.
+      check_command           check_https!-H qdrant.vulcan.lan -u /healthz
       service_groups          application-services
     }
 

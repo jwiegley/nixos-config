@@ -152,7 +152,10 @@ let
       use                     critical-service
       host_name               vulcan
       service_description     ATD HTTPS (atd.vulcan.lan)
-      check_command           check_https!atd.vulcan.lan!/
+      # Flag-style args (2026-07-05): the old two-arg form silently dropped
+      # $ARG2$ (the URL was never checked) and left SNI pointing at the host
+      # address, which the rejectSSL default :443 server refuses.
+      check_command           check_https!-H atd.vulcan.lan -u /
       service_groups          application-services
     }
 

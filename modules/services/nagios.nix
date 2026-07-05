@@ -1264,7 +1264,12 @@ let
 
     define command {
       command_name    check_https
-      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ -S $ARG1$
+      # --sni added 2026-07-05: check_http does NOT send SNI without it, and
+      # the explicit default :443 server (rejectSSL, added 2026-07-03) aborts
+      # no-SNI handshakes — six HTTPS checks went "Cannot make SSL connection"
+      # at the first cycle after that switch. Callers must pass -H <vhost> in
+      # $ARG1$ (the later -H wins and supplies both Host header and SNI).
+      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ -S --sni $ARG1$
     }
 
     define command {
@@ -1816,7 +1821,7 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     Stock Trader HTTPS
-      check_command           check_http!-I 127.0.0.1 -p 443 -S -H trader.vulcan.lan -u /api/config
+      check_command           check_http!-I 127.0.0.1 -p 443 -S --sni -H trader.vulcan.lan -u /api/config
       service_groups          application-services
     }
 

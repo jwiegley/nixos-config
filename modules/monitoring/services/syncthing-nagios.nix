@@ -186,7 +186,10 @@ let
       use                     standard-service
       host_name               vulcan
       service_description     Syncthing HTTPS (syncthing.vulcan.lan)
-      check_command           check_https!syncthing.vulcan.lan!/
+      # Flag-style args (2026-07-05): the old two-arg form silently dropped
+      # $ARG2$ and sent no usable SNI, which the rejectSSL default :443
+      # server refuses.
+      check_command           check_https!-H syncthing.vulcan.lan -u /
       service_groups          application-services
     }
 

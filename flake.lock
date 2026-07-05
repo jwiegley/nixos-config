@@ -2393,11 +2393,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1782924381,
-        "narHash": "sha256-sbWXAZCatucvHc9FDGmBbh0FcAbjqHMwaC7GNMZTTnw=",
+        "lastModified": 1783196794,
+        "narHash": "sha256-Mf+w+1KmIsfC8MoqkaV6z7J5QN+J+ggmHg3//ObDnmU=",
         "ref": "refs/heads/main",
-        "rev": "5fe0f3261ec29b17d665e7f7f06ab116fa34a36b",
-        "revCount": 1972,
+        "rev": "96178bb359e5968ef1770a1c1f592341860f2f83",
+        "revCount": 1992,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2850,11 +2850,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1782723713,
-        "narHash": "sha256-oPXCU/SSUokcGaJREHibG1CBX3+s/W7orDWQOZDsEeQ=",
+        "lastModified": 1782959384,
+        "narHash": "sha256-xnJJk+ct+D2+wdRxj1wk36w5zV9RVESwRqcklPdt3fM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "b5aa0fbd538984f6e3d201be0005b4463d8b09f8",
+        "rev": "65179426c83bb3f6bc14898b42ea1c6f01d374b0",
         "type": "github"
       },
       "original": {
@@ -3081,11 +3081,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782924079,
-        "narHash": "sha256-Voq3xcObfNfbyVZXUnp5bq/erXF4fwVRkHVbXktbCG4=",
+        "lastModified": 1783121313,
+        "narHash": "sha256-hR4rIbk22mti1MTeFkbjj0jRB9nVp7x8dnyzlttR3Kw=",
         "ref": "refs/heads/main",
-        "rev": "b910d5f3a9a4b49db4e2b285a4bb2d8f9dc3939c",
-        "revCount": 456,
+        "rev": "f0a8e45a1c35fb17d24870868e238834985ece27",
+        "revCount": 467,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },
@@ -3334,11 +3334,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782165805,
-        "narHash": "sha256-478kKQBvK6SYTOdN2h9jhKJv94nbXRbFMfuL1WshErg=",
+        "lastModified": 1783174389,
+        "narHash": "sha256-aCWC8ngycU7OdJrU2+Je3qf+1a2ykuBvpPhZT/9tXMc=",
         "owner": "Mic92",
         "repo": "sops-nix",
-        "rev": "56b24064fdcaedca53553b1a6d607fd23b613a24",
+        "rev": "f1406619a3884cd5c47992a70b8b35c9c0fcb4c9",
         "type": "github"
       },
       "original": {

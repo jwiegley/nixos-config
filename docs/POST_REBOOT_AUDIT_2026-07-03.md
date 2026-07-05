@@ -96,7 +96,15 @@ Optional: router `allowed_fails`/cooldown to quiet future hera outages.
    Mode fields now `-`; stale /tank/Public/{johnw,nasimw} rules removed
    (both copyparty-container.nix and secure-nginx.nix).
 5. nginx explicit default :443 (`rejectSSL`) — bogus SNI now gets handshake
-   rejection instead of the Alertmanager UI; real vhosts unaffected.
+   rejection instead of the Alertmanager UI; SNI-bearing vhost traffic
+   unaffected. **Regression found 2026-07-05:** the original verification
+   only exercised SNI-bearing clients; six Nagios `check_http`-based HTTPS
+   checks send NO SNI and went "Cannot make SSL connection" from the first
+   post-switch cycle (16:52) until fixed on 07-05 (`--sni` added to the
+   check commands; also repaired atd/qdrant/syncthing's two-arg
+   `check_https` calls whose URL arg was silently dropped). Lesson recorded:
+   test TLS fallthrough changes with no-SNI clients
+   (`openssl s_client` without `-servername`).
 6. PostgreSQLSlowStatements gated on `calls > 1`.
 7. smartctl exporter: nvme0n1 dropped (Apple ANS rejects --log=error page;
    device was silently discarded → SmartDeviceMissing fired constantly),

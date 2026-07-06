@@ -143,9 +143,25 @@
     };
 
     # nixpkgs unstable for packages that need newer versions
-    # Used for: JupyterLab (4.5.0+), Immich 2.4.1 (CR3 fix), and other packages needing unstable
+    # Used for: JupyterLab (4.5.0+), Home Assistant, and other packages needing unstable
     nixpkgs-unstable = {
       url = "github:NixOS/nixpkgs/nixos-unstable";
+    };
+
+    # Dedicated pin for Immich 3.0.1 (server must be >= the auto-updating
+    # mobile app, which is already 3.0.1; v3's checksum-based backup sync is
+    # what lets phone photos byte-identical to the /tank archive register as
+    # backed up instead of looping "Preparing" forever). nixos-unstable still
+    # carries 2.7.5 (the 3.0.1 bump f76955e3 hasn't reached the channel), and
+    # bumping the whole nixpkgs-unstable input would drag Home Assistant /
+    # JupyterLab along. Rev 266a3597 is the nixpkgs master commit from Hydra
+    # eval 1826899, whose immich.aarch64-linux and
+    # immich-machine-learning.aarch64-linux jobs both built successfully, so
+    # everything substitutes from cache.nixos.org. Drop this input (and point
+    # overlays/default.nix's immich back at nixpkgs-unstable) once
+    # nixos-unstable ships immich >= 3.0.1.
+    nixpkgs-immich = {
+      url = "github:NixOS/nixpkgs/266a3597f538657576ca4b476bb032b68bace284";
     };
   };
 
@@ -277,6 +293,16 @@
             nixpkgs.overlays = [
               inputs.ai-nix.overlays.default
               (import ./overlays inputs system)
+              # nix-config's misc-tools overlay (+ its 00-lib helper dep):
+              # johnw's HM packages import nix-config/config/packages.nix
+              # against vulcan's pkgs (useGlobalPkgs), and as of nix-config
+              # a6ae5339 (2026-07-06) that list references cmdperf, defined
+              # only in nix-config's own overlays — which vulcan never
+              # applied. Same local-adaptation class as ssh-settings-compat
+              # and the git-ai stub. Deliberately NOT importing the whole
+              # overlays/ dir (the emacs overlay would force large rebuilds).
+              (import "${inputs.nix-config}/overlays/00-lib.nix")
+              (import "${inputs.nix-config}/overlays/30-misc-tools.nix")
             ];
           }
           ./hosts/vulcan

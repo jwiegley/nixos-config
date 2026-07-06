@@ -302,6 +302,18 @@
               # and the git-ai stub. Deliberately NOT importing the whole
               # overlays/ dir (the emacs overlay would force large rebuilds).
               (import "${inputs.nix-config}/overlays/00-lib.nix")
+              # gogcli base for the misc-tools overlay below: it bumps gogcli
+              # via `prev.gogcli.overrideAttrs`, assuming the underlying
+              # nixpkgs ships a base gogcli — true on Darwin (unstable
+              # nixpkgs, 0.29.0), absent from nixos-25.11, so the overlay
+              # alone eval-fails with "attribute 'gogcli' missing" (the
+              # 2026-07-06 switch failure). Provide unstable's base here so
+              # the override has something to override; the misc-tools stage
+              # then replaces src/version with the openclaw/gogcli 0.31.1
+              # fork as intended. Drop once vulcan's nixpkgs ships gogcli.
+              (final: prev: {
+                gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
+              })
               (import "${inputs.nix-config}/overlays/30-misc-tools.nix")
             ];
           }

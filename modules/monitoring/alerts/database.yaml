@@ -283,18 +283,32 @@ groups:
       # backup churn: ANALYZE, restore-time DDL) land in the top-N with a single
       # slow call and pinned the alert firing all day after the reboot. A mean
       # over a single call is not a trend — require repetition before paging.
+      #
+      # WINDOWED-MEAN rewrite 2026-07-06: mean_exec_time is a LIFETIME average
+      # since stats reset, so any legitimately-heavy repeated query (case
+      # study: mailarchiver's per-account SUM(pg_column_size(row)) storage
+      # rollup, ~2.1s/call by design — no index can help a whole-row size sum)
+      # pinned the alert 24/7 even while idle; "sustained 30m" was an illusion
+      # on a cumulative gauge. Now: mean over the last 30m only, >=2 calls in
+      # that window. delta() (not increase/rate — exporter declares GAUGE) on
+      # the cumulative counters; a stats reset mid-window makes delta(calls)
+      # negative, which the >=2 gate filters. Fires only while the statement
+      # is ACTIVELY running slow; self-clears when it goes idle.
       - alert: PostgreSQLSlowStatements
         expr: >-
-          pg_stat_statements_top_mean_exec_time_ms > 1000
-          and on(queryid, datname, rolname) pg_stat_statements_top_calls > 1
-        for: 30m
+          (
+            delta(pg_stat_statements_top_total_exec_time_ms[30m])
+            / clamp_min(delta(pg_stat_statements_top_calls[30m]), 1)
+          ) > 1000
+          and delta(pg_stat_statements_top_calls[30m]) >= 2
+        for: 15m
         labels:
           severity: warning
           category: database
           service: postgresql
         annotations:
           summary: "Slow PostgreSQL statement (queryid {{ $labels.queryid }} in {{ $labels.datname }})"
-          description: "Statement queryid={{ $labels.queryid }} (db {{ $labels.datname }}, role {{ $labels.rolname }}) averages {{ $value | humanize }}ms/call, sustained 30m. Inspect the SQL as postgres: SELECT query FROM pg_stat_statements WHERE queryid = {{ $labels.queryid }};"
+          description: "Statement queryid={{ $labels.queryid }} (db {{ $labels.datname }}, role {{ $labels.rolname }}) averaged {{ $value | humanize }}ms/call over the last 30m (>=2 calls). Inspect the SQL as postgres: SELECT query FROM pg_stat_statements WHERE queryid = {{ $labels.queryid }};"
 
       # A single statement dominating cluster exec time. If one queryid's
       # cumulative total_exec_time is >50% of the top-N total, something is

@@ -5,6 +5,27 @@
   ...
 }:
 
+let
+  # Retry transient remote failures (Fastmail 503s, connection resets) within
+  # a single run so one blip doesn't fail the unit and fire
+  # VdirsyncerServiceFailed; the unit only fails after ~5 minutes of
+  # persistent failure. Both observed failures (2026-07-03, 2026-07-06) were
+  # upstream blips that self-healed by the next 15-minute timer cycle.
+  vdirsyncerSync = pkgs.writeShellScript "vdirsyncer-sync" ''
+    attempts=3
+    for attempt in $(${pkgs.coreutils}/bin/seq "$attempts"); do
+      if ${pkgs.vdirsyncer}/bin/vdirsyncer --config /etc/vdirsyncer/config sync; then
+        exit 0
+      fi
+      if [ "$attempt" -lt "$attempts" ]; then
+        echo "vdirsyncer sync attempt $attempt/$attempts failed; retrying in 120s" >&2
+        ${pkgs.coreutils}/bin/sleep 120
+      fi
+    done
+    echo "vdirsyncer sync failed after $attempts attempts" >&2
+    exit 1
+  '';
+in
 {
   # vdirsyncer - Synchronize calendars and contacts
   # Bidirectional sync between Radicale (local) and remote services
@@ -168,7 +189,7 @@
       Type = "oneshot";
       User = "vdirsyncer";
       Group = "vdirsyncer";
-      ExecStart = "${pkgs.vdirsyncer}/bin/vdirsyncer --config /etc/vdirsyncer/config sync";
+      ExecStart = "${vdirsyncerSync}";
 
       # State directory
       StateDirectory = "vdirsyncer";

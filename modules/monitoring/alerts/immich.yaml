@@ -24,32 +24,14 @@ groups:
           summary: "Immich Microservices are down"
           description: "Immich Microservices have been unavailable for more than 2 minutes on {{ $labels.instance }}"
 
-      # High HTTP error rate
-      - alert: ImmichHighHTTPErrorRate
-        expr: |
-          rate(http_server_duration_count{job=~"immich.*",status=~"5.."}[5m]) /
-          rate(http_server_duration_count{job=~"immich.*"}[5m]) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-          service: immich
-        annotations:
-          summary: "Immich has high HTTP error rate"
-          description: "Immich HTTP 5xx error rate is above 5% on {{ $labels.instance }}"
-
-      # Slow HTTP response times
-      - alert: ImmichSlowResponse
-        expr: |
-          histogram_quantile(0.95,
-            rate(http_server_duration_bucket{job=~"immich.*"}[5m])
-          ) > 10000
-        for: 10m
-        labels:
-          severity: warning
-          service: immich
-        annotations:
-          summary: "Immich has slow HTTP response times"
-          description: "95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+      # NOTE (2026-07-06, immich 3.0.1): ImmichHighHTTPErrorRate and
+      # ImmichSlowResponse REMOVED. v3 dropped the OTel HTTP-server
+      # instrumentation from the Prometheus exposition — no http_server_*
+      # series exist on either telemetry port (verified against live
+      # :9283/:9284 with IMMICH_TELEMETRY_INCLUDE=all), so both rules could
+      # never fire. HTTP-level coverage for Immich is now the blackbox vhost
+      # probe of immich.vulcan.lan (nagios-tier1-mirror) plus ImmichAPIDown
+      # below.
 
       # High memory usage (API)
       - alert: ImmichAPIHighMemoryUsage
@@ -75,39 +57,20 @@ groups:
           summary: "Immich Microservices memory usage is high"
           description: "Immich Microservices is using {{ $value | humanize1024 }}B of memory on {{ $labels.instance }}"
 
-      # Job queue backing up
-      - alert: ImmichJobQueueBacklog
-        expr: |
-          sum by (instance) ({__name__=~"immich_queues_.+_active"}) > 50
-        for: 30m
-        labels:
-          severity: warning
-          service: immich
-        annotations:
-          summary: "Immich job queue has large backlog"
-          description: "Immich has {{ $value }} pending jobs on {{ $labels.instance }}"
-
       # NOTE (2026-06-10): ImmichJobFailures REMOVED. It matched
       # {__name__=~"immich_jobs_.*_failed_total"}, which is ZERO live series —
-      # Immich's OTel exporter publishes NO per-queue failed counter. The only
-      # job-health signal Immich exposes is immich_queues_<name>_active (a
-      # per-queue depth gauge). A stuck/backed-up queue is already covered by
-      # ImmichJobQueueBacklog above (sum of *_active sustained > 50 for 30m),
-      # which is the correct proxy for "jobs are not draining / failing".
-
-      # Machine learning service issues
-      - alert: ImmichMLServiceSlow
-        expr: |
-          histogram_quantile(0.95,
-            rate(immich_machine_learning_repository_predict_duration_bucket[5m])
-          ) > 30000
-        for: 15m
-        labels:
-          severity: warning
-          service: immich
-        annotations:
-          summary: "Immich ML service is slow"
-          description: "Immich ML 95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+      # Immich's OTel exporter publishes NO per-queue failed counter.
+      #
+      # NOTE (2026-07-06, immich 3.0.1): ImmichJobQueueBacklog and
+      # ImmichMLServiceSlow also REMOVED. v3 dropped the per-queue depth
+      # gauges (immich_queues_<name>_active) and the ML predict histogram
+      # (immich_machine_learning_repository_predict_duration_*); the v3
+      # exposition only publishes immich_<repo>_<method>_duration call
+      # histograms (verified against live :9283/:9284 — zero matching
+      # series for either rule). Queue backlog is visible in the admin Jobs
+      # UI; ML liveness is still indirectly covered by ImmichMicroservicesDown
+      # and the vmalert HA→VM staleness rules. If upstream reintroduces queue
+      # gauges, resurrect ImmichJobQueueBacklog from git history.
 
       # Storage space warning
       - alert: ImmichStorageSpaceLow

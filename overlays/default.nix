@@ -590,11 +590,16 @@ in
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;
 
-  # Immich - Update to 2.4.1 for Canon CR3 thumbnail fix (PR #24587)
-  # Version 2.3.1 incorrectly detects CR3 files as having 1-second duration,
-  # causing them to be treated as animated GIFs and displaying "Error loading image"
-  # https://github.com/immich-app/immich/issues/24559
-  immich = inputs.nixpkgs-unstable.legacyPackages.${system}.immich;
+  # Immich 3.0.1 from the dedicated nixpkgs-immich pin (see flake.nix for the
+  # full rationale). The iOS app auto-updated to 3.0.1 while nixos-unstable
+  # still ships server 2.7.5; mobile 3.x requires server 3.x, and v3's
+  # checksum-based backup sync resolves the ~4,930 phone photos byte-identical
+  # to the /tank/Photos external library that looped as "duplicate" uploads
+  # forever (v3 removed the deviceId/deviceAssetId bookkeeping that caused it).
+  # Revert to nixpkgs-unstable once it carries immich >= 3.0.1.
+  # (Historical: this line previously pulled unstable for the 2.4.1 CR3
+  # thumbnail fix, immich-app/immich#24559.)
+  immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
 
   # Home Assistant - Update to latest (2026.4.1+) from nixpkgs-unstable
   # Stable nixpkgs-25.11 lags behind; unstable tracks HA releases closely.

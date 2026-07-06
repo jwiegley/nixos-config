@@ -2848,6 +2848,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-immich": {
+      "locked": {
+        "lastModified": 1783337660,
+        "narHash": "sha256-C+dKAAJt4ZoEEX4OMKda9FCLaG/7OaMjcDlo6G2E6IY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "266a3597f538657576ca4b476bb032b68bace284",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "266a3597f538657576ca4b476bb032b68bace284",
+        "type": "github"
+      }
+    },
     "nixpkgs-unstable": {
       "locked": {
         "lastModified": 1783224372,
@@ -3233,6 +3249,7 @@
         "nixos-apple-silicon": "nixos-apple-silicon",
         "nixos-logwatch": "nixos-logwatch",
         "nixpkgs": "nixpkgs_2",
+        "nixpkgs-immich": "nixpkgs-immich",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "org-jw": "org-jw",
         "promptdeploy": "promptdeploy",

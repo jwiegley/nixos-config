@@ -131,6 +131,70 @@ def sweep_resolved(state, now=None):
     return len(aged)
 
 
+# An incident interrupted mid-remediation is stranded forever otherwise:
+# resolution only happens via the post-action re-probe in
+# handle_alertmanager_payload (resolved webhooks are skipped), no future
+# webhook matches its correlation key once vm_active_enter_ts changes, and
+# sweep_resolved only archives resolved incidents. Observed 2026-07-03: the
+# host rebooted 14 s after a restart_microvm attempt, killing the daemon
+# inside its 15 s pre-verification sleep; the in_progress leftover surfaced
+# as a phantom "1 active self-heal incident" in every nightly report.
+ORPHAN_MIN_QUIET_S = 300
+
+
+def _last_activity_ts(incident) -> int:
+    return max(
+        [int(incident.get("first_seen_ts") or 0)]
+        + [int(a.get("ts") or 0) for a in incident.get("attempts", [])]
+    )
+
+
+def reconcile_orphans(state, now=None, vm_ts=None, probe=None):
+    """Resolve in_progress/stuck incidents the VM has provably restarted past.
+
+    Conditions (all required):
+      - the current VM boot timestamp is known (>0) and differs from the
+        incident's, so its correlation key can never match a webhook again;
+      - the probe is clear — the same oracle the normal post-action
+        resolution path uses, so this never fabricates health;
+      - no incident activity within ORPHAN_MIN_QUIET_S, so an in-flight
+        remediation in the webhook thread is left alone. (A concurrent
+        webhook save can still overwrite a reconciliation; both
+        interleavings converge to resolved within the next tick.)
+
+    A residual class stays open by design: an orphan whose VM never
+    restarted afterwards (non-VM action interrupted, alert self-cleared)
+    clears on the next VM restart instead. Returns the number resolved.
+    """
+    now = int(time.time()) if now is None else int(now)
+    if vm_ts is None:
+        vm_ts = int(current_metrics().get(
+            "openclaw_microvm_active_enter_timestamp_seconds", 0))
+    if probe is None:
+        probe = probe_clear
+    if vm_ts <= 0:
+        return 0
+    n = 0
+    for key, inc in state["active"].items():
+        if inc.get("status") not in ("in_progress", "stuck"):
+            continue
+        if int(inc.get("vm_active_enter_ts") or 0) == vm_ts:
+            continue
+        if now - _last_activity_ts(inc) < ORPHAN_MIN_QUIET_S:
+            continue
+        if not probe(inc):
+            continue
+        inc["resolved_from_status"] = inc["status"]
+        inc["status"] = "resolved"
+        inc["resolved_ts"] = now
+        inc["resolved_by"] = "orphan_reconcile"
+        print(f"reconciled orphaned incident {key} "
+              f"(was {inc['resolved_from_status']}, alerts={inc.get('alerts')}): "
+              f"vm restarted past it and probe is clear", flush=True)
+        n += 1
+    return n
+
+
 ACTION_MAP = {
     "OpenClawDiscordWsDown":             "restart_microvm",
     "OpenClawHttpHealthDown":            "restart_microvm",
@@ -454,17 +518,26 @@ def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
 import threading
 
 
+def heartbeat_tick():
+    state = load_state(STATE_PATH)
+    # State maintenance must run here, not only in handle_alertmanager_payload:
+    # with no incoming openclaw alerts nothing else ever reconciles orphans or
+    # archives aged resolved incidents.
+    if reconcile_orphans(state) + sweep_resolved(state):
+        save_state(STATE_PATH, state)
+    active = sum(1 for v in state["active"].values() if v["status"] == "in_progress")
+    counts = {a: 0 for a in ACTION_ALLOWLIST}
+    for inc in list(state["active"].values()) + state["history"]:
+        for att in inc.get("attempts", []):
+            if att.get("action") in counts:
+                counts[att["action"]] += 1
+    write_heartbeat(active_count=active, action_counts=counts)
+
+
 def heartbeat_loop():
     while True:
         try:
-            state = load_state(STATE_PATH)
-            active = sum(1 for v in state["active"].values() if v["status"] == "in_progress")
-            counts = {a: 0 for a in ACTION_ALLOWLIST}
-            for inc in list(state["active"].values()) + state["history"]:
-                for att in inc.get("attempts", []):
-                    if att.get("action") in counts:
-                        counts[att["action"]] += 1
-            write_heartbeat(active_count=active, action_counts=counts)
+            heartbeat_tick()
         except Exception as e:
             print(f"heartbeat error: {e}", flush=True)
         time.sleep(60)

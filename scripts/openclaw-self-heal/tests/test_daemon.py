@@ -300,3 +300,151 @@ def test_sweep_resolved_preserves_attempt_total():
     before = total(state)
     daemon.sweep_resolved(state, now=now)
     assert total(state) == before == 3
+
+
+# ---- orphaned-incident reconciliation (reconcile_orphans) ----
+# Regression coverage for the 2026-07-03 orphan: the host rebooted 14 s after
+# a restart_microvm attempt, killing the daemon inside its 15 s
+# pre-verification sleep. The incident was saved as in_progress and could
+# never resolve: resolution only happens via the post-action probe (resolved
+# webhooks are skipped), no future webhook matches the old
+# vm_active_enter_ts correlation key, and sweep_resolved only archives
+# resolved incidents — so it surfaced as a phantom "1 active self-heal
+# incident" in every nightly report.
+
+_NOW = 1_000_000
+
+
+def _orphan_inc(status="in_progress", vm_ts=1000,
+                first_seen=_NOW - 7200, attempt_ts=_NOW - 7100):
+    return {
+        "first_seen_ts": first_seen,
+        "vm_active_enter_ts": vm_ts,
+        "alerts": ["OpenClawHttpHealthDown"],
+        "attempts": [{"ts": attempt_ts, "action": "restart_microvm",
+                      "by": "deterministic", "ok": True,
+                      "notes": "microvm restarted"}],
+        "status": status,
+        "next_eligible_ts": None,
+    }
+
+
+def test_reconcile_resolves_in_progress_superseded_by_vm_restart():
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 1
+    inc = state["active"]["k"]
+    assert inc["status"] == "resolved"
+    assert inc["resolved_ts"] == _NOW
+    assert inc["resolved_by"] == "orphan_reconcile"
+
+
+def test_reconcile_leaves_same_boot_incident():
+    """Same VM boot as the incident: it may still be the live episode
+    (repeat sends of the same firing alert match its correlation key)."""
+    state = {"active": {"k": _orphan_inc(vm_ts=2000)}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_requires_probe_clear():
+    """VM restarted but the service is still unhealthy: do not fabricate a
+    resolution; the live episode will re-fire under a new correlation key."""
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: False)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_skips_recent_activity():
+    """An incident with activity inside ORPHAN_MIN_QUIET_S may be an
+    in-flight remediation in the webhook thread; leave it alone."""
+    state = {"active": {"k": _orphan_inc(attempt_ts=_NOW - 60)}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_resolves_orphaned_stuck_and_records_prior_status():
+    """stuck incidents leak the same way (nothing ever touches them again);
+    once the VM has restarted past one and the probe is clear, archive it."""
+    state = {"active": {"k": _orphan_inc(status="stuck")}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 1
+    inc = state["active"]["k"]
+    assert inc["status"] == "resolved"
+    assert inc["resolved_by"] == "orphan_reconcile"
+    assert inc["resolved_from_status"] == "stuck"
+
+
+def test_reconcile_ignores_already_resolved():
+    state = {"active": {"k": _resolved_inc(_NOW - 60)}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert "resolved_by" not in state["active"]["k"]
+
+
+def test_reconcile_failsafe_on_unknown_vm_ts():
+    """If the current VM boot timestamp is unknown (canary textfile missing),
+    we cannot prove the VM restarted past the incident: touch nothing."""
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=0,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_defaults_read_live_metrics(monkeypatch):
+    """Default wiring: vm_ts comes from the canary gauge and probe from
+    probe_clear, so heartbeat_tick needs no explicit plumbing."""
+    monkeypatch.setattr(
+        daemon, "current_metrics",
+        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 2000.0,
+                 "openclaw_discord_ws_connected": 1.0})
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW)
+    assert n == 1
+    assert state["active"]["k"]["status"] == "resolved"
+
+
+def test_reconciled_incident_archives_after_retention():
+    """A reconciled orphan flows through the normal lifecycle: retained in
+    active for RESOLVED_RETENTION_S, then swept to history."""
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                             probe=lambda inc: True)
+    assert daemon.sweep_resolved(state, now=_NOW) == 0
+    assert daemon.sweep_resolved(
+        state, now=_NOW + daemon.RESOLVED_RETENTION_S) == 1
+    assert state["active"] == {}
+    assert state["history"][0]["resolved_by"] == "orphan_reconcile"
+
+
+def test_heartbeat_tick_persists_reconciliation(tmp_path, monkeypatch):
+    """The heartbeat tick — not just webhook arrival — must reconcile, sweep,
+    and PERSIST, so orphans clear even when no openclaw alert ever fires
+    again (the 2026-07-03 orphan sat for 3 days precisely because state
+    maintenance only ran inside handle_alertmanager_payload)."""
+    state_path = tmp_path / "incidents.json"
+    monkeypatch.setattr(daemon, "STATE_PATH", state_path)
+    monkeypatch.setattr(
+        daemon, "current_metrics",
+        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 2000.0,
+                 "openclaw_discord_ws_connected": 1.0})
+    heartbeats = []
+    monkeypatch.setattr(daemon, "write_heartbeat",
+                        lambda **kw: heartbeats.append(kw))
+    daemon.save_state(state_path, {"active": {"k": _orphan_inc()},
+                                   "history": []})
+    daemon.heartbeat_tick()
+    persisted = daemon.load_state(state_path)
+    assert persisted["active"]["k"]["status"] == "resolved"
+    assert persisted["active"]["k"]["resolved_by"] == "orphan_reconcile"
+    assert heartbeats and heartbeats[0]["active_count"] == 0

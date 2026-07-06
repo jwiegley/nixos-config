@@ -457,3 +457,126 @@ def test_sweep_resolved_preserves_attempt_total():
     before = total(state)
     daemon.sweep_resolved(state, now=now)
     assert total(state) == before == 3
+
+
+# ---- orphaned-incident reconciliation (reconcile_orphans) ----
+# Mirror of the openclaw fix for the 2026-07-03 orphan class: a daemon
+# interrupted between acting and its 15 s pre-verification sleep leaves the
+# incident in_progress forever — resolution only happens via the post-action
+# probe (resolved webhooks are skipped), no future webhook matches the old
+# vm_active_enter_ts correlation key, and sweep_resolved only archives
+# resolved incidents. Hermes shares the code path verbatim.
+
+_NOW = 1_000_000
+
+
+def _orphan_inc(status="in_progress", vm_ts=1000,
+                first_seen=_NOW - 7200, attempt_ts=_NOW - 7100):
+    return {
+        "first_seen_ts": first_seen,
+        "vm_active_enter_ts": vm_ts,
+        "alerts": ["HermesApiServerDown"],
+        "attempts": [{"ts": attempt_ts, "action": "restart_microvm",
+                      "by": "deterministic", "ok": True}],
+        "status": status,
+        "next_eligible_ts": None,
+    }
+
+
+def test_reconcile_resolves_in_progress_superseded_by_vm_restart():
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 1
+    inc = state["active"]["k"]
+    assert inc["status"] == "resolved"
+    assert inc["resolved_ts"] == _NOW
+    assert inc["resolved_by"] == "orphan_reconcile"
+
+
+def test_reconcile_leaves_same_boot_incident():
+    state = {"active": {"k": _orphan_inc(vm_ts=2000)}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_requires_probe_clear():
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: False)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_skips_recent_activity():
+    state = {"active": {"k": _orphan_inc(attempt_ts=_NOW - 60)}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_resolves_orphaned_stuck_and_records_prior_status():
+    state = {"active": {"k": _orphan_inc(status="stuck")}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                                 probe=lambda inc: True)
+    assert n == 1
+    inc = state["active"]["k"]
+    assert inc["status"] == "resolved"
+    assert inc["resolved_from_status"] == "stuck"
+
+
+def test_reconcile_failsafe_on_unknown_vm_ts():
+    """microvm_active_enter_ts() returns 0 on any systemctl parse failure;
+    we then cannot prove the VM restarted past the incident: touch nothing."""
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=0,
+                                 probe=lambda inc: True)
+    assert n == 0
+    assert state["active"]["k"]["status"] == "in_progress"
+
+
+def test_reconcile_defaults_read_systemd_and_health_metrics(monkeypatch):
+    """Default wiring diverges from openclaw: vm_ts comes from systemd
+    (microvm_active_enter_ts), the probe from hermes_mcp_ask_hermes_ok."""
+    monkeypatch.setattr(daemon, "microvm_active_enter_ts", lambda: 2000)
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    n = daemon.reconcile_orphans(state, now=_NOW)
+    assert n == 1
+    assert state["active"]["k"]["status"] == "resolved"
+
+
+def test_reconciled_incident_archives_after_retention():
+    state = {"active": {"k": _orphan_inc()}, "history": []}
+    daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
+                             probe=lambda inc: True)
+    assert daemon.sweep_resolved(state, now=_NOW) == 0
+    assert daemon.sweep_resolved(
+        state, now=_NOW + daemon.RESOLVED_RETENTION_S) == 1
+    assert state["active"] == {}
+    assert state["history"][0]["resolved_by"] == "orphan_reconcile"
+
+
+def test_heartbeat_tick_persists_reconciliation(tmp_path, monkeypatch):
+    """The heartbeat tick — not just webhook arrival — must reconcile, sweep,
+    and PERSIST, so orphans clear even when no hermes alert ever fires
+    again."""
+    state_path = tmp_path / "incidents.json"
+    monkeypatch.setattr(daemon, "STATE_PATH", state_path)
+    monkeypatch.setattr(daemon, "microvm_active_enter_ts", lambda: 2000)
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
+    heartbeats = []
+    monkeypatch.setattr(daemon, "write_heartbeat",
+                        lambda **kw: heartbeats.append(kw))
+    daemon.save_state(state_path, {"active": {"k": _orphan_inc()},
+                                   "history": []})
+    daemon.heartbeat_tick()
+    persisted = daemon.load_state(state_path)
+    assert persisted["active"]["k"]["status"] == "resolved"
+    assert persisted["active"]["k"]["resolved_by"] == "orphan_reconcile"
+    assert heartbeats and heartbeats[0]["active_count"] == 0

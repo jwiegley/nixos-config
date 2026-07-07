@@ -351,17 +351,41 @@ let
     }
 
 
+    async def capped(coro, budget, fallback):
+        """Enforce a TOTAL wall-clock cap on a probe.
+
+        The per-probe httpx `timeout=` is a per-operation deadline, NOT a
+        total: a streamed SSE response (probe_mcp_sse_open / _ask_hermes_e2e)
+        whose chunks each arrive within the window can run far past the budget
+        while Hermes is on a slow fallback LLM. Before 2026-07-03 that was
+        masked because the unit's RuntimeMaxSec was silently ignored (oneshot),
+        so the probe just ran long and finished; once that became an enforced
+        TimeoutStartSec=120s, a slow-but-working Hermes made systemd SIGTERM the
+        whole unit (Result=timeout -> SystemdServiceFailed). Wrapping each probe
+        in asyncio.timeout() makes it self-terminate at its budget and return a
+        clean "timeout" metric, so TimeoutStartSec is only a hang backstop.
+        """
+        try:
+            async with asyncio.timeout(budget):
+                return await coro
+        except (asyncio.TimeoutError, TimeoutError):
+            return fallback
+
     async def main_async() -> int:
         api_key = read_api_key()
         api_key_present = 1 if api_key else 0
 
         if api_key:
-            api_ok, api_seconds = await probe_api_server(api_key)
+            api_ok, api_seconds = await capped(
+                probe_api_server(api_key), API_PROBE_BUDGET_S + 2.0, (0, API_PROBE_BUDGET_S)
+            )
         else:
             api_ok, api_seconds = 0, 0.0
 
-        sse_ok = await probe_mcp_sse_open()
-        ask_ok, ask_seconds, _ = await probe_ask_hermes_e2e()
+        sse_ok = await capped(probe_mcp_sse_open(), SSE_OPEN_BUDGET_S + 2.0, 0)
+        ask_ok, ask_seconds, _ = await capped(
+            probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
+        )
 
         disco_present, disco_age = discord_last_event_age_seconds()
         hb_present, hb_age = discord_heartbeat_age_seconds()
@@ -429,7 +453,13 @@ in
 
         ExecStart = "${healthScript}";
 
-        # Hard cap: the ask_hermes probe alone allows 60s; pad for the others.
+        # Backstop only. Each probe now enforces its OWN total wall-clock cap
+        # via asyncio.timeout() (see `capped` in the script), so the script's
+        # real max runtime is ~sum of budgets (5+5+60) + overhead < 120s and it
+        # always exits cleanly writing metrics. This 120s is a last-resort hang
+        # guard, NOT the probe's timeout — do not lower it toward the internal
+        # budgets or a slow-Hermes run will be SIGTERM-killed again (the
+        # 2026-07-07 SystemdServiceFailed regression).
         TimeoutStartSec = "120s";
 
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];

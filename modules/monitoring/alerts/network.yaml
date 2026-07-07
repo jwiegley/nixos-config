@@ -14,7 +14,14 @@ groups:
         # at all (and aren't in Nagios either) so they get NO alert — they are
         # probed for visibility only. Matched with !~ so both groups are
         # excluded in one matcher.
-        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx",host_group!~"iot|iot-noping|iot-quiet"} == 0
+        # host_group backbone/dns excluded 2026-07-07: those are external
+        # internet-reference probes (Google, MIT, public resolvers, …) that
+        # John cannot act on individually. A brief upstream ISP wobble used to
+        # trip this per-target critical AND InternetConnectivityIssue AND
+        # DNSServerDown at once — ~20 emails for one 30-min WAN blip with no
+        # real outage. They are now covered by the aggregate WANDegraded /
+        # DNSResolversDown rules below, which fire only on a genuine WAN outage.
+        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
         for: 2m
         labels:
           severity: critical
@@ -86,17 +93,27 @@ groups:
           summary: "Critical latency to {{ $labels.instance }}"
           description: "ICMP probe to {{ $labels.instance }} has latency of {{ $value }}s (>10s) for more than 2 minutes."
 
-      # DNS server connectivity issues
-      - alert: DNSServerDown
-        expr: probe_success{job="blackbox_icmp",host_group="dns"} == 0
-        for: 1m
+      # External public DNS resolvers (OpenDNS, Cloudflare) — AGGREGATE.
+      # Rewritten 2026-07-07: the old per-resolver DNSServerDown (for:1m) paged
+      # on ANY single public resolver flapping during a WAN blip, which is not
+      # actionable — the other resolver still answers, and John doesn't operate
+      # these. Now fires only when EVERY external resolver is unreachable at
+      # once (== count), sustained 5m: the actionable "I have no upstream DNS"
+      # signal. Internal/authoritative DNS is NOT covered here — it has its own
+      # dns_internal blackbox probe (vulcan.lan → correct A). Kept in service=dns
+      # so any downstream dashboards/routes on that label still match.
+      - alert: DNSResolversDown
+        expr: >-
+          count(probe_success{job="blackbox_icmp",host_group="dns"} == 0)
+          == count(probe_success{job="blackbox_icmp",host_group="dns"})
+        for: 5m
         labels:
           severity: critical
           category: network
           service: dns
         annotations:
-          summary: "DNS server {{ $labels.instance }} is down"
-          description: "DNS server {{ $labels.instance }} has been unreachable for more than 1 minute."
+          summary: "All external DNS resolvers unreachable"
+          description: "Every external public DNS resolver (OpenDNS, Cloudflare) has been unreachable for more than 5 minutes — likely an upstream WAN/ISP problem. Internal resolution (dns_internal probe) is tracked separately."
 
       # Local network connectivity issues
       # host_group iot/iot-noping excluded: this rule's .lan instance regex
@@ -114,17 +131,29 @@ groups:
           summary: "Local network host {{ $labels.instance }} unreachable"
           description: "Local network host {{ $labels.instance }} has been unreachable for more than 3 minutes."
 
-      # Internet backbone connectivity issues
-      - alert: InternetConnectivityIssue
-        expr: probe_success{job="blackbox_icmp",host_group="backbone"} == 0
-        for: 30s
+      # Internet (WAN) backbone connectivity — AGGREGATE.
+      # Replaces the per-target InternetConnectivityIssue (removed 2026-07-07),
+      # which fired one critical per backbone target with a 30s hair-trigger, so
+      # a single upstream ISP wobble fanned into 7 criticals + HostUnreachable
+      # riders (~20 emails) for a blip with no real outage. This fires only when
+      # a MAJORITY of the geographically-diverse external targets are down at
+      # once — the real "my internet is degraded" signal. Ratio auto-scales if
+      # the target set changes (>=0.5 of 7 = >=4 down). for:3m rides out normal
+      # background jitter, which on this host peaks at 1-2 targets down for a
+      # minute or two (7-day calibration 2026-07-07); a genuine WAN outage takes
+      # all targets down and fires cleanly, once.
+      - alert: WANDegraded
+        expr: >-
+          count(probe_success{job="blackbox_icmp",host_group="backbone"} == 0)
+          / count(probe_success{job="blackbox_icmp",host_group="backbone"}) >= 0.5
+        for: 3m
         labels:
           severity: critical
           category: network
           service: internet
         annotations:
-          summary: "Internet connectivity issue to {{ $labels.instance }}"
-          description: "Major internet service {{ $labels.instance }} has been unreachable for more than 30 seconds."
+          summary: "Internet (WAN) degraded — majority of external targets unreachable"
+          description: "{{ $value | humanizePercentage }} of external backbone targets (Google, Cloudflare, MIT, Berkeley, UCSD, UMN, OSU) are simultaneously unreachable — an upstream ISP/WAN problem, not a single remote host. Individual target flaps no longer page."
 
       # HTTP/HTTPS service monitoring
       - alert: WebServiceDown

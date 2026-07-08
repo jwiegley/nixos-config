@@ -2361,11 +2361,11 @@
         "spectrum": "spectrum"
       },
       "locked": {
-        "lastModified": 1782764610,
-        "narHash": "sha256-CzCF8RD9a9kwRrpeQ+z67sqqADUG0tf+4+YBSUG30y0=",
+        "lastModified": 1783451207,
+        "narHash": "sha256-6+I67Kj47Ljwj8JGi8P3fSTxCBR+L0AauZTTmrrwLTs=",
         "owner": "astro",
         "repo": "microvm.nix",
-        "rev": "3904edd282a7166cdad6c597964718e6d018baa6",
+        "rev": "c5a04bcc9d1f5a6ccafdcdf607bf49f70d5f7f20",
         "type": "github"
       },
       "original": {
@@ -2393,11 +2393,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1783363821,
-        "narHash": "sha256-2NWf1SqppgfRzzfTep+2tRVuvnznerwhhhBkeVCHlK4=",
+        "lastModified": 1783536821,
+        "narHash": "sha256-OzO7pPe4Ifac2sH1oJcGRNaYZZ0UnJc3O0J+s96WWVc=",
         "ref": "refs/heads/main",
-        "rev": "a6ae53392f139e8b3483873c53e407b9b6d2a9f5",
-        "revCount": 1999,
+        "rev": "01bd2ca51f85d978891b997c17523e1e35f15180",
+        "revCount": 2006,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3367,10 +3367,9 @@
     "spectrum": {
       "flake": false,
       "locked": {
-        "lastModified": 1782480951,
-        "narHash": "sha256-jrfyAgv5XfYDXJJ28OzANQOQIlsfNaI1kM9Mt13n+5k=",
-        "ref": "refs/heads/main",
-        "rev": "e4562d4c7646fea3cbb7306ff9b7ff41154c75c3",
+        "lastModified": 1783423582,
+        "narHash": "sha256-4z10q9MX1irpGhLe+uYC6k7evEnyhb/z1eNeIf71B+g=",
+        "rev": "0adfbcb6c12f35b33b8f47dc527587d4d20eeb93",
         "revCount": 1400,
         "type": "git",
         "url": "https://spectrum-os.org/git/spectrum"

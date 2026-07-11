@@ -294,13 +294,22 @@ groups:
       # the cumulative counters; a stats reset mid-window makes delta(calls)
       # negative, which the >=2 gate filters. Fires only while the statement
       # is ACTIVELY running slow; self-clears when it goes idle.
+      # Per-queryid EXCLUSIONS (the "unless" escape valve prescribed above for
+      # known-heavy by-design statements). Excluded queryids:
+      #   -2956904304308707728 — mailarchiver per-account
+      #     SUM(pg_column_size(row)) storage-cache rollup (the exact case study
+      #     named in the WINDOWED-MEAN comment above). ~2.4s/call: a whole-row
+      #     size sum over all 260k emails that NO index can help; the result is
+      #     cached in mail_archiver."AccountStorageCache" and this query only
+      #     refreshes it. Not user-facing, not actionable. Excluded 2026-07-11.
+      #     Re-check if MailArchiver changes the SQL (queryid will shift).
       - alert: PostgreSQLSlowStatements
         expr: >-
           (
-            delta(pg_stat_statements_top_total_exec_time_ms[30m])
-            / clamp_min(delta(pg_stat_statements_top_calls[30m]), 1)
+            delta(pg_stat_statements_top_total_exec_time_ms{queryid!="-2956904304308707728"}[30m])
+            / clamp_min(delta(pg_stat_statements_top_calls{queryid!="-2956904304308707728"}[30m]), 1)
           ) > 1000
-          and delta(pg_stat_statements_top_calls[30m]) >= 2
+          and delta(pg_stat_statements_top_calls{queryid!="-2956904304308707728"}[30m]) >= 2
         for: 15m
         labels:
           severity: warning

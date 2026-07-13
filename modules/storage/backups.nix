@@ -224,16 +224,14 @@ in
     (mkBackup {
       name = "Public";
       time = "04:10:00";
-      # Syncthing folder metadata (two-way sync with hera; see
-      # modules/services/syncthing.nix) — marker dir, ignore file, version
-      # history, and in-flight temp files have no place in B2.
+      # Retained historical sync markers remain under Public. Keep only
+      # marker metadata out of B2 until cleanup is explicitly approved.
+      # Conflict copies and temp artifacts may contain recoverable payload,
+      # so they are intentionally backed up.
       exclude = [
         ".stfolder"
         ".stignore"
         ".stversions"
-        "*.sync-conflict-*"
-        ".syncthing.*.tmp"
-        "~syncthing~*.tmp"
       ];
     })
   ];

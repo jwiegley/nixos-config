@@ -67,10 +67,10 @@ in
   # /var/www/home.newartisans.com is a BIND MOUNT of /tank/Public: mode/owner
   # fields are '-' so tmpfiles only creates the mountpoint and never chmods
   # the mounted dataset (an explicit mode here re-applied chmod 0755 on every
-  # boot/resetup, resetting the POSIX ACL mask that syncthing needs — the
+  # boot/resetup, resetting the POSIX ACL mask used by named-user grants — the
   # 2026-07-03 audit's /tank/Public write-loss root cause).
-  # /tank/Public/{johnw,nasimw} rules removed same day: persistent ZFS-backed
-  # data dirs owned syncthing/nasimw must not be tmpfiles-managed (CLAUDE.md).
+  # /tank/Public/{johnw,nasimw} rules were removed the same day: persistent
+  # ZFS-backed data directories must not be tmpfiles-managed (CLAUDE.md).
   systemd.tmpfiles.rules = [
     "d /var/www/home.newartisans.com - - - -"
     "d /var/lib/copyparty-container 0755 root root -"

@@ -200,10 +200,6 @@ with lib;
                           url = "https://qdrant.vulcan.lan";
                         }
                         {
-                          title = "Syncthing";
-                          url = "https://syncthing.vulcan.lan";
-                        }
-                        {
                           title = "Memory Vault";
                           url = "https://memory.vulcan.lan";
                         }

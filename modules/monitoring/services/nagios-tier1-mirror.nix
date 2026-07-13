@@ -399,7 +399,6 @@ let
   #
   # SKIPPED (already covered, not re-added):
   #   qdrant.service     -> qdrant-nagios.nix satellite module
-  #   syncthing.service  -> syncthing-nagios.nix (mount-conditional check)
   #   sshd.service       -> a stronger functional `check_ssh` probe exists
   # SKIPPED (non-concrete regex / template / wildcard matchers, cannot map 1:1):
   #   (sshd|postgresql|nginx|prometheus|tailscaled|step-ca|docker).service,
@@ -468,7 +467,7 @@ let
   # The vhosts Prometheus blackbox-probes (modules/services/blackbox-monitoring
   # .nix: blackbox_https_local + blackbox_https_auth) that have NO independent
   # Nagios check_http/check_https service today (the 13 existing Nagios http
-  # checks + the atd/qdrant/syncthing satellite checks). New local command
+  # checks + the atd/qdrant satellite checks). New local command
   # `check_https_vhost` mirrors the blackbox local probe:
   #   check_http -H <vhost> -S --sni -I 127.0.0.1 -w 5 -c 10
   # (the existing global check_https command sends -H $HOSTADDRESS$ and cannot

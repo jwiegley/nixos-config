@@ -126,17 +126,17 @@ in
     # BIND MOUNT of /tank/Public — mode/owner '-' so tmpfiles only creates the
     # mountpoint and never chmods the mounted dataset (an explicit mode here
     # re-applied chmod 0755 on every boot/resetup, resetting the POSIX ACL
-    # mask syncthing needs; 2026-07-03 audit root cause).
+    # mask used by named-user grants; 2026-07-03 audit root cause).
     "d /var/www/home.newartisans.com - - - -"
     "d /var/lib/copyparty-container 0755 root root -"
     "d /var/lib/copyparty-container/.hist 0755 copyparty copyparty -"
     "d /var/lib/copyparty-container/.th 0755 copyparty copyparty -"
     "d /var/lib/copyparty-passwords 0755 root root -"
-    # NOTE: /tank/Public/{johnw,nasimw} tmpfiles rules removed 2026-07-03
-    # (post-reboot audit): the dirs are persistent ZFS-backed data owned
-    # syncthing:syncthing / nasimw:nasimw — per CLAUDE.md, persistent data
-    # dirs must not be managed via tmpfiles, and these root:root rules would
-    # have broken ownership if they ever fired on a fresh dataset.
+    # NOTE: /tank/Public/{johnw,nasimw} tmpfiles rules were removed
+    # 2026-07-03 (post-reboot audit). These are persistent ZFS-backed data
+    # directories; per CLAUDE.md they must not be managed via tmpfiles, and
+    # the former root:root rules would have broken ownership on a fresh
+    # dataset.
   ];
 
   # Bind mount ZFS dataset to host directory (container will access via bindMount)

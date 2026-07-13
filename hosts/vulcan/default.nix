@@ -162,9 +162,6 @@
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
     ../../modules/services/voice-assistant.nix
-    ../../modules/services/syncthing.nix
-    ../../modules/monitoring/services/syncthing-metrics.nix
-    ../../modules/monitoring/services/syncthing-nagios.nix
     ../../modules/monitoring/services/nagios-prometheus-mirror.nix
     ../../modules/monitoring/services/nagios-tier1-mirror.nix
 

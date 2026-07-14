@@ -2150,6 +2150,28 @@
         "type": "github"
       }
     },
+    "home-manager_2": {
+      "inputs": {
+        "nixpkgs": [
+          "promptdeploy",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1773608492,
+        "narHash": "sha256-QZteyExJYSQzgxqdsesDPbQgjctGG7iKV/6ooyQPITk=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "9a40ec3b78fc688d0908485887d355caa5666d18",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "9a40ec3b78fc688d0908485887d355caa5666d18",
+        "type": "github"
+      }
+    },
     "hpc-coveralls": {
       "flake": false,
       "locked": {
@@ -2393,11 +2415,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1783661614,
-        "narHash": "sha256-TatSaRVoY+gT14xIRDO7cIUdGHBvtBWNfvrvCv2t6QY=",
+        "lastModified": 1784044179,
+        "narHash": "sha256-QGmgk78UYKzODw3L8/b1WEVcXXRq8wTUwNJrMdHIX4Y=",
         "ref": "refs/heads/main",
-        "rev": "d614a4aa8b7c81c65349de719402a3fc2151d0d9",
-        "revCount": 2015,
+        "rev": "71084b3ee1f986a2e493f06140faec01ec9dc53f",
+        "revCount": 2053,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3092,16 +3114,17 @@
     "promptdeploy": {
       "inputs": {
         "flake-utils": "flake-utils_3",
+        "home-manager": "home-manager_2",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1783551718,
-        "narHash": "sha256-LcO0q70U5T1+UhaXllMckQ3mHMh9z2FW2NINxpIrKig=",
+        "lastModified": 1784032672,
+        "narHash": "sha256-nFKUEko/jL9k6OP2X6HUnHxLnmJ/96XWkUyOfvK9kMw=",
         "ref": "refs/heads/main",
-        "rev": "a037d18f4e40baaead3dbda4a41e956c097faadb",
-        "revCount": 482,
+        "rev": "4192b7e24ecd9d5a6883716dc110faeb33462b75",
+        "revCount": 488,
         "type": "git",
         "url": "ssh://gitea/johnw/promptdeploy"
       },

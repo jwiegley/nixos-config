@@ -46,6 +46,11 @@
       cost = {
         input = 0;
         output = 0;
+        # cacheRead/cacheWrite are required by openclaw's model-catalog schema
+        # (agents/model-registry "Invalid models.json schema" doctor warning
+        # when omitted). Zero because this is a local, cost-free MLX backend.
+        cacheRead = 0;
+        cacheWrite = 0;
       };
     };
     fallbacks = [

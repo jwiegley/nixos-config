@@ -135,6 +135,7 @@
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/monitoring/services/openclaw-hermes-smoke.nix
     ../../modules/monitoring/services/hermes-e2e-chat-probe.nix
+    ../../modules/monitoring/services/discord-canary.nix
     ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/cockpit.nix
@@ -213,6 +214,34 @@
     # fallback counter (1 min cadence) that catches per-conversation
     # failures immediately. ~96 probes/day, ~11 min MLX compute/day.
     intervalSeconds = 900;
+  };
+  # Active Discord round-trip canary — the only probe that exercises the
+  # inbound MESSAGE_CREATE -> reply pipeline (the leg that zombied silently on
+  # 2026-07-15). The two agents probe EACH OTHER, reusing their existing bot
+  # tokens (no new bot/secret). Blind spot: both dying at once is undetected.
+  # DISABLED until the one-time setup is done — pick a shared channel both
+  # bots can read+send in, add each bot to the OTHER's allow-list, verify each
+  # answers the other's @mention, then set channelId + flip enable=true.
+  # Full runbook: docs/DISCORD_CANARY_SETUP.md
+  services.discordCanary.probes = {
+    # @Claw (OpenClaw) posts, Hermes must reply -> tests Hermes.
+    hermes = {
+      enable = false;
+      channelId = ""; # shared canary channel snowflake
+      targetUserId = "1503619790261194793"; # Hermes bot
+      targetName = "Hermes";
+      tokenFile = config.sops.secrets."openclaw/discord-token".path;
+      intervalSeconds = 300;
+    };
+    # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
+    openclaw = {
+      enable = false;
+      channelId = ""; # shared canary channel snowflake
+      targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
+      targetName = "OpenClaw";
+      envFile = config.sops.secrets."hermes/env".path; # provides DISCORD_BOT_TOKEN
+      intervalSeconds = 300;
+    };
   };
   services.hermesFallbackCounter.enable = true;
   services.openclawConfigDriftCheck.enable = true;

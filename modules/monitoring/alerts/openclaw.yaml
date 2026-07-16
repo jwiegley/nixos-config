@@ -168,6 +168,49 @@ groups:
             real, persistent disconnect.  Bot will not receive or send
             Discord messages until the connection is restored.
 
+      # ACTIVE round-trip detector (discord-canary, Hermes probes @Claw).
+      # Stronger than OpenClawDiscordWsDown above: that reads a log-derived
+      # WS connected/closed edge signal, which a zombie that keeps the socket
+      # "connected" while dropping MESSAGE_CREATE can fool (the 2026-07-15
+      # Hermes-side failure mode). This proves a real message->reply through
+      # Discord. Warmup-gated (>600s VM uptime). NOT auto-healed: OpenClaw's
+      # self-heal daemon triggers on named rules, not a label — to close the
+      # loop, add OpenClawDiscordCanaryDown to its watched-rules set. No data
+      # (canary disabled) never fires.
+      - alert: OpenClawDiscordCanaryDown
+        expr: |
+          openclaw_discord_canary_ok == 0
+          and ignoring(__name__) (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
+        for: 15m
+        labels:
+          severity: critical
+          category: availability
+          service: openclaw
+        annotations:
+          summary: "OpenClaw Discord round-trip failing — @Claw not answering"
+          description: |
+            The discord-canary posted an @Claw mention (as Hermes) to the
+            shared canary channel and OpenClaw did NOT reply within the
+            timeout, sustained for 15m. This is the inbound MESSAGE_CREATE ->
+            dispatch -> reply pipeline; the WS can be "connected" and still
+            not deliver. Restart microvm@openclaw to re-establish a clean WS.
+
+      # The OpenClaw-direction canary/probe stopped producing fresh metrics.
+      - alert: OpenClawDiscordCanaryStale
+        expr: time() - openclaw_discord_canary_last_run_timestamp_seconds > 1200
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "OpenClaw Discord canary has not run in >20 minutes"
+          description: |
+            discord-canary-openclaw.timer has not produced fresh metrics in
+            20 minutes, so the round-trip detector is blind. Check
+            `systemctl status discord-canary-openclaw.timer` and the last
+            invocation's journal.
+
       # B-floor signal — gateway HTTP /health probe failing.
       - alert: OpenClawHttpHealthDown
         # VM-uptime warmup gate: suppress for the first 600s after a (re)boot

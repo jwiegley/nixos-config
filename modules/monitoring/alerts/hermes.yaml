@@ -151,6 +151,53 @@ groups:
             connection acks within ~41s, so this is a zombie on top of
             the restart — another restart is needed.
 
+      # ACTIVE round-trip detector (hermes-discord-canary). Unlike
+      # HermesDiscordZombieSuspected above — which reads gateway.log event
+      # age and is fooled by a zombie that keeps ACKing heartbeats / RESUMEing
+      # while dropping MESSAGE_CREATE (the 2026-07-15 silent outage) — this
+      # keys off a real message->reply round-trip and so proves the inbound
+      # dispatch pipeline actually delivers. Warmup-gated (>600s uptime) so a
+      # fresh VM's ~8-min MLX cold-start doesn't page. self_heal_eligible so a
+      # sustained failure auto-restarts the microvm (the proven fix); the 15m
+      # window + the probe's own one-retry guard against a flap-triggered
+      # restart loop. Make it page-only (drop self_heal_eligible) if it ever
+      # proves noisy. No data (canary not deployed) never fires.
+      - alert: HermesDiscordCanaryDown
+        expr: hermes_discord_canary_ok == 0 and ignoring(__name__) hermes_vm_uptime_seconds > 600
+        for: 15m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+          self_heal_eligible: "true"
+        annotations:
+          summary: "Hermes Discord round-trip failing — @mentions not answered"
+          description: |
+            The hermes-discord-canary posted an @mention to the test
+            channel and Hermes did NOT reply within the timeout, sustained
+            for 15m. This is the leg no other probe covers: the Discord
+            inbound MESSAGE_CREATE -> agent dispatch -> reply pipeline. The
+            WebSocket can be "connected" and still zombied here (heartbeats
+            keep ACKing). Restarting microvm@hermes re-establishes a clean
+            WS session and message routing (2026-07-15 runbook).
+
+      # The canary/probe itself stopped producing fresh metrics.
+      - alert: HermesDiscordCanaryStale
+        expr: time() - hermes_discord_canary_last_run_timestamp_seconds > 1200
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-agent
+        annotations:
+          summary: "Hermes Discord canary has not run in >20 minutes"
+          description: |
+            The hermes-discord-canary.timer has not produced fresh metrics
+            in 20 minutes, so the round-trip detector is blind. Check
+            `systemctl status hermes-discord-canary.timer` and the last
+            invocation's journal (a persistent probe-bot auth/permission
+            failure looks like this).
+
       # The check itself stopped running.
       - alert: HermesHealthCheckStale
         expr: time() - hermes_health_check_last_run_timestamp_seconds > 900

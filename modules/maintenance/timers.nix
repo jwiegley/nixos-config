@@ -118,6 +118,14 @@ let
 
     # --- Rootless containers (dedicated users) ---
     # Each user has linger enabled so their XDG_RUNTIME_DIR exists at /run/user/<uid>
+    # Rootless container users with MOVING image tags (:latest, :slim-latest)
+    # that should track upstream. Keep in sync with ROOTLESS_USERS in
+    # container-health-exporter.nix. NOTE: memory-vault is intentionally NOT
+    # here — it runs pinned tags (ghcr.io/.../memory-vault*:1.0.6), so
+    # auto-pulling would defeat the pin (and a pinned tag never trips
+    # ContainerImageOutdated). speedtest-tracker (≠ openspeedtest) and vane were
+    # missing, silently going stale for weeks (ContainerImageOutdated fired for
+    # speedtest-tracker at 35d, 2026-07-16).
     CONTAINER_USERS=(
       changedetection
       litellm
@@ -128,7 +136,9 @@ let
       opnsense-exporter
       shlink
       shlink-web-client
+      speedtest-tracker
       teable
+      vane
       wallabag
     )
 

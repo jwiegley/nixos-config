@@ -88,6 +88,10 @@ let
         echo "# TYPE microvm_tasks_current gauge"
         echo "# HELP microvm_unit_active 1 if the microvm@<vm> unit ActiveState=active, else 0"
         echo "# TYPE microvm_unit_active gauge"
+        echo "# HELP microvm_memory_pressure_some_avg300 cgroup memory PSI 'some' avg300 (% of 5m the cgroup stalled on memory). Real-pressure signal; ~0 when memory_current is merely reclaimable page cache."
+        echo "# TYPE microvm_memory_pressure_some_avg300 gauge"
+        echo "# HELP microvm_memory_pressure_full_avg300 cgroup memory PSI 'full' avg300 (% of 5m ALL tasks stalled on memory)."
+        echo "# TYPE microvm_memory_pressure_full_avg300 gauge"
 
         ${lib.concatStringsSep "\n" (
           lib.mapAttrsToList (vm: p: ''
@@ -121,6 +125,25 @@ let
             echo "microvm_vcpu_count{vm=\"${vm}\"} ${toString p.vcpu}"
             echo "microvm_tasks_current{vm=\"${vm}\"} $tasks"
             echo "microvm_unit_active{vm=\"${vm}\"} $active"
+
+            # cgroup memory PSI — the REAL pressure signal. Unlike MemoryCurrent
+            # (which counts reclaimable page cache and so spikes during nightly
+            # backups that read the VM's virtiofs share), PSI stays ~0 while
+            # memory is merely cache; it only climbs when the cgroup genuinely
+            # stalls reclaiming/refaulting needed pages — the true OOM precursor.
+            # /sys is readable under ProtectSystem=strict (ProtectControlGroups
+            # is not set); read-only access, no accounting side effects.
+            cg=$(systemctl show "microvm@${vm}" -p ControlGroup --value 2>/dev/null)
+            psi_some=0; psi_full=0
+            pf="/sys/fs/cgroup$cg/memory.pressure"
+            if [ -n "$cg" ] && [ -r "$pf" ]; then
+              psi_some=$(sed -n 's/^some .*avg300=\([0-9.]*\).*/\1/p' "$pf")
+              psi_full=$(sed -n 's/^full .*avg300=\([0-9.]*\).*/\1/p' "$pf")
+            fi
+            case "$psi_some" in (*[!0-9.]*|"") psi_some=0 ;; esac
+            case "$psi_full" in (*[!0-9.]*|"") psi_full=0 ;; esac
+            echo "microvm_memory_pressure_some_avg300{vm=\"${vm}\"} $psi_some"
+            echo "microvm_memory_pressure_full_avg300{vm=\"${vm}\"} $psi_full"
           '') vms
         )}
 

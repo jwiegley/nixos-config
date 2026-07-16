@@ -19,26 +19,39 @@ groups:
       # `> 0` on the ceiling guards against the divide-by-zero / "VM down →
       # gauges 0" case (ratio would read 0 and never fire spuriously, but the
       # explicit guard documents intent and skips down VMs).
+      # Gated on PSI (2026-07-16): MemoryCurrent alone counts reclaimable page
+      # cache, so the nightly local-backup reading each VM's virtiofs share
+      # spikes the ratio >90% for >15m with ZERO real pressure (proven: hermes
+      # peaked 96.8% while memory.stat anon=2MB, file=1633MB, memory.pressure
+      # full avg300=0.00, and the VM neither OOM'd nor restarted — the cache was
+      # simply reclaimed back to ~53%). Requiring `some avg300 > 5` means the
+      # cgroup actually stalled waiting on memory ≥5% of the last 5 min — a
+      # genuine reclaim/refault squeeze (the real OOM precursor), not clean
+      # cache. Healthy idle PSI is ~0, so this is orders of magnitude above
+      # noise; the actual-OOM backstop is the microvm-oom Loki rule.
       - alert: MicroVMMemoryHigh
         expr: |
           microvm_memory_ceiling_bytes > 0
           and
           (microvm_memory_current_bytes / microvm_memory_ceiling_bytes) > 0.90
+          and on(vm)
+          microvm_memory_pressure_some_avg300 > 5
         for: 15m
         labels:
           severity: warning
           category: capacity
         annotations:
-          summary: "{{ $labels.vm }} microVM >90% of its memory ceiling for 15m"
+          summary: "{{ $labels.vm }} microVM under real memory pressure (>90% ceiling + PSI) for 15m"
           description: |
             The {{ $labels.vm }} microVM's cgroup MemoryCurrent has been above
-            90% of its QEMU memory allocation (microvm.mem) for 15 minutes. The
-            guest root is tmpfs with NO swap, so sustained pressure here is the
+            90% of its QEMU memory allocation (microvm.mem) AND its memory PSI
+            (`some avg300`) has been >5% for 15 minutes — i.e. the cgroup is
+            genuinely stalling on memory reclaim, not merely holding reclaimable
+            page cache. The guest root is tmpfs with NO swap, so this is the
             precursor to a silent guest OOM-kill (the VM dies and only an
-            availability alert fires minutes later). NOTE: cgroup MemoryCurrent
-            includes reclaimable page cache, so a brief breach can be benign —
-            the 15m window tolerates cache. Check the guest's real available
-            memory if this persists.
+            availability alert fires minutes later). Check the guest's real
+            available memory (`ssh <vm> free -m`); if it is genuinely low,
+            raise microvm.mem for that VM.
 
       # CPU saturation: the per-VM CPU-time counter rising at ~vCPU cores/sec
       # means the VM is pinned across all its allocated cores. openclaw has 4

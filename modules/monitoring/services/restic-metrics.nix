@@ -92,8 +92,14 @@ let
               LAST_SNAPSHOT_TIME=0
               TIMESTAMP=$(date +%s)
 
-              # Try to collect comprehensive stats
-              if SNAPSHOTS=$(${pkgs.restic}/bin/restic -r "$REPO_URL" snapshots --json 2>/dev/null); then
+              # Try to collect comprehensive stats.
+              # --no-lock on every read-only call: a metrics query needs no lock,
+              # and taking one is what caused the 2026-07-16 cascade — a run killed
+              # at the 30m TimeoutSec left a stale lock on a slow B2 repo (Databases),
+              # which hung every subsequent run into another timeout+lock. Lockless
+              # reads can neither leave a lock nor block on a stale one, so a transient
+              # B2 hang now fails at most one run and self-heals.
+              if SNAPSHOTS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" snapshots --json 2>/dev/null); then
                 # Check if we got valid JSON
                 if echo "$SNAPSHOTS" | ${pkgs.jq}/bin/jq -e . >/dev/null 2>&1; then
                   CHECK_SUCCESS=1
@@ -111,18 +117,18 @@ let
                   fi
 
                   # Get raw data stats (total repository size)
-                  if RAW_STATS=$(${pkgs.restic}/bin/restic -r "$REPO_URL" stats --mode raw-data --json 2>/dev/null); then
+                  if RAW_STATS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" stats --mode raw-data --json 2>/dev/null); then
                     REPO_SIZE=$(echo "$RAW_STATS" | ${pkgs.jq}/bin/jq -r '.total_size // 0')
                     REPO_FILES=$(echo "$RAW_STATS" | ${pkgs.jq}/bin/jq -r '.total_file_count // 0')
                   fi
 
                   # Get restore size stats (size if all files were restored)
-                  if RESTORE_STATS=$(${pkgs.restic}/bin/restic -r "$REPO_URL" stats --mode restore-size --json 2>/dev/null); then
+                  if RESTORE_STATS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" stats --mode restore-size --json 2>/dev/null); then
                     RESTORE_SIZE=$(echo "$RESTORE_STATS" | ${pkgs.jq}/bin/jq -r '.total_size // 0')
                   fi
 
                   # Get unique files stats (deduplication info)
-                  if UNIQUE_STATS=$(${pkgs.restic}/bin/restic -r "$REPO_URL" stats --mode files-by-contents --json 2>/dev/null); then
+                  if UNIQUE_STATS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" stats --mode files-by-contents --json 2>/dev/null); then
                     UNIQUE_FILES=$(echo "$UNIQUE_STATS" | ${pkgs.jq}/bin/jq -r '.total_file_count // 0')
                     UNIQUE_SIZE=$(echo "$UNIQUE_STATS" | ${pkgs.jq}/bin/jq -r '.total_size // 0')
                   fi

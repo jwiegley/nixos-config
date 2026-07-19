@@ -1,0 +1,61 @@
+# "Power-off sensitive group" — 7 devices that lost power the night of 2026-07-02→03
+# and each needed MANUAL restart to come back; they fail together and tend to all
+# fail to self-recover together (see memory project_power_off_sensitive_group).
+#
+# The 7 members: Pentair pool pump, B-Hyve sprinkler, Ecowitt moisture hub, TP-Link
+# TL-WPA8630 powerline, 8-port ethernet hub (UNMANAGED — no IP, not directly
+# probeable), Aqara Hub M3 (blocks ICMP/TCP — needs an HA-child signal), Enphase
+# Envoy. Auto-probeable today: Pentair, B-Hyve, TP-Link, Envoy (blackbox ICMP).
+# TODO extend `groupMembers` regex with the Ecowitt once its IP/hostname is known;
+# add an HA-availability expr for the Aqara hub once a reliable child signal is
+# picked. The annotation deliberately lists ALL seven so the cross-check covers
+# even the not-yet-auto-monitored members.
+
+groups:
+  - name: power_off_sensitive_group
+    rules:
+      # How many auto-probeable group members are currently down (0 when all up).
+      - record: power_off_sensitive_group_members_down
+        expr: |
+          count(
+            probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan"} == 0
+          ) or vector(0)
+
+      # Any one member down → check the whole group (early-warning).
+      - alert: PowerOffSensitiveGroupMemberDown
+        expr: probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          group: power_off_sensitive
+        annotations:
+          summary: "Power-off-sensitive group member DOWN: {{ $labels.instance }}"
+          description: |
+            {{ $labels.instance }} has been unreachable for 10m. It belongs to the
+            "power-off sensitive group" — devices that dropped together in the
+            2026-07-02→03 power loss and each needed a MANUAL restart:
+              Pentair pool pump · B-Hyve sprinkler · Ecowitt moisture hub ·
+              TP-Link TL-WPA8630 · 8-port ethernet hub (unmanaged) ·
+              Aqara Hub M3 (192.168.3.22) · Enphase Envoy.
+            CROSS-CHECK ALL SEVEN NOW — one going down is an early warning that the
+            rest may also be down or won't self-recover. The ethernet hub and
+            Aqara/Ecowitt aren't auto-probed yet, so verify those manually too.
+            (See power_off_sensitive_group_members_down for the auto-probed count.)
+
+      # Two or more down at once → they're failing as a group. Escalate.
+      - alert: PowerOffSensitiveGroupMultipleDown
+        expr: power_off_sensitive_group_members_down >= 2
+        for: 10m
+        labels:
+          severity: critical
+          category: availability
+          group: power_off_sensitive
+        annotations:
+          summary: "Power-off-sensitive group: {{ $value }} members down together"
+          description: |
+            {{ $value }} of the power-off-sensitive group are down simultaneously —
+            the group-failure signature (a power event knocked them out and they're
+            not self-recovering). Check/manually restart ALL seven: Pentair pump,
+            B-Hyve, Ecowitt moisture hub, TP-Link TL-WPA8630, 8-port ethernet hub,
+            Aqara Hub M3, Enphase Envoy.

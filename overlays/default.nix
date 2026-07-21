@@ -62,6 +62,26 @@ let
   # After injection: accessible as ps.xxx in extraPackages and as
   # pkgs.home-assistant.python.pkgs.xxx for buildHomeAssistantComponent dependencies.
   haPackageOverrides = hasPy: hasPyPrev: {
+    # pywizlight: pin to 0.6.3. HA 2026.7.2's wiz component requires
+    # pywizlight==0.6.3 (its manifest pins exactly that) and calls
+    # self._device.state.pilotResult / .get_brightness(). nixpkgs bumped
+    # pywizlight to 0.6.4 (landed here at the 2026-07-20 switch), whose
+    # bulb.state is now a list → wiz light/sensor/number platforms crash at
+    # setup with "AttributeError: 'list' object has no attribute
+    # 'get_brightness'/'pilotResult'/'get_speed'", leaving every light.wiz_*
+    # entity `unavailable` (broke the meeting desk-lamp automation).
+    # doCheck=false: 0.6.3 is a known-good release; skip the 0.6.4-era test
+    # suite against 0.6.3 source. Unpin once nixpkgs' HA is 0.6.4-compatible.
+    pywizlight = hasPyPrev.pywizlight.overridePythonAttrs (old: rec {
+      version = "0.6.3";
+      src = prev.fetchFromGitHub {
+        owner = "sbidy";
+        repo = "pywizlight";
+        tag = "v${version}";
+        hash = "sha256-rCoWdqvFLSLNBAHeFJ6f9kZpIg4WyE8VJLpmsYl+gJM=";
+      };
+      doCheck = false;
+    });
     # Several packages mark disabled=true for Python 3.14 in nixpkgs-unstable,
     # but they work fine at runtime. HA 2026.x requires Python 3.14 and uses these.
     # Tests fail: asyncio.get_event_loop() raises RuntimeError in Python 3.14;

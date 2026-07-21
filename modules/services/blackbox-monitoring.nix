@@ -476,7 +476,11 @@ in
                   "enphase-solar-inverter.lan" # 192.168.3.26
                   "flume-water-meter.lan" # 192.168.3.183
                   "google-home-hub.lan" # 192.168.3.106
-                  "GW1200B.lan" # 192.168.3.154 — Ecowitt moisture-hub (power-off group)
+                  "192.168.3.154" # Ecowitt GW1200B moisture-hub (power-off group). Probed by
+                  # IP, not GW1200B.lan: that DHCP-registered name lapses from DNS (observed
+                  # 2026-07-21 → false PowerOffSensitiveGroupMultipleDown while the device was
+                  # up). Durable fix is a Technitium DHCP reservation for MAC ac:a7:04:82:c9:0c;
+                  # until then the IP is stable in practice (always-on device).
                   "hubspace-porch-light.lan" # 192.168.3.178
                   "miele-dishwasher.lan" # 192.168.3.98
                   "myq-garage-door.lan" # 192.168.3.99

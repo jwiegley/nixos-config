@@ -119,7 +119,9 @@
     };
 
     promptdeploy = {
-      url = "git+ssh://gitea/johnw/promptdeploy";
+      # Keep this pin aligned with programs.promptdeploy.expectedRevision.
+      # Revision 56f8e02 also carries the portable HTTPS submodule URL.
+      url = "git+https://github.com/jwiegley/promptdeploy?rev=56f8e02fbc4a86031a5dbc434693d947f7ba90af&submodules=1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -3111,27 +3111,47 @@
         "type": "github"
       }
     },
+    "ponytail": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784151135,
+        "narHash": "sha256-Y7d4s7uqjH6IbEXhqAiQ+yaxr6iiGcv2X64LuMtG1T8=",
+        "owner": "DietrichGebert",
+        "repo": "ponytail",
+        "rev": "16f29800fd2681bdf24f3eb4ccffe38be3baec6b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "DietrichGebert",
+        "repo": "ponytail",
+        "rev": "16f29800fd2681bdf24f3eb4ccffe38be3baec6b",
+        "type": "github"
+      }
+    },
     "promptdeploy": {
       "inputs": {
         "flake-utils": "flake-utils_3",
         "home-manager": "home-manager_2",
         "nixpkgs": [
           "nixpkgs"
-        ]
+        ],
+        "ponytail": "ponytail"
       },
       "locked": {
-        "lastModified": 1784089963,
-        "narHash": "sha256-86Zsf+TjMpiY84EGDol1HE6p0KIeIalUfqHfJXj+QcQ=",
+        "lastModified": 1784589501,
+        "narHash": "sha256-0qFjQ1BWDTjg5b6+6ef9RfvVvq8anM91y+5lS4oqT1E=",
         "ref": "refs/heads/main",
-        "rev": "c308988401fe9a7087aedfeba38bd59143f4cc7d",
-        "revCount": 491,
+        "rev": "56f8e02fbc4a86031a5dbc434693d947f7ba90af",
+        "revCount": 533,
+        "submodules": true,
         "type": "git",
-        "url": "ssh://gitea/johnw/promptdeploy"
+        "url": "https://github.com/jwiegley/promptdeploy"
       },
       "original": {
-        "rev": "c308988401fe9a7087aedfeba38bd59143f4cc7d",
+        "rev": "56f8e02fbc4a86031a5dbc434693d947f7ba90af",
+        "submodules": true,
         "type": "git",
-        "url": "ssh://gitea/johnw/promptdeploy"
+        "url": "https://github.com/jwiegley/promptdeploy"
       }
     },
     "pushme": {

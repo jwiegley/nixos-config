@@ -30,7 +30,12 @@
         ];
         group_wait = "10s";
         group_interval = "10m";
-        repeat_interval = "4h";
+        # 24h (was 4h): a still-firing alert re-emails at most once/day, not
+        # every 4h. With long-lived deferred conditions (a dead device, a
+        # pending token re-auth) the 4h repeat produced ~6 reminders/day/alert
+        # (2026-07-21 flood). group_wait/group_interval still notify NEW alerts
+        # and state changes promptly; this only slows the reminders.
+        repeat_interval = "24h";
 
         # Special routing rules
         routes = [

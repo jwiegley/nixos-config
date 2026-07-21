@@ -300,6 +300,14 @@ let
         check_command           check_prom_rule!${r.datasource}!${qf}!${r.severity}
         servicegroups           prometheus-mirror,${dsServiceGroup r.datasource}
         max_check_attempts      ${toString mca}
+        # notifications_enabled 0: the mirror is a silent BACKSTOP, not a
+        # second email channel. Alertmanager already emails every Prometheus
+        # alert; these mirror checks duplicated it (2026-07-21: the same alerts
+        # arrived from both alertmanager@ and Nagios PROM-MIRROR). Keep them as
+        # Nagios checks (state stays visible + the divergence reconciler still
+        # catches a silently-dead Prometheus rule), but don't notify. Re-enable
+        # if Alertmanager email ever becomes unreliable.
+        notifications_enabled   0
       }
     '';
 

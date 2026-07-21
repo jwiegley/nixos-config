@@ -8,8 +8,7 @@
 {
   llm = {
     primary = {
-      # name = "hera/Qwen3.6-27B-Instruct";
-      name = "hera/omlx/Qwen3.6-27B-oQ8-mtp";
+      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
@@ -17,8 +16,7 @@
     # Low-latency model for latency-sensitive callers (e.g. rspamd spam
     # classification, where Postfix is blocked on the milter response).
     fast = {
-      # name = "hera/Qwen3.6-27B-Instruct";
-      name = "hera/omlx/Qwen3.6-27B-oQ8-mtp";
+      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 120;
       initialDelay = 5;
       maxDelay = 60;
@@ -32,9 +30,7 @@
     # the .models.providers.vulcan.models[] entry. Defaults match what
     # openclaw expects today; tune per-model as needed.
     agent = {
-      # name = "hera/Qwen3.6-27B-Instruct";
-      # name = "hera/omlx/Qwen3.6-27B-MLX-8bit";
-      name = "hera/omlx/Qwen3.6-27B-oQ8-mtp";
+      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

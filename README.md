@@ -176,7 +176,7 @@ external-facing services tunnel out via Cloudflare.
   (Schwab OAuth-bootstrapped) pinned to a Gitea-hosted release tag.
 - **JupyterLab** (native): notebook server at `jupyter.vulcan.lan` with a
   SageMath kernel.
-- **model-config** (native): deploys `models.nix` JSON to `/etc/models.json` for
+- **model-config** (native): deploys `models.yaml` as `/etc/models.json` for
   non-Nix consumers (CLI tools, scripts).
 
 ### Voice Assistant & Home Automation

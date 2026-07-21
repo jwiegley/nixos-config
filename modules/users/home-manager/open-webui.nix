@@ -5,8 +5,84 @@
   inputs,
   ...
 }:
-
+let
+  models = import ../../../models.nix;
+  defaultModel = models.llm.primary.name;
+in
 {
+  systemd.services.open-webui-model-defaults = {
+    description = "Reconcile OpenWebUI model defaults";
+    wantedBy = [ "multi-user.target" ];
+    after = [
+      "postgresql.service"
+      "postgresql-setup.service"
+    ];
+    requires = [
+      "postgresql.service"
+      "postgresql-setup.service"
+    ];
+    restartTriggers = [ (builtins.toJSON { inherit defaultModel; }) ];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      if ! schema_columns="$(${pkgs.util-linux}/bin/runuser -u postgres -- \
+        ${pkgs.postgresql}/bin/psql -Atq -d open_webui -c \
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'config' AND column_name IN ('key', 'value', 'updated_at')" \
+        2>/dev/null)"; then
+        echo "OpenWebUI database is not ready; environment defaults will seed it"
+        exit 0
+      fi
+
+      if [[ "$schema_columns" != 3 ]]; then
+        echo "OpenWebUI per-key config schema is not ready; deferring reconciliation"
+        exit 0
+      fi
+
+      changed="$(${pkgs.util-linux}/bin/runuser -u postgres -- \
+        ${pkgs.postgresql}/bin/psql -Atq -v ON_ERROR_STOP=1 -d open_webui <<'SQL'
+      WITH desired(key, value) AS (
+        VALUES
+          ('ui.default_models', '${defaultModel}'),
+          ('ui.default_pinned_models', '${defaultModel}'),
+          ('task.model.default', '${defaultModel}'),
+          ('task.model.external', '${defaultModel}')
+      ), changed AS (
+        INSERT INTO config (key, value, updated_at)
+        SELECT key, to_json(value), extract(epoch FROM now())::bigint
+        FROM desired
+        ON CONFLICT (key) DO UPDATE SET
+          value = EXCLUDED.value,
+          updated_at = EXCLUDED.updated_at
+        WHERE config.value::jsonb IS DISTINCT FROM EXCLUDED.value::jsonb
+        RETURNING 1
+      )
+      SELECT count(*) FROM changed;
+      SQL
+      )"
+
+      if [[ "$changed" != 0 ]]; then
+        uid="$(${pkgs.coreutils}/bin/id -u open-webui)"
+        runtime_dir="/run/user/$uid"
+        if [[ -S "$runtime_dir/bus" ]]; then
+          ${pkgs.util-linux}/bin/runuser -u open-webui -- \
+            ${pkgs.coreutils}/bin/env XDG_RUNTIME_DIR="$runtime_dir" \
+            ${pkgs.systemd}/bin/systemctl --user try-restart open-webui.service
+        fi
+      fi
+    '';
+  };
+
+  systemd.timers.open-webui-model-defaults = {
+    description = "Retry OpenWebUI model-default reconciliation after migrations";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2m";
+      OnUnitActiveSec = "1h";
+      Persistent = true;
+    };
+  };
+
   home-manager.users.open-webui =
     {
       config,
@@ -86,7 +162,10 @@
             SAFE_MODE = "true";
 
             # Default model (adjust as needed based on LiteLLM config)
-            DEFAULT_MODELS = "gpt-4o";
+            DEFAULT_MODELS = defaultModel;
+            DEFAULT_PINNED_MODELS = defaultModel;
+            TASK_MODEL = defaultModel;
+            TASK_MODEL_EXTERNAL = defaultModel;
           };
 
           # Secrets via environment file

@@ -7,7 +7,7 @@
 let
   agent = (import ../../models.nix).llm.agent;
 
-  # Derive the single openclaw model entry from models.nix `llm.agent`.
+  # Derive the single OpenClaw model entry from models.yaml `llm.agent`.
   # The retry-policy fields (maxSeconds / initialDelay / maxDelay) are *not*
   # part of openclaw's model schema, so they are intentionally omitted.
   derivedModel = {

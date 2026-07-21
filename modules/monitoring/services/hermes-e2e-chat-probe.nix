@@ -19,6 +19,7 @@
   ...
 }:
 let
+  models = import ../../../models.nix;
   cfg = config.services.hermesE2eChatProbe;
 
   probeScript = pkgs.writers.writePython3Bin "hermes-e2e-chat-probe" {
@@ -53,7 +54,7 @@ in
 
     model = lib.mkOption {
       type = lib.types.str;
-      default = "hera/omlx/Qwen3.6-27B-MLX-8bit";
+      default = models.llm.agent.name;
       description = ''
         Model identifier to use for the probe. Should match
         config.settings.model.default in hermes-vm.nix so the probe

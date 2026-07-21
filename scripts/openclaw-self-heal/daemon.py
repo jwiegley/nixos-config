@@ -291,6 +291,9 @@ def render_prompt(incident, metrics, err_log_tail, out_log_tail):
 
 LITELLM_URL = "http://127.0.0.1:4000/v1/chat/completions"
 LITELLM_KEY_ENV = "LITELLM_KEY"
+LITELLM_MODEL = os.environ.get(
+    "LITELLM_MODEL", "hera/omlx/Qwen3.6-27B-oQ4e-mtp"
+)
 
 
 class LitellmUnreachable(RuntimeError):
@@ -302,7 +305,8 @@ def _http_post_json(url, headers, data, timeout):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
-def call_litellm(messages, model="hera/Qwen3.6-27B", timeout_s=30):
+def call_litellm(messages, model=None, timeout_s=30):
+    model = model or LITELLM_MODEL
     key = os.environ.get(LITELLM_KEY_ENV)
     if not key:
         raise LitellmUnreachable("LITELLM_KEY not set")

@@ -14,7 +14,7 @@
 }:
 let
   # Imported here (in addition to hermes-vm.nix) so the host service has
-  # something to key restart triggers on — changing models.nix should
+  # something to key restart triggers on — changing models.yaml should
   # restart microvm@hermes during the next nixos-rebuild switch.
   models = import ../../models.nix;
 
@@ -325,7 +325,7 @@ in
     before = [ "microvm@hermes.service" ];
     after = [ "sops-nix.service" ];
 
-    # Force re-stage when models.nix changes — Type=oneshot + RemainAfterExit
+    # Force re-stage when the model catalog changes — Type=oneshot + RemainAfterExit
     # means switch-to-configuration would otherwise skip restarting this unit
     # on closure changes, leaving the staged config out of sync.
     restartTriggers = [ (builtins.toJSON { agent = models.llm.agent; }) ];
@@ -398,7 +398,7 @@ in
     '';
   };
 
-  # Restart the host's microvm@hermes service whenever models.nix changes,
+  # Restart the host's microvm@hermes service whenever models.yaml changes,
   # so a `nixos-rebuild switch` propagates new model selections into the
   # running VM without manual intervention.
   systemd.services."microvm@hermes".restartTriggers = [

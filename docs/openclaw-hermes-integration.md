@@ -268,7 +268,7 @@ All metrics are gauges. Files live at
 | --- | --- |
 | Bump the Claw-side MCP tool timeout | `modules/services/openclaw-vm.nix`, the `MCP_TOOL_TIMEOUT` env var |
 | Add a new MCP tool | `pkgs/hermes-mcp/src/hermes_mcp/tools.py` (handler) + `server.py` (`_TOOL_SCHEMAS` + `_TOOL_HANDLERS`) |
-| Change Claw's agent model | `models.nix` `llm.agent.name` (propagates via `modules/services/openclaw-config.nix`) |
+| Change Claw's agent model | `models.yaml` `llm.agent.name` (propagates via the `models.nix` compatibility adapter) |
 | Add or rotate an atomic SOPS secret consumed by openclaw | `sops /etc/nixos/secrets/secrets.yaml` to edit the value; declare in `openclaw-microvm.nix` as `sops.secrets."openclaw/<name>"` with `restartUnits`; wire into the overlay block in `openclaw-prepare-secrets.service` |
 | Adjust self-heal cooldowns or thresholds | `modules/services/hermes-self-heal.nix` (script body) |
 | Bump the smoke probe schedule | `modules/monitoring/services/openclaw-hermes-smoke.nix`, the `intervalSeconds` option (default 900) |

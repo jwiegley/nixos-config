@@ -275,13 +275,13 @@ class AIAnalyzer:
 
     @staticmethod
     def _load_models(config_path: str) -> list:
-        """Load model cascade from models.json (generated from models.nix)."""
+        """Load model cascade from models.json (generated from models.yaml)."""
         try:
             with open(config_path) as f:
                 data = json.load(f)
         except FileNotFoundError:
             print(f"ERROR: Model config not found: {config_path}", file=sys.stderr)
-            print("Run 'sudo nixos-rebuild switch' to generate it from models.nix",
+            print("Run 'sudo nixos-rebuild switch' to generate it from models.yaml",
                   file=sys.stderr)
             sys.exit(1)
         llm = data["llm"]

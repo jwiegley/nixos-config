@@ -5,6 +5,7 @@
   ...
 }:
 let
+  models = import ../../models.nix;
   cfg = config.services.hermesSelfHeal;
   daemonScript = pkgs.writeText "hermes-self-heal-daemon.py" (
     builtins.readFile ../../scripts/hermes-self-heal/daemon.py
@@ -119,6 +120,7 @@ in
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
+        LITELLM_MODEL = models.llm.agent.name;
       };
       serviceConfig = {
         Type = "simple";

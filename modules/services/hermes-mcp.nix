@@ -36,6 +36,7 @@
 }:
 
 let
+  models = import ../../models.nix;
   cfg = config.services.hermes-mcp;
 in
 {
@@ -72,7 +73,7 @@ in
 
     model = lib.mkOption {
       type = lib.types.str;
-      default = "hera/omlx/Qwen3.6-27B-MLX-8bit";
+      default = models.llm.agent.name;
       description = ''
         Default model identifier passed to Hermes' /v1/chat/completions
         when the MCP caller does not override it. The string must be

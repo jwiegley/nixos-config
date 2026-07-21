@@ -20,7 +20,7 @@
 let
   # Single source of truth for LLM selection. Mirrors openclaw-vm.nix:41-42
   # so Hermes and OpenClaw stay on the same `agent` model unless one is
-  # intentionally pinned. Edit /etc/nixos/models.nix to change.
+  # intentionally pinned. Edit /etc/nixos/models.yaml to change.
   models = import ../../models.nix;
   agentModel = models.llm.agent.name;
 
@@ -547,9 +547,9 @@ in
       };
       # Model routing — Hermes consumes OPENROUTER_API_KEY and
       # OPENROUTER_BASE_URL from the env file. The model identifier is
-      # pulled from /etc/nixos/models.nix (`llm.agent.name`) so it tracks
+      # pulled from /etc/nixos/models.yaml (`llm.agent.name`) so it tracks
       # the same setting OpenClaw uses for its long-running tool-using
-      # sessions; change models.nix to update both modules at once.
+      # sessions; change models.yaml to update both modules at once.
       #
       # IMPORTANT: in Hermes v0.14 the model field accepts either a flat
       # string OR a dict with {default, provider, base_url, api_key, ...}.

@@ -557,7 +557,7 @@ in
     before = [ "microvm@openclaw.service" ];
     after = [ "sops-nix.service" ];
 
-    # Force re-stage when models.nix changes — Type=oneshot + RemainAfterExit
+    # Force re-stage when the model catalog changes — Type=oneshot + RemainAfterExit
     # means switch-to-configuration would otherwise skip restarting this unit
     # on closure changes, leaving the staged openclaw-config out of sync.
     restartTriggers = [
@@ -760,7 +760,7 @@ in
 
   # Extend the default microvm startup timeout — the VM needs time to boot
   # the guest kernel, mount virtiofs shares, and start the OpenClaw service.
-  # Also restart the host service whenever models.nix changes, so a
+  # Also restart the host service whenever models.yaml changes, so a
   # `nixos-rebuild switch` propagates new model selections automatically.
   systemd.services."microvm@openclaw" = {
     serviceConfig.TimeoutStartSec = "300";

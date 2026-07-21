@@ -33,7 +33,7 @@ let
 
   openclawDir = "${stateDir}/.openclaw";
 
-  # Model selection comes from models.nix so the SOPS-encrypted openclaw.json
+  # Model selection comes from models.yaml so the SOPS-encrypted openclaw.json
   # does not pin model IDs.  The preStart jq pipeline rewrites the relevant
   # fields in the decrypted config before OpenClaw reads it.  OpenClaw is an
   # agent runtime, so it uses the `agent` tier, which is tuned for

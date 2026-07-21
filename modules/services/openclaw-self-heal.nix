@@ -5,6 +5,7 @@
   ...
 }:
 let
+  models = import ../../models.nix;
   cfg = config.services.openclawSelfHeal;
   daemonScript = pkgs.writeText "openclaw-self-heal-daemon.py" (
     builtins.readFile ../../scripts/openclaw-self-heal/daemon.py
@@ -126,6 +127,7 @@ in
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
+        LITELLM_MODEL = models.llm.agent.name;
       };
       serviceConfig = {
         Type = "simple";

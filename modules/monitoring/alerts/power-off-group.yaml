@@ -5,11 +5,12 @@
 # The 7 members: Pentair pool pump, B-Hyve sprinkler, Ecowitt moisture hub, TP-Link
 # TL-WPA8630 powerline, 8-port ethernet hub (UNMANAGED — no IP, not directly
 # probeable), Aqara Hub M3 (blocks ICMP/TCP — needs an HA-child signal), Enphase
-# Envoy. Auto-probeable today: Pentair, B-Hyve, TP-Link, Envoy (blackbox ICMP).
-# TODO extend `groupMembers` regex with the Ecowitt once its IP/hostname is known;
-# add an HA-availability expr for the Aqara hub once a reliable child signal is
-# picked. The annotation deliberately lists ALL seven so the cross-check covers
-# even the not-yet-auto-monitored members.
+# Envoy. Auto-probed via blackbox ICMP: Pentair pump, B-Hyve, Envoy, TP-Link, and
+# Ecowitt (GW1200B.lan / 192.168.3.154, added 2026-07-20). Still NOT auto-probed:
+# the Aqara Hub M3 (blocks ICMP/TCP; its only HA child — the FP300 — reports too
+# sporadically to serve as a staleness signal, per the user) and the 8-port
+# ethernet hub (unmanaged, no IP). The annotation lists ALL seven so the
+# cross-check still covers those two.
 
 groups:
   - name: power_off_sensitive_group
@@ -18,12 +19,12 @@ groups:
       - record: power_off_sensitive_group_members_down
         expr: |
           count(
-            probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan"} == 0
+            probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan|GW1200B.lan"} == 0
           ) or vector(0)
 
       # Any one member down → check the whole group (early-warning).
       - alert: PowerOffSensitiveGroupMemberDown
-        expr: probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan"} == 0
+        expr: probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan|GW1200B.lan"} == 0
         for: 10m
         labels:
           severity: warning

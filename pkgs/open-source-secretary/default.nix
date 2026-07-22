@@ -12,7 +12,7 @@ python312Packages.buildPythonApplication {
   build-system = with python312Packages; [ setuptools ];
   dependencies = with python312Packages; [ requests ];
   nativeCheckInputs = with python312Packages; [
-    pytest
+    pytestCheckHook
     responses
   ];
   pytestFlagsArray = [ "tests/" ];

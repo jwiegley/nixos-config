@@ -154,6 +154,7 @@
     ../../modules/services/openclaw-self-heal.nix
     ../../modules/services/openclaw-nightly-report.nix
     ../../modules/services/hermes-nightly-report.nix
+    ../../modules/services/open-source-secretary.nix
     ../../modules/services/hermes-microvm.nix
     ../../modules/services/hermes-mcp.nix
     ../../modules/services/drafts-mcp.nix
@@ -201,6 +202,7 @@
   services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
   services.hermes-mcp.enable = true;
+  services.open-source-secretary.enable = true;
   services.drafts-mcp.enable = true;
   services.draftsMcpCheck.enable = true;
   services.draftsMcpSelfHeal.enable = true;

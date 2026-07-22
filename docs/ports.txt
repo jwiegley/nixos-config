@@ -2,6 +2,9 @@
 # Format: PORT INTERFACE... [SERVICE/DESCRIPTION]
 # Keep this file updated when adding new services!
 # Last cleaned: 2026-05-21
+#
+# open-source-secretary: NO listening port. Outbound-only oneshot timer
+# (GitHub/Gitea API + Hermes 10.99.1.2:8080 + local sendmail); binds nothing.
 
 # SSH & Remote Access
 22 0.0.0.0 :: SSH

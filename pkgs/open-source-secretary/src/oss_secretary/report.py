@@ -17,6 +17,10 @@ from .render import render_report, render_baseline, build_message, deliver
 log = logging.getLogger("oss_secretary")
 CA = "/etc/ssl/certs/ca-certificates.crt"
 OVERLAP = timedelta(minutes=10)
+# Above this many deltas, skip the per-thread comment enrichment (N+1 fetches
+# would blow TimeoutStartSec). Applies to the first-ever comprehensive run and
+# to any unusually large delta day; the awaiting signal falls back to coarse.
+ENRICH_CAP = 50
 
 
 def _sendmail(raw, cfg):
@@ -127,15 +131,24 @@ def main() -> int:
     gh, gt = _make_collectors(cfg, state)
     try:
         run_id = state.next_run_id()
-        baseline = cfg.bootstrap or not state.baseline_established()
+        first_ever = not state.baseline_established()
+        # Default first run is COMPREHENSIVE: an empty state means every open
+        # thread is "new", so the first email is a full inventory summary. A
+        # silent seed (counts only, no per-item report) is opt-in via
+        # OSS_SECRETARY_BOOTSTRAP for a future flood-free re-baseline.
+        silent = cfg.bootstrap
         threads, notifs = _collect(cfg, state, cov, gh, gt)
-        deltas = compute_deltas(state, threads, run_id, baseline, owners, now_iso)
-        if baseline:
+        deltas = compute_deltas(state, threads, run_id, silent, owners, now_iso)
+        if silent:
             gh_n = sum(1 for t in threads if t.platform == "github" and t.state == "open")
             gt_n = sum(1 for t in threads if t.platform == "gitea" and t.state == "open")
             subject, body = render_baseline(cfg, gh_n, gt_n, date_str)
         else:
-            _enrich(deltas, gh, gt, owners, now_iso)
+            if len(deltas) <= ENRICH_CAP:
+                _enrich(deltas, gh, gt, owners, now_iso)
+            else:
+                log.info("skipping per-thread enrichment for %d items (large/initial run)",
+                         len(deltas))
             stale = compute_stale(state, run_id, cfg.stale_days, owners, now_iso)
             cov.items_to_triage = len(deltas)
             attention, banner, omitted = _triage(cfg, deltas, notifs)
@@ -148,7 +161,7 @@ def main() -> int:
         if rc == 0:
             state.set_meta("github_last_poll_utc", now_iso)
             state.set_meta("gitea_last_poll_utc", now_iso)
-            if baseline:
+            if first_ever:
                 state.mark_baseline(now_iso)
             state.save_run_summary(run_id, subject)
             state.commit()

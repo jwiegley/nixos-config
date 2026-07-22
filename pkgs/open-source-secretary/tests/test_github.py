@@ -37,6 +37,23 @@ def test_issues_and_prs_split_by_pull_request_key():
     assert kinds == {"I_1": "issue", "PR_2": "pr"}
 
 
+def test_thread_signals_extracts_last_comment_and_owner_response():
+    pages = {"/repos/jwiegley/foo/issues/3/comments": [
+        {"id": 10, "user": {"login": "alice"}, "created_at": "2026-07-20T00:00:00Z", "body": "first"},
+        {"id": 11, "user": {"login": "jwiegley"}, "created_at": "2026-07-21T00:00:00Z", "body": "reply"},
+        {"id": 12, "user": {"login": "bob"}, "created_at": "2026-07-22T00:00:00Z", "body": "still broken?"}]}
+    gh = GitHubCollector(FakeClient(pages), _cfg())
+    sig = gh.thread_signals("jwiegley/foo", 3, {"jwiegley", "johnw"})
+    assert sig["last_commenter"] == "bob"          # newest comment, not the opener
+    assert sig["last_comment_id"] == "12"
+    assert sig["has_owner_response"] is True        # jwiegley commented in-thread
+
+
+def test_thread_signals_none_when_no_comments():
+    gh = GitHubCollector(FakeClient({}), _cfg())
+    assert gh.thread_signals("jwiegley/foo", 9, {"jwiegley"}) is None
+
+
 def test_repo_enumeration_public_default_uses_user_public_endpoint():
     fc = FakeClient({"/users/jwiegley/repos": [
         {"full_name": "jwiegley/foo", "name": "foo",

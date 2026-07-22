@@ -262,13 +262,22 @@ Using **server timestamps**, never the local run clock. Per source, store a
 - **Stale:** open, no human comment in > 30 days → surfaced in a low-priority
   "quiet threads" section (helps catch dropped balls).
 
-### 7.3 First-run baseline (critical — no flooding)
+### 7.3 First run
 
-If `meta.baseline_established_at` is unset, the run is a **baseline seed**: it
-populates `threads` for all currently-open items, marks **none** as new, sends
-**no per-item report** — only a one-line email: "baseline established: N GitHub
-+ M Gitea threads tracked." All subsequent "new"/"new comment" determination is
-relative to this baseline. (Also selectable via `--bootstrap`.)
+**UPDATED 2026-07-22 per operator request:** the default first run is
+**comprehensive**, not a silent baseline. With an empty state DB every open
+thread is "new", so the first email is a full inventory summary (all open
+issues/PRs + notifications, Hermes-prioritized), and the baseline is recorded
+afterward so every subsequent run reports only deltas. Per-thread comment
+enrichment is skipped when the first run's item count exceeds `ENRICH_CAP`
+(50) to stay within `TimeoutStartSec` (the awaiting signal falls back to
+coarse for that one run).
+
+A **silent seed** (populate `threads`, mark none new, email only
+"baseline established: N threads") remains available as an explicit opt-in via
+`OSS_SECRETARY_BOOTSTRAP=1` — for a future flood-free re-baseline. (The original
+design made the silent seed the *default* first run to avoid flooding; the
+operator prefers a comprehensive first summary.)
 
 ### 7.4 "Awaiting you" feature bundle (a hint, never a gate)
 

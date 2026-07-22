@@ -3,16 +3,20 @@ import re
 
 # Redaction source of truth: REDACT_PATTERNS + redact() mirror
 # scripts/agent_health_report.py:70-91 (same secret shapes as the self-heal
-# grammars). Two extra shapes are appended per the plan: a postgres/mysql
-# credential URL and a PEM private-key block. The sk-* minimum-length
-# quantifier is relaxed from {20,} to {6,}: the literal prefixes are already
-# highly specific (no false positives in prose), and over-redaction is always
-# safe while under-redaction leaks.
+# grammars). Extra shapes appended per the plan: GitHub tokens (bare
+# gh[pousr]_ / github_pat_ forms, needed because this collector handles GitHub
+# PATs), a postgres/mysql credential URL, and a PEM private-key block. The sk-*
+# minimum-length quantifier is relaxed from {20,} to {6,}: the literal prefixes
+# are already highly specific (no false positives in prose), and over-redaction
+# is always safe while under-redaction leaks.
 REDACT_PATTERNS = [
     re.compile(r"[A-Za-z0-9_-]{24,40}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}"),
     re.compile(r"sk-ant-[A-Za-z0-9_-]{6,}"),
     re.compile(r"sk-proj-[A-Za-z0-9_-]{6,}"),
     re.compile(r"sk-or-v1-[A-Za-z0-9_-]{6,}"),
+    # GitHub tokens (classic PAT/OAuth/user/server/refresh) and fine-grained PATs.
+    re.compile(r"gh[pousr]_[A-Za-z0-9_]{6,}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{6,}"),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"),
     # key=value secret shapes (superset of the documented leak forms).
     re.compile(

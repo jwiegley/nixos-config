@@ -145,28 +145,61 @@ async def _next_response(lines: Any, expected_id: int) -> dict[str, Any] | None:
     return None
 
 
-def _valid_result(response: dict[str, Any] | None) -> bool:
+def _result_dict(response: dict[str, Any] | None) -> dict[str, Any] | None:
+    if (
+        not isinstance(response, dict)
+        or response.get("jsonrpc") != "2.0"
+        or "error" in response
+    ):
+        return None
+    result = response.get("result")
+    return result if isinstance(result, dict) else None
+
+
+def _initialize_result_ok(response: dict[str, Any] | None) -> bool:
+    result = _result_dict(response)
+    if result is None:
+        return False
+    server_info = result.get("serverInfo")
     return bool(
-        response
-        and "error" not in response
-        and isinstance(response.get("result"), dict)
+        isinstance(result.get("protocolVersion"), str)
+        and result["protocolVersion"]
+        and isinstance(result.get("capabilities"), dict)
+        and isinstance(server_info, dict)
+        and isinstance(server_info.get("name"), str)
+        and server_info["name"]
+        and isinstance(server_info.get("version"), str)
+        and server_info["version"]
     )
 
 
+def _tools_list_result_ok(response: dict[str, Any] | None) -> bool:
+    result = _result_dict(response)
+    return bool(result is not None and isinstance(result.get("tools"), list))
+
+
 def _tool_result_ok(response: dict[str, Any] | None) -> bool:
-    if response is None or "error" in response:
+    result = _result_dict(response)
+    if result is None:
         return False
-    result = response.get("result")
-    if not isinstance(result, dict):
+    is_error = result.get("isError", False)
+    if not isinstance(is_error, bool) or is_error:
         return False
-    if result.get("isError") is True:
+    content = result.get("content")
+    if not isinstance(content, list):
         return False
-    content = result.get("content") or []
-    text = " ".join(
+    texts = [
         block.get("text", "")
         for block in content
-        if isinstance(block, dict) and block.get("type") == "text"
-    ).lower()
+        if (
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
+        )
+    ]
+    if not texts:
+        return False
+    text = " ".join(texts).lower()
     return "-1743" not in text and "not authorized" not in text
 
 
@@ -204,12 +237,12 @@ async def probe_mcp(app_check: bool) -> tuple[int, int | None]:
                         posted.raise_for_status()
 
                     await post(requests[0])
-                    if not _valid_result(await _next_response(lines, 1)):
+                    if not _initialize_result_ok(await _next_response(lines, 1)):
                         return (ssh_ok, app_ok)
 
                     await post(requests[1])
                     await post(requests[2])
-                    if not _valid_result(await _next_response(lines, 2)):
+                    if not _tools_list_result_ok(await _next_response(lines, 2)):
                         return (ssh_ok, app_ok)
                     ssh_ok = 1
 

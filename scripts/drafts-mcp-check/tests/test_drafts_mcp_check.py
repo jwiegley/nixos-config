@@ -11,6 +11,25 @@ import pytest
 
 
 MODULE_PATH = Path(__file__).parents[1] / "drafts_mcp_check.py"
+VALID_INITIALIZE_RESPONSE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "serverInfo": {"name": "drafts-mcp", "version": "1"},
+    },
+}
+VALID_TOOLS_LIST_RESPONSE = {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {"tools": []},
+}
+VALID_TOOL_RESPONSE = {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {"content": [{"type": "text", "text": "Workspace"}]},
+}
 
 
 @pytest.fixture
@@ -55,6 +74,81 @@ def test_manual_request_sequence_calls_only_read_only_workspace_tool(probe):
 
 
 @pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {},
+        {"jsonrpc": "1.0", "result": VALID_INITIALIZE_RESPONSE["result"]},
+        {"jsonrpc": "2.0", "error": {"code": -32603}},
+        {"jsonrpc": "2.0", "result": []},
+        {"jsonrpc": "2.0", "result": {}},
+        {
+            "jsonrpc": "2.0",
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+            },
+        },
+    ],
+)
+def test_initialize_response_rejects_malformed_envelopes(probe, response):
+    assert probe._initialize_result_ok(response) is False
+
+
+def test_initialize_response_accepts_required_mcp_fields(probe):
+    assert probe._initialize_result_ok(VALID_INITIALIZE_RESPONSE) is True
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {},
+        {"jsonrpc": "1.0", "result": {"tools": []}},
+        {"jsonrpc": "2.0", "error": {"code": -32603}},
+        {"jsonrpc": "2.0", "result": {}},
+        {"jsonrpc": "2.0", "result": {"tools": {}}},
+    ],
+)
+def test_tools_list_response_requires_jsonrpc_tools_array(probe, response):
+    assert probe._tools_list_result_ok(response) is False
+
+
+def test_tools_list_response_accepts_tools_array(probe):
+    assert probe._tools_list_result_ok(VALID_TOOLS_LIST_RESPONSE) is True
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {},
+        {"jsonrpc": "1.0", "result": VALID_TOOL_RESPONSE["result"]},
+        {"jsonrpc": "2.0", "error": {"code": -32603}},
+        {"jsonrpc": "2.0", "result": {}},
+        {"jsonrpc": "2.0", "result": {"content": []}},
+        {
+            "jsonrpc": "2.0",
+            "result": {
+                "isError": True,
+                "content": [{"type": "text", "text": "denied"}],
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "result": {"content": [{"type": "text", "text": 3}]},
+        },
+    ],
+)
+def test_tool_response_requires_successful_nonempty_text_content(probe, response):
+    assert probe._tool_result_ok(response) is False
+
+
+def test_tool_response_accepts_successful_text_content(probe):
+    assert probe._tool_result_ok(VALID_TOOL_RESPONSE) is True
+
+
+@pytest.mark.parametrize(
     ("app_check", "expected_methods", "expected_result"),
     [
         (
@@ -83,20 +177,11 @@ def test_probe_mcp_posts_only_the_selected_request_sequence(
 ):
     events = [
         "data: /messages/?session_id=test",
-        f"data: {json.dumps({'jsonrpc': '2.0', 'id': 1, 'result': {}})}",
-        f"data: {json.dumps({'jsonrpc': '2.0', 'id': 2, 'result': {'tools': []}})}",
+        f"data: {json.dumps(VALID_INITIALIZE_RESPONSE)}",
+        f"data: {json.dumps(VALID_TOOLS_LIST_RESPONSE)}",
     ]
     if app_check:
-        events.append(
-            "data: "
-            + json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 3,
-                    "result": {"content": [{"type": "text", "text": "Workspace"}]},
-                }
-            )
-        )
+        events.append("data: " + json.dumps(VALID_TOOL_RESPONSE))
 
     class Lines:
         def __init__(self):

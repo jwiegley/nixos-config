@@ -49,9 +49,20 @@ in
       owner = "root";
       group = "root";
     };
-    # hermes/env is declared (and its content managed) by hermes-mcp.nix;
-    # we only read its decrypted path via LoadCredential below — never
-    # redeclare the secret content here.
+    # hermes/env is declared (and its content managed) by hermes-microvm.nix
+    # (hermes-mcp.nix only appends restartUnits to it); we read its decrypted
+    # path via LoadCredential below and parse API_SERVER_KEY out of it — never
+    # redeclare the secret content here. vulcan always imports hermes-microvm.nix.
+
+    # Dedicated static system user. NOT DynamicUser: sending mail requires the
+    # setgid-postdrop sendmail wrapper to take effect (see serviceConfig), and
+    # DynamicUser forces RestrictSUIDSGID=yes which neutralizes the setgid bit.
+    users.users.oss-secretary = {
+      isSystemUser = true;
+      group = "oss-secretary";
+      description = "open-source-secretary daily report";
+    };
+    users.groups.oss-secretary = { };
 
     systemd.services.open-source-secretary = {
       description = "Daily GitHub/Gitea issue+PR triage report (Hermes-assisted)";
@@ -81,10 +92,14 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        DynamicUser = true;
+        User = "oss-secretary";
+        Group = "oss-secretary";
         StateDirectory = "open-source-secretary";
         StateDirectoryMode = "0700";
         ExecStart = "${pkg}/bin/oss-secretary";
+        # LoadCredential copies each root:0400 secret into $CREDENTIALS_DIRECTORY
+        # readable by the (non-root) service user — the correct way to hand a
+        # root-owned secret to an unprivileged unit.
         LoadCredential = [
           "github-token:${config.sops.secrets."open-source-secretary/github-token".path}"
           "gitea-token:${config.sops.secrets."open-source-secretary/gitea-token".path}"
@@ -94,11 +109,25 @@ in
         ProtectSystem = "strict";
         ProtectHome = true;
         PrivateTmp = true;
-        NoNewPrivileges = true;
+        # NoNewPrivileges MUST stay false and RestrictSUIDSGID false: the report
+        # shells out to /run/wrappers/bin/sendmail, which is setgid `postdrop`,
+        # and postdrop needs that setgid to write postfix's 0730 maildrop queue.
+        # With NNP=true (or RestrictSUIDSGID=true, which DynamicUser forces) the
+        # kernel ignores the setgid bit → EACCES → the sendmail chain HANGS until
+        # TimeoutStartSec. This mirrors flume-data.nix (the repo's proven
+        # unprivileged mail-sender); hermes-nightly-report keeps NNP=true only
+        # because it runs as root.
+        NoNewPrivileges = false;
+        RestrictSUIDSGID = false;
         RestrictNamespaces = true;
         RestrictRealtime = true;
-        RestrictSUIDSGID = true;
         LockPersonality = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectControlGroups = true;
+        ProtectClock = true;
+        ProtectHostname = true;
         MemoryDenyWriteExecute = false; # CPython needs W^X off
         # AF_NETLINK is load-bearing: postfix sendmail calls getifaddrs().
         RestrictAddressFamilies = [
@@ -111,6 +140,9 @@ in
         # Sendmail (setgid postdrop wrapper) writes into postfix's maildrop
         # queue.
         ReadWritePaths = [ "/var/lib/postfix/queue" ];
+        # SystemCallFilter intentionally omitted: not in the spec's hardening
+        # set, and an untested filter risks breaking the setgid sendmail path,
+        # which can't be verified until secrets are provisioned + switched.
 
         TimeoutStartSec = "20min";
       };

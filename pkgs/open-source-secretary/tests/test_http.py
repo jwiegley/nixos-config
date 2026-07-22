@@ -104,6 +104,28 @@ def test_backoff_on_403_secondary_limit(monkeypatch):
     assert slept == [3]                   # backed off despite non-zero remaining
 
 
+@responses.activate
+def test_min_interval_throttles_requests(monkeypatch):
+    slept = []
+    monkeypatch.setattr("oss_secretary.http.time.sleep", lambda s: slept.append(s))
+    monkeypatch.setattr("oss_secretary.http.time.monotonic", lambda: 0.0)  # freeze clock
+    responses.add(responses.GET, "https://g.test/a", json=[], status=200)
+    responses.add(responses.GET, "https://g.test/b", json=[], status=200)
+    c = Client("https://g.test", {}, None, NullCache(), "gitea", min_interval=0.3)
+    c.get("/a")
+    c.get("/b")
+    # clock frozen at 0 => every request must wait the full interval
+    assert slept and all(abs(s - 0.3) < 1e-6 for s in slept)
+
+
+def test_no_throttle_by_default(monkeypatch):
+    slept = []
+    monkeypatch.setattr("oss_secretary.http.time.sleep", lambda s: slept.append(s))
+    c = Client("https://g.test", {}, None, NullCache(), "github")  # min_interval=0.0
+    c._throttle(); c._throttle()
+    assert slept == []            # GitHub is not throttled (rate-limit headers handle it)
+
+
 def test_strip_auth_on_scheme_downgrade():
     s = _StripAuthSession()
     resp = requests.Response()

@@ -45,7 +45,7 @@ def _make_collectors(cfg, state):
                CA, state, "github"), cfg)
     gt = GiteaCollector(
         Client(cfg.gitea_url, {"Authorization": f"token {cfg.gitea_token}"},
-               CA, state, "gitea"), cfg)
+               CA, state, "gitea", min_interval=cfg.gitea_min_interval), cfg)
     return gh, gt
 
 

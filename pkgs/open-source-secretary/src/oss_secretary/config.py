@@ -42,6 +42,7 @@ class Config:
     llm_token_budget: int
     stale_days: int
     bootstrap: bool = False
+    gitea_min_interval: float = 0.34   # spacing floor for Gitea requests (anti-burst)
 
     @staticmethod
     def from_env() -> "Config":
@@ -67,4 +68,5 @@ class Config:
             llm_token_budget=int(g("OSS_SECRETARY_LLM_TOKEN_BUDGET", "12000")),
             stale_days=int(g("OSS_SECRETARY_STALE_DAYS", "30")),
             bootstrap=bool(g("OSS_SECRETARY_BOOTSTRAP")),
+            gitea_min_interval=float(g("OSS_SECRETARY_GITEA_MIN_INTERVAL", "0.34")),
         )

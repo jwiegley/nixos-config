@@ -39,10 +39,16 @@ class _StripAuthSession(requests.Session):
 
 
 class Client:
-    def __init__(self, base_url, auth, ca_bundle, cache, source):
+    def __init__(self, base_url, auth, ca_bundle, cache, source, min_interval=0.0):
         self.base_url = base_url.rstrip("/")
         self.source = source
         self.cache = cache
+        # min_interval enforces a floor on the spacing between requests so a
+        # full scan can't burst a small self-hosted host (gitea.vulcan.lan) into
+        # rate-limiting. 0.0 = no throttle (GitHub, which advertises rate-limit
+        # headers and is handled by _backoff instead).
+        self.min_interval = min_interval
+        self._last_req = 0.0
         self._s = _StripAuthSession()
         self._s.headers.update(auth)
         self._s.headers["Accept"] = "application/json"
@@ -83,10 +89,19 @@ class Client:
                 self.cache.cache_set(key, new_etag, new_lm)
         return resp.json(), resp.headers
 
+    def _throttle(self):
+        if not self.min_interval:
+            return
+        wait = self.min_interval - (time.monotonic() - self._last_req)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_req = time.monotonic()
+
     def _request(self, url, params, headers):
         attempt = 0
         while True:
             attempt += 1
+            self._throttle()
             try:
                 resp = self._s.get(url, params=params, headers=headers,
                                    timeout=30, allow_redirects=True, verify=self._verify)

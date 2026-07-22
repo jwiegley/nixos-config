@@ -15,8 +15,14 @@ _THREAD_COLS = [
 class State:
     def __init__(self, db_path):
         self.db_path = db_path
-        self._db = None
+        self._db: sqlite3.Connection | None = None
         self._lock_fd = None
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        if self._db is None:
+            raise RuntimeError("State.open() must be called before use")
+        return self._db
 
     def open(self):
         d = os.path.dirname(self.db_path)
@@ -46,6 +52,11 @@ class State:
         self.commit()
 
     def acquire_lock(self):
+        # Ensure the state dir exists so the lock can be taken BEFORE any
+        # schema DDL (open()), i.e. before touching the DB.
+        d = os.path.dirname(self.db_path)
+        if d:
+            os.makedirs(d, exist_ok=True)
         self._lock_fd = open(self.db_path + ".lock", "w")
         try:
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -60,7 +71,7 @@ class State:
         self.set_meta("baseline_established_at", ts)
 
     def get_thread(self, platform, node_id):
-        r = self._db.execute(
+        r = self._conn.execute(
             "SELECT * FROM threads WHERE platform=? AND node_id=?",
             (platform, node_id)).fetchone()
         return dict(r) if r else None
@@ -70,33 +81,33 @@ class State:
         ph = ",".join("?" for _ in _THREAD_COLS)
         upd = ",".join(f"{c}=excluded.{c}" for c in _THREAD_COLS
                        if c not in ("platform", "node_id", "first_seen_run"))
-        self._db.execute(
+        self._conn.execute(
             f"INSERT INTO threads ({cols}) VALUES ({ph}) "
             f"ON CONFLICT(platform,node_id) DO UPDATE SET {upd}",
             [row[c] for c in _THREAD_COLS])
 
     def open_threads(self):
-        return [dict(r) for r in self._db.execute(
+        return [dict(r) for r in self._conn.execute(
             "SELECT * FROM threads WHERE state='open'")]
 
     def cache_get(self, url):
-        r = self._db.execute(
+        r = self._conn.execute(
             "SELECT etag,last_modified FROM http_cache WHERE url=?", (url,)).fetchone()
         return (r["etag"], r["last_modified"]) if r else (None, None)
 
     def cache_set(self, url, etag, lm):
-        self._db.execute(
+        self._conn.execute(
             "INSERT INTO http_cache(url,etag,last_modified,fetched_at) "
             "VALUES(?,?,?,datetime('now')) ON CONFLICT(url) DO UPDATE SET "
             "etag=excluded.etag,last_modified=excluded.last_modified,"
             "fetched_at=excluded.fetched_at", (url, etag, lm))
 
     def get_meta(self, key):
-        r = self._db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        r = self._conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return r["value"] if r else None
 
     def set_meta(self, key, value):
-        self._db.execute(
+        self._conn.execute(
             "INSERT INTO meta(key,value) VALUES(?,?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
@@ -106,15 +117,15 @@ class State:
         return cur
 
     def save_run_summary(self, run_id, summary):
-        self._db.execute(
+        self._conn.execute(
             "INSERT OR REPLACE INTO run_summaries(run_id,created_at,summary) "
             "VALUES(?,datetime('now'),?)", (run_id, summary))
 
     def commit(self):
-        self._db.commit()
+        self._conn.commit()
 
     def rollback(self):
-        self._db.rollback()
+        self._conn.rollback()
 
     def close(self):
         if self._db:

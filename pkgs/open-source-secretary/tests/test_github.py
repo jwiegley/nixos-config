@@ -4,9 +4,9 @@ from oss_secretary.models import Repo
 
 class FakeClient:
     def __init__(self, pages): self.pages = pages; self.calls = []
-    def paginate(self, path, params=None):
+    def paginate(self, path, params=None, conditional=True):
         self.calls.append((path, params)); return self.pages.get(path, [])
-    def get(self, path, params=None): return self.pages.get(path), {}
+    def get(self, path, params=None, conditional=True): return self.pages.get(path), {}
 
 
 def _cfg(**kw):

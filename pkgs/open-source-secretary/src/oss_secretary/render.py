@@ -11,24 +11,30 @@ _PLATFORM_TAG = {"github": "github", "gitea": "gitea"}
 
 
 def _awaiting_owner(awaiting) -> bool:
-    """A thread awaits John's reply when the last human comment was not his."""
-    return not awaiting.is_last_commenter_owner and not awaiting.last_actor_is_bot
+    """A thread awaits John's reply when the last human comment was not his and
+    he has not already responded in the thread."""
+    return (not awaiting.is_last_commenter_owner
+            and not awaiting.last_actor_is_bot
+            and not awaiting.has_owner_response)
 
 
 def _section(title: str, lines: list[str]) -> str:
     return f"{title}\n{_RULE}\n" + ("".join(lines) if lines else "  (none)\n") + "\n"
 
 
-def render_report(cfg, deltas, notifications, attention, coverage, banner, date_str):
+def render_report(cfg, deltas, notifications, attention, coverage, banner, date_str,
+                  stale=None):
     """Build the plain-text daily report. Returns (subject, body).
 
-    Every rendered field is already redacted upstream; the whole body is passed
-    through redact() again as a belt-and-suspenders final pass.
+    ``deltas`` are the new/new_comment/reopened items; ``stale`` (computed by a
+    separate pass over the stored open inventory) feeds §5 only. Every rendered
+    field is already redacted upstream; the whole body is passed through
+    redact() again as a belt-and-suspenders final pass.
     """
     new_deltas = [d for d in deltas if d.change == "new"]
     reopened_deltas = [d for d in deltas if d.change == "reopened"]
     comment_deltas = [d for d in deltas if d.change == "new_comment"]
-    stale_deltas = [d for d in deltas if d.change == "stale"]
+    stale_deltas = stale or []
 
     n_new = len(new_deltas)
     n_await = sum(1 for d in deltas if _awaiting_owner(d.awaiting))

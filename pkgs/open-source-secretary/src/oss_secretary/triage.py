@@ -10,21 +10,36 @@ _CHANGE_RANK = {"reopened": 0, "new_comment": 1, "new": 2, "stale": 3}
 
 
 def build_prompt(deltas, notifications, budget):
+    """Build the triage prompt within a hard token budget. Returns
+    (prompt, valid_ids, omitted_count). Both delta items and notification lines
+    are charged against the budget; anything dropped is counted (no silent cap)."""
     ranked = sorted(deltas, key=lambda d: _CHANGE_RANK.get(d.change, 9))
-    lines, ids, approx = [], set(), 0
-    omitted = 0
+    lines, ids, approx, omitted = [], set(), 0, 0
     for d in ranked:
         iid = item_id(d.thread)
+        awaiting = (not d.awaiting.is_last_commenter_owner
+                    and not d.awaiting.last_actor_is_bot
+                    and not d.awaiting.has_owner_response)
         block = (f"[{iid}] ({d.thread.kind}, {d.change}) {redact(d.thread.title)}\n"
-                 f"  awaiting_owner={not d.awaiting.is_last_commenter_owner and not d.awaiting.last_actor_is_bot}"
-                 f" last_bot={d.awaiting.last_actor_is_bot}\n"
+                 f"  awaiting_owner={awaiting} last_bot={d.awaiting.last_actor_is_bot}"
+                 f" last_commenter={d.thread.last_commenter}\n"
                  f"  excerpt: {redact(d.thread.body_excerpt)[:600]}\n")
-        if approx + len(block) // 4 > budget:
+        cost = len(block) // 4
+        if approx + cost > budget:
             omitted += 1
             continue
-        lines.append(block); ids.add(iid); approx += len(block) // 4
-    notif = "\n".join(f"- {redact(n.subject_title)} [{n.repo_full_name}] ({n.reason})"
-                      for n in notifications[:50])
+        lines.append(block)
+        ids.add(iid)
+        approx += cost
+    notif_lines = []
+    for n in notifications:
+        line = f"- {redact(n.subject_title)} [{n.repo_full_name}] ({n.reason})\n"
+        cost = len(line) // 4
+        if approx + cost > budget:
+            omitted += 1
+            continue
+        notif_lines.append(line)
+        approx += cost
     notice = f"\n(NOTE: {omitted} lower-signal items omitted from triage.)\n" if omitted else ""
     prompt = (
         "You are John's open-source secretary. From the data below, identify what "
@@ -36,20 +51,30 @@ def build_prompt(deltas, notifications, budget):
         '{"attention":[{"id":"<one id from the list>","severity":"serious|question|fyi",'
         '"one_line":"why it matters"}],"notes":"<=3 sentences"}.\n'
         f"{notice}<UNTRUSTED_INPUT>\n" + "".join(lines) +
-        ("\nNotifications elsewhere:\n" + notif if notif else "") +
+        ("\nNotifications elsewhere:\n" + "".join(notif_lines) if notif_lines else "") +
         "\n</UNTRUSTED_INPUT>\n")
-    return prompt, ids
+    return prompt, ids, omitted
 
 
 def call_hermes(cfg, prompt):
-    r = requests.post(cfg.hermes_url,
-                      headers={"Authorization": f"Bearer {cfg.hermes_key}",
-                               "Content-Type": "application/json"},
-                      json={"model": cfg.hermes_model,
-                            "messages": [{"role": "user", "content": prompt}]},
-                      timeout=(30, 900))
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    """POST the triage prompt; retry once on a connection/timeout error to
+    absorb a VM cold-start race (the service is ordered after, not requires,
+    the Hermes VM). HTTP errors are not retried — they surface to the fallback."""
+    last_exc = None
+    for _ in range(2):
+        try:
+            r = requests.post(cfg.hermes_url,
+                              headers={"Authorization": f"Bearer {cfg.hermes_key}",
+                                       "Content-Type": "application/json"},
+                              json={"model": cfg.hermes_model,
+                                    "messages": [{"role": "user", "content": prompt}]},
+                              timeout=(30, 900))
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            continue
+    raise last_exc if last_exc is not None else RuntimeError("hermes call failed")
 
 
 def parse_and_validate(raw, valid_ids):
@@ -72,14 +97,20 @@ def deterministic_order(deltas):
 
 
 def triage(cfg, deltas, notifications):
+    """Return (attention_items, banner_or_None, omitted_count).
+
+    A successful parse with an empty attention list is a valid "nothing urgent"
+    result (empty §1, no banner). Only a call failure or an unparseable response
+    falls back to deterministic ordering with a banner."""
     if not deltas and not notifications:
-        return [], None
-    prompt, ids = build_prompt(deltas, notifications, cfg.llm_token_budget)
+        return [], None, 0
+    prompt, ids, omitted = build_prompt(deltas, notifications, cfg.llm_token_budget)
     try:
         raw = call_hermes(cfg, prompt)
-        items = parse_and_validate(raw, ids)
-        if not items and deltas:
-            return deterministic_order(deltas), "LLM triage returned no items; using deterministic order"
-        return items, None
     except Exception as e:
-        return deterministic_order(deltas), f"LLM triage unavailable: {type(e).__name__}"
+        return deterministic_order(deltas), f"LLM triage unavailable: {type(e).__name__}", omitted
+    try:
+        items = parse_and_validate(raw, ids)
+    except Exception as e:
+        return deterministic_order(deltas), f"LLM triage output invalid: {type(e).__name__}", omitted
+    return items, None, omitted

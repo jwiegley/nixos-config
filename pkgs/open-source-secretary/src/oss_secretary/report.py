@@ -2,13 +2,13 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from .config import Config
 from .state import State
 from .http import Client, HttpError
 from .github import GitHubCollector
 from .gitea import GiteaCollector
-from .delta import compute_deltas, owner_logins
+from .delta import compute_deltas, compute_stale, build_awaiting, owner_logins
 from . import triage as _triage_mod
 from .triage import triage, call_hermes
 from .models import Coverage
@@ -16,53 +16,91 @@ from .render import render_report, render_baseline, build_message, deliver
 
 log = logging.getLogger("oss_secretary")
 CA = "/etc/ssl/certs/ca-certificates.crt"
+OVERLAP = timedelta(minutes=10)
 
 
 def _sendmail(raw, cfg):
     return deliver(raw, cfg)
 
 
-def _collect(cfg, state, cov):
-    """Return (threads, notifications). Isolated per-repo; updates coverage."""
-    threads, notifs = [], []
+def _since_with_overlap(watermark_iso):
+    """Replay the stored watermark minus a 10-minute overlap so a boundary
+    event isn't dropped; de-dup by (platform,node_id) absorbs the re-fetch."""
+    if not watermark_iso:
+        return None
+    try:
+        t = datetime.fromisoformat(watermark_iso.replace("Z", "+00:00")) - OVERLAP
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return watermark_iso
+
+
+def _make_collectors(cfg, state):
     gh = GitHubCollector(
         Client("https://api.github.com", {"Authorization": f"Bearer {cfg.github_token}"},
                CA, state, "github"), cfg)
     gt = GiteaCollector(
         Client(cfg.gitea_url, {"Authorization": f"token {cfg.gitea_token}"},
                CA, state, "gitea"), cfg)
-    gh_since = state.get_meta("github_last_poll_utc")
-    gt_since = state.get_meta("gitea_last_poll_utc")
+    return gh, gt
+
+
+def _collect(cfg, state, cov, gh, gt):
+    """Return (threads, notifications). Per-repo isolated: one bad repo (HTTP,
+    transport, or malformed JSON) is logged (redacted, metadata-only), counted,
+    and skipped — never aborts the run."""
+    threads, notifs = [], []
+    gh_since = _since_with_overlap(state.get_meta("github_last_poll_utc"))
+    gt_since = _since_with_overlap(state.get_meta("gitea_last_poll_utc"))
     for collector, since in ((gh, gh_since), (gt, gt_since)):
+        name = collector.__class__.__name__
         try:
             repos = collector.list_repos()
-        except HttpError as e:
-            log.warning("repo enumeration failed: %s", type(e).__name__)
+        except Exception as e:
+            log.warning("repo enumeration failed for %s: %s", name, type(e).__name__)
             cov.repos_errored += 1
             continue
         for r in repos:
             try:
                 threads.extend(collector.list_threads(r, since))
                 cov.repos_scanned += 1
-            except HttpError:
+            except Exception as e:
+                log.warning("repo scan failed (%s): %s", name, type(e).__name__)
                 cov.repos_errored += 1
                 cov.errored_repos.append(r.full_name)
         try:
             notifs.extend(collector.list_notifications(since))
-        except HttpError:
-            log.warning("notifications fetch failed for %s", collector.__class__.__name__)
+        except Exception as e:
+            log.warning("notifications fetch failed for %s: %s", name, type(e).__name__)
     return threads, notifs
 
 
-def _triage(cfg, deltas, notifs):
-    """Run triage, injecting this module's ``call_hermes`` into the triage module.
+def _enrich(deltas, gh, gt, owners, now_iso):
+    """Replace opener-derived coarse signals with the REAL last comment for each
+    changed thread (bounded to the small delta set). Rebuilds the awaiting bundle
+    with the true last commenter + has_owner_response from comment history."""
+    for d in deltas:
+        collector = gh if d.thread.platform == "github" else gt
+        try:
+            sig = collector.thread_signals(d.thread.repo_full_name, d.thread.number, owners)
+        except Exception:
+            sig = None
+        if not sig:
+            continue
+        t = d.thread
+        t.last_commenter = sig["last_commenter"]
+        t.last_commenter_is_bot = sig["last_commenter_is_bot"]
+        t.last_comment_id = sig["last_comment_id"]
+        t.last_comment_at = sig["last_comment_at"]
+        t.body_excerpt = sig["body_excerpt"]
+        d.awaiting = build_awaiting(t, owners, now_iso,
+                                    has_owner_response=sig["has_owner_response"])
 
-    ``triage.triage()`` resolves ``call_hermes`` from its own module globals, so a
-    caller (or test) that swaps out ``report.call_hermes`` would otherwise have no
-    effect. Bind report's reference into the triage module for the duration of the
-    call and restore it afterward — a pollution-free dependency-injection shim that
-    keeps the LLM seam patchable and the orchestration hermetic under test.
-    """
+
+def _triage(cfg, deltas, notifs):
+    """Run triage.triage while binding report's ``call_hermes`` into the triage
+    module, so a caller/test that swaps ``report.call_hermes`` takes effect
+    (triage resolves the symbol from its own globals). Pollution-free."""
     orig = _triage_mod.call_hermes
     _triage_mod.call_hermes = call_hermes
     try:
@@ -75,32 +113,36 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     cfg = Config.from_env()
     state = State(cfg.state_db)
-    state.open()
+    # Take the lock BEFORE any DB write (schema DDL happens in open()).
     if not state.acquire_lock():
         log.info("another run holds the lock; exiting")
         return 0
+    state.open()
     started = time.monotonic()
     now = datetime.now(timezone.utc)
     now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     date_str = now.strftime("%Y-%m-%d")
     cov = Coverage()
+    owners = owner_logins(cfg)
+    gh, gt = _make_collectors(cfg, state)
     try:
         run_id = state.next_run_id()
-        baseline = not state.baseline_established()
-        threads, notifs = _collect(cfg, state, cov)
-        deltas = compute_deltas(state, threads, run_id, baseline, cfg.stale_days,
-                                owner_logins(cfg), now_iso)
+        baseline = cfg.bootstrap or not state.baseline_established()
+        threads, notifs = _collect(cfg, state, cov, gh, gt)
+        deltas = compute_deltas(state, threads, run_id, baseline, owners, now_iso)
         if baseline:
-            gh_n = sum(1 for t in threads if t.platform == "github")
-            gt_n = sum(1 for t in threads if t.platform == "gitea")
+            gh_n = sum(1 for t in threads if t.platform == "github" and t.state == "open")
+            gt_n = sum(1 for t in threads if t.platform == "gitea" and t.state == "open")
             subject, body = render_baseline(cfg, gh_n, gt_n, date_str)
-            attention, banner = [], None
         else:
+            _enrich(deltas, gh, gt, owners, now_iso)
+            stale = compute_stale(state, run_id, cfg.stale_days, owners, now_iso)
             cov.items_to_triage = len(deltas)
-            attention, banner = _triage(cfg, deltas, notifs)
+            attention, banner, omitted = _triage(cfg, deltas, notifs)
+            cov.items_omitted = omitted
             cov.llm_status = "fallback" if banner else "ok"
             subject, body = render_report(cfg, deltas, notifs, attention, cov,
-                                          banner, date_str)
+                                          banner, date_str, stale)
         cov.duration_s = round(time.monotonic() - started, 1)
         rc = _sendmail(build_message(subject, body, cfg.sender, cfg.recipient), cfg)
         if rc == 0:

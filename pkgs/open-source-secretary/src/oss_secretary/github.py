@@ -20,11 +20,15 @@ class GitHubCollector:
         else:
             user_path, user_params = f"/users/{self.cfg.github_user}/repos", {"per_page": 100}
             org_params = {"type": "public", "per_page": 100}
-        for r in self.c.paginate(user_path, user_params):
+        # conditional=False: enumeration uses static params, so a conditional
+        # request could 304 and silently return no repos (skipping the whole
+        # scan). Always fetch the full list.
+        for r in self.c.paginate(user_path, user_params, conditional=False):
             if r["owner"]["login"].lower() != self.cfg.github_user.lower():
                 continue
             repos.append(self._repo(r))
-        for r in self.c.paginate(f"/orgs/{self.cfg.github_org}/repos", org_params):
+        for r in self.c.paginate(f"/orgs/{self.cfg.github_org}/repos", org_params,
+                                 conditional=False):
             repos.append(self._repo(r))
         return repos
 
@@ -34,7 +38,10 @@ class GitHubCollector:
                     r["node_id"], r.get("private", False), r["html_url"])
 
     def list_threads(self, repo, since):
-        params = {"state": "open", "sort": "updated", "direction": "desc", "per_page": 100}
+        # state=all so a close→reopen transition is visible (a reopened item
+        # comes back as state=open with a stored prior state=closed). The delta
+        # layer records closed items and only reports open ones.
+        params = {"state": "all", "sort": "updated", "direction": "desc", "per_page": 100}
         if since:
             params["since"] = since
         out = []
@@ -47,12 +54,42 @@ class GitHubCollector:
                 title=redact(it.get("title", "")), html_url=it.get("html_url", ""),
                 state=it.get("state", "open"), closed_at=it.get("closed_at"),
                 comment_count=int(it.get("comments", 0)),
+                # last_* here reflect the opener/updated_at from the list; the
+                # real last commenter is filled in by thread_signals() for the
+                # small set of changed threads (report._enrich).
                 last_comment_id=None, last_comment_at=it.get("updated_at"),
                 last_commenter=login, last_commenter_is_bot=_is_bot(login),
                 author_association=it.get("author_association"),
                 updated_at=it.get("updated_at"),
                 body_excerpt=redact((it.get("body") or "")[:600])))
         return out
+
+    def thread_signals(self, repo_full_name, number, owners):
+        """Fetch the newest comment + owner-response signal for one thread.
+
+        Returns None on error or no comments (caller keeps the opener-derived
+        coarse data). One-off fetch, conditional=False (not cached)."""
+        try:
+            comments = self.c.paginate(
+                f"/repos/{repo_full_name}/issues/{number}/comments",
+                {"per_page": 100}, conditional=False)
+        except Exception:
+            return None
+        if not comments:
+            return None
+        last = comments[-1]
+        login = (last.get("user") or {}).get("login", "")
+        has_owner = any(
+            (((c.get("user") or {}).get("login", "") or "").lower() in owners)
+            for c in comments)
+        return {
+            "last_commenter": login,
+            "last_commenter_is_bot": _is_bot(login),
+            "last_comment_id": str(last.get("id")),
+            "last_comment_at": last.get("created_at"),
+            "body_excerpt": redact((last.get("body") or "")[:600]),
+            "has_owner_response": has_owner,
+        }
 
     def list_notifications(self, since):
         params = {"all": "false", "per_page": 50}
@@ -72,7 +109,7 @@ class GitHubCollector:
         if not api_url:
             return None
         try:
-            body, _ = self.c.get(api_url)
+            body, _ = self.c.get(api_url, conditional=False)
             return (body or {}).get("html_url")
         except Exception:
             return None

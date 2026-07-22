@@ -41,6 +41,7 @@ class Config:
     include_private: bool
     llm_token_budget: int
     stale_days: int
+    bootstrap: bool = False
 
     @staticmethod
     def from_env() -> "Config":
@@ -65,4 +66,5 @@ class Config:
             include_private=bool(g("OSS_SECRETARY_INCLUDE_PRIVATE")),
             llm_token_budget=int(g("OSS_SECRETARY_LLM_TOKEN_BUDGET", "12000")),
             stale_days=int(g("OSS_SECRETARY_STALE_DAYS", "30")),
+            bootstrap=bool(g("OSS_SECRETARY_BOOTSTRAP")),
         )

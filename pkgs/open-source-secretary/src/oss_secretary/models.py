@@ -11,6 +11,8 @@ class Repo:
     node_id: str
     private: bool
     html_url: str
+    has_issues: bool = True   # tracker enabled (Gitea 404s the endpoint if not)
+    has_pulls: bool = True    # PR tracker enabled
 
 
 @dataclass

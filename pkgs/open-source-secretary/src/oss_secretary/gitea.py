@@ -22,7 +22,9 @@ class GiteaCollector:
             if r.get("mirror"):
                 continue
             out.append(Repo("gitea", r["full_name"], r["owner"]["login"], r["name"],
-                            str(r["id"]), r.get("private", False), r.get("html_url", "")))
+                            str(r["id"]), r.get("private", False), r.get("html_url", ""),
+                            has_issues=r.get("has_issues", True),
+                            has_pulls=r.get("has_pull_requests", True)))
         return out
 
     def list_threads(self, repo, since):
@@ -31,7 +33,11 @@ class GiteaCollector:
         if since:
             params["since"] = since
         out = []
-        for typ in ("issues", "pulls"):
+        # Only query a tracker that's enabled: Gitea 404s /issues?type=pulls when
+        # a repo has pull requests disabled (issue-only repos), which would
+        # otherwise error the whole repo.
+        types = [t for t, on in (("issues", repo.has_issues), ("pulls", repo.has_pulls)) if on]
+        for typ in types:
             params["type"] = typ
             for it in self.c.paginate(f"/repos/{repo.full_name}/issues", dict(params)):
                 kind = "pr" if it.get("pull_request") else ("pr" if typ == "pulls" else "issue")

@@ -22,6 +22,21 @@ def test_gitea_skips_mirror_repos():
     assert [r.full_name for r in gt.list_repos()] == ["johnw/real"]   # mirror skipped
 
 
+def test_gitea_skips_pulls_when_disabled():
+    calls = []
+
+    class RecClient:
+        def paginate(self, path, params=None, conditional=True):
+            calls.append(params.get("type"))
+            return []
+
+    # issue-only repo (PRs disabled) — the pulls query would 404, so skip it.
+    repo = Repo("gitea", "johnw/notes", "johnw", "notes", "5", False, "h",
+                has_issues=True, has_pulls=False)
+    GiteaCollector(RecClient(), _cfg()).list_threads(repo, since=None)
+    assert calls == ["issues"]     # pulls not queried
+
+
 def test_gitea_pull_request_field_classifies_pr():
     pages = {"/repos/johnw/bar/issues": [
         {"id": 5, "number": 5, "title": "q", "html_url": "h", "state": "open",

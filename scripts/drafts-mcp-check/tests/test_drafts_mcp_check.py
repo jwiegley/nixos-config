@@ -73,6 +73,23 @@ def test_manual_request_sequence_calls_only_read_only_workspace_tool(probe):
     ]
 
 
+def test_next_response_rejects_boolean_jsonrpc_id(probe):
+    class Lines:
+        def __init__(self):
+            self._lines = iter(['data: {"jsonrpc":"2.0","id":true,"result":{}}'])
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._lines)
+            except StopIteration as error:
+                raise StopAsyncIteration from error
+
+    assert asyncio.run(probe._next_response(Lines(), 1)) is None
+
+
 @pytest.mark.parametrize(
     "response",
     [
@@ -127,6 +144,14 @@ def test_tools_list_response_accepts_tools_array(probe):
         {"jsonrpc": "2.0", "error": {"code": -32603}},
         {"jsonrpc": "2.0", "result": {}},
         {"jsonrpc": "2.0", "result": {"content": []}},
+        {
+            "jsonrpc": "2.0",
+            "result": {"content": [{"type": "text", "text": ""}]},
+        },
+        {
+            "jsonrpc": "2.0",
+            "result": {"content": [{"type": "text", "text": " \n\t"}]},
+        },
         {
             "jsonrpc": "2.0",
             "result": {

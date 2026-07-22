@@ -140,8 +140,10 @@ async def _next_response(lines: Any, expected_id: int) -> dict[str, Any] | None:
             event = json.loads(raw)
         except json.JSONDecodeError:
             return None
-        if isinstance(event, dict) and event.get("id") == expected_id:
-            return event
+        if isinstance(event, dict):
+            response_id = event.get("id")
+            if type(response_id) is int and response_id == expected_id:
+                return event
     return None
 
 
@@ -199,7 +201,9 @@ def _tool_result_ok(response: dict[str, Any] | None) -> bool:
     ]
     if not texts:
         return False
-    text = " ".join(texts).lower()
+    text = " ".join(texts).strip().lower()
+    if not text:
+        return False
     return "-1743" not in text and "not authorized" not in text
 
 

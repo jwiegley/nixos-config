@@ -12,8 +12,15 @@ class GiteaCollector:
     def list_repos(self):
         out = []
         # conditional=False: enumeration must always return the full set.
+        # Skip MIRRORS: johnw's Gitea mirrors his GitHub repos (which are scanned
+        # comprehensively on the GitHub side), so their trackers carry no unique
+        # issues. Scanning all ~190 (160 mirrors) also bursts gitea.vulcan.lan
+        # into rate-limiting; the ~30 canonical (non-mirror) repos are his actual
+        # Gitea projects and scan cleanly.
         for r in self.c.paginate(f"/users/{self.cfg.gitea_user}/repos",
                                  {"limit": 50}, conditional=False):
+            if r.get("mirror"):
+                continue
             out.append(Repo("gitea", r["full_name"], r["owner"]["login"], r["name"],
                             str(r["id"]), r.get("private", False), r.get("html_url", "")))
         return out

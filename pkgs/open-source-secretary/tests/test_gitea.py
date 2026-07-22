@@ -12,6 +12,16 @@ def test_gitea_repos_bare_array_and_issue_ids_stringified():
     assert repos[0].platform == "gitea" and repos[0].node_id == "11"
 
 
+def test_gitea_skips_mirror_repos():
+    fc = FakeClient({"/users/johnw/repos": [
+        {"id": 1, "full_name": "johnw/real", "name": "real",
+         "owner": {"login": "johnw"}, "private": False, "html_url": "h", "mirror": False},
+        {"id": 2, "full_name": "johnw/backup", "name": "backup",
+         "owner": {"login": "johnw"}, "private": False, "html_url": "h", "mirror": True}]})
+    gt = GiteaCollector(fc, _cfg())
+    assert [r.full_name for r in gt.list_repos()] == ["johnw/real"]   # mirror skipped
+
+
 def test_gitea_pull_request_field_classifies_pr():
     pages = {"/repos/johnw/bar/issues": [
         {"id": 5, "number": 5, "title": "q", "html_url": "h", "state": "open",

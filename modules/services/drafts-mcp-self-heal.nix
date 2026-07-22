@@ -1,6 +1,6 @@
 # Drafts MCP self-heal — a one-action Alertmanager webhook receiver.
 #
-# DraftsMcpBridgeDown / DraftsMcpAskFailing (service=drafts-mcp,
+# DraftsMcpBridgeDown / DraftsMcpTransportFailing (service=drafts-mcp,
 # self_heal_eligible=true) → POST /alert here → `systemctl restart
 # drafts-mcp.service`. That restart re-execs mcp-proxy's single shared ssh
 # child to hera (the design-D9 zombie fix). It is the ONLY automated
@@ -11,8 +11,6 @@
 # alerts) and routing a DraftsMcp* alert at it would no-op without
 # cross-contaminating an unrelated critical service.
 #
-# DraftsMcpTccAutomationLost is intentionally NOT in HEALABLE (a lost hera GUI
-# session — restarting drafts-mcp cannot fix it; it pages a human).
 {
   config,
   lib,
@@ -41,7 +39,7 @@ let
 
     PORT = ${toString cfg.port}
     ACTION = "${actionsDir}/restart_drafts_mcp"
-    HEALABLE = {"DraftsMcpBridgeDown", "DraftsMcpAskFailing"}
+    HEALABLE = {"DraftsMcpBridgeDown", "DraftsMcpTransportFailing"}
     MIN_RESTART_INTERVAL_S = 300.0
     _last_restart = [0.0]
 

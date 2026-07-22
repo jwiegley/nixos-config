@@ -351,6 +351,53 @@
             src = ./scripts;
             suiteDir = "agent-health-report-tests";
           };
+
+          drafts-mcp-check-tests = helpers.mkPytestCheck {
+            name = "drafts-mcp-check-tests";
+            src = ./scripts/drafts-mcp-check;
+            suiteDir = "tests";
+          };
+
+          drafts-mcp-probe-wiring =
+            let
+              lib = inputs.nixpkgs.lib;
+              systemd = inputs.self.nixosConfigurations.vulcan.config.systemd;
+              scheduledExec = systemd.services.drafts-mcp-check.serviceConfig.ExecStart;
+              manualUnit = systemd.services.drafts-mcp-app-check or null;
+              manualExec = if manualUnit == null then "" else manualUnit.serviceConfig.ExecStart;
+              manualWantedBy = if manualUnit == null then [ "missing" ] else manualUnit.wantedBy or [ ];
+              timerUnit = systemd.timers.drafts-mcp-check.timerConfig.Unit;
+            in
+            assert !lib.hasInfix "--app-check" scheduledExec;
+            assert manualUnit != null;
+            assert lib.hasInfix "--app-check" manualExec;
+            assert manualWantedBy == [ ];
+            assert timerUnit == "drafts-mcp-check.service";
+            assert !builtins.hasAttr "drafts-mcp-app-check" systemd.timers;
+            pkgs.runCommand "drafts-mcp-probe-wiring-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.gnugrep
+                  pkgs.prometheus.cli
+                ];
+              }
+              ''
+                set -euo pipefail
+                rules=${./modules/monitoring/alerts/drafts.yaml}
+                self_heal=${./modules/services/drafts-mcp-self-heal.nix}
+                alertmanager=${./modules/services/alertmanager.nix}
+
+                promtool check rules "$rules"
+                grep -Fq 'alert: DraftsMcpTransportFailing' "$rules"
+                grep -Fq 'expr: drafts_mcp_sse_open_ok == 1 and drafts_mcp_ssh_hera_ok == 0' "$rules"
+                grep -Fq 'HEALABLE = {"DraftsMcpBridgeDown", "DraftsMcpTransportFailing"}' "$self_heal"
+
+                if grep -Eq 'drafts_mcp_(e2e|tcc_automation)_ok|DraftsMcp(AskFailing|TccAutomationLost)' "$rules" "$self_heal" "$alertmanager"; then
+                  echo "obsolete Drafts app-level monitoring contract remains" >&2
+                  exit 1
+                fi
+                touch "$out"
+              '';
         };
     };
 }

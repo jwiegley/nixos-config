@@ -120,10 +120,6 @@
           # Drafts MCP self-heal pipeline — service=drafts-mcp alerts go to
           # the drafts-mcp-self-heal webhook receiver. continue=true keeps the
           # email/critical/iPhone paths firing so a human still sees it.
-          # NOTE: DraftsMcpTccAutomationLost also carries service=drafts-mcp and
-          # so reaches the daemon, but the daemon's HEALABLE allowlist excludes
-          # it (a lost hera GUI grant is not restart-fixable) — delivered but
-          # no-ops, then continues to email/iPhone for a human.
           # NOTE: any future drafts-self-heal watchdog alert MUST carry a
           # distinct service label (e.g. service=drafts-mcp-self-heal) so it
           # never loops back to the possibly-dead daemon, mirroring the openclaw

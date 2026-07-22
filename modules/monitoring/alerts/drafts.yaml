@@ -20,8 +20,8 @@ groups:
             child and typically resolves this in seconds; the
             drafts-mcp-self-heal receiver does exactly this.
 
-      - alert: DraftsMcpAskFailing
-        expr: drafts_mcp_e2e_ok == 0
+      - alert: DraftsMcpTransportFailing
+        expr: drafts_mcp_sse_open_ok == 1 and drafts_mcp_ssh_hera_ok == 0
         for: 5m
         labels:
           severity: critical
@@ -29,39 +29,14 @@ groups:
           service: drafts-mcp
           self_heal_eligible: "true"
         annotations:
-          summary: "Drafts MCP end-to-end probe failing for 5 minutes"
+          summary: "Drafts MCP transport probe failing for 5 minutes"
           description: |
-            The 5-minute drafts-mcp check has failed to round-trip a read-only
-            Drafts tool (drafts_list_workspaces) through drafts-mcp.service ⇒
-            ssh johnw@hera.lan ⇒ drafts-mcp-server ⇒ Drafts.app for 5 minutes.
-            Localize via the component metrics: drafts_mcp_sse_open_ok (bridge
-            door), drafts_mcp_ssh_hera_ok (transport leg), and
-            drafts_mcp_tcc_automation_ok (Drafts AppleEvents grant). The
-            drafts-mcp-self-heal receiver restarts drafts-mcp.service on this
-            alert (recovers the mcp-proxy single-ssh-child zombie).
-
-      - alert: DraftsMcpTccAutomationLost
-        expr: drafts_mcp_ssh_hera_ok == 1 and drafts_mcp_tcc_automation_ok == 0
-        for: 5m
-        labels:
-          severity: critical
-          category: integration
-          service: drafts-mcp
-        annotations:
-          summary: "Drafts Automation (TCC) grant lost on hera — ssh OK but Drafts denies"
-          description: |
-            ssh to hera and drafts-mcp-server are answering MCP
-            (drafts_mcp_ssh_hera_ok=1), but every read-only Drafts tools/call
-            returns an error (drafts_mcp_tcc_automation_ok=0). This is the
-            signature of a lost macOS Automation (kTCCServiceAppleEvents)
-            grant — almost always johnw logging OUT of hera's GUI (Aqua)
-            session (screen-lock preserves it; logout tears it down — design
-            §6.3). Restarting drafts-mcp will NOT help. Remedy on hera: log
-            johnw back in to the console GUI session; approve a fresh
-            Automation prompt if one appears. Then drafts_mcp_tcc_automation_ok
-            returns to 1. (NOT self_heal_eligible: this alert carries
-            service=drafts-mcp so it reaches the daemon, but the daemon's
-            HEALABLE allowlist excludes it — it no-ops and pages a human.)
+            The loopback SSE endpoint is accepting sessions, but the proxy's
+            persistent ssh child, hera forced command, or drafts-mcp-server
+            has not completed MCP initialize plus tools/list for 5 minutes.
+            This scheduled probe does not call a Drafts tool or address
+            Drafts.app. The drafts-mcp-self-heal receiver restarts
+            drafts-mcp.service to replace a wedged single ssh child.
 
       - alert: DraftsMcpCheckStale
         expr: |

@@ -62,6 +62,7 @@
     # Services
     ../../modules/services/alertmanager.nix
     ../../modules/services/blackbox-monitoring.nix
+    ../../modules/services/watch-presence-notify.nix
     ../../modules/services/certificate-automation.nix
     ../../modules/services/certificates.nix
     ../../modules/services/cleanup.nix

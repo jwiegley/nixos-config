@@ -432,7 +432,12 @@ in
                   "asus-rt-ax88u.lan" # 192.168.3.8
                   "hera-wifi.lan" # 192.168.3.6
 
-                  "TL-WPA8630.lan" # 192.168.30.49
+                  "192.168.30.49" # TL-WPA8630 powerline (Neo, vlan04). Probed by IP:
+                  # its DHCP-registered forward name TL-WPA8630.lan doesn't resolve
+                  # (OPNsense registers only the PTR), so a name-based probe fails even
+                  # when the device is up (2026-07-21). Durable fix = a DHCP reservation
+                  # on OPNsense for the extender (MAC d8:47:32:cf:49:0a) so the lease/name
+                  # stay put; the .30.49 lease is sticky for this always-on device.
 
                   "9.9.9.9"
                   "149.112.112.112"

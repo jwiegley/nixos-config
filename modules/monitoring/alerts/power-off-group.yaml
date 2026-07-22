@@ -19,12 +19,12 @@ groups:
       - record: power_off_sensitive_group_members_down
         expr: |
           count(
-            probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan|192.168.3.154"} == 0
+            probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|192.168.30.49|192.168.3.154"} == 0
           ) or vector(0)
 
       # Any one member down → check the whole group (early-warning).
       - alert: PowerOffSensitiveGroupMemberDown
-        expr: probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|TL-WPA8630.lan|192.168.3.154"} == 0
+        expr: probe_success{instance=~"pentair-intelliflo.lan|b-hyve-sprinkler.lan|enphase-solar-inverter.lan|192.168.30.49|192.168.3.154"} == 0
         for: 10m
         labels:
           severity: warning

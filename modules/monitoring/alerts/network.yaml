@@ -69,7 +69,7 @@ groups:
       # (or never), so they would drive chronic latency noise — they alert only
       # via BlackboxICMPIoTDeviceDown.
       - alert: HighLatency
-        expr: probe_duration_seconds{job="blackbox_icmp",instance!="TL-WPA8630.lan",host_group!~"iot|iot-noping|iot-quiet"} > 5
+        expr: probe_duration_seconds{job="blackbox_icmp",instance!="192.168.30.49",host_group!~"iot|iot-noping|iot-quiet"} > 5
         for: 5m
         labels:
           severity: warning
@@ -83,7 +83,7 @@ groups:
       # host_group iot/iot-noping excluded: same rationale as HighLatency —
       # sleepy IoT devices must not trip an infrastructure-latency critical.
       - alert: CriticalLatency
-        expr: probe_duration_seconds{job="blackbox_icmp",instance!="TL-WPA8630.lan",host_group!~"iot|iot-noping|iot-quiet"} > 10
+        expr: probe_duration_seconds{job="blackbox_icmp",instance!="192.168.30.49",host_group!~"iot|iot-noping|iot-quiet"} > 10
         for: 2m
         labels:
           severity: critical

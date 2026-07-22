@@ -184,6 +184,7 @@
 
       packages.${system} = {
         hermes-mcp = pkgs.callPackage ./pkgs/hermes-mcp { };
+        open-source-secretary = pkgs.callPackage ./pkgs/open-source-secretary { };
       };
 
       # `nix run .#water-attribution-check` — validate the generated
@@ -398,6 +399,8 @@
                 fi
                 touch "$out"
               '';
+
+          open-source-secretary = inputs.self.packages.${system}.open-source-secretary;
         };
     };
 }

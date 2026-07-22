@@ -24,7 +24,7 @@ agents.defaults.model
 agents.defaults.model.fallbacks
 agents.defaults.model.primary
 agents.defaults.models
-agents.defaults.models.vulcan/hera/omlx/Qwen3.6-27B-MLX-8bit
+agents.defaults.models.vulcan/hera/omlx/Qwen3.6-27B-oQ4e-mtp
 agents.defaults.sandbox
 agents.defaults.sandbox.docker
 agents.defaults.sandbox.docker.network
@@ -102,6 +102,8 @@ models.providers.vulcan.models.0
 models.providers.vulcan.models.0.api
 models.providers.vulcan.models.0.contextWindow
 models.providers.vulcan.models.0.cost
+models.providers.vulcan.models.0.cost.cacheRead
+models.providers.vulcan.models.0.cost.cacheWrite
 models.providers.vulcan.models.0.cost.input
 models.providers.vulcan.models.0.cost.output
 models.providers.vulcan.models.0.id

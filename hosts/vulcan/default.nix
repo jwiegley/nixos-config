@@ -203,7 +203,7 @@
   services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
   services.hermes-mcp.enable = true;
-  services.open-source-secretary.enable = true;
+  services.open-source-secretary.enable = false; # temporarily disabled 2026-07-21: secrets not yet in secrets.yaml (blocks all rebuilds); re-enable after adding open-source-secretary/{github,gitea}-token via `sops secrets.yaml`
   services.drafts-mcp.enable = true;
   services.draftsMcpCheck.enable = true;
   services.draftsMcpSelfHeal.enable = true;

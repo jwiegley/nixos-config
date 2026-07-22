@@ -82,6 +82,18 @@ let
       };
       doCheck = false;
     });
+    # thinqconnect: 1.0.13 builds its MQTT client-cert CSR with pyOpenSSL's
+    # crypto.X509Req, but X509Req was removed in pyOpenSSL 24.3.0 (HA now ships
+    # 25.x/26.x) → LG ThinQ fails at setup: "module 'OpenSSL.crypto' has no
+    # attribute 'X509Req'". Rewrite generate_csr() to use the `cryptography`
+    # library (build-time transform; the script asserts, so the build fails
+    # loudly if upstream changes the block). Keeps version 1.0.13 (what HA's
+    # lg_thinq manifest pins). Drop once thinqconnect migrates off pyOpenSSL.
+    thinqconnect = hasPyPrev.thinqconnect.overridePythonAttrs (old: {
+      postPatch = (old.postPatch or "") + ''
+        ${prev.python3.interpreter} ${./thinqconnect-x509req-fix.py}
+      '';
+    });
     # Several packages mark disabled=true for Python 3.14 in nixpkgs-unstable,
     # but they work fine at runtime. HA 2026.x requires Python 3.14 and uses these.
     # Tests fail: asyncio.get_event_loop() raises RuntimeError in Python 3.14;

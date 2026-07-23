@@ -62,7 +62,6 @@
     # Services
     ../../modules/services/alertmanager.nix
     ../../modules/services/blackbox-monitoring.nix
-    ../../modules/services/watch-presence-notify.nix
     ../../modules/services/certificate-automation.nix
     ../../modules/services/certificates.nix
     ../../modules/services/cleanup.nix
@@ -207,7 +206,13 @@
   services.drafts-mcp.enable = true;
   services.draftsMcpCheck.enable = true;
   services.draftsMcpSelfHeal.enable = true;
-  services.hermesHealthCheck.enable = true;
+  services.hermesHealthCheck = {
+    enable = true;
+    # 5min → 15min: this is the single full agent-with-tools liveness probe
+    # (a ~28k-token ask_hermes round-trip). Cutting its cadence removes the
+    # dominant share of synthetic LLM canary load (see the LLM-probe analysis).
+    intervalSeconds = 900;
+  };
   services.hermesSelfHeal.enable = true;
   services.openclawSelfHeal.enable = true;
   services.openclawHermesSmoke.enable = true;

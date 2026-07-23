@@ -69,7 +69,18 @@
   ];
 
   # tmpfiles rules
+  #
+  # Owner MUST be `teable`, not root. This dir is bind-mounted into the rootless
+  # container as /app/.assets and teable runs as its container-internal root
+  # (→ host uid `teable`). teable keeps its session store here (.cache.db); if
+  # the dir is root-owned the app cannot create SQLite's journal/WAL sidecars in
+  # it, so every *successful* login fails with "SQLITE_READONLY: attempt to
+  # write a readonly database" → HTTP 500 (anonymous pages and bad-cred logins
+  # never write a session, so they stay 200/400 — the failure is login-only and
+  # invisible to anonymous health probes). The `d` directive re-applies this
+  # owner on every switch/boot, so a root owner silently re-breaks login after
+  # any rebuild (root-caused 2026-07-22). `d` (not `D`) preserves contents.
   systemd.tmpfiles.rules = [
-    "d /var/lib/teable 0755 root root -"
+    "d /var/lib/teable 0755 teable teable -"
   ];
 }

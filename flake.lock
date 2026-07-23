@@ -2375,11 +2375,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1784693858,
-        "narHash": "sha256-cCK/zsSNnqqVDh5QZYFgEgv1O9YpYgMikhcY3q5AfC8=",
+        "lastModified": 1784788297,
+        "narHash": "sha256-4j1KU9xj5PRmHZS0v0WLVQnyF9JMRTtTNhz4Fxx5gjs=",
         "ref": "refs/heads/main",
-        "rev": "6ab863b3b67b24537a84763c158d018d77e91290",
-        "revCount": 2108,
+        "rev": "6bdbabbc3e193d09b11931b3bbc0e829ddc7b34f",
+        "revCount": 2144,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

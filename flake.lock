@@ -84,11 +84,11 @@
         "translate-tool": "translate-tool"
       },
       "locked": {
-        "lastModified": 1784828085,
-        "narHash": "sha256-ZqWKwgd043gdbEqNxZ6f/vQfNDaJbGJHMHgZVbS/Eaw=",
+        "lastModified": 1784842652,
+        "narHash": "sha256-hrkFx+/PGsjFtm+hNibCUAuy+iz3YWj35qNnd+x5Qyw=",
         "owner": "jwiegley",
         "repo": "ai-nix",
-        "rev": "c17255f34e6fd92be3540d419357ed2678a8931a",
+        "rev": "34a0a4d24548f7430ff5c9555f15d8fbda9f541d",
         "type": "github"
       },
       "original": {
@@ -2267,11 +2267,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1784837400,
-        "narHash": "sha256-YDqFzhej8+F7mTpwtKVdYkSD5/qrXEp1i+H6e95dNMY=",
+        "lastModified": 1784843050,
+        "narHash": "sha256-Dk6sqlJsJU13RSamRLJNpTRSLLLtbLQLj5E80+KMDC8=",
         "ref": "refs/heads/main",
-        "rev": "0015230e434d777db83d02ff656784e99c20582b",
-        "revCount": 2151,
+        "rev": "ea92bc4093bf55fe3e8f336c1f36a09cc497d4b5",
+        "revCount": 2156,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

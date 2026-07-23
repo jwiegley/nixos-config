@@ -44,37 +44,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    llm-agents = {
-      # Pinned to be5813ba (2026-06-27, gemini-cli 0.47.0). The next locked rev
-      # (552400b0, 2026-06-28) bumps gemini-cli to 0.49.0 and adds a postPatch
-      # that runs `node align-pins-to-lock.mjs`. buildNpmPackage replays
-      # postPatch inside the `gemini-cli-0.49.0-npm-deps` fixed-output
-      # derivation, which carries no nodejs on PATH, so on aarch64 — where that
-      # FOD isn't in numtide's binary cache and must build locally — it dies
-      # with "node: command not found" (exit 127) in patchPhase, breaking
-      # johnw's home-manager-path (gemini-cli is in the nix-config shared
-      # package list). x86_64 substitutes the FOD from cache and never hits it.
-      # Unpin once upstream adds nodejs to the gemini-cli npm-deps inputs (or
-      # drops the node postPatch from the FOD); no fix exists as of HEAD
-      # (70e4e3d5, 2026-06-29).
-      url = "github:numtide/llm-agents.nix/be5813ba4f71c49494d530c9a0b79132f089270e";
-    };
-
     ai-nix = {
-      # Pinned to 4690e999 — the last rev whose llama-cpp overlay is compatible
-      # with our nixpkgs pin. Later revs (94b7f45+) redefine llama-cpp as
-      # `prev.llama-cpp.override { inherit (final) nodejs_latest; }`, which assumes
-      # a newer nixpkgs whose llama-cpp/package.nix takes a `nodejs_latest` arg
-      # (the in-tree tools/ui webui era, llama-cpp ≳ 9190). Our nixpkgs is pinned
-      # to nixos-25.11 @ d6df351 (llama-cpp 6981, pre-webui), which has no such
-      # parameter, so the override fails with "function 'anonymous lambda' called
-      # with unexpected argument 'nodejs_latest'". 4690e999's overlay uses
-      # overrideAttrs only and builds the bundled webui via the nodejs /
-      # npmConfigHook that overlays/default.nix layers on. Unpin once our nixpkgs
-      # is bumped past the llama-cpp webui-in-tools/ui change.
-      url = "github:jwiegley/ai-nix/4690e999a0ac";
+      url = "github:jwiegley/ai-nix/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    llm-agents.follows = "ai-nix/llm-agents";
 
     hermes-agent = {
       # Pinned to c47b9d12 (2026-06-02). Later revs (c3055d61, fd1e7c2b, HEAD)

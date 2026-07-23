@@ -137,3 +137,73 @@ def test_litellm_unreachable_marks_stuck(monkeypatch, tmp_path):
         daemon.handle_alertmanager_payload(_payload("HermesAskFailing"))
 
     assert "HermesSelfHealLitellmUnreachable" in synth
+
+
+# ---- circuit breaker (recent_action_count) ----
+# Regression guard for the same unbounded-restart class OpenClaw hit
+# 2026-07-22: restart_microvm resets the alert, so each episode is a fresh
+# single-attempt incident and the per-incident stuck check never trips. The
+# breaker bounds real actions in a rolling window regardless of correlation.
+
+
+def test_recent_action_count_sums_real_actions_in_window():
+    now = 1_000_000
+    state = {
+        "active": {"a": {"attempts": [{"ts": now - 10, "action": "restart_microvm"},
+                                      {"ts": now - 20, "action": "restart_mcp"}]}},
+        "history": [{"attempts": [{"ts": now - 30, "action": "restart_microvm"}]}],
+    }
+    assert daemon.recent_action_count(state, now=now) == 3
+
+
+def test_recent_action_count_ignores_aged_out_and_placeholder():
+    now = 1_000_000
+    state = {
+        "active": {
+            "old":         {"attempts": [{"ts": now - daemon.CIRCUIT_WINDOW_S - 1,
+                                          "action": "restart_microvm"}]},
+            "placeholder": {"attempts": [{"ts": now - 5, "action": "none"}]},
+            "recent":      {"attempts": [{"ts": now - 5, "action": "restart_microvm"}]},
+        },
+        "history": [],
+    }
+    assert daemon.recent_action_count(state, now=now) == 1
+
+
+def test_circuit_breaker_stops_after_budget(monkeypatch, tmp_path):
+    """Once CIRCUIT_MAX_ATTEMPTS real remediations have happened in the window,
+    a further firing alert is NOT acted on — it is marked stuck and pages
+    HermesSelfHealStuck instead of restarting the VM again."""
+    state_path = tmp_path / "incidents.json"
+    monkeypatch.setattr(daemon, "STATE_PATH", str(state_path))
+    monkeypatch.setattr(daemon, "current_metrics", lambda: {"hermes_mcp_ask_hermes_ok": 0.0})
+    monkeypatch.setattr(daemon, "_kick_health_check", lambda: None)
+
+    import time as _time
+    now = int(_time.time())
+    seed = {
+        "active": {
+            f"ep{i}": {"status": "in_progress", "first_seen_ts": now - 100,
+                       "vm_active_enter_ts": 1000 + i,
+                       "alerts": ["HermesApiServerDown"],
+                       "attempts": [{"ts": now - 10 * (i + 1),
+                                     "action": "restart_microvm",
+                                     "by": "deterministic", "ok": True}]}
+            for i in range(daemon.CIRCUIT_MAX_ATTEMPTS)
+        },
+        "history": [],
+    }
+    daemon.save_state(state_path, seed)
+
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda a, **kw: ran.append(a) or {"ok": True})
+    synth = []
+    monkeypatch.setattr(daemon, "emit_synthetic_alert",
+                        lambda name, ann, **kw: synth.append(name))
+
+    daemon.handle_alertmanager_payload(_payload("HermesApiServerDown"))
+    assert ran == []
+    assert "HermesSelfHealStuck" in synth
+    persisted = daemon.load_state(str(state_path))
+    assert any(i.get("stuck_reason") == "circuit_breaker"
+               for i in persisted["active"].values())

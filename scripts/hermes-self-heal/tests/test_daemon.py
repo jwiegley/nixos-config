@@ -42,16 +42,22 @@ def test_validate_action_rejects_path_traversal():
         daemon.validate_action("../../bin/sh")
 
 
-def test_correlation_key_groups_by_vm_boot():
+def test_correlation_key_groups_distinct_alerts_in_same_bucket():
+    """Distinct alerts of one outage that fire in the same time bucket
+    correlate into a single incident."""
     a = {"alert_name": "HermesAskFailing", "vm_active_enter_ts": 1000, "starts_at": 5000}
     b = {"alert_name": "HermesApiServerDown", "vm_active_enter_ts": 1000, "starts_at": 5000}
     assert daemon.correlation_key(a) == daemon.correlation_key(b)
 
 
-def test_correlation_key_differs_after_vm_restart():
+def test_correlation_key_same_across_self_inflicted_vm_restart():
+    """restart_microvm changes vm_active_enter_ts; the correlation key must NOT
+    change with it, or the same firing episode is re-tracked as a new incident
+    on every restart and the attempt counter never reaches the stuck threshold
+    (the identical latent runaway that hit OpenClaw 2026-07-22)."""
     a = {"alert_name": "HermesAskFailing", "vm_active_enter_ts": 1000, "starts_at": 5000}
     b = {"alert_name": "HermesAskFailing", "vm_active_enter_ts": 2000, "starts_at": 5000}
-    assert daemon.correlation_key(a) != daemon.correlation_key(b)
+    assert daemon.correlation_key(a) == daemon.correlation_key(b)
 
 
 def test_new_incident_starts_in_progress():

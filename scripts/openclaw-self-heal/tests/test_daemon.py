@@ -32,15 +32,23 @@ def test_validate_action_rejects_path_traversal():
 
 import time
 
-def test_correlation_key_groups_by_vm_boot():
+def test_correlation_key_groups_distinct_alerts_in_same_bucket():
+    """Multiple distinct alerts of one outage that fire in the same time
+    bucket correlate into a single incident."""
     a = {"alert_name": "OpenClawDiscordWsDown", "vm_active_enter_ts": 1000, "starts_at": 5000}
     b = {"alert_name": "OpenClawDiscordPluginMissing", "vm_active_enter_ts": 1000, "starts_at": 5000}
     assert daemon.correlation_key(a) == daemon.correlation_key(b)
 
-def test_correlation_key_differs_after_vm_restart():
-    a = {"alert_name": "OpenClawDiscordWsDown", "vm_active_enter_ts": 1000, "starts_at": 5000}
-    b = {"alert_name": "OpenClawDiscordWsDown", "vm_active_enter_ts": 2000, "starts_at": 5000}
-    assert daemon.correlation_key(a) != daemon.correlation_key(b)
+def test_correlation_key_same_across_self_inflicted_vm_restart():
+    """A restart_microvm remediation changes vm_active_enter_ts. The
+    correlation key must NOT change with it — otherwise the same firing
+    episode is re-tracked as a brand-new incident on every restart and the
+    attempt counter never reaches the stuck threshold (root cause of the
+    2026-07-22 unbounded restart storm). Same alert + same startsAt bucket
+    stays one incident regardless of the VM boot timestamp."""
+    a = {"alert_name": "OpenClawHttpHealthDown", "vm_active_enter_ts": 1000, "starts_at": 5000}
+    b = {"alert_name": "OpenClawHttpHealthDown", "vm_active_enter_ts": 2000, "starts_at": 5000}
+    assert daemon.correlation_key(a) == daemon.correlation_key(b)
 
 def test_attempt_n_starts_at_one_for_new_incident():
     inc = daemon.new_incident({"alert_name": "OpenClawDiscordWsDown",
@@ -448,3 +456,131 @@ def test_heartbeat_tick_persists_reconciliation(tmp_path, monkeypatch):
     assert persisted["active"]["k"]["status"] == "resolved"
     assert persisted["active"]["k"]["resolved_by"] == "orphan_reconcile"
     assert heartbeats and heartbeats[0]["active_count"] == 0
+
+
+# ---- circuit breaker (recent_action_count) ----
+# Regression coverage for the 2026-07-22 unbounded restart storm. The
+# remediation for OpenClawHttpHealthDown is restart_microvm, which resets the
+# alert's 600 s warmup gate; the alert resolves after each restart and re-fires
+# ~11 min later with a fresh startsAt, so every episode is a new single-attempt
+# incident and the per-incident attempts>=3 stuck check never trips. The
+# breaker counts real actions taken across ALL incidents in a rolling window
+# and stops acting once the budget is spent (72 restarts / 48 stranded
+# incidents observed before the fix).
+
+
+def test_recent_action_count_sums_real_actions_in_window():
+    now = 1_000_000
+    state = {
+        "active": {
+            "a": {"attempts": [{"ts": now - 10, "action": "restart_microvm"},
+                               {"ts": now - 20, "action": "doctor_fix"}]},
+        },
+        "history": [
+            {"attempts": [{"ts": now - 30, "action": "restart_microvm"}]},
+        ],
+    }
+    assert daemon.recent_action_count(state, now=now) == 3
+
+
+def test_recent_action_count_ignores_aged_out_and_placeholder_attempts():
+    now = 1_000_000
+    state = {
+        "active": {
+            "old":         {"attempts": [{"ts": now - daemon.CIRCUIT_WINDOW_S - 1,
+                                          "action": "restart_microvm"}]},
+            "placeholder": {"attempts": [{"ts": now - 5, "action": "none"}]},
+            "no_action":   {"attempts": [{"ts": now - 5, "action": None}]},
+            "recent":      {"attempts": [{"ts": now - 5, "action": "restart_microvm"}]},
+        },
+        "history": [],
+    }
+    assert daemon.recent_action_count(state, now=now) == 1
+
+
+def test_handle_payload_circuit_breaker_stops_after_budget(monkeypatch, tmp_path):
+    """Once CIRCUIT_MAX_ATTEMPTS real remediations have happened in the window,
+    a further firing alert is NOT acted on — it is marked stuck and pages
+    OpenClawSelfHealStuck instead of triggering yet another restart. This is
+    the direct regression guard for the unbounded restart storm."""
+    state_path = tmp_path / "incidents.json"
+    monkeypatch.setattr(daemon, "STATE_PATH", state_path)
+    monkeypatch.setattr(
+        daemon, "current_metrics",
+        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 9999})
+    now = int(time.time())
+    # Pre-spend the budget: CIRCUIT_MAX_ATTEMPTS recent restarts across prior
+    # (now-stranded) episodes, each a distinct incident as the storm produced.
+    seed = {
+        "active": {
+            f"ep{i}": {"status": "in_progress", "first_seen_ts": now - 100,
+                       "vm_active_enter_ts": 1000 + i,
+                       "alerts": ["OpenClawHttpHealthDown"],
+                       "attempts": [{"ts": now - 10 * (i + 1),
+                                     "action": "restart_microvm",
+                                     "by": "deterministic", "ok": True}]}
+            for i in range(daemon.CIRCUIT_MAX_ATTEMPTS)
+        },
+        "history": [],
+    }
+    daemon.save_state(state_path, seed)
+
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda name: ran.append(name) or {"ok": True})
+    monkeypatch.setattr(daemon, "probe_clear", lambda inc: False)
+    monkeypatch.setattr(daemon, "_kick_canary", lambda: None)
+    emitted = []
+    monkeypatch.setattr(daemon, "emit_synthetic_alert",
+                        lambda name, ann, **k: emitted.append(name))
+    monkeypatch.setattr(daemon.time, "sleep", lambda *_: None)
+
+    # A NEW firing episode (fresh startsAt bucket -> a new incident) arrives.
+    payload = {"alerts": [{"status": "firing",
+                           "labels": {"alertname": "OpenClawHttpHealthDown",
+                                      "service": "openclaw"},
+                           "startsAt": "2026-07-22T10:00:00Z"}]}
+    daemon.handle_alertmanager_payload(payload)
+
+    assert ran == []  # breaker prevented another restart
+    assert "OpenClawSelfHealStuck" in emitted
+    persisted = daemon.load_state(state_path)
+    stuck = [i for i in persisted["active"].values()
+             if i.get("stuck_reason") == "circuit_breaker"]
+    assert stuck, "the new episode must be recorded stuck via the breaker"
+
+
+def test_handle_payload_acts_when_budget_available(monkeypatch, tmp_path):
+    """Below the budget, the breaker does not interfere — a single fresh
+    incident still gets its deterministic first-attempt remediation."""
+    state_path = tmp_path / "incidents.json"
+    monkeypatch.setattr(daemon, "STATE_PATH", state_path)
+    monkeypatch.setattr(
+        daemon, "current_metrics",
+        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 9999})
+    now = int(time.time())
+    # One prior recent action — still under CIRCUIT_MAX_ATTEMPTS.
+    seed = {
+        "active": {
+            "ep0": {"status": "resolved", "first_seen_ts": now - 100,
+                    "resolved_ts": now - 90,
+                    "alerts": ["OpenClawHttpHealthDown"],
+                    "attempts": [{"ts": now - 90, "action": "restart_microvm",
+                                  "by": "deterministic", "ok": True}]},
+        },
+        "history": [],
+    }
+    daemon.save_state(state_path, seed)
+
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda name: ran.append(name) or {"ok": True})
+    monkeypatch.setattr(daemon, "probe_clear", lambda inc: True)
+    monkeypatch.setattr(daemon, "_kick_canary", lambda: None)
+    monkeypatch.setattr(daemon, "emit_synthetic_alert", lambda *a, **k: None)
+    monkeypatch.setattr(daemon.time, "sleep", lambda *_: None)
+
+    payload = {"alerts": [{"status": "firing",
+                           "labels": {"alertname": "OpenClawHttpHealthDown",
+                                      "service": "openclaw"},
+                           "startsAt": "2026-07-22T11:30:00Z"}]}
+    daemon.handle_alertmanager_payload(payload)
+    assert ran == ["restart_microvm"]

@@ -40,10 +40,22 @@ def validate_action(name: str) -> str:
 
 
 def correlation_key(alert: dict, window_s: int = 300) -> str:
-    """Same VM boot + 5-min bucket → same incident."""
+    """Same firing episode (startsAt time bucket) → same incident.
+
+    Deliberately does NOT include vm_active_enter_ts. The remediation for the
+    VM-health alerts is restart_microvm, which CHANGES vm_active_enter_ts;
+    keying on it meant every restart minted a fresh incident, so attempts
+    never accumulated toward should_escalate and the daemon restarted the VM
+    without bound (72 restarts / 48 stranded incidents observed 2026-07-22).
+    Keying on the alert's startsAt time bucket keeps one continuous firing
+    episode in one incident across our own remediations, while a genuinely
+    new episode (new startsAt) still gets its own incident. Multiple distinct
+    alerts of one outage that fire in the same bucket still correlate into a
+    single incident, as before.
+    """
     ts = alert.get("starts_at", 0)
     bucket = ts // window_s
-    return f"{alert.get('vm_active_enter_ts', 0)}:{bucket}"
+    return str(bucket)
 
 
 def new_incident(alert: dict) -> dict:
@@ -63,6 +75,41 @@ def next_attempt_n(incident: dict) -> int:
 
 def should_escalate(incident: dict) -> bool:
     return len(incident["attempts"]) >= 3
+
+
+# Circuit breaker. should_escalate (per-incident attempts >= 3) is necessary
+# but NOT sufficient for the VM-health alerts: restart_microvm both changes
+# vm_active_enter_ts AND resets the OpenClawHttpHealthDown 600 s warmup gate,
+# so the alert RESOLVES within one eval cycle after each restart and re-fires
+# ~11 min later with a fresh startsAt. Every episode is therefore a new
+# single-attempt incident and the per-incident counter never reaches 3 — an
+# unbounded restart loop (72 restarts / 48 stranded incidents / ~90 flapping
+# CRITICAL-Resolved pages, 2026-07-22). This breaker counts remediation ACTIONS
+# ACTUALLY TAKEN across ALL incidents in a rolling window, independent of how
+# incidents correlate, and refuses to act once the budget is spent — turning an
+# unfixable outage into a single sustained OpenClawSelfHealStuck page instead of
+# a restart/flap storm. It re-arms as old attempts age out of the window, so a
+# genuinely new future outage is still remediated.
+CIRCUIT_WINDOW_S = 3600
+CIRCUIT_MAX_ATTEMPTS = 3
+
+
+def recent_action_count(state, now=None, window_s=CIRCUIT_WINDOW_S) -> int:
+    """Count real remediation actions taken across active+history within window_s.
+
+    Excludes attempts whose action is None/"none" — the placeholder recorded
+    when LiteLLM is unreachable took no remediation, so a flapping LiteLLM
+    outage cannot trip the breaker on phantom actions.
+    """
+    now = int(time.time()) if now is None else int(now)
+    count = 0
+    for inc in list(state["active"].values()) + state["history"]:
+        for att in inc.get("attempts", []):
+            if att.get("action") in (None, "none"):
+                continue
+            if now - int(att.get("ts") or 0) < window_s:
+                count += 1
+    return count
 
 
 def load_state(path):
@@ -424,6 +471,22 @@ def handle_alertmanager_payload(payload):
         inc = state["active"].get(key) or new_incident(alert_meta)
         state["active"][key] = inc
         if inc["status"] != "in_progress":
+            continue
+        # Circuit breaker: refuse to act once the rolling-window remediation
+        # budget is spent, regardless of how incidents correlate. This is the
+        # bound that the per-incident attempt counter cannot provide when the
+        # remediation resets the alert's warmup gate (see recent_action_count).
+        if recent_action_count(state) >= CIRCUIT_MAX_ATTEMPTS:
+            inc["status"] = "stuck"
+            inc["stuck_ts"] = int(time.time())
+            inc["stuck_reason"] = "circuit_breaker"
+            save_state(STATE_PATH, state)
+            emit_synthetic_alert(
+                "OpenClawSelfHealStuck",
+                {"alert": alert_meta["alert_name"],
+                 "attempts": recent_action_count(state),
+                 "reason": "circuit breaker: too many recent remediations, backing off"},
+                severity="critical", duration_s=14400)
             continue
         n = next_attempt_n(inc)
         ai_reason = None

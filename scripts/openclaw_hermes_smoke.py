@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-OpenClaw <-> Hermes end-to-end smoke probe.
+OpenClaw <-> Hermes MCP-bridge liveness probe.
 
-Speaks raw MCP-over-SSE to the hermes-mcp bridge at 127.0.0.1:9081,
-invokes the ask_hermes tool with a trivial prompt, and writes four
-Prometheus textfile metrics to /var/lib/prometheus-node-exporter-textfiles/
-openclaw_hermes_smoke.prom.
+Speaks raw MCP-over-SSE to the hermes-mcp bridge at 127.0.0.1:9081 and issues
+a `tools/list` request — a lightweight liveness check that confirms the SSE
+bridge, the MCP session handshake, and the agent's tool registration are all
+healthy, WITHOUT triggering a model inference.
 
-Stdlib-only by design (no httpx, no mcp SDK import) so packaging
-changes in hermes-mcp can't break this probe.
+This is deliberately NOT a full ask_hermes round-trip. The ~28k-token inference
+a round-trip costs is already exercised by hermes-health-check (via this same
+bridge) and hermes-e2e-chat-probe (direct to the api_server, the Discord path),
+so this probe covers only the transport/handshake and doesn't need to pay the
+model cost every run. Metric names are unchanged so the openclaw-hermes
+dashboard and the nightly-report smoke summary keep working; `_ok` now means
+"the bridge answered tools/list with a non-empty tool set".
+
+Stdlib-only by design (no httpx, no mcp SDK import) so packaging changes in
+hermes-mcp can't break this probe.
 """
 from __future__ import annotations
 import http.client
@@ -19,25 +27,20 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-# Hardcoded at packaging time; the server's initialize response
-# determines the authoritative negotiated version going forward.
-# Update this string when the mcp SDK pinned in hermes-mcp bumps.
+# Hardcoded at packaging time; the server's initialize response determines the
+# authoritative negotiated version going forward. Update when the mcp SDK
+# pinned in hermes-mcp bumps.
 CLIENT_PROTOCOL_VERSION = "2025-06-18"
 
 HOST = "127.0.0.1"
 PORT = 9081
-BUDGET_SECONDS = 90.0
-PROMPT = "Reply with exactly two characters: O then K. No explanation."
+# tools/list is a cheap handshake (no model inference), so a tight budget is
+# fine — a slow response here means the bridge/agent itself is unhealthy.
+BUDGET_SECONDS = 30.0
+TOOLS_LIST_REQUEST_ID = 42
 METRIC_PATH = (
     "/var/lib/prometheus-node-exporter-textfiles/openclaw_hermes_smoke.prom"
 )
-# hermes-mcp wraps replies in a JSON envelope
-# {session_id, reply, message_count}. We try to parse and apply the
-# 16-char bound from the spec to the *reply* field only; if parsing
-# fails (a future hermes-mcp emits raw text), we fall back to bounding
-# the whole text content at REPLY_FALLBACK_MAX_LEN.
-REPLY_MAX_LEN = 16
-REPLY_FALLBACK_MAX_LEN = 1024
 
 
 @dataclass
@@ -51,13 +54,13 @@ class SmokeResult:
 def parse_sse_events(buf: bytes):
     """Yield (event_type, data) tuples from a complete-event buffer.
 
-    Handles both LF (\\n\\n) and CRLF (\\r\\n\\r\\n) event terminators —
-    the hermes-mcp bridge uses sse-starlette which defaults to CRLF, so
-    the live wire format may have \\r\\n endings even though SSE allows
-    either. We normalise to LF before splitting.
+    Handles both LF (\\n\\n) and CRLF (\\r\\n\\r\\n) event terminators — the
+    hermes-mcp bridge uses sse-starlette which defaults to CRLF, so the live
+    wire format may have \\r\\n endings even though SSE allows either. We
+    normalise to LF before splitting.
 
-    Only complete events (terminated by a blank line) yield. Trailing
-    partial events are silently dropped; caller buffers and retries.
+    Only complete events (terminated by a blank line) yield. Trailing partial
+    events are silently dropped; caller buffers and retries.
     """
     text = buf.decode("utf-8", errors="replace").replace("\r\n", "\n")
     blocks = text.split("\n\n")
@@ -83,7 +86,7 @@ def build_initialize_request(request_id: int) -> bytes:
             "capabilities": {},
             "clientInfo": {
                 "name": "openclaw-hermes-smoke",
-                "version": "0.1.0",
+                "version": "0.2.0",
             },
         },
     }).encode()
@@ -97,43 +100,22 @@ def build_initialized_notification() -> bytes:
     }).encode()
 
 
-def build_tools_call(request_id: int, prompt: str) -> bytes:
+def build_tools_list(request_id: int) -> bytes:
+    """A tools/list request — lists the agent's registered MCP tools without
+    invoking any of them (no model inference)."""
     return json.dumps({
         "jsonrpc": "2.0",
         "id": request_id,
-        "method": "tools/call",
-        "params": {
-            "name": "ask_hermes",
-            "arguments": {"prompt": prompt},
-            "_meta": {"progressToken": f"smoke-{request_id}"},
-        },
+        "method": "tools/list",
+        "params": {},
     }).encode()
 
 
-def _extract_reply_from_envelope(text: str) -> Optional[str]:
-    """If text is a hermes-mcp envelope, return the `reply` field; else None.
+def extract_tools_count(payload: str, request_id: int) -> Optional[int]:
+    """Return the number of tools in a tools/list result for request_id.
 
-    hermes-mcp wraps tool responses in JSON like
-    `{"session_id": "...", "reply": "OK", "message_count": 1}`.
-    Returns None on parse failure or missing/non-string `reply`.
-    """
-    try:
-        obj = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(obj, dict):
-        return None
-    reply = obj.get("reply")
-    if isinstance(reply, str):
-        return reply
-    return None
-
-
-def extract_tool_result_text(payload: str, request_id: int) -> Optional[str]:
-    """Return the first text content of a tools/call result for request_id.
-
-    Returns None if the payload is not a result for our id, is an error,
-    or contains no text content.
+    Returns None if the payload is not a result for our id, is an error, or
+    contains no `tools` list.
     """
     try:
         msg = json.loads(payload)
@@ -146,27 +128,22 @@ def extract_tool_result_text(payload: str, request_id: int) -> Optional[str]:
     result = msg.get("result")
     if not isinstance(result, dict):
         return None
-    content = result.get("content")
-    if not isinstance(content, list):
+    tools = result.get("tools")
+    if not isinstance(tools, list):
         return None
-    for item in content:
-        if isinstance(item, dict) and item.get("type") == "text":
-            text = item.get("text")
-            if isinstance(text, str):
-                return text
-    return None
+    return len(tools)
 
 
 def write_metrics(result: SmokeResult, target: str = METRIC_PATH) -> None:
     """Atomically write the four smoke metrics to target."""
     lines = [
-        "# HELP openclaw_hermes_smoke_ok 1 if the round-trip ask_hermes probe succeeded",
+        "# HELP openclaw_hermes_smoke_ok 1 if the hermes-mcp bridge answered tools/list with a non-empty tool set",
         "# TYPE openclaw_hermes_smoke_ok gauge",
         f"openclaw_hermes_smoke_ok {1 if result.ok else 0}",
-        "# HELP openclaw_hermes_smoke_duration_seconds Wall-clock seconds for the round-trip",
+        "# HELP openclaw_hermes_smoke_duration_seconds Wall-clock seconds for the bridge handshake + tools/list",
         "# TYPE openclaw_hermes_smoke_duration_seconds gauge",
         f"openclaw_hermes_smoke_duration_seconds {result.duration_seconds}",
-        "# HELP openclaw_hermes_smoke_response_bytes Length of the response text in bytes (0 on failure)",
+        "# HELP openclaw_hermes_smoke_response_bytes Length of the tools/list response in bytes (0 on failure)",
         "# TYPE openclaw_hermes_smoke_response_bytes gauge",
         f"openclaw_hermes_smoke_response_bytes {result.response_bytes}",
         "# HELP openclaw_hermes_smoke_last_run_timestamp_seconds When the probe last ran",
@@ -242,30 +219,26 @@ def run_probe(target: str = METRIC_PATH) -> SmokeResult:
         post3 = http.client.HTTPConnection(HOST, PORT, timeout=10)
         post3.request(
             "POST", endpoint,
-            body=build_tools_call(request_id=42, prompt=PROMPT),
+            body=build_tools_list(request_id=TOOLS_LIST_REQUEST_ID),
             headers={"Content-Type": "application/json"},
         )
         post3.getresponse().read()
 
-        def _find_tool_result(buf: bytes) -> Optional[str]:
+        def _find_tools_result(buf: bytes) -> Optional[str]:
             for evt_type, data in parse_sse_events(buf):
                 if evt_type == "message":
-                    text = extract_tool_result_text(data, request_id=42)
-                    if text is not None:
-                        return text
+                    count = extract_tools_count(data, request_id=TOOLS_LIST_REQUEST_ID)
+                    if count is not None:
+                        return data
             return None
 
-        result_text = _read_until(resp, _find_tool_result, deadline)
+        result_text = _read_until(resp, _find_tools_result, deadline)
         if result_text is not None:
-            reply = _extract_reply_from_envelope(result_text)
-            if reply is not None and 0 < len(reply) <= REPLY_MAX_LEN:
-                ok = True
-                response_text = result_text
-            elif (
-                reply is None
-                and 0 < len(result_text) <= REPLY_FALLBACK_MAX_LEN
-            ):
-                # Envelope didn't parse — accept the raw text if short.
+            count = extract_tools_count(result_text, request_id=TOOLS_LIST_REQUEST_ID)
+            # A healthy bridge/agent always exposes at least one tool
+            # (ask_hermes). An empty list means the agent came up without
+            # registering its MCP tools — a real degradation worth flagging.
+            if count is not None and count > 0:
                 ok = True
                 response_text = result_text
     except (
@@ -276,8 +249,8 @@ def run_probe(target: str = METRIC_PATH) -> SmokeResult:
         json.JSONDecodeError,
     ) as e:
         # Only catch transient/IO-level failures. Programming errors
-        # (TypeError, AttributeError, etc.) propagate so they fail the
-        # systemd unit and surface in the journal as stack traces.
+        # (TypeError, AttributeError, etc.) propagate so they fail the systemd
+        # unit and surface in the journal as stack traces.
         print(f"smoke probe error: {e}", file=sys.stderr)
 
     duration = time.monotonic() - start

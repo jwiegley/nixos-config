@@ -77,54 +77,44 @@ def test_build_initialized_notification():
     assert "id" not in decoded  # Notification = no id
 
 
-def test_build_tools_call_with_progress_token():
-    body = s.build_tools_call(request_id=42, prompt="Hi")
+def test_build_tools_list():
+    body = s.build_tools_list(request_id=42)
     decoded = json.loads(body)
+    assert decoded["jsonrpc"] == "2.0"
     assert decoded["id"] == 42
-    assert decoded["method"] == "tools/call"
-    assert decoded["params"]["name"] == "ask_hermes"
-    assert decoded["params"]["arguments"] == {"prompt": "Hi"}
-    assert "_meta" in decoded["params"]
-    assert "progressToken" in decoded["params"]["_meta"]
+    assert decoded["method"] == "tools/list"
+    assert decoded["params"] == {}
 
 
-def test_extract_tool_result_text_happy_path():
+def test_extract_tools_count_happy_path():
     payload = json.dumps({
         "jsonrpc": "2.0", "id": 42,
-        "result": {"content": [{"type": "text", "text": "OK"}], "isError": False}
+        "result": {"tools": [{"name": "ask_hermes"}, {"name": "other"}]},
     })
-    text = s.extract_tool_result_text(payload, request_id=42)
-    assert text == "OK"
+    assert s.extract_tools_count(payload, request_id=42) == 2
 
 
-def test_extract_tool_result_text_wrong_id_returns_none():
-    payload = json.dumps({"jsonrpc": "2.0", "id": 999, "result": {"content": []}})
-    text = s.extract_tool_result_text(payload, request_id=42)
-    assert text is None
+def test_extract_tools_count_empty_list_is_zero():
+    """An agent that registered no tools => count 0 => probe scores ok=0."""
+    payload = json.dumps({"jsonrpc": "2.0", "id": 42, "result": {"tools": []}})
+    assert s.extract_tools_count(payload, request_id=42) == 0
 
 
-def test_extract_tool_result_text_error_returns_none():
+def test_extract_tools_count_wrong_id_returns_none():
+    payload = json.dumps({"jsonrpc": "2.0", "id": 999, "result": {"tools": [{"name": "x"}]}})
+    assert s.extract_tools_count(payload, request_id=42) is None
+
+
+def test_extract_tools_count_error_returns_none():
     payload = json.dumps({
         "jsonrpc": "2.0", "id": 42,
-        "error": {"code": -32000, "message": "boom"}
+        "error": {"code": -32000, "message": "boom"},
     })
-    text = s.extract_tool_result_text(payload, request_id=42)
-    assert text is None
+    assert s.extract_tools_count(payload, request_id=42) is None
 
 
-def test_extract_reply_from_envelope_happy_path():
-    """The hermes-mcp envelope's reply field is extracted."""
-    text = json.dumps({"session_id": "abc", "reply": "OK", "message_count": 1})
-    assert s._extract_reply_from_envelope(text) == "OK"
-
-
-def test_extract_reply_from_envelope_non_json_returns_none():
-    assert s._extract_reply_from_envelope("just a raw string") is None
-
-
-def test_extract_reply_from_envelope_missing_reply_returns_none():
-    text = json.dumps({"session_id": "abc", "message_count": 1})
-    assert s._extract_reply_from_envelope(text) is None
+def test_extract_tools_count_non_json_returns_none():
+    assert s.extract_tools_count("just a raw string", request_id=42) is None
 
 
 # ---------------- Task 5: Atomic metric writer ----------------
@@ -203,14 +193,13 @@ class FakeMcpHandler(BaseHTTPRequestHandler):
             return
         self.send_response(202)
         self.end_headers()
-        # If it's a tools/call we push a result through the SSE stream
-        if req.get("method") == "tools/call":
+        # If it's a tools/list we push the tool set through the SSE stream
+        if req.get("method") == "tools/list":
             req_id = req["id"]
             response = json.dumps({
                 "jsonrpc": "2.0", "id": req_id,
                 "result": {
-                    "content": [{"type": "text", "text": "OK"}],
-                    "isError": False,
+                    "tools": [{"name": "ask_hermes", "description": "ask"}],
                 },
             })
             writer = self.server_state.get("sse_writer")

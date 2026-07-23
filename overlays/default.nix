@@ -522,33 +522,12 @@ in
         };
   };
 
-  # llama-cpp's version/src/webui build steps now come from the ai-nix overlay
-  # (pinned to b9704, with the tools/ui webui build). We only layer the Asahi /
-  # Apple-silicon build options on top. The previous local re-pin to b6721 was
-  # written before the ai-nix overlay was adopted; since adoption it paired a
-  # b6721 source with ai-nix's b9704 `pushd tools/ui` preConfigure (override and
-  # overrideAttrs compose, so ai-nix's build steps survive the re-pin) → the
-  # build failed on aarch64-linux with "pushd: tools/ui: No such file".
-  llama-cpp =
-    (prev.llama-cpp.override {
-      # vulkan was previously "compiled but buggy on Asahi - don't use -ngl flag"
-      # (i.e. unused at runtime). On the ai-nix b9704 source its build additionally
-      # needs SPIRV-Headers, which the base b6721 derivation doesn't provide →
-      # cmake find_package(SPIRV-Headers) fails. Since it's unused, disable it.
-      vulkanSupport = false;
-      blasSupport = true; # Enable BLAS for optimized CPU inference
-    }).overrideAttrs
-      (old: {
-        # The ai-nix overlay adds a tools/ui (vite) webui build but relies on the
-        # base llama-cpp carrying nodejs/npm in nativeBuildInputs — true only for
-        # newer nixpkgs (≥ b9190 webui-in-tools/ui era). vulcan's nixpkgs base is
-        # b6721, so the webui build failed with "npm: command not found". Provide
-        # the npm toolchain here so the bundled webui builds on aarch64-linux.
-        nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-          prev.nodejs
-          prev.npmHooks.npmConfigHook
-        ];
-      });
+  # ai-nix deliberately leaves Linux llama-cpp unchanged. Apply only Vulcan's
+  # Asahi backend choices here.
+  llama-cpp = prev.llama-cpp.override {
+    vulkanSupport = false;
+    blasSupport = true;
+  };
 
   llama-swap =
     let

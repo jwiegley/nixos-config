@@ -297,6 +297,12 @@
           helpers = import ./tests/checks.nix { inherit pkgs; };
         in
         {
+          llama-cpp-overlay-compat =
+            assert
+              !(builtins.elem pkgs.npmHooks.npmConfigHook (pkgs.llama-cpp.nativeBuildInputs or [ ]))
+              || pkgs.llama-cpp ? npmDeps;
+            pkgs.runCommand "llama-cpp-overlay-compat-check" { } "touch $out";
+
           openclaw-config-schema = import ./tests/openclaw/check-schema.nix {
             inherit pkgs;
             inherit (inputs.self.nixosConfigurations.vulcan.pkgs)

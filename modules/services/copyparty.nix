@@ -51,9 +51,21 @@ let
         i: 0.0.0.0
         # Port configuration
         p: ${toString cfg.port}
-        # Reverse proxy configuration - required to detect real client IPs
+        # Reverse proxy configuration - required to detect real client IPs.
+        # xff-hdr names the header carrying the true client IP; xff-src is the
+        # CIDR allowlist of proxy sources copyparty will TRUST that header from.
+        # Without xff-src, copyparty ignores x-forwarded-for and attributes every
+        # request to the connecting IP — here the host's link-local veth address
+        # (169.254.x.x on ve-copyparty), shared by ALL host->container traffic
+        # (the systemd-socket-proxyd frontend AND the Prometheus scrape). A single
+        # external brute-forcer then gets that shared proxy IP banned, which
+        # collateral-bans every real user and the monitoring scrape (403 ->
+        # up{job="copyparty"}==0 -> CopypartyDown). 'lan' trusts private + the
+        # 169.254.0.0/16 link-local range (copyparty's own remediation message),
+        # so bans correctly hit the real client behind the proxy instead.
         rproxy: -1
         xff-hdr: x-forwarded-for
+        xff-src: lan
         # Enable Prometheus metrics
         stats
         # Enable media indexing and search

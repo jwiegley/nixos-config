@@ -173,78 +173,109 @@
       # value output) or field-targeted (`.entity_id` only). Per CLAUDE.md
       # the entity registry is on the "adjacent / context-sensitive" list,
       # which permits field-targeted jq but forbids `cat`.
-      apps.${system}.water-attribution-check = {
-        type = "app";
-        program =
-          let
-            checkScript = pkgs.writeShellScript "water-attribution-check" ''
-              set -euo pipefail
+      apps.${system} = {
+        water-attribution-check = {
+          type = "app";
+          program =
+            let
+              checkScript = pkgs.writeShellScript "water-attribution-check" ''
+                set -euo pipefail
 
-              # Prefer the live deployment path — it's always the current
-              # generation's file (the activation script ran on the last
-              # nixos-rebuild switch). The store fallback handles the case
-              # where the script runs before any switch has happened (e.g.
-              # immediately after a `nixos-rebuild build`).
-              pkg=/var/lib/hass/packages/water_attribution.yaml
-              if [ ! -r "$pkg" ]; then
-                # Files in /nix/store have hash-prefixed names like
-                # `<hash>-water_attribution.yaml`; the right glob is
-                # `*-water_attribution.yaml`. Pick the file with the newest
-                # ctime (store-file mtime is always Unix epoch).
-                pkg=$(find /nix/store -maxdepth 1 \
-                          -name '*-water_attribution.yaml' \
-                          -not -name '*.drv' \
-                          -printf '%C@ %p\n' 2>/dev/null \
-                      | sort -nr | head -1 | cut -d' ' -f2-)
-              fi
-              if [ -z "''${pkg:-}" ] || [ ! -r "$pkg" ]; then
-                echo "ERROR: water_attribution.yaml not deployed and not in store — run nixos-rebuild build/switch first"
-                exit 1
-              fi
-              echo "Validating YAML at: $pkg"
-
-              if ! ${pkgs.yq-go}/bin/yq eval '.' "$pkg" > /dev/null; then
-                echo "FAIL: YAML parse error"
-                exit 1
-              fi
-
-              registry=/var/lib/hass/.storage/core.entity_registry
-              if [ ! -r "$registry" ]; then
-                echo "WARN: cannot read entity registry — skipping live-entity check"
-                exit 0
-              fi
-
-              # Pull every zone_slug attribute out of the YAML's template
-              # sensors. The YAML structure puts the gated-GPM template's
-              # attributes under template[*].sensor[*].attributes.zone_slug.
-              slugs=$(${pkgs.yq-go}/bin/yq eval '
-                [.template[]?.sensor[]?.attributes.zone_slug // ""] | unique | .[]
-              ' "$pkg" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -v '^$' || true)
-
-              missing=0
-              count=0
-              for slug in $slugs; do
-                count=$((count + 1))
-                eid="valve.sprinkler_control_''${slug}_zone"
-                # `jq -e` is a boolean test — no values are emitted to
-                # stdout, so the entity registry's other fields (e.g.
-                # unique_id, capabilities) never reach the conversation.
-                if ! ${pkgs.jq}/bin/jq -e --arg eid "$eid" \
-                    '.data.entities[] | select(.entity_id == $eid)' \
-                    "$registry" > /dev/null; then
-                  echo "MISSING: $eid not in entity registry"
-                  missing=$((missing + 1))
+                # Prefer the live deployment path — it's always the current
+                # generation's file (the activation script ran on the last
+                # nixos-rebuild switch). The store fallback handles the case
+                # where the script runs before any switch has happened (e.g.
+                # immediately after a `nixos-rebuild build`).
+                pkg=/var/lib/hass/packages/water_attribution.yaml
+                if [ ! -r "$pkg" ]; then
+                  # Files in /nix/store have hash-prefixed names like
+                  # `<hash>-water_attribution.yaml`; the right glob is
+                  # `*-water_attribution.yaml`. Pick the file with the newest
+                  # ctime (store-file mtime is always Unix epoch).
+                  pkg=$(find /nix/store -maxdepth 1 \
+                            -name '*-water_attribution.yaml' \
+                            -not -name '*.drv' \
+                            -printf '%C@ %p\n' 2>/dev/null \
+                        | sort -nr | head -1 | cut -d' ' -f2-)
                 fi
-              done
+                if [ -z "''${pkg:-}" ] || [ ! -r "$pkg" ]; then
+                  echo "ERROR: water_attribution.yaml not deployed and not in store — run nixos-rebuild build/switch first"
+                  exit 1
+                fi
+                echo "Validating YAML at: $pkg"
 
-              if [ "$missing" -gt 0 ]; then
-                echo "FAIL: $missing zone(s) missing from registry"
-                exit 1
-              fi
-              echo "OK: $count zone slugs validated"
-            '';
-          in
-          toString checkScript;
+                if ! ${pkgs.yq-go}/bin/yq eval '.' "$pkg" > /dev/null; then
+                  echo "FAIL: YAML parse error"
+                  exit 1
+                fi
+
+                registry=/var/lib/hass/.storage/core.entity_registry
+                if [ ! -r "$registry" ]; then
+                  echo "WARN: cannot read entity registry — skipping live-entity check"
+                  exit 0
+                fi
+
+                # Pull every zone_slug attribute out of the YAML's template
+                # sensors. The YAML structure puts the gated-GPM template's
+                # attributes under template[*].sensor[*].attributes.zone_slug.
+                slugs=$(${pkgs.yq-go}/bin/yq eval '
+                  [.template[]?.sensor[]?.attributes.zone_slug // ""] | unique | .[]
+                ' "$pkg" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -v '^$' || true)
+
+                missing=0
+                count=0
+                for slug in $slugs; do
+                  count=$((count + 1))
+                  eid="valve.sprinkler_control_''${slug}_zone"
+                  # `jq -e` is a boolean test — no values are emitted to
+                  # stdout, so the entity registry's other fields (e.g.
+                  # unique_id, capabilities) never reach the conversation.
+                  if ! ${pkgs.jq}/bin/jq -e --arg eid "$eid" \
+                      '.data.entities[] | select(.entity_id == $eid)' \
+                      "$registry" > /dev/null; then
+                    echo "MISSING: $eid not in entity registry"
+                    missing=$((missing + 1))
+                  fi
+                done
+
+                if [ "$missing" -gt 0 ]; then
+                  echo "FAIL: $missing zone(s) missing from registry"
+                  exit 1
+                fi
+                echo "OK: $count zone slugs validated"
+              '';
+            in
+            toString checkScript;
+        };
+
+        # `nix run .#check-litellm-models` — validate the LiteLLM model catalog
+        # against the live hera/clio model servers: (a) server models with no
+        # config entry (warn), (b) config entries the server doesn't offer (fail),
+        # and unreachable servers. On-demand ONLY — it hits the network, so it is
+        # deliberately never run at eval time (that would couple rebuilds to the
+        # servers' uptime). Pass --strict to fail on (a) too. Model ids aren't
+        # secrets; servers are queried with a dummy bearer token.
+        check-litellm-models = {
+          type = "app";
+          program =
+            let
+              runner = pkgs.writeShellApplication {
+                name = "check-litellm-models";
+                runtimeInputs = [
+                  pkgs.nix
+                  pkgs.python3
+                ];
+                # Pass the settings file explicitly: under `nix run` the script
+                # lands standalone in the store, so its repo-relative default
+                # would not resolve. A user-supplied --settings in "$@" still wins.
+                text = ''
+                  exec python3 ${./scripts/check-litellm-models.py} \
+                    --settings ${./modules/services/litellm-settings.nix} "$@"
+                '';
+              };
+            in
+            "${runner}/bin/check-litellm-models";
+        };
       };
 
       nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {

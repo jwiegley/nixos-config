@@ -105,6 +105,7 @@
     ../../modules/services/rspamd.nix
     ../../modules/services/service-reliability.nix
     ../../modules/services/litellm-anthropic-fixup.nix
+    ../../modules/services/litellm-config.nix
     ../../modules/services/stock-trader.nix
     ../../modules/services/technitium-dns-backup.nix
     ../../modules/services/web.nix

@@ -94,38 +94,6 @@
       };
     }
     {
-      model_name = "hera/Bonsai-8B";
-      litellm_params = {
-        model = "openai/Bonsai-8B";
-        litellm_credential_name = "hera_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "clio/Bonsai-8B";
-      litellm_params = {
-        model = "openai/Bonsai-8B";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/claude-fable-5-thinking-32000";
       litellm_params = {
         model = "openai/claude-fable-5";
@@ -462,22 +430,6 @@
       };
     }
     {
-      model_name = "hera/omlx/deepseek-ai-DeepSeek-V4-Flash-8bit";
-      litellm_params = {
-        model = "openai/deepseek-ai-DeepSeek-V4-Flash-8bit";
-        litellm_credential_name = "omlx_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "positron_gemini/gemini-3-pro-preview";
       litellm_params = {
         model = "gemini/gemini-3-pro-preview";
@@ -654,22 +606,6 @@
       };
     }
     {
-      model_name = "clio/gpt-oss-20b";
-      litellm_params = {
-        model = "openai/gpt-oss-20b";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = true;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/gpt-oss-safeguard-20b";
       litellm_params = {
         model = "openai/gpt-oss-safeguard-20b";
@@ -738,22 +674,6 @@
       litellm_params = {
         model = "openai/LFM2.5-350M";
         litellm_credential_name = "hera_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "clio/LFM2.5-350M";
-      litellm_params = {
-        model = "openai/LFM2.5-350M";
-        litellm_credential_name = "clio_llama_swap_credential";
         supports_system_message = true;
       };
       model_info = {
@@ -878,22 +798,6 @@
       };
     }
     {
-      model_name = "clio/Nemotron-3-Nano-30B-A3B";
-      litellm_params = {
-        model = "openai/Nemotron-3-Nano-30B-A3B";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/Nemotron-Cascade-2-30B-A3B";
       litellm_params = {
         model = "openai/Nemotron-Cascade-2-30B-A3B";
@@ -910,44 +814,10 @@
       };
     }
     {
-      model_name = "clio/Nemotron-Cascade-2-30B-A3B";
-      litellm_params = {
-        model = "openai/Nemotron-Cascade-2-30B-A3B";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/nomic-embed-text-v2-moe";
       litellm_params = {
         model = "openai/nomic-embed-text-v2-moe";
         litellm_credential_name = "hera_llama_swap_credential";
-        drop_params = true;
-        encoding_format = "float";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "embedding";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "clio/nomic-embed-text-v2-moe";
-      litellm_params = {
-        model = "openai/nomic-embed-text-v2-moe";
-        litellm_credential_name = "clio_llama_swap_credential";
         drop_params = true;
         encoding_format = "float";
         supports_system_message = true;
@@ -994,42 +864,10 @@
       };
     }
     {
-      model_name = "clio/Phi-4-reasoning-plus";
-      litellm_params = {
-        model = "openai/Phi-4-reasoning-plus";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = true;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/Qwen.Qwen3-Reranker-8B";
       litellm_params = {
         model = "openai/Qwen.Qwen3-Reranker-8B";
         litellm_credential_name = "hera_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "reranker";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "clio/Qwen.Qwen3-Reranker-8B";
-      litellm_params = {
-        model = "openai/Qwen.Qwen3-Reranker-8B";
-        litellm_credential_name = "clio_llama_swap_credential";
         supports_system_message = true;
       };
       model_info = {
@@ -1060,24 +898,6 @@
       };
     }
     {
-      model_name = "clio/Qwen3-Embedding-8B";
-      litellm_params = {
-        model = "openai/Qwen3-Embedding-8B";
-        litellm_credential_name = "clio_llama_swap_credential";
-        drop_params = true;
-        encoding_format = "float";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "embedding";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
       litellm_params = {
         model = "openai/Qwen3.6-27B-oQ4e-mtp";
@@ -1094,58 +914,10 @@
       };
     }
     {
-      model_name = "clio/omlx/Qwen3.6-27B-oQ4e-mtp";
-      litellm_params = {
-        model = "openai/Qwen3.6-27B-oQ4e-mtp";
-        litellm_credential_name = "omlx_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "hera/omlx/Qwen3.6-27B-oQ8-mtp";
-      litellm_params = {
-        model = "openai/Qwen3.6-27B-oQ8-mtp";
-        litellm_credential_name = "omlx_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "hera/omlx/Qwen3.6-35B-A3B-oQ4-mtp";
-      litellm_params = {
-        model = "openai/Qwen3.6-35B-A3B-oQ4-mtp";
-        litellm_credential_name = "omlx_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "clio/omlx/Qwen3.6-35B-A3B-oQ4-mtp";
       litellm_params = {
         model = "openai/Qwen3.6-35B-A3B-oQ4-mtp";
-        litellm_credential_name = "omlx_credential";
+        litellm_credential_name = "clio_omlx_credential";
         supports_system_message = true;
       };
       model_info = {
@@ -1206,38 +978,6 @@
       };
     }
     {
-      model_name = "clio/SERA-32B";
-      litellm_params = {
-        model = "openai/SERA-32B";
-        litellm_credential_name = "clio_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = true;
-        supports_response_schema = false;
-      };
-    }
-    {
-      model_name = "hera/thesven";
-      litellm_params = {
-        model = "openai/thesven";
-        litellm_credential_name = "hera_llama_swap_credential";
-        supports_system_message = true;
-      };
-      model_info = {
-        mode = "chat";
-        description = "";
-        max_output_tokens = 81920;
-        supports_function_calling = true;
-        supports_reasoning = false;
-        supports_response_schema = false;
-      };
-    }
-    {
       model_name = "hera/atorsvn/TinyLlama-1.1B-Chat-v0.1-gptq-4bit";
       litellm_params = {
         model = "openai/atorsvn/TinyLlama-1.1B-Chat-v0.1-gptq-4bit";
@@ -1294,11 +1034,21 @@
     {
       credential_name = "clio_llama_swap_credential";
       credential_values = {
-        api_base = "https://clio.lan:8443/v1";
+        api_base = "http://clio.lan:8080/v1";
         api_key = "fake";
       };
       credential_info = {
         description = "API Key for llama-swap on Clio";
+      };
+    }
+    {
+      credential_name = "clio_omlx_credential";
+      credential_values = {
+        api_base = "http://clio.lan:8000/v1";
+        api_key = "fake";
+      };
+      credential_info = {
+        description = "API Key for oMLX on Clio";
       };
     }
     {

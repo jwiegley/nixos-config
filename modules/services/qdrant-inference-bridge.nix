@@ -24,7 +24,7 @@ let
     Qdrant's expected {"embeddings": [[...], ...]} format.
 
     Model names without a provider prefix (e.g. "bge-m3") are resolved
-    using the configured default embedding model from models.yaml.
+    using the configured default embedding model from models.nix.
     """
     import json
     import logging

@@ -760,7 +760,7 @@ in
 
   # Extend the default microvm startup timeout — the VM needs time to boot
   # the guest kernel, mount virtiofs shares, and start the OpenClaw service.
-  # Also restart the host service whenever models.yaml changes, so a
+  # Also restart the host service whenever models.nix changes, so a
   # `nixos-rebuild switch` propagates new model selections automatically.
   systemd.services."microvm@openclaw" = {
     serviceConfig.TimeoutStartSec = "300";

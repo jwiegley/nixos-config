@@ -1,6 +1,6 @@
 # /etc/nixos/modules/services/model-config.nix
 #
-# Deploys a JSON serialization of models.yaml (via models.nix) to /etc/models.json
+# Deploys a JSON serialization of models.nix to /etc/models.json
 # for non-Nix consumers (Python scripts).
 { pkgs, ... }:
 

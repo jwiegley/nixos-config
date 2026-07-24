@@ -14,7 +14,7 @@
 }:
 let
   # Imported here (in addition to hermes-vm.nix) so the host service has
-  # something to key restart triggers on — changing models.yaml should
+  # something to key restart triggers on — changing models.nix should
   # restart microvm@hermes during the next nixos-rebuild switch.
   models = import ../../models.nix;
 
@@ -398,7 +398,7 @@ in
     '';
   };
 
-  # Restart the host's microvm@hermes service whenever models.yaml changes,
+  # Restart the host's microvm@hermes service whenever models.nix changes,
   # so a `nixos-rebuild switch` propagates new model selections into the
   # running VM without manual intervention.
   systemd.services."microvm@hermes".restartTriggers = [

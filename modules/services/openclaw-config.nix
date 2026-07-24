@@ -342,6 +342,17 @@ let
         };
         memory-qdrant = {
           enabled = true;
+          # autoCapture writes end-of-conversation snippets to Qdrant via the
+          # `agent_end` typed hook. As a non-bundled plugin, memory-qdrant is
+          # denied conversation access by default, so that hook was silently
+          # blocked (gateway log 2026-06-02: "must set
+          # plugins.entries.memory-qdrant.hooks.allowConversationAccess=true"),
+          # neutering autoCapture while leaving autoRecall + explicit
+          # memory_store/search/forget working. Grant it so autoCapture=true
+          # actually takes effect.
+          hooks = {
+            allowConversationAccess = true;
+          };
           config = {
             autoCapture = true;
             autoRecall = true;

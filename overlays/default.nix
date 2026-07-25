@@ -522,7 +522,7 @@ in
         };
   };
 
-  # ai-nix deliberately leaves Linux llama-cpp unchanged. Apply only Vulcan's
+  # The ai overlay leaves Linux llama-cpp unchanged. Apply only Vulcan's
   # Asahi backend choices here.
   llama-cpp = prev.llama-cpp.override {
     vulkanSupport = false;
@@ -739,11 +739,10 @@ in
   # cozempic: Context cleaning for Claude Code
   inherit (import ./30-cozempic.nix final prev) cozempic;
 
-  # agent-deck: tmux TUI session manager for AI coding agents. Mirrored from
-  # ai-nix because our ai-nix pin predates it (llama-cpp compat); the shared
-  # nix-config package list installs it via `optPkg "agent-deck"`.
-  # See overlays/30-agent-deck.nix for the full rationale.
-  inherit (import ./30-agent-deck.nix final prev) agent-deck;
+  # agent-deck (tmux TUI for AI coding agents) is now provided by nix-config's
+  # ai overlay (via aiFlake.overlays.default in flake.nix), applied ahead of
+  # this overlay. The former local mirror (an ai-nix-pin workaround) was dropped
+  # when ai-nix was folded into nix-config.
 
   # stock-trader: Python overrides for pip-only deps not in nixpkgs.
   # See pkgs/stock-trader.deps.md for the audit that drives this list.

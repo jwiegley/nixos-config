@@ -44,12 +44,84 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    ai-nix = {
-      url = "github:jwiegley/ai-nix/main";
+    # AI/agent stack. Formerly the `ai-nix` flake; that has been folded into
+    # nix-config, whose ai overlay + packages are exposed as a plain function at
+    # `${inputs.nix-config}/flake-ai.nix` (see `aiFlake` in outputs). nix-config
+    # is `flake = false` (its flake.nix has Darwin-only git+file inputs), so it
+    # can't supply its own inputs — we declare flake-ai.nix's required inputs
+    # here. Pins track nix-config's flake.lock so we build what it was tested
+    # against. Keep this set in sync with the header of nix-config/flake-ai.nix.
+    llm-agents.url = "github:numtide/llm-agents.nix/e12f1c0df7ef59f57089bf9e80a96f9b1e419b06";
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay/095c394bb91342882f27f6c73f64064fb9de9f2a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    llm-agents.follows = "ai-nix/llm-agents";
+    mcp-servers-nix = {
+      url = "github:natsukium/mcp-servers-nix/f87c14091dccea78d4e3ee4c29af4184215cc28d";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    git-ai = {
+      url = "github:git-ai-project/git-ai/16ebfc032814a1acb5286508c3fb3194d61d9983";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    mcp-remote = {
+      url = "github:geelen/mcp-remote/02619aff36e79803d7c894e8c8ae7b34b2d11f8c";
+      flake = false;
+    };
+
+    pal-mcp-server = {
+      url = "github:jwiegley/pal-mcp-server/89f05d7cc5ecacaf527d2d6fbacc68a6b6a7534d";
+      flake = false;
+    };
+
+    agent-browser-source = {
+      url = "github:vercel-labs/agent-browser/1ed371f3af472cc0d6cd8fdaea75d1a085ff7534";
+      flake = false;
+    };
+
+    bigpowers = {
+      url = "github:danielvm-git/bigpowers/d1993d31437bfbdb5bda81e84650628215365754";
+      flake = false;
+    };
+
+    pi-btw = {
+      url = "github:dbachelder/pi-btw/4f858102706910ee9d520a9666832f3103631b61";
+      flake = false;
+    };
+
+    pi-subagentura = {
+      url = "github:jwiegley/pi-subagentura/f71281bce8f88741da0e2f9f7ba722964f19d4f0";
+      flake = false;
+    };
+
+    ponytail = {
+      url = "github:DietrichGebert/ponytail/16f29800fd2681bdf24f3eb4ccffe38be3baec6b";
+      flake = false;
+    };
+
+    translate-tool = {
+      url = "github:jwiegley/translate-tool/bffdb7ba3e5db603ea1390fee555354c1d45d642";
+      flake = false;
+    };
+
+    pi-mcp-adapter = {
+      url = "github:nicobailon/pi-mcp-adapter/19d88da27ef82dc61b6e4041b3af7cd0669dbeb5";
+      flake = false;
+    };
+
+    pi-openai-server-compaction = {
+      url = "github:algal/pi-openai-server-compaction/8a3de2f3b0c178fdd6f73f2f94172dfc3943e466";
+      flake = false;
+    };
+
+    pi-quiet = {
+      url = "github:zenspc/pi-extensions/43e6756823a8f77985bec69b86f294c9ef55e8b7";
+      flake = false;
+    };
 
     hermes-agent = {
       # Pinned to c47b9d12 (2026-06-02). Later revs (c3055d61, fd1e7c2b, HEAD)
@@ -114,8 +186,15 @@
 
     # nixpkgs unstable for packages that need newer versions
     # Used for: JupyterLab (4.5.0+), Home Assistant, and other packages needing unstable
+    #
+    # Pinned to the 2026-07-19 rev (nixos-unstable branch tip at that date). The
+    # 2026-07-23 bump (e2587caef) broke several HA Python deps sourced from this
+    # channel: langfuse 4.0.2 pins wrapt<2.0 but the channel ships wrapt 2.2.2,
+    # and a new pyprojectVersionPatchHook rejects pybose's version metadata. This
+    # rev is the last one that built cleanly (matches vulcan gen at ac85b36).
+    # Re-float to `nixos-unstable` once nixpkgs' HA Python packages catch up.
     nixpkgs-unstable = {
-      url = "github:NixOS/nixpkgs/nixos-unstable";
+      url = "github:NixOS/nixpkgs/241313f4e8e508cb9b13278c2b0fa25b9ca27163";
     };
 
     # Dedicated pin for Immich 3.0.1 (server must be >= the auto-updating
@@ -139,13 +218,17 @@
     inputs:
     let
       system = "aarch64-linux";
+      # Shared AI/agent overlay + packages from nix-config, imported as a plain
+      # function (nix-config is flake=false; this avoids its Darwin-only inputs).
+      # Replaces the former inputs.ai-nix.overlays.default.
+      aiFlake = import "${inputs.nix-config}/flake-ai.nix" inputs;
       # Pkgs with the local overlay applied — used to expose in-repo
       # packages (e.g. hermes-mcp) at the flake's top level so they can
       # be built standalone with `nix build .#<name>`.
       pkgs = import inputs.nixpkgs {
         inherit system;
         overlays = [
-          inputs.ai-nix.overlays.default
+          aiFlake.overlays.default
           (import ./overlays inputs system)
         ];
         config.allowUnfree = true;
@@ -293,7 +376,7 @@
           inputs.home-manager.nixosModules.home-manager
           {
             nixpkgs.overlays = [
-              inputs.ai-nix.overlays.default
+              aiFlake.overlays.default
               (import ./overlays inputs system)
               # nix-config's misc-tools overlay (+ its 00-lib helper dep):
               # johnw's HM packages import nix-config/config/packages.nix

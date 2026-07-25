@@ -44,12 +44,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    ai-nix = {
-      url = "github:jwiegley/ai-nix/main";
+    nix-config-ai = {
+      url = "git+ssh://gitea/johnw/nix-config?dir=config/ai";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    llm-agents.follows = "ai-nix/llm-agents";
+    llm-agents.follows = "nix-config-ai/llm-agents";
 
     hermes-agent = {
       # Pinned to c47b9d12 (2026-06-02). Later revs (c3055d61, fd1e7c2b, HEAD)
@@ -145,7 +145,7 @@
       pkgs = import inputs.nixpkgs {
         inherit system;
         overlays = [
-          inputs.ai-nix.overlays.default
+          inputs.nix-config-ai.overlays.default
           (import ./overlays inputs system)
         ];
         config.allowUnfree = true;
@@ -293,7 +293,7 @@
           inputs.home-manager.nixosModules.home-manager
           {
             nixpkgs.overlays = [
-              inputs.ai-nix.overlays.default
+              inputs.nix-config-ai.overlays.default
               (import ./overlays inputs system)
               # nix-config's misc-tools overlay (+ its 00-lib helper dep):
               # johnw's HM packages import nix-config/config/packages.nix

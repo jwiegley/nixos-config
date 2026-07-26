@@ -49,6 +49,7 @@ let
     "positron_openai-api-key"
     "positron-api-key"
     "omlx-api-key"
+    "factory-api-key"
   ];
 
   # Native-Nix config, with each secret site resolved to a sops-nix placeholder

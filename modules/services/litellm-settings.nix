@@ -510,6 +510,22 @@
       };
     }
     {
+      model_name = "factory/glm-5.2";
+      litellm_params = {
+        model = "factory/glm-5.2";
+        litellm_credential_name = "factory_credential";
+        supports_system_message = true;
+      };
+      model_info = {
+        mode = "chat";
+        description = "";
+        max_output_tokens = 81920;
+        supports_function_calling = true;
+        supports_reasoning = true;
+        supports_response_schema = false;
+      };
+    }
+    {
       model_name = "positron_openai/gpt-5.5";
       litellm_params = {
         model = "openai/gpt-5.5";
@@ -1097,6 +1113,15 @@
       };
     }
     {
+      credential_name = "factory_credential";
+      credential_values = {
+        api_key = "os.environ/FACTORY_API_KEY";
+      };
+      credential_info = {
+        description = "API Key for Factory";
+      };
+    }
+    {
       credential_name = "positron_openai_credential";
       credential_values = {
         api_key = "os.environ/POSITRON_OPENAI_API_KEY";
@@ -1151,6 +1176,7 @@
     PERPLEXITYAI_API_KEY = mkSecret "perplexityai-api-key";
     GROQ_API_KEY = mkSecret "groq-api-key";
     OPENROUTER_API_KEY = mkSecret "openrouter-api-key";
+    FACTORY_API_KEY = mkSecret "factory-api-key";
     POSITRON_ANTHROPIC_API_KEY = mkSecret "positron_anthropic-api-key";
     POSITRON_GEMINI_API_KEY = mkSecret "positron_gemini-api-key";
     POSITRON_OPENAI_API_KEY = mkSecret "positron_openai-api-key";

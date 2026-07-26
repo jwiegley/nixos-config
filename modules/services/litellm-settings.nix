@@ -512,7 +512,7 @@
     {
       model_name = "factory/glm-5.2";
       litellm_params = {
-        model = "factory/glm-5.2";
+        model = "openai/glm-5.2";
         litellm_credential_name = "factory_credential";
         supports_system_message = true;
       };
@@ -1116,6 +1116,11 @@
     {
       credential_name = "factory_credential";
       credential_values = {
+        # Factory's OpenAI-compatible model gateway (the /o/ tree = OpenAI format;
+        # /a/ = Anthropic). NOT app.factory.ai/v1, which serves the web console.
+        # Undocumented for direct use but what Droid targets; Bearer auth, bare
+        # model ids (e.g. glm-5.2). Key from app.factory.ai/settings/api-keys.
+        api_base = "https://app.factory.ai/api/llm/o/v1";
         api_key = "os.environ/FACTORY_API_KEY";
       };
       credential_info = {

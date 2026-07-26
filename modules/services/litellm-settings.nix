@@ -567,6 +567,7 @@
       model_info = {
         mode = "chat";
         description = "ChatGPT 5.6 Sol (Positron)";
+        max_input_tokens = 1050000;
         max_output_tokens = 128000;
         supports_function_calling = true;
         supports_reasoning = false;

@@ -512,6 +512,9 @@
     {
       model_name = "factory/glm-5.2";
       litellm_params = {
+        # DORMANT: returns 401 — Factory's model gateway needs a WorkOS JWT, not
+        # the fk- API key. See factory_credential in credential_list for the full
+        # rationale and the options for making it live.
         model = "openai/glm-5.2";
         litellm_credential_name = "factory_credential";
         supports_system_message = true;
@@ -1116,15 +1119,41 @@
     {
       credential_name = "factory_credential";
       credential_values = {
-        # Factory's OpenAI-compatible model gateway (the /o/ tree = OpenAI format;
-        # /a/ = Anthropic). NOT app.factory.ai/v1, which serves the web console.
-        # Undocumented for direct use but what Droid targets; Bearer auth, bare
-        # model ids (e.g. glm-5.2). Key from app.factory.ai/settings/api-keys.
+        # ── DORMANT SCAFFOLD — factory/glm-5.2 cannot work as configured. ──
+        #
+        # This is Factory's OpenAI-compatible model gateway (the /o/ tree = OpenAI
+        # format; /a/ = Anthropic /v1/messages, /g/ = Google). It is the endpoint
+        # Droid itself targets, and it is NOT app.factory.ai/v1 (that serves the
+        # web console: SPA HTML / 405). Model ids here are bare (glm-5.2), and
+        # `factory/` is not a LiteLLM provider, hence litellm_params.model =
+        # "openai/glm-5.2" on the model entry above.
+        #
+        # WHY IT 401s (investigated 2026-07-26): this gateway validates
+        # short-lived WorkOS JWT access tokens ONLY. The FACTORY_API_KEY below is
+        # an `fk-` key from app.factory.ai/settings/api-keys, which authenticates
+        # Factory's CONTROL PLANE (api.factory.ai/api/v0/sessions, billing/limits,
+        # usage, readiness reports) and the `droid exec` CLI — but the LLM data
+        # plane rejects it with 401 "Access token is invalid or expired. Please
+        # sign in again." (i.e. it tried to parse the key as a WorkOS JWT).
+        # Verified: adding Droid's full client header set (x-factory-client: cli,
+        # factory-cli/<ver> UA, x-session-id, x-stainless-*) does NOT help — it is
+        # the token TYPE, not missing headers. There is no fk- -> JWT exchange
+        # endpoint; Droid's token comes from a browser sign-in whose refresh_token
+        # is re-exchanged at WorkOS every ~6h.
+        #
+        # Kept dormant deliberately: the endpoint and routing here are correct, so
+        # this becomes live the moment a valid Bearer token is available. Options
+        # if that is ever wanted: (a) a droid2api-style sidecar holding the WorkOS
+        # refresh loop (needs a Droid browser login + refresh_token in SOPS;
+        # unsupported, spoofs the CLI user-agent, and Factory's ToS forbids
+        # reverse engineering), or (b) skip LiteLLM and use `droid exec` /
+        # `droid exec --output-format acp`, where the fk- key works as intended.
+        # Calling factory/glm-5.2 meanwhile just returns 401; nothing else breaks.
         api_base = "https://app.factory.ai/api/llm/o/v1";
         api_key = "os.environ/FACTORY_API_KEY";
       };
       credential_info = {
-        description = "API Key for Factory";
+        description = "API Key for Factory (dormant — gateway needs a WorkOS JWT, not this fk- key)";
       };
     }
     {

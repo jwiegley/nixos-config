@@ -3318,11 +3318,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1784960759,
-        "narHash": "sha256-scCedORNrWgCVz9t8cydwv131AYlP1JbO+wm9DrGSwA=",
+        "lastModified": 1785095583,
+        "narHash": "sha256-DTcLORqtcMGfckSCjZlMTlqHYGmyuZNAb87UQz+y0sA=",
         "ref": "refs/heads/main",
-        "rev": "bb14958043580bb7558422711d627a7b460d3652",
-        "revCount": 157,
+        "rev": "39c1b48a750a166cd6c9f8f3f5eec81591e65afb",
+        "revCount": 158,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

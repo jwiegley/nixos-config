@@ -13,6 +13,14 @@ Phase 2 cross-check will see small boundary differences on real-world
 data with mid-session dips. Document any persistent drift in the Phase 2
 anomaly section.
 
+The two also diverge structurally as of 2026-07-27: since the 2026-06
+low-flow retune, the HA template additionally suppresses whenever
+`binary_sensor.irrigation_active` is on or the domestic-hot leg is
+flowing (see the irrigation/hot guards in
+modules/services/home-assistant-water-attribution.nix). This module has
+no such guards, so it can report sessions the HA sensor deliberately
+drops -- expect that class of difference in the cross-check too.
+
 This module is a pure function over a (timestamp, gpm) list. Sources and
 destinations are layered on top.
 """

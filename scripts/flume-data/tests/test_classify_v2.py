@@ -64,7 +64,7 @@ def test_no_irrigation_overlap_lets_pool_autofill_pass():
 
 
 def test_segment_ends_exactly_when_irrigation_starts_is_safe():
-    """Boundary case: segment [22:00..22:01) abuts irrigation [22:01..23:00).
+    """Boundary case: segment [21:55..22:01) abuts irrigation [22:01..22:30).
     Per the half-open semantics we picked (end_time stored is inclusive
     last minute, segment occupies [start, end+1min)), a segment ending
     at 22:00 does NOT overlap a session starting at 22:01."""

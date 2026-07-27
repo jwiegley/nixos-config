@@ -152,7 +152,8 @@ def discover_coverage() -> SourceCoverage:
     except Exception as e:
         # Type name only — the exception body can include URL/credential
         # fragments from `requests` (e.g. NewConnectionError repr) and from
-        # OAuth-grant failures. Mirrors cross_check.py:251.
+        # OAuth-grant failures. Mirrors the handler in
+        # cross_check.py's _post_cross_check_sensor.
         print(f"WARN: VM discovery failed: {type(e).__name__}")
 
     # Flume API: live deployment fills this in once device/user ids are

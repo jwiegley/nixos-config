@@ -95,7 +95,12 @@ class FlumeAPIClient:
             )
         data = resp.json()["data"][0]
         self._token = data["access_token"]
-        # The user_id is embedded in the JWT; parse it lazily on first query call.
+        # The user_id is embedded in the JWT, but nothing here parses it:
+        # `query_gpm` takes `user_id` as an explicit argument, so `self._user_id`
+        # is only ever whatever the token cache already held (in practice None —
+        # device/user-id discovery is still unwired, see
+        # backfill.discover_coverage). `emit_segments_csv.mint_token` shows the
+        # base64url JWT decode if this client ever needs to derive it itself.
         if self._cache_path:
             # Atomic 0600 write: the previous `write_text` + `chmod(0o600)`
             # pair left a ≈microsecond TOCTOU window where the cache file

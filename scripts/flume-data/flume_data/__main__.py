@@ -47,7 +47,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    # Wire subcommands to their modules. Implementations land in later tasks.
+    # Wire subcommands to their modules. cross-check and backfill are
+    # implemented; `detect` is still a stub (detection.run_cli raises
+    # NotImplementedError).
     if args.command == "cross-check":
         from . import cross_check
         return cross_check.run(days=args.days)

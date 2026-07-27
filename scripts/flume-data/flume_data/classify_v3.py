@@ -3,13 +3,19 @@
 For each segment, evaluates every fixture in `fixtures.FIXTURES`:
 1. Applies hard constraints (must overlap irrigation, must be cold-only,
    custom predicate, etc.). Any constraint failure zeros that fixture.
-2. Computes a likelihood score = product of triangular likelihoods over
-   mean_gpm, duration, gallons, hot_fraction, peak/mean ratio.
+2. Computes a likelihood score = product of Gaussian likelihoods (see
+   `fixtures.Range`) over mean_gpm, duration, gallons, hot_fraction,
+   peak/mean ratio.
 3. Normalizes scores to probabilities (sum to 1).
 4. If all fixtures score 0, emits a single ("unknown", 1.0) attribution.
 
-User labels from `flume_user_labels` override this entirely — when a
-label exists, the classifier returns (user_fixture, 1.0).
+`pool_autofill` is never scored here: v2 is authoritative for it, so
+`classify()` short-circuits when `v2_category == "pool_autofill"` and
+otherwise skips that fixture.
+
+User labels from `flume_user_labels` override this entirely, but the
+substitution happens in the CALLER (backfill_v3.py): when a label exists
+it emits (user_fixture, 1.0) without calling `classify()` at all.
 """
 from __future__ import annotations
 
@@ -80,8 +86,9 @@ def _passes_hard_constraints(f: Fixture, ctx: SegmentContext) -> bool:
     # Fixtures that DON'T require B-Hyve overlap shouldn't fire DURING
     # an irrigation session (irrigation suppresses domestic detection).
     if ctx.bhyve_overlaps and not f.requires_bhyve_overlap:
-        # Allow only dishwasher (rare overlap) and pool_autofill (different
-        # circuit — though typically v2 already excluded this). Treat the
+        # Allow only dishwasher (rare overlap). pool_autofill is on a
+        # different circuit but never reaches here — classify() skips that
+        # fixture outright because v2 is authoritative for it. Treat the
         # rest as suppressed.
         if f.name not in ("dishwasher",):
             return False

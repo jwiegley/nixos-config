@@ -53,8 +53,8 @@ def test_during_irrigation_spray_zone_attributes_to_spray():
 
 
 def test_during_irrigation_drip_zone_attributes_to_drip():
-    """3.5 GPM during a drip zone — would look like pool autofill
-    without context, but B-Hyve overlap forces irrigation_drip."""
+    """2.0 GPM during a drip zone — the flow shape alone is ambiguous;
+    the B-Hyve overlap plus the drip zone type forces irrigation_drip."""
     result = classify(ctx(
         mean_gpm=2.0, duration_min=8, gallons=16,
         bhyve_overlaps=True,

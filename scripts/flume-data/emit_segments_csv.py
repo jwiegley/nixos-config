@@ -7,24 +7,24 @@ autofill detector rule (10+ min in [3, 5] GPM with 1-min blip tolerance
 and rolling-mean check).
 
 The script authenticates against Flume's Personal API, derives `user_id`
-from the JWT's `data` claim, lists devices to find `device_id`, queries
-per-minute samples in 7-day chunks (well under the API's per-call size
-limits and 120-req/hr rate budget), runs detection from the live
-`flume_data.detection` module, and writes:
+from the JWT's `user_id` claim, lists devices to find `device_id`, queries
+per-minute samples in 24-hour chunks (the largest window the API accepts
+for the MIN bucket, self-throttled to stay under the 120-req/hr rate
+budget), re-implements the autofill rule locally (see the constants below
+— this script does NOT import `flume_data.detection`), and writes:
 
     /var/lib/flume-data/backfill/flume-segments.csv
     /var/lib/flume-data/backfill/flume-day-totals.csv
 
-Both are owned by flume-data:flume-data and readable by group
-`users` (so you can scp / open without sudo).
+Both end up root-owned (the script runs as root) with group `users` and
+mode 0640. Note the enclosing /var/lib/flume-data/backfill is
+0750 flume-data:flume-data, so reading them still needs sudo.
 
-Run as root (the systemd unit handles LoadCredential):
+There is no systemd unit for this script — run it as root, which can read
+the SOPS-deployed credentials directly (or point CREDENTIALS_DIRECTORY at
+a LoadCredential dir):
 
-    sudo systemctl start flume-data-emit-csv.service
-
-Or interactively for development:
-
-    sudo CREDENTIALS_DIRECTORY=/run/secrets/flume/.. python3 emit_segments_csv.py
+    sudo python3 emit_segments_csv.py
 """
 
 from __future__ import annotations
@@ -43,13 +43,24 @@ from typing import Iterator
 
 import requests
 
+# Per-day cache: paths, formats, and the "has this window elapsed?" clock.
+# Everything about cache completeness lives there, not here.
+from flume_data import day_cache
+
 
 # ───────────────────────────────── Constants ─────────────────────────────────
 
 FLUME_API_BASE = "https://api.flumewater.com"
 FLUME_RATE_LIMIT_PER_HOUR = 120
 
-# Autofill detection (must match flume_data.detection / Phase 1 HA rule)
+# Autofill detection. These mirror the ORIGINAL Phase 1 HA rule, i.e. the
+# old pool-fill valve's long 30-200 min fills at 3-5 gpm. The pool auto-fill
+# valve was replaced 2026-05-26 and the live HA rule moved to
+# [1.3, 1.9] gpm / window 5 / min-in-range 4 (hosts/vulcan/default.nix
+# `services.home-assistant-water-attribution.autofill`), so as of 2026-07-27
+# these constants NO LONGER match the live rule. They are kept as-is because
+# this script is a historical EDA tool over the pre-swap archive; bump them
+# if you re-run it over post-2026-05-26 data.
 GPM_MIN = 3.0
 GPM_MAX = 5.0
 WINDOW_MINUTES = 10
@@ -65,7 +76,9 @@ OUTPUT_DIR = Path("/var/lib/flume-data/backfill")
 SEGMENTS_CSV = OUTPUT_DIR / "flume-segments.csv"
 DAY_TOTALS_CSV = OUTPUT_DIR / "flume-day-totals.csv"
 
-LOCAL_TZ_NAME = "America/Los_Angeles"
+# Single source of truth for the device-local frame lives in day_cache —
+# cache keys are minted in it, so completeness must be judged in it.
+LOCAL_TZ_NAME = day_cache.LOCAL_TZ_NAME
 
 # ────────────────────────────────── Auth ─────────────────────────────────────
 
@@ -105,7 +118,7 @@ def mint_token(creds: dict[str, str]) -> tuple[str, int]:
         sys.exit(f"FATAL: oauth/token returned {resp.status_code}")
     token = resp.json()["data"][0]["access_token"]
 
-    # JWT body is base64url-encoded JSON; extract user_id from the data claim.
+    # JWT body is base64url-encoded JSON; read the `user_id` claim from it.
     _hdr, body, _sig = token.split(".")
     pad = "=" * (-len(body) % 4)
     body_json = json.loads(base64.urlsafe_b64decode(body + pad))
@@ -269,7 +282,8 @@ def discover_earliest_data(
     return datetime(earliest_found.year, earliest_found.month, 1)
 
 
-CACHE_DIR = Path("/var/lib/flume-data/cache/per-minute-by-day")
+# Cache location and format now live in flume_data.day_cache — see that
+# module's header for why "the file exists" is not "the day is complete".
 
 
 def chunked_pull(
@@ -280,36 +294,57 @@ def chunked_pull(
     latest_local: datetime,
     rate: RateLimiter,
     chunk_hours: int = 24,
+    *,
+    reuse_cache: bool = True,
+    now: datetime | None = None,
 ) -> Iterator[tuple[datetime, float]]:
     """Yield (ts_local_naive, gpm) tuples in chunk_hours windows.
 
-    Caches each day's payload as JSON at CACHE_DIR/YYYY-MM-DD.json so a
-    multi-hour run can resume after interruption without re-fetching what
-    was already pulled. Cached days are loaded directly with no API call.
-
     Flume's MIN bucket is restricted to ≤ 24 hours per call.
+
+    Cache policy — the rationale is in flume_data/day_cache.py:
+
+    * A day is served from cache only once it has fully elapsed in
+      device-local time. An in-progress day is ALWAYS re-fetched, because
+      Flume zero-fills minutes that have not happened yet: a response for
+      "today" taken at 00:30 carries 1410 fake zeros and, left in the
+      cache, freezes the day there forever.
+    * An in-progress window is yielded but never written. Only an elapsed
+      window earns a cache file.
+    * `reuse_cache=False` bypasses the read side entirely, for callers that
+      have already decided these days need re-fetching (flume_db_sync does
+      this for every day whose cache is not recorded-complete).
+    * `now` is the test seam for the local clock.
     """
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    day_cache.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cursor = earliest_local
     while cursor < latest_local:
         window_end = min(cursor + timedelta(hours=chunk_hours), latest_local)
-        cache_key = cursor.strftime("%Y-%m-%d")
-        cache_path = CACHE_DIR / f"{cache_key}.json"
-        if cache_path.exists():
-            cached = json.loads(cache_path.read_text())
-            for entry in cached:
-                yield (datetime.fromisoformat(entry[0]), float(entry[1]))
-            print(f"  cache hit  {cache_key} ({len(cached)} pts)")
+        day = cursor.date()
+
+        if reuse_cache and day_cache.cache_day_is_reusable(day, now=now):
+            entry = day_cache.read_cache_day(day)
+            yield from entry.points
+            print(f"  cache hit  {day} ({len(entry.points)} pts)")
             cursor = window_end
             continue
+
         batch = query_data(
             token, user_id, device_id, cursor, window_end, "MIN", rate
         )
-        cache_path.write_text(
-            json.dumps([[ts.isoformat(), v] for ts, v in batch])
-        )
+        # Two guards, deliberately: `window_is_final` covers a sub-day
+        # chunk_hours (the window may end before the day does), and
+        # `write_cache_day` re-checks the day itself, which is the frame
+        # the cache key is minted in.
+        cached = day_cache.window_is_final(
+            window_end, now=now
+        ) and day_cache.write_cache_day(day, batch, now=now)
+        if cached:
+            print(f"  fetched    {day} ({len(batch)} pts, cached)")
+        else:
+            print(f"  fetched    {day} ({len(batch)} pts; window still open "
+                  f"— deliberately not cached)")
         yield from batch
-        print(f"  fetched    {cache_key} ({len(batch)} pts)")
         cursor = window_end
 
 
@@ -350,7 +385,9 @@ def is_pool_autofill_segment(
 ) -> bool:
     """Apply the canonical autofill rule across a single segment.
 
-    Mirror of the Phase 1 HA / Phase 0 Python detector:
+    Mirror of the ORIGINAL Phase 1 HA / Phase 0 Python detector (see the
+    constants block above: the live HA rule has since been re-tuned for the
+    2026-05-26 valve swap and no longer uses these thresholds):
       - Duration ≥ WINDOW_MINUTES
       - ≥ MIN_MINUTES_IN_RANGE of any rolling window in [GPM_MIN, GPM_MAX]
       - Rolling 10-min mean in [GPM_MIN, GPM_MAX]

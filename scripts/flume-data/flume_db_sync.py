@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Sync Flume per-segment data into PostgreSQL `flume_history.flume_segments`.
+"""Sync Flume per-segment data into the `flume-data` PostgreSQL database.
+
+The target table is `public.flume_segments` (there is no `flume_history`
+database or schema, despite that name appearing in several sibling
+descriptions — the db, role, and OS user are all literally `flume-data`).
 
 Two modes:
 
@@ -14,6 +18,15 @@ Two modes:
 Both modes are idempotent: INSERT … ON CONFLICT (date, start_time) DO
 UPDATE keeps the table in sync with the latest cache contents.
 
+CACHE CONTRACT — read flume_data/day_cache.py before touching this. A
+cached day counts as "in hand" only when the file records that it captured
+a fully-elapsed day; the presence of a file means nothing. From 2026-05-23
+to 2026-07-27 this script trusted `Path.exists()`, so the 00:30 run's
+half-hour-old snapshot of today (1410 of whose 1440 minutes had not yet
+happened, and came back zero-filled) became the permanent answer for that
+day and the other three runs skipped it. ~94% of two months of water data
+was dropped with every health check green.
+
 Schema is created in-place on first run (CREATE TABLE IF NOT EXISTS),
 so deployment doesn't need a separate migration step.
 
@@ -23,7 +36,6 @@ Run as the `flume-data` system user (peer-auth to Postgres).
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from collections import defaultdict
@@ -36,7 +48,6 @@ import psycopg2
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from emit_segments_csv import (  # noqa: E402
-    CACHE_DIR,
     chunked_pull,
     detect_segments,
     is_pool_autofill_segment,
@@ -46,6 +57,11 @@ from emit_segments_csv import (  # noqa: E402
     RateLimiter,
     segment_to_local,
 )
+# Cache paths, formats, completeness and the device-local clock. Imported as
+# a module (not as `from … import CACHE_DIR`) so that redirecting the cache
+# — in tests, or ever in production — has one place to happen instead of one
+# stale copy per importer.
+from flume_data import day_cache  # noqa: E402
 from flume_data.classify_v2 import classify_segment  # noqa: E402
 from flume_data.irrigation_sessions import (  # noqa: E402
     HA_RECORDER_RETENTION_DAYS,
@@ -303,62 +319,135 @@ ON CONFLICT (date, start_time) DO UPDATE SET
 
 
 def load_cached_samples(target_dates: list[date]) -> list[tuple[datetime, float]]:
-    """Read cache files for the given dates and return concatenated samples."""
+    """Read cache files for the given dates and return concatenated samples.
+
+    A day whose file records `complete: false` is skipped: a payload that
+    labels itself a partial capture must never be replayed into the
+    database as though it were the day. Legacy bare-array files carry no
+    such label and are read as-is — they are the 908-file archive.
+    """
     out: list[tuple[datetime, float]] = []
     for d in sorted(target_dates):
-        path = CACHE_DIR / f"{d.isoformat()}.json"
-        if not path.exists():
+        entry = day_cache.read_cache_day(d)
+        if entry is None:
             continue
-        for entry in json.loads(path.read_text()):
-            out.append((datetime.fromisoformat(entry[0]), float(entry[1])))
+        if entry.complete is False:
+            print(f"  skipping {d}: cache entry records an incomplete capture")
+            continue
+        out.extend(entry.points)
     return out
 
 
+def days_needing_fetch(
+    target_dates: list[date], *, now: datetime | None = None
+) -> list[date]:
+    """The subset of `target_dates` that must be pulled from the API.
+
+    A day is satisfied by cache ONLY when the cache file records that it
+    captured a fully-elapsed day. Consequences worth stating out loud:
+
+    * Today is always fetched. It is still being lived, and Flume pads the
+      minutes that have not happened yet with zeros — so "we already have
+      a file for today" has never meant "we already have today".
+    * Yesterday is fetched once, on the first run after midnight. Under the
+      old `Path.exists()` rule yesterday was never re-fetched either: its
+      file had been minted at its own 00:30 and simply stayed.
+    * A legacy bare-array file does not record completeness, so it is
+      re-fetched when it falls inside the sync window. That is what heals
+      the tail of the 2026-05-23..07-27 damage automatically; days older
+      than the window need the operator recovery.
+    """
+    return [
+        d
+        for d in target_dates
+        if not day_cache.cache_day_is_authoritative(d, now=now)
+    ]
+
+
 def ensure_cache_for(
-    start_date: date,
-    end_date: date,
+    days: list[date],
     token: str,
     user_id: int,
     device_id: str,
-) -> None:
-    """Pull missing days into the cache via Flume API (rate-limited)."""
+    *,
+    now: datetime | None = None,
+) -> list[tuple[datetime, float]]:
+    """Pull `days` from the Flume API, caching the ones that have ended.
+
+    Returns every sample pulled, and the return value is load-bearing: an
+    in-progress day is deliberately NOT written to cache, so this list is
+    the only route by which today's partial data reaches the database.
+    This function used to iterate purely for the cache side effect and
+    throw the samples away.
+
+    `days` is an explicit list rather than a range — the caller has already
+    worked out which days it does not trust, and a range would re-fetch the
+    complete days sitting between them at 33s of rate-limit budget apiece.
+    """
     rate = RateLimiter()
-    start_dt = datetime(start_date.year, start_date.month, start_date.day)
-    end_dt = datetime(end_date.year, end_date.month, end_date.day) + timedelta(days=1)
-    # chunked_pull yields samples; we don't need them here (the cache file is
-    # written as a side effect), but iterating is required.
-    for _ in chunked_pull(token, user_id, device_id, start_dt, end_dt, rate):
-        pass
+    pulled: list[tuple[datetime, float]] = []
+    for d in sorted(days):
+        start_dt = datetime(d.year, d.month, d.day)
+        pulled.extend(
+            chunked_pull(
+                token,
+                user_id,
+                device_id,
+                start_dt,
+                start_dt + timedelta(days=1),
+                rate,
+                reuse_cache=False,
+                now=now,
+            )
+        )
+    return pulled
 
 
-def sync_dates_to_db(target_dates: list[date]) -> tuple[int, int]:
+def merge_samples(*groups: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """Combine sample groups into one time-ordered series; later groups win.
+
+    Segment detection walks the list positionally, so the result must be
+    sorted and free of duplicate timestamps. There are two sources of
+    duplicates: freshly-fetched samples overlapping what the cache already
+    held, and the midnight sample that appears at the end of day N-1's file
+    and again at the start of day N's.
+    """
+    merged: dict[datetime, float] = {}
+    for group in groups:
+        for ts, gpm in group:
+            merged[ts] = gpm
+    return sorted(merged.items())
+
+
+def sync_dates_to_db(
+    target_dates: list[date],
+    fresh_samples: list[tuple[datetime, float]] | None = None,
+) -> tuple[int, int]:
     """UPSERT BOTH raw per-minute samples AND derived segments for the
     given local dates. Returns (samples_written, segments_written).
+
+    `fresh_samples` are points just pulled from the API that may not be on
+    disk — an in-progress day is never cached, so without this argument
+    today would contribute nothing (or, worse, whatever stale partial file
+    an earlier run left behind). Fresh values win over cached ones.
     """
     if not target_dates:
         return (0, 0)
 
-    samples = load_cached_samples(target_dates)
+    samples = merge_samples(load_cached_samples(target_dates), fresh_samples or [])
     if not samples:
-        print(f"no cached samples for {target_dates[0]}..{target_dates[-1]} — skipping")
+        print(f"no samples (cached or fetched) for "
+              f"{target_dates[0]}..{target_dates[-1]} — skipping")
         return (0, 0)
 
     target_set = set(target_dates)
 
-    # 1) Raw per-minute samples — every cached point whose local date is
-    # in the target set. This is the authoritative ground truth for any
-    # downstream re-aggregation the user wants to do in SQL.
-    #
-    # Dedup by ts: VM pre-populate's query_range end-time is inclusive,
-    # so the midnight sample of day N appears in BOTH cache files
-    # (day N-1.json and day N.json). Postgres rejects duplicate rows
-    # in a single ON CONFLICT DO UPDATE batch — collapse them here.
-    # Later sample wins (consistent with UPSERT semantics).
-    sample_dict: dict = {}
-    for ts, gpm in samples:
-        if ts.date() in target_set:
-            sample_dict[ts] = gpm
-    sample_rows = list(sample_dict.items())
+    # 1) Raw per-minute samples — every point whose local date is in the
+    # target set. This is the authoritative ground truth for any downstream
+    # re-aggregation the user wants to do in SQL. `merge_samples` has
+    # already collapsed duplicate timestamps (Postgres rejects duplicate
+    # rows inside a single ON CONFLICT DO UPDATE batch).
+    sample_rows = [(ts, gpm) for ts, gpm in samples if ts.date() in target_set]
 
     # 2) Refresh B-Hyve irrigation sessions for the date range from HA
     # Postgres. Only the dates we're syncing — anything older than HA's
@@ -516,29 +605,38 @@ def main() -> int:
     args = parser.parse_args()
 
     target: list[date] = []
+    fresh: list[tuple[datetime, float]] = []
     if args.from_cache:
-        cache_files = sorted(CACHE_DIR.glob("*.json"))
-        target = [date.fromisoformat(p.stem) for p in cache_files]
+        target = day_cache.cached_days()
         print(f"--from-cache: {len(target)} cached days available")
     else:
         # Last N days INCLUDING today. range(N, -1, -1) → [N, N-1, ..., 1, 0]
         # so we capture today's partial data; tomorrow's run UPSERTs the
-        # complete day over it.
-        today = date.today()
+        # complete day over it. `local_today` reads the device-local zone
+        # the cache keys are minted in, not the host TZ.
+        today = day_cache.local_today()
         target = [today - timedelta(days=i) for i in range(args.days, -1, -1)]
         print(f"--days {args.days}: syncing {target[0]} .. {target[-1]}")
 
-        # Ensure all target days are in cache (no-ops for cache hits)
-        missing = [d for d in target if not (CACHE_DIR / f"{d.isoformat()}.json").exists()]
-        if missing:
-            print(f"  {len(missing)} missing days; pulling from API")
+        # Which of those days do we actually have in hand? "A file exists"
+        # is not an answer — see days_needing_fetch.
+        stale = days_needing_fetch(target)
+        if stale:
+            eta_s = len(stale) * RateLimiter().min_interval_s
+            print(
+                f"  {len(stale)} day(s) without a complete cache entry "
+                f"({', '.join(d.isoformat() for d in stale)}); "
+                f"pulling from API (~{eta_s:.0f}s)"
+            )
             creds = load_credentials()
             token, user_id = mint_token(creds)
             devices = list_devices(token, user_id)
             sensor = next((d for d in devices if d.get("type") == 2), devices[0])
-            ensure_cache_for(missing[0], missing[-1], token, user_id, sensor["id"])
+            fresh = ensure_cache_for(stale, token, user_id, sensor["id"])
+        else:
+            print("  all target days satisfied by complete cache entries")
 
-    samples_written, segments_written = sync_dates_to_db(target)
+    samples_written, segments_written = sync_dates_to_db(target, fresh_samples=fresh)
     print(f"  UPSERTed {samples_written} minute samples + {segments_written} segment rows")
 
     # v3 attributions + per-minute materialization. Failures are

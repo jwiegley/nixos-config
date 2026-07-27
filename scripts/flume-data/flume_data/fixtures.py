@@ -1,7 +1,8 @@
 """Fixture library — calibrated signatures for vulcan's plumbing.
 
 Each fixture defines:
-- Expected mean GPM range (low, mid, high) — triangular likelihood peaks at mid
+- Expected mean GPM range (low, high) — Gaussian likelihood peaks at the
+  midpoint; see `Range` below (an earlier draft used a triangular kernel)
 - Expected duration range in minutes
 - Expected per-segment gallons range
 - Hot fraction expectation (0 = cold-only, 1 = all hot)

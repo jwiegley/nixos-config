@@ -148,10 +148,10 @@ def _build_category_comparisons(
     """Compare HA's recorded category totals against Phase 2's recompute.
 
     Phase 2 currently only re-derives ``pool_autofill`` from the raw Flume
-    signal in VM. Other categories (irrigation/domestic_hot/other) appear
-    as 1-row "self-comparisons" so the summary at least surfaces an
-    HA-side delta of zero — they'll grow real Phase 2 numbers in a later
-    iteration. Until then, the meaningful row is ``pool_autofill``.
+    signal in VM, so the returned list has exactly ONE row. The other
+    categories (irrigation/domestic_hot/other) are not cross-checked at
+    all — they'll grow real Phase 2 numbers in a later iteration. Until
+    then, the only row is ``pool_autofill``.
     """
     comps: list[CategoryComparison] = []
 

@@ -37,6 +37,17 @@ let
     OUT_FINAL = pathlib.Path("${textfileDir}/openclaw_mcporter.prom")
     OUT_TMP = OUT_FINAL.with_suffix(".prom.tmp")
 
+    # Only real MCP servers belong here.  Do NOT add "memory-qdrant": it is an
+    # OpenClaw plugin (openclaw.plugin.json declares kind="memory"), loaded
+    # in-process via plugins.entries in openclaw-config.nix, and it exposes its
+    # tools through the gateway rather than through mcporter.  It will never
+    # appear in mcporter.json, so listing it here would emit a permanently-0
+    # gauge.  Its real liveness signal is the canary's
+    # openclaw_channel_plugin_loaded gauge, mirrored by the Nagios service
+    # "OpenClaw Memory-Qdrant Plugin Loaded".  (An agent-authored health check
+    # made this exact category error and reported the plugin as down; recorded
+    # 2026-07-27.)
+    # Note "memory-vault" IS a genuine MCP server; the similar name is a trap.
     EXPECTED_SERVERS = (
         "home-assistant",
         "stock-trader",
@@ -202,7 +213,7 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       # Wait until openclaw is reasonably warm before the first check, then
-      # poll every 5 minutes.  This is slower than the canary (30s) because
+      # poll every 5 minutes.  This is slower than the canary (1min) because
       # the HA endpoint probe is the slowest step (~50ms typical, 5s timeout).
       OnBootSec = "3min";
       OnUnitActiveSec = "5min";

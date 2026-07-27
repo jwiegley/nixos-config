@@ -123,6 +123,20 @@ let
   # Strategy: guest OUTPUT DNAT 127.0.0.1:port -> 10.99.0.1:port
   #           host  PREROUTING DNAT 10.99.0.1:port -> 127.0.0.1:port on br-openclaw
   #           host  route_localnet=1 on br-openclaw
+  #
+  # This list is also the VM's entire host allow-list: it generates the RETURN
+  # rules in the `openclaw-isolate` chain below, and everything else the VM
+  # aims at the host or the LAN hits that chain's trailing `-j DROP`.
+  #
+  # Port 22 is absent ON PURPOSE and must stay absent. VM -> host SSH has never
+  # been part of the design; adding it would hand the agent (which runs with
+  # sandbox disabled inside this VM) a shell on the hypervisor the VM exists to
+  # be isolated from. The provisioned direction is the reverse: host -> VM on
+  # 10.99.0.2:22, source-restricted to the bridge address and one key, for the
+  # openclaw-nightly-report probe (see openclaw-vm.nix `services.openssh`).
+  # An agent-authored health check flagged the resulting SSH timeout as an
+  # outage (recorded 2026-07-27); the answer is to fix the check, not to open
+  # the port.
   dnatPorts = [
     443 # nginx (HTTPS) — needed for HA and other proxied services
     993 # Dovecot IMAPS — VM accesses host Dovecot via DNAT
@@ -207,10 +221,13 @@ in
   # ============================================================================
   # Section 2: SOPS Secrets
   # ============================================================================
-  # The full openclaw.json config is stored as a multiline string value in
-  # secrets.yaml under the "openclaw/config" key. SOPS decrypts it at
-  # activation time; the prepare-secrets service copies it to the staging
-  # directory for virtiofs sharing into the VM.
+  # "openclaw/config" is the LEGACY full-openclaw.json blob: a multiline
+  # string value in secrets.yaml. SOPS still decrypts it at activation time,
+  # but prepare-secrets no longer copies it — since the atomic-secret split
+  # (see the note above the per-credential entries below) the staged config is
+  # produced by jq-merging pkgs.openclaw-config-template with the individual
+  # SOPS credentials. The only code left that reads this blob is the
+  # unimported modules/services/openclaw.nix.
 
   sops.secrets."openclaw/config" = {
     owner = "openclaw";
@@ -434,7 +451,9 @@ in
   # Section 5: Host-side DNAT for loopback service access
   # ============================================================================
   # The VM needs to reach host services bound to 127.0.0.1 (Qdrant, LiteLLM,
-  # llama-swap, Dovecot). We use a two-stage DNAT approach:
+  # PostgreSQL, Dovecot — the exact set is `dnatPorts` above; llama-swap on
+  # :8080 is NOT exposed, the VM reaches those models through LiteLLM).
+  # We use a two-stage DNAT approach:
   #
   #   1. Guest nftables: OUTPUT DNAT 127.0.0.1:PORT -> 10.99.0.1:PORT
   #      (so OpenClaw's existing localhost config works unchanged)
@@ -481,9 +500,12 @@ in
   };
 
   # ============================================================================
-  # Section 6: Egress Logging
+  # Section 6: VM Network Isolation + Egress Logging
   # ============================================================================
-  # Log new outbound connections from the VM bridge for audit purposes.
+  # Installs the openclaw-isolate chain (which host ports the VM may reach),
+  # FORWARD drops for RFC1918 destinations, and a LOG rule for new outbound
+  # connections from the VM bridge. Note that traffic to the public internet
+  # is LOGGED, not restricted — only host/LAN destinations are filtered.
   # Uses iptables FORWARD chain (not nftables) to stay consistent with the
   # host's iptables-nft backend.
 
@@ -547,9 +569,11 @@ in
   # ============================================================================
   # Section 8: Secrets Preparation
   # ============================================================================
-  # SOPS decrypts "openclaw/config" on the host at activation time.
-  # This oneshot service copies the decrypted secret to a staging directory
-  # that is shared into the VM via virtiofs.
+  # SOPS decrypts the individual openclaw/* secrets on the host at activation
+  # time. This oneshot service jq-merges them into the Nix-generated
+  # pkgs.openclaw-config-template and writes the result — plus the other
+  # staged credentials — to a staging directory that is shared into the VM
+  # via virtiofs. (It does NOT copy the legacy "openclaw/config" blob.)
 
   systemd.services.openclaw-prepare-secrets = {
     description = "Stage SOPS secrets for OpenClaw microVM";

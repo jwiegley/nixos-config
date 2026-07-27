@@ -92,7 +92,9 @@ let
 
   # Stdio bridge from mcporter to Home Assistant's streamable HTTP MCP
   # server.  We can't connect mcporter directly to HA's SSE/HTTP MCP
-  # endpoint because mcporter 0.10.1 always probes OAuth metadata and
+  # endpoint because mcporter (0.10.1 when this was diagnosed; the locked
+  # llm-agents input supplies 0.12.4 as of 2026-07-27, not re-tested since)
+  # always probes OAuth metadata and
   # then attempts RFC 7591 dynamic client registration — which HA does
   # not implement, so the connection fails with "Incompatible auth
   # server: does not support dynamic client registration".  Static
@@ -276,6 +278,118 @@ let
     - "I'm going to act on this answer" → run at least two of the above and reconcile
   '';
 
+  # The two sections below document invariants that an agent-authored health
+  # check got wrong (recorded 2026-07-27), reporting three designed behaviours
+  # as outages: the VM's inability to SSH to the host (explained as "you're not
+  # on the home network"), memory-qdrant's absence from `mcporter list`, and a
+  # refused connection to localhost:8080.  All three are correct behaviour.
+  # There is no Nix-declared check making those assertions — the check is the
+  # agent improvising — so the durable fix is to put the real invariants where
+  # the agent reads them, via the same TOOLS.md mechanism as the sections
+  # above, rather than to change the system to satisfy a false requirement.
+  toolsNetworkIsolationMd = pkgs.writeText "tools-network-isolation.md" ''
+
+    ---
+
+    ## Network Isolation — What You Can and Cannot Reach
+
+    You run inside a microVM on vulcan, not on vulcan itself. This VM is
+    ${vmCidr}; the host is the bridge gateway ${bridgeAddr}. Access to the host
+    is an explicit allow-list, so several things that look like outages are the
+    designed state. Do not report these as faults.
+
+    ### SSH to the host does not work, and never has
+
+    `ssh vulcan.lan`, `ssh ${bridgeAddr}`, or any probe of port 22 on the host
+    will **time out**. Two independent reasons, both deliberate:
+
+    - Port 22 is not on the host's allow-list (`dnatPorts` in
+      `modules/services/openclaw-microvm.nix`). Anything not on that list falls
+      through to `-j DROP` at the end of the `openclaw-isolate` chain. It is
+      DROP rather than REJECT, which is exactly why the symptom is a timeout
+      and not "connection refused".
+    - The bare name `vulcan.lan` is not in this VM's `/etc/hosts`, so it
+      resolves to the host's LAN address — and the host drops VM traffic to
+      RFC1918 destinations other than the bridge gateway.
+
+    This VM's own boot-time diagnostic (the `network-diag` unit; output in
+    `${stateDir}/.openclaw/netdiag.txt`) probes port 22 on the host's LAN
+    address and records `PASS: ...:22 blocked`. A health check that reports the
+    same condition as a failure is asserting a requirement that does not exist.
+
+    SSH is provisioned only in the opposite direction: the host connects to
+    *this VM* on port 22, source-restricted to ${bridgeAddr} and to a single
+    key, for the `openclaw-nightly-report` probe.
+
+    ### An SSH timeout tells you nothing about where John is
+
+    "Cannot reach vulcan.lan:22" is not evidence that John is travelling or off
+    the home network. You are inside vulcan; this probe fails identically with
+    John sitting next to the machine. Never infer his location from it, and
+    never infer from it that Home Assistant, email, or SearXNG/Vane are
+    unreachable — those cross the bridge on their own allow-listed ports and
+    are unaffected by anything port 22 does.
+
+    ### What you can reach
+
+    These names are mapped to the bridge gateway in this VM's `/etc/hosts`:
+    `hass.vulcan.lan`, `qdrant.vulcan.lan`, `litellm.vulcan.lan`,
+    `imap.vulcan.lan`, `smtp.vulcan.lan`, `radicale.vulcan.lan`,
+    `searxng.vulcan.lan`, `vane.vulcan.lan`, `trader.vulcan.lan`.
+
+    The bare apex `vulcan.lan` is deliberately absent from that list. To judge
+    host health, probe one of the mapped names above, or the DNAT'd localhost
+    ports (127.0.0.1:4000 LiteLLM, :6333 Qdrant, :8123 Home Assistant, :5432
+    PostgreSQL). Do not invent new probes and do not treat an unlisted
+    port/name failing as an incident.
+  '';
+
+  toolsMemoryQdrantMd = pkgs.writeText "tools-memory-qdrant.md" ''
+
+    ---
+
+    ## memory-qdrant Health Signals
+
+    `memory-qdrant` is an OpenClaw **plugin** — its `openclaw.plugin.json`
+    declares `"kind": "memory"` — not an MCP server. It is configured on the
+    plugin surface (`plugins.allow`, `plugins.load.paths`,
+    `plugins.slots.memory`, `plugins.entries."memory-qdrant"`) and exposes
+    `memory_store`, `memory_search` and `memory_forget` as in-process gateway
+    tools.
+
+    ### The correct signals
+
+    1. Prometheus `openclaw_channel_plugin_loaded{channel="memory-qdrant"} == 1`
+       (published by the openclaw-canary on the host; Nagios mirrors it as the
+       service "OpenClaw Memory-Qdrant Plugin Loaded").
+    2. Qdrant reachable at `http://127.0.0.1:6333` (DNAT'd to the host). Qdrant
+       runs with an API key, so an unauthenticated probe answering **401 means
+       the server is alive** — that is a healthy result, not a fault.
+    3. Embeddings via LiteLLM: `POST http://127.0.0.1:4000/v1/embeddings`,
+       model `${embeddingModel}`, expecting a 1024-dimension vector. This is
+       the plugin's only embedding dependency.
+
+    ### Stale probes that produce false alarms — do not use
+
+    - **`mcporter list`.** mcporter enumerates MCP servers only; a plugin never
+      appears there. memory-qdrant's absence from that list is expected and
+      correct, and says nothing about whether the memory tools work. Note that
+      `memory-vault` *is* a real MCP server — do not confuse the two names and
+      conclude that memory is half-registered.
+    - **`http://localhost:8080/v1/embeddings`.** Nothing in this deployment
+      uses :8080. llama-swap listens there on the host and is deliberately
+      excluded from the allow-list, because this VM reaches those models
+      through LiteLLM on :4000. The `network-diag` unit records
+      `PASS: 127.0.0.1:8080 not reachable (correct)`: a refused or timed-out
+      connection on :8080 is the designed steady state, not an outage.
+    - **Adding an embedding-endpoint setting to the plugin config.** There is
+      no such key. The manifest's `configSchema` sets
+      `"additionalProperties": false` and declares exactly seven properties
+      (`autoCapture`, `autoRecall`, `captureMaxChars`, `collectionName`,
+      `maxMemorySize`, `qdrantApiKey`, `qdrantUrl`); adding one would fail
+      schema validation.
+  '';
+
 in
 {
   networking.hostName = vmHostname;
@@ -401,12 +515,18 @@ in
   };
 
   # CVE-2026-31431 "CopyFail" — disable AF_ALG userspace crypto sockets.
-  # The microVM runs the nixpkgs 25.11 default kernel (6.12.x LTS); patched
-  # in 6.12.85 upstream, so the guest is vulnerable until nixpkgs bumps.
-  # Since the OpenClaw VM runs a Claude Code agent that can fetch and exec
-  # untrusted code, this is a real LPE risk inside the VM. Drop once the
-  # guest kernel reaches 6.12.85+. `install /bin/false` is required in
-  # addition to `blacklist` to block kernel request_module() autoload.
+  # Rationale: the OpenClaw VM runs a Claude Code agent that can fetch and
+  # exec untrusted code, so an unpatched AF_ALG is a real LPE risk inside the
+  # VM. The microVM runs the nixpkgs 25.11 default kernel (6.12.x LTS).
+  # Verified 2026-07-27 against the kernel.org CNA record for CVE-2026-31431
+  # (cveawg.mitre.org/api/cve/CVE-2026-31431): the 6.12.x series is fixed as
+  # of 6.12.85, and both the evaluated guest config and the deployed runner
+  # under /var/lib/microvms/openclaw/current are on 6.12.93 — so that one CVE
+  # is patched in the guest. Do NOT drop the blacklist on that basis alone:
+  # it is a standing mitigation for the AF_ALG surface generally, and removal
+  # needs a human who has checked that nothing in the guest uses AF_ALG.
+  # `install /bin/false` is required in addition to `blacklist` to block
+  # kernel request_module() autoload.
   boot.blacklistedKernelModules = [
     "algif_aead"
     "algif_skcipher"
@@ -434,6 +554,15 @@ in
   # Override *.vulcan.lan hostnames to point to the bridge gateway so the
   # AI agent reaches host services directly. The egress filter blocks
   # 192.168.0.0/16, so normal DNS resolution (192.168.1.2) is unreachable.
+  #
+  # The bare apex `vulcan.lan` is deliberately NOT in this list: only the
+  # specific service names below are reachable, and each one corresponds to a
+  # port in `dnatPorts` (openclaw-microvm.nix) or to nginx on 443. Mapping the
+  # apex here would make `vulcan.lan` resolve to the gateway while most ports
+  # on it — port 22 in particular — still hit the `openclaw-isolate` DROP, i.e.
+  # it would swap an honest "unreachable" for a misleading silent timeout.
+  # An agent health check misread exactly that timeout as "John is not on the
+  # home network"; see the Network Isolation section of TOOLS.md.
   networking.hosts = {
     ${bridgeAddr} = [
       "hass.vulcan.lan"
@@ -732,7 +861,11 @@ in
 
             # Patch runtime config for the VM environment:
             #  - CORS: allow host-header origin fallback (VM is the isolation boundary)
-            #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM)
+            #  - Embedding URL: rewrite localhost:8080 → localhost:4000 (LiteLLM).
+            #    Legacy safety net only: openclaw-config.nix contains no :8080,
+            #    so this gsub is a no-op on the current Nix-rendered config. It
+            #    also only touches this JSON — it cannot rewrite a URL that a
+            #    plugin hardcodes in its own JavaScript.
             #  - Schema migration: flatten tools.web.search.<provider>.apiKey → tools.web.search.apiKey
             #    (openclaw >=2026.3.28 rejects nested provider config as "Unrecognized key")
             #  - Schema migration: openclaw 2026.5.x requires channels.<x>.streaming
@@ -1130,6 +1263,20 @@ in
               cat ${toolsWebSearchMd} >> "$TOOLS_MD"
             fi
 
+            # Append the network-isolation and memory-qdrant invariants so the
+            # agent stops reporting designed behaviour (no SSH to the host,
+            # memory-qdrant absent from mcporter, :8080 refused) as outages.
+            # Idempotent; note the grep guard means editing the section text
+            # above will NOT re-append over an existing TOOLS.md — change the
+            # heading, or remove the stale block by hand, to force a refresh.
+            if [ -f "$TOOLS_MD" ] && ! grep -q '## Network Isolation' "$TOOLS_MD"; then
+              cat ${toolsNetworkIsolationMd} >> "$TOOLS_MD"
+            fi
+
+            if [ -f "$TOOLS_MD" ] && ! grep -q '## memory-qdrant Health Signals' "$TOOLS_MD"; then
+              cat ${toolsMemoryQdrantMd} >> "$TOOLS_MD"
+            fi
+
             # ────────────────────────────────────────────────────────────────
             # Sync contacts from Radicale (best-effort at service start)
             # ────────────────────────────────────────────────────────────────
@@ -1252,6 +1399,10 @@ in
       echo "--- Connectivity Tests ---" >> "$OUT"
 
       # MUST BE BLOCKED: 192.168.1.2 (any port)
+      # Port 22 is in this list because VM -> host SSH is meant to fail: it is
+      # not in dnatPorts, so `openclaw-isolate` DROPs it. "PASS: ...:22 blocked"
+      # here is the assertion that the isolation boundary holds — it is not an
+      # outage, and it carries no information about whether John is at home.
       for port in 443 993 25 80 22; do
         if curl -sk --connect-timeout 3 "https://192.168.1.2:$port/" >/dev/null 2>&1; then
           echo "FAIL: 192.168.1.2:$port REACHABLE (should be blocked)" >> "$OUT"
@@ -1310,6 +1461,11 @@ in
       fi
 
       # MUST NOT WORK: localhost:8080 (old embedding server)
+      # llama-swap binds 127.0.0.1:8080 on the host and is deliberately absent
+      # from dnatPorts; the VM reaches those models through LiteLLM on :4000,
+      # which is what the memory-qdrant plugin actually calls. A refused
+      # connection here is the designed steady state, so any health check
+      # reporting "embedding server down on :8080" is probing a retired path.
       echo "--- Negative Tests ---" >> "$OUT"
       if curl -s --connect-timeout 3 "http://127.0.0.1:8080/" >/dev/null 2>&1; then
         echo "INFO: 127.0.0.1:8080 reachable (unexpected)" >> "$OUT"

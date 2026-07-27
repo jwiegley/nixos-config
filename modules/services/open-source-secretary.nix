@@ -36,6 +36,15 @@ in
       default = 30;
       description = "Age in days after which an open thread is flagged stale.";
     };
+    html = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Send the report as multipart/alternative with an HTML part in which every
+        referenced item links to its thread. The plain-text part is always sent
+        and is unaffected.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -85,6 +94,10 @@ in
         OSS_SECRETARY_INCLUDE_PRIVATE = lib.optionalString cfg.includePrivate "1";
         OSS_SECRETARY_LLM_TOKEN_BUDGET = toString cfg.llmTokenBudget;
         OSS_SECRETARY_STALE_DAYS = toString cfg.staleDays;
+        # NOT `toString cfg.html`, which emits the string "false" — truthy
+        # under the codebase's bool(getenv) idiom. The explicit conditional is
+        # unambiguous under either parser.
+        OSS_SECRETARY_HTML = if cfg.html then "1" else "0";
         REQUESTS_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt";
         SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
         NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";

@@ -58,8 +58,10 @@ def build_prompt(deltas, notifications, budget):
 
 def call_hermes(cfg, prompt):
     """POST the triage prompt; retry once on a connection/timeout error to
-    absorb a VM cold-start race (the service is ordered after, not requires,
-    the Hermes VM). HTTP errors are not retried — they surface to the fallback."""
+    absorb a VM cold-start race (the unit orders only after network-online and
+    postfix — nothing gates it on the Hermes VM being up; see
+    modules/services/open-source-secretary.nix). HTTP errors are not retried —
+    they surface to the fallback."""
     last_exc = None
     for _ in range(2):
         try:

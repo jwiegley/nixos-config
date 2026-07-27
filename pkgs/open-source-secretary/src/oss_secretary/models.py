@@ -76,6 +76,11 @@ class Coverage:
     repos_scanned: int = 0
     repos_errored: int = 0
     errored_repos: list[str] = field(default_factory=list)
+    # name -> authoritative Repo.html_url, captured in report._collect's
+    # per-repo except block. A bare `owner/name` is ambiguous between hosts
+    # (the same name can exist on GitHub and Gitea), so the render layer cannot
+    # derive a link for these; this carries the API's own URL instead.
+    errored_repo_urls: dict[str, str] = field(default_factory=dict)
     items_to_triage: int = 0
     items_omitted: int = 0
     llm_status: str = "ok"

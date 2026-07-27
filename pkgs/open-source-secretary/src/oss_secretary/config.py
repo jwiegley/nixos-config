@@ -43,6 +43,7 @@ class Config:
     stale_days: int
     bootstrap: bool = False
     gitea_min_interval: float = 0.34   # spacing floor for Gitea requests (anti-burst)
+    html: bool = True                  # send a text/html alternative part
 
     @staticmethod
     def from_env() -> "Config":
@@ -69,4 +70,8 @@ class Config:
             stale_days=int(g("OSS_SECRETARY_STALE_DAYS", "30")),
             bootstrap=bool(g("OSS_SECRETARY_BOOTSTRAP")),
             gitea_min_interval=float(g("OSS_SECRETARY_GITEA_MIN_INTERVAL", "0.34")),
+            # NOT bool(g(...)) like the flags above: that idiom makes the
+            # string "0" True, which cannot express a default-ON flag.
+            html=g("OSS_SECRETARY_HTML", "1").strip().lower()
+                 not in ("", "0", "false", "no", "off"),
         )

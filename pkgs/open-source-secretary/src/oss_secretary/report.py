@@ -72,6 +72,10 @@ def _collect(cfg, state, cov, gh, gt):
                 log.warning("repo scan failed (%s): %s", name, type(e).__name__)
                 cov.repos_errored += 1
                 cov.errored_repos.append(r.full_name)
+                # `r` IS a Repo here and carries the authoritative html_url;
+                # the render layer cannot derive one because a bare
+                # `owner/name` is ambiguous between GitHub and Gitea.
+                cov.errored_repo_urls[r.full_name] = r.html_url
         try:
             notifs.extend(collector.list_notifications(since))
         except Exception as e:
@@ -142,7 +146,7 @@ def main() -> int:
         if silent:
             gh_n = sum(1 for t in threads if t.platform == "github" and t.state == "open")
             gt_n = sum(1 for t in threads if t.platform == "gitea" and t.state == "open")
-            subject, body = render_baseline(cfg, gh_n, gt_n, date_str)
+            subject, body, html_body = render_baseline(cfg, gh_n, gt_n, date_str)
         else:
             if len(deltas) <= ENRICH_CAP:
                 _enrich(deltas, gh, gt, owners, now_iso)
@@ -154,10 +158,11 @@ def main() -> int:
             attention, banner, omitted = _triage(cfg, deltas, notifs)
             cov.items_omitted = omitted
             cov.llm_status = "fallback" if banner else "ok"
-            subject, body = render_report(cfg, deltas, notifs, attention, cov,
-                                          banner, date_str, stale)
+            subject, body, html_body = render_report(cfg, deltas, notifs, attention,
+                                                     cov, banner, date_str, stale)
         cov.duration_s = round(time.monotonic() - started, 1)
-        rc = _sendmail(build_message(subject, body, cfg.sender, cfg.recipient), cfg)
+        rc = _sendmail(build_message(subject, body, cfg.sender, cfg.recipient,
+                                     html_body), cfg)
         if rc == 0:
             state.set_meta("github_last_poll_utc", now_iso)
             state.set_meta("gitea_last_poll_utc", now_iso)

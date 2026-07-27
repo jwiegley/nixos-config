@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 
 # Redaction source of truth: REDACT_PATTERNS + redact() mirror
-# scripts/agent_health_report.py:70-91 (same secret shapes as the self-heal
+# scripts/agent_health_report.py:77-98 (same secret shapes as the self-heal
 # grammars), extended for this collector because it ingests arbitrary
 # third-party issue/PR/comment text where pasted credentials are common.
 # Additions beyond the mirrored source: a real JWT catcher, AWS/Google/

@@ -1,5 +1,11 @@
 # Hermes Egress Tightening + Integration Dashboard — Design Spec
 
+> **Archival — 2026-05-15.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-microvm.nix`, `modules/monitoring/dashboards/openclaw-hermes-integration.json`).
+
 Two small post-config-refactor hardening + observability changes, sharing one spec because they touch the same surface (Hermes + OpenClaw monitoring layer) and their plans are short enough that decomposition adds more overhead than it saves.
 
 ## Why

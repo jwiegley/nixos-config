@@ -9,7 +9,9 @@ let
   # SearXNG internal port (proxied through nginx)
   searxngPort = 8890;
 
-  # Redis port for SearXNG rate limiting
+  # Redis port for SearXNG rate limiting. NOTE: the limiter is currently
+  # disabled (`limiter = false` below), so this instance is provisioned but
+  # unused — verified empty (dbsize 0) on 2026-07-27.
   redisPort = 6386;
 in
 {

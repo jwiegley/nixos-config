@@ -2,7 +2,7 @@
 #
 # Bridges a remote *stdio* MCP server (`drafts-mcp-server`, packaged on
 # hera at /etc/profiles/per-user/johnw/bin/drafts-mcp-server) to a loopback
-# *SSE* endpoint on 127.0.0.1:9082. mcp-proxy 0.10.0 runs in server mode and
+# *SSE* endpoint on 127.0.0.1:9082. mcp-proxy 0.8.2 runs in server mode and
 # spawns ONE long-lived child for its entire lifetime: drafts-tool-filter,
 # which in turn execs a single ssh child to hera. That ssh execs
 # drafts-mcp-server via an authorized_keys forced-command (the remote command
@@ -175,7 +175,7 @@ in
 
       unitConfig = {
         # Bound boot crash-loops if hera is unreachable. Verified shape:
-        # litellm.nix:89-94 puts these under unitConfig (NOT serviceConfig).
+        # litellm.nix:91-96 puts these under unitConfig (NOT serviceConfig).
         StartLimitIntervalSec = "300";
         StartLimitBurst = "5";
       };
@@ -233,7 +233,7 @@ in
           "hera-ssh-key:${config.sops.secrets."drafts/hera-ssh-private-key".path}"
         ];
 
-        # Hardening — cloned from hermes-mcp.nix:166-187 / stock-trader.nix:222-247.
+        # Hardening — cloned from hermes-mcp.nix:166-187 / stock-trader.nix:233-258.
         ProtectSystem = "strict";
         ProtectHome = true;
         PrivateTmp = true;

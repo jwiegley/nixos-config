@@ -335,7 +335,10 @@ Test the template:
 - Main configuration: `/etc/nixos/modules/services/home-assistant.nix`
 - Automation YAML: `/etc/nixos/config/home-assistant/vacation-mode-automation.yaml`
 - Home Assistant devices: `/etc/nixos/docs/HOME_ASSISTANT_DEVICES.md`
-- Home Assistant backup: `/etc/nixos/docs/HOME_ASSISTANT_BACKUP_GUIDE.md`
+- Home Assistant backups: there is no `HOME_ASSISTANT_BACKUP_GUIDE.md` in this
+  repo (checked 2026-07-27). Backups land in `/var/lib/hass/backups` and are
+  watched by `modules/monitoring/services/home-assistant-backup-exporter.nix`,
+  whose shipped reference is `/etc/prometheus/home-assistant-backup-exporter-README.md`.
 
 ## Support
 

@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""MCP server exposing the org PostgreSQL database to OpenClaw.
+"""MCP server exposing the org PostgreSQL database to the Hermes agent.
 
-Designed to run inside the OpenClaw microVM as an mcporter stdio child.
+Designed to run inside the Hermes microVM as a stdio MCP child: it is wired
+in as the ``org-db`` entry of hermes-agent's ``mcpServers`` (see the
+``orgDbMcpScript`` / ``orgDbMcpServer`` wrapper in
+modules/services/hermes-vm.nix). OpenClaw does NOT use this script — it
+reaches org-mode through its own ``org-db-search`` shell wrapper instead.
 Provides two READ-ONLY views into the ``org`` database:
 
   * ``org_sql``    — direct, sanitized SELECT queries via psycopg2.
   * ``org_search`` — semantic search by shelling out to the ``org`` CLI,
-    mirroring the host's ``org-db-search`` wrapper.
+    mirroring the ``org-db-search`` wrapper defined in
+    modules/services/openclaw-microvm.nix (an OpenClaw-VM binary; it is not
+    installed on the host).
 
 Both tools are strictly read-only. ``org_sql`` rejects anything that is
 not a single bare SELECT, and the database connection itself never prints
@@ -40,8 +46,9 @@ from mcp.server.fastmcp import FastMCP
 
 # -- PostgreSQL connection parameters --------------------------------------
 # psycopg2/libpq already honors PG* env vars, but we read them explicitly so
-# the defaults match the host's org-db-search wrapper (PGUSER=openclaw, etc.)
-# and so we can pass an explicit dict to psycopg2.connect().
+# the defaults match the org-db-search wrapper in openclaw-microvm.nix
+# (PGUSER=openclaw, etc.) and so we can pass an explicit dict to
+# psycopg2.connect().
 PGHOST = os.getenv("PGHOST", "127.0.0.1")
 PGPORT = os.getenv("PGPORT", "5432")
 PGDATABASE = os.getenv("PGDATABASE", "org")
@@ -256,7 +263,7 @@ def org_sql(query: str, limit: int = 100) -> str:
 def org_search(query: str, n: int = 10) -> str:
     """Semantic search over the org database via embeddings.
 
-    Shells out to the ``org`` CLI exactly as the host's ``org-db-search``
+    Shells out to the ``org`` CLI exactly as the ``org-db-search``
     wrapper does: it embeds the query through LiteLLM (the ``hera/bge-m3``
     model on the local gateway) and returns the nearest org entries. Use
     this for natural-language lookup ("notes about the pool heater") where

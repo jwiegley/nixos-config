@@ -59,8 +59,15 @@
     defaultNetwork.settings = {
       # Disabled: conflicts with Technitium DNS on 0.0.0.0:53
       dns_enabled = false;
-      # Containers will use host's /etc/resolv.conf (192.168.1.2, 192.168.1.1)
-      # for DNS resolution
+      # Containers on this bridge do NOT inherit the host's loopback resolver.
+      # Observed 2026-07-27 with `podman exec <ctr> cat /etc/resolv.conf`:
+      # bridge containers get `search lan` plus two LAN nameservers and no
+      # 127.0.0.1 entry, even though the host's own /etc/resolv.conf lists only
+      # 127.0.0.1 (networking.nameservers in modules/core/networking.nix).
+      # Containers with host networking (e.g. matter-server) do see the same
+      # nameserver, 127.0.0.1 included. (Not a byte-identical copy — the
+      # container's view omits the systemd-resolved header block — but the
+      # directive lines match.)
       subnets = [
         {
           subnet = "10.88.0.0/16";
@@ -97,14 +104,16 @@
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    # 1433: mssql
+    # 1433: mssql — leftover; the MS SQL Server container was removed on
+    #       2025-10-22 (commit b00880a) and nothing in the repo uses 1433 now
     # 3001: teable
     # 4000: litellm
     # 5380: Technitium DNS
     # 5432: PostgreSQL
     # 6253: budgetboard-client
     # 8085: Redis
-    # 9182: mssql-exporter
+    # 9182: mssql-exporter — leftover; removed together with the MS SQL Server
+    #       container (2025-10-22, commit b00880a)
     allowedTCPPorts = [
       1433
       3001

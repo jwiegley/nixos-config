@@ -1,5 +1,11 @@
 # Unified Agent Health Report — Design
 
+> **Archival — 2026-06-01.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/agent_health_report.py`).
+
 Date: 2026-06-01
 Status: Approved (design), pending implementation
 Supersedes the section layout of:

@@ -97,7 +97,8 @@ in
 
     # Enable mail plugins globally for old_stats (required for Prometheus exporter)
     # FTS (full-text search) with Xapian-based Flatcurve backend
-    # Note: sieve is protocol-specific, not global - configured in LDA protocol below
+    # Note: sieve is protocol-specific, not global - configured in the LDA and
+    # LMTP protocol blocks below (imap gets imap_sieve, not sieve)
     mailPlugins.globally.enable = [
       "old_stats"
       "fts"
@@ -453,7 +454,8 @@ in
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
-    # Sieve directory with group write permissions for IMAPSieve
+    # Sieve directories. Only global/rspamd is group-writable (0775
+    # dovecot2:mail); the two parents above it are 0755 dovecot2:dovecot2.
     # Scripts are pre-compiled during system activation, but users need write access
     # to recompile when IMAPSieve triggers (dovecot runs scripts in user context)
     # IMPORTANT: Create parent directories BEFORE rspamd.nix creates child symlinks

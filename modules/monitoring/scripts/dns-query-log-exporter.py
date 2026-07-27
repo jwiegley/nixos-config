@@ -2,7 +2,8 @@
 """
 Technitium DNS Query Log Exporter for Loki and Prometheus
 Polls Technitium DNS query logs API and pushes to Loki for visualization in Grafana.
-Also exposes Prometheus metrics on port 9101.
+Also exposes Prometheus metrics on 127.0.0.1:9275 (METRICS_PORT; the deployed
+unit sets 9275 in modules/monitoring/services/dns-query-logs.nix).
 """
 
 import json

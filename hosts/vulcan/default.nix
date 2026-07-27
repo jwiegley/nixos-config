@@ -344,7 +344,9 @@
   # re-derives totals from VictoriaMetrics + HA Postgres, emails a water
   # report, and writes the max-delta sensor back to HA.
   #
-  # DISABLED until SOPS secrets are populated. Flip to `true` after:
+  # ENABLED (as of 2026-07-27 the timers are active and the weekly run exits
+  # 0), so the SOPS setup below is DONE — kept as the reference list of keys
+  # this module needs if the secret store is ever rebuilt:
   #   1. sops /etc/nixos/secrets/secrets.yaml and add the keys:
   #        flume:
   #          client_id: <Flume Personal API client_id>
@@ -353,10 +355,12 @@
   #          password: <Flume account password>
   #        home-assistant:
   #          flume-data-token: <long-lived HA token>
-  #   2. sudo nixos-rebuild switch --flake '/etc/nixos.worktrees/water-attribution#vulcan'
+  #   2. sudo nixos-rebuild switch --flake '/etc/nixos#vulcan'
+  #      (this was originally staged in the /etc/nixos.worktrees/water-attribution
+  #      worktree; it has since landed on the main tree)
   #
-  # Until then, the Phase 1 templates + utility meters deploy on their
-  # own (gated GPM sensors, integration totals, weekly/monthly cycles).
+  # The Phase 1 templates + utility meters deploy independently of this
+  # (gated GPM sensors, integration totals, weekly/monthly cycles).
   services.flume-data.enable = true;
 
   # This option defines the first version of NixOS you have installed on this

@@ -1,5 +1,11 @@
 # Non-invasive Drafts MCP Probe Implementation Plan
 
+> **Archival — 2026-07-21.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/drafts-mcp-check/drafts_mcp_check.py`, `modules/monitoring/services/drafts-mcp-check.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Preserve five-minute Drafts MCP transport monitoring on Vulcan without any scheduled AppleEvent or GUI interaction, while retaining a clearly invasive manual app/TCC diagnostic.

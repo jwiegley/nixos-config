@@ -1,5 +1,11 @@
 # Alarm.com integration — work-in-progress handoff
 
+> **Archival — 2026-05-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `overlays/default.nix`).
+
 **Date:** 2026-05-22
 **Status:** Changes staged on disk and in `/etc/nixos`. Awaiting `nixos-rebuild
 switch` from `/etc/nixos` (the main worktree, not water-attribution) to bring

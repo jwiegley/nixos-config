@@ -1,5 +1,11 @@
 # Cloud Drive Backup — Implementation Plan
 
+> **Archival — 2026-05-27.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/rclone-cloud-backup.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Nightly one-way `rclone` mirror of three Google Drive accounts plus one OneDrive into per-account ZFS datasets under `tank/Backups`, with sanoid snapshots for history and Prometheus freshness alerting.

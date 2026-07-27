@@ -9,7 +9,8 @@ let
   # Script to remove Nix-managed integrations from HACS installed tracking.
   # HACS cannot update Nix store symlinks: shutil.rmtree fails on symlinks in
   # Python 3.12+ and Nix store files are read-only (causing backup failures).
-  # opnsense stays Nix-managed because upstream lacks Python 3.13 syntax fixes.
+  # Both entries in NIX_MANAGED below stay Nix-managed: opnsense because upstream
+  # lacks the Python 3.13 syntax fixes, poolmath because of poolmath-fixes.patch.
   hacsUntrackNixManaged = pkgs.writeText "hacs-untrack-nix-managed.py" ''
     import json
     NIX_MANAGED = {"travisghansen/hass-opnsense", "rsnodgrass/hass-poolmath"}
@@ -360,7 +361,8 @@ in
   services.home-assistant = {
     enable = true;
 
-    # Custom components installed via overlays
+    # Custom components: those from pkgs.home-assistant-custom-components (nixpkgs
+    # plus overlays/default.nix) and the derivations defined in the let block above
     customComponents = with pkgs.home-assistant-custom-components; [
       # HACS with manifest check disabled
       # Fix for manifestCheckPhase error on aarch64 (Asahi)
@@ -380,7 +382,8 @@ in
       poolmath # Pool Math (Trouble Free Pool) v2.2.0 + poolmath-fixes.patch (config-flow + initial-state seed)
     ];
 
-    # Use PostgreSQL for better performance
+    # Extra Python packages needed by the integrations below
+    # (psycopg2 is what lets the recorder use PostgreSQL)
     extraPackages = ps: [
       ps.psycopg2 # PostgreSQL adapter
       ps.grpcio # Required for Google Nest integration
@@ -429,14 +432,16 @@ in
       "analytics"
       "default_config"
       "met"
-      "mqtt" # MQTT broker for HASS.Agent and other IoT devices
+      "mqtt" # MQTT client for HASS.Agent and other IoT devices
       "sql" # SQL sensor platform — water-attribution fixture totals from flume-data DB
 
       # Calendar and scheduling
       "google" # Google Calendar integration (requires gcal_sync)
       "workday" # Binary sensor for workday/holiday detection
 
-      # Yale/August lock integration (renamed from yale_home in HA 2026.x)
+      # Yale/August lock integration. Upstream redirected yale_home -> yale in
+      # 2024-08 and later dropped the yale_home alias entirely; this config
+      # caught up at the HA 2026.4.1 upgrade.
       "yale"
       "august"
 
@@ -469,7 +474,7 @@ in
       # Network devices
       "asuswrt" # ASUS WiFi routers
       "tplink" # TP-Link Smart Home (Kasa/Tapo devices)
-      # OPNsense firewall - use HACS custom component instead
+      # OPNsense firewall - use the Nix-managed hass-opnsense custom component instead
       # Built-in integration has JSON parsing issues with newer OPNsense versions
 
       # Lighting
@@ -562,7 +567,8 @@ in
         internal_url = "https://hass.vulcan.lan";
         external_url = "https://hass.vulcan.lan";
 
-        # Trust the nginx reverse proxy
+        # Authentication providers: username/password only. (Trust for the nginx
+        # reverse proxy is configured under http: below, not here.)
         auth_providers = [
           {
             type = "homeassistant";
@@ -574,9 +580,10 @@ in
         packages = "!include_dir_named packages";
       };
 
-      # OpenUV daily forecast — one /forecast pull per day at 05:00 (driven by
-      # the refresh automation in Task 4). Exposes the hourly UV array as
-      # sensor.openuv_forecast.attributes.result for Node-RED consumption.
+      # OpenUV daily forecast — one /forecast pull per day at 05:00 (driven by the
+      # HA automation openuv_forecast_refresh, created per Task 4 of
+      # docs/superpowers/plans/2026-05-12-openuv-pool-time.md). Exposes the hourly
+      # UV array as sensor.openuv_forecast.attributes.result for Node-RED consumption.
       rest = [
         {
           scan_interval = 86400;
@@ -620,12 +627,13 @@ in
 
       # Recorder - using PostgreSQL for better performance and memory efficiency
       recorder = {
-        # Don't specify db_url here - it will be set via environment variable
+        # Don't specify db_url here - the service's preStart injects it into
+        # /var/lib/hass/configuration.yaml (see the awk block further below)
         # This allows us to inject the SOPS-managed password securely
 
         auto_purge = true;
         purge_keep_days = 30;
-        commit_interval = 5; # Reduced from 1 to improve performance
+        commit_interval = 5; # Increased from 1 to improve performance
 
         # Database optimization
         auto_repack = true; # Automatically repack database to reclaim space and improve performance
@@ -955,7 +963,8 @@ in
       # Connection/auth keys (host, port, database) are managed via UI after
       # HA 2026.4+ deprecation of YAML connection config (removed in 2026.9.0)
       influxdb = {
-        # Push metrics every 60 seconds (aligned with VictoriaMetrics scrape interval)
+        # Pushed on every state change (HA batches writes, ~1s window as of
+        # 2026.7.2); the influxdb integration has no fixed push interval to tune
         max_retries = 3;
         default_measurement = "state";
 
@@ -1035,7 +1044,7 @@ in
             # "climate.slugify_*" # Traeger grill climate entities
           ];
 
-          # To include specific sensors/binary_sensors, uncomment and add entities:
+          # Specific sensors/binary_sensors exposed to HomeKit (add more here):
           include_entities = [
             "sensor.upstairs_temperature"
             "sensor.downstairs_temperature"
@@ -1140,7 +1149,7 @@ in
             fi
     '';
 
-    # Inject credentials as environment variables
+    # Inject the paths of the credential files as environment variables
     serviceConfig = {
       EnvironmentFile = [
         (pkgs.writeText "home-assistant-env" ''
@@ -1214,7 +1223,7 @@ in
     };
   };
 
-  # Open firewall for local network access only
+  # Open port 8123 on the loopback interface only (not on the LAN)
   # Access via nginx reverse proxy on port 443 (HTTPS)
   networking.firewall.interfaces."lo".allowedTCPPorts = [
     8123 # Home Assistant web interface

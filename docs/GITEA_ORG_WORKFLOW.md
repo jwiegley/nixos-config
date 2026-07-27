@@ -8,7 +8,9 @@ Before building the NixOS configuration, you need to add two secrets to SOPS:
 
 ### 1. Add Secrets to SOPS
 
-Run `sops /etc/nixos/secrets.yaml` and add the following keys:
+Run `sops /etc/nixos/secrets/secrets.yaml` and add the following keys.
+(`/etc/nixos/secrets/` is a separate git repo consumed as the `secrets` flake
+input — there is no `/etc/nixos/secrets.yaml`.)
 
 ```yaml
 # Gitea Actions Runner registration token
@@ -118,14 +120,17 @@ To test the workflow:
 1. Make a commit to your org repository
 2. Push to the main branch
 3. Check the Actions tab in Gitea to see the workflow run
-4. Check logs: `sudo journalctl -u gitea-runner-org-builder.service -f`
+4. Check logs: `sudo journalctl -u 'gitea-runner-org\x2dbuilder.service' -f`
+   (the hyphen in the instance name `org-builder` is systemd-escaped to
+   `\x2d`; `gitea-runner-org-builder.service` does not exist — quote the name
+   so the shell does not eat the backslash)
 
 ## Troubleshooting
 
 **Runner not appearing in Gitea:**
 ```bash
-sudo systemctl status gitea-runner-org-builder.service
-sudo journalctl -u gitea-runner-org-builder.service -f
+sudo systemctl status 'gitea-runner-org\x2dbuilder.service'
+sudo journalctl -u 'gitea-runner-org\x2dbuilder.service' -f
 ```
 
 **Secrets not accessible:**

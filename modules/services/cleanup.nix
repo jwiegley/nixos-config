@@ -6,7 +6,10 @@
 }:
 
 let
-  # Create a Python environment with dirscan available
+  # Create a Python environment with dirscan available.
+  # STALE as of 2026-07-27: this binding is dead — the package list is empty
+  # and nothing references pythonWithDirscan. The wrapper below instead runs
+  # plain pkgs.python3 with dirscan's libexec prepended to PYTHONPATH.
   pythonWithDirscan = pkgs.python3.withPackages (ps: [
     # Note: dirscan is defined in overlays/dirscan.nix but we need to
     # ensure the Python module is available, not just the binary

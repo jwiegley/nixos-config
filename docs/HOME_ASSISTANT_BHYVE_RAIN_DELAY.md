@@ -1,5 +1,23 @@
 # Home Assistant B-Hyve Rain Delay Automation
 
+> **Status (2026-07-27):** The B-Hyve integration itself **is installed** —
+> `/var/lib/hass/custom_components/bhyve` (sebr/bhyve-home-assistant v4.1.2). Its
+> manifest declares no Python requirements, so the "no NixOS configuration changes
+> are needed" note near the end of this document still holds.
+>
+> The rain-delay automation described here is **not deployed**:
+> `/var/lib/hass/automations.yaml` contains no `bhyve` references. This document is
+> a how-to, not a description of a running setup.
+>
+> Two procedural corrections for this host: HACS is already installed and is
+> **Nix-managed** (see `customComponents` in
+> `/etc/nixos/modules/services/home-assistant.nix`) — do not run the `get.hacs.xyz`
+> installer below. And do not hand-edit `/var/lib/hass/configuration.yaml` (Step 1,
+> Option A): it is regenerated from `services.home-assistant.config` on every Home
+> Assistant start, so edits are lost. Drop template YAML into
+> `/var/lib/hass/packages/` instead — that directory is loaded via
+> `homeassistant.packages = "!include_dir_named packages"`.
+
 ## Overview
 
 This guide explains how to automatically enable rain delay on your Orbit B-Hyve sprinkler system based on weather forecasts. The automation prevents unnecessary watering when rain is expected, conserving water and reducing costs.
@@ -65,9 +83,11 @@ After restart:
 
 ### 2. Weather Integration
 
-You already have these configured:
+You already have these configured (both `accuweather` and `nws` are in
+`extraComponents` in `/etc/nixos/modules/services/home-assistant.nix`):
 - ✅ **AccuWeather** (`weather.YOUR_LOCATION`)
-- ✅ **National Weather Service** (`weather.YOUR_NWS_STATION`)
+- ✅ **National Weather Service** (`weather.YOUR_NWS_STATION` — on this host the NWS
+  entity is `weather.kmhr`, Mather Airport/Sacramento)
 
 You'll need to identify your weather entity IDs (see "Finding Entity IDs" section below).
 
@@ -519,7 +539,13 @@ sudo journalctl -u home-assistant | grep -i bhyve
 
 ### Weather-Based Cancel
 
-Automatically cancel rain delay if forecast improves (see Approach 7 in automation file).
+Automatically cancel rain delay if forecast improves. This is the last automation in
+`/etc/nixos/config/home-assistant/bhyve-rain-delay-automation.yaml`, commented
+"Optional: Disable rain delay when weather clears" (id `bhyve_rain_delay_cancel`).
+It is not numbered — that file contains APPROACH 1 through 6 only, plus this cancel
+automation. (Corrected 2026-07-27; this previously read "see Approach 7 in automation
+file", but Approach 7 exists only as a section of *this* document, and it is the
+"without template sensors" variant, not the cancel automation.)
 
 ### Integration with Smart Home Routines
 

@@ -123,7 +123,8 @@ in
 
         containerConfig = {
           image = "ghcr.io/open-webui/open-webui:main";
-          # With host network mode, no port mapping needed - app listens on 8080 directly
+          # With host network mode, no port mapping needed - app listens on 8084 directly
+          # (PORT=8084 below; 8080 is open-webui's default but belongs to llama-swap here)
           # publishPorts is not used with host networking
 
           # Use host network mode to access host services directly
@@ -152,7 +153,7 @@ in
             # Can be disabled from Admin Panel after first user is created
             ENABLE_SIGNUP = "true";
 
-            # Enable community sharing
+            # Disable community sharing
             ENABLE_COMMUNITY_SHARING = "false";
 
             # Disable update checks (we manage via container updates)

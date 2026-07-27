@@ -1,5 +1,14 @@
 # Mac Studio Power Monitoring on Asahi Linux
 
+> **Status (2026-07-27):** still accurate in substance — the sensors, the
+> node-exporter metrics and the `mac-studio-power` Grafana dashboard are all
+> live. Three corrections were folded in on that date: the SMC hwmon device is
+> **`hwmon0`** on the current boot (not `hwmon1`, which is the NVMe controller)
+> and its index is assigned at boot, so the shell examples now discover it;
+> `temp1` is the **NAND Flash Temperature**, not a generic "system"
+> temperature; and the module paths for node-exporter / Prometheus were wrong.
+> The numeric power readings below are the original 2025-10-26 measurements.
+
 ## Overview
 
 This document describes the comprehensive power monitoring solution for the Mac Studio running Asahi Linux. The system leverages native Apple Silicon hardware sensors exposed through the Linux hwmon subsystem to provide real-time power consumption, current draw, and temperature monitoring.
@@ -18,12 +27,13 @@ This document describes the comprehensive power monitoring solution for the Mac 
                     ▼
 ┌─────────────────────────────────────────────────┐
 │  macsmc_hwmon Kernel Driver (Asahi Linux)       │
-│  /sys/class/hwmon/hwmon1/                       │
+│  /sys/class/hwmon/hwmon0/  (index varies)       │
 │  - power1_input: Total System Power             │
 │  - power2_input: AC Input Power                 │
 │  - power3_input: 3.8V Rail Power                │
-│  - curr1_input: Current Draw                    │
-│  - temp1_input: System Temperature              │
+│  - curr1_input: AC Input Current                │
+│  - temp1_input: NAND Flash Temperature          │
+│  - fan1/fan2_input: Fan 1 / Fan 2 RPM           │
 └───────────────────┬─────────────────────────────┘
                     │
                     ▼
@@ -64,7 +74,7 @@ This document describes the comprehensive power monitoring solution for the Mac 
 | `node_hwmon_power_watt{sensor="power2"}` | AC Input Power | AC power input from wall | 15-55W |
 | `node_hwmon_power_watt{sensor="power3"}` | 3.8V Rail Power | Power consumption on 3.8V rail | 8-25W |
 
-**Current Readings** (idle Mac Studio):
+**Readings at idle, measured 2025-10-26**:
 - Total System Power: ~16.8W
 - AC Input Power: ~15.8W
 - 3.8V Rail Power: ~9.7W
@@ -73,22 +83,29 @@ This document describes the comprehensive power monitoring solution for the Mac 
 
 | Metric | Sensor | Description | Typical Range |
 |--------|--------|-------------|---------------|
-| `node_hwmon_curr_amps{sensor="curr1"}` | Current Draw | System current consumption | 1.0-3.0A |
+| `node_hwmon_curr_amps{sensor="curr1"}` | AC Input Current (`ID0R`) | Current drawn from the wall supply | 1.0-3.0A |
 
-**Current Reading**: ~1.3A
+**Reading (2025-10-26)**: ~1.3A
+
+### Fan Metrics
+
+The same chip also exposes both Mac Studio fans (no separate configuration
+needed): `node_hwmon_fan_rpm`, `node_hwmon_fan_target_rpm`,
+`node_hwmon_fan_min_rpm` (1100) and `node_hwmon_fan_max_rpm` (3500) for
+`sensor="fan1"` and `sensor="fan2"`.
 
 ### Temperature Metrics
 
 | Metric | Description | Typical Range |
 |--------|-------------|---------------|
-| `node_hwmon_temp_celsius{chip="290400000_smc_macsmc_hwmon"}` | SMC temperature sensor | 25-45°C |
-| `node_hwmon_temp_celsius{chip="nvme_nvme0"}` | NVMe SSD temperature | 25-65°C |
-| `node_hwmon_temp_celsius{chip="0000:00:02_0_0000:03:00_0"}` | PCIe device temperature | 45-80°C |
+| `node_hwmon_temp_celsius{chip="290400000_smc_macsmc_hwmon"}` | NAND Flash Temperature (`TH0x`, the only SMC temperature in the device tree) | 25-45°C |
+| `node_hwmon_temp_celsius{chip="nvme_nvme0"}` | NVMe SSD "Composite" temperature | 25-65°C |
+| `node_hwmon_temp_celsius{chip="0000:00:02_0_0000:03:00_0"}` | 10GbE NIC — `temp1` = PHY, `temp2` = MAC | 45-80°C |
 
-**Current Readings**:
-- SMC sensor: ~27.8°C
+**Readings (2025-10-26)**:
+- SMC (NAND flash) sensor: ~27.8°C
 - NVMe SSD: ~26.9°C
-- PCIe device: ~56°C
+- NIC: ~56°C
 
 ## Grafana Dashboard
 
@@ -101,17 +118,20 @@ This document describes the comprehensive power monitoring solution for the Mac 
 
 ### Dashboard Panels
 
-1. **Total System Power** (Gauge)
+(Panels 1, 2, 3, 5, 6 and 7 are Grafana `stat` panels with thresholds, not
+`gauge` panels; 4 and 8 are time series.)
+
+1. **Total System Power** (Stat)
    - Query: `node_hwmon_power_watt{sensor="power1"}`
    - Thresholds: Green (<20W), Yellow (20-40W), Orange (40-60W), Red (>60W)
    - Unit: Watts
 
-2. **AC Input Power** (Gauge)
+2. **AC Input Power** (Stat)
    - Query: `node_hwmon_power_watt{sensor="power2"}`
    - Thresholds: Green (<20W), Yellow (20-40W), Red (>40W)
    - Unit: Watts
 
-3. **3.8V Rail Power** (Gauge)
+3. **3.8V Rail Power** (Stat)
    - Query: `node_hwmon_power_watt{sensor="power3"}`
    - Thresholds: Green (<15W), Yellow (15-25W), Red (>25W)
    - Unit: Watts
@@ -122,19 +142,23 @@ This document describes the comprehensive power monitoring solution for the Mac 
    - Shows mean, last, max, and min values in legend
    - Time range: Last 6 hours (configurable)
 
-5. **Current Draw** (Gauge)
+5. **Current Draw** (Stat)
    - Query: `node_hwmon_curr_amps{sensor="curr1"}`
    - Thresholds: Green (<2A), Yellow (2-3A), Red (>3A)
    - Unit: Amps
 
-6. **System Temperature** (Gauge)
+6. **System Temperature** (Stat)
    - Query: `node_hwmon_temp_celsius{chip="290400000_smc_macsmc_hwmon"}`
    - Thresholds: Green (<60°C), Yellow (60-80°C), Red (>80°C)
    - Unit: Celsius
+   - The panel title is a misnomer: the only SMC temperature exposed is
+     `TH0x`, **NAND Flash Temperature**
 
-7. **Energy Consumed (24h)** (Gauge)
+7. **Energy Consumed (24h)** (Stat)
    - Query: `sum(increase(node_hwmon_power_watt{sensor="power1"}[24h])) / 3600`
-   - Shows total energy consumption in kWh over last 24 hours
+   - Labelled kWh over the last 24 hours, but `increase()` is a counter function
+     applied to a gauge — the number it prints is **not** energy (see the
+     caution under "Advanced Queries"). Unfixed as of 2026-07-27.
    - Unit: kWh
 
 8. **All Temperature Sensors** (Time Series)
@@ -165,11 +189,14 @@ node_hwmon_power_watt{sensor="power2"}
 # Current 3.8V rail power
 node_hwmon_power_watt{sensor="power3"}
 
-# Current draw in amps
+# AC input current in amps
 node_hwmon_curr_amps{sensor="curr1"}
 
-# SMC temperature
+# SMC temperature (NAND flash)
 node_hwmon_temp_celsius{chip="290400000_smc_macsmc_hwmon"}
+
+# Fan speeds
+node_hwmon_fan_rpm{chip="290400000_smc_macsmc_hwmon"}
 ```
 
 ### Advanced Queries
@@ -182,6 +209,10 @@ avg_over_time(node_hwmon_power_watt{sensor="power1"}[1h])
 max_over_time(node_hwmon_power_watt{sensor="power1"}[24h])
 
 # Total energy consumed in last 24 hours (kWh)
+# CAUTION: this is the expression the dashboard's "Energy Consumed (24h)" panel
+# uses, but `increase()` is a counter function and power1 is a GAUGE, so the
+# result is not actually energy. The dimensionally correct form is:
+#   avg_over_time(node_hwmon_power_watt{sensor="power1"}[24h]) * 24 / 1000
 sum(increase(node_hwmon_power_watt{sensor="power1"}[24h])) / 3600
 
 # Rate of power change (watts per second)
@@ -193,36 +224,46 @@ node_hwmon_temp_celsius and on() node_hwmon_power_watt{sensor="power1"}
 
 ## CLI Monitoring
 
+### Finding the SMC hwmon device
+
+The hwmon index is assigned at boot and is **not** stable: on 2026-07-27 the SMC
+chip is `hwmon0` and `hwmon1` is the NVMe controller. Discover it instead of
+hard-coding an index:
+
+```bash
+SMC=$(dirname "$(grep -l macsmc_hwmon /sys/class/hwmon/*/name)")
+echo "$SMC"          # e.g. /sys/class/hwmon/hwmon0
+```
+
+All examples below assume `$SMC` is set that way.
+
 ### Real-time Power Monitoring
 
 ```bash
 # Watch power consumption in real-time
-watch -n 1 'cat /sys/class/hwmon/hwmon1/power1_input | awk "{print \$1/1000000 \" watts\"}"'
+watch -n 1 "awk '{print \$1/1000000 \" watts\"}' $SMC/power1_input"
 
 # All power sensors
-watch -n 1 '
-  echo "Total System: $(awk "{print \$1/1000000}" /sys/class/hwmon/hwmon1/power1_input) W"
-  echo "AC Input: $(awk "{print \$1/1000000}" /sys/class/hwmon/hwmon1/power2_input) W"
-  echo "3.8V Rail: $(awk "{print \$1/1000000}" /sys/class/hwmon/hwmon1/power3_input) W"
-  echo "Current: $(awk "{print \$1/1000000}" /sys/class/hwmon/hwmon1/curr1_input) A"
-'
+watch -n 1 "
+  echo \"Total System: \$(awk '{print \$1/1000000}' $SMC/power1_input) W\"
+  echo \"AC Input:     \$(awk '{print \$1/1000000}' $SMC/power2_input) W\"
+  echo \"3.8V Rail:    \$(awk '{print \$1/1000000}' $SMC/power3_input) W\"
+  echo \"AC Current:   \$(awk '{print \$1/1000}' $SMC/curr1_input) A\"   # mA, not µA
+"
 ```
 
 ### Sensor Information
 
 ```bash
-# List all hwmon devices
-ls -l /sys/class/hwmon/
+# List all hwmon devices with their names
+for d in /sys/class/hwmon/hwmon*; do echo "$d: $(cat $d/name)"; done
 
-# Show sensor labels
-cat /sys/class/hwmon/hwmon1/power1_label
-cat /sys/class/hwmon/hwmon1/power2_label
-cat /sys/class/hwmon/hwmon1/power3_label
-cat /sys/class/hwmon/hwmon1/curr1_label
+# Show sensor labels (power1/2/3, curr1, temp1, fan1, fan2)
+for f in "$SMC"/*_label; do echo "$(basename "$f"): $(cat "$f")"; done
 
-# Read raw sensor values (microwatts/microamps)
-cat /sys/class/hwmon/hwmon1/power1_input
-cat /sys/class/hwmon/hwmon1/curr1_input
+# Read raw sensor values (power in microwatts, current in MILLIamps)
+cat "$SMC/power1_input"
+cat "$SMC/curr1_input"
 ```
 
 ### Prometheus API Queries
@@ -247,7 +288,8 @@ curl -s 'http://localhost:9090/api/v1/query?query=sum(increase(node_hwmon_power_
 
 - **Service**: `prometheus-node-exporter.service`
 - **Port**: 9100
-- **Config**: `/etc/nixos/modules/monitoring/services/node-exporter.nix`
+- **Config**: `/etc/nixos/modules/monitoring/services/system-exporters.nix`
+  (there is no `node-exporter.nix`; that file also defines the `node` scrape job)
 
 ```bash
 # Check node exporter status
@@ -264,8 +306,11 @@ curl http://localhost:9100/metrics | grep node_hwmon
 
 - **Service**: `prometheus.service`
 - **Port**: 9090
-- **Config**: `/etc/nixos/modules/monitoring/services/prometheus.nix`
-- **Scrape Interval**: 15 seconds
+- **Config**: `/etc/nixos/modules/monitoring/services/prometheus-server.nix`
+  (there is no `prometheus.nix`)
+- **Scrape Interval**: 15 seconds (`globalConfig.scrape_interval`)
+- **Listen address**: 127.0.0.1 only; the external URL is
+  `https://prometheus.vulcan.lan` via nginx
 
 ```bash
 # Check Prometheus status
@@ -341,19 +386,25 @@ The `macsmc_hwmon` driver is part of the Asahi Linux kernel and provides access 
 
 **Kernel Module**: `macsmc_hwmon.ko`
 
-**sysfs Path**: `/sys/class/hwmon/hwmon1/` (device name: `290400000.smc.macsmc-hwmon`)
+**sysfs Path**: `/sys/class/hwmon/hwmon<N>/` — `hwmon0` on the 2026-07-27 boot,
+but the index is not stable (see "Finding the SMC hwmon device"). The `name`
+file reads **`macsmc_hwmon`**; the *device* path is
+`/sys/devices/platform/soc/290400000.smc/macsmc-hwmon/hwmon/hwmon<N>`, which is
+what node-exporter turns into the `chip="290400000_smc_macsmc_hwmon"` label.
 
-**Available Sensors**:
-- `power1`: Total system power consumption
-- `power2`: AC input power (wall power)
-- `power3`: 3.8V rail power consumption
-- `curr1`: System current draw
-- `temp1`: System temperature (SMC sensor)
+**Available Sensors** (labels straight from the device tree):
+- `power1`: Total System Power (`PSTR`)
+- `power2`: AC Input Power (`PDTR`, wall power)
+- `power3`: 3.8 V Rail Power (`PMVR`)
+- `curr1`: AC Input Current (`ID0R`)
+- `temp1`: NAND Flash Temperature (`TH0x`)
+- `fan1`, `fan2`: Fan 1 / Fan 2 (`F0Ac` / `F1Ac`, with min/max/target attributes)
 
-**Units**:
+**Units** (standard Linux hwmon scaling):
 - Power: microwatts (divide by 1,000,000 for watts)
-- Current: microamps (divide by 1,000,000 for amps)
+- Current: **milliamps** (divide by 1,000 for amps)
 - Temperature: millidegrees Celsius (divide by 1,000 for °C)
+- Fan speed: RPM (no scaling)
 
 ### Why Zeus Doesn't Work
 
@@ -371,7 +422,10 @@ The `macsmc_hwmon` driver is part of the Asahi Linux kernel and provides access 
 
 ## Alerting (Future Enhancement)
 
-Potential Alertmanager rules for power monitoring:
+Still unimplemented as of 2026-07-27 — there is no `mac_studio_power` group in
+`modules/monitoring/alerts/`. Sketch of the rules that could be added (note that
+`temp1` on this chip is NAND flash temperature, so the temperature threshold
+below is not a CPU/SoC guard):
 
 ```yaml
 groups:
@@ -428,8 +482,9 @@ sudo ls -la /var/lib/grafana/dashboards/mac-studio-power.json
 
 1. Verify sensor is exposed by hwmon:
    ```bash
-   ls /sys/class/hwmon/hwmon1/
-   cat /sys/class/hwmon/hwmon1/<sensor>_label
+   SMC=$(dirname "$(grep -l macsmc_hwmon /sys/class/hwmon/*/name)")
+   ls "$SMC"
+   cat "$SMC/<sensor>_label"
    ```
 
 2. Confirm node_exporter exposes it:
@@ -446,14 +501,18 @@ sudo ls -la /var/lib/grafana/dashboards/mac-studio-power.json
 ### No Power Metrics Available
 
 ```bash
-# Check if hwmon device exists
-ls /sys/class/hwmon/hwmon1/
+# Locate the SMC hwmon device (its index changes between boots)
+SMC=$(dirname "$(grep -l macsmc_hwmon /sys/class/hwmon/*/name)")
+ls "$SMC"
 
 # Verify it's the SMC device
-cat /sys/class/hwmon/hwmon1/name  # Should show: 290400000.smc.macsmc-hwmon
+cat "$SMC/name"   # shows: macsmc_hwmon
 
 # Check if sensors are readable
-cat /sys/class/hwmon/hwmon1/power1_input
+cat "$SMC/power1_input"
+
+# Is the driver loaded at all?
+lsmod | grep macsmc_hwmon
 ```
 
 ### Metrics Not Appearing in Prometheus
@@ -492,7 +551,8 @@ curl http://localhost:3000/api/health
 
 ```bash
 # Compare raw sensor value with Prometheus
-RAW=$(cat /sys/class/hwmon/hwmon1/power1_input)
+SMC=$(dirname "$(grep -l macsmc_hwmon /sys/class/hwmon/*/name)")
+RAW=$(cat "$SMC/power1_input")
 WATTS=$(echo "scale=2; $RAW / 1000000" | bc)
 echo "Raw: $RAW microwatts = $WATTS watts"
 
@@ -513,7 +573,8 @@ curl -s 'http://localhost:9090/api/v1/query?query=node_hwmon_power_watt{sensor="
 This Mac Studio power monitoring solution provides comprehensive, real-time visibility into system power consumption without requiring any external tools or proprietary software. By leveraging Asahi Linux's native `macsmc_hwmon` driver and the existing Prometheus + Grafana monitoring stack, we achieve:
 
 ✅ **Real-time power monitoring** (15-second granularity)
-✅ **Historical trending and analysis** (unlimited retention via Prometheus)
+✅ **Historical trending and analysis** (effectively unlimited — Prometheus
+`retentionTime` is set to `100y` in `modules/options/default.nix`)
 ✅ **Visual dashboards** with Grafana
 ✅ **Energy consumption calculations** (daily/weekly/monthly)
 ✅ **Temperature correlation** with power draw
@@ -531,7 +592,8 @@ This Mac Studio power monitoring solution provides comprehensive, real-time visi
 
 ### Question: Can we measure CPU, GPU, and ANE power separately like macmon does on macOS?
 
-**Short Answer:** ❌ **No, not currently available on Asahi Linux.**
+**Short Answer:** ❌ **No — still not available on Asahi Linux as of 2026-07-27**
+(kernel 6.17.12; the device tree exposes only the three power keys below).
 
 While tools like **macmon** and **powermetrics** on macOS can show separate power measurements for CPU, GPU, and ANE (Apple Neural Engine), this capability is **not yet available** on Asahi Linux for Mac Studio.
 
@@ -558,12 +620,17 @@ On macOS, separate component power monitoring works through:
 
 **Device Tree Configuration:**
 
-Current power sensors in `/sys/firmware/devicetree/base/soc/smc@290400000/hwmon/apple,power-keys/`:
+Sensor nodes live directly under
+`/sys/firmware/devicetree/base/soc/smc@290400000/hwmon/` (there is no
+`apple,power-keys/` sub-node). Verified 2026-07-27:
 
 ```
-power-PSTR  → Total System Power (power1)
-power-PDTR  → AC Input Power (power2)
-power-PMVR  → 3.8 V Rail Power (power3)
+power-PSTR        → Total System Power     (power1)
+power-PDTR        → AC Input Power         (power2)
+power-PMVR        → 3.8 V Rail Power       (power3)
+current-ID0R      → AC Input Current       (curr1)
+temperature-TH0x  → NAND Flash Temperature (temp1)
+fan-F0Ac/fan-F1Ac → Fan 1 / Fan 2          (fan1/fan2)
 ```
 
 **What's Missing:**
@@ -582,7 +649,8 @@ power-PMVR  → 3.8 V Rail Power (power3)
 
 2. **Device Tree Configuration**
    - Asahi Linux uses device tree to specify which SMC sensors to expose
-   - Only three power sensors are currently configured for Mac Studio
+   - Only three *power* sensors are configured for Mac Studio (plus one
+     current, one temperature and two fan nodes)
    - Adding new sensors requires knowing the correct SMC keys
 
 3. **Driver Already Supports It**
@@ -681,7 +749,7 @@ File feature request with Asahi Linux project:
 **Device Tree Format for Power Sensors:**
 
 ```
-/sys/firmware/devicetree/base/soc/smc@290400000/hwmon/apple,power-keys/
+/sys/firmware/devicetree/base/soc/smc@290400000/hwmon/
 ├── power-PSTR/
 │   ├── apple,key-id: "PSTR"
 │   ├── label: "Total System Power"
@@ -690,10 +758,14 @@ File feature request with Asahi Linux project:
 │   ├── apple,key-id: "PDTR"
 │   ├── label: "AC Input Power"
 │   └── name: "power-PDTR"
-└── power-PMVR/
-    ├── apple,key-id: "PMVR"
-    ├── label: "3.8 V Rail Power"
-    └── name: "power-PMVR"
+├── power-PMVR/
+│   ├── apple,key-id: "PMVR"
+│   ├── label: "3.8 V Rail Power"
+│   └── name: "power-PMVR"
+├── current-ID0R/        (label "AC Input Current")
+├── temperature-TH0x/    (label "NAND Flash Temperature")
+├── fan-F0Ac/            (label "Fan 1"; also apple,fan-{minimum,maximum,target,mode})
+└── fan-F1Ac/            (label "Fan 2")
 ```
 
 **To add CPU power sensor (if key was known):**
@@ -705,8 +777,8 @@ power-pACC/   # Example - actual key unknown
 ```
 
 This would automatically create:
-- `/sys/class/hwmon/hwmon1/power4_input`
-- `/sys/class/hwmon/hwmon1/power4_label` → "CPU Power"
+- `$SMC/power4_input`
+- `$SMC/power4_label` → "CPU Power"
 - Prometheus metric: `node_hwmon_power_watt{sensor="power4"}`
 
 ### Recommendation

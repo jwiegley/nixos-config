@@ -1,5 +1,11 @@
 # Hermes Agent Phase 1 — Standalone microVM Implementation Plan
 
+> **Archival — 2026-05-11.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-microvm.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deploy Hermes Agent (Nous Research) on vulcan as a standalone
@@ -465,7 +471,7 @@ in
   # ---- NetworkManager coexistence ----
   # NetworkManager runs on this host; tell it to ignore the bridge and
   # TAP interface so systemd-networkd can manage them. (Same pattern as
-  # openclaw-microvm.nix:327.)
+  # openclaw-microvm.nix:389.)
   networking.networkmanager.unmanaged = [
     "interface-name:${bridgeName}"
     "interface-name:${tapName}"
@@ -545,7 +551,7 @@ in
   # ---- Nix store / virtiofs interaction ----
   # The guest mounts /nix/store via virtiofs (ro-store share in
   # hermes-vm.nix). Auto-optimise on the host can produce stale file
-  # handles inside the guest — disable. Matches openclaw-microvm.nix:623.
+  # handles inside the guest — disable. Matches openclaw-microvm.nix:736.
   nix.optimise.automatic = false;
 
   # ---- SOPS secret staged for the VM's environmentFile ----

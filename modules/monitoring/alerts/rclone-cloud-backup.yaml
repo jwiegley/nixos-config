@@ -30,9 +30,12 @@ groups:
       # mode), the run timestamp advances while the success timestamp stays frozen,
       # so (run - success) grows without bound. This is the signal RcloneCloudBackupStale
       # alone cannot give: a perpetually-stale remote on a broken token looks identical
-      # to "nothing to copy" with the success timestamp only. EXPECTED to fire on
-      # deploy for the remotes whose nightly sync is currently broken (assembly, bia,
-      # git-ai, positron were last successful 2026-06-02/06-03) — that is the finding.
+      # to "nothing to copy" with the success timestamp only. This was EXPECTED to
+      # fire on deploy for the four remotes whose nightly sync was broken (assembly,
+      # bia, git-ai, positron — last successful 2026-06-02/06-03); those four were
+      # DISABLED on 2026-06-10 (rclone-cloud-backup.nix:241-259) because their Google
+      # OAuth client is Testing-status, and their textfiles were removed, so as of
+      # 2026-07-27 only gdrive and onedrive are tracked by this rule.
       - alert: RcloneRemoteSyncFailing
         expr: |
           (rclone_last_run_timestamp_seconds - on(remote)

@@ -1,6 +1,8 @@
 """MCP server exposing email (IMAP/SMTP) and contact (khard) tools.
 
-Designed to run inside the OpenClaw microVM where:
+Designed to run inside the agent microVMs — it is wired into BOTH the
+OpenClaw VM (openclaw-vm.nix, via mcporter) and the Hermes VM
+(hermes-vm.nix, via services.hermes-agent.mcpServers) — where:
   - Dovecot IMAPS is reachable at imap.vulcan.lan:993 via DNAT
   - Postfix plain SMTP is reachable at smtp.vulcan.lan:2525 via DNAT
   - khard is in PATH with pre-synced vCard contacts

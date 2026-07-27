@@ -3,7 +3,9 @@
 #
 # Sibling to modules/services/openclaw-microvm.nix; intentionally on
 # its own private /30 bridge so neither VM's networking can affect the
-# other. No DNAT/inbound in Phase 1 — Hermes is outbound-only.
+# other. No INBOUND path from the LAN — Hermes is outbound-only. (There IS
+# outbound-direction DNAT: since 2026-05-12 a two-stage DNAT lets the guest
+# reach host loopback services; see the dnatPorts block below.)
 {
   config,
   lib,
@@ -42,7 +44,7 @@ let
   secretsStagingDir = "/var/lib/microvms/hermes/secrets";
 
   # -- Host-side loopback services that the VM needs to reach --
-  # Strategy mirrors openclaw-microvm.nix:115-118 — two-stage DNAT:
+  # Strategy mirrors openclaw-microvm.nix:122-125 — two-stage DNAT:
   #   1. Guest nftables OUTPUT: 127.0.0.1:port -> 10.99.1.1:port
   #   2. Host iptables PREROUTING (on hermes-br0): 10.99.1.1:port -> 127.0.0.1:port
   #   3. Host sysctl route_localnet=1 on hermes-br0 (allows the loopback hop)
@@ -58,6 +60,8 @@ let
   #   5232 Radicale CardDAV (contacts)
   #   5432 PostgreSQL (org-db read-only)
   #   8123 Home Assistant (mcp-proxy bridge)
+  #   9082 drafts-mcp (Drafts(hera) MCP SSE bridge)
+  # (8236 memory-vault-mcp is annotated inline in the list itself.)
   # Deliberately EXCLUDED: 6333/6334/6335 (Qdrant — OpenClaw-memory-specific)
   # and 9081 (the OpenClaw↔Hermes bridge — Hermes *is* Hermes).
   dnatPorts = [
@@ -142,21 +146,26 @@ in
   # bridgeAddr:PORT → 127.0.0.1:PORT but the packet still arrives via
   # hermes-br0; the INPUT chain must whitelist the post-DNAT ports on
   # this interface or `nixos-fw-log-refuse` drops them at end-of-chain.
-  # Matches openclaw-microvm.nix:479-486.
+  # Matches openclaw-microvm.nix:546-553.
   networking.firewall.interfaces.${bridgeName} = {
     allowedUDPPorts = [ 53 ];
     allowedTCPPorts = [ 53 ] ++ dnatPorts;
   };
 
   # ---- Egress isolation (iptables-nft, matching OpenClaw) ----
-  # Phase 1: outbound is allowed to the public internet (Discord +
-  # OpenRouter via the hera/* route). The chain below only restricts
-  # the VM's access *back* into the host's private network.
+  # Outbound reaches the public internet on TCP/UDP 443 (Discord +
+  # OpenRouter via the hera/* route) and TCP/UDP 53 (DNS) only;
+  # everything else leaving the bridge is logged as
+  # "hermes-egress-rejected" and DROPped by the FORWARD rules below
+  # (tightened 2026-05-15 — before that, all outbound was allowed).
+  # The hermes-isolate chain below separately restricts the VM's
+  # access *back* into the host's private network.
   #
-  # TODO(phase-2): tighten egress to an allowlist of known endpoint
-  # ranges — Discord runs behind Cloudflare (AS13335) and OpenRouter
-  # publishes its egress addresses. Until then, a compromised Hermes
-  # process could exfiltrate to arbitrary public IPs.
+  # TODO(phase-2): tighten egress further to an allowlist of known
+  # endpoint IP ranges — Discord runs behind Cloudflare (AS13335) and
+  # OpenRouter publishes its egress addresses. Until then, a
+  # compromised Hermes process could still exfiltrate to arbitrary
+  # public IPs over port 443.
   networking.firewall.extraCommands = ''
     # ── Hermes network isolation ──
     iptables -N hermes-isolate 2>/dev/null || iptables -F hermes-isolate
@@ -268,7 +277,7 @@ in
   # ---- Nix store / virtiofs interaction ----
   # The guest mounts /nix/store via virtiofs in hermes-vm.nix.
   # Auto-optimise on the host can produce stale file handles inside
-  # the guest — disable. Matches openclaw-microvm.nix:623.
+  # the guest — disable. Matches openclaw-microvm.nix:736.
   nix.optimise.automatic = false;
 
   # ---- SOPS secret staged for the VM's environmentFile ----
@@ -278,7 +287,7 @@ in
   # default /run/secrets/hermes/env on the host, and a prepare-secrets
   # oneshot below copies the *content* into the state share at
   # ${stateDir}/env so the in-VM hermes-agent.service can read a real
-  # file via virtio-fs. Same pattern as openclaw-microvm.nix:495.
+  # file via virtio-fs. Same pattern as openclaw-microvm.nix:564.
   sops.secrets."hermes/env" = {
     mode = "0640";
     owner = "hermes";

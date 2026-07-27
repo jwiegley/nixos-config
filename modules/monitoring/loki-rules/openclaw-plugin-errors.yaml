@@ -28,7 +28,7 @@ groups:
             Check /var/lib/openclaw/.openclaw/logs/gateway-vm.err.log and
             `systemctl status microvm@openclaw.service`.
 
-      # Fires on the exact EUNSUPPORTEDPROTOCOL regression we hit today
+      # Fires on the exact EUNSUPPORTEDPROTOCOL regression hit on 2026-04-22
       # — an OpenClaw build that ships `"workspace:*"` in plugin
       # package.json files.  openclaw-microvm.nix already patches this at
       # build time; the alert catches the regression if the patch ever

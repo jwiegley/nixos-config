@@ -135,7 +135,7 @@ class VCardFixer:
     def generate_fn_fallback(self, vcard: str) -> Optional[str]:
         """
         Generate FN from alternative fields when N is missing or empty
-        Priority: NICKNAME > EMAIL > ORG
+        Priority: NICKNAME > EMAIL > ORG > TEL
         """
         # Try NICKNAME
         nickname = self.extract_field(vcard, 'NICKNAME')
@@ -168,7 +168,8 @@ class VCardFixer:
     def add_fn_field(self, vcard: str, fn_value: str) -> str:
         """
         Add FN field to vCard
-        Insert after VERSION field or at the beginning after BEGIN:VCARD
+        Insert after VERSION if present, else after the last N field,
+        else at the beginning after BEGIN:VCARD
         """
         lines = vcard.split('\n')
         insert_index = 1  # Default: after BEGIN:VCARD

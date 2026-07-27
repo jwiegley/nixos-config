@@ -16,7 +16,12 @@ let
   dovecotCertDir = "/var/lib/dovecot-certs";
   postfixCertDir = "/var/lib/postfix-certs";
 
-  # Warning and critical thresholds (in seconds)
+  # Warning and critical thresholds (in seconds).
+  # NOTE (verified 2026-07-27): both bindings are UNUSED — the exporter emits
+  # raw certificate_expiry_seconds / certificate_days_until_expiry and the
+  # thresholds that actually alert live in the Prometheus rules
+  # (modules/monitoring/alerts/certificates.yaml: < 30 days warning, <= 0 days
+  # critical; also health-checks.yaml). Kept only as documentation of intent.
   warningSeconds = 30 * 24 * 3600; # 30 days
   criticalSeconds = 7 * 24 * 3600; # 7 days
 

@@ -20,8 +20,9 @@
 # Emits a Prometheus textfile at /var/lib/prometheus-node-exporter-textfiles/
 # hermes_health.prom. Pair with alerts/hermes.yaml.
 #
-# Runs as the hermes-mcp service user (in the `hermes` group) so the
-# API_SERVER_KEY env file is readable and the gateway.log is readable.
+# Runs as the `hermes` user (`User = "hermes"` in serviceConfig below, NOT
+# hermes-mcp) so the API_SERVER_KEY env file (/run/secrets/hermes/env) and the
+# gateway.log under /var/lib/hermes/.hermes/logs are readable.
 {
   config,
   lib,
@@ -441,13 +442,20 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        # Run as the `hermes` user directly. We considered hermes-mcp +
-        # SupplementaryGroups=hermes, but /var/lib/hermes/.hermes is mode
-        # 0700 — only the owner can traverse it, group membership does not
-        # grant entry. Running as the owning user is the simplest path to
-        # read both the SOPS env file (hermes:hermes 0640) and the
-        # gateway.log (under .hermes/logs/). The probe is read-only against
+        # Run as the `hermes` user directly — the simplest path to read both
+        # the SOPS env file (/run/secrets/hermes/env, hermes:hermes 0640) and
+        # the gateway.log under .hermes/logs/. The probe is read-only against
         # the entire hermes state directory.
+        #
+        # The rationale that used to sit here said hermes-mcp +
+        # SupplementaryGroups=hermes could not work because
+        # /var/lib/hermes/.hermes is mode 0700 and group membership does not
+        # grant entry. That is false. Checked 2026-07-27: /var/lib/hermes,
+        # .hermes and .hermes/logs are all 2770 hermes:hermes, so any member
+        # of the `hermes` group can traverse and read them —
+        # hermes-fallback-counter.service does exactly that today, running as
+        # hermes-log-reader (a member of `hermes`, not the owner). Running as
+        # the owning user here is a choice, not a permissions requirement.
         User = "hermes";
         Group = "hermes";
 

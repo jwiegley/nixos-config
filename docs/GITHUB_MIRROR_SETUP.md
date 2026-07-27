@@ -19,13 +19,18 @@ The service automatically discovers and creates **bidirectional mirrors** for al
 
 ## Required Secrets
 
-Two secrets must be added to `/etc/nixos/secrets.yaml` using SOPS:
+Two secrets must be added to `/etc/nixos/secrets/secrets.yaml` using SOPS. Note
+the path: the encrypted store lives in a **separate git repo** consumed as the
+`secrets` flake input — there is no `/etc/nixos/secrets.yaml`. An edit only takes
+effect once it is committed in that repo and the flake input is re-locked
+(`nix flake update secrets`).
 
 ### 1. GitHub Personal Access Token
 
 ```bash
 # Edit secrets file
-sops /etc/nixos/secrets.yaml
+cd /etc/nixos
+sops secrets/secrets.yaml
 ```
 
 Add the following key:
@@ -49,7 +54,8 @@ github-mirror-token: "ghp_YOUR_GITHUB_TOKEN_HERE"
 
 ```bash
 # Edit secrets file
-sops /etc/nixos/secrets.yaml
+cd /etc/nixos
+sops secrets/secrets.yaml
 ```
 
 Add the following key:
@@ -210,8 +216,8 @@ Check mirror sync status in Gitea:
 ls -la /run/secrets/github-mirror-token
 ls -la /run/secrets/gitea-mirror-token
 
-# Check template was created
-ls -la /run/secrets-rendered/github-mirror-env
+# Check the rendered sops template was created
+ls -la /run/secrets/rendered/github-mirror-env
 ```
 
 **View error logs:**
@@ -336,7 +342,7 @@ The service uses a two-phase approach with bidirectional synchronization:
 
 ## Security Considerations
 
-1. **Tokens stored in SOPS** - Encrypted at rest in `secrets.yaml`
+1. **Tokens stored in SOPS** - Encrypted at rest in `secrets/secrets.yaml`
 2. **Minimal permissions** - Tokens have only necessary scopes
 3. **Environment file mode 0400** - Readable only by root
 4. **HTTPS only** - All API calls use TLS encryption

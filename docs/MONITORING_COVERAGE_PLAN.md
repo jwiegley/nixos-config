@@ -1,5 +1,11 @@
 # Vulcan — Complete Monitoring Coverage Analysis & Implementation Plan
 
+> **Archival — 2026-06-09.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/monitoring/services/self-scrape.nix`, `modules/monitoring/services/smartctl-exporter.nix`).
+
 **Host:** `vulcan` (aarch64 / Apple Silicon, Asahi Linux) · **Date:** 2026-06-09
 **Author:** Claude Opus (multi-agent census) · **Intended implementer:** Fable model
 

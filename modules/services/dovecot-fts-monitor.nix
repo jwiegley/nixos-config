@@ -8,7 +8,7 @@
 # Dovecot FTS (Xapian/flatcurve) index-staleness monitor.
 #
 # Dovecot full-text search runs on the flatcurve (Xapian "glass") backend with
-# fts_autoindex = yes (modules/services/dovecot.nix:332-337). The autoindexer is
+# fts_autoindex = yes (modules/services/dovecot.nix:333-338). The autoindexer is
 # supposed to keep a per-mailbox Xapian index in step with delivered mail, but
 # nothing detects when it falls behind: if indexer-worker wedges, a folder's
 # index corrupts, or a glass write fails mid-rotation, the service stays green
@@ -37,14 +37,16 @@
 #
 # Baseline measured live 2026-06-10: clamped max lag = 0 s for all three users
 # (johnw 29 fts-flatcurve folders, assembly 2, bia 1) at ~211-306 delivered
-# msgs/day, so the 48h/7d thresholds sit far above noise.
+# msgs/day, so the 48h/7d thresholds sit far above noise. A fourth mail user,
+# rbcca, was added on 2026-07-02 (commit 68b8c27) and is covered by the loop
+# below but is not part of that baseline measurement.
 #
 # FORMAL RETIREMENT — DovecotHighConnectionCount: this intent is consciously
 # CLOSED, not deferred. The dovecot Prometheus exporter (:9166, job=dovecot)
 # exposes only dovecot_user_* auth/IO/cache counters — there is NO
 # concurrent-connection gauge to alert against, and it was already removed from
 # the rule set in the 2026-06-09 dead-metric sweep. vulcan is a single-user mail
-# server with mail_max_userip_connections = 100 for the LAN (dovecot.nix:318), so
+# server with mail_max_userip_connections = 100 for the LAN (dovecot.nix:319), so
 # a connection-count alert would protect against a load profile that cannot occur.
 # Reviving it would require a custom exporter scraping `doveadm who`/proc for a
 # metric of zero operational value here. Up/down is already covered by

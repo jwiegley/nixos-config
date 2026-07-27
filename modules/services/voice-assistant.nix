@@ -3,18 +3,21 @@
 # wyoming-openai (roryeckel) exposes a Wyoming STT server that forwards
 # complete utterances to an OpenAI-compatible /v1/audio/transcriptions
 # endpoint. We point it at the local LiteLLM proxy (127.0.0.1:4000) and
-# select the cohere-transcribe alias (defined in /etc/litellm/config.yaml,
-# which routes to hera).
+# select the hera/cohere-transcribe-03-2026 alias (declared in
+# modules/services/litellm-settings.nix and rendered into
+# /etc/litellm/config.yaml, which routes to hera).
 #
 # Setup checklist (one-time, outside this module):
 #   1. Add a SOPS secret "wyoming-openai-env" to /etc/nixos/secrets/secrets.yaml
 #      as a multi-line env file with a single STT_OPENAI_KEY=... line.
 #      The key is a LiteLLM virtual key with permission to call the
-#      cohere-transcribe model. Generate one in the LiteLLM admin UI at
-#      https://litellm.vulcan.lan.
-#   2. Verify /etc/litellm/config.yaml has a model_list entry whose
-#      model_name is "cohere-transcribe" and whose api_base routes to
-#      hera. Restart litellm if you add a new alias.
+#      hera/cohere-transcribe-03-2026 model. Generate one in the LiteLLM
+#      admin UI at https://litellm.vulcan.lan.
+#   2. Verify modules/services/litellm-settings.nix has a model_list entry
+#      whose model_name is "hera/cohere-transcribe-03-2026" and that routes
+#      to hera (via hera_llama_swap_credential). /etc/litellm/config.yaml is
+#      a rendered sops-template symlink — do not hand-edit it; rebuild, and
+#      litellm-config.nix's restart bridge picks the new alias up.
 #   3. After this module is built and switched, in HA UI:
 #      Settings -> Devices & Services -> Add Integration -> "Wyoming Protocol"
 #      Host: 127.0.0.1   Port: 10300
@@ -63,7 +66,7 @@
 
         # Talk to local LiteLLM. STT_MODELS must match a model name visible
         # to the virtual key (verify with `/v1/models`). If you add an alias
-        # like `cohere-transcribe` to /etc/litellm/config.yaml's model_list,
+        # to the model_list in modules/services/litellm-settings.nix,
         # update this to match.
         STT_OPENAI_URL = "http://127.0.0.1:4000/v1";
         STT_MODELS = "hera/cohere-transcribe-03-2026";

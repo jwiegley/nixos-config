@@ -9,7 +9,7 @@ let
   downloadDir = "/tank/Public/download";
   rpcPort = 6800;
 
-  # Fetch AriaNG latest release
+  # Fetch AriaNG (pinned release 1.3.7 — bump the URL + sha256 to update)
   ariangSource = pkgs.fetchzip {
     url = "https://github.com/mayswind/AriaNg/releases/download/1.3.7/AriaNg-1.3.7.zip";
     sha256 = "sha256-9YUscIGHHUg2V5fGgBqLw87oFZrwj1frwl4YsIxXzTM=";

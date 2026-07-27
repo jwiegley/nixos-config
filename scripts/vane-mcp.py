@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""MCP server exposing the Vane (Perplexica) AI answer engine to OpenClaw.
+"""MCP server exposing the Vane (Perplexica) AI answer engine to the agents.
 
 Vane synthesizes an answer from web sources retrieved via SearXNG, with
 inline citations. Use this when you want a researched response rather
 than a list of search hits.
 
-Designed to run inside the OpenClaw microVM as an mcporter stdio child.
+Runs inside BOTH agent microVMs: in OpenClaw as an mcporter stdio child
+(openclaw-vm.nix) and in Hermes as a `services.hermes-agent.mcpServers`
+stdio child (hermes-vm.nix), from the same source file.
 Talks to https://vane.vulcan.lan over HTTPS using the Vulcan Step-CA root
 trusted at the system level.
 
@@ -194,7 +196,8 @@ def web_research(
     pages, and asks an LLM to compose an answer that cites the sources
     inline. Use this for "what does the web say about X?" style queries
     where you want a digest. For raw result lists, use ``web_search``
-    from the searxng MCP server.
+    from the searxng MCP server — which exists in the OpenClaw VM only;
+    Hermes runs SearXNG as its native web backend, not as an MCP server.
 
     Args:
       query: the question to research.

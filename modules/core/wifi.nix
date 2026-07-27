@@ -73,7 +73,10 @@
             uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
             type = "wifi";
             autoconnect = true;
-            autoconnect-priority = 10; # Lower than Ethernet (default 0), but will auto-connect
+            # NM semantics: HIGHER value = preferred. The end0-wired profile in
+            # modules/core/networking.nix is also 10, so neither wins on priority;
+            # WiFi is kept off the default route by never-default below.
+            autoconnect-priority = 10;
           };
           wifi = {
             mode = "infrastructure";

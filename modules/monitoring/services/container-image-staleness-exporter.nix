@@ -63,9 +63,10 @@ let
   # container-health-exporter.nix:159 (the canonical, drift-checked enumeration,
   # verified 2026-06-10). EXCLUDES zimit (transient on-demand containers, no
   # persistent PODMAN_SYSTEMD_UNIT container) and johnw (human account). root
-  # quadlets (matter-server, budget-board-{client,server}) fall under the root
-  # sweep below. localhost/* (locally-built, e.g. technitium-dns-exporter) are
-  # skipped in-script — they have no upstream tag to drift against.
+  # quadlets (matter-server, budget-board-{client,server}, wyoming-openai) fall
+  # under the root sweep below. localhost/* (locally-built, e.g.
+  # technitium-dns-exporter) are skipped in-script — they have no upstream tag
+  # to drift against.
   rootlessUsers = [
     "changedetection"
     "litellm"

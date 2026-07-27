@@ -40,7 +40,7 @@
       };
     };
 
-    # Alert rules are loaded by prometheus-alerting.nix (auto-discovers from alerts/)
+    # Alert rules are loaded by monitoring/services/alerting.nix (auto-discovers from alerts/)
 
     # Alertmanager configuration
     alertmanagers = lib.mkIf config.services.prometheus.alertmanager.enable [

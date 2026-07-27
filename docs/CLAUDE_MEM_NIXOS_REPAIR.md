@@ -1,5 +1,10 @@
 # claude-mem Repair on NixOS (2026-05-27)
 
+> **Archival — 2026-05-27.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 Diagnosis and repair of claude-mem's semantic-search backend on **vulcan**, plus
 guidance for deciding whether the same fixes are needed on your **other machines**.
 

@@ -7,7 +7,7 @@
 
 {
   imports = [
-    # Use fixed quadlet configuration with proper network setup
+    # Podman quadlet container modules plus podman network/storage setup
     ./quadlet.nix
 
     # Separate containers for copyparty and static nginx

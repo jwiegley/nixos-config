@@ -67,6 +67,8 @@ let
   # is the whole-tree size (a few MB, not the old ~290KB per-day tarball). The
   # SizeShrunk alert's 14d trailing average makes it insensitive during the
   # transition window — acceptable while history rebuilds on the new scale.
+  # (That window closed 14d after the 2026-06-10 switch to a mirror; as of
+  # 2026-07-27 the average is fully on the mirror scale, ~6 MB.)
   noderedBackupMetricsScript = pkgs.writeShellScript "nodered-backup-metrics" ''
     set -euo pipefail
 

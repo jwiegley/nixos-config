@@ -1,5 +1,11 @@
 # OpenClaw self-heal — design
 
+> **Archival — 2026-05-05.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/openclaw-self-heal.nix`, `scripts/openclaw-self-heal/daemon.py`).
+
 **Date:** 2026-05-05
 **Status:** approved (brainstorming) — pending implementation plan
 **Driver:** recurring weekly silent Discord outages on `vulcan` because the existing canary verifies plugins at startup, not whether the bot is currently responsive.

@@ -1,7 +1,15 @@
 # Nagios ⇄ Prometheus Reverse Mirror — Design Spec
 
-**Status:** approved-for-implementation (operator directive 2026-06-10: "I want
-there to be 100% duplication. Each is a check and validation of the other.")
+**Status:** **implemented and live** (verified 2026-07-27) — all seven files in
+the §7 manifest exist, tiers 1–2 are imported at `hosts/vulcan/default.nix:168-169`
+and tier 3 at `modules/monitoring/services/default.nix:28`. Live figures on
+2026-07-27: 483 `PROM-MIRROR` services in `status.dat` (480 rule mirrors + the 3
+per-datasource API health checks) out of 830 Nagios services total;
+`nagios_mirror_divergence_total` = 0 in both directions and
+`nagios_mirror_reconciler_success` = 1. The design below is the as-built
+description; the counts inside it are the 2026-06-10 recon snapshot, not today's.
+Original operator directive 2026-06-10: "I want there to be 100% duplication.
+Each is a check and validation of the other."
 **Companion:** docs/MONITORING_DEFERRED_SPECS.md (#nagios-topology-decision),
 memory `feedback_nagios_prometheus_duplication`.
 
@@ -130,7 +138,9 @@ check_prom_rule --datasource {prometheus|loki|vm} --query-file <store path>
   eliminate the class); power-save wakeup latency (ring-doorbell measured
   0% real loss yet 1.2s avg / 2.9s max RTT) makes per-instant blips
   routine, so at nearly every
-  sample SOME device reads as down. The ruler's `for: 10m` requires ONE
+  sample SOME device reads as down. The ruler's `for:` (10m when this was
+  written; widened to `1h` in commit df0c1c8, still 1h as of 2026-07-27)
+  requires ONE
   device continuously down; the mirror latched HARD WARNING for hours on a
   rotating cast (13 distinct devices in 2h, ≥1 failing at every 10-min
   sample, observed 2026-06-12) while the ruler stayed correctly silent —
@@ -194,8 +204,10 @@ nagios-status-exporter — root oneshot + 5 min timer + textfile):
 4. Alert rules in `modules/monitoring/alerts/nagios-mirror.yaml`:
    `NagiosMirrorDivergence` (warning, `for: 30m` — state-machine timing skew
    between the stacks makes transient divergence NORMAL; only sustained
-   disagreement is real) and `NagiosMirrorReconcilerStale`. Info-severity
-   rules and the exclusions (§2.4) are skipped in the comparison. These two rules
+   disagreement is real) and `NagiosMirrorReconcilerStale`. (As built there is
+   a third rule, `NagiosMirrorReconcilerFailed` —
+   `modules/monitoring/alerts/nagios-mirror.yaml:17,40,53`.) Info-severity
+   rules and the exclusions (§2.4) are skipped in the comparison. These rules
    are themselves auto-mirrored into Nagios by tier 2 — harmless, and means
    Nagios also sees the divergence.
 
@@ -239,6 +251,6 @@ nagios-status-exporter — root oneshot + 5 min timer + textfile):
 | `modules/monitoring/services/nagios-mirror-divergence.nix` | tier-3 reconciler exporter |
 | `scripts/nagios-mirror-divergence.py` | tier-3 parser/comparator |
 | `modules/monitoring/alerts/nagios-mirror.yaml` | tier-3 alert rules (auto-discovered) |
-| `hosts/vulcan/default.nix` | 3 module imports |
+| `hosts/vulcan/default.nix` | tier-1 + tier-2 imports (`:168-169`); as built, tier 3 is imported from `modules/monitoring/services/default.nix:28` instead |
 
 Estimated: tier 2 ≈ 4 h, tier 1 ≈ 2 h, tier 3 ≈ 2 h, verify/soak ≈ 1 h.

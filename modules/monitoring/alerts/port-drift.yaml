@@ -3,8 +3,9 @@ groups:
     rules:
       # ----------------------------------------------------------------------
       # The one high-signal tripwire. Baseline measured 2026-06-10: TCP=0,
-      # UDP=1 (jellyfin discovery :7359 — a registry omission the orchestrator
-      # is adding to docs/ports.txt; once added + rebuilt, this goes to 0).
+      # UDP=1 (jellyfin discovery :7359 — a registry omission). That entry has
+      # since been added to docs/ports.txt (line 99), and as of 2026-07-27 the
+      # gauge reads TCP=0 / UDP=0 as predicted.
       # A wildcard (0.0.0.0/::) listener on a non-ephemeral port that nobody
       # declared in docs/ports.txt is the canonical "a service just exposed
       # something to the LAN" event. Loopback drift and loopback->wildcard

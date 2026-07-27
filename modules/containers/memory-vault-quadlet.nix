@@ -39,7 +39,9 @@ in
   #     (databases.nix), which reads the path below as the postgres user.
   #   - the container receives it as DB_PASSWORD via the rendered env file.
   # The operator must add the key `memory-vault/db-password` with
-  #   sops /etc/nixos/secrets.yaml
+  #   sops /etc/nixos/secrets/secrets.yaml
+  # (/etc/nixos/secrets is a separate git repo, consumed as the `secrets`
+  #  flake input — see flake.nix and modules/lib/common.nix)
   ##########################################################################
   sops.secrets."memory-vault/db-password" = {
     sopsFile = common.secretsPath;

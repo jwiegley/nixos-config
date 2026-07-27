@@ -2,6 +2,28 @@
 
 Complete guide for migrating DNS from Name.com to Cloudflare and setting up n8n webhook proxy.
 
+> **Status (2026-07-27):** The DNS half of this migration is **done** —
+> `newartisans.com` is served by Cloudflare nameservers today. The n8n half is
+> **obsolete**. n8n and its webhook proxy were removed from this repository on
+> 2026-03-14 in commit `5f56003` ("remove n8n, Windows 11, NocoBase, and ntopng
+> services"), which deleted `modules/services/n8n.nix`,
+> `modules/services/nginx-n8n-webhook.nix`, `modules/monitoring/services/n8n-alerts.nix`,
+> `modules/monitoring/services/n8n-exporter.nix`, and `docs/N8N_WEBHOOK_SETUP.md`.
+> None of the following exist any more: the `n8n-webhook-enable` /
+> `-disable` / `-status` / `-logs` / `-test` helper commands, the
+> `nginx-n8n-webhook.service` and `cloudflared-tunnel-n8n-webhook.service` units,
+> the `cloudflared-n8n` SOPS secret, and the `n8n.newartisans.com` hostname.
+>
+> The Cloudflare tunnel that actually runs now is a single always-on tunnel named
+> `data`, defined in `modules/services/cloudflare-tunnels.nix` (unit
+> `cloudflared-tunnel-data.service`, credentials at `/run/secrets/cloudflared/data`),
+> fronting `data.`, `gitea.`, `s.`, and `calendar.newartisans.com`. For current
+> tunnel information see [CLOUDFLARE_TUNNELS.md](CLOUDFLARE_TUNNELS.md).
+>
+> Parts 1 and 7 are kept as a record of the one-time migration. Parts 2-6, and the
+> n8n rows in the checklists at the end, are kept for background only — **do not
+> follow them as a procedure.**
+
 ---
 
 ## Overview
@@ -218,8 +240,11 @@ Using the three values from Step 8, create this JSON:
 **Add to SOPS:**
 
 ```bash
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 ```
+
+(The secrets file lives at `secrets/secrets.yaml`; the older top-level
+`/etc/nixos/secrets.yaml` path no longer exists.)
 
 Add this section (paste your JSON values):
 ```yaml
@@ -591,6 +616,7 @@ n8n-webhook-disable
 **Optional - Automate with systemd timers:**
 
 See documentation: `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md` (section: "Automating Enable/Disable")
+— **removed 2026-03-14 in commit `5f56003`; that document no longer exists.**
 
 ### Monitoring
 
@@ -1103,6 +1129,10 @@ If something goes wrong and you need to revert:
 
 ### Disable N8N Webhook Proxy
 
+**Already done permanently** — the module was removed from the configuration on
+2026-03-14 (commit `5f56003`). There is nothing left to disable. Kept for
+background:
+
 ```bash
 # Stop services
 n8n-webhook-disable
@@ -1152,13 +1182,17 @@ n8n-webhook-disable
 
 ### Documentation
 
-- **N8N Webhook Setup:** `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md`
+- **N8N Webhook Setup:** `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md` — **deleted 2026-03-14
+  (commit `5f56003`)**; for the tunnels that exist today see
+  [CLOUDFLARE_TUNNELS.md](CLOUDFLARE_TUNNELS.md)
 - **Cloudflare Tunnels:** https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
 - **Cloudflare API:** https://api.cloudflare.com/
 
 ### Helper Commands
 
-All installed as part of the nginx-n8n-webhook module:
+All installed as part of the nginx-n8n-webhook module. **None of these commands
+exist as of 2026-07-27** — the module that provided them was deleted on 2026-03-14
+(commit `5f56003`):
 
 ```bash
 n8n-webhook-enable    # Start webhook proxy
@@ -1170,10 +1204,19 @@ n8n-webhook-test      # Test connectivity
 
 ### Configuration Files
 
+**Historical — all removed on 2026-03-14 (commit `5f56003`):**
+
 - **Nginx config:** `/etc/nginx/nginx-n8n-webhook.conf`
 - **Service definition:** `/etc/nixos/modules/services/nginx-n8n-webhook.nix`
 - **Cloudflare credentials:** `/run/secrets/cloudflared-n8n` (deployed from SOPS)
-- **Logs:** `/var/log/nginx-n8n-webhook/`
+- **Logs:** `/var/log/nginx-n8n-webhook/` (the empty directory may still linger on
+  disk; nothing writes to it)
+
+**Current Cloudflare tunnel configuration:**
+
+- **Module:** `/etc/nixos/modules/services/cloudflare-tunnels.nix`
+- **Unit:** `cloudflared-tunnel-data.service`
+- **Credentials:** `/run/secrets/cloudflared/data` (deployed from SOPS key `cloudflared/data`)
 
 ---
 

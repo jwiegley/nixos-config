@@ -1,5 +1,11 @@
 # Drafts MCP Bridge (hera) — Execution Plan
 
+> **Archival — 2026-06-09.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/drafts-mcp.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up a host-side `drafts-mcp.service` on vulcan that bridges the remote *stdio* Drafts.app MCP server on hera (`drafts-mcp-server`, already packaged) to a loopback *SSE* endpoint on `127.0.0.1:9082`, then wire it to three consumers: host Claude Code (`claude-vulcan`, full toolset via SSH-stdio), OpenClaw (read-only via a stdio filter shim), and Hermes (default-deny `tools.include` allowlist) — with probe-driven self-heal and no new LAN exposure.
@@ -97,7 +103,7 @@ Seals the private key, authorizes the public key on hera, builds the `drafts-mcp
 
 **Files:** EDIT `/etc/nixos/secrets/secrets.yaml`
 
-- [ ] **Step 1 (USER-GATED):** `sops /etc/nixos/secrets/secrets.yaml` and add `drafts: { hera-ssh-private-key: |  <private key> }` from spec §10.2. The `.*\.yaml$` rule auto-covers it (no `.sops.yaml` edit). Confirm `/etc/nixos/secrets/secrets.yaml` is the **subdir** path (flake.nix:19 / system.nix:71 / vulcan default.nix:287) — NOT the bare `/etc/nixos/secrets.yaml`.
+- [ ] **Step 1 (USER-GATED):** `sops /etc/nixos/secrets/secrets.yaml` and add `drafts: { hera-ssh-private-key: |  <private key> }` from spec §10.2. The `.*\.yaml$` rule auto-covers it (no `.sops.yaml` edit). Confirm `/etc/nixos/secrets/secrets.yaml` is the **subdir** path (flake.nix:25 / system.nix:74 / vulcan default.nix:287) — NOT the bare `/etc/nixos/secrets.yaml`.
 - [ ] **Step 2 (USER-GATED COMMIT + PUSH):** `git -C /etc/nixos/secrets add secrets.yaml && git -C /etc/nixos/secrets commit -m "Add drafts/hera-ssh-private-key for drafts-mcp bridge" && git -C /etc/nixos/secrets push`.
 - [ ] **Step 3:** `shred -u /tmp/drafts-bridge-ed25519*` (the private half now lives only in sops).
 

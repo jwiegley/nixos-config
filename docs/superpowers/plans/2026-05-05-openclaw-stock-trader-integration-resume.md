@@ -1,5 +1,11 @@
 # OpenClaw ↔ stock-trader Integration — Resume Notes
 
+> **Archival — 2026-05-05.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/stock-trader-mcp.py`).
+
 Pick this work up here. The integration is **deployed** but the final end-to-end Discord verification (Task 6) is still pending, blocked on a fresh Schwab OAuth token.
 
 ## State at last checkpoint

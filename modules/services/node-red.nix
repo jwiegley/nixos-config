@@ -55,7 +55,8 @@
   # Claude"). settings.js does not read this file — it only reads api-tokens
   # — so a mismatch silently breaks `curl -H "Authorization: Bearer ..."`
   # against /flows with HTTP 401. When rotating, update BOTH SOPS values in
-  # one `sops /etc/nixos/secrets.yaml` session.
+  # one `sops secrets/secrets.yaml` session (the encrypted store lives in the
+  # separate `secrets` flake-input repo; there is no /etc/nixos/secrets.yaml).
   # Owned by johnw so curl works without sudo.
   sops.secrets."node-red-admin-token" = {
     owner = "johnw";

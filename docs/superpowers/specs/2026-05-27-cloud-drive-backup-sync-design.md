@@ -1,5 +1,11 @@
 # Cloud Drive Backup — Nightly One-Way Mirror to ZFS
 
+> **Archival — 2026-05-27.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/rclone-cloud-backup.nix`).
+
 **Status:** Design (approved 2026-05-27)
 **Host:** vulcan
 **Author:** John Wiegley (with Claude Code)

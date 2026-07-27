@@ -301,7 +301,7 @@
           ];
         }
         # iPhone push via Node-RED's /alert HTTP-In endpoint.
-        # Auth token is extracted at activation time from
+        # Auth token is extracted at service start (ExecStartPre) from
         # /run/secrets/node-red/api-tokens (see the alertmanager
         # systemd override below) and placed at
         # /run/alertmanager/nr-token (mode 0400 alertmanager).

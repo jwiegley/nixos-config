@@ -8,7 +8,7 @@ Exercises the exact code path a real Discord conversation takes:
     generate the token "ROVER" (case-insensitive)
   - Validates HTTP 200 AND response body contains the token
 
-Emits four gauges to /var/lib/prometheus-node-exporter-textfiles/:
+Emits five gauges to /var/lib/prometheus-node-exporter-textfiles/:
   hermes_e2e_chat_ok                              1 if both HTTP and content checks passed
   hermes_e2e_chat_http_code                       HTTP status of the request
   hermes_e2e_chat_duration_seconds                Wall-clock seconds for the round-trip
@@ -16,10 +16,13 @@ Emits four gauges to /var/lib/prometheus-node-exporter-textfiles/:
   hermes_e2e_chat_last_run_timestamp_seconds      When the probe last ran
 
 Why this complements openclaw_hermes_smoke:
-  The smoke probe goes through the MCP `ask_hermes` tool, which on this
-  host returns a fixed 185-byte canned reply that does NOT exercise the
-  Hermes Agent → LiteLLM → MLX backend path. The 2026-05-24 incident
-  proved this: smoke greened up while the actual Discord chat path
+  The smoke probe does NOT exercise the Hermes Agent → LiteLLM → MLX
+  backend path. (Until 2026-07-22 it called the MCP `ask_hermes` tool,
+  which on this host returned a fixed 185-byte canned reply; since then it
+  has been lightened further and only issues `tools/list`, so it now covers
+  the SSE transport and MCP handshake and no model inference at all — see
+  scripts/openclaw_hermes_smoke.py.) The 2026-05-24 incident proved why
+  that gap matters: smoke greened up while the actual Discord chat path
   returned HTTP 401 from openrouter.ai because the model.base_url
   override was missing from the streaming-off code path.
 

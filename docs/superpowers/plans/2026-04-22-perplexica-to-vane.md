@@ -1,5 +1,11 @@
 # Perplexica → Vane Rebrand Implementation Plan
 
+> **Archival — 2026-04-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/vane.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rename the existing Perplexica deployment on host `vulcan` to Vane across all NixOS modules, swap the container image to `itzcrazykns1337/vane:slim-latest`, and migrate on-disk state in place — without losing chat history, configured API keys, or monitoring coverage.

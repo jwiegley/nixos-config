@@ -48,7 +48,8 @@ in
     # scripts are state-changing (matched by the L3 allowlist in the
     # daemon); the aux scripts are read-only/trivial helpers.
     # Suppress sudo's mail-on-error for openclaw-heal. Belt-and-braces
-    # alongside the /run/sudo ReadWritePath above: if sudo ever still
+    # alongside the /run/sudo ReadWritePath below (in the unit's
+    # serviceConfig.ReadWritePaths): if sudo ever still
     # fails for any reason in this confined namespace, we do NOT want
     # it to spawn a sendmail child that hangs on a read-only maildrop.
     security.sudo.extraConfig = ''

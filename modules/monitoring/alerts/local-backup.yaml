@@ -75,10 +75,11 @@ groups:
             Action: review journalctl -u restic-check and run `sudo restic-doc check` manually.
 
       # Staleness: the check runs weekly (Persistent=true catches up a missed run).
-      # 8d = weekly cadence + 1d grace. NOTE: coverage only begins at the NEXT
-      # weekly run after deploy (the metric is absent until then, so this rule
-      # cannot fire yet); absent() is intentionally NOT used so a fresh deploy
-      # doesn't alarm before the first run has had a chance to populate it.
+      # 8d = weekly cadence + 1d grace. Coverage only begins at the first weekly
+      # run after deploy; that has since happened (as of 2026-07-27
+      # restic_integrity_check_timestamp_seconds is populated), so this rule is
+      # live. absent() is intentionally NOT used so a fresh deploy doesn't alarm
+      # before the first run has had a chance to populate it.
       - alert: ResticIntegrityCheckStale
         expr: (time() - restic_integrity_check_timestamp_seconds) > 8 * 86400
         for: 5m
@@ -129,11 +130,14 @@ groups:
             Action: check systemctl status technitium-dns-backup.timer and journalctl -u technitium-dns-backup.
 
       # Output-sanity: a green Type=oneshot exit is NOT proof of a complete backup
-      # — the tar source could be empty or the artifact truncated when /tank drops
+      # — the source could be empty or the copy left half-written when /tank drops
       # mid-write. Mirrors PgDumpSizeShrunk (database.yaml). The >0 guard avoids a
-      # divide-by-baseline false-fire while the 14d window is still filling in (the
-      # technitium artifact is steady ~100 MB, so a sudden <50% drop is a real
-      # red flag). for:6h because the size is only refreshed on the daily 03:00 run.
+      # divide-by-baseline false-fire while the 14d window is still filling in.
+      # Since fa3026e (2026-06-10) this backup is an rsync MIRROR, not a dated
+      # tar.xz, so the gauge is `du -sb` of the whole mirror (~731 MB as of
+      # 2026-07-27) rather than a per-run artifact; a sudden <50% drop is still a
+      # real red flag. for:6h because the size is only refreshed on the daily
+      # 03:00 run.
       - alert: TechnitiumBackupSizeShrunk
         expr: technitium_backup_size_bytes > 0 and technitium_backup_size_bytes < 0.5 * avg_over_time(technitium_backup_size_bytes[14d])
         for: 6h
@@ -183,14 +187,17 @@ groups:
             (last run {{ $value | humanizeDuration }} ago; expected daily at 02:30).
             Action: check systemctl status node-red-backup.timer and journalctl -u node-red-backup.
 
-      # Output-sanity: catches a tar that ran clean but captured no flows (e.g. a
+      # Output-sanity: catches a run that exited clean but captured no flows (e.g. a
       # shadow /var/lib/node-red with only skeleton files, the documented failure
-      # mode). Mirrors PgDumpSizeShrunk / TechnitiumBackupSizeShrunk. The current
-      # artifact is ~290 KB; flows shrinking below half the 14d average is a strong
-      # signal of an incomplete capture. >0 guard prevents a baseline-fill false-fire;
-      # for:6h because the size only refreshes on the daily 02:30 run. NOTE: the
-      # backup compresses with zstd, so normal flow edits move the size only modestly
-      # — a sub-50% drop is well outside ordinary variation.
+      # mode). Mirrors PgDumpSizeShrunk / TechnitiumBackupSizeShrunk. Since fa3026e
+      # (2026-06-10) this is an rsync MIRROR rather than a dated zstd tarball, so
+      # the gauge is `du -sb` of the whole mirror (~6 MB as of 2026-07-27, not the
+      # old ~290 KB per-day artifact); flows shrinking below half the 14d average
+      # is a strong signal of an incomplete capture. >0 guard prevents a
+      # baseline-fill false-fire; for:6h because the size only refreshes on the
+      # daily 02:30 run. NOTE: compression now happens at the ZFS-dataset level,
+      # so normal flow edits move the uncompressed mirror size only modestly — a
+      # sub-50% drop is well outside ordinary variation.
       - alert: NodeRedBackupSizeShrunk
         expr: nodered_backup_size_bytes > 0 and nodered_backup_size_bytes < 0.5 * avg_over_time(nodered_backup_size_bytes[14d])
         for: 6h

@@ -374,7 +374,7 @@ class AIAnalyzer:
         """Prepare log context for AI analysis"""
         context_parts = []
 
-        # Include critical and error logs (limit to prevent token overflow)
+        # Include critical, error, and warning logs (limit to prevent token overflow)
         for severity in ["critical", "error", "warning"]:
             if severity in grouped_logs:
                 logs = grouped_logs[severity][:50]  # Limit per severity

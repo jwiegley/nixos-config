@@ -5,8 +5,11 @@
 # Background: HermesApiServerDown fires when http://10.99.1.2:8080/v1/capabilities
 # stops answering. The 2026-05-30 investigation found the gateway can go
 # *silent* for minutes (no error, no traceback) under concurrent load — the
-# signature of a CPU-starved event loop (the VM ran on a single vCPU; see the
-# 4-vCPU fix in hermes-vm.nix). self-heal recovers it by restarting the whole
+# signature of a CPU-starved event loop (the VM runs on a single vCPU; a
+# 4-vCPU bump was tried 2026-05-31 and then REVERTED once it was shown not to
+# change the warmup — see the vCPU rationale block in hermes-vm.nix, which
+# names this watchdog as the evidence source for revisiting that decision).
+# self-heal recovers it by restarting the whole
 # microVM, which SIGKILLs the frozen process and destroys the evidence. This
 # watchdog captures that evidence the moment the freeze is detected, BEFORE any
 # restart, so a residual freeze can be root-caused from its actual thread state.

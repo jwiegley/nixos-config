@@ -1,5 +1,11 @@
 # Drafts MCP Bridge (hera) → OpenClaw / Hermes / Host Claude Code — Implementation Spec
 
+> **Archival — 2026-06-09.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/drafts-mcp.nix`).
+
 **Date:** 2026-06-09
 **Status:** Spec — ready to implement
 **Author:** Claude (Opus 4.8) with John Wiegley
@@ -104,7 +110,7 @@ This is the host-side bridge unit. Modeled on `stock-trader.nix` (`DynamicUser` 
 
 **Review fixes applied:**
 - **MERGED ExecStart** — the single source of truth is the **filter-shim form** (`lib.escapeShellArgs`, with `draftsToolFilter` interposed before the ssh wrapper). The svc-module's competing no-shim `concatStringsSep` ExecStart is **deleted** (shipping it would silently remove OpenClaw's write-tool denial).
-- **`StartLimitIntervalSec`/`StartLimitBurst` under `unitConfig`** (verified `litellm.nix:89-94`); placing them in `serviceConfig` is silently ignored.
+- **`StartLimitIntervalSec`/`StartLimitBurst` under `unitConfig`** (verified `litellm.nix:91-96`); placing them in `serviceConfig` is silently ignored.
 - **`LoadCredential` id `hera-ssh-key`** matches the basename the wrapper hardcodes at `/run/credentials/drafts-mcp.service/hera-ssh-key` (a mismatch builds clean but fails at runtime with "no such identity").
   > **Correction (2026-06-10, deployed):** the wrapper must **NOT** use `"$CREDENTIALS_DIRECTORY/hera-ssh-key"` as originally specified. mcp-proxy spawns the stdio backend through the MCP Python SDK's `stdio_client`, which scrubs the child env down to `get_default_environment()`'s allowlist (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER` on POSIX) — `$CREDENTIALS_DIRECTORY` is stripped, expands to `""`, ssh sees `-i /hera-ssh-key` → "Identity file not accessible" → publickey auth fails while the unit stays `active` (the silent-green-zombie failure mode, observed live 2026-06-09). The fix references the stable documented systemd path `/run/credentials/<unit>/` directly.
 - **Build-time assertion** that `pinnedKnownHosts` does not contain `REPLACE_ME` — the `writeText` placeholder does **NOT** break the build by itself (verified: `writeText` with any string body evaluates fine); the failure would otherwise be runtime-only (StrictHostKeyChecking). The assertion makes `enable` fail closed at eval until the real Phase-1 host key lands.
@@ -275,7 +281,7 @@ in
 
       unitConfig = {
         # Bound boot crash-loops if hera is unreachable. Verified shape:
-        # litellm.nix:89-94 puts these under unitConfig (NOT serviceConfig).
+        # litellm.nix:91-96 puts these under unitConfig (NOT serviceConfig).
         StartLimitIntervalSec = "300";
         StartLimitBurst = "5";
       };
@@ -1670,7 +1676,7 @@ Anchor: `keys = [` at `:34`; existing card keys `:36-37`; closing `];` at `:38`.
 
 ### 10.2 SECRETS — `/etc/nixos/secrets/secrets.yaml` (note the `/secrets/` subdir)
 
-**Design correction (BOTH reviewers, load-bearing):** the canonical sopsfile is **`/etc/nixos/secrets/secrets.yaml`** (subdir), confirmed by `flake.nix:19`, `modules/core/system.nix:71`, `hosts/vulcan/default.nix:287` — NOT the bare `/etc/nixos/secrets.yaml`. Editing the bare path would target the wrong/nonexistent file and activation would fail.
+**Design correction (BOTH reviewers, load-bearing):** the canonical sopsfile is **`/etc/nixos/secrets/secrets.yaml`** (subdir), confirmed by `flake.nix:25`, `modules/core/system.nix:74`, `hosts/vulcan/default.nix:287` — NOT the bare `/etc/nixos/secrets.yaml`. Editing the bare path would target the wrong/nonexistent file and activation would fail.
 
 **Keygen (run on vulcan):**
 ```sh

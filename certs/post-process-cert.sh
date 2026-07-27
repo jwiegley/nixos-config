@@ -30,7 +30,7 @@
 #   post-process-cert.sh mail.vulcan.lan --owner root:root
 #
 #   # Custom target directory
-#   post-process-cert.sh dovecot.vulcan.lan -d /etc/dovecot/certs
+#   post-process-cert.sh dovecot.vulcan.lan -d /var/lib/dovecot-certs
 #
 #   # Dry run to preview actions
 #   post-process-cert.sh hass.vulcan.lan --dry-run

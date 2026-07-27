@@ -260,13 +260,15 @@ in
         # I/O limits: Use best-effort scheduling to minimize impact on other services
         IOSchedulingClass = "best-effort";
         IOSchedulingPriority = 7; # Lowest priority (0=highest, 7=lowest)
-        IOWeight = 10; # Low I/O weight (10-1000 scale)
+        IOWeight = 10; # Low I/O weight (systemd IOWeight= is 1-10000, default 100)
 
         # Enhanced I/O throttling with cgroup v2 bandwidth limits
         # Limit read speed from source drive to prevent I/O saturation
         IOReadBandwidthMax = "/dev/nvme0n1 50M"; # 50MB/s read limit
 
-        # Limit write speed to backup destination
+        # Limit write speed. NOTE (verified 2026-07-27): this names /dev/nvme0n1,
+        # the SOURCE disk, not the backup destination -- /tank is a ZFS pool on
+        # sda-sdd (external enclosure), so destination writes are not throttled here.
         IOWriteBandwidthMax = "/dev/nvme0n1 30M"; # 30MB/s write limit
 
         # CPU priority: Run at lower priority

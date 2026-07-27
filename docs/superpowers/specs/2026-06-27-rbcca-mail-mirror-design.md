@@ -1,5 +1,11 @@
 # Design: Mirror + send-as for `jwiegley@rbcca.org`
 
+> **Archival — 2026-06-27.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/users/rbcca.nix`).
+
 **Date:** 2026-06-27
 **Status:** Implemented and deployed 2026-07-02 (plan:
 `docs/superpowers/plans/2026-07-02-rbcca-mail-mirror.md`)

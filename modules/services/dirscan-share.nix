@@ -165,7 +165,10 @@ in
         StandardOutput = "journal";
         StandardError = "journal";
 
-        # Prevent parallel execution
+        # Hardening: lock the process execution domain (personality(2)).
+        # This is NOT a concurrency control — systemd already refuses to run
+        # two instances of this unit at once, and the burst limits above
+        # bound rapid re-triggers.
         LockPersonality = true;
       };
     };
@@ -185,8 +188,10 @@ in
         # Unit to trigger when changes detected
         Unit = "dirscan-share.service";
 
-        # Coalesce multiple rapid changes into single trigger
-        # Wait 10 seconds of inactivity before triggering
+        # NOTE: no coalescing delay is configured — systemd .path units have
+        # no "wait N seconds of inactivity" option. Rapid-fire triggers are
+        # bounded instead by the service's StartLimitBurst=15 /
+        # StartLimitIntervalSec=60 above.
         MakeDirectory = false; # Don't create the directory
       };
     };

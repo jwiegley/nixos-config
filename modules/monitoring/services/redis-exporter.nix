@@ -52,10 +52,11 @@
   # SupplementaryGroups is honored even though the unit runs DynamicUser=yes
   # (systemd applies supplementary groups to the transient dynamic user). The
   # group names are verified to exist (redis-gitea gid 947, redis-immich gid
-  # 922) and own the 0750 socket dirs. POST-DEPLOY VERIFY: the exporter version
-  # must accept /scrape?target=unix:///... — after switch, confirm
-  # redis_up{instance=~".*redis.sock"}==1 in Prometheus; if it fails, the
-  # RedisSocketInstanceDown systemd-state backstop still covers these two.
+  # 922) and own the 0750 socket dirs. POST-DEPLOY VERIFY (done — confirmed
+  # 2026-07-27): the exporter does accept /scrape?target=unix:///..., and both
+  # redis_up{instance="unix:///run/redis-{gitea,immich}/redis.sock"} report 1 in
+  # Prometheus. The RedisSocketInstanceDown systemd-state backstop is kept
+  # anyway, so a regression here is still covered.
   systemd.services.prometheus-redis-exporter.serviceConfig.SupplementaryGroups = [
     "redis-gitea"
     "redis-immich"

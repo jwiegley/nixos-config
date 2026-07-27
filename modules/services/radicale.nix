@@ -139,7 +139,12 @@ in
 
   # Ensure the radicale service has proper permissions
   systemd.services.radicale = {
-    # Ensure SOPS secrets are available before starting
+    # Ensure SOPS secrets are available before starting.
+    # NOTE (verified 2026-07-27): sops-install-secrets.service does not exist
+    # on this host (LoadState=not-found) — sops-nix installs secrets from an
+    # activation script rather than a unit, so that half of the ordering below
+    # is a silent no-op. The secret is nonetheless present before any service
+    # starts, because activation runs first.
     after = [
       "network-online.target"
       "sops-install-secrets.service"

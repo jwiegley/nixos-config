@@ -60,6 +60,29 @@ echo "ghp_newtoken123" | sudo /etc/nixos/scripts/update-github-tokens.py --stdin
 cat ~/secure-token.txt | sudo /etc/nixos/scripts/update-github-tokens.py --stdin
 ```
 
+### Automated Runs (added to this doc 2026-07-27)
+
+You usually do not need to run the script by hand. `modules/services/github-gitea-mirror.nix:320-357`
+defines a `update-github-mirror-tokens.service` + `.timer` pair that runs **daily at
+04:00** (`Persistent = true`, 15 min randomized delay) and does exactly this:
+
+```
+python3 <update-github-tokens.py> --stdin --verbose < /run/secrets/github-mirror-token
+```
+
+followed by `sync-push-mirrors` as `ExecStartPost`. So rotating the GitHub PAT in
+SOPS and rebuilding is normally enough — the propagation happens on the next timer
+tick. To force it immediately:
+
+```bash
+sudo systemctl start update-github-mirror-tokens.service
+sudo journalctl -u update-github-mirror-tokens -n 100
+```
+
+Note that the unit reads the **new GitHub** token from `/run/secrets/github-mirror-token`,
+which is a different secret from the **Gitea API** token at `/run/secrets/gitea-mirror-token`
+that the script uses to authenticate against Gitea.
+
 ## Command-Line Options
 
 - `github_token` - New GitHub token (positional argument)
@@ -149,7 +172,9 @@ The script:
 
 - `/etc/nixos/scripts/add-push-mirrors.sh` - Original bash script for adding push mirrors
 - `/etc/nixos/modules/services/github-gitea-mirror.nix` - Gitea mirroring service configuration
-- `/etc/nixos/secrets.yaml` - SOPS-encrypted secrets (contains tokens)
+- `/etc/nixos/secrets/secrets.yaml` - SOPS-encrypted secrets (contains tokens).
+  This is a separate git repo consumed as the `secrets` flake input; edit it with
+  `cd /etc/nixos && sops secrets/secrets.yaml`. There is no `/etc/nixos/secrets.yaml`.
 
 ## Troubleshooting
 

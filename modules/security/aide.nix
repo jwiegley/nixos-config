@@ -10,9 +10,13 @@
 #
 # This module configures AIDE to monitor:
 # - System binaries and libraries
-# - Critical backup directories (/tank/Backups/Images, /tank/Backups/Messages)
 # - SSH keys and configuration files
 # - SOPS secrets configuration
+#
+# It does NOT monitor the backup directories: /tank/Backups/Images,
+# /tank/Backups/Messages and /tank/Backups/PostgreSQL are excluded outright by
+# `!` rules below (a recursive negative rule adds nothing at all to the AIDE
+# database), so their integrity is covered by ZFS scrub/snapshots, not AIDE.
 
 {
   # Install AIDE package
@@ -275,7 +279,8 @@
       ExecStart = "${pkgs.aide}/bin/aide --update";
       ExecStartPost = "${pkgs.coreutils}/bin/mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db";
       # AIDE exit codes: 0=no changes, 1-7=changes detected (all valid for update)
-      # 1=new, 2=removed, 3=changed, 4=new+removed, 5=new+changed, 6=removed+changed, 7=all
+      # Codes are additive bits (1=new, 2=removed, 4=changed), so:
+      # 1=new, 2=removed, 3=new+removed, 4=changed, 5=new+changed, 6=removed+changed, 7=all
       SuccessExitStatus = [
         0
         1

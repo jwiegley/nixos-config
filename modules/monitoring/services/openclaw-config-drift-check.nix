@@ -31,8 +31,10 @@ in
       ];
       wants = [ "network-online.target" ];
 
-      # ssh binary is needed by the python script; under ProtectSystem=strict
-      # the unit's PATH doesn't include /run/current-system/sw/bin.
+      # ssh binary is needed by the python script; NixOS gives every unit a
+      # minimal store-path PATH (coreutils/findutils/gnugrep/gnused/systemd)
+      # that never includes /run/current-system/sw/bin, so ssh must be added
+      # explicitly here.
       path = [ pkgs.openssh ];
 
       environment = {

@@ -316,7 +316,8 @@ let
   # --- notification-storm guard (spec 2.3) -----------------------------------
   # One health check per datasource. When a ruler API is down, a
   # servicedependency keyed on that datasource's servicegroup suppresses the
-  # mirror checks/notifications (so Nagios does not emit ~400 UNKNOWNs); the
+  # mirror checks/notifications (so Nagios does not emit one UNKNOWN per mirror
+  # — 480 of them as of 2026-07-27); the
   # API-down condition itself pages.
   #
   # Health endpoints verified live 2026-06-10:

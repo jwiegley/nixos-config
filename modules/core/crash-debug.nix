@@ -109,7 +109,7 @@
       "irqpoll"
       "nr_cpus=1"
       "reset_devices"
-      # Disable unnecessary subsystems in crash kernel
+      # Cap udev worker processes so the crash kernel stays lightweight
       "udev.children-max=2"
     ];
   };
@@ -132,7 +132,7 @@
   environment.systemPackages = with pkgs; [
     # System monitoring and diagnostics
     sysstat # sar, iostat, mpstat, pidstat, etc.
-    procps # ps, top, vmstat, free, etc. (includes dmesg)
+    procps # ps, top, vmstat, free, etc. (dmesg comes from util-linux, not procps)
     lsof # List open files
     strace # System call tracer
     htop # Interactive process viewer
@@ -255,7 +255,8 @@
     # (commented out - may already be handled by NixOS)
     # "verbose"
 
-    # Enable kernel oops reporting to console
+    # Always panic on a kernel oops so the crash kernel can capture a dump
+    # (same effect as kernel.panic_on_oops = 1 above, applied from boot)
     "oops=panic"
   ];
 

@@ -7,7 +7,10 @@
 }:
 
 {
-  # Increase D-Bus pending replies limit for systemd_exporter
+  # Increase D-Bus pending replies limit for heavy systemd D-Bus polling.
+  # Originally added for the standalone systemd_exporter, which was removed
+  # 2025-10-31; as of 2026-07-27 the D-Bus-heavy consumer is node-exporter's
+  # `systemd` collector (modules/monitoring/services/system-exporters.nix:22).
   services.dbus.packages = [
     (pkgs.writeTextDir "share/dbus-1/system.d/systemd-exporter-limits.conf" ''
       <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
@@ -90,7 +93,7 @@
 
   # zram swap configuration
   # Provides compressed swap in RAM to prevent OOM kills during memory pressure
-  # 50% of RAM (32GB) can hold ~64-96GB of compressed data with 2-3x compression
+  # 50% of RAM (31GB) can hold ~62-93GB of compressed data with 2-3x compression
   # Priority 5 (higher than disk swap) ensures zram is used first
   zramSwap = {
     enable = true;
@@ -127,12 +130,13 @@
 
     # vm.watermark_boost_factor: Boost watermarks temporarily when system is low on memory
     # 0 = disable boosting (prevents aggressive reclaim triggering)
-    # Default: 15000 (1.5% boost)
+    # Default: 15000 — the unit is fractions of 10000, so the default boosts
+    # reclaim by up to 150% of the high watermark (not 1.5%)
     "vm.watermark_boost_factor" = 0;
 
     # vm.watermark_scale_factor: How much memory to keep free
     # Higher values = more aggressive about keeping memory free
-    # 125 = 0.125% of RAM (780MB for 62GB RAM) kept free
+    # Unit is fractions of 10000, so 125 = 1.25% of RAM (780MB for 62GB RAM) kept free
     # Default: 10 (0.1% of RAM)
     "vm.watermark_scale_factor" = 125;
 

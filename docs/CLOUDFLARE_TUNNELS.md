@@ -2,12 +2,28 @@
 
 Persistent CloudFlare Tunnel connections for external service access without port forwarding.
 
+> **Status (2026-07-27):** There is now exactly **one** tunnel, named `data`
+> (unit `cloudflared-tunnel-data.service`), and it fronts **four** hostnames.
+> The second "rsync" tunnel described by earlier revisions of this document was
+> removed on 2025-11-17 in commit `b93020b` ("cloudflare-tunnels: Remove rsync
+> tunnel configuration"): `rsync.newartisans.com`, the
+> `cloudflared-tunnel-rsync.service` unit and the `cloudflared/rsync` SOPS
+> secret no longer exist, and nothing listens on port 18873. The
+> `cloudflare-tunnel-*` helper commands accept only `data` (and `all` for
+> restart). Everything below has been updated to the single-tunnel reality.
+
 ## Overview
 
-Two always-running CloudFlare Tunnels provide secure access to internal services:
+One always-running CloudFlare Tunnel (`data`) provides secure access to internal
+services. Its ingress map (`modules/services/cloudflare-tunnels.nix:45-50`) is:
 
-1. **Data Tunnel**: `https://data.newartisans.com` → `http://localhost:18080`
-2. **Rsync Tunnel**: `https://rsync.newartisans.com` → `http://localhost:18873`
+1. `https://data.newartisans.com` → `http://localhost:18080` (static-nginx container)
+2. `https://gitea.newartisans.com` → `http://localhost:3005` (Gitea)
+3. `https://s.newartisans.com` → `http://localhost:8580` (Shlink)
+4. `https://calendar.newartisans.com` → `http://localhost:8090` (Sacramento Cluster .ics)
+
+Anything not matching one of those hostnames gets the tunnel default,
+`http_status:404`.
 
 **Benefits:**
 - No port forwarding required
@@ -20,46 +36,43 @@ Two always-running CloudFlare Tunnels provide secure access to internal services
 
 ## Initial Setup
 
-### Step 1: Create CloudFlare Tunnels
-
-For each tunnel (data and rsync):
+### Step 1: Create the CloudFlare Tunnel
 
 1. **Log in to CloudFlare Dashboard**: https://dash.cloudflare.com
 2. **Select your domain**: `newartisans.com`
 3. **Go to Zero Trust** → **Networks** → **Tunnels**
 4. **Click "Create a tunnel"**
-5. **Name**: `data` (or `rsync` for the second tunnel)
+5. **Name**: `data`
 6. **Choose environment**: `Cloudflared`
 7. **Copy the tunnel token** (format: `eyJhIjoiXXX...`)
 
-**IMPORTANT**: Create TWO separate tunnels - one for data, one for rsync.
+**IMPORTANT**: One tunnel serves all four hostnames — do not create a second
+tunnel per hostname. Additional hostnames are added to the `ingress` attrset in
+`modules/services/cloudflare-tunnels.nix`, not by creating new tunnels.
 
 ### Step 2: Save Tunnel Credentials
 
+Secrets live in the separate `secrets` git repo consumed as a flake input, not
+at the repo root (`/etc/nixos/secrets.yaml` does not exist):
+
 ```bash
 # Edit secrets file
-sops /etc/nixos/secrets.yaml
+cd /etc/nixos
+sops secrets/secrets.yaml
 
 # Add under cloudflared section:
 cloudflared:
   data: "eyJhIjoiXXX..."    # Paste data tunnel token here
-  rsync: "eyJhIjoiXXX..."   # Paste rsync tunnel token here
 ```
 
 ### Step 3: Configure CloudFlare DNS
 
-In CloudFlare Dashboard → DNS → Records, add TWO CNAME records:
+In CloudFlare Dashboard → DNS → Records, add one CNAME record per hostname the
+tunnel fronts (`data`, `gitea`, `s`, `calendar`). For each:
 
-**Data Tunnel:**
 - Type: `CNAME`
-- Name: `data`
+- Name: `data` (then `gitea`, `s`, `calendar`)
 - Target: `<data-tunnel-id>.cfargotunnel.com` (from tunnel dashboard)
-- Proxy status: **Proxied** (orange cloud)
-
-**Rsync Tunnel:**
-- Type: `CNAME`
-- Name: `rsync`
-- Target: `<rsync-tunnel-id>.cfargotunnel.com` (from tunnel dashboard)
 - Proxy status: **Proxied** (orange cloud)
 
 ### Step 4: Rebuild System
@@ -68,7 +81,9 @@ In CloudFlare Dashboard → DNS → Records, add TWO CNAME records:
 sudo nixos-rebuild switch --flake '.#vulcan'
 ```
 
-The tunnels will start automatically and reconnect on boot.
+The tunnel will start automatically and reconnect on boot. Its unit sets
+`StartLimitIntervalSec=0` and `RestartSec=10`, so it retries forever rather than
+giving up if DNS is still warming up at boot.
 
 ---
 
@@ -80,28 +95,37 @@ The tunnels will start automatically and reconnect on boot.
 cloudflare-tunnel-status
 ```
 
-Shows the running status of both tunnels.
+Shows the running status of the tunnel.
 
 ### View Tunnel Logs
 
 ```bash
 cloudflare-tunnel-logs data    # View data tunnel logs
-cloudflare-tunnel-logs rsync   # View rsync tunnel logs
 ```
+
+`data` is the only accepted argument; anything else prints a usage message.
 
 ### Restart Tunnels
 
 ```bash
-cloudflare-tunnel-restart data   # Restart data tunnel only
-cloudflare-tunnel-restart rsync  # Restart rsync tunnel only
-cloudflare-tunnel-restart all    # Restart both tunnels
+cloudflare-tunnel-restart data   # Restart the data tunnel
+cloudflare-tunnel-restart all    # Same thing (only one tunnel exists)
 ```
 
 ### Detailed Status
 
 ```bash
 systemctl status cloudflared-tunnel-data
-systemctl status cloudflared-tunnel-rsync
+```
+
+### Metrics
+
+The unit sets `TUNNEL_METRICS=127.0.0.1:9301`, so cloudflared's Prometheus
+endpoint (including `cloudflared_tunnel_ha_connections`) is scraped locally as
+`job=cloudflared`:
+
+```bash
+curl -s http://127.0.0.1:9301/metrics | grep cloudflared_tunnel_ha_connections
 ```
 
 ---
@@ -117,13 +141,16 @@ curl -I https://data.newartisans.com
 # Expected: HTTP response (200, 404, etc. depending on service)
 ```
 
-### Test Rsync Tunnel
+### Test the Other Hostnames
 
 ```bash
 # From any machine with internet access
-curl -I https://rsync.newartisans.com
+curl -I https://gitea.newartisans.com
+curl -I https://s.newartisans.com
+curl -I https://calendar.newartisans.com
 
-# Expected: HTTP response from rsync service
+# Expected: HTTP response from Gitea / Shlink / the calendar publisher.
+# A hostname not in the ingress map returns 404 (the tunnel default).
 ```
 
 ---
@@ -144,8 +171,7 @@ cloudflare-tunnel-logs data
 
 **Verify credentials file exists:**
 ```bash
-ls -la /run/secrets/cloudflared-data
-ls -la /run/secrets/cloudflared-rsync
+ls -la /run/secrets/cloudflared/data
 ```
 
 **Check DNS configuration:**
@@ -155,19 +181,17 @@ ls -la /run/secrets/cloudflared-rsync
 
 ### Service Not Responding
 
-**Check if local service is running:**
+**Check if the local service behind the failing hostname is running:**
 ```bash
-# For data tunnel (port 18080)
-curl http://localhost:18080
-
-# For rsync tunnel (port 18873)
-curl http://localhost:18873
+curl http://localhost:18080   # data.newartisans.com     (static-nginx container)
+curl http://localhost:3005    # gitea.newartisans.com    (Gitea)
+curl http://localhost:8580    # s.newartisans.com        (Shlink API)
+curl http://localhost:8090    # calendar.newartisans.com (calendar publisher)
 ```
 
 **Check if ports are listening:**
 ```bash
-sudo ss -tulpn | grep 18080
-sudo ss -tulpn | grep 18873
+sudo ss -tulpn | grep -E '18080|3005|8580|8090'
 ```
 
 ### Connection Timeouts
@@ -181,14 +205,15 @@ CloudFlare may timeout long-running connections. If you need longer timeouts:
 
 ### 502 Bad Gateway
 
-Usually means the local service (port 18080 or 18873) is not responding:
+Usually means the local service behind that hostname (18080, 3005, 8580 or
+8090) is not responding:
 
 ```bash
 # Check if services are running
 systemctl status <your-service-name>
 
 # Check if ports are listening
-sudo netstat -tulpn | grep -E "18080|18873"
+sudo ss -tulpn | grep -E "18080|3005|8580|8090"
 ```
 
 ---
@@ -205,7 +230,8 @@ By default, tunnels are publicly accessible. To restrict access:
    - Configure authentication (email, Google, etc.)
 
 2. **Application-level authentication**:
-   - Ensure your services (port 18080, 18873) have their own authentication
+   - Ensure the services behind the tunnel (18080, 3005, 8580, 8090) have their
+     own authentication
    - Do not rely solely on CloudFlare Tunnel obscurity
 
 ### Monitoring
@@ -225,26 +251,18 @@ Configure rate limiting in CloudFlare:
 ## Architecture
 
 ```
-Internet (https://data.newartisans.com)
+Internet (data. / gitea. / s. / calendar.newartisans.com)
   ↓
 CloudFlare Edge (automatic HTTPS)
   ↓
-CloudFlare Tunnel (encrypted connection)
+CloudFlare Tunnel "data" (single encrypted connection)
   ↓
-vulcan.lan (cloudflared daemon)
+vulcan.lan (cloudflared-tunnel-data.service)
   ↓
-localhost:18080 (data service)
-
-
-Internet (https://rsync.newartisans.com)
-  ↓
-CloudFlare Edge (automatic HTTPS)
-  ↓
-CloudFlare Tunnel (encrypted connection)
-  ↓
-vulcan.lan (cloudflared daemon)
-  ↓
-localhost:18873 (rsync service)
+localhost:18080  (data     → static-nginx container)
+localhost:3005   (gitea    → Gitea)
+localhost:8580   (s        → Shlink API)
+localhost:8090   (calendar → calendar publisher, plain HTTP by design)
 ```
 
 **Key points:**
@@ -257,15 +275,20 @@ localhost:18873 (rsync service)
 
 ## Related Services
 
-### N8N Webhook Tunnel
+### N8N Webhook Tunnel (removed)
 
-Similar setup but manually controlled. See `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md`
+n8n and its manually controlled webhook tunnel were removed from this repository
+on 2026-03-14 (commit `5f56003`), together with `docs/N8N_WEBHOOK_SETUP.md`.
+There is no `n8n-webhook-*` command, `cloudflared-tunnel-n8n-webhook.service`
+unit, or `n8n.newartisans.com` hostname any more. The historical procedure is
+kept for background in [CLOUDFLARE_MIGRATION.md](CLOUDFLARE_MIGRATION.md).
 
 ### Configuration Files
 
 - Module: `/etc/nixos/modules/services/cloudflare-tunnels.nix`
-- Secrets: `/etc/nixos/secrets.yaml` (encrypted)
-- Deployed credentials: `/run/secrets/cloudflared-{data,rsync}`
+- Secrets: `/etc/nixos/secrets/secrets.yaml` (encrypted; separate git repo
+  consumed as the `secrets` flake input — there is no `/etc/nixos/secrets.yaml`)
+- Deployed credentials: `/run/secrets/cloudflared/data`
 
 ---
 
@@ -277,39 +300,33 @@ If you need to rotate tunnel tokens:
 
 ```bash
 # Edit secrets
-sops /etc/nixos/secrets.yaml
+cd /etc/nixos
+sops secrets/secrets.yaml
 
 # Update the token
 cloudflared:
   data: "new_token_here"
 
+# Commit the change in the secrets repo, then re-lock the flake input:
+git -C secrets commit -am "cloudflared: rotate data tunnel token"
+nix flake update secrets
+
 # Rebuild and restart
 sudo nixos-rebuild switch --flake '.#vulcan'
 ```
 
-The `restartUnits` configuration will automatically restart the tunnels.
+The secret's `restartUnits = [ "cloudflared-tunnel-data.service" ]` will
+automatically restart the tunnel.
 
 ### Removing a Tunnel
 
 To disable a tunnel:
 
 1. Remove from `modules/services/cloudflare-tunnels.nix`
-2. Remove secrets from `secrets.yaml`
+2. Remove the secret from `secrets/secrets.yaml` (and re-lock the `secrets` input)
 3. Remove CNAME from CloudFlare DNS
 4. Delete tunnel from CloudFlare Dashboard
 5. Rebuild: `sudo nixos-rebuild switch --flake '.#vulcan'`
-
----
-
-## Differences from N8N Webhook Tunnel
-
-| Feature | N8N Webhook | Data/Rsync Tunnels |
-|---------|-------------|-------------------|
-| Auto-start | No (manual) | Yes (automatic) |
-| Nginx proxy | Yes | No (direct to localhost) |
-| SSL termination | CloudFlare + Nginx | CloudFlare only |
-| Management commands | n8n-webhook-* | cloudflare-tunnel-* |
-| Use case | Temporary webhook access | Persistent service access |
 
 ---
 

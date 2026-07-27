@@ -7,7 +7,7 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
         print(f"hermes-mcp {__version__}")
         return 0
-    # Server entrypoint lands here in Task 6.
+    # Server entrypoint — implemented in hermes_mcp.server.run().
     from hermes_mcp.server import run
     return run()
 

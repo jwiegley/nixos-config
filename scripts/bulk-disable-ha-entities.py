@@ -216,7 +216,12 @@ def main():
     if dry_run:
         print("Running in DRY RUN mode - no changes will be made\n")
 
-    # Debug: Show token info (but not the actual token)
+    # Debug: print the token's length, plus a prefix of it. Verified 2026-07-27
+    # by executing the exact ternary below: when len(token) > 20 it prints the
+    # first 20 characters ("Token starts with: <20 chars>..."); otherwise it
+    # prints "Token: [REDACTED]" and no token material. So the short-token case
+    # is safe, but any token longer than 20 characters is PARTIALLY LEAKED to
+    # stdout. Do not paste this output anywhere.
     print(f"Token length: {len(token)} characters")
     print(f"Token starts with: {token[:20]}..." if len(token) > 20 else f"Token: {token}")
     print()

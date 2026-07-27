@@ -7,6 +7,8 @@ Tests the complete email delivery pipeline using IMAP (like a real email client)
 - Rspamd spam filtering
 - Dovecot Sieve filtering
 - IMAPSieve training (TrainSpam/TrainGood)
+- IMAPSieve retraining (Retrain folder: rescan through rspamd + redeliver)
+- GPT/LLM spam classification via the LiteLLM proxy
 
 SAFETY: All test messages use unique Message-IDs for safe cleanup.
 """
@@ -54,7 +56,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Track IMAP connection
+# Cache the IMAP password after the first load (see get_imap_password)
 _imap_password: Optional[str] = None
 
 
@@ -438,7 +440,8 @@ def check_for_forwarding_loops(since_time: datetime, message_id: str) -> bool:
 
     Args:
         since_time: Start time to check logs from
-        message_id: Message ID to check for (used for context in errors)
+        message_id: Message ID under test. Currently unused - the Postfix log
+            scan is time-window based, not per-message; kept for caller clarity.
 
     Returns:
         True if no forwarding loops detected, False otherwise

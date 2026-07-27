@@ -62,7 +62,10 @@ groups:
           description: "Copyparty is not serving any volumes. Configuration or mount issue."
           action: "Check /tank/Public mount and copyparty configuration"
 
-      # Authentication failures (if metric exists)
+      # Authentication failures. copyparty exposes no direct auth-failure
+      # metric (verified 2026-07-27: the live cpp_* set has no auth counter),
+      # so this uses the ban counter as a proxy — same series as
+      # CopypartyFrequentBans above, at a shorter window and lower threshold.
       - alert: CopypartyAuthFailures
         expr: increase(cpp_total_bans[15m]) > 0
         for: 5m

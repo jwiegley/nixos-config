@@ -1,5 +1,10 @@
 # Climate Comfort — bias regression upgrade
 
+> **Archival — 2026-05-15.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 **Status:** Draft 2026-05-15 (for later implementation)
 **Author:** John Wiegley (with Claude design assistance)
 **Depends on:** `2026-05-14-climate-comfort-design.md`

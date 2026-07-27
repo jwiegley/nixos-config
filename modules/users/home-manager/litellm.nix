@@ -7,7 +7,9 @@
 }:
 
 {
-  # Deploy harmony_filter.py from /etc/nixos/scripts to /etc/litellm
+  # Deploy harmony_filter.py from this repo's scripts/ to /etc/litellm. The
+  # source is copied into the Nix store at build time, so /etc/nixos is not
+  # read at runtime.
   environment.etc."litellm/harmony_filter.py" = {
     source = ../../../scripts/harmony_filter.py;
     mode = "0644";

@@ -7,7 +7,8 @@
 # 4x Seagate Exos X18 (sda-sdd) behind a flaky OWC Mercury Elite Pro Quad USB/UAS
 # enclosure (see memory project_tank_uas_enclosure_failure). The leading indicator
 # that the UAS bridge is degrading is a rising UDMA_CRC_Error_Count on those disks
-# — invisible without SMART. The NVMe root (nvme0n1) is monitored for media errors.
+# — invisible without SMART. The NVMe root (nvme0n1) was also scraped for media
+# errors until 2026-07-03, when it had to be dropped (see the device list below).
 #
 # Verified 2026-06-09 (`smartctl -H`): all five devices report PASSED and SMART
 # reads pass cleanly through the UAS bridge with automatic SAT detection — no

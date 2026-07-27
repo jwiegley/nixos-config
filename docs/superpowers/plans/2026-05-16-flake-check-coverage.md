@@ -1,5 +1,11 @@
 # Flake-check Coverage Implementation Plan
 
+> **Archival — 2026-05-16.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `tests/openclaw/check-schema.nix`, `tests/openclaw/expected-keys.txt`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire three improvements into `nix flake check`: (A) snapshot schema check on `pkgs.openclaw-config-template`, (B) runtime schema-drift detector emitting Prometheus textfile metrics, (C) three new flake checks running the existing pytest suites.

@@ -20,7 +20,7 @@ stream, each serving a different need:
 | `/var/lib/flume-data/cache/per-minute-by-day/YYYY-MM-DD.json` | JSON | One file per local date, `[[iso_naive_local_ts, gpm], ...]` | Source of truth on disk; cheap re-processing |
 | `/var/lib/flume-data/backfill/flume-segments.csv` | CSV | One row per continuous-usage segment + autofill classification | Excel-friendly export |
 | `/var/lib/flume-data/backfill/flume-day-totals.csv` | CSV | One row per day with sum/count rollups | Excel-friendly day-level view |
-| PostgreSQL `flume-data` database | SQL | Two tables + one view (see schema below) | Ad-hoc SQL queries, Grafana, joins |
+| PostgreSQL `flume-data` database | SQL | Eight tables + two views (see schema below) | Ad-hoc SQL queries, Grafana, joins |
 
 **The PostgreSQL tables are the recommended primary source for analysis.**
 The CSVs are convenience exports; the cache files are intermediate. All
@@ -46,8 +46,10 @@ minutes. **This is the authoritative ground truth.** Compute any
 aggregation you want from this table — `flume_segments` and
 `flume_day_totals` are derived conveniences.
 
-Expected scale: ~1440 samples/day × days-of-history = ~430k rows/year =
-~22 MB/year. Trivial for Postgres.
+Expected scale: ~1440 samples/day × 365 = ~526k rows/year. Measured
+2026-07-27: 1.31M rows (2024-02-01 onwards) in 94 MB of heap, 169 MB
+including the date index — roughly 40 MB/year, or 70 MB/year counting
+indexes. Trivial for Postgres.
 
 **Timestamp semantics:** stored naive in device-local time
 (America/Los_Angeles). Flume's API contract is "device-local timestamps,
@@ -103,8 +105,8 @@ heuristic with three rules applied in order:
    open/closed events in HA), it is `irrigation`. Wins over all other
    rules.
 2. **Tight band** — `mean_gpm` must be in `[3.2, 3.8]` GPM (the
-   characteristic pool autofill rate is ~3.5 GPM, not the looser 3-5
-   v1 used).
+   pre-swap valve's characteristic pool autofill rate was ~3.5 GPM,
+   not the looser 3-5 v1 used — but see the staleness warning below).
 3. **Sustained** — per-minute `gpm_stddev < 0.6` AND at least 85% of
    minutes in the [3.2, 3.8] band. Drip-zone tails fluctuate too much
    to satisfy this even when their mean drifts through 3.5.
@@ -117,7 +119,36 @@ skipped and `category_v2_reason` ends in `(no B-Hyve data)`. Filter on
 that suffix when comparing recent vs historical classifications.
 
 Use `category` for v1 (historical, pre-2026-05-23). Use `category_v2`
-for accurate current totals. The v1 column stays for audit trail.
+for accurate current totals — it is populated for every segment in the
+table (39,169 of 39,169 rows spanning 2024-02-09 … 2026-07-27, checked
+2026-07-27), subject to the pool-autofill caveat below. The v1 column
+stays for audit trail.
+
+> **Stale as of 2026-07-27 — pool autofill only.** The pool auto-fill
+> valve was replaced 2026-05-26. The new one does SHORT top-offs —
+> roughly 2-9 minute bursts at 1.3-1.9 GPM — rather than the old valve's
+> long 30-200 minute fills at 3-5 GPM. That burst *duration*, not just
+> the lower rate, is why the detection window had to move from w15/min14
+> to w5/min4: a 15-minute window caught zero real fills.
+> (Source: `hosts/vulcan/default.nix`,
+> `services.home-assistant-water-attribution.autofill` — see the comment
+> above the `autofill` block. Same date in `docs/WATER_ATTRIBUTION.md`
+> and `scripts/flume-data/emit_segments_csv.py`. Note the retune commit
+> "water-attribution: retune pool auto-fill detection for replaced
+> valve" is dated 2026-06-09 and says "2026-06"; that is when the
+> detection was *fixed*, not when the valve was swapped.)
+> `flume_data/classify_v2.py` still hardcodes the old
+> valve's `GPM_BAND_MIN/MAX = 3.2/3.8`, and `flume_data/fixtures.py`
+> still gives the v3 `pool_autofill` fixture `mean_gpm 3.2-3.8` over
+> `duration_min 30-200`, so **neither `category_v2` nor the v3
+> `pool_autofill` attribution can match a post-swap fill.** The live
+> Home Assistant rule *was* retuned — `[1.3, 1.9]` GPM, window 5,
+> 4-of-5 minutes in range (`hosts/vulcan/default.nix`,
+> `services.home-assistant-water-attribution.autofill`) — but these
+> offline classifiers were not. Re-tune them and re-run the backfills
+> (see "Re-classification" and "Re-calibrating v3 fixture signatures")
+> before trusting post-swap pool numbers. Every other fixture and
+> category is unaffected.
 
 ### `irrigation_sessions` — B-Hyve ground truth
 
@@ -155,8 +186,9 @@ is **forward-filled** to per-minute so it joins directly with
 `flume_minute_samples` on `ts`. A minute with no event keeps the prior
 value (which may be 0).
 
-**Coverage starts 2026-05-19** (when the sensor was added to HA);
-older minutes won't appear here.
+**Coverage starts 2026-05-15** (earliest row in the table as of
+2026-07-27, bounded by when the sensor was added to HA); older minutes
+won't appear here.
 
 Used by the v3 classifier to discriminate hot-water fixtures (shower,
 dishwasher, washer-hot) from cold-only ones (toilet, irrigation, pool
@@ -262,8 +294,9 @@ ORDER BY day, gallons DESC;
 ```
 
 Materialized by `refresh_minute_attributions.py`; refreshed
-incrementally by the 6-hourly sync (`--days 4` window) which also
-re-runs the invariant check on the touched window.
+incrementally by the 6-hourly sync (which passes `--days 3`, i.e. today
+plus the previous three days) and which also re-runs the invariant check
+on the touched window.
 
 ### `flume_user_labels` — manual ground-truth overrides
 
@@ -293,8 +326,8 @@ VALUES ('2025-07-23', '20:07:00', 'leak', 'pool float valve stuck open');
 
 After labeling, run:
 ```bash
-sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py --days 800
-sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/backfill_v3.py" --days 800
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/refresh_minute_attributions.py" --full
 ```
 (or wait for the next 6-hourly sync, which only catches the most
 recent 4-day window).
@@ -338,12 +371,44 @@ Auto-updates when `flume_segments` changes; no separate sync needed.
 ## How to connect
 
 The database is owned by the OS user `flume-data` via Postgres peer
-authentication. The Grafana service user also has peer access (read).
-For interactive queries:
+authentication. `johnw` and `hass` also have read-only access —
+`modules/services/databases.nix` grants each of them `CONNECT`, schema
+`USAGE` and `SELECT` on all tables. `grafana` has only a `pg_hba` peer
+line (same file) and `CONNECT` + `USAGE`; it holds **no** table-level
+`SELECT`, so as of 2026-07-27 `has_table_privilege('grafana', …)` is
+false on all ten relations and Grafana cannot actually read them. For
+interactive queries:
 
 ```bash
+# read-only, no sudo needed as johnw
+psql -d flume-data
+
+# as the owner, for writes (labels, DDL)
 sudo -u flume-data psql -d flume-data
 ```
+
+### Running the one-shot Python scripts
+
+The scripts under `scripts/flume-data/` are **not** marked executable,
+and the system `python3` has neither `psycopg2` nor `requests` — those
+live only in the `python3.withPackages` env that the systemd units use.
+So borrow the interpreter and `PYTHONPATH` from a deployed unit rather
+than calling the checkout directly:
+
+```bash
+FPY=$(systemctl show flume-data-daily-sync.service -p ExecStart --value \
+        | sed -n 's/.*path=\([^ ]*\).*/\1/p')
+FPP=$(systemctl show flume-data-daily-sync.service -p Environment --value \
+        | tr ' ' '\n' | sed -n 's/^PYTHONPATH=//p')
+
+# smoke test
+PYTHONPATH="$FPP" "$FPY" "$FPP/backfill_v3.py" --help
+```
+
+`$FPP` is the nix-store copy of `scripts/flume-data/`, so it always
+matches the currently-activated generation. Every `backfill_v3.py`,
+`refresh_minute_attributions.py` and `emit_segments_csv.py` invocation
+elsewhere in this document assumes `$FPY`/`$FPP` are set this way.
 
 For Python from outside the systemd sandbox (e.g., a notebook):
 
@@ -368,7 +433,9 @@ SELECT * FROM flume_day_totals ORDER BY date DESC LIMIT 30;
 ```
 
 > Note: `flume_day_totals` aggregates the v1 `category` column. For
-> accurate post-2026-05-23 numbers, use the v2 recipes below.
+> accurate post-2026-05-23 numbers, use the v2 recipes below — subject,
+> for `pool_autofill` specifically, to the June-2026 valve-swap caveat
+> in the schema section above.
 
 ### True pool autofill totals (v2, B-Hyve-aware)
 
@@ -512,8 +579,8 @@ After labeling N segments, refresh the materialized table so the
 labels propagate to `flume_minute_attributions`:
 
 ```bash
-sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
-sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/backfill_v3.py"
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/refresh_minute_attributions.py" --full
 ```
 
 ### Custom daily total computed from raw samples
@@ -631,9 +698,18 @@ Compare with VM via Grafana or PromQL:
 
 ```promql
 sum_over_time(
-  last_over_time({entity_id="flume_sensor_sierra_oaks_current"}[1m])[1d:1m]
+  last_over_time(
+    {entity_id="flume_sensor_sierra_oaks_current",__name__=~".+_value"}[1m]
+  )[1d:1m]
 )
 ```
+
+The `__name__=~".+_value"` pin is required. The HA→VM bridge writes a
+`<unit>_value` numeric series *plus* `<unit>_*_str` attribute series (and
+`_last_period` / `_last_reset` for utility meters), so a bare
+`{entity_id=...}` selector matches several series at once and yields a
+polluted sum. `flume_data/sources/victoriametrics.py` pins it the same
+way.
 
 A delta of more than a few gallons per day across most days suggests an
 ingestion issue worth investigating.
@@ -674,12 +750,15 @@ initial backfill):
 3. Pull Miele dishwasher phases from HA Postgres → `dishwasher_cycles`
 4. Pull B-Hyve valve events from HA Postgres → `irrigation_sessions`
 5. Run v3 classifier on the recent segments → `flume_segment_attributions`
-6. Refresh the wide projection → `flume_minute_attributions`
+6. Refresh the per-minute long-format projection → `flume_minute_attributions`
 
 The 3-day rolling window absorbs late-arriving data without re-fetching
 the full history. Cache hits are free (no API call); only genuinely
-missing days trigger Flume API calls. The window itself is ≈ 4 API calls
-on a typical run — well under the per-hour budget.
+missing days trigger Flume API calls, so in steady state a run costs 0-1
+calls (normally just the new day, on the 00:30 run) — far under the
+per-hour budget. Note the flip side: a day that is already cached is
+*never* re-fetched, so today's file, written by the 00:30 run, is what
+the 06:30 / 12:30 / 18:30 runs re-read.
 
 ```bash
 # Check next firing time
@@ -703,13 +782,15 @@ sudo journalctl -u flume-data-daily-sync.service --since '10 min ago' \
 After a fresh historical pull (or any time the cache and DB diverge):
 
 ```bash
-sudo systemd-run --uid=$(id -u flume-data) --gid=$(id -g flume-data) \
-    --setenv=PYTHONPATH=$(systemctl show flume-data-daily-sync.service \
-        --property=Environment --value | tr ' ' '\n' | \
-        grep ^PYTHONPATH= | cut -d= -f2) \
-    --pipe --wait \
-    /run/current-system/sw/bin/python -m flume_db_sync --from-cache
+sudo systemctl start flume-data-bulkload.service
+journalctl -u flume-data-bulkload.service -n 40 --no-pager
 ```
+
+`flume-data-bulkload.service` is a no-timer oneshot declared in
+`modules/services/flume-data.nix` that runs `flume_db_sync --from-cache`
+under the same user, sandbox and Python env as the 6-hourly sync. (Don't
+try to run this by hand with `/run/current-system/sw/bin/python` — the
+system interpreter has no `psycopg2`.)
 
 This reads every JSON file under `cache/per-minute-by-day/` and UPSERTs
 the entire history. Uses `execute_values` with 5000-row pages — ~1.2M
@@ -720,18 +801,23 @@ just re-overwrites the same rows.
 
 `emit_segments_csv.py` is the script that talks to the Flume API at
 length. It's NOT wired to a systemd unit; you launch it explicitly when
-you want to do a bulk historical fetch:
+you want to do a bulk historical fetch.
+
+Run it **as `flume-data`**, not as root: the credentials under
+`/run/secrets/flume` are owned by `flume-data`, and anything root writes
+into `cache/per-minute-by-day/` lands root-owned and can no longer be
+rewritten by the service. (As of 2026-07-27, 573 of the 908 cache files
+are root-owned from exactly this mistake — harmless while they are never
+re-fetched, but a re-pull of one of those days will fail.)
 
 ```bash
-# Pull the entire device history (~7-8 hours wall time at 30s/call)
-sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
-    /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-data/emit_segments_csv.py
+# Pull the entire device history (~8 hours wall time at ~33s/call)
+sudo -u flume-data env CREDENTIALS_DIRECTORY=/run/secrets/flume \
+    PYTHONPATH="$FPP" "$FPY" "$FPP/emit_segments_csv.py"
 
 # Or a specific date range
-sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
-    /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
+sudo -u flume-data env CREDENTIALS_DIRECTORY=/run/secrets/flume \
+    PYTHONPATH="$FPP" "$FPY" "$FPP/emit_segments_csv.py" \
     --from 2024-02-01 --to 2024-12-31
 ```
 
@@ -752,9 +838,19 @@ If you decide your autofill detection rule has changed (e.g., your pool
 float now opens at 4 GPM instead of 3.5), the segments table needs to be
 rebuilt:
 
-1. Edit the detection constants in
-   `/etc/nixos/scripts/flume-data/flume_data/detection.py` (or
-   the duplicate in `emit_segments_csv.py` — long-term, deduplicate).
+1. Edit the detection constants. The ones that produce
+   `flume_segments.category` are `GPM_MIN` / `GPM_MAX` /
+   `WINDOW_MINUTES` / `MIN_MINUTES_IN_RANGE` at the top of
+   `/etc/nixos/scripts/flume-data/emit_segments_csv.py` (currently
+   `3.0` / `5.0` / `10` / `9`); `flume_db_sync.py` reaches them by
+   importing `detect_segments` and `is_pool_autofill_segment` from that
+   module. `flume_data/detection.py` holds
+   no constants of its own — it is a pure function over a
+   `DetectionConfig`, and the config it gets comes from `zones.json`,
+   generated from `services.home-assistant-water-attribution.autofill`
+   in `hosts/vulcan/default.nix`. Those two are deliberately separate
+   today (the Nix-side rule tracks the current valve; the script still
+   describes the pre-swap one) — long-term, deduplicate.
 2. `nixos-rebuild switch` to deploy.
 3. `TRUNCATE flume_segments` to drop the old classification.
 4. Run `--from-cache` to repopulate from the (unchanged) raw samples
@@ -775,8 +871,8 @@ runs at 1.8 GPM rather than the assumed 2.0):
 2. `nixos-rebuild switch` to deploy.
 3. Re-attribute:
    ```bash
-   sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
-   sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+   sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/backfill_v3.py"
+   sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/refresh_minute_attributions.py" --full
    ```
 
 A useful re-calibration cadence is every ~2 weeks, as new
@@ -799,11 +895,11 @@ VALUES ('2025-07-23', '20:07:00', 'leak', 'pool float stuck open');
 
 Then:
 ```bash
-sudo -u flume-data /etc/nixos/scripts/flume-data/backfill_v3.py
-sudo -u flume-data /etc/nixos/scripts/flume-data/refresh_minute_attributions.py --full
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/backfill_v3.py"
+sudo -u flume-data env PYTHONPATH="$FPP" "$FPY" "$FPP/refresh_minute_attributions.py" --full
 ```
 
-Labeled segments are also propagated into the wide
+Labeled segments are also propagated into the per-minute
 `flume_minute_attributions` table, so dashboards and reports pick up
 the correction automatically.
 
@@ -825,13 +921,12 @@ Run a targeted re-sync:
 
 ```bash
 # Day-by-day re-fetch + re-sync from API
-sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
-    /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
+sudo -u flume-data env CREDENTIALS_DIRECTORY=/run/secrets/flume \
+    PYTHONPATH="$FPP" "$FPY" "$FPP/emit_segments_csv.py" \
     --from 2026-05-10 --to 2026-05-22
 
 # Bulk-load the now-up-to-date cache into Postgres
-sudo systemd-run --uid=$(id -u flume-data) ... -m flume_db_sync --from-cache
+sudo systemctl start flume-data-bulkload.service
 ```
 
 ### Monitoring health
@@ -887,9 +982,8 @@ If the gap query reveals missing dates, re-fetch just those days from
 the Flume API and bulkload:
 
 ```bash
-sudo CREDENTIALS_DIRECTORY=/run/secrets/flume \
-    /run/current-system/sw/bin/python \
-    /etc/nixos/scripts/flume-data/emit_segments_csv.py \
+sudo -u flume-data env CREDENTIALS_DIRECTORY=/run/secrets/flume \
+    PYTHONPATH="$FPP" "$FPY" "$FPP/emit_segments_csv.py" \
     --from YYYY-MM-DD --to YYYY-MM-DD
 
 sudo systemctl start flume-data-bulkload.service
@@ -937,7 +1031,7 @@ on `ts` (e.g., `flume_minute_annotations`).
 * One-shot backfills:
   - `scripts/flume-data/backfill_v2.py` (category_v2 + irrigation_sessions)
   - `scripts/flume-data/backfill_v3.py` (flume_segment_attributions)
-  - `scripts/flume-data/refresh_minute_attributions.py` (per-minute wide table)
+  - `scripts/flume-data/refresh_minute_attributions.py` (per-minute long-format table)
 * Cache shape: `scripts/flume-data/emit_segments_csv.py:chunked_pull`
   (writes one JSON per day with `[[iso_naive_ts, gpm], ...]`)
 * NixOS module: `modules/services/flume-data.nix`

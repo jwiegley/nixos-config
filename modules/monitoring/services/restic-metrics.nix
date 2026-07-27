@@ -173,7 +173,8 @@ in
 
   # Restic metrics collection for multiple repositories
   # Systemd service to collect restic metrics
-  # Auto-start when tank mount becomes available
+  # Started only by restic-metrics.timer (its wantedBy was dropped 2025-11-05);
+  # the timer below is what carries the tank.mount wantedBy
   # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
   systemd.services.restic-metrics = {
     description = "Collect Restic Repository Metrics";

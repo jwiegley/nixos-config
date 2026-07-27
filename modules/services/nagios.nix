@@ -384,7 +384,8 @@ let
   nagiosCfgDir = "/var/lib/nagios";
 
   # Helper function to generate systemd service checks
-  # Optional 4th parameter: template (defaults to "standard-service")
+  # 4th parameter is the template name; it is required — call sites pass
+  # "critical-service" or "standard-service"
   mkServiceCheck = serviceName: displayName: servicegroups: template: ''
     define service {
       use                     ${template}
@@ -518,8 +519,9 @@ let
     '';
 
   # List of monitored hosts with parent relationships for network topology
-  # IMPORTANT: Host definitions are now stored in a separate private file: /etc/nixos/nagios-hosts.nix
-  # This file is excluded from version control (.gitignore) to keep network topology private
+  # IMPORTANT: Host definitions are stored in a separate private file: /etc/nixos/nagios/hosts.nix
+  # That directory is its own git repo, gitignored by this one (.gitignore), and is
+  # consumed here as the `nagios` flake input, so the topology stays out of this repo
   #
   # The file should contain a Nix list with the following format:
   # [
@@ -532,8 +534,9 @@ let
   #   - DOWN: Host itself is unreachable (parent is UP)
   #   - UNREACHABLE: Host is unreachable because parent/network path is down
   #
-  # Import from absolute path (required for gitignored files in flakes)
-  # Falls back to empty list if file doesn't exist
+  # Imported through the `nagios` flake input's store path (required for gitignored
+  # files in flakes).  There is no fallback: if hosts.nix is missing or the input
+  # fails to resolve, evaluation fails loudly rather than silently monitoring nothing.
   monitoredHosts = import (nagios.outPath + "/hosts.nix");
 
   # Service categories for organized monitoring
@@ -984,7 +987,9 @@ let
   # Podman Containers
   # rootless containers (runAs set) run in user namespaces and require special checks
   # root containers (no runAs) run in the root namespace via system services
-  # Updated 2025-11-09: Each container now runs under its own dedicated user for security isolation
+  # Updated 2025-11-09: rootless containers each run under a dedicated user for security
+  # isolation (memory-vault and memory-vault-mcp share the memory-vault user); the two
+  # budget-board entries are still root-level Quadlet containers, hence no runAs
   containers = [
     {
       name = "litellm";
@@ -1066,7 +1071,9 @@ let
     }
   ];
 
-  # Container systemd services (for Quadlet-managed containers)
+  # Container systemd services: the systemd-nspawn unit container@static-nginx.service
+  # (modules/containers/static-nginx-container.nix) and the Quadlet-generated
+  # technitium-dns-exporter.service
   containerSystemdServices = [
     {
       name = "container@static-nginx.service";
@@ -2518,7 +2525,9 @@ in
       bc # calculator for check_ssl_cert
       gawk # required by check_ssl_cert for certificate parsing
       jq # required by check_git_workspace_sync for JSON parsing
-      findutils # required by check_git_workspace_stale for find command
+      # findutils: was needed by the old find-based check_git_workspace_stale; the
+      # state-file version above uses no find (kept in PATH as of 2026-07-27)
+      findutils
     ];
 
     # Validate configuration at build time
@@ -2534,7 +2543,9 @@ in
       log_rotation_method = "d";
       log_archive_path = "/var/log/nagios/archives";
 
-      # Performance data settings (for Prometheus exporter)
+      # Performance data settings.  Nagios writes these files, but as of 2026-07-27
+      # nothing in this repo reads them — the Nagios→Prometheus bridge parses
+      # /var/lib/nagios/status.dat (modules/monitoring/services/nagios-status-exporter.nix)
       process_performance_data = "1";
       service_perfdata_file = "/var/lib/nagios/service-perfdata";
       service_perfdata_file_template = "[SERVICEPERFDATA]\\t$TIMET$\\t$HOSTNAME$\\t$SERVICEDESC$\\t$SERVICEEXECUTIONTIME$\\t$SERVICELATENCY$\\t$SERVICEOUTPUT$\\t$SERVICEPERFDATA$";
@@ -2871,6 +2882,9 @@ in
       ];
     }
     # Allow nagios to run podman as container-db (for database-backed rootless containers)
+    # Legacy: the shared container-* users were replaced by per-service users
+    # (modules/users/container-users-dedicated.nix); container-db no longer exists
+    # on this host and no entry in `containers` above uses it (verified 2026-07-27)
     {
       users = [ "nagios" ];
       runAs = "container-db";
@@ -2885,6 +2899,7 @@ in
       ];
     }
     # Allow nagios to run podman as container-monitor (for monitoring rootless containers)
+    # Legacy, same as container-db above: no such user on this host (verified 2026-07-27)
     {
       users = [ "nagios" ];
       runAs = "container-monitor";
@@ -2899,6 +2914,7 @@ in
       ];
     }
     # Allow nagios to run podman as container-misc (for miscellaneous rootless containers)
+    # Legacy, same as container-db above: no such user on this host (verified 2026-07-27)
     {
       users = [ "nagios" ];
       runAs = "container-misc";
@@ -2913,6 +2929,7 @@ in
       ];
     }
     # Allow nagios to run podman as container-web (for web application rootless containers)
+    # Legacy, same as container-db above: no such user on this host (verified 2026-07-27)
     {
       users = [ "nagios" ];
       runAs = "container-web";

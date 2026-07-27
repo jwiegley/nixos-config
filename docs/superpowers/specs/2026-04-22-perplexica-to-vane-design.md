@@ -1,5 +1,11 @@
 # Perplexica → Vane Rebrand: Design Spec
 
+> **Archival — 2026-04-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/vane.nix`).
+
 **Status:** Approved (brainstormed 2026-04-22 with user)
 **Scope:** Rename the existing Perplexica deployment on host `vulcan` to Vane across all NixOS modules, swap the container image, preserve on-disk state, and keep the standalone SearXNG backend intact.
 

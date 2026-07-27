@@ -7,7 +7,9 @@
 
 {
   # Add restart policies for critical services to improve reliability
-  # Note: Prometheus exporters already have restart policies in prometheus-monitoring.nix
+  # Note: Prometheus exporters already have restart policies in their own modules
+  # under modules/monitoring/services/ (the old modules/services/prometheus-monitoring.nix
+  # was removed in 2025-12 when that tree was split out).
 
   systemd.services = {
     # Database service - critical
@@ -60,7 +62,8 @@
       };
     };
 
-    # Note: Container services managed by Quadlet (litellm, wallabag, organizr)
+    # Note: Container services managed by Quadlet (litellm, wallabag, and the other
+    # rootless per-user quadlets defined under modules/users/home-manager/)
     # are excluded from restart policies here because Quadlet handles their lifecycle management
     # differently. Applying systemd service overrides causes conflicts with quadlet-nix's
     # overrideStrategy. These containers already have restart policies defined in their

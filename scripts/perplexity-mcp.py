@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""MCP server exposing the Perplexity AI answer engine to OpenClaw.
+"""MCP server exposing the Perplexity AI answer engine to the Hermes agent.
 
 Perplexity synthesizes an answer from live web sources and returns it with
 citations. Use this when you want a researched, sourced response rather
 than a list of raw search hits.
 
-Designed to run inside the OpenClaw microVM as an mcporter stdio child.
+Designed to run inside the HERMES microVM as a stdio child of
+`services.hermes-agent.mcpServers.perplexity` (hermes-vm.nix), where the
+wrapper exports the key from /run/hermes-secrets/perplexity-api-key.
+It is NOT wired into the OpenClaw VM: OpenClaw reaches Perplexity through
+its own built-in web tool, fed by the openclaw/perplexity-api-key secret.
 Talks to the public Perplexity API at https://api.perplexity.ai over HTTPS.
 
 The API key is read from the PERPLEXITY_API_KEY environment variable — a
@@ -75,9 +79,10 @@ def web_search(query: str, model: str = "") -> str:
 
     Perplexity searches the live web, ranks the hits, and asks an LLM to
     compose a sourced answer. Use this for "what does the web say about X?"
-    style queries where you want a digest with references. For raw result
-    lists use ``web_search`` from the searxng MCP server; for the self-hosted
-    Vane engine use ``web_research``.
+    style queries where you want a digest with references. For the
+    self-hosted Vane engine use ``web_research``. (A separate searxng MCP
+    server offers raw result lists, but it is registered in the OpenClaw VM
+    only — Hermes uses SearXNG as its native web backend instead.)
 
     Args:
       query: the question to research.

@@ -59,10 +59,15 @@ in
       nginxVirtualHost ? null, # { enable = true; proxyPass = "..."; extraConfig = "..."; }
 
       # Health monitoring options
-      # NOTE: Health checks are disabled by default because quadlet-nix doesn't support
-      # the healthChecks option. If quadlet-nix adds support in the future, we can re-enable.
+      # NOTE: Health checks are disabled by default because quadlet-nix did not
+      # support health-check options when this helper was written. That condition
+      # has since been MET: as of 2026-07-27 the locked quadlet-nix (rev f1652b4)
+      # exposes them natively as containerConfig.healthCmd / healthInterval /
+      # healthTimeout / healthStartPeriod / healthRetries (plus `notify` for
+      # --sdnotify). Health checks can therefore be re-enabled, either through
+      # those native options or through the podmanArgs path already wired below.
       healthCheck ? {
-        enable = false; # Disabled - not supported by quadlet-nix
+        enable = false; # Still disabled by default - see the NOTE above
         type = "http"; # "http", "tcp", or "exec"
         interval = "30s"; # How often to run health check
         timeout = "10s"; # Health check timeout
@@ -199,7 +204,10 @@ in
               if (containerUser != null) then [ "slirp4netns:allow_host_loopback=true" ] else [ "podman" ];
 
             # Health check configuration via podman args
-            # NOTE: Disabled by default - quadlet-nix doesn't fully support health checks yet
+            # NOTE: Disabled by default. quadlet-nix DOES support health checks
+            # natively as of the locked rev (see the healthCheck NOTE above);
+            # these podmanArgs are the older path and only apply when
+            # healthCheck.enable is set.
             podmanArgs = lib.optionals (healthCheck.enable && healthCheckCmd != null) [
               "--health-cmd"
               healthCheckCmd

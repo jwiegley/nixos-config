@@ -183,7 +183,9 @@ automation:
         at: "06:00:00"
 
     condition:
-      # High chance of rain today or tomorrow
+      # High chance of rain in the current/next forecast period only —
+      # binary_sensor.rain_expected_soon is sensor.nws_current_rain_chance > 50
+      # (see nws-rain-sensors.yaml); tomorrow's chance is not consulted here.
       - condition: state
         entity_id: binary_sensor.rain_expected_soon
         state: "on"

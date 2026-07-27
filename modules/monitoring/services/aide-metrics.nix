@@ -120,6 +120,11 @@ in
     };
   };
 
-  # Link the service to the timer
+  # Defensive, not corrective: nixpkgs already defaults `wantedBy` to [ ]
+  # (nixos/lib/systemd-unit-options.nix), so there is no multi-user.target
+  # default to undo. The mkForce just guarantees that no other definition of
+  # this option can pull aide-metrics.service into a boot target. The service
+  # is started by aide-metrics.timer above; aide-check.service separately runs
+  # the same script via its ExecStartPost.
   systemd.services.aide-metrics.wantedBy = lib.mkForce [ ];
 }

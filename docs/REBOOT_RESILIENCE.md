@@ -12,7 +12,7 @@ reboot, **start here**.
 sudo bash /etc/nixos/scripts/post-reboot-validation.sh
 ```
 
-That script (25 checks) is the executable form of this document. It exits 0 when
+That script (22 checks) is the executable form of this document. It exits 0 when
 healthy. Each numbered check below corresponds to a check in the script and
 tells you what to do if it FAILs.
 
@@ -131,7 +131,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   tripped `StartLimitBurst`. With a finite limit, systemd stopped restarting it.
 - **Fix:** `After=technitium-dns-server.service` (don't start before DNS) +
   `StartLimitIntervalSec=0` (retry forever — it self-reconnects)
-  (`modules/...` · audit fix · `2c15db1`).
+  (`modules/services/cloudflare-tunnels.nix` · audit fix · `2c15db1`).
 - **Verify (check 5):** `cloudflared-tunnel-data` active/running, `NRestarts`
   small, `StartLimitIntervalUSec=0`.
 - **Recover:** `sudo systemctl restart cloudflared-tunnel-data`; check it isn't
@@ -143,7 +143,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   actually resolve, causing cascading early-boot failures (incl. 2.3).
 - **Fix:** `ExecStartPost` dig-probe so the unit isn't "started" until it
   actually answers, plus `Before=`/`WantedBy=nss-lookup.target`
-  (`modules/...` · `2c15db1`).
+  (`modules/services/dns.nix` · `2c15db1`).
 - **Verify (check 6):** service active **and** `dig +short vulcan.lan @127.0.0.1`
   returns an answer.
 - **Recover:** `systemctl status technitium-dns-server`; if the ExecStartPost
@@ -201,9 +201,15 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
 - **Verify (checks 15-18):** 0 rules with `health=err`; ≥10 Loki ruler groups;
   Watchdog firing (= pipeline alive); ≤3 targets down.
 - **Belt-and-suspenders:** the **Nagios mirror** (`docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md`,
-  memory `project_nagios_prometheus_mirror`) now re-evaluates all 487 ruler rules
-  through Nagios's independent scheduler, and a tier-3 reconciler alerts if the
-  two stacks ever disagree — this would catch the dead-rule class on day one.
+  memory `project_nagios_prometheus_mirror`) re-evaluates the alert rules in
+  `modules/monitoring/{alerts,loki-rules,vm-alerts}/` through Nagios's independent
+  scheduler. The mirror is generated at build time from the same YAML the rulers
+  consume, so a new rule file is auto-mirrored on the next rebuild. Coverage is
+  deliberately *not* total: `nagios-prometheus-mirror.nix` excludes the
+  alertnames `Watchdog`, `ServiceStuckActivating` and `BlackboxICMPIoTDeviceDown`,
+  plus every rule sourced from `alerts/nagios.yaml` (each with a rationale in
+  that file). A tier-3 reconciler alerts if the two stacks disagree; this would
+  catch the dead-rule class on day one for everything inside that universe.
 
 ### 2.8 OpenClaw self-heal restart storms at boot
 
@@ -220,7 +226,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
 
 ## 3. The validation harness
 
-`scripts/post-reboot-validation.sh` — 25 read-only checks, PASS/WARN/FAIL/INFO +
+`scripts/post-reboot-validation.sh` — 22 read-only checks, PASS/WARN/FAIL/INFO +
 a summary; exit 0 iff no FAILs. **Boot-window aware:** within 15 min of boot,
 slow starters (microVMs, Loki ruler, targets) WARN instead of FAIL; past 24 h
 uptime, boot-proximity timing checks (the NM-wait-online runtime delta, "restic

@@ -224,9 +224,12 @@ groups:
       # Surprise database growth. Largest non-excluded DB is mailarchiver at
       # ~7.3 GiB; 20 GiB leaves ample headroom so this fires on UNEXPECTED growth
       # rather than steady state. litellm is EXCLUDED: it is legitimately the
-      # largest DB (~13.7 GiB) and grows steadily ~3 GiB/week (request-log
-      # accumulation), so a flat 20 GiB cap would chronically alarm on it within
-      # ~2 weeks — that is steady-state, not a surprise. hass has its own
+      # largest DB and grows steadily ~3 GiB/week (request-log accumulation),
+      # so a flat 20 GiB cap would chronically alarm on it — that is
+      # steady-state, not a surprise. (Measured 2026-07-27: ~42 GiB, i.e. long
+      # past the cap; the "~13.7 GiB" figure this comment used to carry is what
+      # it read when the rule was written.)
+      # hass has its own
       # dedicated HassRecorderDBLarge rule above (5 GiB) and is also caught here.
       - alert: PostgreSQLDatabaseLarge
         expr: pg_database_size_bytes{datname!~"litellm"} > 20 * 1024 * 1024 * 1024
@@ -259,10 +262,13 @@ groups:
           description: "postgres-exporter reported a scrape error (pg_exporter_last_scrape_error==1) or a failing collector{{ if $labels.collector }} ({{ $labels.collector }}){{ end }} for 10m. The exporter is up but its data may be stale/incomplete — Postgres-derived alerts could be silently blind. Check: journalctl -u prometheus-postgres-exporter."
 
       # Per-statement latency regression (pg_stat_statements top-N custom query
-      # in postgres-exporter.nix; metric is in MILLISECONDS). These metrics do
-      # NOT exist until the planned PostgreSQL restart loads
-      # shared_preload_libraries=pg_stat_statements — before that the rules are
-      # simply inert (no series → no fire), which is correct.
+      # in postgres-exporter.nix; metric is in MILLISECONDS). These metrics
+      # required a PostgreSQL restart to load
+      # shared_preload_libraries=pg_stat_statements; before that the rules were
+      # simply inert (no series → no fire), which was correct. That restart has
+      # since happened — the extension went live 2026-06-10 and the
+      # pg_stat_statements_top_* series are present (verified 2026-07-27), so
+      # these rules are ACTIVE now, not dormant.
       #
       # THRESHOLD DISCIPLINE: 1000ms is a CONSERVATIVE absolute starter that
       # mirrors the existing log_min_duration_statement=1000 slow-query log
@@ -325,7 +331,7 @@ groups:
       # normalising, so it is immune to pg_stat_statements_reset()/save=off
       # restart zeroing (both numerator and denominator reset together).
       # Share-of-top-N alone is the WRONG predicate on this box: with most of
-      # the 26 DBs idle, one healthy poller (e.g. flume-data's once-a-minute
+      # the ~29 DBs idle, one healthy poller (e.g. flume-data's once-a-minute
       # SUM(gpm) at ~6ms mean) "dominates" >50% forever and the alert becomes a
       # permanent false positive (fired 2026-06-10 within 3h of the extension
       # going live). Dominance only matters when the dominant statement is ALSO

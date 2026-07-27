@@ -12,17 +12,24 @@ Sections (fixed order, identical for both agents):
   0. Header + headline verdict (PASS/FAIL + issues)
   1. Live metrics            — dump the agent's Prometheus textfile gauges
   2. MCP servers             — OpenClaw: struct+live tool counts (mcporter,
-                               host+in-VM SSH); Hermes: configured inventory
-                               from nix + aggregate MCP-liveness from metrics
-  3. Gateway + plugins       — OpenClaw: canary metrics; Hermes: n/a (no gateway)
+                               host+in-VM SSH); Hermes: per-server live tool
+                               counts parsed from agent.log (parse_hermes_mcp_log)
+                               + aggregate MCP-liveness from metrics
+  3. Gateway + plugins       — OpenClaw: canary metrics; Hermes: agent.log
+                               platform/MCP-readiness analog (loaded servers,
+                               tool total, reconnects, discord heartbeat) —
+                               there is no OpenClaw-style plugin gateway
   4. microVM + sidecars      — systemctl show over the profile's units
   5. 24h probe summary       — Prometheus success ratio + p50/p95 per family
   6. Discord activity        — OpenClaw: ws metrics; Hermes: gateway-log events
-  7. Home Assistant MCP      — OpenClaw: dedicated probe gauges; Hermes: n/a
+  7. Home Assistant MCP      — OpenClaw: dedicated probe gauges; Hermes: derived
+                               from the home-assistant server's tool
+                               registration in agent.log
   8. Errors digest           — redacted + benign-filtered, both agents
   9. Self-heal incidents     — incidents.json + *_self_heal_* metrics
  10. In-VM corroboration     — one SSH round-trip (trader curl + requests-TLS,
-                               plus api/gateway reachability)
+                               memory-vault MCP recall, plus api/gateway
+                               reachability)
 
 Environment overrides (read under the profile's <PREFIX>, e.g. OPENCLAW_REPORT):
   <PREFIX>_TO              recipient (default: johnw@vulcan.lan)

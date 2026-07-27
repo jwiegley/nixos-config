@@ -1,5 +1,12 @@
 # OPNsense Exporter Workarounds - IMPLEMENTED
 
+> **Version note (2026-07-27):** the two bugs below were first hit on
+> opnsense-exporter **v0.0.11**. The deployed container is pinned to the moving
+> tag `ghcr.io/athennamind/opnsense-exporter:latest`, which currently resolves
+> to image version **0.0.16** (built 2026-05-27). Upstream issue #70 is still
+> open and PR #58 is still closed-unmerged, so the workaround has not been
+> retired; it has simply not been re-tested against 0.0.16 without the proxy.
+
 ## Problems
 
 ### 1. Gateway Collector Issue
@@ -65,13 +72,16 @@ sudo systemctl status opnsense-api-transformer
 ```
 
 ### 3. Restart the exporter:
+The exporter is a **rootless Home Manager quadlet** owned by the
+`opnsense-exporter` user, so it is a *user* unit — there is no system unit of
+that name:
 ```bash
-sudo systemctl restart opnsense-exporter
+sudo systemctl --machine=opnsense-exporter@.host --user restart opnsense-exporter.service
 ```
 
 ### 4. Check exporter logs for gateway collector:
 ```bash
-sudo journalctl -u opnsense-exporter -f | grep -i gateway
+sudo journalctl _SYSTEMD_USER_UNIT=opnsense-exporter.service -f | grep -i gateway
 ```
 
 ### 5. Verify metrics are being collected:
@@ -88,7 +98,10 @@ When a fixed version of opnsense-exporter is released (check releases at https:/
 rm /etc/nixos/modules/containers/opnsense-api-transformer.nix
 rm /etc/nixos/modules/containers/opnsense-api-proxy.nix  # if it exists
 rm /etc/nixos/modules/containers/opnsense-api-proxy-lua.nix  # if it exists
-rm /etc/nixos/modules/containers/OPNSENSE-EXPORTER-WORKAROUND.md
+rm /etc/nixos/docs/OPNSENSE-EXPORTER-WORKAROUND.md           # this file (moved
+                                                             # out of
+                                                             # modules/containers/
+                                                             # on 2025-10-21)
 ```
 
 ### 2. Update quadlet.nix:
@@ -103,26 +116,36 @@ imports = [
 ];
 ```
 
-### 3. Update opnsense-exporter-quadlet.nix:
+### 3. Update modules/users/home-manager/opnsense-exporter.nix:
+The container definition moved to Home Manager; `modules/containers/opnsense-exporter-quadlet.nix`
+now holds only the SOPS secret and the firewall openings, so these changes go in
+the Home Manager module (inside `virtualisation.quadlet.containers.opnsense-exporter`):
+
 ```nix
-# Change these environment variables back:
+# Change these environment variables back (containerConfig.environments):
 OPNSENSE_EXPORTER_OPS_PROTOCOL = "https";  # Was "http"
 OPNSENSE_EXPORTER_OPS_API = "192.168.1.1";  # Was "10.88.0.1:8444"
 OPNSENSE_EXPORTER_OPS_INSECURE = "false";  # Was "true"
 
-# Re-enable CA certificate volume mounts:
+# Re-ADD the CA certificate volume mounts. These were dropped entirely during
+# the Home Manager migration — there is nothing commented out to re-enable, so
+# they must be written fresh as containerConfig.volumes:
 volumes = [
   "/var/lib/opnsense-exporter-ca.crt:/usr/local/share/ca-certificates/opnsense-ca.crt:ro"
   "/var/lib/opnsense-exporter-ca.crt:/etc/ssl/certs/ca-certificates.crt:ro"
 ];
 
-# Re-enable SSL_CERT_FILE:
+# Re-add SSL_CERT_FILE:
 SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
 
-# Remove opnsense-api-transformer.service from dependencies:
-After = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" ];
-Wants = [ "sops-nix.service" "network-online.target" "ensure-podman-network.service" ];
+# Remove opnsense-api-transformer.service from unitConfig, leaving:
+After = [ "sops-nix.service" ];
+Wants = [ "sops-nix.service" ];
 ```
+
+(The `sops-nix.service` ordering is itself a no-op on this host — sops-nix
+installs secrets from an activation script and no such unit exists — but it is
+left in place here to describe the file as written.)
 
 ### 4. Rebuild and switch:
 ```bash
@@ -142,9 +165,10 @@ Simply wait for the maintainers to merge the fix and release a new version.
 
 ## Current Status
 - Workaround is **ACTIVE**
-- Gateway collector fix implemented: 2025-01-03
-- Firmware collector fix implemented: 2025-11-12
-- Last tested: 2025-11-12
-- Gateway upstream issue: Open (#70)
+- Gateway collector fix implemented: 2025-10-03 (commit 7db36d1)
+- Firmware collector fix implemented: 2025-11-12 (commit bf3e14f)
+- Last verified: 2026-07-27 — `opnsense-api-transformer.service` active, and
+  `curl -s http://127.0.0.1:9273/metrics | grep opnsense_gateway` returns series
+- Gateway upstream issue: Open (#70, still open as of 2026-07-27)
 - Gateway upstream PR: Closed (not merged, #58)
 - Firmware issue: Not yet reported upstream

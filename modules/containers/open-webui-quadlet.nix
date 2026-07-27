@@ -1,7 +1,9 @@
 # Open WebUI - System Configuration
 #
 # Quadlet container: Managed by Home Manager (see /etc/nixos/modules/users/home-manager/open-webui.nix)
-# This file: Nginx virtual host, SOPS secrets, firewall rules, and tmpfiles
+# This file: Nginx virtual host, SOPS secrets, PostgreSQL user setup, and tmpfiles
+# (no firewall rules — the container uses host networking, see the note at the
+# bottom of this file)
 
 {
   config,

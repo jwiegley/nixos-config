@@ -308,10 +308,13 @@ def probe_clear(incident):
 def microvm_active_enter_ts(unit: str = "microvm@hermes.service") -> int:
     """Return the unix timestamp of the unit's last ActiveEnter, or 0 on error.
 
-    Used by correlation_key() to detect VM restarts. The Hermes-side
-    equivalent of the openclaw_microvm_active_enter_timestamp_seconds
-    gauge that openclaw-canary writes for OpenClaw — Hermes has no
-    canary, so we read systemd directly.
+    Used by handle_alertmanager_payload() to stamp each incident's
+    vm_active_enter_ts, and by reconcile_orphans() to tell that the VM has
+    restarted past a stranded incident. correlation_key() deliberately does
+    NOT key on it any more — see its docstring. The Hermes-side equivalent of
+    the openclaw_microvm_active_enter_timestamp_seconds gauge that
+    openclaw-canary writes for OpenClaw — Hermes has no canary, so we read
+    systemd directly.
     """
     from datetime import datetime
     try:

@@ -74,7 +74,8 @@ in
   # Merge all systemd services into one definition
   systemd.services = lib.mkMerge [
     # Alert service template
-    # Auto-start when tank mount becomes available
+    # Instantiated on demand only (no wantedBy — see the NOTE below); the
+    # incorrect wantedBy=tank.mount was removed in commit 7e2f7fe.
     # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
     {
       "backup-alert@" = {

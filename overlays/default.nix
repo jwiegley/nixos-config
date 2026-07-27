@@ -198,8 +198,9 @@ let
     };
 
     # opower: SMUD Okta SSO redirect fix (same patch as pythonPackagesExtensions).
-    # HA 2026.x uses unstable's opower 0.18.0; the SMUD redirectUrl KeyError
-    # still exists in 0.18.0, so we apply the same patch here.
+    # HA 2026.x uses unstable's opower — 0.18.6 as of 2026-07-27 (this note
+    # originally said 0.18.0); the SMUD redirectUrl KeyError still exists
+    # upstream, so we apply the same patch here.
     opower = hasPyPrev.opower.overridePythonAttrs (oldAttrs: {
       patches = (oldAttrs.patches or [ ]) ++ [
         ./opower-smud-fix.patch
@@ -341,10 +342,15 @@ in
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
 
-  # Inherit the patched check_systemd from the check-systemd overlay
+  # Inherit the patched check_systemd from the check-systemd overlay.
+  # NOTE 2026-07-27: inert — nixos-25.11 renamed the top-level attribute to
+  # nagiosPlugins.check_systemd, which is what Nagios actually invokes, so the
+  # reload-notify patch is not in effect. See overlays/check-systemd.nix.
   inherit (prevWithCheckSystemd) check_systemd;
   # Python environment for JupyterLab from nixpkgs-unstable
-  # Uses unstable's Python to avoid version mismatch (stable has 3.13.9, unstable has 3.13.11)
+  # Uses unstable's Python throughout to avoid a version mismatch: as of
+  # 2026-07-27 stable is on Python 3.13.12 and unstable on 3.14.6 (the two
+  # channels are no longer even on the same minor)
   # This gives us JupyterLab 4.5.0+ with PyTorch and data science packages
   jupyterlab-env =
     let
@@ -602,17 +608,23 @@ in
   droid = inputs.llm-agents.packages.${system}.droid;
 
   # Immich 3.0.1 from the dedicated nixpkgs-immich pin (see flake.nix for the
-  # full rationale). The iOS app auto-updated to 3.0.1 while nixos-unstable
-  # still ships server 2.7.5; mobile 3.x requires server 3.x, and v3's
-  # checksum-based backup sync resolves the ~4,930 phone photos byte-identical
-  # to the /tank/Photos external library that looped as "duplicate" uploads
-  # forever (v3 removed the deviceId/deviceAssetId bookkeeping that caused it).
+  # full rationale). The iOS app auto-updated to 3.0.1 at a time when
+  # nixos-unstable still shipped server 2.7.5; mobile 3.x requires server 3.x,
+  # and v3's checksum-based backup sync resolves the ~4,930 phone photos
+  # byte-identical to the /tank/Photos external library that looped as
+  # "duplicate" uploads forever (v3 removed the deviceId/deviceAssetId
+  # bookkeeping that caused it).
   # Revert to nixpkgs-unstable once it carries immich >= 3.0.1.
+  # STATUS 2026-07-27: that condition is now MET — the locked nixpkgs-unstable
+  # (241313f4, 2026-07-19) evaluates immich to 3.0.3, so this dedicated pin is
+  # currently holding immich *down* at 3.0.1. Dropping it (and the flake input)
+  # would move the server to 3.0.3.
   # (Historical: this line previously pulled unstable for the 2.4.1 CR3
   # thumbnail fix, immich-app/immich#24559.)
   immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
 
-  # Home Assistant - Update to latest (2026.4.1+) from nixpkgs-unstable
+  # Home Assistant - Update to latest from nixpkgs-unstable (2026.7.2 as of
+  # 2026-07-27; this note originally anchored on 2026.4.1+)
   # Stable nixpkgs-25.11 lags behind; unstable tracks HA releases closely.
   # HA 2026.x requires Python 3.14. Use packageOverrides to inject custom
   # packages (aiopnsense, pybose, pywaze, etc.) into HA's own Python 3.14 set.
@@ -776,7 +788,8 @@ in
 
   # hermes-mcp: MCP server bridging OpenClaw to the Hermes Agent microVM
   # over SSE. See docs/superpowers/plans/2026-05-12-openclaw-hermes-mcp-bridge.md
-  # for the full design. The systemd unit lands in Task 7.
+  # for the full design. The systemd unit has since landed in
+  # modules/services/hermes-mcp.nix (enabled at hosts/vulcan/default.nix:205).
   hermes-mcp = final.callPackage ../pkgs/hermes-mcp { };
 
   # Node-RED — bump to upstream maintenance release 4.1.10.

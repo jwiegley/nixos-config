@@ -186,7 +186,9 @@ this only arms when there IS a pickup tomorrow:
 
 - The repeat-interval JSONata gotcha: `chronos-repeat` interprets the JSONata
   expression as **milliseconds**, not seconds. For 3-second cycle: return
-  `3000`, not `3`. (See CLAUDE.md pitfall #2.)
+  `3000`, not `3`. (Pitfall #2 in the `node-red` skill's numbered pitfall list,
+  `~/.claude/skills/node-red/SKILL.md` — the "#N" references below are to that
+  same list; /etc/nixos/CLAUDE.md has no pitfall list.)
 - The `api-current-state` gate at 21:00: `halt_if: "off"` wired to **output 1
   (no-match)** means "fire when state is NOT off" = "fire when acknowledged".
   We want the opposite — wire output 0 (match) onward to "start cycling".

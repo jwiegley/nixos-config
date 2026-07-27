@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # Script to generate/renew PostgreSQL SSL certificate using step-ca
-# This script is called by systemd services for initial setup and renewal
+# Run monthly (1st at 03:00) by the postgresql-cert-renewal systemd service and
+# timer, defined in modules/services/certificate-automation.nix:73,183. Nothing
+# else invokes it, so run it by hand for initial setup.
 
 set -euo pipefail
 
@@ -166,7 +168,12 @@ openssl x509 -in "$CERT_DIR/server.crt" -noout -enddate | sed 's/^/  /'
 # Check if PostgreSQL is running and needs reload
 if systemctl is-active --quiet postgresql; then
     echo -e "\n${YELLOW}Step 6: Reloading PostgreSQL configuration...${NC}"
-    # Note: The reload will be handled by the systemd service
+    # NOTE (2026-07-27): nothing actually reloads PostgreSQL. The
+    # postgresql-cert-renewal unit (modules/services/certificate-automation.nix:73)
+    # is a bare oneshot with no reload step, and no other unit in the repo
+    # reloads postgresql on cert change -- so the new certificate is only picked
+    # up at the next PostgreSQL restart/reload. The message echoed below is
+    # therefore wrong; reload manually (systemctl reload postgresql) after a run.
     echo "  PostgreSQL reload will be triggered by systemd"
 else
     echo -e "\n${YELLOW}PostgreSQL is not running. Certificates will be used on next start.${NC}"

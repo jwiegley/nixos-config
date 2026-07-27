@@ -13,7 +13,7 @@ let
 in
 {
   # DNS Query Log Exporter - pushes Technitium DNS query logs to Loki
-  # and exposes Prometheus metrics on port 9101
+  # and exposes Prometheus metrics on port 9275 (METRICS_PORT below)
   systemd.services.dns-query-log-exporter = {
     description = "Technitium DNS Query Log Exporter for Loki and Prometheus";
     wantedBy = [ "multi-user.target" ];
@@ -81,7 +81,9 @@ in
   users.groups.dns-query-exporter = { };
 
   # Shared group for Technitium DNS secret access
-  # Both dns-query-exporter and container-monitor need to read technitium-dns-exporter-env
+  # Both dns-query-exporter and technitium-dns-exporter (the container user that
+  # replaced the old shared container-monitor account) need to read
+  # technitium-dns-exporter-env
   users.groups.technitium-readers = { };
 
   # SOPS secret configuration

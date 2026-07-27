@@ -16,7 +16,7 @@
         http_listen_address = "127.0.0.1";
         http_listen_port = 9080;
         grpc_listen_address = "127.0.0.1";
-        grpc_listen_port = 0; # Disable gRPC
+        grpc_listen_port = 0; # 0 = pick a free ephemeral port, NOT "off" — the gRPC server still listens (on 127.0.0.1)
       };
 
       # Position file to track what has been read
@@ -426,9 +426,15 @@
           ];
         }
 
-        # PostgreSQL logs
+        # PostgreSQL logs — the file-based scrape of /var/log/postgresql/*.log
+        # was removed on 2025-10-22 ("promtail: Remove hardcoded job
+        # configurations"). Postgres now reaches Loki via the journal-based
+        # job_name = "postgresql" scrape defined above.
 
-        # Dovecot mail logs
+        # Dovecot mail logs — the file-based scrape of /var/log/dovecot/*.log
+        # was removed in the same 2025-10-22 commit and never replaced. Dovecot
+        # lines only reach Loki through the consolidated systemd-journal scrape,
+        # i.e. priority 0-4 only.
 
         # Jellyfin logs
         {
@@ -568,7 +574,11 @@
           ];
         }
 
-        # Audit logs (separate from journal to allow specific handling)
+        # Audit logs — the dedicated /var/log/audit/audit.log scrape (which had
+        # its own rate limiter) was removed on 2025-10-22 along with the other
+        # hardcoded jobs. Audit lines are NOT shipped to Loki at all today: the
+        # consolidated journal scrape above explicitly drops
+        # syslog_identifier="audit" (100+ logs/sec).
 
         # Backup failure logs
         {

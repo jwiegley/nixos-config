@@ -1,5 +1,18 @@
 # Comprehensive Answer: Rootless Podman Quadlets in NixOS Containers
 
+> **What this is (status 2026-07-27):** a research memo answering the question
+> "*could* we nest rootless Podman quadlets inside systemd-nspawn containers?" It is
+> **not** a description of how vulcan is configured. Vulcan runs its quadlets
+> rootless via home-manager (`quadlet-nix`) **directly on the host** — see
+> `modules/containers/*-quadlet.nix` and `modules/users/home-manager/` — and none of
+> the three nspawn containers in this repo (`containers.copyparty` in
+> `copyparty-container.nix`, `containers.secure-nginx` in `secure-nginx.nix`,
+> `containers.static-nginx` in `static-nginx-container.nix`) enable Podman inside
+> the container. (`quadlet.nix` declares no nspawn container at all — it
+> configures rootless Podman on the *host*.)
+> Treat everything below as advice for a hypothetical
+> deployment, and check the option names against current nixpkgs before using them.
+
 **YES**, you can run rootless Podman quadlet containers within secure NixOS containers (systemd-nspawn). This is a supported configuration with proper setup, following community best practices.
 
 ## Architecture Overview
@@ -33,7 +46,8 @@
 ### 1. Host System Configuration
 
 ```nix
-# /etc/nixos/configuration.nix or module
+# In the host module — hosts/vulcan/default.nix or a module under modules/.
+# (This repo is flake-based; there is no /etc/nixos/configuration.nix.)
 {
   # User namespaces (enabled by default, but explicitly shown)
   security.allowUserNamespaces = true;
@@ -291,17 +305,19 @@ Based on NixOS Discourse discussions and recent developments:
 1. **Historical Issues** (2022): Older discussions show runc failures in unprivileged containers - these have been resolved in modern NixOS
 2. **Pod Support**: Home Manager lacks native pod declarations - requires manual systemd service definitions
 3. **Storage Migration**: Changing storage drivers requires removing `~/.local/share/containers/storage`
-4. **Kernel Requirements**: Native overlayfs requires kernel ≥5.13 (your kernel 6.16.8 supports this)
+4. **Kernel Requirements**: Native overlayfs requires kernel ≥5.13 (vulcan's kernel, 6.17.12 as of 2026-07-27, supports this)
 
 ## Recommended Configuration for Your System
 
-Given your setup (Kernel 6.16.8-asahi on aarch64):
+Given your setup (Kernel 6.17.12-asahi on aarch64; it was 6.16.8 when this memo was
+written, and the kernel is pinned to 6.17.12 for ZFS 2.3.x compatibility — see
+`flake.nix`):
 
 ```nix
 containers.podman-host = {
   privateUsers = "pick";          # Security: user namespace isolation
   privateNetwork = true;          # Network isolation
-  # NO allowedDevices needed      # Kernel 6.16.8 supports native overlayfs
+  # NO allowedDevices needed      # Kernel 6.17.12 supports native overlayfs
   # NO additionalCapabilities     # Not needed with native overlayfs
 
   config = { config, pkgs, ... }: {
@@ -336,5 +352,7 @@ This document was compiled from:
 - Recent developments in Podman rootless support
 - Linux kernel overlayfs improvements (5.13+)
 
-**Last Updated**: 2025-11-09
-**System**: NixOS 25.05 on Kernel 6.16.8-asahi (aarch64)
+**Last Updated**: 2025-11-09 (research); facts re-checked 2026-07-27
+**System when written**: NixOS 25.05 on Kernel 6.16.8-asahi (aarch64)
+**System now (2026-07-27)**: NixOS 25.11 (`system.stateVersion = "25.11"`,
+`hosts/vulcan/default.nix:387`) on Kernel 6.17.12-asahi (aarch64)

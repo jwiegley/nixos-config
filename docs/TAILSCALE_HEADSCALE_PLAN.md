@@ -3,7 +3,7 @@
 **Host:** vulcan (aarch64, NixOS, Asahi) · **Gateway:** OPNsense at `192.168.1.1` · **Server:** vulcan at `192.168.1.2` · **LAN:** `192.168.1.0/24`
 **Author of record:** prepared for John Wiegley
 **Date:** 2026-07-11
-**Status:** design accepted; not yet implemented
+**Status:** design accepted; not yet implemented (re-verified 2026-07-27: still unimplemented — no `services.headscale` or `services.tailscale` declaration exists anywhere in this repository)
 
 ---
 
@@ -149,7 +149,7 @@ The data-plane entry point — the subnet router, and the exit node if used — 
 
 The tailnet neither replaces nor is replaced by the two remote-access mechanisms already in service; each keeps the work it does best.
 
-The **Cloudflare tunnels** publish specific web services to the *public* over HTTPS — the `data` and `rsync` hostnames — with the edge terminating TLS and no inbound port opened for them. The tailnet, by contrast, grants *your authenticated devices* private access to the whole LAN on any port and protocol. The benefit of keeping both is that public consumers stay on Cloudflare while your own administrative reach moves onto the tailnet; the trade-off is two systems to understand, resolved by the simple rule that anything a stranger may use belongs on Cloudflare and anything only you and yours may use belongs on the tailnet.
+The **Cloudflare tunnels** publish specific web services to the *public* over HTTPS — as of 2026-07-27 the `data`, `gitea`, `s` (Shlink), and `calendar` hostnames, per `modules/services/cloudflare-tunnels.nix`; the `rsync` tunnel this document originally named was removed in 2025-11 — with the edge terminating TLS and no inbound port opened for them. The tailnet, by contrast, grants *your authenticated devices* private access to the whole LAN on any port and protocol. The benefit of keeping both is that public consumers stay on Cloudflare while your own administrative reach moves onto the tailnet; the trade-off is two systems to understand, resolved by the simple rule that anything a stranger may use belongs on Cloudflare and anything only you and yours may use belongs on the tailnet.
 
 The **OPNsense WireGuard** overlaps the tailnet's purpose — private remote access — but is retained deliberately, not redundantly. It depends on neither vulcan nor Headscale, and so remains the entry that works when both are down. The tailnet becomes the everyday driver for its convenience across many devices and networks; WireGuard becomes the break-glass path held in reserve. Some independent way in is better than none, and this one costs nothing to keep.
 
@@ -215,6 +215,8 @@ security.acme = {
 
 The `group` and `reloadServices` settings matter: certificate files are group-readable, so the `headscale` group must own them, and Headscale must be reloaded when the certificate renews. A certificate the service cannot read, or does not reload after renewal, is a silent outage in waiting.
 
+Note that this host already configures `security.acme` in `modules/services/web.nix` — as of 2026-07-27 with `acceptTerms = true` and `defaults.email = "johnw@newartisans.com"`. A second, differing definition of `defaults.email` would be a module conflict, so add only the `certs."headscale.newartisans.com"` block above and leave the existing defaults alone.
+
 **Step 2 — Declare Headscale.** Enable the module, terminate TLS with the acme certificate, and point clients at the public URL (verify keys against the module and the Headscale configuration reference for your version — the `dns` block in particular was `dns_config` before Headscale 0.24, and the database block has likewise been reorganized):
 
 ```nix
@@ -274,7 +276,7 @@ Reaching the health endpoint from *outside* your network confirms the port-forwa
 
 **Purpose.** Create the identities devices register against, and the keys that let them do so unattended.
 
-Headscale groups devices under **users** (called *namespaces* before the 0.23 rename; Headscale documentation, checked 2026-07-11). Create one for yourself, and separate users for others so that policy can distinguish them (Phase 7).
+Headscale groups devices under **users** (called *namespaces* before the 0.19.0 rename, which also replaced the `--namespace`/`-n` flags with `--user`/`-u`; Headscale CHANGELOG, re-checked 2026-07-27). Create one for yourself, and separate users for others so that policy can distinguish them (Phase 7).
 
 ```bash
 sudo -u headscale headscale users create john
@@ -310,10 +312,13 @@ tailscale up --login-server=https://headscale.newartisans.com \
 
 **Step 3 — Assign the interface and pass traffic.** This is the step OPNsense does not perform for you, and omitting it silently drops inbound tailnet traffic to the box (Tailscale documentation, checked 2026-07-11). Under Interfaces ▸ Assignments, add the `tailscale0` device, enable the new interface, give it a description, and lock it against accidental removal. Under Firewall ▸ Rules, on the Tailscale interface, add a pass rule appropriate to your intent — permissive to start, narrowed later with an alias of tailnet addresses.
 
-**Step 4 — Approve the route on the Headscale side.** Advertising a route only offers it; the control server must approve it before peers use it. List the node and enable its route (command form is markedly version-dependent — `headscale routes enable -r <id>` in the 0.23 era, reorganized under `headscale nodes` in later releases; confirm with `--help`):
+**Step 4 — Approve the route on the Headscale side.** Advertising a route only offers it; the control server must approve it before peers use it. List the node and approve its route (command form is markedly version-dependent — `headscale routes enable -r <id>` in the 0.23 era; the whole route API and CLI was **removed in Headscale 0.26.0** and folded into `headscale nodes approve-routes`, which is the form the current package provides — this repo's inputs give Headscale 0.27.1 from `nixpkgs` (nixos-25.11) and 0.29.2 from `nixpkgs-unstable`, both checked 2026-07-27, so both are past the 0.26.0 change. Confirm with `--help`):
 
 ```bash
 sudo -u headscale headscale nodes list
+# Headscale >= 0.26 (what you will install today):
+sudo -u headscale headscale nodes approve-routes --identifier <node-id> --routes 192.168.1.0/24
+# Headscale <= 0.25 only (the `routes` command was removed in 0.26.0):
 sudo -u headscale headscale routes list
 sudo -u headscale headscale routes enable -r <route-id>
 ```
@@ -360,6 +365,8 @@ services.headscale.settings.dns = {
   };
 };
 ```
+
+One name to reconfirm before copying that fragment: as of 2026-07-27 the nixpkgs module declares the option as `services.headscale.settings.dns.split` (a bare attribute set of domain → nameservers), whereas Headscale's own `config-example.yaml` still places the map at `dns.nameservers.split`. The module declares only `dns.nameservers.global` under `nameservers`, so check `search.nixos.org` for the module you actually build against.
 
 Rebuild vulcan, then, on a remote client, resolve `vulcan.lan` and confirm it returns `192.168.1.2` and that an HTTPS service there validates against its step-ca certificate. Because the name and the address are unchanged from their on-LAN values, the existing certificate is correct as issued; nothing new must be minted for remote use.
 
@@ -449,7 +456,7 @@ The known failure modes, each with its cause and its answer:
 - **Headscale cannot read its certificate after renewal.** The certificate group or the reload hook is misconfigured (Phase 1, Step 1); confirm `group = "headscale"` and `reloadServices`.
 - **A configuration key or command is rejected after an upgrade.** A version drift; consult the reference for the installed version — `dns_config`↔`dns`, the database block, and the routes commands are the usual movers.
 
-**Variant — exposure through a Cloudflare tunnel instead of a port-forward.** If opening `WAN:443` is unwanted, route `headscale.newartisans.com` through a Cloudflare tunnel to `127.0.0.1:8442` on vulcan, as the existing `data` and `rsync` tunnels are routed. This opens no inbound port, at the cost of a proxy hop Headscale's maintainers discourage and of DERP traffic that an HTTP tunnel does not carry — so direct connections and the public DERP mesh must suffice. It is a supported posture, not the recommended one.
+**Variant — exposure through a Cloudflare tunnel instead of a port-forward.** If opening `WAN:443` is unwanted, route `headscale.newartisans.com` through a Cloudflare tunnel to `127.0.0.1:8442` on vulcan, as the existing `data`, `gitea`, `s`, and `calendar` tunnels are routed. This opens no inbound port, at the cost of a proxy hop Headscale's maintainers discourage and of DERP traffic that an HTTP tunnel does not carry — so direct connections and the public DERP mesh must suffice. It is a supported posture, not the recommended one.
 
 ## Appendices
 
@@ -459,13 +466,16 @@ The Nix fragments in Phases 1 and 5 are the canonical illustrations; keep them i
 
 ### B. Command cheat-sheet
 
-All `headscale` commands run as the service user; command verbs are version-sensitive (checked 2026-07-11):
+All `headscale` commands run as the service user; command verbs are version-sensitive (checked 2026-07-11; route commands re-checked 2026-07-27 against the versions this repo's inputs provide — Headscale 0.27.1 from `nixpkgs`, 0.29.2 from `nixpkgs-unstable`):
 
 ```bash
 sudo -u headscale headscale users list
 sudo -u headscale headscale users create <name>
 sudo -u headscale headscale preauthkeys create --user <name> --expiration 1h
 sudo -u headscale headscale nodes list
+# Headscale >= 0.26: route approval moved onto `nodes`.
+sudo -u headscale headscale nodes approve-routes --identifier <node-id> --routes <prefix[,prefix]>
+# Headscale <= 0.25 only — the `routes` command was removed in 0.26.0:
 sudo -u headscale headscale routes list
 sudo -u headscale headscale routes enable -r <route-id>
 sudo -u headscale headscale nodes delete -i <id>

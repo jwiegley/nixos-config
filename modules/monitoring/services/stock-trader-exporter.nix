@@ -8,13 +8,15 @@
 # nginx/TLS.
 #
 # Alert rules live in modules/monitoring/alerts/stock-trader.yaml; the
-# load-bearing one is StockTraderChatErrorRate, which fires when the
-# chat WebSocket handler emits errors at a non-trivial rate. The
+# original load-bearing one is StockTraderChatErrorRate, which fires when
+# the chat WebSocket handler emits errors at a non-trivial rate. The
 # motivating cause is the LiteLLM Anthropic→Responses adapter
 # misorder bug documented in /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md
 # — the alert catches that bug regressing (or model prompt-adherence
 # drifting and re-triggering it) without anyone having to type into
-# the chat panel.
+# the chat panel. Since stock-trader v0.2.0 (2026-06-09) this scrape job
+# also backs the live-data freshness alerts StockTraderSchwabDataSourceDown,
+# StockTraderQuotesUnavailable and StockTraderStaleQuotesRejected.
 {
   config,
   lib,

@@ -9,6 +9,14 @@
 {
   # Container Secrets Migration Module
   #
+  # STATUS as of 2026-07-27: DEAD. Nothing imports this file (neither
+  # containers/default.nix nor containers/quadlet.nix lists it), and the four
+  # shared container users it targets (container-db / -web / -monitor / -misc)
+  # no longer exist on the host — the shared-user model was replaced by one
+  # dedicated user per service in modules/users/container-users-dedicated.nix.
+  # The description below documents the superseded scheme; keep it for history,
+  # do not treat it as a description of the running system.
+  #
   # This module creates user-specific variants of existing container secrets
   # for rootless Podman operation. It maintains backward compatibility by
   # keeping the original /run/secrets/ paths while adding new

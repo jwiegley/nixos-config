@@ -13,12 +13,16 @@
 
   # Configure hd-idle systemd service for disk power management
   #
-  # DISK TOPOLOGY:
-  # - sda: 115.7G Ultra T C (system boot drive)
-  # - sdb-sde: 4x 14.6TB ST16000NM000J (tank pool RAID10)
-  #   - mirror-0: sde + sdc
-  #   - mirror-1: sdb + sdd
-  # - sdf: 7.3TB WDC WD80EFZX (standalone disk)
+  # DISK TOPOLOGY (re-verified 2026-07-27; /dev/sdX letters reflect enumeration
+  # order — the pool itself is assembled from stable wwn-* ids):
+  # - nvme0n1: 1.8TB Apple SSD — system disk (root is nvme0n1p5, ext4)
+  # - sda-sdd: 4x 14.6TB ST16000NM000J in the external OWC enclosure
+  #   (tank pool, two mirrors striped)
+  #   - mirror-0: sdd + sdb
+  #   - mirror-1: sda + sdc
+  # - There is no sde and no sdf on this host. The 115.7G "Ultra T C" boot drive
+  #   and the 7.3TB WDC WD80EFZX standalone disk this comment used to list are
+  #   both gone.
   #
   # CONFIGURATION SYNTAX:
   # hd-idle uses the following syntax:
@@ -41,8 +45,11 @@
   #     (all disks get 10min except sda which is disabled)
   #
   # CURRENT CONFIGURATION:
-  # Spin down ONLY sdf after 10 minutes of inactivity (600 seconds)
-  # All other disks (sda-sde) will NOT spin down (-i 0 sets global default to disabled)
+  # `-i 0 -a sdf -i 600` = global default disabled, spin down only sdf after
+  # 10 minutes of inactivity (600 seconds).
+  # STALE as of 2026-07-27: /dev/sdf no longer exists, so this ExecStart manages
+  # no disk at all — every attached disk simply inherits the disabled default.
+  # Left as-is here because changing it is a behaviour change, not a doc fix.
   #
   # WARNING: Prometheus scrapes node_exporter and zfs-exporter every 15 seconds!
   # This will likely prevent drives from spinning down. See system activity report

@@ -226,7 +226,7 @@ in
 {
   # Systemd services for textfile exporters
   systemd.services = {
-    # Backup status exporter - runs daily
+    # Backup status exporter - runs every 15 minutes (see the timer below)
     backup-status-exporter = {
       description = "Generate backup status metrics for Prometheus";
       serviceConfig = {

@@ -298,7 +298,8 @@ in
     '';
   };
 
-  # Note: The quadlet definitions above (lines 73-192) handle container lifecycle.
+  # Note: The quadlet definitions above (the pod at line 81 and the two
+  # containers at lines 92-233) handle container lifecycle.
   # Manual systemd services removed to avoid conflict with quadlet-generated services.
 
   # Firewall configuration

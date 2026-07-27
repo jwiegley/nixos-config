@@ -1,5 +1,11 @@
 # OpenClaw Nix Config Refactor — Implementation Plan
 
+> **Archival — 2026-05-14.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/openclaw-config.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the single SOPS-encrypted `openclaw/config` blob with a Nix-generated openclaw.json template + atomic per-credential SOPS secrets, so structural edits (like `timeoutSeconds: 1800`) become one-line Nix changes that don't require `sops -d` round-trips.

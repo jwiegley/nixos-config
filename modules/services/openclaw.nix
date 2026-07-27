@@ -20,6 +20,19 @@ in
   # ============================================================================
   # OpenClaw AI Gateway
   # ============================================================================
+  # STATUS (verified 2026-07-27): this module is NOT imported by anything — it
+  # appears in no `imports` list in the tree; the only reference to the file
+  # name is a comment in modules/services/openclaw-microvm.nix (which already
+  # calls it "the unimported modules/services/openclaw.nix") plus one mention
+  # in a docs/superpowers plan. The
+  # host-level service described below was superseded by the microVM
+  # deployment: modules/services/openclaw-microvm.nix (the host side, imported
+  # at hosts/vulcan/default.nix:154) plus modules/services/openclaw-vm.nix (the
+  # guest config it pulls in). Nothing here is deployed, including the
+  # openclaw.vulcan.lan vhost at the bottom of this file, which duplicates the
+  # live one in openclaw-microvm.nix. Read the rest of this header as a record
+  # of the pre-microVM design, not of the running system.
+  #
   # OpenClaw is an AI agent gateway that orchestrates LLM interactions,
   # tool use, and multi-step agent workflows.
   #

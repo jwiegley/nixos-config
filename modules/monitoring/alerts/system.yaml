@@ -121,7 +121,9 @@ groups:
       # other hwmon sensors so they don't skew the signal:
       #   - end0 (chip 0000:00:02_0_0000:03:00_0): Ethernet PHY, runs ~63C
       #     normally — high for a PHY, not the CPU.
-      #   - tas2764 (chip i2c_0_0_0038): audio amp, reports a bogus -93C.
+      #   - tas2764 (chip i2c_1_1_0038 as of 2026-07-27; this comment previously
+      #     recorded it as i2c_0_0_0038, so the id is not stable): audio amp,
+      #     reports a bogus -93C.
       #   - nvme_nvme0: NVMe temp (~34C idle) — better covered by smartctl.
       # Observed SoC baseline: 31-46C over 24h. 85C is a conservative warning
       # well below the M-series throttle point.

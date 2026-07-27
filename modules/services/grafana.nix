@@ -87,13 +87,13 @@ in
         root_url = "https://grafana.vulcan.lan";
         serve_from_sub_path = false;
 
-        # Security headers
+        # Response compression
         enable_gzip = true;
       };
 
       # Security settings
       security = {
-        # Disable signups
+        # Disable gravatar (no outbound avatar fetches)
         disable_gravatar = true;
         allow_embedding = false;
         cookie_secure = true;

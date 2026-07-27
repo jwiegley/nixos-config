@@ -114,7 +114,7 @@
   # materialized ipv4.routing-rule* into the kernel (verified 2026-06-09 — the
   # only live prio 50/51 rules were `proto unspec`, added by the asymmetric-routing
   # oneshot, never `proto static` as NM would tag its own). The oneshot
-  # (systemd.services.asymmetric-routing above, re-run by the NM dispatcher on
+  # (systemd.services.asymmetric-routing below, re-run by the NM dispatcher on
   # every end0 up/dhcp event, fail-loud, and protected from networkd by
   # ManageForeignRoutingPolicyRules=false) is the SINGLE authoritative writer.
   # The dead routing-rule1/2 keys were removed 2026-06-10 (Phase B) after a cold

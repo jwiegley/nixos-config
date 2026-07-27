@@ -1,5 +1,11 @@
 # Non-invasive Drafts MCP Health Probe Design
 
+> **Archival — 2026-07-21.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/drafts-mcp-check/drafts_mcp_check.py`, `modules/monitoring/services/drafts-mcp-check.nix`).
+
 ## Context
 
 Vulcan currently runs `drafts-mcp-check.timer` every 300 seconds. The scheduled

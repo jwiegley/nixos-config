@@ -4,8 +4,9 @@ A thin FastMCP **stdio** server that wraps the stock-trader REST API
 (default ``https://trader.vulcan.lan``) with named MCP tools — the same 18
 tools OpenClaw/Hermes use (8 core + 10 Alpha Vantage). It depends only on
 ``requests`` + ``mcp``, so it can be packaged as a standalone Nix executable
-(see ``~/src/nix`` overlay ``stock-trader-mcp``) and pointed at any
-stock-trader deployment.
+(the ``nix-config`` repo packages it in ``overlays/30-stock-trader-mcp.nix``;
+that repo is flake input ``nix-config`` here, not a local ``~/src`` checkout)
+and pointed at any stock-trader deployment.
 
 Environment variables:
   STOCK_TRADER_BASE_URL   default: https://trader.vulcan.lan

@@ -9,13 +9,21 @@
 #   - PostgreSQL database and user
 #   - SSL certificates
 #   - Data directories (/var/lib/ntopng)
-#   - Prometheus node-exporter prom files (if any)
+#   - The ntopng system user and group
+#   - nginx conf.d / sites-* leftovers, then an nginx reload
+# (It does NOT touch Prometheus node-exporter textfile .prom files — an
+# earlier revision of this header claimed it did; nothing here removes any.)
 #
 # PREREQUISITES:
 #   - Run AFTER `sudo nixos-rebuild switch` with the updated configuration
 #   - Run as root (or with sudo)
-#   - NOTE: SOPS secret cleanup (ntopng-db-password) must be done manually:
-#       sops /etc/nixos/secrets.yaml  →  delete 'ntopng-db-password'
+#   - NOTE: SOPS secret cleanup (ntopng-db-password) must be done manually.
+#       There is no /etc/nixos/secrets.yaml: the encrypted store lives in the
+#       separate `secrets` flake-input repo, so the command is
+#       `sops /etc/nixos/secrets/secrets.yaml`  →  delete 'ntopng-db-password'
+#       (the two echo lines in the SUMMARY block below still print the old,
+#       non-existent path — they are shell code, not comments, so this pass
+#       left them alone.)
 #
 # USAGE:
 #   sudo bash /etc/nixos/scripts/cleanup-ntopng.sh

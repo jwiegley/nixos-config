@@ -124,7 +124,10 @@ groups:
             Check current cert: openssl s_client -connect shlink.vulcan.lan:443 -servername shlink.vulcan.lan < /dev/null 2>/dev/null | openssl x509 -noout -dates
 
       # Cloudflare tunnel monitoring (Shlink uses the shared data tunnel)
-      # Note: The data tunnel is monitored separately in copyparty.yaml or a dedicated alert file
+      # Note: the data tunnel's own health is monitored separately — see
+      # CloudflaredTunnelDegraded / CloudflaredTunnelDisconnected in dns.yaml and
+      # the public-edge probes in network.yaml (NOT copyparty.yaml, which has no
+      # cloudflared rules).
       # This alert checks that external access to Shlink via the data tunnel is working
       - alert: ShlinkExternalAccessDown
         expr: |

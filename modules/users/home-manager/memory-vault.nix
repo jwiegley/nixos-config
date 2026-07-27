@@ -109,8 +109,14 @@ in
         };
 
         unitConfig = {
-          # Order after sops-nix so the rendered DB_PASSWORD env file exists on
-          # first (cold-boot) start, mirroring vane.nix.
+          # Intent: order after sops-nix so the rendered DB_PASSWORD env file
+          # exists on first (cold-boot) start, mirroring vane.nix.
+          # NOTE (verified 2026-07-27): this ordering is a NO-OP. There is no
+          # sops-nix.service on this host — sops-nix installs secrets from a
+          # system activation script — and in any case After=/Wants= inside a
+          # rootless *user* unit can only name other user units, so it could not
+          # reach a system unit even if one existed. `systemctl --user
+          # -M memory-vault@` reports sops-nix.service as "not-found".
           After = [
             "network-online.target"
             "sops-nix.service"
@@ -162,7 +168,13 @@ in
         };
 
         unitConfig = {
-          # Order after sops-nix (env file) and the app container (DB migrations).
+          # Intent: order after sops-nix (env file) and the app container (DB
+          # migrations). NOTE (verified 2026-07-27): both are NO-OPs. There is
+          # no sops-nix.service (see the app container above), and the app's
+          # user unit is named `memory-vault.service`, not
+          # `podman-memory-vault.service` — `systemctl --user -M memory-vault@`
+          # reports the latter as "not-found", so nothing actually holds this
+          # container back until the migrations have run.
           After = [
             "network-online.target"
             "sops-nix.service"

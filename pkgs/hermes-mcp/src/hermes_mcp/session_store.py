@@ -2,8 +2,9 @@
 
 Holds OUR side of the session bookkeeping (id, name, last-used, count,
 cached summary).  The actual conversation history lives inside Hermes
-itself and is keyed by `hermes_session_id`, which Hermes echoes back
-through the `X-Hermes-Session-Id` response header on the first request.
+itself and is keyed by `hermes_session_id`, which we mint locally
+(uuid4, see `create()`) and send on every request in the
+`X-Hermes-Session-Id` request header.
 """
 from __future__ import annotations
 

@@ -437,8 +437,9 @@ let
   # directly via peer auth — no password, the `hass` Postgres role is
   # granted SELECT in modules/services/databases.nix.
   #
-  # `scan_interval: 600` (10 min) is plenty given the underlying data
-  # only refreshes on the 6-hour sync cadence.
+  # No per-entry `scan_interval` is emitted: the modern `sql:` integration
+  # rejects it and polls on its own fixed cadence (see the note at
+  # flumeDataDsn below), even though the data only refreshes 6-hourly.
 
   fixtures = [
     "irrigation_spray"

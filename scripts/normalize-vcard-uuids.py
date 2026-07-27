@@ -253,7 +253,8 @@ class VCardNormalizer:
                 # Write updated content to new file
                 new_path.write_text(updated_content, encoding='utf-8')
 
-                # Copy permissions and ownership from original
+                # Copy permissions from original (ownership is NOT copied —
+                # the new file is owned by whoever runs the script)
                 stat_info = file_path.stat()
                 new_path.chmod(stat_info.st_mode)
 

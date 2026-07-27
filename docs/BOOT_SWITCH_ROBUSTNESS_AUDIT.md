@@ -1,5 +1,28 @@
 # Boot / Switch Service-Robustness Audit — vulcan
 
+> **Status (2026-07-27): historical. Every residual finding below has since been fixed.**
+> The audit's "nothing was applied" / "apply nothing" framing was true on 2026-06-08 only.
+> Verified in the tree today: #1/#2 DNS race — `modules/services/dns.nix:19-28`
+> (`before`/`wantedBy = nss-lookup.target` + an `ExecStartPost` readiness probe) and
+> `modules/services/cloudflare-tunnels.nix:66,99` (`after = technitium-dns-server.service`,
+> `StartLimitIntervalSec = 0`); #3 immich — `ConditionPathIsMountPoint` +
+> `wantedBy = tank-Photos-Immich.mount` at `modules/services/immich.nix:82,89,98,101,155`;
+> #4/#8 restic boot herd — `restic-check` is timer-only, with the reasoning kept at
+> `modules/storage/backups.nix:252,279-283,338`; #5/#6 OpenClaw self-heal —
+> the `>600` VM-uptime gate is live at `modules/monitoring/alerts/openclaw.yaml:150,183,224`;
+> #7 `pg_isready` — replaced by a bounded retry loop at
+> `modules/lib/mkQuadletService.nix:288-293`; and both out-of-scope defects in item 7 of
+> "Recommended Next Actions" are closed (`SystemdServiceFailed` now uses
+> `node_systemd_unit_state`, `modules/monitoring/alerts/systemd.yaml:7`; the
+> asymmetric-routing rules are exported as a gauge, `asymmetric_routing.prom`).
+> A clean cold reboot validated the result on 2026-06-10. **The consolidated,
+> maintained document is now [REBOOT_RESILIENCE.md](REBOOT_RESILIENCE.md)** —
+> read that for current behaviour; this file is kept for the reasoning and the evidence.
+>
+> Note also that `backups.nix` has moved to `modules/storage/backups.nix` and the
+> self-heal `daemon.py` referenced below is `scripts/openclaw-self-heal/daemon.py`;
+> line numbers cited throughout are as-of 2026-06-08 and will not all still match.
+
 _Generated 2026-06-08 by a multi-agent read-only audit (13 dimensions, 58 agents; 10 findings confirmed after adversarially refuting 29). Findings are recommendations only — nothing was applied._
 
 # Vulcan Service Robustness Audit — Reboot & Large `nixos-rebuild switch`
@@ -70,3 +93,5 @@ None of the residual issues cause data loss. The worst (cloudflared, immich) lea
 7. **Track the two out-of-scope defects surfaced during refutation:** (a) asymmetric-routing's priority 50/51 `ip rule`s are absent ~7h post-boot (live asymmetric misrouting to WiFi); (b) the `SystemdServiceFailed` alert references a non-existent metric (`systemd_unit_state` vs `node_systemd_unit_state`) and can never fire — silently disabling generic service-failure paging fleet-wide.
 
 **Apply nothing from this audit — these are recommendations for the operator.**
+(Superseded: the operator applied all of them between 2026-06-08 and 2026-06-10 —
+see the status note at the top of this file.)

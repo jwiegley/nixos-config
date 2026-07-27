@@ -6,7 +6,7 @@
 }:
 
 let
-  # Simple web interface to display atd queue status and job history
+  # Simple web interface to display atd queue status and per-job commands
   atd-web-server = pkgs.writeScriptBin "atd-web-server" ''
     #!${pkgs.python3}/bin/python3
 
@@ -331,7 +331,7 @@ in
 {
   # ============================================================================
   # ATD Web Status Interface
-  # Simple web UI to display atd queue status and job history
+  # Simple web UI to display atd queue status and per-job commands
   # ============================================================================
 
   systemd.services."atd-web" = {
@@ -350,7 +350,7 @@ in
       RestartSec = 10;
 
       # Security hardening
-      User = "root"; # Needs to run atq and read history
+      User = "root"; # Needs to run atq and `at -c` for any user's job
       Group = "root";
       PrivateTmp = true;
       ProtectSystem = "strict";

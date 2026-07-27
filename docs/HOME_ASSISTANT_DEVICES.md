@@ -1,11 +1,20 @@
 # Home Assistant Device Integration Guide
 
-This document provides setup instructions for all IoT devices integrated with Home Assistant on this system.
+This document provides setup instructions for a selection of the IoT devices
+integrated with Home Assistant on this system.
+
+> **Status (2026-07-27):** This guide is a partial snapshot (last substantively
+> updated 2025-10-07) and is **no longer a complete inventory**. The NixOS module
+> `/etc/nixos/modules/services/home-assistant.nix` now lists 54 entries in
+> `extraComponents` and 9 Nix-managed `customComponents`, and
+> `/var/lib/hass/custom_components` holds 34 custom integrations. Treat that
+> module as the authoritative list. Two sections below describe arrangements that
+> no longer hold and are flagged inline: §3 (Tesla Wall Connector) and §7 (MyQ).
 
 ## Overview
 
-**Built-in Integrations (13)**: Configured via NixOS extraComponents
-**Custom Integrations (4)**: Require HACS or manual installation
+**Built-in Integrations (13 documented here)**: Configured via NixOS `extraComponents`
+**Custom Integrations (4 documented here)**: Require HACS or manual installation
 
 ---
 
@@ -63,25 +72,32 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 ---
 
-### 3. Tesla Wall Connector (tesla)
+### 3. Tesla Wall Connector (tesla_wall_connector)
 
-**Component**: `tesla`
+**Component**: `tesla_wall_connector` (corrected 2026-07-27 — the component is
+`tesla_wall_connector`, not `tesla`; `tesla` does not exist in Home Assistant core
+and is not in `extraComponents`)
 
 **Setup**:
-1. Go to Settings > Devices & Services > Add Integration
-2. Search for "Tesla"
-3. Authenticate with your Tesla account
-4. Select your Wall Connector from discovered devices
+1. Go to Settings > Devices & Services — the Wall Connector is normally
+   auto-discovered over DHCP (hostname `teslawallconnector_*`)
+2. If it is not discovered, click "Add Integration" and search for
+   "Tesla Wall Connector"
+3. Enter the Wall Connector's IP address or hostname
 
-**Features**:
-- Charging status and power
-- Energy delivered per session
-- Charging schedule control
-- Real-time power monitoring
+This is a **local-polling** integration: it talks to the Wall Connector's own web
+API on your LAN. No Tesla account, cloud login, or OAuth flow is involved.
+
+**Features** (read-only — the integration provides no control entities):
+- Charging status (`evse_state`, `status`) and vehicle-connected / contactor-closed
+  binary sensors
+- Real-time power, per-phase voltage and current, grid voltage and frequency
+- Energy delivered in the current session, and lifetime energy
+- Handle, PCBA, and MCU temperatures
 
 **Requirements**:
-- Tesla account credentials
-- Wall Connector on same network
+- Wall Connector reachable on the same network
+- No credentials required
 
 **Energy Dashboard**: Charging data integrates with Energy Dashboard
 
@@ -165,11 +181,21 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 ---
 
-### 7. MyQ Garage Door Opener (myq)
+### 7. MyQ Garage Door Opener (myq) — REMOVED UPSTREAM
 
-**Component**: `myq`
+> **Status (2026-07-27):** This integration no longer works and is **not** in
+> `extraComponents`. Home Assistant removed MyQ in 2023 after Chamberlain blocked
+> third-party access (https://www.home-assistant.io/blog/2023/11/06/removal-of-myq-integration/).
+> The `myq` component still ships with Home Assistant 2026.7.2, but its
+> `async_setup_entry` does nothing except raise an "integration removed" repair
+> issue — it creates no entities. The setup steps below are kept for background
+> and will not work. A `myq-garage-door.lan` host is still probed by
+> `modules/services/blackbox-monitoring.nix`, but that is an HTTP reachability
+> probe, not a Home Assistant integration.
 
-**Setup**:
+**Component**: `myq` (removed — see status note above)
+
+**Setup** (historical, no longer functional):
 1. Go to Settings > Devices & Services > Add Integration
 2. Search for "MyQ"
 3. Enter MyQ account credentials
@@ -262,10 +288,12 @@ These integrations are pre-configured in the NixOS Home Assistant module and wil
 
 2. Add the token to secrets:
 ```bash
-sops /etc/nixos/secrets.yaml
-# Add under home-assistant section:
+sops /etc/nixos/secrets/secrets.yaml
+# Add under the home-assistant section:
 # lg-thinq-token: "your_personal_access_token_here"
 ```
+(The SOPS store is a separate flake input rooted at `/etc/nixos/secrets`; the key
+is declared in the module as `sops.secrets."home-assistant/lg-thinq-token"`.)
 
 3. Rebuild NixOS configuration:
 ```bash
@@ -626,11 +654,18 @@ wget -O - https://get.hacs.xyz | bash -
 
 **Manual Installation**:
 ```bash
-# SSH into Home Assistant
-cd /config/custom_components
-git clone https://github.com/nocturnal11/homeassistant-traeger.git traeger
-# Restart Home Assistant
+# SSH into vulcan — Home Assistant runs natively here, so the custom component
+# directory is /var/lib/hass/custom_components (not the /config path used by
+# Home Assistant OS / container installs).
+cd /var/lib/hass/custom_components
+sudo git clone https://github.com/nocturnal11/homeassistant-traeger.git traeger
+sudo chown -R hass:hass traeger
+sudo systemctl restart home-assistant
 ```
+
+**Note**: the Python dependency `aiomqtt` is supplied by `extraPackages` in
+`/etc/nixos/modules/services/home-assistant.nix` — Home Assistant runs with
+`--skip-pip` here, so manifest requirements are not pip-installed at runtime.
 
 **Setup**:
 1. After installation, restart Home Assistant
@@ -655,10 +690,18 @@ git clone https://github.com/nocturnal11/homeassistant-traeger.git traeger
 
 ## Secrets Management
 
-Many integrations require credentials. Add these to your SOPS secrets.yaml:
+Most of the integrations above are configured entirely through the Home Assistant
+UI config flow and store their credentials in `/var/lib/hass/.storage/` — they do
+**not** read SOPS secrets. As of 2026-07-27 the only keys actually declared under
+the `home-assistant/` SOPS namespace are: `flume-data-token`,
+`google-assistant-client-id`, `google-assistant-client-secret`, `lg-thinq-token`,
+`node-red-token`, `openuv-api-key`, `opnsense-api-key`, `opnsense-api-secret`,
+`opnsense-url`, `postgres-password`, `yale-password`, `yale-username`. The block
+below is an **illustrative naming example only**; none of these flat keys exist,
+and real keys live nested under a `home-assistant:` section.
 
 ```yaml
-# Example secrets structure (encrypt with sops)
+# Illustrative example only — NOT the current secrets layout (see note above)
 # Network
 asus-router-password: "your_password"
 
@@ -699,7 +742,7 @@ traeger-password: "your_traeger_password"
 
 To encrypt and edit secrets:
 ```bash
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 ```
 
 ---

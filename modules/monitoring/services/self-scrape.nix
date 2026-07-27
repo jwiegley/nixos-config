@@ -1,6 +1,7 @@
 { ... }:
 
-# Self-monitoring scrape jobs for the two TSDBs themselves.
+# Self-monitoring scrape jobs for the monitoring stack's own /metrics endpoints:
+# the two TSDBs, Alertmanager, and the cloudflared tunnel.
 #
 # Until 2026-06-09 neither Prometheus nor VictoriaMetrics was scraped, so every
 # rule in prometheus-protection.yaml and victoriametrics-protection.yaml was dead

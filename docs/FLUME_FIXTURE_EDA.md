@@ -7,6 +7,14 @@ by when the tankless water heater sensor went online (2026-05-19).
 The library proposed at the bottom is a starting point; it will be
 re-calibrated every ~2 weeks as more data accumulates.
 
+> **Status (2026-07-27):** archival snapshot — every number below is from the 4-day
+> 2026-05-20..23 window and has **not** been refreshed. The promised ~2-weekly
+> re-calibration has not happened: `scripts/flume-data/flume_data/fixtures.py`, the
+> library that actually runs, has not been touched since it was committed on
+> 2026-05-23 (`7e179e3`). Read `fixtures.py` for the live fixture ranges and
+> `FLUME_DATA_REFERENCE.md` for the deployed schema; use this document only as the
+> record of how those numbers were derived.
+
 ---
 
 ## Data inventory
@@ -180,6 +188,11 @@ score(fixture | segment) =
 Each `L_*` is a triangular distribution centered on the range midpoint
 that goes to 0 outside the range. Probabilities are then computed as
 `P(fixture | segment) = score(f) / sum(score(f') for all f')`.
+
+> **As built:** the triangular kernel was replaced by a **Gaussian** one before
+> shipping — `fixtures.Range.likelihood()` uses `sigma = (high - low) / 4`, so values
+> inside the range score ≥ 0.135 and the score decays smoothly outside it rather than
+> hitting zero at the edge. The probability normalisation is as described.
 
 Hard constraints (cold-only, B-Hyve overlap) zero out the score
 entirely. This means a segment with hot water can never be classified

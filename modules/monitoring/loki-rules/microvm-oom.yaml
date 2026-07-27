@@ -1,7 +1,7 @@
 # microVM guest-OOM detection (Option A — docs/MONITORING_DEFERRED_SPECS.md
 # "microVM Guest Visibility"). Loki ruler rule — needs an L+ symlink in
-# modules/services/loki.nix (loki-rules/*.yaml are NOT auto-discovered); see
-# the userActions in the workstream report.
+# modules/services/loki.nix (loki-rules/*.yaml are NOT auto-discovered); that
+# symlink is in place, at modules/services/loki.nix:131 (verified 2026-07-27).
 #
 # WHY a host-side journal rule (not the in-guest probe / cgroup heuristic):
 # the worklist decision is to detect guest-OOM via the HOST kernel journal.

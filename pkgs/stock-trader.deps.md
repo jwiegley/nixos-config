@@ -1,5 +1,12 @@
 # stock-trader runtime Python dependencies
 
+> **This is a dated audit snapshot, not a live manifest.** It was taken against
+> `refs/tags/v0.1.0`; as of 2026-07-27 `flake.nix:110` pins the `stock-trader`
+> input at `refs/tags/v0.2.0` (the `version = "0.1.0"` strings at
+> `overlays/default.nix:775,784` were not bumped with it). Re-run the audit
+> below before trusting this list for a new deployment. The "verified version"
+> column likewise reflects nixpkgs as of 2026-04-26.
+
 Generated 2026-04-26 (vulcan deployment chunk 2, task 7) from the
 v0.1.0 source tree of the laptop repo at
 `refs/tags/v0.1.0`. Audited via:
@@ -16,8 +23,10 @@ the laptop's `pythonEnv` set. Everything below is what the
 runtime; dev-only deps (pytest, ruff, mypy, jupyter, ipython,
 notebook, mplfinance, etc.) are excluded.
 
-The four pip-only deps in the laptop's pipPackages that are NOT
-imported anywhere under `src/` were excluded from this list:
+The pip-only deps in the laptop's pipPackages that are NOT
+imported anywhere under `src/` were excluded from this list
+(16 entries — the "four" this sentence originally claimed was
+never right):
 `polygon-api-client`, `finnhub-python`, `mibian`, `crewai`,
 `langchain*`, `langgraph`, `chromadb`, `sentence-transformers`,
 `backtrader`, `bt`, `finviz`, `newspaper3k`, `anthropic`, `respx`,

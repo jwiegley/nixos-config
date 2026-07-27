@@ -30,7 +30,7 @@ let
   # sha256 lives in the root-0600 baseline store and is NEVER emitted; no file
   # contents, no diffs, no key paths. configuration.yaml is sha-normalized by
   # dropping the rebuild-injected "  db_url:" line (mirrors
-  # home-assistant.nix:1120). secrets.yaml is hashed in ciphertext form.
+  # home-assistant.nix:1137). secrets.yaml is hashed in ciphertext form.
   #
   # Also emits nixos_config_uncommitted_changes (count of uncommitted/untracked
   # files in /etc/nixos, ignoring the gitignored .nixos-build lock) so forgotten

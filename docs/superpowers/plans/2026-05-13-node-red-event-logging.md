@@ -1,5 +1,11 @@
 # Node-RED Event Logging Implementation Plan
 
+> **Archival — 2026-05-13.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/node-red-event-logger.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Capture every message that traverses Node-RED plus all admin/audit events into PostgreSQL, with a Grafana dashboard for inspection.

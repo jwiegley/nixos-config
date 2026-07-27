@@ -77,7 +77,11 @@ groups:
 
       # NVMe media errors: integrity errors on the root device's media. Any
       # nonzero count is a hard media-error signal (unlike SMART attributes
-      # this is a direct NVMe log-page counter).
+      # this is a direct NVMe log-page counter). NOTE: /dev/nvme0n1 was dropped
+      # from the exporter's device list on 2026-07-03 (see
+      # modules/monitoring/services/smartctl-exporter.nix:36), so as of
+      # 2026-07-27 no smartctl_device_media_errors series is produced and this
+      # rule cannot fire; boot-NVMe coverage is a deferred follow-up.
       - alert: SmartNVMeMediaErrors
         expr: smartctl_device_media_errors > 0
         for: 5m

@@ -55,7 +55,7 @@ groups:
       # is NO concurrent-connection gauge to alert against (the rule was deleted in
       # the 2026-06-09 dead-metric sweep for exactly this reason). vulcan is a
       # single-user mail server with mail_max_userip_connections = 100 for the LAN
-      # (dovecot.nix:318), so a connection-count alert would guard a load profile
+      # (dovecot.nix:319), so a connection-count alert would guard a load profile
       # that cannot occur. Reviving it would require a bespoke exporter scraping
       # `doveadm who`/proc for a metric of zero operational value here. Liveness is
       # already covered by up{job="dovecot"}, DovecotExporterStale (absent(dovecot_up)),

@@ -1,5 +1,11 @@
 # Hermes Egress Tightening + Integration Dashboard Implementation Plan
 
+> **Archival — 2026-05-15.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-microvm.nix`, `modules/monitoring/dashboards/openclaw-hermes-integration.json`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Conservatively tighten Hermes microVM egress (allow TCP 443, UDP 443, TCP/UDP 53; final DROP everything else) and add a Grafana dashboard visualizing the 28 metrics across `hermes_health.prom`, `openclaw_canary.prom`, `openclaw_mcporter.prom`, and `openclaw_hermes_smoke.prom`.

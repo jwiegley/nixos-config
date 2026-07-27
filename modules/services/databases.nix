@@ -129,7 +129,10 @@ in
         log_autovacuum_min_duration = 10000; # Log autovacuum runs > 10s to reduce noise
 
         # Include more context in logs
-        log_line_prefix = "%m [%p] %q%u@%d "; # timestamp [pid] app_name user@database
+        # %m timestamp, %p pid, then %q (drop the rest for non-session
+        # processes) followed by %u@%d = user@database. NOTE: %q is a
+        # stop-marker, not the application name — that would be %a.
+        log_line_prefix = "%m [%p] %q%u@%d ";
 
         # pg_stat_statements: per-query aggregate latency telemetry.
         #
@@ -144,6 +147,9 @@ in
         # restart into a planned maintenance window; do NOT ride a routine
         # unattended switch. The StartLimitBurst=30/RestartSec hardening below
         # + the exporter's Restart=always mean the dependents self-recover.
+        # STATUS: that restart has already happened — as of 2026-07-27
+        # `SHOW shared_preload_libraries` reads "vchord.so,pg_stat_statements".
+        # The warning above still governs any FUTURE change to this setting.
         #
         # The immich nixpkgs module owns shared_preload_libraries as a plain
         # list assignment ([ "vchord.so" ]); use lib.mkAfter so we APPEND
@@ -385,6 +391,9 @@ in
 
   # Grant read-only access on the org database to the openclaw user.
   # This runs after mkPostgresUserSetup creates the user and sets its password.
+  # Despite the unit name, the script below ALSO issues the flume-data grants:
+  # read-only on `flume-data` for johnw and hass, and read-only on hass
+  # states/states_meta for the flume-data role.
   systemd.services.postgresql-openclaw-org-grants = {
     description = "Grant read-only access on org database to openclaw user";
     after = [
@@ -490,6 +499,8 @@ in
   # restart it errors ("could not access file ... shared_preload_libraries")
   # and this oneshot is simply retried on the next boot/activation — harmless;
   # the pg_stat_statements_* metrics stay absent until the restart happens.
+  # As of 2026-07-27 that restart HAS happened: the .so is preloaded and the
+  # extension exists in the `postgres` database, so this oneshot now succeeds.
   systemd.services.postgresql-pgstatstatements-setup = {
     description = "Create pg_stat_statements extension in postgres DB";
     after = [ "postgresql.service" ];

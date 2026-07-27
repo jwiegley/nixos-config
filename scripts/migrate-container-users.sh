@@ -5,6 +5,20 @@
 #
 # IMPORTANT: Review and test this script carefully before running!
 # Run this AFTER switching to the new configuration with dedicated users.
+#
+# HISTORICAL as of 2026-07-27 — the migration below has already been carried
+# out and the script no longer matches the deployed layout, so it must NOT be
+# re-run as-is:
+#   * the shared container-db / container-web / container-misc /
+#     container-monitor accounts no longer exist on this host (the dedicated
+#     per-service users do);
+#   * the services it stops are no longer system units named
+#     "<service>.service". litellm, wallabag, teable, opnsense-exporter and
+#     openspeedtest are now rootless per-user Home Manager quadlets under
+#     modules/users/home-manager/ (openspeedtest's container unit is named
+#     `speedtest`), and technitium-dns-exporter was reverted to a root-level
+#     podman container.
+# Kept as the record of how the per-service user split was performed.
 
 set -euo pipefail
 

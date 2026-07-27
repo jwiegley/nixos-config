@@ -1,5 +1,11 @@
 # Hermes Agent ↔ OpenClaw Service Parity — Design
 
+> **Archival — 2026-05-28.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-microvm.nix`).
+
 **Date:** 2026-05-28
 **Status:** Approved (design), pending spec review + user sign-off
 **Author:** Claude (Opus 4.8) with John Wiegley

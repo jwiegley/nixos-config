@@ -1,5 +1,11 @@
 # OpenUV pool-time prediction — design
 
+> **Archival — 2026-05-12.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see the `openuv_forecast` REST sensor in `modules/services/home-assistant.nix`).
+
 **Date:** 2026-05-12 (revised 2026-05-13 to match shipped implementation)
 **Status:** shipped — see deltas in §13
 **Driver:** The OpenUV integration polls `/uv` only, never `/forecast`. The user wants a once-per-day forecast pull whose hourly array drives both (a) a daily summary of the day's predicted "pool window," and (b) a scheduled event at the moment UV will descend through 3 — gated against pool water temperature ≥ 82 °F — that triggers a TTS "pool time" announcement.

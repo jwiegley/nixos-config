@@ -7,7 +7,14 @@
 
 {
   # Glances system monitoring service
-  # Provides real-time system monitoring with web interface and Prometheus metrics
+  # Provides real-time system monitoring through a web interface.
+  # NOTE (verified 2026-07-27): the "prometheus=True" line in the [outputs]
+  # section below is inert. Glances only exports Prometheus when started with
+  # `--export prometheus` (which this unit's ExecStart does not pass), so
+  # /api/prometheus 404s (checked against the live port) and Prometheus has no
+  # `glances` job — port 61208 appears outside this file only as the registry
+  # entry in docs/ports.txt, never in a scrape config. The /api/prometheus
+  # nginx location below proxies to that 404.
   # https://github.com/nicolargo/glances
 
   # Create Glances configuration file

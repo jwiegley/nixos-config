@@ -3,9 +3,10 @@
 # Exercises the actual chat completion path Discord conversations use,
 # so any routing/auth regression in the main streaming-off code path
 # shows up within one probe interval (default 5 min). Complements (does
-# not replace) the openclaw-hermes-smoke probe — that one tests the
-# MCP `ask_hermes` tool path, which on this host short-circuits and
-# does not exercise the LiteLLM + MLX backend.
+# not replace) the openclaw-hermes-smoke probe — that one now tests
+# only the MCP transport/handshake (`tools/list`; it was `ask_hermes`
+# until 2026-07-22) and deliberately triggers no model inference, so
+# it does not exercise the LiteLLM + MLX backend.
 #
 # History: added 2026-05-24 after the smoke probe greened up for 24h
 # while Discord chat returned HTTP 401 from openrouter.ai. Root cause

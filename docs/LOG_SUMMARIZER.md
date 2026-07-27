@@ -25,43 +25,56 @@ Intelligent log analysis tool that collects system logs from journalctl and uses
 
 - **Organized Output**: Groups logs by severity (critical → errors → warnings → notable events)
 
+- **Persistent History / Deduplication**: keeps prior analyses under
+  `/var/log/logwatch-ai` (14-day retention) and loads an accumulated
+  `known-conditions.prompt` "wisdom" file so recurring conditions are not
+  re-reported every day. Disable with `--no-history`.
+
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Run with AI analysis (requires LITELLM_API_KEY)
+# Preferred: the analyze-logs wrapper reads the API key from SOPS for you
+sudo analyze-logs
+sudo analyze-logs --since 2h --no-history
+
+# Direct invocation, supplying the key yourself
 export LITELLM_API_KEY="your-api-key"
 sudo /etc/nixos/scripts/log-summarizer.py
 
-# Run without AI (uses fallback summary)
+# Without a key it still runs, falling back to the non-AI grouped summary
 sudo /etc/nixos/scripts/log-summarizer.py
 ```
 
-### Integration with LogWatch
+### Integration with LogWatch — already done (verified 2026-07-27)
 
-Add to logwatch configuration:
+You do **not** need to hand-write logwatch config files for this; the integration is
+declarative in `modules/services/monitoring.nix`:
 
-```bash
-# /etc/logwatch/conf/services/ai-summary.conf
-Title = "AI System Log Summary"
-LogFile = NONE
+- `analyzeLogsScript` (`:91`) is a `writeShellApplication` named **`analyze-logs`**
+  that exports `LITELLM_API_KEY` from `/run/secrets/litellm-vulcan-lan-logwatch`
+  and execs the summarizer. It is installed into `environment.systemPackages`, so
+  **`sudo analyze-logs` is the normal way to run this tool.**
+- `logwatchAiScript` (`:112`) wraps it as `analyze-logs --quiet` and is registered
+  as the logwatch custom service `ai-log-summary`
+  ("AI-Powered System Log Analysis") under `services.logwatch.customServices`.
+- Logwatch itself runs from `logwatch.timer` with
+  `range = "since 24 hours ago for those hours"`, mailing `johnw@vulcan.lan`.
 
-# /etc/logwatch/scripts/services/ai-summary
-#!/bin/bash
-export LITELLM_API_KEY=$(cat /run/secrets/litellm-api-key)
-/etc/nixos/scripts/log-summarizer.py
-```
+Note the secret name: the key is `litellm-vulcan-lan` deployed as
+`/run/secrets/litellm-vulcan-lan-logwatch`. There is no `/run/secrets/litellm-api-key`.
 
 ### As a Systemd Service/Timer
 
-Example configuration:
+Not currently used — the daily run happens via logwatch (above). Illustrative
+configuration if you ever want a dedicated timer:
 
 ```nix
 systemd.services.log-summarizer = {
   description = "AI-Powered Log Summarizer";
   script = ''
-    export LITELLM_API_KEY=$(cat /run/secrets/litellm-api-key)
+    export LITELLM_API_KEY=$(cat /run/secrets/litellm-vulcan-lan-logwatch)
     ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py
   '';
   serviceConfig = {
@@ -81,17 +94,35 @@ systemd.timers.log-summarizer = {
 
 ## Configuration
 
+### Command-Line Options
+
+- `--since` / `-s` — time range to analyze (default `"24 hours ago"`; accepts
+  `"2 hours"`, `"30m"`, `"1d"`, `"2024-12-08 10:00"`)
+- `--quiet` / `-q` — suppress progress messages on stderr (what the logwatch
+  wrapper uses)
+- `--model` / `-m` — bypass the model cascade and use exactly this model
+- `--models-config` — path to the models JSON (default `/etc/models.json`; also
+  settable via the `MODELS_CONFIG` env var)
+- `--history-dir` — where analysis history is kept (default `/var/log/logwatch-ai`)
+- `--no-history` — disable history save/load, for one-off runs
+
 ### Environment Variables
 
 - `LITELLM_API_KEY`: API key for LiteLLM authentication (optional, script works without it)
+- `MODELS_CONFIG`: override the models JSON path (same as `--models-config`)
 
 ### LiteLLM API Settings
 
-Default configuration (modify in script if needed):
+Verified against the script 2026-07-27:
 - **API URL**: `http://127.0.0.1:4000/v1/chat/completions`
-- **Model**: `hera/Qwen3.6-27B-Instruct`
-- **Timeout**: 45 seconds
-- **Max Tokens**: 1000
+- **Model**: not hardcoded. The script loads a **model cascade** from
+  `/etc/models.json` (generated from `/etc/nixos/models.nix` by
+  `modules/services/model-config.nix`) and walks it with exponential backoff,
+  falling through to the next model when one fails. `--model` overrides the cascade.
+  If `/etc/models.json` is missing the script exits 1 and tells you to rebuild.
+- **Per-request timeout**: 7200 seconds / 2 hours (`self.timeout`) — deliberately
+  large because the primary model is a local LLM
+- **Max Tokens**: 1500
 
 ### Noise Filtering
 
@@ -169,8 +200,11 @@ STATISTICS:
 
 ## Performance
 
-- **Typical runtime**: 5-15 seconds (depending on log volume)
-- **Maximum timeout**: 60 seconds (30s journalctl + 45s AI API)
+- **Typical runtime**: dominated by the AI call, not log collection. Log gathering
+  is seconds; a local-LLM analysis can take minutes.
+- **Timeouts**: 30 s per `journalctl` invocation (per service), and up to 7200 s
+  (2 h) for a single AI request, retried across the model cascade. The old
+  "60 seconds total" figure predates the cascade and is no longer true.
 - **Memory usage**: ~50-100MB (depending on log volume)
 - **Log collection**: Processes 50,000-100,000 entries typical
 
@@ -179,7 +213,12 @@ STATISTICS:
 ### "API connection error: HTTP Error 401: Unauthorized"
 
 - Set `LITELLM_API_KEY` environment variable
-- Verify LiteLLM service is running: `systemctl status litellm`
+- Verify LiteLLM is running. It is a **rootless** container owned by the `litellm`
+  user, so `systemctl status litellm` (system scope) finds nothing; use
+  `sudo -u litellm env XDG_RUNTIME_DIR=/run/user/$(id -u litellm) systemctl --user status litellm.service`
+  or simply check that the port answers: `curl -s -o /dev/null -w '%{http_code}\n'
+  http://127.0.0.1:4000/health` (a `401` still proves LiteLLM is up — the endpoint
+  requires a key)
 - Script will fall back to manual summary automatically
 
 ### "Timeout collecting logs for service"
@@ -226,7 +265,11 @@ STATISTICS:
 Potential improvements:
 - Configuration file for service groups and noise patterns
 - Support for custom log sources beyond journalctl
-- Email delivery integration
-- Persistent summary storage and trend analysis
 - Custom AI prompts per service type
 - Multi-day comparison analysis
+
+Already implemented since this list was written (as of 2026-07-27):
+- ~~Email delivery integration~~ — delivered via the logwatch `ai-log-summary`
+  custom service, which mails `johnw@vulcan.lan`
+- ~~Persistent summary storage and trend analysis~~ — `/var/log/logwatch-ai`
+  history plus the `known-conditions.prompt` wisdom file (14-day retention)

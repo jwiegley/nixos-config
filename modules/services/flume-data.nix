@@ -151,10 +151,11 @@ in
 
   config = lib.mkIf cfg.enable {
     # ── SOPS secrets ────────────────────────────────────────────────
-    # These are placeholders until the user populates secrets.yaml. The
-    # values never enter Nix-tracked state — sops decrypts them at
-    # activation time into /run/secrets/flume/* and the systemd unit
-    # plumbs them into the process via LoadCredential.
+    # Populated in the `secrets` flake-input repo (secrets/secrets.yaml);
+    # /run/secrets/flume/{client_id,client_secret,username,password} are all
+    # present as of 2026-07-27. The values never enter Nix-tracked state —
+    # sops decrypts them at activation time into /run/secrets/flume/* and the
+    # systemd unit plumbs them into the process via LoadCredential.
     sops.secrets."flume/client_id" = {
       owner = "flume-data";
       mode = "0400";

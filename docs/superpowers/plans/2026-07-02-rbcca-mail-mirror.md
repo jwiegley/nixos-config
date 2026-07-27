@@ -1,5 +1,11 @@
 # RBCCA Mail Mirror Implementation Plan
 
+> **Archival — 2026-07-02.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/users/rbcca.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Mirror `jwiegley@rbcca.org` (Google Workspace) into a local Dovecot mailbox and enable send-as through Gmail SMTP, replicating the existing `bia` template exactly.
@@ -215,7 +221,7 @@ git commit -m "mbsync: add rbcca mirror (jwiegley@rbcca.org, INBOX pull, 15min)"
 
 **Files:**
 - Modify: `modules/services/dovecot.nix:465` and `:475` (tmpfiles rules)
-- Modify: `modules/services/dovecot-fts-monitor.nix:61-64` (USERS list + comment line-ref)
+- Modify: `modules/services/dovecot-fts-monitor.nix:63-66` (USERS list + comment line-ref)
 
 **Interfaces:**
 - Consumes: user `rbcca` (Task 2).
@@ -343,7 +349,7 @@ git commit -m "postfix: send-as jwiegley@rbcca.org via Gmail relay"
 
 **Files:**
 - Modify: `modules/services/nagios.nix:929` and `:941` (timer list entries)
-- Modify: `modules/services/promtail.nix:542` (append scrape job after the `mbsync-bia` block)
+- Modify: `modules/services/promtail.nix:548` (append scrape job after the `mbsync-bia` block)
 
 **Interfaces:**
 - Consumes: `mbsync-rbcca.timer`, `mbsync-rbcca-health-check.timer`, `/var/log/mbsync-rbcca/*.log` (Task 3).

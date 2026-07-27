@@ -116,7 +116,24 @@ class GiteaAPIClient:
             Dictionary with 'ok' (bool), 'status' (int), 'data' (parsed JSON or text)
 
         Raises:
-            URLError: On network errors
+            Nothing for ordinary HTTP or network failures — HTTPError and
+            URLError are caught and reported as {'ok': False, ...} ('status'
+            is the HTTP code, or 0 for a network-level error).
+
+            This is NOT blanket exception safety. Checked 2026-07-27 on this
+            host's Python 3.13.12:
+
+            - UnicodeDecodeError escapes. It is a subclass of neither URLError
+              nor HTTPError, so a response body that is not valid UTF-8 hitting
+              either .decode('utf-8') call below propagates to the caller.
+            - A READ timeout escapes, raised as TimeoutError from
+              getresponse(). A CONNECT timeout does NOT: urllib's
+              AbstractHTTPHandler.do_open wraps the connect in
+              `except OSError as err: raise URLError(err)`, and TimeoutError is
+              an OSError, so it is caught here and returned as
+              {'ok': False, 'status': 0}. Do not generalise from
+              `issubclass(TimeoutError, URLError) is False` to "all timeouts
+              escape" — the two paths differ.
         """
         # Build URL with query parameters
         url = urljoin(self.base_url, endpoint)
@@ -325,7 +342,11 @@ class GiteaAPIClient:
             )
             return True
 
-        # Get current repo details to preserve settings
+        # Confirm the repo is reachable before patching. The response body is
+        # assigned to repo_data below and then never used anywhere in this
+        # file (checked 2026-07-27) — the PATCH sends only mirror_password.
+        # Whether Gitea preserves the repo's other settings across a partial
+        # PATCH is NOT verified here; this comment is not evidence for it.
         response = self._make_request(
             'GET',
             f'/api/v1/repos/{owner}/{repo_name}'

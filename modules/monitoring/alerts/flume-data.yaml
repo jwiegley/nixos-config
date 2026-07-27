@@ -76,9 +76,10 @@ groups:
       # 8.5 days = weekly Monday cadence + grace (Persistent=true catches up a
       # missed run; the +0.5d absorbs the 10m RandomizedDelaySec and any boot
       # catch-up jitter without alarming on a normal week). The metric is
-      # absent until the first post-deploy weekly run, so this rule cannot fire
-      # until then; absent() is intentionally NOT used so a fresh deploy does
-      # not alarm before the first run has populated it.
+      # absent until the first post-deploy weekly run; that has since happened
+      # (as of 2026-07-27 flume_weekly_cross_check_last_run_timestamp_seconds is
+      # populated), so the rule is live. absent() is intentionally NOT used so a
+      # fresh deploy does not alarm before the first run has populated it.
       - alert: FlumeCrossCheckStale
         expr: (time() - flume_weekly_cross_check_last_run_timestamp_seconds) > 8.5 * 86400
         for: 10m

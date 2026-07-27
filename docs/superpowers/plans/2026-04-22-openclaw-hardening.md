@@ -1,5 +1,11 @@
 # OpenClaw High-Availability Hardening Implementation Plan
 
+> **Archival — 2026-04-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/openclaw-microvm.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the 2026-04-22 plugin-init regression (OpenClaw 2026.4.21 + `workspace:*` npm protocol) at the package level, and add defense-in-depth monitoring so a similar regression trips an alert within 5 minutes instead of going unnoticed.

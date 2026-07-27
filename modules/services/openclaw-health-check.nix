@@ -37,7 +37,9 @@ in
   #
   # Two-tier health check system:
   # 1. openclaw-health.service - connectivity checks (runs on every boot)
-  # 2. openclaw-health-full.service - round-trip functional tests (manual only)
+  # 2. openclaw-health-full.service - round-trip functional tests (on demand:
+  #    manual start, or the host-written trigger file picked up by the path
+  #    unit / poll timer at the bottom of this file)
   #
   # Usage from host:
   #   sudo openclaw-health          # connectivity checks only
@@ -453,7 +455,9 @@ in
   systemd.services.openclaw-health-full = {
     description = "OpenClaw full round-trip health check";
     after = [ "openclaw.service" ];
-    # Not wantedBy - manual trigger only via `systemctl start openclaw-health-full`
+    # Not wantedBy - started on demand: `systemctl start openclaw-health-full`,
+    # or by the ${openclawDir}/run-health-check-full trigger file, which the
+    # path unit + poll timer at the bottom of this file watch for.
 
     serviceConfig = {
       Type = "oneshot";

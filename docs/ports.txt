@@ -2,6 +2,8 @@
 # Format: PORT INTERFACE... [SERVICE/DESCRIPTION]
 # Keep this file updated when adding new services!
 # Last cleaned: 2026-05-21
+# Last fact-checked: 2026-07-27 — NOT clean: port_registry_stale_entries = 7 that
+# day (registered ports with no live listener; see port-drift-exporter.nix)
 #
 # open-source-secretary: NO listening port. Outbound-only oneshot timer
 # (GitHub/Gitea API + Hermes 10.99.1.2:8080 + local sendmail); binds nothing.
@@ -145,6 +147,7 @@
 8123 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:8123 (Home Assistant)
 
 # Prometheus Stack
+8880 127.0.0.1 vmalert (VictoriaMetrics alerting engine — web/API + self-metrics)
 9085 127.0.0.1 Drafts MCP Self-Heal webhook receiver
 9090 127.0.0.1 Prometheus Server
 9092 127.0.0.1 OpenClaw Self-Heal webhook receiver
@@ -176,8 +179,19 @@
 9633 127.0.0.1 Smartctl exporter (SMART disk health)
 
 # Cloudflare Tunnels
-18873 127.0.0.1 rsync Cloudflare tunnel backend (bound only while rsync running)
-20241 127.0.0.1 cloudflared-tunnel-data (Cloudflare Tunnel data plane / metrics)
+# NOTE (2026-07-27): only ONE tunnel exists now — cloudflared-tunnel-data.service,
+# fronting data./gitea./s./calendar.newartisans.com. Its backends are 18080, 3005,
+# 8580 and 8090, all registered in the Web Applications section above.
+9301 127.0.0.1 cloudflared tunnel metrics (TUNNEL_METRICS on cloudflared-tunnel-data; scraped by job=cloudflared)
+# 18873 - RESERVED, not listening. Was the rsync.newartisans.com tunnel backend;
+#         that tunnel was removed 2025-11-17 (commit b93020b) and nothing binds
+#         this port. Kept registered so the port is not silently reused.
+# 20241 - RESERVED, not listening. cloudflared's DEFAULT metrics port range
+#         (20241-20245); superseded once the unit began setting
+#         TUNNEL_METRICS=127.0.0.1:9301 explicitly. Kept registered because
+#         cloudflared would fall back to this range if TUNNEL_METRICS were dropped.
+18873 127.0.0.1 (reserved - former rsync Cloudflare tunnel backend; see note above)
+20241 127.0.0.1 (reserved - cloudflared default metrics port; see note above)
 
 # Container Services (internal ports — host-facing variant listed above)
 3001 container Teable (internal; host-facing on 3004)
@@ -189,6 +203,9 @@
 
 # Previously seen but not currently listening — verify before reuse
 # (Captured during the 2026-05-21 cleanup; if still absent next pass, drop the line.)
+# Re-checked 2026-07-27: all five below are STILL absent, so the stated
+# drop condition is now met — they can be deleted whenever this file is next
+# cleaned. Left in place for one more pass rather than removed silently.
 # 5679    127.0.0.1
 # 9095    127.0.0.1
 # 20242   127.0.0.1
@@ -203,5 +220,3 @@
 # - ::1 = IPv6 localhost only
 # - Specific IPs (192.168.x.x, 10.x.x.x) = Interface-specific binding
 # - "container" = Port used within container, may not be exposed to host
-9301 127.0.0.1 cloudflared tunnel metrics (data.newartisans.com tunnel /metrics, scraped by job=cloudflared)
-8880 127.0.0.1 vmalert (VictoriaMetrics alerting engine — web/API + self-metrics)

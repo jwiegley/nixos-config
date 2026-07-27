@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time script to remove all push mirrors from Gitea repositories.
-# Run as: sudo systemd-run --pipe -p EnvironmentFile=/run/secrets-rendered/github-mirror-env \
+# Run as: sudo systemd-run --pipe -p EnvironmentFile=/run/secrets/rendered/github-mirror-env \
 #           -E GITEA_URL=https://gitea.vulcan.lan -E GITEA_USER=johnw \
 #           /etc/nixos/scripts/remove-push-mirrors.sh
 #

@@ -33,7 +33,7 @@
     ./config-drift-exporter.nix # crown-jewel config-file change detection + AIDE result metrics
     ./container-image-staleness-exporter.nix # skopeo moving-tag digest drift
     ./microvm-resource-exporter.nix # host-cgroup CPU/mem + backing-volume gauges for the agent VMs
-    ./vm-egress-exporter.nix # per-VM egress counters (agent microVM network visibility)
+    ./vm-egress-exporter.nix # empty placeholder — the agent-microVM egress signals ship as alerts/vm-egress.yaml + Loki rules, not as an exporter (see the file header)
     ./system-exporters.nix # Consolidated: node, systemd, zfs
 
     # Service-specific exporters

@@ -1,5 +1,11 @@
 # Open-Source Secretary Implementation Plan
 
+> **Archival — 2026-07-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `pkgs/open-source-secretary/`, `modules/services/open-source-secretary.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A daily host-side systemd job that scans GitHub (`jwiegley` + `ledger`) and Gitea (`johnw`) open issues/PRs and both notification feeds, computes deltas against a metadata-only SQLite state DB, has the Hermes Agent triage what needs attention, and emails John a prioritized summary.
@@ -21,7 +27,7 @@
 - **State committed only after `sendmail` exits 0.** `flock` guards against overlapping runs.
 - **Env var prefix `OSS_SECRETARY_`.** Recipient default `johnw@vulcan.lan`, sender `oss-secretary@vulcan.lan`, sendmail `/run/wrappers/bin/sendmail`.
 - **Endpoints (verified):** GitHub `https://api.github.com`; Gitea `https://gitea.vulcan.lan/api/v1`; Hermes `http://10.99.1.2:8080/v1/chat/completions`, model `hera/omlx/Qwen3.6-27B-oQ4e-mtp`, key from `hermes/env` (`API_SERVER_KEY=`).
-- **Redaction source of truth:** copy `REDACT_PATTERNS` + `redact()` verbatim from `scripts/agent_health_report.py:70-91`.
+- **Redaction source of truth:** copy `REDACT_PATTERNS` + `redact()` verbatim from `scripts/agent_health_report.py:77-98`.
 - **Commit trailers** (every commit): `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>` and `Claude-Session: https://claude.ai/code/session_01YP5fcbXVcBaNW4hnnYpAuv`.
 
 ---
@@ -225,7 +231,7 @@ def test_redact_preserves_ordinary_text():
 Run: `cd pkgs/open-source-secretary && python -m pytest tests/test_redact.py -v`
 Expected: FAIL (`ModuleNotFoundError: oss_secretary.redact`)
 
-- [ ] **Step 6: Implement `redact.py`** — copy `REDACT_PATTERNS` + `redact()` verbatim from `scripts/agent_health_report.py:70-91`. The list is module-level pre-compiled `re.compile` objects; `redact(s)` loops `for p in REDACT_PATTERNS: s = p.sub("[REDACTED]", s)` and returns `s`. Verify by reading that source first, then reproduce exactly (patterns: JWT triple-segment, `sk-ant-`, `sk-proj-`, `sk-or-v1-`, `(?i)bearer\s+…`, the `(?i)(token|password|passwd|passphrase|api[_-]?key|secret|client_secret|psk|refresh_token|access_token)…=…` shape, E.164 `(?<!\d)\+\d{10,15}(?!\d)`, pairing/registration/verification code shape). Add a `postgres://|mysql://` credential pattern and a `-----BEGIN … PRIVATE KEY-----` block pattern if not already present in the source.
+- [ ] **Step 6: Implement `redact.py`** — copy `REDACT_PATTERNS` + `redact()` verbatim from `scripts/agent_health_report.py:77-98`. The list is module-level pre-compiled `re.compile` objects; `redact(s)` loops `for p in REDACT_PATTERNS: s = p.sub("[REDACTED]", s)` and returns `s`. Verify by reading that source first, then reproduce exactly (patterns: JWT triple-segment, `sk-ant-`, `sk-proj-`, `sk-or-v1-`, `(?i)bearer\s+…`, the `(?i)(token|password|passwd|passphrase|api[_-]?key|secret|client_secret|psk|refresh_token|access_token)…=…` shape, E.164 `(?<!\d)\+\d{10,15}(?!\d)`, pairing/registration/verification code shape). Add a `postgres://|mysql://` credential pattern and a `-----BEGIN … PRIVATE KEY-----` block pattern if not already present in the source.
 
 - [ ] **Step 7: Run — expect PASS**
 

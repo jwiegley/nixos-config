@@ -7,10 +7,18 @@ and monthly totals in HA's Energy dashboard and Grafana.
 ## Sensors created
 
 ### Detection state
-- `binary_sensor.flume_gpm_in_autofill_range` — true when current GPM ∈ [3, 5]
-- `binary_sensor.pool_autofill_active` — true when ≥ 9 of last 10 min in range AND rolling mean in [3, 5]
-- `sensor.flume_minutes_in_autofill_range_10m` — rolling count (history_stats)
-- `sensor.flume_gpm_10m_mean` — rolling mean (statistics platform)
+
+Entity names and thresholds below reflect the **live** band as of 2026-07-27.
+The `_<N>m` suffix is derived from `autofill.windowMinutes`, so it changes if
+you retune the window (see *Tuning autofill detection*).
+
+- `binary_sensor.flume_gpm_in_autofill_range` — true when current GPM ∈ [1.3, 1.9]
+- `binary_sensor.pool_autofill_active` — true when ≥ 4 of last 5 min in range
+  AND rolling mean in [1.3, 1.9] AND `binary_sensor.irrigation_active` is not
+  `on` AND the domestic hot leg is < 0.1 gpm (the irrigation/hot guards added
+  with the low-flow band)
+- `sensor.flume_minutes_in_autofill_range_5m` — rolling count (history_stats)
+- `sensor.flume_gpm_5m_mean` — rolling mean (statistics platform)
 
 ### Cumulative gallons (monotonic, `state_class: total_increasing`)
 - `sensor.water_pool_autofill_total`
@@ -37,7 +45,8 @@ A leak alert based on `sensor.water_other_daily` is a good v2 addition.
 
 ## Adding or splitting a zone
 
-Edit `services.home-assistant-water-attribution.zones` in `configuration.nix`:
+Edit `services.home-assistant-water-attribution.zones` in
+`hosts/vulcan/default.nix` (there is no `configuration.nix` in this repo):
 
 ```nix
 zones = [
@@ -51,12 +60,18 @@ automatically via `restartTriggers`.
 
 ## Tuning autofill detection
 
+Live values in `hosts/vulcan/default.nix` as of 2026-07-27 (the auto-fill valve
+was replaced 2026-05-26 and now does short 2–9 min top-offs at 1.3–1.9 gpm
+instead of the old valve's long 3–5 gpm fills — see the rationale comment above
+the block in that file). The module's own `mkOption` defaults are still the old
+`3.0 / 5.0 / 10 / 9`:
+
 ```nix
 services.home-assistant-water-attribution.autofill = {
-  gpmMin = 3.0;
-  gpmMax = 5.0;
-  windowMinutes = 10;
-  minMinutesInRange = 9;
+  gpmMin = 1.3;
+  gpmMax = 1.9;
+  windowMinutes = 5;
+  minMinutesInRange = 4;
   enforceMeanCheck = true;
 };
 ```
@@ -77,9 +92,23 @@ Tolerance defaults: 5 gal absolute, 3% relative. Tune via
 
 ## Historical backfill
 
-Discover what's available:
+> **There is no `flume-data` executable on PATH** (verified 2026-07-27). The
+> argparse `prog` name is `flume-data`, but nothing installs a wrapper — the
+> code is only ever run as `python -m flume_data` from the units in
+> `modules/services/flume-data.nix`, which supply `PYTHONPATH`,
+> `FLUME_AUTOFILL_CONFIG` and the Python env that actually has `requests` /
+> `psycopg2` / `websocket-client`. The stock `/run/current-system/sw/bin/python`
+> has none of those.
 
-    sudo -u flume-data /run/current-system/sw/bin/python -m flume_data backfill --discover
+Discover what's available (read-only, safe to run ad hoc — borrow the
+interpreter from the deployed unit so you never hardcode a store path):
+
+    PYENV=$(systemctl cat 'flume-data-backfill@.service' \
+              | sed -n 's|^ExecStart=\(/nix/store/[^ ]*\)/bin/python .*|\1|p')
+    sudo -u flume-data env \
+        PYTHONPATH=/etc/nixos/scripts/flume-data \
+        FLUME_AUTOFILL_CONFIG=/var/lib/flume-data/zones.json \
+        "$PYENV/bin/python" -m flume_data backfill --discover
 
 Backfill a year:
 
@@ -92,11 +121,19 @@ Backfill a specific day (e.g., from a Phase 2 anomaly email):
 Once values look correct in HA's Statistics tab and Grafana, promote into the
 live LTS namespace:
 
-    flume-data backfill --promote --through 2026-05-21
+    ... -m flume_data backfill --promote --through 2026-05-21
 
 Rollback:
 
-    flume-data backfill --unpromote --through 2026-05-21
+    ... -m flume_data backfill --unpromote --through 2026-05-21
+
+Unlike `--discover`, both of these write to Home Assistant over its WebSocket
+API and read the HA token from `$CREDENTIALS_DIRECTORY/ha_token`
+(`flume_data/backfill.py:343,386,469`). They therefore have to run under systemd
+with the same `LoadCredential=` set as `flume-data-backfill@.service` — a bare
+shell invocation raises `KeyError: 'CREDENTIALS_DIRECTORY'`. Note also that
+`--unpromote` ignores `--through`: HA's `recorder/clear_statistics` is not
+range-filtered, so it wipes the whole backfilled namespace.
 
 ## v1 backfill scope and limitations
 

@@ -10,8 +10,10 @@ The counter is reset to 0 whenever the log file is rotated/truncated
 (inode changes), which Prometheus' increase() handles gracefully.
 
 Why a separate signal from the e2e probe:
-  - The e2e probe runs every 5 min and tests the chat path proactively
-    with a synthetic prompt.
+  - The e2e probe runs every 15 min (hosts/vulcan/default.nix sets
+    services.hermesE2eChatProbe.intervalSeconds = 900, overriding the
+    module's 300s default) and tests the chat path proactively with a
+    synthetic prompt. This counter refreshes every 60s.
   - This counter records ACTUAL user-visible failures as they happen
     — including transients the probe might miss between intervals.
     Two failures within a probe interval would each be counted here

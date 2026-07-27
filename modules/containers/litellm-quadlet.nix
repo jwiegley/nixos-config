@@ -60,7 +60,12 @@
   services.redis.servers.litellm = {
     enable = true;
     port = 8085;
-    bind = "127.0.0.1"; # Rootless containers access via host.containers.internal → 127.0.0.1
+    # The rootless litellm container runs on slirp4netns with
+    # allow_host_loopback, so it reaches this loopback bind at 10.0.2.2:8085
+    # (see cache_params in modules/services/litellm-settings.nix). NOT via
+    # host.containers.internal — that name is pinned to the podman0 address
+    # 10.88.0.1 host-wide in quadlet.nix, which this bind does not answer on.
+    bind = "127.0.0.1";
     settings = {
       protected-mode = "yes"; # Re-enable since only localhost
     };

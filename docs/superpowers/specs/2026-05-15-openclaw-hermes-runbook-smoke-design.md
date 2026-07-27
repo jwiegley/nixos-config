@@ -1,5 +1,11 @@
 # OpenClaw ↔ Hermes Integration: Runbook + Smoke Test — Design Spec
 
+> **Archival — 2026-05-15.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `docs/openclaw-hermes-integration.md`, `modules/monitoring/services/openclaw-hermes-smoke.nix`).
+
 **Status:** Approved by user, awaiting spec-reviewer round.
 **Sibling docs:**
 - `/etc/nixos/docs/superpowers/plans/2026-05-12-openclaw-hermes-mcp-bridge.md` — the original bridge plan; this spec closes its acceptance-criterion #7 (runbook).

@@ -168,7 +168,9 @@ in
     aws-keys = { };
     restic-password = { };
     # Note: Restic metrics collection uses aws-keys and restic-password
-    # via the textfile collector approach (see prometheus-monitoring.nix)
+    # via the textfile collector approach (see
+    # modules/monitoring/services/restic-metrics.nix:37-44; there is no
+    # prometheus-monitoring.nix in this repo)
   };
 
   # Staggered start times (20-min spacing from 02:10) so the nine restic jobs

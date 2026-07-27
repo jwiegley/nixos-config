@@ -1,5 +1,11 @@
 # Hermes Self-Heal + Nightly Report — Implementation Plan
 
+> **Archival — 2026-05-20.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-self-heal.nix`, `modules/services/hermes-nightly-report.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring Hermes Agent up to OpenClaw parity for automated health remediation (Alertmanager-webhook-driven Python daemon with deterministic→AI escalation and L3-allowlisted actions), and add a daily emailed nightly report so the operator sees Hermes' state every morning.

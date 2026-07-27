@@ -7,7 +7,7 @@
 #
 # Run as:
 #   sudo systemd-run --pipe \
-#     -p EnvironmentFile=/run/secrets-rendered/github-mirror-env \
+#     -p EnvironmentFile=/run/secrets/rendered/github-mirror-env \
 #     -E GITEA_URL=https://gitea.vulcan.lan \
 #     -E GITEA_USER=johnw \
 #     -E GITHUB_USER=jwiegley \

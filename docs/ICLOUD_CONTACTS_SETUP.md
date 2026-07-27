@@ -1,5 +1,16 @@
 # iCloud Contact Syncing Setup for nasimw
 
+> **Status (2026-07-27):** this plan has been **implemented**. The nasimw
+> iCloud ↔ Radicale pair, the four `vdirsyncer-nasimw/*` SOPS secrets and the
+> 15-minute timer are all live in `modules/services/vdirsyncer.nix`
+> (secrets `:66-93`, config `:145-175`, timer `:235-244`). Read this as a record
+> of how it was set up, not as work still to do. Two things drifted since it was
+> written: the johnw pair is now named `contacts_johnw` with storage
+> `radicale_contacts_johnw` and secrets under `vdirsyncer-johnw/…`, and the SOPS
+> store is `/etc/nixos/secrets/secrets.yaml` (a separate git repo consumed as
+> the `secrets` flake input) — there is no `/etc/nixos/secrets.yaml`. Both are
+> corrected inline below.
+
 This document provides complete instructions for adding iCloud contact synchronization for the `nasimw` user to the existing vdirsyncer configuration.
 
 ## Overview
@@ -69,7 +80,7 @@ nasimw:$2y$05$abcdefghijklmnopqrstuvwxyz...
 Add this line to the SOPS secrets file:
 
 ```bash
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 ```
 
 In the editor, locate the `radicale:` section and add nasimw's credentials to the `users-htpasswd` field:
@@ -87,11 +98,15 @@ Save and exit (Ctrl+O, Enter, Ctrl+X for nano).
 
 ## Step 2: Add iCloud Credentials to SOPS
 
-Add the following new secrets to `/etc/nixos/secrets.yaml`:
+Add the following new secrets to `/etc/nixos/secrets/secrets.yaml`:
 
 ```bash
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 ```
+
+Note that `secrets/` is its own git repo pulled in as the `secrets` flake input,
+so an edit only reaches the system once it is committed there and the flake input
+is re-locked.
 
 Add these entries under a new `vdirsyncer-nasimw:` section:
 
@@ -203,6 +218,13 @@ In the `environment.etc."vdirsyncer/config".text` section (around line 52), add 
   '';
 ```
 
+> **Drift note (2026-07-27):** the johnw half of the snippet above is no longer
+> what the module contains. Live names are `[pair contacts_johnw]`,
+> `[storage radicale_contacts_johnw]`, and secrets `vdirsyncer-johnw/radicale-*`
+> and `vdirsyncer-johnw/fastmail-*` (`modules/services/vdirsyncer.nix:110-143`).
+> The nasimw half matches the deployed configuration exactly
+> (`modules/services/vdirsyncer.nix:145-175`).
+
 **Key Configuration Details:**
 
 - **`collections = ["from b"]`**: Auto-discover all contact collections from iCloud
@@ -235,14 +257,14 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 ### 5a. Check Secret Deployment
 
 ```bash
-# Verify secrets are deployed
-ls -la /run/secrets/ | grep vdirsyncer-nasimw
+# Verify secrets are deployed (nested SOPS keys become a directory)
+sudo ls -la /run/secrets/vdirsyncer-nasimw/
 
-# Should show:
-# -r-------- 1 vdirsyncer vdirsyncer ... vdirsyncer-nasimw-icloud-password
-# -r-------- 1 vdirsyncer vdirsyncer ... vdirsyncer-nasimw-icloud-username
-# -r-------- 1 vdirsyncer vdirsyncer ... vdirsyncer-nasimw-radicale-password
-# -r-------- 1 vdirsyncer vdirsyncer ... vdirsyncer-nasimw-radicale-username
+# Should show (verified 2026-07-27):
+# -r-------- 1 vdirsyncer vdirsyncer ... icloud-password
+# -r-------- 1 vdirsyncer vdirsyncer ... icloud-username
+# -r-------- 1 vdirsyncer vdirsyncer ... radicale-password
+# -r-------- 1 vdirsyncer vdirsyncer ... radicale-username
 ```
 
 ### 5b. Check Service Status
@@ -368,7 +390,7 @@ sudo journalctl -u vdirsyncer.service | grep -i auth
 
 2. Run manual sync with verbose output:
    ```bash
-   sudo -u vdirsyncer vdirsyncer --config /etc/vdirsyncer/config sync -v contacts_nasimw
+   sudo -u vdirsyncer vdirsyncer -v DEBUG --config /etc/vdirsyncer/config sync contacts_nasimw
    ```
 
 3. Clear sync state and re-discover:
@@ -388,7 +410,7 @@ sudo journalctl -u vdirsyncer.service | grep -i auth
 1. Verify htpasswd entry was added correctly:
    ```bash
    # Check deployed htpasswd file (don't decrypt here, just verify it deployed)
-   ls -la /run/secrets/radicale-users-htpasswd
+   sudo ls -la /run/secrets/radicale/users-htpasswd
    ```
 
 2. Check Radicale logs:
@@ -453,7 +475,11 @@ Visual status dashboard available at https://vdirsyncer.vulcan.lan shows:
 
 ### Alerts
 
-Check `/etc/nixos/modules/monitoring/services/vdirsyncer-exporter.nix` for configured Prometheus alerts.
+Prometheus alerts live in `/etc/nixos/modules/services/vdirsyncer-alerts.nix`
+(VdirsyncerNotSyncing, VdirsyncerSyncUnhealthy, VdirsyncerNotSyncingCritical,
+VdirsyncerNoCollections, VdirsyncerSlowSync);
+`/etc/nixos/modules/monitoring/services/vdirsyncer-exporter.nix` defines the
+scrape target and the metrics, not the alerts.
 
 ---
 
@@ -491,7 +517,7 @@ The vdirsyncer service runs with extensive systemd hardening:
 | vdirsyncer config | `/etc/vdirsyncer/config` |
 | vdirsyncer state | `/var/lib/vdirsyncer/` |
 | Radicale data | `/var/lib/radicale/collections/` |
-| SOPS secrets | `/etc/nixos/secrets.yaml` |
+| SOPS secrets | `/etc/nixos/secrets/secrets.yaml` (separate git repo, `secrets` flake input) |
 | Deployed secrets | `/run/secrets/` |
 | NixOS module | `/etc/nixos/modules/services/vdirsyncer.nix` |
 | Status exporter | `/etc/nixos/scripts/vdirsyncer-status.py` |

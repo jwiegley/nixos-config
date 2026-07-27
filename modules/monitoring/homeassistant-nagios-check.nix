@@ -47,7 +47,12 @@ in
     checkScriptWithToken
   ];
 
-  # Example systemd timer for periodic checks (optional - can be used without Nagios)
+  # Periodic integration health check. This is NOT an example: the timer below
+  # is unconditionally wantedBy=timers.target, so homeassistant-health-check
+  # runs every 5 minutes in addition to the Nagios service definition that
+  # invokes the same wrapper (modules/services/nagios.nix:1512 defines the
+  # check_homeassistant_integration_status command; :2339 is the "Home
+  # Assistant - Integration Status" service that uses it).
   systemd.services.homeassistant-health-check = {
     description = "Home Assistant Integration Health Check";
     after = [

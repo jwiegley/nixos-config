@@ -1,3 +1,13 @@
+Reference transcript: a fully-passing run of scripts/email-tester.py, captured
+2025-11-07. Nothing consumes this file programmatically — it is here so you know
+what "good" looks like.
+
+Note (2026-07-27): the script has grown since this capture. It now registers ten
+tests (the five below plus retrain-spam, retrain-ham, litellm, gpt-spam and
+gpt-ham), so a current full run prints "Overall: 11/11 tests passed" — the 6/6
+below is not the expected total any more. Use `email-tester.py --list` for the
+current registry.
+
 ~ ❯ sudo /etc/nixos/scripts/email-tester.py
 ======================================================================
 EMAIL PIPELINE TESTER

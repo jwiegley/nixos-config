@@ -6,21 +6,34 @@ This document outlines how to manage certificates using Step CA on the vulcan ho
 
 Step CA is configured to provide a private certificate authority for issuing TLS and SSH certificates within the local network.
 
-## IMPORTANT: Nginx Wildcard Certificate
+## IMPORTANT: Nginx Certificates
 
-The nginx service uses a wildcard certificate that must be renewed annually due to Apple/Safari certificate requirements.
+> **Status (2026-07-27):** nginx no longer uses a single wildcard certificate.
+> `/var/lib/nginx-certs/` now holds **per-vhost** certificates, and the wildcard
+> files this section used to describe (`vulcan-1year.crt`, `vulcan-1year.key`,
+> `vulcan-fullchain.crt`) do not exist any more. The manual OpenSSL procedure
+> under "Nginx Certificate Renewal Process" below is kept for background only —
+> renew with `certs/renew-certificate.sh` (one domain) or
+> `certs/renew-nginx-certs.sh` (bulk), as CLAUDE.md instructs.
 
-### Current Nginx Certificate
-- **Certificate Chain**: `/var/lib/nginx-certs/vulcan-fullchain.crt` (includes root + intermediate + leaf)
-- **Private Key**: `/var/lib/nginx-certs/vulcan-1year.key`
-- **Coverage**: `vulcan.lan`, `vulcan`, `*.vulcan.lan`
+Certificates still have to be renewed annually because of Apple/Safari
+certificate requirements.
+
+### Current Nginx Certificates
+- **Location**: `/var/lib/nginx-certs/<host>.vulcan.lan.crt` + `.key`, one pair
+  per vhost (49 pairs as of 2026-07-27); the bare host is
+  `vulcan.lan.crt` / `vulcan.lan.key` (`modules/services/web.nix:74-75`)
+- **Nix wiring**: most vhosts get their paths from the `nginxSSLPaths` helper in
+  `modules/lib/common.nix:50-53`
+- **Coverage**: one CN/SAN per certificate (no wildcard)
 - **Validity**: 365 days (Apple requires ≤398 days)
-- **Standards Compliant**: Includes all required X.509v3 extensions
-- **Browser Trust Setup**: See [BROWSER_TRUST.md](BROWSER_TRUST.md) for detailed instructions
+- **Bulk renewal**: `certs/renew-nginx-certs.sh` covers 37 domains; see that
+  script's header comment for the vhosts it does *not* cover
+- **Browser Trust Setup**: see "Trust the Root Certificate" below
 
 To check expiration:
 ```bash
-nix-shell -p openssl --run "openssl x509 -in /var/lib/nginx-certs/vulcan-1year.crt -noout -dates"
+nix-shell -p openssl --run "openssl x509 -in /var/lib/nginx-certs/vulcan.lan.crt -noout -dates"
 ```
 
 ## Configuration
@@ -58,7 +71,15 @@ The Step CA service is configured in `/etc/nixos/modules/services/certificates.n
 - Accessible by step-ca user/group only
 - Located at `/run/secrets/step-ca-password`
 
-## Nginx Certificate Renewal Process
+## Nginx Certificate Renewal Process (historical wildcard workflow)
+
+> **Historical (superseded 2026-07-27).** The steps below operate on the
+> `vulcan-1year.*` / `vulcan-fullchain.crt` wildcard files, which no longer
+> exist, and they pipe the SOPS CA password through the shell. Use
+> `certs/renew-certificate.sh <domain> -o /var/lib/nginx-certs --owner nginx:nginx`
+> (or `certs/renew-nginx-certs.sh` for all 37 nginx domains at once) instead —
+> that script handles the SOPS password internally. Kept here for background on
+> why the certificates carry the extensions they do.
 
 ### When to Renew
 Renew the nginx wildcard certificate when it has 30 days or less remaining validity.
@@ -230,10 +251,16 @@ step ca provisioner list \
 ```
 
 ### List Issued Certificates
+
+There is no `step ca certificate list` subcommand (`step ca` offers health,
+init, bootstrap, token, certificate, rekey, renew, revoke, provisioner, sign,
+root, roots, federation, acme, policy, admin — verified against step-cli on this
+host, 2026-07-27). To see what has been issued, read the CA log or inspect the
+files on disk:
+
 ```bash
-step ca certificate list \
-  --ca-url https://localhost:8443 \
-  --root /var/lib/step-ca-state/certs/root_ca.crt
+sudo journalctl -u step-ca | grep -i certificate
+ls -la /var/lib/nginx-certs/
 ```
 
 ### Revoke a Certificate
@@ -269,6 +296,15 @@ step certificate verify service.crt \
 ```
 
 ## Automatic Certificate Renewal with systemd
+
+> **Note (2026-07-27):** this host already has Nix-managed renewal timers in
+> `modules/services/certificate-automation.nix`:
+> `postgresql-cert-renewal.timer` (monthly, 1st 03:00),
+> `nginx-cert-renewal.timer` (1st 03:30), `postfix-cert-renewal.timer`
+> (1st 04:00), `dovecot-cert-renewal.timer` (1st 04:30) and
+> `certificate-validation.timer` (daily 06:00). Add new renewals there rather
+> than hand-writing units under `/etc/systemd/system`, which NixOS does not
+> manage. The generic recipe below is kept as a reference for non-NixOS hosts.
 
 Create a systemd timer for automatic renewal:
 
@@ -418,8 +454,9 @@ sudo journalctl -xeu step-ca --since "5 minutes ago"
 ls -la /var/lib/step-ca-state/
 ls -la /run/secrets/step-ca-password
 
-# Check configuration syntax
-sudo -u step-ca step-ca /etc/smallstep/ca.json --validate
+# Check configuration syntax (step-ca has no --validate flag; the live config
+# is the Nix-generated /etc/smallstep/ca.json symlink)
+jq . /etc/smallstep/ca.json
 ```
 
 #### Certificate Requests Fail
@@ -461,7 +498,10 @@ sudo nixos-rebuild switch --flake .#vulcan
 
 ### Service Dependencies
 - `step-ca-init.service` runs before `step-ca.service`
-- Both services depend on `sops-install-secrets.service`
+- `step-ca-init.service` is ordered after (and wants) `sops-install-secrets.service`
+  (`modules/services/certificates.nix:142-143`); `step-ca.service` itself has no
+  such ordering, but is listed in the secret's `restartUnits` so it restarts when
+  `step-ca-password` changes (`:81`)
 - State directories are managed by systemd with StateDirectory
 
 ### Permissions
@@ -495,9 +535,9 @@ services.postfix = {
 
 1. **Localhost Only**: CA only listens on 127.0.0.1, not exposed to network
 2. **Password Protection**: Provisioner requires password for certificate issuance (stored in SOPS)
-3. **Short-lived Certificates**: Default duration is 5 minutes for testing, recommended 90 days for production
+3. **Certificate Durations**: TLS claims in `modules/services/certificates.nix:53-56` are min 5m / default 2160h (90 days) / max 8760h (1 year); the nginx certificates are minted at 365 days by `certs/renew-certificate.sh`
 4. **Secure Storage**: Private keys stored with restrictive permissions (mode 0700)
-5. **Regular Rotation**: Consider rotating CA password periodically (see PASSWORDS.md)
+5. **Regular Rotation**: Consider rotating the CA password periodically — it is the SOPS secret `step-ca-password`, edited with `sops /etc/nixos/secrets/secrets.yaml` (there is no PASSWORDS.md in this repo, and no `/etc/nixos/secrets.yaml` — the encrypted store lives in the separate `secrets` flake input)
 6. **Audit Logging**: Monitor certificate issuance via journalctl
 7. **Network Isolation**: Only expose to network if absolutely necessary
 8. **Backup**: Regular backup of `/var/lib/step-ca-state/` for disaster recovery

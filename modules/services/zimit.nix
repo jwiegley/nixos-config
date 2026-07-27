@@ -953,7 +953,8 @@ in
     };
   };
 
-  # Zimit job runner timer (checks for pending jobs every 5 minutes)
+  # Zimit job runner service (fired by the timer below, which checks for
+  # pending jobs every 5 minutes)
   systemd.services.zimit-job-runner = {
     description = "Process pending Zimit archive jobs";
     after = [
@@ -1147,7 +1148,8 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe kiwixUrlMapGenerator;
-      # Reload nginx after updating the map file (use -f to not fail if nginx isn't running)
+      # Reload nginx after updating the map file (the leading "-" tells systemd
+      # to ignore the failure if nginx isn't running)
       ExecStartPost = "-${pkgs.systemd}/bin/systemctl reload nginx.service";
       User = "root";
       Group = "root";
@@ -1235,10 +1237,12 @@ in
   ];
 
   # TODO: Prometheus alerting rules for Zimit
-  # Currently disabled due to NixOS concatenating all rule files into one,
-  # causing duplicate 'groups' keys. Need to restructure the alerting module.
-  # Rules to add later:
-  # - ZimitJobsFailed: Alert when failed jobs exist
-  # - ZimitJobsStuck: Alert when jobs pending > 6h
-  # - ZimitArchiveStorageLarge: Alert when storage > 100GB
+  # These were originally blocked because NixOS concatenated all rule files
+  # into one, causing duplicate 'groups' keys, which needed the alerting module
+  # restructured. That blocker is gone: rules now live in per-service files
+  # under modules/monitoring/alerts/, and as of 2026-07-27 zimit.yaml already
+  # ships two of the three sketched here:
+  # - ZimitJobsFailed: Alert when failed jobs exist            (DONE)
+  # - ZimitJobsStuck: Alert when jobs pending > 6h             (DONE, at > 24h)
+  # - ZimitArchiveStorageLarge: Alert when storage > 100GB     (still missing)
 }

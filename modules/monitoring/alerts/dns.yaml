@@ -417,17 +417,18 @@ groups:
   # public traffic flows. cloudflared_tunnel_ha_connections is the gauge that
   # surfaces this.
   #
-  # POST-DEPLOY VERIFICATION REQUIRED: these rules reference
-  # cloudflared_tunnel_ha_connections, which does NOT exist in the TSDB until
+  # POST-DEPLOY VERIFICATION: DONE (2026-07-27). These rules reference
+  # cloudflared_tunnel_ha_connections, which does not exist in the TSDB until
   # the tunnel restarts with TUNNEL_METRICS set and Prometheus scrapes the new
   # job. The metric name is the documented cloudflared standard
   # (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/monitor-tunnels/metrics/),
-  # but the exact name/label shape on this cloudflared build (2025.11.1) MUST be
-  # confirmed live after switch: query `cloudflared_tunnel_ha_connections` and
-  # `count(up{job="cloudflared"})`. If the metric name differs, update the exprs
-  # below. Until the series exists these alerts simply do not fire (no series),
-  # so they are safe to ship; the case of a totally-dead tunnel is meanwhile
-  # covered by the host-wide TargetDown (up{job="cloudflared"}==0).
+  # and the name/label shape was confirmed live on this cloudflared build
+  # (2025.11.1): `cloudflared_tunnel_ha_connections` == 4 on instance
+  # 127.0.0.1:9301 with up{job="cloudflared"} == 1, so the exprs below now
+  # match real series. If a cloudflared upgrade ever renames the metric these
+  # alerts go silently dormant (no series → no fire) — re-run those two queries
+  # after any upgrade. The case of a totally-dead tunnel is meanwhile covered
+  # by the host-wide TargetDown (up{job="cloudflared"}==0).
   - name: cloudflared_tunnel
     interval: 30s
     rules:

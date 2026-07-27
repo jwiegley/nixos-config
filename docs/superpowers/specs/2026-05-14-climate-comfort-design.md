@@ -1,5 +1,10 @@
 # Climate Comfort — adaptive HVAC setpoint blend
 
+> **Archival — 2026-05-14.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 **Status:** Approved 2026-05-14
 **Author:** John Wiegley (with Claude design assistance)
 

@@ -40,7 +40,9 @@ let
   #
   # Static facts (verified live 2026-06-10):
   #   openclaw  microvm.mem = 4096 MiB, microvm.vcpu = 4  (openclaw-microvm.nix:28-29)
-  #   hermes    microvm.mem = 3072 MiB, microvm.vcpu = 1  (hermes-vm.nix:349,351)
+  #   hermes    microvm.mem = 3072 MiB, microvm.vcpu = 1  (hermes-vm.nix:355,357
+  #             — vcpu is not assigned; 357 is the comment recording that it is
+  #             deliberately left at the microvm.nix default of 1)
   # The cgroup MemoryMax is `infinity` for both (no cgroup ceiling); the REAL
   # ceiling is the QEMU memory allocation (microvm.mem), so that is what the
   # *_ceiling_bytes gauge encodes.

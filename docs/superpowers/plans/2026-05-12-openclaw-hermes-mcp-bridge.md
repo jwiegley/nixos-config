@@ -1,5 +1,11 @@
 # OpenClaw ↔ Hermes MCP Bridge Implementation Plan
 
+> **Archival — 2026-05-12.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `pkgs/hermes-mcp/`, `modules/services/hermes-mcp.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Hermes Agent invokable from OpenClaw as a multi-tool MCP server, exposing six tools (`ask_hermes`, `start_session`, `continue_session`, `list_sessions`, `summarize_session`, `delete_session`) over HTTPS/SSE, with conversation state persisted across calls.

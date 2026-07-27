@@ -1,5 +1,11 @@
 # OpenUV Pool-Time Implementation Plan
 
+> **Archival — 2026-05-12.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see the `openuv_forecast` REST sensor in `modules/services/home-assistant.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Pull OpenUV `/forecast` once daily into a HA REST sensor; have Node-RED derive (a) a sunrise summary at 08:00 announcing the predicted UV=3 descending crossing time, and (b) a scheduled "pool time" TTS event at that crossing, gated on pool water temp ≥ 82 °F.
@@ -227,7 +233,7 @@ git commit -m "feat(hass): add OpenUV /forecast REST sensor with daily scan inte
 
 ## Task 4: Create HA daily refresh automation via the UI
 
-**Why no Nix change in this task:** `home-assistant.nix:690` declares `automation = "!include automations.yaml"`. Automations live in `/var/lib/hass/automations.yaml`, which is UI-managed and not git-tracked on this host. Adding the automation through the HA UI is the established convention — converting to an inline Nix list would break UI editability for all existing automations.
+**Why no Nix change in this task:** `home-assistant.nix:790` declares `automation = "!include automations.yaml"`. Automations live in `/var/lib/hass/automations.yaml`, which is UI-managed and not git-tracked on this host. Adding the automation through the HA UI is the established convention — converting to an inline Nix list would break UI editability for all existing automations.
 
 **Files:**
 - Modify (via HA UI Deploy, which writes): `/var/lib/hass/automations.yaml`

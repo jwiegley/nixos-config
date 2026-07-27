@@ -42,18 +42,28 @@ drop a pending alert window.
 
 - **Door-device low battery** — Home tab, `sensor.{front_door,side_door,garage}_battery < 20%` → notify.
 - **Pool salinity low** — Pool tab, `sensor.intellichlor_1_salt` → email + notify.
-- **Pool heater low water flow** — dedicated *Pool Heater Alarm* tab (IntelliCenter
-  UltraTemp Low Water Flow → turn off heater + notify, auto-disarm).
+- **Pool heater low water flow** — the *Pool Heater Alarm* flow (IntelliCenter
+  UltraTemp Low Water Flow → turn off heater + notify, auto-disarm). It was once
+  its own tab; as of 2026-07-27 it lives on the **Pool** tab
+  (`c24adcfdbba9413b`), not a dedicated one.
 - **Departure security** — *Away* tab: on everyone-away, lock doors + ADT arm away +
   HVAC off/eco (proactive remediation).
 - **Flume leak false-positive suppression** — the `flume-data` Postgres DB +
   `flume_data/classify_v2.py` classifier reads HA state to suppress spurious leaks.
 
-### New `HA Safety` tab (the gap-closers)
+### The `HA Safety` gap-closers
 
 These are the concerns that had **no** replacement after the Prometheus rules were
 removed. Implemented as a single persist-and-scan flow (one `server-state-changed`
-feeding a persisted `flow.safety` map; a 1-minute `chronos` scan evaluates dwell):
+feeding a persisted `flow.safety` map; a 1-minute `chronos` scan evaluates dwell).
+
+**Where it actually lives (verified 2026-07-27):** *not* a separate `HA Safety`
+tab — the flow was built on the existing **Away** tab (`ba13e5bae3dfce24`),
+alongside the departure-security logic it shares `binary_sensor.everyone_away`
+with. Look for the nodes `any monitored entity changed` → `record safety state`
+and `every 1 min` → `read everyone_away?` → `evaluate safety`. The entity /
+dwell / severity table below matches the deployed `CONFIG` and `RULES` blocks
+exactly.
 
 | Alert | Entity | Bad state | Dwell | Severity |
 |---|---|---|---|---|
@@ -80,7 +90,7 @@ the four grill rules (`GrillTemperatureDangerouslyHigh`, `GrillOnNobodyHome`,
 
 The 23 removed rules and their thresholds are preserved in git history at
 `modules/monitoring/alerts/home-assistant.yaml` (last present before the 2026-06-01
-removal commit). They informed the `HA Safety` tab above. Note two correctness fixes
+removal commit). They informed the `HA Safety` flow above. Note two correctness fixes
 that were applied during migration: pool/probe temperatures are stored in **°F** in
 VictoriaMetrics (the old rules' Celsius thresholds were wrong), and the grill rules were
 dropped because their entities never existed.

@@ -1,5 +1,10 @@
 # NixOS Configuration Enhancement
 
+> **Archival — 2025-09-24.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 Ultrathink. Use nix-pro to proceed with analysis or implementation of the
 following design within the current NixOS installation.
 

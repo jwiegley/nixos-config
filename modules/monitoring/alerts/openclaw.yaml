@@ -2,8 +2,8 @@ groups:
   - name: openclaw_availability
     interval: 60s
     rules:
-      # Today's regression symptom: the discord channel plugin isn't in
-      # the most-recent [gateway] ready line.
+      # The 2026-04-22 regression symptom: the discord channel plugin isn't
+      # in the most-recent [gateway] ready line.
       - alert: OpenClawDiscordPluginMissing
         expr: openclaw_channel_plugin_loaded{channel="discord"} == 0
         for: 10m

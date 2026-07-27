@@ -68,9 +68,11 @@ sub_state() { sc SubState "$1"; }
 load_state() { sc LoadState "$1"; }
 result_of() { sc Result "$1"; }
 
-# Convert a systemd timestamp property (ExecMainStartTimestamp etc.) to epoch
-# seconds, or empty on failure. Uses the *Monotonic variants where possible for
-# robust deltas.
+# Read a systemd timestamp property off a unit (mono_us <property> <unit>), or
+# empty on failure. No conversion is done here: callers pass the *Monotonic
+# variants (ExecMainStartTimestampMonotonic, LastTriggerUSecMonotonic), whose
+# value is microseconds since boot, and divide by 1000000 themselves —
+# monotonic deltas are more robust than parsing the wall-clock timestamps.
 mono_us() { systemctl show "$2" -p "$1" --value 2>/dev/null; }
 
 NODE_EXPORTER_URL="http://127.0.0.1:9100/metrics"
@@ -111,7 +113,11 @@ fi
 
 # ===========================================================================
 # (b) NetworkManager-wait-online — active(exited), success, runtime sane (<=65s)
-#     Fix: commit da1946b — upstream `nm-online -s -q -t 60` (old `-x` burned 60s)
+#     Fix: commit da1946b — upstream `nm-online -s -q -t 60`. NB the "old `-x`
+#     burned 60s" theory was DISPROVED by the 2026-06-08 boot capture: `-x`
+#     fast-failed rc=1 in ~62ms while NM was still connecting, releasing
+#     network-online.target ~10s before the link was up. The <=65s bound below
+#     is just a sanity ceiling on the current `-s -q -t 60` form.
 # ===========================================================================
 check "NetworkManager-wait-online sane"
 nmw_active=$(active_state NetworkManager-wait-online)

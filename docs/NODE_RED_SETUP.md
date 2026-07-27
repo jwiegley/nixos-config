@@ -32,8 +32,12 @@ The following configuration has been completed:
 ### 2. Add SOPS Secret for Home Assistant Token
 
 ```bash
-# Edit the encrypted secrets file
-sops /etc/nixos/secrets.yaml
+# Edit the encrypted secrets file. The encrypted store is a SEPARATE git repo
+# consumed as the `secrets` flake input — there is no /etc/nixos/secrets.yaml,
+# and an edit only takes effect once committed there and re-locked
+# (`nix flake update secrets`).
+cd /etc/nixos
+sops secrets/secrets.yaml
 
 # Add the following under the home-assistant section:
 home-assistant:
@@ -77,7 +81,12 @@ Open your browser and navigate to:
 https://nodered.vulcan.lan
 ```
 
-The Node-RED editor should now be accessible.
+The Node-RED editor should now be accessible. Since the deployment of
+`config/node-red-settings.js`, the editor and the Admin API are behind
+`adminAuth`: you will be prompted for the username/password held in
+`/run/secrets/node-red/{admin-username,admin-password-hash}`, and editor login
+sessions expire after 7 days. Automation can instead present one of the bearer
+tokens in `/run/secrets/node-red/api-tokens`.
 
 ### 6. Install Home Assistant WebSocket Nodes
 
@@ -182,8 +191,10 @@ However, for most use cases, you should configure the Home Assistant WebSocket n
 ## Firewall Configuration
 
 Node-RED is accessible:
-- **Direct HTTP**: http://vulcan.lan:1880 (local network only via end0)
-- **HTTPS Proxy**: https://nodered.vulcan.lan (via nginx)
+- **HTTPS Proxy**: https://nodered.vulcan.lan (via nginx) — this is the only way in
+- **Direct HTTP**: none. `config/node-red-settings.js` sets `uiHost: "127.0.0.1"`,
+  so Node-RED binds `127.0.0.1:1880` only; no port is opened on the LAN
+  interface and `http://vulcan.lan:1880` does not answer.
 
 ## Troubleshooting
 
@@ -269,7 +280,8 @@ Owned by the `node-red` user and group.
 
 1. **Token Security**: The Home Assistant token is encrypted with SOPS and only readable by the `node-red` user
 2. **SSL/TLS**: All communication uses SSL certificates from Step-CA
-3. **Network Access**: Direct access limited to local network interface (end0)
+3. **Network Access**: Node-RED binds loopback only (`127.0.0.1:1880`); all access
+   goes through the nginx HTTPS vhost
 4. **User Isolation**: Node-RED runs as dedicated `node-red` user
 
 ## Integration Examples

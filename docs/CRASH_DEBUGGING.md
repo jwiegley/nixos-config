@@ -3,7 +3,8 @@
 This document describes the debugging infrastructure configured on vulcan to help diagnose spontaneous reboots and system crashes.
 
 **Configuration Module:** `/etc/nixos/modules/core/crash-debug.nix`
-**Date Implemented:** 2024-11-24
+**Date Implemented:** 2025-11-24 (commit `17810eb`, "crash-debug: Add comprehensive
+crash debugging infrastructure")
 
 ---
 
@@ -96,6 +97,14 @@ Traditional syslog files for kernel and system messages.
 
 Captures kernel memory dump on panic for post-mortem analysis.
 
+> **Status (2026-07-27): declared but NOT armed on this host.** `boot.crashDump.enable
+> = true` and `crashkernel=512M` is on the live `/proc/cmdline`, but
+> `/sys/kernel/kexec_crash_loaded` reads `0` and `/var/crash/` does not exist — so no
+> crash kernel is loaded and no dump would be written. The module itself warns that
+> kdump "may not work on all ARM64 systems"; treat this path as unverified on
+> aarch64/Asahi. The journald / rsyslog / sar / atop paths below are the ones that
+> actually carry post-crash evidence today.
+
 **Configuration:**
 - Reserved memory: 512MB
 - NMI watchdog: enabled (panics on hard lockup)
@@ -178,10 +187,14 @@ sar 1 10    # Every 1 second, 10 iterations
 Detailed system and per-process resource monitoring.
 
 **Configuration:**
-- Interval: 10 seconds
+- Interval: `/etc/atoprc` sets `interval 10` (10 seconds) — that is the default for
+  *interactive* `atop`. The logging **daemon** samples every 600 s: the upstream
+  `atop.service` passes `LOGINTERVAL=600` as atop's interval argument, which wins
+  over `/etc/atoprc`. Historical files therefore have 10-minute resolution.
 - Process accounting: enabled
 - Log location: `/var/log/atop/`
-- Retention: 7 days
+- Retention: 28 days (`LOGGENERATIONS=28` in `atop.service`; its `ExecStartPost`
+  deletes `atop_*` older than that on each daily restart)
 
 **Useful Commands:**
 ```bash
@@ -394,7 +407,7 @@ This system runs on Apple Silicon (aarch64) via Asahi Linux. Some considerations
 ## Related Configuration Files
 
 - `/etc/nixos/modules/core/crash-debug.nix` - Main crash debugging config
-- `/etc/nixos/modules/core/system.nix` - systemd-coredump config (lines 104-136)
+- `/etc/nixos/modules/core/system.nix` - systemd-coredump config (lines 150-182)
 - `/etc/nixos/modules/core/memory-limits.nix` - Memory management settings
 - `/etc/systemd/journald.conf` - Journald runtime config
 - `/etc/atoprc` - atop configuration

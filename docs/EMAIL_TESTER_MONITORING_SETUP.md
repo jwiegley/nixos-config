@@ -1,14 +1,38 @@
 # Email Tester - Complete Monitoring Setup
 
+> **Status (2026-07-27): this is a PROPOSAL, not a description of the running
+> system.** None of the automated monitoring below was ever deployed. What
+> actually exists is `modules/services/email-tester-manual.nix` (imported at
+> `hosts/vulcan/default.nix:121`), whose header states the reason:
+> *"Does NOT include automated monitoring (timer, Prometheus, Nagios) to avoid
+> over-training rspamd on test messages."* It provides only the SOPS secret
+> `email-tester-imap-password` and an `email-tester` wrapper on `PATH`.
+>
+> Concretely, **none of these exist**: `email-tester.service` / `.timer`,
+> `email-tester-exporter`, the `email_tester_*` metrics, the `EmailTester*`
+> alerts, the Nagios `check_email_tester` command, and the four modules the
+> "Import All Modules" step tells you to add (`modules/services/email-tester.nix`,
+> `modules/services/nagios-email-tester-check.nix`,
+> `modules/services/prometheus-email-tester-exporter.nix`,
+> `modules/monitoring/email-tester-alerts.nix`).
+>
+> **Working today:** `sudo email-tester` (or `sudo /etc/nixos/scripts/email-tester.py`).
+> Everything from "Complete Setup Guide" onward is a design that would have to be
+> written before it could be followed; it is kept for background. If it is ever
+> implemented, note that the entry point named in Step 2 is wrong too — this repo
+> has no `/etc/nixos/configuration.nix`; the host module is
+> `hosts/vulcan/default.nix`.
+
 ## Quick Answer
 
 **To use the tester manually:**
 ```bash
-sudo /etc/nixos/scripts/email-tester.py
+sudo email-tester                          # wrapper installed by email-tester-manual.nix
+sudo /etc/nixos/scripts/email-tester.py    # equivalent, direct
 ```
 
 **For automated hourly testing with Nagios & Prometheus alerts:**
-Follow the complete setup below.
+Not implemented — see the status note above. The setup below is the (unbuilt) design.
 
 ---
 
@@ -30,7 +54,8 @@ Save (`:wq`).
 
 ### Step 2: Import All Modules
 
-Edit `/etc/nixos/configuration.nix`:
+Edit the host module `hosts/vulcan/default.nix` (there is no
+`/etc/nixos/configuration.nix`):
 
 ```nix
 imports = [
@@ -50,7 +75,9 @@ imports = [
 
 ### Step 3: Add Nagios Service Check
 
-Add to your Nagios host configuration (e.g., `nagios-hosts.nix` or wherever you define services):
+Add to your Nagios host configuration. The private topology lives in the separate
+`nagios` flake-input repo at `/etc/nixos/nagios/hosts.nix`, imported at
+`modules/services/nagios.nix:537`; there is no `/etc/nixos/nagios-hosts.nix`.
 
 ```nix
 {
@@ -293,6 +320,9 @@ sudo systemctl start email-tester.timer
 ---
 
 ## Summary
+
+**(Describes the proposed end state, not the current one — see the status note at
+the top of this file.)**
 
 ✅ **Email Tester**: Runs every hour automatically
 ✅ **Nagios**: Checks service status every hour, alerts on failure

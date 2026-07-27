@@ -6,6 +6,12 @@
       # Pinned to kernel 6.17.12 for ZFS compatibility
       # ZFS 2.3.x doesn't support kernel 6.18+ yet
       # Remove pin once ZFS supports newer kernels
+      # STATUS 2026-07-27: that premise no longer matches nixpkgs' own compat
+      # metadata — `linuxPackages_6_18.zfs_2_3` evaluates with meta.broken =
+      # false both in the locked nixpkgs (25.11, zfs 2.3.7) and in
+      # nixpkgs-unstable (zfs 2.3.8). Still unverified whether a newer
+      # nixos-apple-silicon rev builds its Asahi kernel + ZFS cleanly on this
+      # host, so the pin stays until someone tries it.
       url = "github:nix-community/nixos-apple-silicon/f94f4496775f9ca6e8a9e9e83f5aa4e4210fbb5d";
       inputs.nixpkgs.follows = "nixpkgs";
     };
@@ -128,15 +134,18 @@
     # Dedicated pin for Immich 3.0.1 (server must be >= the auto-updating
     # mobile app, which is already 3.0.1; v3's checksum-based backup sync is
     # what lets phone photos byte-identical to the /tank archive register as
-    # backed up instead of looping "Preparing" forever). nixos-unstable still
-    # carries 2.7.5 (the 3.0.1 bump f76955e3 hasn't reached the channel), and
-    # bumping the whole nixpkgs-unstable input would drag Home Assistant /
-    # JupyterLab along. Rev 266a3597 is the nixpkgs master commit from Hydra
-    # eval 1826899, whose immich.aarch64-linux and
-    # immich-machine-learning.aarch64-linux jobs both built successfully, so
-    # everything substitutes from cache.nixos.org. Drop this input (and point
-    # overlays/default.nix's immich back at nixpkgs-unstable) once
-    # nixos-unstable ships immich >= 3.0.1.
+    # backed up instead of looping "Preparing" forever). When this pin was
+    # added nixos-unstable still carried 2.7.5 (the 3.0.1 bump f76955e3 had
+    # not reached the channel), and bumping the whole nixpkgs-unstable input
+    # would drag Home Assistant / JupyterLab along. Rev 266a3597 is the
+    # nixpkgs master commit from Hydra eval 1826899, whose
+    # immich.aarch64-linux and immich-machine-learning.aarch64-linux jobs both
+    # built successfully, so everything substitutes from cache.nixos.org. Drop
+    # this input (and point overlays/default.nix's immich back at
+    # nixpkgs-unstable) once nixos-unstable ships immich >= 3.0.1.
+    # STATUS 2026-07-27: that condition is now MET — the locked
+    # nixpkgs-unstable (241313f4, 2026-07-19) evaluates immich to 3.0.3, so
+    # this dedicated pin is currently holding immich *down* at 3.0.1.
     nixpkgs-immich = {
       url = "github:NixOS/nixpkgs/266a3597f538657576ca4b476bb032b68bace284";
     };
@@ -318,8 +327,9 @@
               # alone eval-fails with "attribute 'gogcli' missing" (the
               # 2026-07-06 switch failure). Provide unstable's base here so
               # the override has something to override; the misc-tools stage
-              # then replaces src/version with the openclaw/gogcli 0.31.1
-              # fork as intended. Drop once vulcan's nixpkgs ships gogcli.
+              # then replaces src/version with the openclaw/gogcli fork (0.34.1
+              # as of 2026-07-27). Drop once vulcan's nixpkgs ships gogcli
+              # (as of 2026-07-27 nixos-25.11 still has no `gogcli` attribute).
               (final: prev: {
                 gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
               })

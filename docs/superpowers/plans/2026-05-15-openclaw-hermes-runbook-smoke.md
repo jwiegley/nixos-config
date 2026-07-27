@@ -1,5 +1,11 @@
 # OpenClaw ↔ Hermes Runbook + Smoke Probe Implementation Plan
 
+> **Archival — 2026-05-15.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `docs/openclaw-hermes-integration.md`, `modules/monitoring/services/openclaw-hermes-smoke.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver (a) a user-facing runbook at `/etc/nixos/docs/openclaw-hermes-integration.md` documenting the OpenClaw ↔ Hermes integration, and (b) a bridge-level synthetic smoke probe that exercises MCP-over-SSE end-to-end and emits Prometheus textfile metrics on a 15-minute cadence.

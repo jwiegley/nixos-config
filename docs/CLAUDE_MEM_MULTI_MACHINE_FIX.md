@@ -1,5 +1,10 @@
 # claude-mem — Multi-Machine Fix Guide (hera + other Ubuntu/NixOS hosts)
 
+> **Archival — 2026-05-27.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 Companion to `docs/CLAUDE_MEM_NIXOS_REPAIR.md` (the vulcan deep-dive). This one is
 **portable and diagnostic-driven**: it tells you which of the issues apply on a
 given machine and exactly how to fix each, per platform.

@@ -7,6 +7,13 @@
 }:
 
 {
+  # ORPHANED as of 2026-07-27: nothing imports this module, and the shared
+  # container users it targets (container-db / container-web) no longer exist —
+  # that model was replaced by per-service users, see
+  # modules/users/container-users-dedicated.nix. /run/secrets-container-db is
+  # absent on the running host. Kept for reference only; the description below
+  # documents what the test WAS meant to prove, not current behaviour.
+  #
   # Test module to validate per-user SOPS secrets ownership configuration
   # This module tests that secrets can be deployed to user-specific directories
   # with proper ownership and permissions.

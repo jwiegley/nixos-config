@@ -4,7 +4,8 @@ A production-grade, modular NixOS configuration for self-hosted infrastructure r
 
 ## 🚀 Key Features
 
-- **🏗️ Modular Architecture**: 70+ well-organized modules across 8 functional categories
+- **🏗️ Modular Architecture**: 237 well-organized module files across 13 category
+  directories under `modules/` (count as of 2026-07-27)
 - **📊 Full Observability**: Prometheus, Grafana, Alertmanager with custom exporters and alert rules
 - **💾 Multi-Layer Backups**: ZFS snapshots + Restic cloud backups to Backblaze B2
 - **🔐 Security First**: SOPS-nix secrets management, private CA (step-ca), security hardening
@@ -35,7 +36,7 @@ This configuration follows a highly modular architecture, organizing system conf
 
 | Category | Purpose | Key Modules |
 |----------|---------|-------------|
-| **Core** | System fundamentals | Boot (GRUB/EFI), networking, firewall, Nix config, systemd tuning |
+| **Core** | System fundamentals | Boot (systemd-boot/EFI), networking, firewall, Nix config, systemd tuning — all in `modules/core/` (7 files; boot, firewall and `nix.settings` all live in `base.nix`) |
 | **Services** | Application services | Web (Nginx), mail, databases, monitoring, DNS |
 | **Storage** | Data management | ZFS configuration, snapshots, backups |
 | **Containers** | Containerized apps | Podman/Quadlet setup, container services |
@@ -43,6 +44,11 @@ This configuration follows a highly modular architecture, organizing system conf
 | **Users** | User management | User configs, home-manager integration |
 | **Maintenance** | System maintenance | Timers, logwatch, automation |
 | **Packages** | Custom packages | Shell configs, custom tools |
+
+The table groups modules by role. On disk (2026-07-27) `modules/` holds **13**
+directories — `containers core hardware lib maintenance monitoring options
+packages security services storage test users` — and 237 `.nix` files; see
+[Module Organization](#module-organization) for the real layout.
 
 ### Design Principles
 
@@ -54,9 +60,15 @@ This configuration follows a highly modular architecture, organizing system conf
 
 ## 🏗️ Infrastructure Components
 
-This is the complete service catalog as actually deployed on `vulcan`. Each entry
+This is the main service catalog as actually deployed on `vulcan`. It is accurate
+but not exhaustive — as of 2026-07-27 it omits, among others, memory-vault,
+drafts-mcp, calendar-publisher, the rclone cloud-drive mirrors, NUT/UPS
+monitoring, and the OpenClaw / Hermes self-heal daemons. Each entry
 notes the runtime model — **(native)** for native systemd services, **(Quadlet)**
-for system-level Podman containers managed by quadlet-nix, **(NixOS container)**
+for Podman containers managed by quadlet-nix (most of which now run *rootless*,
+as per-user systemd units under a dedicated lingering service user declared in
+`modules/users/home-manager/`; matter-server, wyoming-openai, BudgetBoard and the
+Technitium exporter are still root-level system units), **(NixOS container)**
 for `systemd-nspawn` / native NixOS containers, and **(microVM)** for hardware-isolated
 guests. Internal services are reachable as `*.vulcan.lan` behind step-ca TLS;
 external-facing services tunnel out via Cloudflare.
@@ -66,13 +78,19 @@ external-facing services tunnel out via Cloudflare.
 - **Nginx** (native): central reverse proxy terminating step-ca TLS for ~40
   `*.vulcan.lan` virtual hosts; HTTP/2, HSTS, automatic HTTP → HTTPS redirect,
   per-upstream retry logic.
-- **Cloudflared tunnels** (native): persistent tunnels exposing
-  `data.newartisans.com` (Copyparty), `gitea.newartisans.com` (Gitea),
-  `s.newartisans.com` (Shlink), and `home.newartisans.com` (static site).
+- **Cloudflared tunnels** (native): one persistent tunnel (`data`) whose ingress
+  map (`modules/services/cloudflare-tunnels.nix:46-49`) exposes
+  `data.newartisans.com` → `localhost:18080` (the static-nginx container, which
+  serves `/tank/Public`), `gitea.newartisans.com` → Gitea,
+  `s.newartisans.com` → Shlink, and `calendar.newartisans.com` → the
+  Sacramento-cluster `.ics` publisher. Anything else through the tunnel gets a
+  404.
 - **Glance** (native): personal dashboard at `glance.vulcan.lan` with GitHub /
   RSS / weather widgets.
-- **Static-nginx-container** (NixOS container): read-only static site for
-  `home.newartisans.com`, served from a ZFS bind-mounted directory.
+- **Static-nginx-container** (NixOS container): read-only static site declared as
+  the `home.newartisans.com` vhost and served from `/tank/Public` (ZFS bind
+  mount). The vhost is `default = true`, so it is also what the
+  `data.newartisans.com` tunnel reaches on port 18080.
 
 ### Mail Stack
 
@@ -124,7 +142,8 @@ external-facing services tunnel out via Cloudflare.
 - **Glances** (native): live system view at `glances.vulcan.lan`.
 - **Blackbox monitoring** (native): HTTP / ICMP probes for local, DNS, and
   external host groups.
-- **Prometheus exporters** (mostly native, some Quadlet): node, systemd, zfs,
+- **Prometheus exporters** (mostly native, some Quadlet): node (its `systemd`
+  collector replaces a separate systemd exporter), zfs,
   postgres, redis, postfix, nginx, gitea, immich, litellm, node-red, jupyterlab,
   vdirsyncer, qdrant, aria2, atd, restic, AIDE, ZFS pool health, certificate
   expiry, container health, HA backup freshness, stock-trader,
@@ -172,6 +191,11 @@ external-facing services tunnel out via Cloudflare.
 - **OpenClaw** (microVM): hardware-isolated AI-agent gateway at
   `openclaw.vulcan.lan`; persistent state via virtiofs from
   `/var/lib/openclaw`; openclaw-canary monitors liveness.
+- **Hermes Agent** (microVM): second, independently bridged AI-agent guest
+  (`modules/services/hermes-microvm.nix` host side, `hermes-vm.nix` guest side).
+  Outbound-only — no LAN-facing vhost; the guest reaches host loopback services
+  through two-stage DNAT. Paired with `hermes-mcp`, `hermes-self-heal`, and a
+  nightly health report.
 - **Stock Trader** (native): hardened Python service at `trader.vulcan.lan`
   (Schwab OAuth-bootstrapped) pinned to a Gitea-hosted release tag.
 - **JupyterLab** (native): notebook server at `jupyter.vulcan.lan` with a
@@ -187,8 +211,8 @@ external-facing services tunnel out via Cloudflare.
   patched `aiopnsense` for Python 3.13 compatibility.
 - **Matter Server** (Quadlet): python-matter-server controller for HA's Matter
   integration.
-- **wyoming-openai** (Quadlet): Wyoming STT bridge to a LiteLLM
-  `cohere-transcribe` route on loopback for the HA voice pipeline.
+- **wyoming-openai** (Quadlet): Wyoming STT bridge to the LiteLLM
+  `hera/cohere-transcribe-03-2026` route on loopback for the HA voice pipeline.
 - **Mosquitto** (native, see above): MQTT broker for HA / HASS.Agent.
 - **Node-RED** (native): flow-based automation at `nodered.vulcan.lan`.
 
@@ -197,7 +221,10 @@ external-facing services tunnel out via Cloudflare.
 - **Samba** (native): SMB / CIFS + NetBIOS + WSDD shares for ZFS datasets
   under `/tank`.
 - **Copyparty** (NixOS container): multi-user file server bind-mounting ZFS
-  datasets; reachable internally and via `data.newartisans.com`.
+  datasets; reachable internally on `127.0.0.1:13923` (socket-activated proxy to
+  the container). Its own config still sets `domain = data.newartisans.com`, but
+  as of 2026-07-27 that tunnel hostname routes to the static-nginx container on
+  18080 instead — see `modules/services/cloudflare-tunnels.nix:4-7`.
 - **Immich** (native): photo / video library at `immich.vulcan.lan`.
 - **Aria2** (native): download manager with the AriaNG UI at `aria.vulcan.lan`.
 - **Jellyfin** (native, via `media.nix`): media server at `jellyfin.vulcan.lan`.
@@ -242,10 +269,14 @@ external-facing services tunnel out via Cloudflare.
 - `production` template: Hourly (24), Daily (14), Weekly (4), Monthly (3)
 
 **Restic Cloud Backups** (to Backblaze B2):
-- Multiple per-purpose filesets (home, documents, projects, …) with daily
-  persistent timers and 7d / 5w / 3y retention.
+- Nine per-purpose filesets (`Audio Backups Databases Home Photos Public Video
+  doc src`) with daily persistent timers, staggered 02:10–05:30, and
+  7d / 5w / 12m / 3y retention.
 - Status surfaced through a Prometheus textfile collector.
-- Helper script: `restic-operations` (check, snapshots, prune, repair).
+- Helper script: `restic-operations`, with two subcommands — `check` (unlock,
+  check, prune, `repair snapshots` per fileset) and `snapshots`. It is not
+  installed on `PATH`; it runs from the weekly `restic-check.service` and from
+  the logwatch `restic` report.
 
 **Other backup services**:
 - **local-backup** (native): restic-driven local backups for selected directory
@@ -268,7 +299,9 @@ external-facing services tunnel out via Cloudflare.
 - **hd-idle** (native): spin-down for non-system disks.
 - **ZFS** (native): pool management with 16 K page size for Apple Silicon
   and an ARC limit of 16 GiB.
-- **podman autoPrune** (native): daily container/image cleanup.
+- **podman autoPrune** (native): weekly (`podman-prune.timer`, Mondays)
+  container/image cleanup of the *root* podman store; rootless per-user stores
+  are pruned separately by `rootless-podman-image-prune.nix`.
 - **container-health-exporter** (native): per-container liveness metrics for
   Prometheus.
 
@@ -277,18 +310,22 @@ external-facing services tunnel out via Cloudflare.
 ### System Specifications
 
 - **Platform**: Apple Hardware (aarch64-linux)
-- **RAM**: 64GB (ZFS ARC: 32GB max, 4GB min)
-- **Storage**: ZFS on multiple pools
-  - `rpool`: System and home directories
-  - `tank`: Data storage with replication
+- **RAM**: 64GB installed / ~62 GiB usable (ZFS ARC: 16 GiB max, 2 GiB min —
+  `modules/storage/zfs.nix:39-40`)
+- **Storage**:
+  - root filesystem: **ext4** (`hosts/vulcan/hardware-configuration.nix`)
+  - `tank`: the only ZFS pool — all data storage, snapshots and shares
 - **Network**: NetworkManager with static hostname
-- **External Storage**: USB-C device auto-enrollment
+- **External Storage**: USB-C device auto-enrollment; `tank` itself lives in an
+  external USB enclosure driven over BOT/usb-storage (UAS disabled)
 
 ### Hardware Configuration
 
-- **Boot**: GRUB with EFI support
+- **Boot**: systemd-boot with EFI support (`modules/core/base.nix:18-22`,
+  `configurationLimit = 10`)
   - ZFS ARC tuning for 64GB RAM
-- **Post-boot**: PCI rescan for device discovery
+- **Initrd modules**: `xhci_pci`, `usbhid`, `usb_storage`, `sdhci_pci`
+  (`hosts/vulcan/hardware-configuration.nix:21-26`)
 
 ## 🚀 Quick Start
 
@@ -343,7 +380,7 @@ sudo nixos-rebuild build-vm --flake .#vulcan
 # Update flake inputs
 nix flake update
 
-# Format Nix files (nixfmt-rfc-style)
+# Format Nix files (formatter = nixfmt-tree, i.e. treefmt driving nixfmt-rfc-style)
 nix fmt
 ```
 
@@ -371,17 +408,19 @@ sudo systemctl status step-ca
 sudo journalctl -u step-ca -f  # Follow logs
 
 # Generate a new certificate
-step ca certificate "service.vulcan.local" service.crt service.key \
+# (for service certs prefer the wrapper: sudo /etc/nixos/certs/renew-certificate.sh)
+step ca certificate "service.vulcan.lan" service.crt service.key \
   --ca-url https://localhost:8443 \
-  --root /var/lib/step-ca/certs/root_ca.crt
+  --root /var/lib/step-ca-state/certs/root_ca.crt
 
 # Renew a certificate
 step ca renew service.crt service.key \
   --ca-url https://localhost:8443 \
-  --root /var/lib/step-ca/certs/root_ca.crt
+  --root /var/lib/step-ca-state/certs/root_ca.crt
 
 # Export root CA for client installation
-sudo cp /var/lib/step-ca/certs/root_ca.crt ~/vulcan-ca.crt
+sudo cp /var/lib/step-ca-state/certs/root_ca.crt ~/vulcan-ca.crt
+# (a checked-in copy also lives at /etc/nixos/certs/vulcan-root-ca.crt)
 ```
 
 ### Dovecot Full-Text Search (FTS)
@@ -412,18 +451,18 @@ doveadm mailbox status -u johnw all '*'
 ### Backup Operations
 
 ```bash
-# Check all backup filesets
-restic-operations check
+# Check all backup filesets (weekly timer; run it by hand with systemctl)
+sudo systemctl start restic-check.service
 
-# View recent snapshots
-restic-operations snapshots
-# Or use the dedicated command:
-restic-snapshots
+# Per-fileset wrappers that ARE on PATH — one per fileset, capitalisation matters:
+#   restic-Audio restic-Backups restic-Databases restic-doc restic-Home
+#   restic-Photos restic-Public restic-src restic-Video
+restic-Home snapshots
+restic-doc check
+restic-src stats
 
-# Manual backup operations (per fileset)
-restic-home check
-restic-documents snapshots
-restic-projects prune
+# Run one fileset's backup now
+sudo systemctl start restic-backups-Home.service
 ```
 
 ### Container Management
@@ -433,14 +472,20 @@ restic-projects prune
 lazydocker  # TUI for Docker/Podman
 podman-tui  # Alternative Podman TUI
 
-# List running containers
-podman ps
+# List root-level containers (budget-board-*, matter-server, wyoming-openai,
+# technitium-dns-exporter). Most app containers are rootless and belong to a
+# per-service user, so they do NOT show up here.
+sudo podman ps
 
-# View container logs
-journalctl -u quadlet-<service-name> -f
+# Root-level container units are plain systemd services
+journalctl -u matter-server -f
+sudo systemctl restart matter-server
 
-# Restart a container service
-sudo systemctl restart quadlet-<service-name>
+# Rootless Home-Manager containers (litellm, open-webui, wallabag, shlink,
+# teable, vane, …) run as *user* units under a lingering service user:
+journalctl _SYSTEMD_USER_UNIT=litellm.service -f
+sudo -u litellm XDG_RUNTIME_DIR=/run/user/$(id -u litellm) \
+  systemctl --user restart litellm
 ```
 
 ### ZFS Management
@@ -452,8 +497,9 @@ zpool status
 # List ZFS filesystems and snapshots
 zfs list -t all
 
-# View recent snapshots per filesystem
-logwatch-zfs-snapshot
+# Recent snapshots per filesystem: `logwatch-zfs-snapshot` is NOT on PATH —
+# it exists only as a logwatch report script (modules/services/monitoring.nix:19).
+zfs list -t snapshot -o name,creation -s creation | tail -40
 ```
 
 ## 📊 Monitoring & Observability
@@ -462,17 +508,23 @@ logwatch-zfs-snapshot
 
 | Exporter | Port | Metrics |
 |----------|------|---------|
-| Node | 9100 | CPU, memory, disk, network, systemd |
+| Node | 9100 | CPU, memory, disk, network, hwmon, systemd (`node_systemd_*`) |
 | PostgreSQL | 9187 | Database stats, connections, queries |
-| Systemd | 9558 | Service status, failures, restarts |
 | Postfix | 9154 | Mail queue, delivery stats |
 | ZFS | 9134 | Pool health, dataset usage, I/O |
 | Restic | Textfile | Backup status, snapshot counts |
 | mbsync | Textfile | Sync status, message counts |
 
+There is **no** separate systemd exporter on 9558: node-exporter's `systemd`
+collector supersedes it (`modules/monitoring/services/system-exporters.nix:22`).
+The table above is a sample — the full exporter set is much larger (see the
+Monitoring entries in the service catalog).
+
 ### Alert Rules
 
-Located in `modules/monitoring/alerts/`:
+Located in `modules/monitoring/alerts/` — **51** rule files as of 2026-07-27,
+auto-discovered with `builtins.readDir`
+(`modules/monitoring/services/alerting.nix`). A representative handful:
 
 - **system.yaml**: CPU, memory, disk alerts
 - **systemd.yaml**: Service failures, restarts
@@ -481,12 +533,24 @@ Located in `modules/monitoring/alerts/`:
 - **certificates.yaml**: Certificate expiration warnings
 - **network.yaml**: Network connectivity and performance
 
+Two sibling directories hold rules that are wired differently:
+`modules/monitoring/vm-alerts/` (3 files, also auto-discovered, evaluated by
+vmalert against VictoriaMetrics) and `modules/monitoring/loki-rules/` (10 files
+that are **not** auto-discovered — each needs a hand-written `L+` tmpfiles
+symlink in `modules/services/loki.nix`).
+
 ### Grafana Dashboards
 
 Access Grafana for visualization:
 - URL: `https://grafana.vulcan.lan`
-- Pre-configured dashboards for all exporters
-- Custom dashboards for service-specific metrics
+- 7 prefetched community dashboards (node-exporter ×2, PostgreSQL,
+  Loki/Promtail, logs-app, Immich, Qdrant) plus 10 local ones from
+  `modules/monitoring/dashboards/`,
+  `modules/monitoring/grafana-dashboards/` and
+  `modules/storage/dns-query-logs-dashboard.json`
+- All are hand-listed in `modules/services/grafana.nix` and copied into
+  `/var/lib/grafana/dashboards/` — a new JSON file is not picked up until it is
+  added there
 
 ### Logwatch Reports
 
@@ -506,63 +570,66 @@ Daily email reports include:
 
 ### Directory Structure
 
+Two levels deep, as of 2026-07-27 (per-directory `.nix` counts in parentheses):
+
 ```
 /etc/nixos/
-├── flake.nix                      # Flake definition and inputs
+├── flake.nix                      # Flake definition and 23 inputs
+├── models.nix                     # Central LLM model registry (→ /etc/models.json)
 ├── hosts/
 │   └── vulcan/
-│       ├── default.nix            # Main host configuration
+│       ├── default.nix            # The single host module — every import lives here
 │       └── hardware-configuration.nix
-├── modules/
-│   ├── core/                      # System fundamentals
-│   │   ├── boot.nix
-│   │   ├── networking.nix
-│   │   ├── firewall.nix
-│   │   ├── nix.nix
-│   │   ├── system.nix
-│   │   ├── programs.nix
-│   │   └── systemd-rate-limit-fix.nix
-│   ├── services/                  # Service configurations
-│   │   ├── web.nix
-│   │   ├── dovecot.nix
-│   │   ├── postfix.nix
-│   │   ├── mbsync.nix
-│   │   ├── databases.nix
-│   │   ├── certificates.nix
-│   │   ├── monitoring.nix
-│   │   ├── prometheus-monitoring.nix
-│   │   ├── grafana.nix
-│   │   └── ...
-│   ├── storage/                   # Storage and backups
-│   │   ├── zfs.nix
-│   │   ├── backups.nix
-│   │   └── backup-monitoring.nix
-│   ├── containers/                # Container services
-│   │   ├── quadlet.nix
-│   │   ├── litellm-quadlet.nix
-│   │   ├── wallabag-quadlet.nix
-│   │   └── ...
-│   ├── security/                  # Security configurations
-│   │   └── hardening.nix
-│   ├── users/                     # User management
-│   │   ├── default.nix
-│   │   ├── johnw.nix
-│   │   ├── assembly.nix
-│   │   └── home-manager/
-│   ├── maintenance/               # Maintenance tasks
-│   │   └── timers.nix
-│   ├── packages/                  # Package configurations
-│   │   ├── custom.nix
-│   │   └── zsh.nix
-│   ├── lib/                       # Reusable functions
-│   │   └── mkMbsyncModule.nix
-│   ├── monitoring/                # Monitoring configs
-│   │   └── alerts/                # Prometheus alert rules
-│   └── options/                   # Custom options
-├── certs/                         # Certificate scripts
-├── scripts/                       # Helper scripts
-└── secrets.yaml                   # SOPS encrypted secrets
+├── modules/                       # 237 .nix in 13 category directories
+│   ├── core/          (7)         # base.nix (systemd-boot, firewall, nix.settings),
+│   │                              #   networking, system, programs, crash-debug,
+│   │                              #   memory-limits, wifi
+│   ├── services/     (92)         # web.nix, dovecot.nix, postfix.nix, mbsync.nix,
+│   │                              #   databases.nix, certificates.nix, monitoring.nix,
+│   │                              #   grafana.nix, *-microvm.nix / *-vm.nix, …
+│   ├── monitoring/   (72)         # services/ (68, incl. a default.nix aggregator),
+│   │                              #   alerts/ (51 Prometheus rule YAMLs),
+│   │                              #   loki-rules/ (10), vm-alerts/ (3),
+│   │                              #   dashboards/, grafana-dashboards/,
+│   │                              #   nagios-plugins/, scripts/
+│   ├── users/        (25)         # johnw, assembly, bia, nasimw, rbcca,
+│   │                              #   container-users-dedicated, home-manager/ (19)
+│   ├── containers/   (22)         # quadlet.nix, copyparty-container.nix,
+│   │                              #   static-nginx-container.nix, *-quadlet.nix —
+│   │                              #   most -quadlet.nix files now hold only nginx /
+│   │                              #   SOPS / redis config; the containers themselves
+│   │                              #   moved to users/home-manager/
+│   ├── lib/           (6)         # bindTankModule, common, mkMbsyncModule,
+│   │                              #   mkPostgresUserSetup, mkQuadletService,
+│   │                              #   resticOperations (+ README.md)
+│   ├── storage/       (4)         # zfs.nix, backups.nix, backup-monitoring.nix,
+│   │                              #   hd-idle.nix
+│   ├── security/      (3)         # hardening.nix, aide.nix, root-ssh-gitea.nix
+│   ├── packages/      (2)         # custom.nix, zsh.nix
+│   ├── hardware/      (1)         # wifi-stability.nix
+│   ├── maintenance/   (1)         # timers.nix
+│   ├── options/       (1)         # default.nix — declares options.vulcan.*; no
+│   │                              #   module outside this file reads them, but its
+│   │                              #   own config block sets Prometheus retention /
+│   │                              #   scrape interval and the restic keep-* counts
+│   └── test/          (1)         # sops-ownership-test.nix (imported by nothing)
+├── overlays/         (22)         # package overrides (default.nix + leaf overlays)
+├── pkgs/                          # custom derivations (stock-trader, hermes-mcp, …)
+├── tests/                         # checks.nix + openclaw/, wired from flake.nix
+├── certs/                         # certificate scripts + CERTIFICATES.md
+├── scripts/                       # helper scripts (Python/shell) used by modules
+├── config/ · files/ · templates/  # static config/data shipped by modules
+├── docs/                          # 90 .md files (47 top-level) + ports.txt registry
+├── CLAUDE.md · SECURITY.md
+└── (separate, gitignored git repos consumed as flake inputs)
+    ├── secrets/secrets.yaml       # SOPS-encrypted secrets  (input `secrets`)
+    ├── nagios/hosts.nix           # private Nagios topology (input `nagios`)
+    └── firmware/                  # Apple firmware blobs    (input `firmware`)
 ```
+
+Note: there is **no** `configuration.nix` and **no** `/etc/nixos/secrets.yaml` —
+the host config is `hosts/vulcan/default.nix` and the encrypted secrets live in
+the separate `secrets/` repo.
 
 ### Adding New Modules
 
@@ -605,8 +672,13 @@ This configuration uses **SOPS-nix** for managing secrets securely in git.
 ### How It Works
 
 1. Secrets are encrypted with Age/PGP keys
-2. Encrypted `secrets.yaml` is committed to git
+2. The encrypted store is `secrets/secrets.yaml` — a **separate** git repo at
+   `/etc/nixos/secrets/`, consumed as the `secrets` flake input
+   (the `secrets` input in `flake.nix`, `flake = false`) and excluded from this
+   repo by `.gitignore`. `sops.defaultSopsFile` in `modules/core/system.nix`
+   points at it. There is no `/etc/nixos/secrets.yaml`.
 3. At activation, secrets are decrypted and placed in `/run/secrets/`
+   (per-user drops land in `/run/secrets-<user>/`)
 4. Services reference secrets via SOPS paths
 
 ### Secret Configuration
@@ -628,7 +700,9 @@ services.restic.backups.home = {
 
 ### Adding New Secrets
 
-1. Edit `secrets.yaml` with `sops secrets.yaml`
+1. Edit the store with `sops secrets/secrets.yaml`, then **commit it in the
+   `secrets` repo and re-lock the flake input** — an uncommitted edit has no
+   effect on the build
 2. Add secret reference in module:
    ```nix
    sops.secrets."my-new-secret" = {
@@ -641,7 +715,8 @@ services.restic.backups.home = {
 
 ### Required Secrets
 
-The following secrets are used (see `secrets.yaml` for complete list):
+The following secrets are used (see `secrets/secrets.yaml`, or `ls /run/secrets/`,
+for the complete list — 133 `sops.secrets` entries are declared):
 
 - `step-ca-password`: CA intermediate key password
 - `restic-password`: Restic backup encryption password
@@ -698,15 +773,26 @@ Many services follow similar patterns:
 
 ### Flake Inputs & Overlays
 
-Current flake inputs:
+All 23 flake inputs (as of 2026-07-27; see `flake.nix` for the pin rationales):
 
-- `nixpkgs`: nixos-unstable channel
-- `nixos-apple-silicon`: Apple hardware support
-- `home-manager`: User environment management
+- `nixpkgs`: `nixos-25.11` — the system channel
+- `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for JupyterLab,
+  Home Assistant and other packages needing newer versions
+- `nixpkgs-immich`: dedicated pin for the Immich server
+- `nixos-apple-silicon`: Apple hardware support (pinned for ZFS/kernel compat)
+- `home-manager`: `release-25.11`, user environment management
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
 - `quadlet-nix`: Podman container integration
-- `claude-code-nix`: Claude Code overlay
+- `microvm`: the OpenClaw and Hermes microVMs
+- `hermes-agent`: Hermes agent source (pinned to rev `c47b9d12`; the `hermes-agent`
+  input in `flake.nix` carries the reason)
+- `nix-config-ai`, `nix-config`, `llm-agents`: shared AI / home-manager config
+- `stock-trader`: pinned to Gitea tag `v0.2.0` (`flake = false`)
+- `git-scripts`, `org-jw`, `una`, `sizes`, `pushme`,
+  `sacramento-cluster-ics`: personal tooling and data repos
+- `secrets`, `nagios`, `firmware`: local, gitignored data repos
+  (`git+file:///etc/nixos/...`, all `flake = false`)
 
 Add new inputs in `flake.nix`:
 
@@ -738,7 +824,8 @@ system.stateVersion = "25.11";
 ### Channel & Version
 
 - **NixOS Version**: 25.11
-- **nixpkgs Channel**: `nixos-25.11` (with `nixos-unstable` available as a secondary input for select packages)
+- **nixpkgs Channel**: `nixos-25.11` (with a secondary `nixpkgs-unstable` input for
+  select packages — currently *pinned* to rev `241313f4`, 2026-07-19, not floating)
 - **System Architecture**: aarch64-linux
 
 ### Flake Lock
@@ -757,7 +844,7 @@ nix flake lock --update-input nixpkgs
 
 ### Code Style
 
-- **Formatting**: Use `nix fmt` (nixfmt-rfc-style)
+- **Formatting**: Use `nix fmt` (`nixfmt-tree`, which runs nixfmt-rfc-style)
 - **Indentation**: 2 spaces
 - **Line Length**: Keep reasonable (80-100 chars when possible)
 - **Comments**: Document complex logic and design decisions
@@ -793,14 +880,19 @@ Follow conventional commits:
 ### Debugging
 
 ```bash
-# Check Nix evaluation without building
-nix eval .#nixosConfigurations.vulcan.config.system.build.toplevel
+# Check Nix evaluation without building.
+# NOTE (checked 2026-07-27): this currently FAILS on vulcan, and the failure is
+# not in this repo — home-manager's johnw profile pulls in the external
+# nix-config overlay `overlays/30-text-tools.nix`, whose `org2tc ? null` lambda
+# rejects the `system` argument. Treat a failure here as "look at the trace"
+# rather than "the module set is broken".
+nix eval .#nixosConfigurations.vulcan.config.system.build.toplevel.drvPath
 
 # Show full build log
 sudo nixos-rebuild switch --flake .#vulcan --show-trace
 
-# Verify module imports
-nix eval .#nixosConfigurations.vulcan.config.imports --json | jq
+# Inspect a single evaluated option
+nix eval .#nixosConfigurations.vulcan.config.system.stateVersion
 ```
 
 ## 📚 Additional Resources

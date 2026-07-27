@@ -1,5 +1,11 @@
 # ZFS overlay for 16K page size support (Apple Silicon / Asahi Linux)
 #
+# NOT WIRED IN as of 2026-07-27: nothing in this repo imports this file
+# (`grep -r zfs-16k` matches only itself). The zfs / zfs_unstable overrides
+# that are actually applied live inline in overlays/default.nix (the "ZFS -
+# Enable support for 16K page size" block). Keep the two in sync, or delete
+# this file, before assuming an edit here changes the built system.
+#
 # This overlay enables ZFS to build and run on systems with 16K page sizes,
 # such as Apple Silicon Macs running Asahi Linux with 16K kernels.
 #

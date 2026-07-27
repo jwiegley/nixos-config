@@ -95,7 +95,7 @@ user approval, even with `sudo`:**
 
 **Adjacent / context-sensitive paths — apply Purpose Check rigorously:**
 
-- `/etc/nixos/secrets.yaml` — encrypted form is OK to view; never decrypt
+- `/etc/nixos/secrets/secrets.yaml` — encrypted form is OK to view; never decrypt
 - `nmcli connection show <name>` — fine for metadata; avoid full output for WiFi
 - `~/.claude/settings.json`, any tool's `settings.json`/`config.json` — may hold
   plaintext API keys in MCP `env` blocks or similar; if you must inspect, use
@@ -202,7 +202,7 @@ LENS is the authoritative gate; this list is a non-exhaustive reminder.
 - **2025-11-14**: Attempted to fix PostgreSQL password read by changing from `600` to `644` (world-readable)
 
 **SAFE operations:**
-- `sops /etc/nixos/secrets.yaml` (interactive editor)
+- `sops /etc/nixos/secrets/secrets.yaml` (interactive editor)
 - `ls -la /run/secrets/` (metadata only)
 - Checking logs with `journalctl`
 - Using `systemctl status` commands
@@ -222,12 +222,18 @@ LENS is the authoritative gate; this list is a non-exhaustive reminder.
 
 ## SOPS Secrets Management
 
-Secrets are encrypted in `secrets.yaml` (tracked in git) using age encryption.
-Private `.age` keys must NEVER be committed.
+Secrets are encrypted in `/etc/nixos/secrets/secrets.yaml` using age encryption.
+That file lives in a SEPARATE git repo at `/etc/nixos/secrets/`, consumed as the
+non-flake flake input `secrets` (declared in `flake.nix`; `sops.defaultSopsFile`
+is set from it in `modules/core/system.nix`). The main repo's `.gitignore` excludes `/secrets`,
+so it is tracked by its own repo, not by `/etc/nixos`'s.
+Private age keys must NEVER be committed. This host's age identities are derived
+from `/etc/ssh/ssh_host_ed25519_key` plus `/var/lib/sops-nix/key.txt` — there are
+no `.age` key files in the repo tree.
 
 ```bash
 # Edit secrets
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 
 # Apply changes
 sudo nixos-rebuild switch --flake '.#vulcan'
@@ -237,7 +243,7 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 ```
 
 **Adding secrets:**
-1. Edit with `sops /etc/nixos/secrets.yaml`
+1. Edit with `sops /etc/nixos/secrets/secrets.yaml`
 2. Declare in NixOS module with owner/permissions
 3. Access via systemd `LoadCredential` or direct path
 4. Rebuild to deploy
@@ -267,8 +273,8 @@ sudo /etc/nixos/certs/renew-certificate.sh "domain.lan" \
 
 # Common locations:
 # Nginx: /var/lib/nginx-certs/ (nginx:nginx)
-# PostgreSQL: /var/lib/postgresql/ (postgres:postgres)
-# Dovecot: /etc/dovecot/certs/ (root:root)
+# PostgreSQL: /var/lib/postgresql/certs/ (postgres:postgres)
+# Dovecot: /var/lib/dovecot-certs/ (root:root)
 ```
 
 ### Database Backups
@@ -357,18 +363,34 @@ zpool status    # Pool health
 
 ## Module Organization
 
+There is NO `configuration.nix` and NO root-level `secrets.yaml`. The only `.nix`
+files at the repo root are `flake.nix` and `models.nix`; the host configuration is
+`hosts/vulcan/default.nix`.
+
 ```
 /etc/nixos/
-├── flake.nix                 # Main flake configuration
-├── configuration.nix         # System configuration
-├── secrets.yaml             # SOPS-encrypted secrets (in git)
-├── *.age                    # Private keys (NEVER commit)
-├── modules/
-│   ├── services/            # Service configurations
-│   ├── monitoring/          # Prometheus, Grafana, etc.
-│   └── containers/          # Container definitions
+├── flake.nix                # Main flake configuration (entry point)
+├── models.nix               # Shared LLM model registry (llm.agent.name, ...)
+├── hosts/vulcan/
+│   ├── default.nix          # THE host configuration (the big `imports` list; stateVersion here)
+│   └── hardware-configuration.nix
+├── modules/                 # 237 .nix across 13 category dirs
+│   ├── services/            # Service configurations (92 .nix)
+│   ├── monitoring/          # Prometheus, Grafana, alerts/, exporters
+│   ├── containers/          # Container / quadlet definitions
+│   ├── core/                # base, networking, system, programs, wifi, ...
+│   ├── users/               # Users + home-manager/ modules
+│   └── ...                  # storage, security, packages, lib, maintenance,
+│                            #   hardware, options, test
+├── overlays/                # Package overlays
+├── pkgs/                    # Locally packaged software
+├── certs/                   # Certificate scripts (renew-certificate.sh)
+├── scripts/                 # Exporters, self-heal actions, validation harnesses
 ├── docs/                    # Additional documentation
-└── nagios-hosts.nix        # Private network topology (gitignored)
+├── secrets/                 # SOPS store — SEPARATE git repo, flake input `secrets`
+│   └── secrets.yaml         #   (gitignored by this repo)
+└── nagios/                  # SEPARATE git repo, flake input `nagios`
+    └── hosts.nix            #   Private network topology (gitignored by this repo)
 ```
 
 ## Troubleshooting
@@ -393,7 +415,11 @@ journalctl -u <service> -f  # View logs
 
 ## Important Files
 
-- `/etc/nixos/nagios-hosts.nix` - Private network topology (excluded from git)
+- `/etc/nixos/nagios/hosts.nix` - Private network topology (separate git repo, flake
+  input `nagios`; imported at `modules/services/nagios.nix` as `nagios.outPath + "/hosts.nix"`)
+- `/etc/nixos/secrets/secrets.yaml` - SOPS-encrypted secrets (separate git repo,
+  flake input `secrets`; excluded from this repo by `.gitignore`)
+- `/etc/nixos/hosts/vulcan/default.nix` - The host configuration (there is no `configuration.nix`)
 - `/etc/nixos/docs/ports.txt` - Port registry (MUST update when adding services)
 - `/etc/nixos/docs/` - Detailed service documentation
 - `/tank/Backups/` - Backup storage location

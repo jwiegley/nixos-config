@@ -112,5 +112,8 @@ in
   };
 
   # Note: SOPS secrets automatically configured by mkQuadletService
-  # Note: Firewall rules automatically configured by mkQuadletService
+  # Note: mkQuadletService does NOT configure any firewall rules (verified
+  # 2026-07-27 — modules/lib/mkQuadletService.nix touches no
+  # networking.firewall option). None are needed here: publishPorts binds
+  # 127.0.0.1:9274 only.
 }

@@ -1,5 +1,11 @@
 # Water Attribution Implementation Plan
 
+> **Archival — 2026-05-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/home-assistant-water-attribution.nix`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver per-category water attribution (pool autofill / per-zone irrigation / domestic hot / other) live in Home Assistant with daily/weekly/monthly totals, plus a weekly cross-check service that emails a water report, plus historical backfill from VictoriaMetrics and the Flume Personal API.

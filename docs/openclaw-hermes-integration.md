@@ -6,7 +6,8 @@ verification commands, known failure modes with one-command remediation,
 the full metrics reference, and a map of where to make changes for each
 common edit path.
 
-**Last updated:** 2026-05-15. **Spec:** `docs/superpowers/specs/2026-05-15-openclaw-hermes-runbook-smoke-design.md`.
+**Last updated:** 2026-05-15; fact-checked against the tree 2026-07-27.
+**Spec:** `docs/superpowers/specs/2026-05-15-openclaw-hermes-runbook-smoke-design.md`.
 
 ## 1. Topology
 
@@ -36,7 +37,7 @@ common edit path.
 **Why the two-stage DNAT exists:** a microVM guest cannot route to the
 host's `127.0.0.1` directly because the loopback interface isn't shared
 across the virtio network boundary. The bridge IP (`10.99.0.1` for
-br-openclaw, `10.99.1.1` for br-hermes) is the only routable host
+`br-openclaw`, `10.99.1.1` for `hermes-br0`) is the only routable host
 address from inside the VM. The guest's `OUTPUT` chain rewrites
 `127.0.0.1:9081` to the bridge gateway, and the host's `PREROUTING`
 chain rewrites that back to `127.0.0.1:9081` so the bound hermes-mcp
@@ -53,7 +54,7 @@ from inside the openclaw VM.
 | `microvm@openclaw.service` | `modules/services/openclaw-microvm.nix` + `openclaw-vm.nix` | Runs the Claw agent guest at 10.99.0.2 |
 | `openclaw-prepare-secrets.service` | `modules/services/openclaw-microvm.nix` | Nix-merges the structural template with atomic SOPS secrets, writes `${secretsStagingDir}/openclaw-config` |
 | `hermes-health-check.service` + `.timer` | `modules/monitoring/services/hermes-health-check.nix` | Host-side 4-axis probe (every 5min); emits `hermes_*.prom` |
-| `hermes-self-heal.service` + `.timer` | `modules/services/hermes-self-heal.nix` | Watchdog reading hermes_*.prom; restarts hermes-mcp or microvm@hermes on persistent failure |
+| `hermes-self-heal.service` | `modules/services/hermes-self-heal.nix` | Alertmanager webhook receiver + remediation runner (mirrors openclaw-self-heal); restarts hermes-mcp or microvm@hermes on a sustained `self_heal_eligible` alert |
 | `openclaw-canary.service` | `modules/monitoring/services/openclaw-canary.nix` | Claw-side log-tailing canary; emits `openclaw_canary_*.prom` |
 | `openclaw-mcporter-check.service` | `modules/monitoring/services/openclaw-mcporter-check.nix` | Validates the in-guest mcporter.json structure |
 | `openclaw-hermes-smoke.service` + `.timer` | `modules/monitoring/services/openclaw-hermes-smoke.nix` | End-to-end MCP-SSE probe (every 15min); emits `openclaw_hermes_smoke_*.prom` |
@@ -100,10 +101,17 @@ in the headers.
 ### 4b. The Claw VM can reach the bridge
 
 ```bash
-sudo ssh -i /root/.ssh/openclaw-probe -o StrictHostKeyChecking=no \
+sudo ssh -i /run/secrets/openclaw/probe-ssh-private-key \
+  -o StrictHostKeyChecking=no \
   openclaw@10.99.0.2 \
   'curl -sI --max-time 5 http://127.0.0.1:9081/sse | head -3'
 ```
+
+The probe key is the SOPS secret `openclaw/probe-ssh-private-key`, deployed
+root-only at `/run/secrets/openclaw/probe-ssh-private-key` (0400 root:root);
+pass it to `ssh -i` and never print it. The nightly-report service reaches the
+same key through `LoadCredential=probe-ssh-key:…`
+(`modules/services/openclaw-nightly-report.nix`).
 
 Expected: `HTTP/1.1 200 OK`. The SSH key probe pattern is documented
 in `memory/project_openclaw_vm_ssh_probe.md`. If you get a 502/timeout,
@@ -113,7 +121,7 @@ check the two-stage DNAT chain via `sudo nft list table ip nat`.
 
 ```bash
 cat /var/lib/prometheus-node-exporter-textfiles/hermes_health.prom \
-  | grep -E '^hermes_(ask|api_server|mcp_sse|api_key|discord)_'
+  | grep -E '^hermes_(mcp_ask|api_server|mcp_sse|api_key|discord)_'
 ```
 
 Quick read-out:
@@ -136,13 +144,13 @@ by the automated probe's 90s budget.
 
 Short variant — Hermes price lookup (exercises yfinance):
 ```bash
-sudo ssh -i /root/.ssh/openclaw-probe openclaw@10.99.0.2 \
+sudo ssh -i /run/secrets/openclaw/probe-ssh-private-key openclaw@10.99.0.2 \
   'openclaw chat "Ask Hermes for the current Bitcoin price."'
 ```
 
 Long variant — Hermes execute_code:
 ```bash
-sudo ssh -i /root/.ssh/openclaw-probe openclaw@10.99.0.2 \
+sudo ssh -i /run/secrets/openclaw/probe-ssh-private-key openclaw@10.99.0.2 \
   'openclaw chat "Have Hermes execute df -h and report the results."'
 ```
 
@@ -158,17 +166,25 @@ cat /var/lib/prometheus-node-exporter-textfiles/hermes_health.prom \
   | grep ^hermes_discord_last_event_age_seconds
 ```
 
-Healthy: `<14400` (less than 4h). Self-heal triggers a microvm restart
-at the 4h threshold (see `modules/services/hermes-self-heal.nix`).
+Healthy: `<600` — since 2026-05-28 this metric is the age of the last
+discord.py HEARTBEAT_ACK (the in-VM shim stamps it ~every 41s while the
+WS is healthy), not gateway-log idleness, so a healthy bot stays under
+~60s no matter how quiet the server is. The `HermesDiscordZombieSuspected`
+alert fires at `> 600` sustained for 10m and the self-heal daemon then
+restarts `microvm@hermes` (`modules/monitoring/alerts/hermes.yaml`,
+`modules/services/hermes-self-heal.nix`). The old 4h / 24h idleness
+thresholds were retired — they restarted the VM on an idle-but-healthy bot.
 
 ## 5. Failure modes and recovery
 
 1. **Claw hallucinates "Hermes offline" or "Hermes unreachable".**
-   Cause: Claw is a 27B local model (currently `hera/omlx/Qwen3.6-27B-MLX-8bit`),
+   Cause: Claw is a 27B local model (as of 2026-07-27
+   `hera/omlx/Qwen3.6-27B-oQ4e-mtp`; see `models.nix` `llm.agent.name`),
    not Claude — its model-reasoning capacity is limited, and it
    sometimes confabulates outages from ICMP failures on unrelated IPs
    despite Hermes responding correctly to MCP calls. The hermes MCP
-   tool description in `openclaw.json` already discourages this
+   tool description in the guest's `.mcporter/mcporter.json`
+   (rendered by `modules/services/openclaw-vm.nix`) already discourages this
    diagnosis pattern. **Remediation:** ignore the diagnosis; ask Claw
    to call `ask_hermes` again, and if the smoke metric
    (`openclaw_hermes_smoke_ok 1`) and `hermes_mcp_ask_hermes_ok 1`
@@ -180,8 +196,9 @@ at the 4h threshold (see `modules/services/hermes-self-heal.nix`).
    sometimes goes silent after the microVM restarts but does not
    surface a connection error, so `hermes_discord_last_event_age_seconds`
    climbs while everything else looks fine. **Auto-remediation:**
-   `hermes-self-heal.service` triggers a `systemctl restart microvm@hermes.service`
-   once `hermes_discord_last_event_age_seconds > 14400`.
+   `HermesDiscordZombieSuspected` (`hermes_discord_last_event_age_seconds > 600`
+   for 10m) routes through Alertmanager to `hermes-self-heal.service`, which
+   runs the `restart_microvm` action (`systemctl restart microvm@hermes.service`).
    **Manual remediation:** `sudo systemctl restart microvm@hermes.service`.
 
 3. **MCP timeout during long Hermes runs.**
@@ -189,8 +206,9 @@ at the 4h threshold (see `modules/services/hermes-self-heal.nix`).
    internal tool-use cycle (yfinance, execute_code, etc.); these can
    take 15–20 min for a single user prompt that requires several
    tool invocations. **Mitigation in place:**
-   `MCP_TOOL_TIMEOUT=1800000` (30 min) on the Claw side (env var on
-   `microvm@openclaw.service`), plus progress heartbeats every 30s
+   `MCP_TOOL_TIMEOUT=1800000` (30 min) on the Claw side (env var on the
+   in-guest `openclaw.service`, set in `modules/services/openclaw-vm.nix`),
+   plus progress heartbeats every 30s
    via `notifications/progress` with `resetTimeoutOnProgress: true`.
    **Failure signal:** if a Claw-side timeout fires despite heartbeats
    visible in `journalctl -u hermes-mcp.service`, investigate the
@@ -199,7 +217,10 @@ at the 4h threshold (see `modules/services/hermes-self-heal.nix`).
 
 4. **LiteLLM virtual key rotation breaks agent inference.**
    Cause: the openclaw config consumes a LiteLLM virtual key as one of
-   the four atomic SOPS secrets (`openclaw/litellm-virtual-key`). When
+   the six atomic SOPS secrets merged by the overlay
+   (`openclaw/litellm-virtual-key`, `openclaw/discord-token`,
+   `openclaw/gateway-auth-token`, `openclaw/perplexity-api-key`,
+   `qdrant/api-key`, `openclaw/gh-issues-api-key`). When
    that key is rotated, `openclaw-prepare-secrets.service` must re-run
    to bake the new value into `${secretsStagingDir}/openclaw-config`,
    then the openclaw microVM must restart. **Auto-remediation:**
@@ -214,7 +235,7 @@ at the 4h threshold (see `modules/services/hermes-self-heal.nix`).
 All metrics are gauges. Files live at
 `/var/lib/prometheus-node-exporter-textfiles/`.
 
-### `hermes_health.prom` (9 metrics)
+### `hermes_health.prom` (12 metrics as of 2026-07-27)
 
 | Metric | Range | Meaning |
 | --- | --- | --- |
@@ -222,11 +243,14 @@ All metrics are gauges. Files live at
 | `hermes_api_server_ok` | 0/1 | Hermes api_server `/v1/capabilities` returned 200 |
 | `hermes_api_server_probe_seconds` | float | Wall-clock seconds for the api_server capabilities probe |
 | `hermes_discord_event_present` | 0/1 | At least one Discord event was found in `gateway.log` tail |
-| `hermes_discord_last_event_age_seconds` | float | Wall-clock seconds since the most recent Discord gateway event |
+| `hermes_discord_heartbeat_present` | 0/1 | The discord.py heartbeat-ACK stamp file was readable |
+| `hermes_discord_heartbeat_age_seconds` | float | Wall-clock seconds since the last Discord gateway HEARTBEAT_ACK (via the in-VM shim) |
+| `hermes_discord_last_event_age_seconds` | float | Wall-clock seconds since the most recent proof of gateway liveness (heartbeat-ACK, falling back to a `gateway.log` event) |
 | `hermes_health_check_last_run_timestamp_seconds` | float (unix) | When the health check last ran |
 | `hermes_mcp_ask_hermes_ok` | 0/1 | A full ask_hermes round-trip completed within 60s |
 | `hermes_mcp_ask_hermes_seconds` | float | Wall-clock seconds for the end-to-end ask_hermes probe |
 | `hermes_mcp_sse_open_ok` | 0/1 | hermes-mcp `/sse` accepted a connection and emitted the endpoint event |
+| `hermes_vm_uptime_seconds` | float | Seconds since `microvm@hermes` last became active (VM-boot proxy; gates `HermesApiServerDown` past the post-restart warm-up) |
 
 ### `openclaw_canary.prom` (10 metrics, excerpted)
 
@@ -291,6 +315,13 @@ via its own `hermes-br0` gateway DNAT (`10.99.1.1:PORT→127.0.0.1:PORT`, mirror
 These widen the Hermes VM's reach but stay inside the microVM isolation boundary; egress
 stays restricted to the enumerated DNAT ports plus 443/53, the org-DB role is read-only,
 and no new plaintext enters `secrets.yaml`. See the design spec for the full rationale.
+
+**Since that milestone (state as of 2026-07-27):** the parity set has grown past the
+original seven. The authoritative lists are `dnatPorts` in
+`modules/services/hermes-microvm.nix` (now 443, 993, 2525, 4000, 5232, 5432, 8123,
+9082 drafts-mcp, 8236 memory-vault-mcp) and `mcpServers` in
+`modules/services/hermes-vm.nix` (now eight: the six above plus `memory-vault` and
+`drafts-hera`). Read those two blocks rather than this section when the exact set matters.
 
 ## Related documents
 

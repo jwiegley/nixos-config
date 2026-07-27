@@ -1,5 +1,11 @@
 # Flake-check Coverage: Schema Drift + Pytest — Design Spec
 
+> **Archival — 2026-05-16.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `tests/openclaw/check-schema.nix`, `tests/openclaw/expected-keys.txt`).
+
 Two related improvements to the regression-catch story for the OpenClaw ↔ Hermes integration. Bundled into one spec because both are about strengthening `nix flake check` so a `nixos-rebuild` catches problems before they ship.
 
 ## Why

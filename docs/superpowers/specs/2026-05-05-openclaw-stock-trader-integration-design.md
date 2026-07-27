@@ -1,5 +1,11 @@
 # OpenClaw ↔ stock-trader Integration
 
+> **Archival — 2026-05-05.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/stock-trader-mcp.py`).
+
 **Date:** 2026-05-05
 **Status:** Draft
 

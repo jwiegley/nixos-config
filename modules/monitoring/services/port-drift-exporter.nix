@@ -11,11 +11,13 @@ let
   #
   # Design: docs/MONITORING_DEFERRED_SPECS.md "Port-Drift Detector" chapter.
   #
-  # Nothing on vulcan continuously reconciles the live listening-socket set
-  # against docs/ports.txt. The registry is hand-maintained and disciplined,
-  # but it is a *document*, not an *invariant* — a misconfigured service that
-  # suddenly binds a NEW wildcard (0.0.0.0/::) port (the canonical "I just
-  # exposed something to the LAN" event) produces zero signal today.
+  # Motivation (the pre-implementation state this module closed): nothing on
+  # vulcan continuously reconciled the live listening-socket set against
+  # docs/ports.txt. The registry is hand-maintained and disciplined, but it is
+  # a *document*, not an *invariant* — a misconfigured service that suddenly
+  # binds a NEW wildcard (0.0.0.0/::) port (the canonical "I just exposed
+  # something to the LAN" event) produced zero signal. THIS file is that
+  # reconciler; it has been deployed and running since 2026-06-10.
   #
   # This collector parses docs/ports.txt into the set of registered ports +
   # their declared binding scope, snapshots `ss -tlnH`/`-ulnH` (addresses only;
@@ -34,6 +36,12 @@ let
   # an expected artifact of the rootless networking model, measured live on
   # 6383/6385 (container Redis) and 8084 (Open WebUI), all firewall-closed and
   # nginx-proxied. Folding those into the pager would chronically false-fire.
+  # As of 2026-07-27 the gauge reads 4, not 3: port 2022 (Eternal Terminal,
+  # added 2026-06-29) also counts as widened. That one is a registry-notation
+  # artifact rather than a rootless one — it genuinely binds 0.0.0.0/::, but
+  # docs/ports.txt:16 declares it per-interface ("end0 wlp1s0f0"), which the
+  # section-1 parser does not read as a wildcard declaration. Same INFO-only
+  # treatment applies: it is firewall-scoped to those two LAN interfaces.
   #
   # Metrics exposed (flat, low cardinality):
   #   port_drift_unexpected_wildcard_listeners{proto}    — PAGES (port not in registry)

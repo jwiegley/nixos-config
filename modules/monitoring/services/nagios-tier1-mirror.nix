@@ -466,8 +466,13 @@ let
   #
   # The vhosts Prometheus blackbox-probes (modules/services/blackbox-monitoring
   # .nix: blackbox_https_local + blackbox_https_auth) that have NO independent
-  # Nagios check_http/check_https service today (the 13 existing Nagios http
-  # checks + the atd/qdrant satellite checks). New local command
+  # Nagios check_http/check_https service today (nagios.nix carries 14 such
+  # checks as of 2026-07-27 — 12 check_http! + 2 check_https! — plus the
+  # atd/qdrant satellite checks). memory.vulcan.lan is deliberately absent
+  # from the list below even though it IS blackbox-probed locally (job
+  # blackbox_memory_vault, blackbox-monitoring.nix): nagios.nix already has
+  # its own Memory-Vault Health check_https for that vhost, so it is not a
+  # gap. New local command
   # `check_https_vhost` mirrors the blackbox local probe:
   #   check_http -H <vhost> -S --sni -I 127.0.0.1 -w 5 -c 10
   # (the existing global check_https command sends -H $HOSTADDRESS$ and cannot
@@ -516,7 +521,9 @@ let
     { vhost = "zimit.vulcan.lan"; }
   ];
 
-  # Auth-gated vhosts (blackbox_https_auth): probe expecting a 401.
+  # Auth-gated / no-root-handler vhosts (blackbox_https_auth): probed with the
+  # full https_2xx_or_auth status list (2xx/3xx/401/403/404), not only 401 —
+  # loki answers 404 from localhost (see the family header above).
   vhostAuthChecks = [
     { vhost = "nagios.vulcan.lan"; }
     { vhost = "loki.vulcan.lan"; }

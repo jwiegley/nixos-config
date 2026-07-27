@@ -1,5 +1,20 @@
 # Rspamd Spam Filter Installation and Configuration
 
+> **Status (2026-07-27):** Rspamd is **deployed and running** on vulcan
+> (`rspamd.service` active); this is no longer a pre-deployment plan. Two
+> structural things changed after the original write-up and are corrected below:
+>
+> 1. The `rspamd-scan-mailboxes` service/timer **no longer exists.** It was removed
+>    on 2025-11-06 (commit 25bad76, "Remove 183-line mailboxScannerScript,
+>    rspamd-scan-mailboxes systemd service, mbsync-johnw OnSuccess hook"). Mail is
+>    now scanned inline by Rspamd as a **Postfix milter**, not by a 15-minute
+>    polling sweep of the Maildir. `systemctl status rspamd-scan-mailboxes.*` will
+>    report "Unit not found". (`modules/services/nagios.nix:958` still lists that
+>    timer as a monitored unit — that is a live defect in the Nagios config, not a
+>    doc error.)
+> 2. Sieve pipe scripts moved out of `/usr/local/bin` into
+>    `/var/lib/dovecot/sieve-pipe-bin/` on 2025-11-06 (commit 2e709e2).
+
 This document describes the comprehensive Rspamd installation on the vulcan NixOS system.
 
 ## Overview
@@ -28,14 +43,18 @@ Rspamd is an advanced spam filtering system integrated with:
 ### Data Flow
 
 ```
-Incoming Email → mbsync → Dovecot Maildir
+Incoming / locally-injected mail → Postfix
                               ↓
-         rspamd-scan-mailboxes (every 15min)
+         milter (inet:localhost:11332 → rspamd_proxy worker, self_scan)
                               ↓
-                    Rspamd Analysis
+                    Rspamd Analysis — adds X-Spam* headers
+                    (actions.conf never rejects: reject = 999)
                               ↓
-                    Spam → Spam folder
-                    Ham → Stays in folder
+                    Dovecot delivery → default.sieve (sieve_before)
+                              ↓
+                    X-Spam-Score / X-Spam-Level >= 4, or X-Spam: Yes
+                        → fileinto "Spam", stop
+                    otherwise → falls through to the user's personal Sieve
 
 User Training Workflow:
     TrainSpam folder ← User moves spam
@@ -49,11 +68,18 @@ User Training Workflow:
     Sieve: rspamc learn_ham
          ↓
     Re-filter through personal Sieve rules
+
+    Retrain folder ← User moves anything to re-scan
+         ↓
+    Sieve: retrain.sieve (rescan through rspamd, redeliver via LDA)
+         ↓
+    Full Sieve pipeline again (default.sieve + active.sieve)
 ```
 
 ### Redis Backend
 
-- **Instance**: `redis-rspamd` on port 6380
+- **Instance**: `redis-rspamd` on port 6381 (`modules/services/rspamd.nix:808`;
+  matches `docs/ports.txt:60`)
 - **Purpose**: Bayes classifier token storage
 - **Persistence**: Save to disk (900s/1key, 300s/10keys, 60s/10000keys)
 
@@ -65,12 +91,14 @@ User Training Workflow:
 
 ## Required Secrets (SOPS)
 
-The following secrets must be created in `/etc/nixos/secrets.yaml`:
+Both of these already exist. The encrypted store is `/etc/nixos/secrets/secrets.yaml`
+— a *separate* git repo consumed as the `secrets` flake input. There is no
+`/etc/nixos/secrets.yaml`.
 
 ### 1. Rspamd Controller Password
 
 ```bash
-sops /etc/nixos/secrets.yaml
+sops /etc/nixos/secrets/secrets.yaml
 ```
 
 Add under appropriate section:
@@ -111,8 +139,9 @@ This certificate will be used by nginx to serve the Rspamd web UI at `https://rs
 ### Step 1: Create SOPS Secrets
 
 ```bash
-# Edit secrets file
-sops /etc/nixos/secrets.yaml
+# Edit secrets file (separate `secrets` flake-input repo; note that an edit does
+# not take effect until it is committed there AND the flake input is re-locked)
+sops /etc/nixos/secrets/secrets.yaml
 
 # Add both secrets:
 # - rspamd-controller-password
@@ -151,9 +180,9 @@ sudo journalctl -u rspamd -f
 # Check Redis backend
 sudo systemctl status redis-rspamd
 
-# Check mailbox scanner timer
-sudo systemctl status rspamd-scan-mailboxes.timer
-sudo systemctl status rspamd-scan-mailboxes.service
+# Check the milter path is live (Postfix -> rspamd_proxy on 11332)
+sudo postconf -n | grep milter
+sudo ss -tlnp | grep 11332
 
 # Check nginx reverse proxy
 sudo nginx -t
@@ -178,18 +207,22 @@ sudo journalctl -u rspamd --since "5 minutes ago"
 2. Log in with controller password from SOPS secrets
 3. Verify dashboard shows statistics
 
-### Test 3: Mailbox Scanning
+### Test 3: Inline Milter Filing
+
+There is no mailbox scanner to trigger any more (see the status note at the top).
+To exercise the live path, deliver a message through Postfix and confirm Sieve filed
+it:
 
 ```bash
-# Manually trigger mailbox scan
-sudo systemctl start rspamd-scan-mailboxes.service
+# Confirm rspamd is stamping headers on delivered mail
+sudo journalctl -u rspamd --since "15 minutes ago" | grep -i 'proxy;'
 
-# Check logs
-sudo journalctl -u rspamd-scan-mailboxes -f
-
-# Verify spam messages were moved to Spam folder
+# Verify spam messages landed in the Spam folder
 ls -la /var/mail/johnw/Spam/cur/
 ```
+
+To re-run an already-delivered message through the whole pipeline, move it into the
+`Retrain` folder (`imapsieve_mailbox3`, `modules/services/dovecot.nix:377-380`).
 
 ### Test 4: Spam Training Workflow
 
@@ -197,7 +230,9 @@ ls -la /var/mail/johnw/Spam/cur/
    - Move a spam message to `TrainSpam` folder via IMAP client
    - Sieve script should run `rspamc learn_spam`
    - Message should be moved to `Spam` folder
-   - Check Dovecot logs: `sudo journalctl -u dovecot2 -f`
+   - Check Dovecot logs: `sudo journalctl -u dovecot -f` (the unit is `dovecot`;
+     `dovecot2` is only a unit *alias*, and `journalctl -u dovecot2` returns
+     nothing)
 
 2. **Train Ham**:
    - Move a legitimate message to `TrainGood` folder
@@ -249,51 +284,92 @@ The following alerts are configured (see `/etc/nixos/modules/services/rspamd-ale
 ### Nagios Checks
 
 - **rspamd.service**: SystemD service health check
-- **rspamd-scan-mailboxes.timer**: Mailbox scanning timer check
+- **rspamd-scan-mailboxes.timer**: still listed as a monitored timer at
+  `modules/services/nagios.nix:958`, but **that unit no longer exists** (removed
+  2025-11-06). The check can only ever report the unit as absent; it should be
+  dropped from the timer list.
 
 ## Configuration Files
 
 ### Rspamd Local Overrides
 
-Rspamd configuration uses local overrides in `/var/lib/rspamd/local.d/`:
+Rspamd configuration uses local overrides in **`/etc/rspamd/local.d/`**, generated
+from the `services.rspamd.locals` attrset in `modules/services/rspamd.nix`
+(`/var/lib/rspamd/override.d/` is a *different* directory, used only for the two
+files that must carry secrets at runtime — see below). The full live set:
 
 - **redis.conf**: Redis connection for statistics
-- **classifier-bayes.conf**: Bayes learning settings
-- **statistic.conf**: Statistics and autolearn configuration
+- **statistic.conf**: Bayes classifier (BAYES_SPAM / BAYES_HAM statfiles) and
+  autolearn configuration
 - **actions.conf**: Spam score thresholds
-- **worker-controller.inc**: Web UI and API settings
-- **worker-normal.inc**: Normal worker settings
-- **worker-proxy.inc**: Proxy worker (for future milter integration)
 - **milter_headers.conf**: Email header additions
 - **metrics.conf**: Prometheus metrics export
+- **logging.inc**: log level (`notice`, to suppress per-scrape trusted-IP noise)
+- **options.inc**: DNS and general options
+- **rrd.conf**: RRD graph file location
+- **policies_group.conf**: policy symbol scores
+- **gpt.conf**: LLM-assisted classification (API key injected at preStart)
+- **dkim_signing.conf**: DKIM signing disabled for local/private domains
+- **phishing.conf** + **maps.d/phishing_whitelist.inc**: phishing module with
+  `vulcan.lan` whitelisted
+- **settings.conf**: whitelist for intra-`vulcan.lan` mail
+- **rbl.conf**: RBL configuration
+- **maps.d/effective_tld_names.dat**: custom TLD map
+- **worker-controller.inc**: Web UI and API settings
+
+There is no `classifier-bayes.conf`, `worker-normal.inc`, or `worker-proxy.inc`.
+The proxy (milter) and controller workers are configured through the NixOS module's
+`services.rspamd.workers.rspamd_proxy` / `workers.controller` options rather than
+via `local.d` includes.
+
+Two files are written at `rspamd.service` preStart into
+`/var/lib/rspamd/override.d/` (mode 600, `rspamd:rspamd`) because they embed SOPS
+secrets and `/etc` is read-only on NixOS: **worker-controller.inc** (controller
+password) and **gpt.conf** (LiteLLM API key).
 
 ### Sieve Scripts
 
-Located in `/var/lib/dovecot/sieve/global/rspamd/`:
+Located in `/var/lib/dovecot/sieve/global/rspamd/` (symlinks into the Nix store,
+created by `systemd.tmpfiles.rules`):
 
 - **learn-spam.sieve**: Triggered when message moved to TrainSpam
 - **learn-ham.sieve**: Triggered when message moved to TrainGood
 - **move-to-spam.sieve**: Moves trained spam to Spam folder
 - **process-good.sieve**: Re-filters trained ham through personal Sieve rules
+  (defined in `dovecot.nix`, not `rspamd.nix`)
+- **retrain.sieve** / **retrain-cleanup.sieve**: Retrain folder — rescan through
+  rspamd and redeliver via LDA
 
-Shell scripts in `/usr/local/bin/`:
+Shell scripts in **`/var/lib/dovecot/sieve-pipe-bin/`** (Dovecot's
+`sieve_pipe_bin_dir`; the old `/usr/local/bin` location was removed 2025-11-06):
 
 - **rspamd-learn-spam.sh**: Calls `rspamc learn_spam`
 - **rspamd-learn-ham.sh**: Calls `rspamc learn_ham`
+- **rspamd-retrain.sh**: Rescan + redeliver for the Retrain folder
 
 ## Workflow Details
 
 ### Automated Spam Scanning
 
-Every 15 minutes, the `rspamd-scan-mailboxes.service` runs:
+**Historical note:** until 2025-11-06 this was a `rspamd-scan-mailboxes.service`
+that swept the Maildir every 15 minutes, scanning users `johnw` and `assembly`
+across INBOX/Sent/Drafts/NeedsRule/TrainGood/Good/mail/*/list/* (skipping Spam and
+TrainSpam to avoid loops) and moving anything over the score threshold. That
+service and its timer were **deleted** in favour of inline milter scanning, and
+that is the arrangement in force today:
 
-1. Scans mailboxes for users: `johnw`, `assembly`
-2. Processes folders: INBOX, Sent, Drafts, NeedsRule, TrainGood, Good, mail/*, list/*
-3. Skips: Spam, TrainSpam (to avoid loops)
-4. For each message:
-   - Calls `rspamc` to analyze
-   - If score > 15 (spam threshold), moves to Spam folder
-5. Logs activity to journalctl
+1. Postfix hands every incoming and locally-injected message to the milter at
+   `inet:localhost:11332` (`smtpd_milters` / `non_smtpd_milters`,
+   `modules/services/postfix.nix:172-176`; submission ports 465/587 set
+   `smtpd_milters = ""` and skip it).
+2. Rspamd's `rspamd_proxy` worker scans it (`self_scan = yes`) and adds `X-Spam*`
+   headers. `actions.conf` sets `reject = 999`, so Rspamd never rejects — it only
+   annotates.
+3. On delivery, Dovecot's `sieve_before` script `default.sieve` files the message
+   into `Spam` when `X-Spam-Score` / `X-Spam-Level` >= 4 (or `X-Spam: Yes`),
+   exempting anything `from` domain `vulcan.lan`. Everything else falls through to
+   the user's personal Sieve.
+4. Activity is logged to journalctl under the `rspamd` and `dovecot` units.
 
 ### User Training
 
@@ -330,26 +406,30 @@ sudo systemctl status redis-rspamd
 
 ```bash
 # Check Dovecot logs
-sudo journalctl -u dovecot2 -f
+sudo journalctl -u dovecot -f
 
 # Verify Sieve scripts exist
-ls -la /var/lib/dovecot/sieve/rspamd/
+ls -la /var/lib/dovecot/sieve/global/rspamd/
 
 # Test Sieve script compilation
-sievec /var/lib/dovecot/sieve/rspamd/learn-spam.sieve
+sievec /var/lib/dovecot/sieve/global/rspamd/learn-spam.sieve
 ```
 
-### Mailbox Scanner Not Running
+### Mail Not Being Scanned
+
+The 15-minute `rspamd-scan-mailboxes` sweep no longer exists; if mail is arriving
+unscanned, the milter hand-off is the thing to check.
 
 ```bash
-# Check timer status
-sudo systemctl status rspamd-scan-mailboxes.timer
+# Is Postfix pointed at the milter?
+sudo postconf -n | grep -E 'milter'
 
-# Manually trigger
-sudo systemctl start rspamd-scan-mailboxes.service
+# Is the rspamd_proxy worker listening?
+sudo ss -tlnp | grep 11332
 
-# Check logs
-sudo journalctl -u rspamd-scan-mailboxes -f
+# Rspamd's own view
+sudo journalctl -u rspamd --since "1 hour ago"
+rspamc stat
 ```
 
 ### High False Positive Rate
@@ -359,10 +439,11 @@ sudo journalctl -u rspamd-scan-mailboxes -f
 rspamc stat
 
 # Adjust thresholds in /etc/nixos/modules/services/rspamd.nix
-# actions.conf section:
-# - reject = 15 (default)
-# - add_header = 6 (default)
-# - greylist = 4 (default)
+# actions.conf section (live values as of 2026-07-27, rspamd.nix:531-537):
+# - reject = 999      (rejection deliberately disabled; Sieve does the filing)
+# - add_header = 4
+# - greylist = 3
+# Note default.sieve files to Spam at X-Spam-Score >= 4, matching add_header.
 
 # Rebuild after changes
 sudo nixos-rebuild switch --flake '.#vulcan'
@@ -380,12 +461,21 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 
 Potential improvements:
 
-1. **Milter Integration**: Connect Rspamd directly to Postfix for incoming mail filtering
-2. **PostgreSQL History**: Enable history module to track long-term statistics
-3. **Custom Rules**: Add domain-specific spam rules
-4. **Whitelist/Blacklist**: Implement sender reputation lists
-5. **DKIM Signing**: Add outgoing email signing
-6. **Greylisting**: Enable greylisting for unknown senders
+1. ~~**Milter Integration**~~ — **DONE.** Postfix hands mail to the `rspamd_proxy`
+   worker at `inet:localhost:11332` (`modules/services/postfix.nix:172-176`).
+2. **PostgreSQL History**: Enable history module to track long-term statistics. The
+   `rspamd` database and role exist (`databases.nix:31-34`), but no history module
+   is configured — the DB is still unused.
+3. **Custom Rules**: Add domain-specific spam rules. (Partly done: there are custom
+   Lua rules for gibberish detection, plus a `gpt.conf` LLM-assisted module.)
+4. **Whitelist/Blacklist**: Implement sender reputation lists. (Partly done:
+   `settings.conf` whitelists intra-`vulcan.lan` mail and `default.sieve` never
+   spam-files a `vulcan.lan` sender.)
+5. **DKIM Signing**: Add outgoing email signing. Still not enabled —
+   `dkim_signing.conf` explicitly sets `sign_local = false` on the grounds that DKIM
+   only helps for public internet domains.
+6. **Greylisting**: Enable greylisting for unknown senders. The `greylist = 3`
+   action threshold exists, but the greylisting module itself is not configured.
 
 ## References
 
@@ -404,8 +494,12 @@ For issues or questions:
 
 ---
 
-**Configuration Status**: Ready for deployment (pending secrets and certificate)
+**Configuration Status**: Deployed and running. Both SOPS secrets
+(`rspamd-controller-password`, `rspamd-db-password`) exist, the
+`rspamd.vulcan.lan` certificate is in place, and `rspamd.service` is active.
 
-**Last Updated**: 2025-01-15
+**Last Updated**: 2026-07-27 (fact-check pass). The document was first written
+2025-11-04 and last substantively revised 2025-11-26; the "2025-01-15" date this
+line previously carried predates the work it describes and was never correct.
 
 **Author**: Claude Code (claude.ai/code)

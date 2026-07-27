@@ -7,11 +7,12 @@
 
 {
   # Memory limits for resource-intensive services to prevent OOM crashes
-  # See: docs/OOM_ANALYSIS_2025-11-12.md for context
   #
-  # These limits are based on observed memory usage patterns:
-  # - Promtail: ~1.1GB (limited in promtail.nix)
-  # - Home Assistant: ~612MB
+  # These limits are based on observed memory usage patterns. Measured
+  # 2026-07-27 with `systemctl show -p MemoryCurrent -p MemoryPeak <unit>`:
+  # - Promtail: 91 MiB current, 224 MiB peak. Its cap is NOT set here — it is
+  #   MemoryMax = 512M in modules/services/promtail.nix.
+  # - Home Assistant: 1.15 GiB current, 1.50 GiB peak.
   #
   # Philosophy:
   # - MemoryMax: Hard limit, kills service if exceeded
@@ -29,7 +30,8 @@
     # podmanArgs = [ "--memory=1.8g" "--memory-reservation=1.5g" ]
 
     # Home Assistant memory limits
-    # Observed ~825MB steady-state, peaks at 1GB with all integrations loaded
+    # Measured 2026-07-27: 1.15 GiB current, 1.50 GiB peak — the peak has
+    # already reached the MemoryHigh soft limit set below.
     home-assistant = {
       serviceConfig = {
         MemoryMax = "1.8G";

@@ -233,7 +233,12 @@ let
 in
 {
   # Export host groups for use in other modules (like prometheus scrape configs)
-  # This allows other modules to reference the defined hosts
+  # This allows other modules to reference the defined hosts.
+  # NOTE (2026-07-27): nothing outside this file reads these two options, and
+  # the scrapeConfigs below do NOT derive from hostGroups — they carry their own
+  # hand-maintained target lists. hostGroups only feeds the host counts in the
+  # shipped /etc/blackbox-monitoring/README.md, so those counts describe this
+  # list rather than what is actually probed.
   options.services.blackbox-monitoring = {
     hostGroups = lib.mkOption {
       type = lib.types.attrs;
@@ -419,8 +424,13 @@ in
             static_configs = [
               # Always-on hosts: local infra (host/peers + network gear) plus
               # the public DNS / internet-backbone reachability checks. These
-              # are expected to be up 24/7; HostUnreachable (critical) owns
-              # them. host_group is attached by the relabel_configs below.
+              # are expected to be up 24/7. HostUnreachable (critical) no longer
+              # owns all of them: since 2026-07-07 it excludes host_group
+              # backbone/dns, which are covered instead by the aggregate
+              # WANDegraded / DNSResolversDown rules in network.yaml. Targets
+              # that end up with no host_group (e.g. the Quad9 addresses, which
+              # the "dns" relabel regex does not match) are still owned by it.
+              # host_group is attached by the relabel_configs below.
               {
                 targets = [
                   "vulcan.lan" # 192.168.1.2
@@ -465,7 +475,7 @@ in
               # ICMP for long stretches (low-power radios, deep sleep), so they
               # are carried in their own group and EXCLUDED from the always-on
               # HostUnreachable critical. The warning-only BlackboxICMPIoTDevice
-              # Down alert (network.yaml, for: 10m) covers them and mirrors the
+              # Down alert (network.yaml, for: 1h) covers them and mirrors the
               # existing Nagios IoT ping coverage (the cross-stack duplication
               # on this host is intentional). The explicit host_group label here
               # is authoritative — the relabel_configs "local/dns/backbone"
@@ -512,6 +522,12 @@ in
               # never-clearing warnings, violating the no-chronic-firing
               # discipline. If one of these ever starts answering ICMP, move it
               # back into the "iot" group above so it gets warning coverage.
+              # UPDATE 2026-07-27: that has now happened for the office chime —
+              # ring-chime-office.lan answered ~99.6% of probes over the
+              # preceding 30 days, so it no longer fits "never answers ICMP"
+              # and, by the rule above, belongs in the "iot" group.
+              # (nest-upstairs.lan answers ~2% of the time; the other two nests
+              # are still flat 0%.)
               {
                 targets = [
                   "nest-downstairs.lan" # 192.168.3.57
@@ -531,6 +547,11 @@ in
               #   - traeger-grill  (~78% reachable; off for days between cooks)
               #   - ring-doorbell  (~92% reachable; long power-save windows;
               #     measured 0% real loss but multi-second wakeup RTT)
+              # Re-measured over the 90 days to 2026-07-27 (with the 10s
+              # icmp_ping_iot module in force): traeger-grill ~92%,
+              # ring-doorbell ~99.9%. Both still go quiet by design, so the
+              # exclusion rationale stands, but the percentages above are the
+              # older, lower figures.
               # They are still probed for visibility (a genuine extended outage
               # remains visible on dashboards) but, exactly like iot-noping, are
               # EXCLUDED from every blackbox alert — both the warning-only
@@ -999,9 +1020,10 @@ in
           # ICMP host_group-based rules in network.yaml never match it. The
           # MLXBackendDown alert in hermes.yaml owns this target (gated by
           # `and on() up{job="darwin-hera"}==1`); the generic HostUnreachable rule
-          # (network.yaml, job=~"blackbox_.*") should exclude blackbox_hera_mlx so
+          # (network.yaml, job=~"blackbox_.*") must exclude blackbox_hera_mlx so
           # a hera reboot does not double-fire an ungated critical — that
-          # exclusion is requested as a userAction (network.yaml not owned here).
+          # exclusion has since landed (HostUnreachable now carries
+          # job!="blackbox_hera_mlx"; verified 2026-07-27).
           # (coverage plan deferred: mlx-hera-probe)
           {
             job_name = "blackbox_hera_mlx";

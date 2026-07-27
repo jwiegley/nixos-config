@@ -1,5 +1,17 @@
 # Flume v3 Design — Per-Minute Attribution + User Feedback Loop
 
+> **Status (2026-07-27):** this is the **design record**, not a to-do list and not the
+> as-built schema. Most of it shipped on 2026-05-23 (phase 3a `503bcff`, 3b `7e179e3`,
+> 3c `b21395e`), **but the per-minute table was immediately rebuilt in long format**
+> (commit `e9beaf0`, "replace wide `flume_minute_attributions` with long format"), so
+> the wide one-column-per-fixture schema in section 1 below **does not exist**. For the
+> schema that is actually deployed read
+> [`FLUME_DATA_REFERENCE.md`](./FLUME_DATA_REFERENCE.md) and the authoritative DDL in
+> `scripts/flume-data/flume_db_sync.py`. Still unbuilt as of 2026-07-27: the phase-3d
+> **email digest of unlabeled big events** — `flume_user_labels` and the
+> `flume_questionnaire` view exist, but nothing in `scripts/flume-data/` reads the view,
+> so nothing surfaces questions to the user yet.
+
 Building on v2 (B-Hyve-aware classifier) and the fixture EDA, v3 adds:
 
 1. **Per-minute wide attribution table** — one column per fixture
@@ -11,6 +23,16 @@ Building on v2 (B-Hyve-aware classifier) and the fixture EDA, v3 adds:
 ---
 
 ## 1. Per-minute wide table
+
+> **Superseded — do not query against this.** The shipped
+> `flume_minute_attributions` is **long format**: `(ts, fixture, gpm, source,
+> computed_at)` with `PRIMARY KEY (ts, fixture)` and `source IN ('v3','user')`, zero or
+> more rows per minute. The invariant is the same in spirit but tighter: per-minute
+> `SUM(gpm)` equals `flume_minute_samples.gpm` within **0.05** GPM (not 0.1), and the
+> refresh script asserts it after every rebuild. See
+> `scripts/flume-data/flume_db_sync.py` for the live DDL. The wide design below is
+> retained because the *column list* is still the fixture vocabulary the classifier
+> uses.
 
 ```sql
 CREATE TABLE flume_minute_attributions (
@@ -121,6 +143,13 @@ unknown_gpm = max(0, remaining)
 The triangular-likelihood scoring from v3's segment-attribution design
 is wrapped in `allocate_hot()` and the cold-only allocator.
 
+> **As built (2026-07-27):** there is no `allocate_hot()` anywhere in
+> `scripts/flume-data/`, and the likelihood kernel is **Gaussian**, not triangular —
+> `fixtures.Range.likelihood()` centres a Gaussian on the range midpoint with
+> `sigma = (high - low) / 4`, precisely to avoid the triangular kernel's "edge-cliff"
+> (a sample sitting exactly at `low` would score 0 and kill the whole fixture).
+> Scoring and allocation live in `flume_data/classify_v3.py`.
+
 ### Multiplicity (3-4 simultaneous showers)
 
 The per-minute table allocates **GPM**, not fixture counts. If
@@ -225,6 +254,14 @@ Per-minute allocation during a cycle:
 
 ## 5. Calibrated fixture library v3.1 (updated from EDA)
 
+> **Superseded by code.** The library that actually runs is
+> `scripts/flume-data/flume_data/fixtures.py` (`FIXTURES`), and several ranges there
+> are wider than this table — e.g. `shower` is `mean_gpm 1.3–10.0` ("high end
+> accommodates 3-4 simultaneous"), `toilet_flush` is `1.2–2.5`, and
+> `clothes_washer_hot` is no longer TBD (`2.0–10.0`, `peak_over_mean 2.5–8.0`). Read
+> `fixtures.py` for current values; the table below is the calibration this design
+> started from.
+
 Based on user feedback:
 
 | Fixture | Mean GPM | Notes |
@@ -255,9 +292,17 @@ Based on user feedback:
 ## Open questions remaining
 
 1. **Email digest frequency for unlabeled events**: weekly or monthly?
+   — **still open** as of 2026-07-27; the digest itself was never built (see the
+   status note at the top).
 2. **Looking up fridge water flow rate**: I can do this if you tell me
    the make/model. Or I can use a reasonable default (~0.6 GPM ice
    maker, ~0.4 GPM dispenser) and calibrate when we see data.
+   — **resolved**: the literature defaults were adopted. `fixtures.py`'s
+   `fridge_event` records "dispenser ~0.4 GPM, ice maker ~0.6 GPM (per user decision
+   to use literature defaults until refrigerator make/model tells us otherwise)".
 3. **Dishwasher water_consumption resets**: cumulative per cycle? Does
    it reset to 0 between cycles, or accumulate forever? (Will check
    when I implement.)
+   — **resolved during implementation**: cumulative within a cycle, resets per cycle
+   on the Miele. `flume_data/dishwasher.py` takes the per-cycle `max()` of
+   `sensor.dishwasher_water_consumption` as the cycle's gallons.

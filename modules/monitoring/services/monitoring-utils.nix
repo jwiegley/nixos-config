@@ -9,7 +9,9 @@ let
   # Alert rules directory
   alertRulesDir = ../../monitoring/alerts;
 
-  # Load all alert rules from YAML files
+  # Hand-picked subset of the alert rule files, used ONLY by the
+  # `validate-alerts` helper below. This is NOT the set Prometheus loads:
+  # alerting.nix auto-discovers every *.yaml in ../alerts via builtins.readDir.
   alertRuleFiles = builtins.map (file: "${alertRulesDir}/${file}") [
     "system.yaml"
     "systemd.yaml"

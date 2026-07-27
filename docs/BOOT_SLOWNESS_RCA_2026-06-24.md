@@ -1,5 +1,10 @@
 # Boot Slowness RCA — vulcan, 2026-06-24
 
+> **Archival — 2026-06-24.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 **Boot:** index 0, started 2026-06-24 15:54:18 PDT (14 days after the prior boot).
 **Author:** boot RCA agent. **Method:** `systemd-analyze time|blame|critical-chain`, `journalctl -b 0 -o short-monotonic`, `systemctl cat/show`, adversarial verifier pass. All offsets are userspace-monotonic seconds from kernel handoff unless noted.
 

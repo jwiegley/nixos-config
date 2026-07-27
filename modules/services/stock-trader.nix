@@ -20,8 +20,9 @@
 #
 # The whole config block is `lib.mkIf cfg.enable {...}` so a dry-build
 # with the service disabled does not require the secrets to exist or
-# the TLS cert to have been issued. Final activation is part of the
-# Chunk 3 bring-up.
+# the TLS cert to have been issued. Final activation was the Chunk 3
+# bring-up; the service has since been switched on for vulcan at
+# hosts/vulcan/default.nix:204 (`services.stock-trader.enable = true`).
 {
   config,
   lib,

@@ -1,5 +1,11 @@
 # Unified Agent Health Report Implementation Plan
 
+> **Archival — 2026-06-01.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `scripts/agent_health_report.py`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the two divergent nightly-report scripts with one shared engine (`agent_health_report.py`) driven by per-agent profiles, so the OpenClaw and Hermes emails render the same 11-section union, each section probed for real where a signal exists.

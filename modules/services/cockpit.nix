@@ -17,7 +17,7 @@
       WebService = {
         # Allow connections from nginx reverse proxy
         Origins = lib.mkForce "https://cockpit.vulcan.lan wss://cockpit.vulcan.lan";
-        # Disable direct HTTP/HTTPS - nginx will handle SSL
+        # Serve plain HTTP instead of Cockpit's own TLS - nginx handles SSL
         AllowUnencrypted = true;
         # Set URL root for reverse proxy
         UrlRoot = "/";
@@ -133,7 +133,7 @@
   };
 
   # Don't open firewall ports - access via nginx reverse proxy only
-  # Cockpit binds to localhost:9090 and nginx proxies HTTPS traffic
+  # Cockpit binds to localhost:9099 and nginx proxies HTTPS traffic
 
   # Ensure johnw user can access cockpit (wheel group has admin access)
   # No additional configuration needed - PAM authentication uses system users

@@ -1,5 +1,10 @@
 # Post-Reboot Health Audit — 2026-07-03
 
+> **Archival — 2026-07-03.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+
 74-agent workflow audit (run `wf_3c9ffea1-d08`) after the 11:37 reboot: 24h of
 journals across all 435 system units + 17 user managers, kernel, both microVMs,
 all firing alerts, every nginx vhost probed, deep-dives on the two observed

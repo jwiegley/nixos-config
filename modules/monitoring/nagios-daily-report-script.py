@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict, Counter
 
-# Configuration will be set via environment variables or command-line args
+# Configuration is set via environment variables (no command-line arguments)
 import os
 
 STATUS_FILE = Path(os.getenv("STATUS_FILE", "/var/lib/nagios/status.dat"))

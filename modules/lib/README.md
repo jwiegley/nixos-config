@@ -6,10 +6,16 @@ This directory contains reusable helper functions to reduce boilerplate and stan
 
 ### `common.nix` - Shared Variables and Constants
 
-Import with: `common = import ../lib/common.nix { };`
+Import with: `common = import ../lib/common.nix { inherit secrets; };`
+
+`common.nix` is `{ secrets, ... }:` — the `secrets` flake input is a **required**
+argument, so the importing module must accept `secrets` in its own argument set.
+`import ../lib/common.nix { }` fails to evaluate.
 
 Provides:
-- `secretsPath` - Consistent path to `secrets.yaml` (use instead of `../../secrets.yaml`)
+- `secretsPath` - Consistent path to the SOPS store (`secrets.outPath + "/secrets.yaml"`,
+  i.e. `/etc/nixos/secrets/secrets.yaml` via the `secrets` flake input — not a
+  repo-relative path)
 - `restartPolicies` - Standard systemd restart configurations (each contains `unit` and `service` sections)
   - `restartPolicies.always.unit` - Rate limiting for [Unit] section (StartLimitIntervalSec, StartLimitBurst)
   - `restartPolicies.always.service` - Restart behavior for [Service] section (Restart, RestartSec)
@@ -20,12 +26,13 @@ Provides:
 
 Example:
 ```nix
+{ config, lib, pkgs, secrets, ... }:
 let
-  common = import ../lib/common.nix { };
+  common = import ../lib/common.nix { inherit secrets; };
 in
 {
   sops.secrets."my-secret" = {
-    sopsFile = common.secretsPath;  # Instead of ../../secrets.yaml
+    sopsFile = common.secretsPath;  # Instead of a repo-relative secrets.yaml
   };
 
   services.nginx.virtualHosts."myapp.vulcan.lan" =
@@ -81,10 +88,13 @@ systemd.services.postgresql-myapp-setup = {
 Import with:
 ```nix
 let
-  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+  mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
   inherit (mkQuadletLib) mkQuadletService;
 in
 ```
+
+`mkQuadletService.nix` is `{ config, lib, pkgs, secrets, ... }:` — `secrets` is
+**required** (it forwards it to `common.nix`), so omitting it fails to evaluate.
 
 Creates a complete Podman quadlet container configuration with:
 - Standard restart policies
@@ -135,7 +145,27 @@ imports = [
 - `services.nginx.virtualHosts` with SSL certificates
 - `systemd.tmpfiles.rules`
 
-See `wallabag-quadlet.nix` and `litellm-quadlet.nix` for working examples.
+**Status (2026-07-27):** `mkQuadletService` has exactly one remaining consumer,
+`modules/containers/technitium-dns-exporter-quadlet.nix:28` — see that file for the
+only working example. `wallabag-quadlet.nix` and `litellm-quadlet.nix` (once cited
+here) no longer use it: those containers moved to rootless Home Manager quadlets
+under `modules/users/home-manager/`, and the `mkQuadletService` blocks that remain
+in the `-quadlet.nix` files are commented out for reference only.
+
+### Other helpers in this directory (added 2026-07-27)
+
+Three more helpers live here and are in active use; they are listed for
+discoverability — read the file headers for their full parameter sets.
+
+- **`bindTankModule.nix`** — `import ../lib/bindTankModule.nix { inherit config lib pkgs; }`
+  → `bindTankPath`. The most-used helper in this directory (7 import sites, e.g.
+  `modules/services/postgresql-backup.nix`, `modules/services/node-red-backup.nix`,
+  `modules/containers/copyparty-container.nix`, `modules/maintenance/timers.nix`).
+- **`resticOperations.nix`** — `import ../lib/resticOperations.nix { inherit config lib pkgs; }`
+  → `resticOperations`. Used by `modules/services/monitoring.nix` and
+  `modules/storage/backups.nix`.
+- **`mkMbsyncModule.nix`** — `import ../lib/mkMbsyncModule.nix { inherit config lib pkgs; }`
+  → `mkMbsyncService`. Used only by `modules/services/mbsync.nix`.
 
 ## Migration Guide
 
@@ -157,9 +187,9 @@ See `wallabag-quadlet.nix` and `litellm-quadlet.nix` for working examples.
    }
 
    # After (45 lines)
-   { config, lib, pkgs, ... }:
+   { config, lib, pkgs, secrets, ... }:
    let
-     mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs; };
+     mkQuadletLib = import ../lib/mkQuadletService.nix { inherit config lib pkgs secrets; };
      inherit (mkQuadletLib) mkQuadletService;
    in
    {
@@ -177,7 +207,8 @@ See `wallabag-quadlet.nix` and `litellm-quadlet.nix` for working examples.
    }
    ```
 
-2. **Standardize SOPS paths:**
+2. **Standardize SOPS paths** (historical — as of 2026-07-27 no `.nix` file in the
+   repo still uses a repo-relative `secrets.yaml`, so this migration is complete):
    ```nix
    # Before
    sopsFile = ../../secrets.yaml;
@@ -186,10 +217,14 @@ See `wallabag-quadlet.nix` and `litellm-quadlet.nix` for working examples.
 
    # After
    let
-     common = import ../lib/common.nix { };
+     common = import ../lib/common.nix { inherit secrets; };
    in
    sopsFile = common.secretsPath;
    ```
+
+   Note that `sopsFile = config.sops.defaultSopsFile;` resolves to the same file
+   and is what most modules use today; `common.secretsPath` is only needed where
+   `config` is not in scope.
 
 3. **Consolidate PostgreSQL setup:**
    ```nix

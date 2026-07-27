@@ -6,11 +6,14 @@ the inbound MESSAGE_CREATE -> agent dispatch -> reply pipeline. Posts an
 `@target <nonce>` message to a dedicated channel *as one bot* and verifies
 the *target bot* replies.
 
-Deployed as a mutually-probing pair (2026-07-15, replacing the dedicated
+Wired as a mutually-probing pair (2026-07-15, replacing the dedicated
 probe-bot design):
   - OpenClaw's @Claw probes Hermes   -> metric hermes_discord_canary_*
   - Hermes probes OpenClaw's @Claw   -> metric openclaw_discord_canary_*
 Blind spot (accepted): if BOTH gateways die at once, neither probe reports.
+NOT YET LIVE as of 2026-07-27: both directions are declared in
+hosts/vulcan/default.nix with enable = false and an empty channelId,
+pending the one-time shared-channel setup in docs/DISCORD_CANARY_SETUP.md.
 
 Why this is needed (2026-07-15 incident):
   Hermes' Discord connection zombied — the WebSocket stayed "connected" and

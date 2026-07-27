@@ -4,17 +4,24 @@ This guide explains how to monitor Home Assistant integration health using Nagio
 
 ## Overview
 
-The `check_homeassistant_integrations` script monitors:
-- **Total entities** across all integrations
-- **Unavailable entities** (devices/sensors that are offline or unreachable)
-- **Failed integrations** (integrations that are disabled or in error state)
-- **Specific integration health** (optional filtering)
+The `check_homeassistant_integrations` script
+(`modules/monitoring/check_homeassistant_integrations.sh`) monitors:
+- **Total entities** across all integrations (from `/api/states`)
+- **Unavailable entities** (devices/sensors whose state is literally `unavailable`)
+- **Missing integrations** — for each name passed to `-i`, whether it appears in
+  the loaded-components list from `/api/config`. The script has no visibility into
+  "disabled" or "error" config-entry states; a named integration is either loaded
+  or it is not.
+- **Integration-only mode** (`-I`): skip entity counting entirely and report only
+  loaded/missing integrations. Requires `-i`.
 
 Returns standard Nagios exit codes:
-- `OK (0)`: All integrations healthy, unavailable entities below warning threshold
+- `OK (0)`: All named integrations loaded, unavailable entities below warning threshold
 - `WARNING (1)`: Unavailable entities >= warning threshold (default: 5)
-- `CRITICAL (2)`: Unavailable entities >= critical threshold (default: 10) OR any integration failures
-- `UNKNOWN (3)`: Unable to connect to Home Assistant API
+- `CRITICAL (2)`: Unavailable entities >= critical threshold (default: 10), OR any
+  `-i` integration is not loaded, OR the Home Assistant API is unreachable /
+  unparseable
+- `UNKNOWN (3)`: No token supplied (`-t`), an invalid option, or `-I` without `-i`
 
 ## Setup Instructions
 
@@ -30,24 +37,32 @@ Returns standard Nagios exit codes:
 ### 2. Add Token to SOPS Secrets
 
 ```bash
-# Edit SOPS secrets file
-sops /etc/nixos/secrets.yaml
+# Edit SOPS secrets file (the encrypted store is secrets/secrets.yaml, a
+# separate git repo consumed as the `secrets` flake input — there is no
+# /etc/nixos/secrets.yaml)
+sops /etc/nixos/secrets/secrets.yaml
 
 # Add under a monitoring section:
 monitoring:
-  home-assistant-token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  home-assistant-token: "<long-lived access token>"
 
 # Save and exit
 ```
 
+The secret is declared as `monitoring/home-assistant-token`
+(`modules/monitoring/homeassistant-nagios-check.nix:36`) and deploys to
+`/run/secrets/monitoring/home-assistant-token` owned `nagios:nagios`, mode `0400`.
+
 ### 3. Enable Monitoring Module
 
-Add to your NixOS configuration:
+**Already enabled on vulcan** — `hosts/vulcan/default.nix:115` imports
+`../../modules/monitoring/homeassistant-nagios-check.nix`. On another host, add the
+import to that host's module (there is no `/etc/nixos/configuration.nix`):
 
 ```nix
-# In configuration.nix or flake.nix
+# In hosts/<host>/default.nix
 imports = [
-  ./modules/monitoring/homeassistant-nagios-check.nix
+  ../../modules/monitoring/homeassistant-nagios-check.nix
 ];
 ```
 
@@ -89,6 +104,8 @@ check_homeassistant_integrations -H hass.vulcan.lan -s -t "YOUR_TOKEN_HERE" -i "
 | `-c` | Critical threshold (unavailable entities) | `10` |
 | `-s` | Use HTTPS instead of HTTP | HTTP |
 | `-i` | Check specific integrations (comma-separated) | All integrations |
+| `-I` | Integration-only mode: check only that the `-i` integrations are loaded, ignore entities | Off (entity mode) |
+| `-h` | Print usage and exit 0 | — |
 
 ### Example Output
 
@@ -104,37 +121,78 @@ WARNING - Total: 247 entities, Unavailable: 7 | Unavailable: sensor.ring_front_d
 
 **Critical Status:**
 ```
-CRITICAL - Total: 247 entities, Unavailable: 12, Failed integrations: nest (disabled) | Unavailable: sensor.ring_front_door_battery, lock.front_door, climate.upstairs, sensor.pool_temperature, binary_sensor.garage_door (+7 more) | entities=247 unavailable=12;5;10;0;247
+CRITICAL - Total: 247 entities, Unavailable: 12, Missing integrations: nest | Unavailable: sensor.ring_front_door_battery, lock.front_door, climate.upstairs, sensor.pool_temperature, binary_sensor.garage_door (+7 more) | entities=247 unavailable=12;5;10;0;247
 ```
+
+**Integration-only mode (`-I`), which is what the systemd timer runs:**
+```
+OK - Integrations: 12/12 loaded
+CRITICAL - Integrations: 11/12 loaded, Missing: nest
+```
+Note that `-I` output carries **no** performance data.
 
 ## Nagios Configuration
 
+> **Note (2026-07-27):** on vulcan Nagios is fully declarative. There is no
+> `/etc/nagios` directory at all — `services.nagios.objectDefs` points at a single
+> generated `nagios-objects.cfg` in the Nix store
+> (`modules/services/nagios.nix:1157`, wired at `:2508`). The `.cfg` snippets below
+> are the *shape* of what to write; the place to write them is
+> `modules/services/nagios.nix`, followed by a rebuild. Editing files under
+> `/etc/nagios/objects/` does nothing.
+>
+> All three commands and the Home Assistant service are **already defined** there —
+> see `modules/services/nagios.nix:1502` / `:1507` / `:1512` (commands) and `:2339`
+> (service `Home Assistant - Integration Status`).
+
 ### Command Definition
 
-Add to `/etc/nagios/objects/commands.cfg`:
+Already present in `modules/services/nagios.nix` (lines 1500-1514). Note that the
+live definitions take the host as `$ARG1$` rather than hardcoding it:
 
 ```cfg
 define command {
     command_name    check_homeassistant_integrations
-    command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s -w $ARG1$ -c $ARG2$
+    command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$
 }
 
 define command {
-    check_homeassistant_specific_integration
-    command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s -w $ARG1$ -c $ARG2$ -i $ARG3$
+    command_name    check_homeassistant_specific_integration
+    command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
+}
+
+define command {
+    command_name    check_homeassistant_integration_status
+    command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -I -i $ARG2$
 }
 ```
 
 ### Service Definition
 
-Add to `/etc/nagios/objects/services.cfg`:
+Add to `modules/services/nagios.nix` (the `nagiosObjectDefs` block). The service
+that is actually deployed today is the integration-status one:
+
+```cfg
+define service {
+    use                     generic-service
+    host_name               vulcan
+    service_description     Home Assistant - Integration Status
+    check_command           check_homeassistant_integration_status!127.0.0.1:8123!august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws
+    check_interval          5
+    max_check_attempts      2
+    service_groups          home-assistant-integrations
+}
+```
+
+Entity-threshold variants, if you want them, look like this — note that the host is
+`$ARG1$`, so it comes first in the `!`-separated argument list:
 
 ```cfg
 define service {
     use                     generic-service
     host_name               vulcan
     service_description     Home Assistant - All Integrations
-    check_command           check_homeassistant_integrations!5!10
+    check_command           check_homeassistant_integrations!hass.vulcan.lan!5!10
     check_interval          5
     retry_interval          1
     max_check_attempts      3
@@ -145,7 +203,7 @@ define service {
     use                     generic-service
     host_name               vulcan
     service_description     Home Assistant - Critical Integrations
-    check_command           check_homeassistant_specific_integration!2!5!nest,yale_home,ring,enphase_envoy
+    check_command           check_homeassistant_specific_integration!hass.vulcan.lan!2!5!nest,yale_home,ring,enphase_envoy
     check_interval          5
     retry_interval          1
     max_check_attempts      3
@@ -155,28 +213,36 @@ define service {
 
 ### Host Definition
 
-Add to `/etc/nagios/objects/hosts.cfg`:
+Host objects are **not** written by hand here. They are imported from the private
+`nagios` flake input (`import (nagios.outPath + "/hosts.nix")`,
+`modules/services/nagios.nix:537`), which is a separate git repo excluded from this
+one. The generated shape is:
 
 ```cfg
 define host {
     use                     linux-server
     host_name               vulcan
     alias                   Vulcan NixOS Server
-    address                 192.168.1.2
+    address                 <vulcan's LAN address>
 }
 ```
 
-## Systemd Timer (Alternative to Nagios)
+## Systemd Timer (runs alongside Nagios)
 
-The module includes an optional systemd timer that runs the health check every 5 minutes.
+The module defines a systemd timer that runs the health check every 5 minutes
+(`OnBootSec=5min`, `OnUnitActiveSec=5min`, `Persistent=true`). It is **not optional
+and not an example**: the timer is unconditionally `wantedBy = [ "timers.target" ]`
+(`modules/monitoring/homeassistant-nagios-check.nix:69-77`), so it is enabled and
+active whenever the module is imported — verified enabled + active 2026-07-27. It
+runs *in addition to* the Nagios service definition, and both invoke the same
+wrapper.
 
-### Enable Timer
+The service runs as `nagios:nagios` with a fixed argument list:
+`-H 127.0.0.1:8123 -I -i august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws`.
+
+### Inspect the Timer
 
 ```bash
-# Enable the timer
-sudo systemctl enable homeassistant-health-check.timer
-sudo systemctl start homeassistant-health-check.timer
-
 # Check timer status
 sudo systemctl status homeassistant-health-check.timer
 
@@ -184,21 +250,28 @@ sudo systemctl status homeassistant-health-check.timer
 sudo journalctl -u homeassistant-health-check -f
 ```
 
-### Disable Timer (if using Nagios)
+### Turn the Timer Off
+
+`systemctl disable` will not stick across a rebuild, because the unit is declared
+`wantedBy = [ "timers.target" ]`. To turn it off durably, remove or guard the
+`systemd.timers.homeassistant-health-check` block in
+`modules/monitoring/homeassistant-nagios-check.nix` and rebuild. For a temporary
+stop until the next boot or rebuild:
 
 ```bash
 sudo systemctl stop homeassistant-health-check.timer
-sudo systemctl disable homeassistant-health-check.timer
 ```
 
 ## Prometheus Integration (Optional)
 
 You can export the check results to Prometheus using the `node_exporter` textfile collector:
 
-```bash
-# Create textfile directory if not exists
-sudo mkdir -p /var/lib/node_exporter/textfile_collector
+On this host the node-exporter textfile directory is
+`/var/lib/prometheus-node-exporter-textfiles`
+(`--collector.textfile.directory=`, `modules/monitoring/services/system-exporters.nix:38`),
+and it is created by that module — not `/var/lib/node_exporter/textfile_collector`.
 
+```bash
 # Run check and export metrics
 check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s | \
   awk '/entities=/ {
@@ -206,8 +279,12 @@ check_homeassistant_integrations_wrapper -H hass.vulcan.lan -s | \
     match($0, /unavailable=([0-9]+)/, u);
     print "homeassistant_entities_total " e[1];
     print "homeassistant_entities_unavailable " u[1];
-  }' | sudo tee /var/lib/node_exporter/textfile_collector/homeassistant.prom
+  }' | sudo tee /var/lib/prometheus-node-exporter-textfiles/homeassistant.prom
 ```
+
+Note the `-I` integration-only mode emits no perfdata, so this only works in the
+default entity-counting mode. Also beware `TextfileCollectorStale` alerting on a
+`.prom` file that stops being refreshed.
 
 Add to cron or systemd timer for periodic updates.
 
@@ -306,7 +383,8 @@ entities=247 unavailable=2;5;10;0;247
 
 Format: `label=value;warn;crit;min;max`
 
-- `247` = current value (unavailable entities)
+- `2` = current value of the `unavailable` label (unavailable entities); `247` is
+  the separate `entities` label (total entities)
 - `5` = warning threshold
 - `10` = critical threshold
 - `0` = minimum value

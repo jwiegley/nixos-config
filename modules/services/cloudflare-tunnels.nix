@@ -1,7 +1,10 @@
 # Always-running CloudFlare Tunnels for external service access
 #
 # Provides persistent CloudFlare Tunnel connections for:
-# - data.newartisans.com → localhost:18080 (Copyparty)
+# - data.newartisans.com → localhost:18080 (static-nginx container; 18080 is
+#   owned by static-nginx-http.socket. The copyparty-backed secure-nginx.nix
+#   that also claims 18080 is imported by nothing, and the live copyparty
+#   container listens on 127.0.0.1:13923 instead.)
 # - gitea.newartisans.com → localhost:3005 (Gitea)
 # - s.newartisans.com → localhost:8580 (Shlink)
 # - calendar.newartisans.com → localhost:8090 (Sacramento Cluster .ics)

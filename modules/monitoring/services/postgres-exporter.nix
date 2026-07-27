@@ -11,9 +11,10 @@ let
   # TXID / multixact WRAPAROUND (P1, database domain): age(datfrozenxid) is a
   # cluster-wide catalog read from pg_database, so it works from the exporter's
   # single `postgres` connection (NO --auto-discover-databases, which would
-  # otherwise re-activate the default stat_user_tables collector across all 27
-  # DBs and explode cardinality — ~1077 user tables × ~20 series each). This
-  # emits one row per database (27 series). Wraparound is a silent-death risk:
+  # otherwise re-activate the default stat_user_tables collector across all 28
+  # DBs and explode cardinality — ~1100 user tables × ~20 series each). This
+  # emits one row per connectable database (28 rows × 2 gauges = 56 series as of
+  # 2026-07-27). Wraparound is a silent-death risk:
   # at ~2.1B the cluster shuts down to protect itself; autovacuum_freeze_max_age
   # is 200M and the observed baseline is ~22M, so the 1e9/1.5e9 thresholds have
   # large headroom but fire well before the cliff.
@@ -24,12 +25,13 @@ let
   #
   # pg_stat_statements_top (P2, database domain): bounded top-N-by-cumulative-
   # exec-time per-query latency. Reuses the SAME single `postgres`-DB master
-  # connection — pg_stat_statements is cluster-wide so this row set spans all 26
+  # connection — pg_stat_statements is cluster-wide so this row set spans all 28
   # DBs. The extension is loaded via shared_preload_libraries and CREATE'd by
-  # the postgresql-pgstatstatements-setup oneshot in databases.nix; BOTH require
-  # a planned PostgreSQL RESTART, so these metrics are ABSENT until that window
-  # lands (the query errors harmlessly meanwhile, surfaced by
-  # PostgreSQLExporterScrapeError via pg_scrape_collector_success).
+  # the postgresql-pgstatstatements-setup oneshot in databases.nix; BOTH required
+  # a planned PostgreSQL RESTART, which has since landed — verified 2026-07-27
+  # the extension is installed and the exporter emits 48 pg_stat_statements_top
+  # series. (Before that window the query errored harmlessly, surfaced by
+  # PostgreSQLExporterScrapeError via pg_scrape_collector_success.)
   #
   # CARDINALITY: LIMIT 12 rows × 4 GAUGE columns = 48 series, inside the ≤50
   # budget. NEVER select the `query` text column — query text can embed literal

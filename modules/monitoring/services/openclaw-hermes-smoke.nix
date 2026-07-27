@@ -47,7 +47,8 @@ in
         Group = "hermes-mcp";
         ExecStart = "${smokeScript}/bin/openclaw-hermes-smoke";
         # Cap runtime so a wedged read doesn't pile up zombie units.
-        # Budget is BUDGET_SECONDS (90s) inside the script; 120s on
+        # Budget is BUDGET_SECONDS (30s since 2026-07-22, when the probe
+        # was lightened from ask_hermes to tools/list) inside the script; 120s on
         # the systemd side leaves margin for python startup.
         TimeoutStartSec = "120s";
         # Hardening (matches modules/monitoring/services/hermes-health-check.nix)

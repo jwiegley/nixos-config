@@ -1,5 +1,11 @@
 # Hermes Self-Heal + Nightly Report — Design
 
+> **Archival — 2026-05-20.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/hermes-self-heal.nix`, `modules/services/hermes-nightly-report.nix`).
+
 **Status:** Draft
 **Author:** Claude (Opus 4.7)
 **Date:** 2026-05-20

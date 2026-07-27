@@ -261,7 +261,20 @@
   # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
   #
   # Symlinks are created to make SOPS secrets (in /run/secrets/<service>/) accessible
-  # to user services as /run/secrets-<service>/<service>/ for container environmentFiles
+  # to user services as /run/secrets-<service>/<service>/ for container environmentFiles.
+  #
+  # The convention holds for only 2 of the 13 `L+` rules below. Checked against
+  # the live /run/secrets on 2026-07-27 (names and stat only, contents never read):
+  #   - 2 match: changedetection, litellm — target is an existing directory.
+  #   - 3 point at a single regular FILE, not a per-service directory:
+  #     shlink-web-client, open-webui-secrets, speedtest-tracker-secrets.
+  #   - 8 targets do not exist at all, so the symlink dangles: mailarchiver,
+  #     wallabag, teable, opnsense-exporter, technitium-dns-exporter,
+  #     openspeedtest, openproject, shlink. (Several of those services do have
+  #     secrets under other top-level names, e.g. mailarchiver-env,
+  #     openproject-env, opnsense-exporter-secrets — the per-service directory
+  #     these rules expect is what is missing. Not investigated further here.)
+  # Treat the layout below as historical, not as a description of what exists.
   systemd.tmpfiles.rules = [
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
     "L+ /run/secrets-changedetection/changedetection - - - - /run/secrets/changedetection"

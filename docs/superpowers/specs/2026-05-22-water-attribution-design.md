@@ -1,5 +1,11 @@
 # Water Attribution Tracking — Design
 
+> **Archival — 2026-05-22.**
+> This is a historical record of a plan/design/investigation as it stood at
+> that time. It is NOT maintained and may not describe the current system.
+> Current state: see `docs/README.md`.
+> **Outcome:** implemented (see `modules/services/home-assistant-water-attribution.nix`, `scripts/flume-data/`).
+
 Status: **Draft** · Date: 2026-05-22 · Author: John Wiegley (via Claude)
 
 Track and attribute every gallon Flume measures into distinct categories — pool

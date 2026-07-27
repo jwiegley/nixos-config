@@ -30,7 +30,7 @@ SECURITY — counts / booleans / timestamps / file-NAME labels ONLY. The sha256
 is stored locally in the root-0600 baseline store and is NEVER emitted. File
 *contents* never leave the box, no diffs, no key paths. configuration.yaml is
 sha-normalized by dropping the injected "  db_url:" line (mirrors
-home-assistant.nix:1120) so per-rebuild db_url churn is invisible.
+home-assistant.nix:1137) so per-rebuild db_url churn is invisible.
 secrets.yaml is hashed in its ENCRYPTED form — sops is never invoked.
 
 Stdlib-only, modeled on scripts/openclaw-config-drift-check.py.
@@ -67,7 +67,7 @@ NR_BACKUP_ANCHOR = "/var/lib/node-red/.flows.json.backup"
 
 def _normalize_ha_config(buf: bytes) -> bytes:
     """Drop the rebuild-injected '  db_url:' line so per-switch churn is
-    invisible (mirrors home-assistant.nix:1120 `grep -v '^  db_url:'`)."""
+    invisible (mirrors home-assistant.nix:1137 `grep -v '^  db_url:'`)."""
     out = []
     for line in buf.split(b"\n"):
         if line.startswith(b"  db_url:"):

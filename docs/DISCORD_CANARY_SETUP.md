@@ -54,7 +54,9 @@ bot-authored messages entirely. You must:
 
 - **Hermes must accept @Claw:** add `1477036366138445905` to
   `DISCORD_ALLOWED_USERS` (and the channel to `DISCORD_ALLOWED_CHANNELS`) in
-  the `hermes/env` SOPS secret (`sops /etc/nixos/secrets.yaml`).
+  the `hermes/env` SOPS secret (`cd /etc/nixos && sops secrets/secrets.yaml` —
+  the encrypted store lives in the separate `secrets` flake-input repo at
+  `/etc/nixos/secrets/secrets.yaml`, not at the repo root).
 - **OpenClaw must accept Hermes:** add `1503619790261194793` to the Discord
   `allowFrom` list in `modules/services/openclaw-config.nix` (the
   `channels.discord` block).

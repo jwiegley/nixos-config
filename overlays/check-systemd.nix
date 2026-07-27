@@ -1,5 +1,14 @@
 final: prev: {
 
+  # ⚠ INERT as of 2026-07-27: this overrides the TOP-LEVEL `check_systemd`
+  # attribute, which nixos-25.11 has renamed away — evaluating
+  # `pkgs.check_systemd` now throws "'check_systemd' has been renamed to/
+  # replaced by 'nagiosPlugins.check_systemd'". Nothing forces that attribute,
+  # so nothing fails, but the patch below never reaches the plugin Nagios
+  # actually runs: modules/services/nagios.nix:1324 and :2513 use
+  # `pkgs.nagiosPlugins.check_systemd` (upstream 5.0.0, unpatched). To make
+  # this effective again the override has to target `nagiosPlugins`.
+  #
   # Patch check-systemd to support 'reload-notify' sub-state
   #
   # This is a transient state that occurs during reload operations for

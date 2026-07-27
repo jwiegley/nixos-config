@@ -45,9 +45,11 @@ let
   # servers (vane, email-contacts, perplexity, org-db); `financialPython`
   # carries the heavy numeric stack that only stock-trader-mcp.py needs.
   #
-  # The MCP scripts themselves are shared verbatim with OpenClaw (same files
-  # under ../../scripts), so the interpreter package sets must match what
-  # those scripts import. `psycopg2` is required by org-db-mcp.py's read-only
+  # The vane / email-contacts / stock-trader scripts are shared verbatim with
+  # OpenClaw (same files under ../../scripts), so the interpreter package sets
+  # must match what those scripts import. perplexity-mcp.py and org-db-mcp.py
+  # are Hermes-only (OpenClaw has a built-in Perplexity tool and reaches org
+  # through the orgDbSearch wrapper). `psycopg2` is required by org-db-mcp.py's read-only
   # org_sql (requests cannot speak the PostgreSQL wire protocol).
   lightPython = pkgs.python312.withPackages (ps: [
     ps.mcp
@@ -221,7 +223,10 @@ let
   #   1. httpx.Timeout workaround for upstream hermes-agent v0.13.0 timeout
   #      defaults that the configured `request_timeout_seconds` /
   #      `HERMES_STREAM_READ_TIMEOUT` don't actually override at the httpx
-  #      layer. Two paths confirmed broken:
+  #      layer. (Written against v0.13.0; the pinned flake input builds
+  #      hermes-agent 0.15.1 as of 2026-07-27, so re-verify the upstream line
+  #      references below — and whether the shim is still needed — against
+  #      that tree.) Two paths confirmed broken in v0.13.0:
   #        - run_agent.py:7789-7794 builds the streaming `httpx.Timeout(...)`
   #          with hardcoded `connect=30.0` / `pool=30.0` — not exposed via
   #          any documented config knob.
@@ -301,7 +306,8 @@ let
   '';
 
   # In-VM watchdog: detects a frozen/CPU-starved api_server and captures a
-  # py-spy stack dump of the gateway BEFORE self-heal restarts the microVM
+  # /proc-based per-thread stack dump of the gateway (py-spy does not build on
+  # aarch64 here — see the unit below) BEFORE self-heal restarts the microVM
   # (which SIGKILLs the frozen process and destroys the evidence). Loaded from
   # a repo file so the bash is reviewable and unit-testable on its own; PATH is
   # supplied by the systemd unit below. See scripts/hermes-hang-capture.sh.
@@ -332,7 +338,7 @@ in
   # Required for the nftables OUTPUT DNAT below that rewrites localhost
   # connections to the host bridge IP — without this, the kernel
   # refuses to route packets with source 127.0.0.1 via eth0.
-  # Matches openclaw-vm.nix:386.
+  # Matches openclaw-vm.nix:398-402.
   boot.kernel.sysctl."net.ipv4.conf.all.route_localnet" = 1;
 
   # ---- Guest resources ----
@@ -372,7 +378,7 @@ in
   ];
   # Match `e*` (not just `eth*`) — the kernel may assign an `en*` predictable
   # name to the virtio-net interface. OpenClaw uses the same prefix at
-  # openclaw-vm.nix:412.
+  # openclaw-vm.nix:434.
   systemd.network.networks."10-eth" = {
     matchConfig.Name = "e*";
     address = [ "${vmAddr}/30" ];
@@ -407,7 +413,7 @@ in
   # rule (hermes-host-dnat.service) rewrites them back to 127.0.0.1
   # on the host. The port set is threaded from hermes-microvm.nix via
   # _module.args (dnatPortList) so it stays in sync with the host-side
-  # PREROUTING/INPUT rules. Same shape as openclaw-vm.nix:452.
+  # PREROUTING/INPUT rules. Same shape as openclaw-vm.nix:469.
   networking.nftables.enable = true;
   networking.nftables.tables.hermes-dnat = {
     family = "ip";
@@ -466,7 +472,7 @@ in
   # virtio-fs mount silently shadows them at multi-user.target. Forcing
   # the state share into initrd makes the mount visible to activation.
   #
-  # Failure mode: if the host's virtiofsd-state.service is slow or
+  # Failure mode: if the host virtiofsd serving the state share is slow or
   # crash-looping, the guest will block in initrd waiting on
   # `dev-virtio\x2dfs-state.mount`. Check virtiofsd status on the host
   # (microvm-virtiofsd@hermes.service) before suspecting in-VM issues.
@@ -474,11 +480,11 @@ in
 
   # ---- Vulcan CA bundle (HTTPS to internal services) ----
   # Embed the host's root CA at evaluation time so it lands in the
-  # nss-cacert bundle at build time. The runtime path inside the VM
-  # (${stateDir}/vulcan-root-ca.crt, mounted via virtio-fs) is staged by
-  # the host module's tmpfiles entry but is no longer needed for trust —
-  # this readFile burns the cert content into the store. Same pattern as
-  # openclaw-vm.nix:277.
+  # nss-cacert bundle at build time. The host used to stage a runtime copy at
+  # ${stateDir}/vulcan-root-ca.crt via a tmpfiles `C+` entry; that entry was
+  # dropped (commit e850935) because this readFile burns the cert content into
+  # the store, so nothing needs the staged copy for trust any more. Same
+  # pattern as openclaw-vm.nix:293.
   security.pki.certificates = [
     (builtins.readFile ../../certs/vulcan-root-ca.crt)
   ];
@@ -553,6 +559,9 @@ in
       #
       # IMPORTANT: in Hermes v0.14 the model field accepts either a flat
       # string OR a dict with {default, provider, base_url, api_key, ...}.
+      # (Written for v0.14; the pinned flake input builds hermes-agent 0.15.1
+      # as of 2026-07-27 — the upstream file:line references below have not
+      # been re-verified against that tree.)
       # We use the dict form because:
       #
       #   1. The openrouter provider profile (plugins/model-providers/
@@ -851,7 +860,8 @@ in
   # (~60s of a frozen loop) it writes per-thread scheduler state + kernel stacks
   # to ${stateDir}/.hermes/diag/ (host-shared, so it survives the self-heal VM
   # restart). That state distinguishes the CPU-starvation freeze (threads
-  # runnable but load >> nproc — the cause the 4-vCPU bump above fixes) from a
+  # runnable but load >> nproc — the cause the 2026-05-31 4-vCPU bump was meant
+  # to address, since reverted; see the vCPU rationale block above) from a
   # blocking call / deadlock on any residual freeze.
   #
   # NB: py-spy (which would give Python frames) does NOT compile on aarch64 in
@@ -899,9 +909,18 @@ in
   # All generated config goes under ${stateDir}/.config (the read-write
   # state share) — NEVER into the read-only /run/hermes-secrets mount.
   # Secrets are read from /run/hermes-secrets/* and injected into the
-  # config files at write time (the sherlock config at mode 600 via jq, so
-  # the password never appears in argv). Runs as the hermes user so every
-  # file it writes is owned hermes:hermes.
+  # config files at write time (the sherlock config is written with a
+  # placeholder, patched by jq, then chmod 600). Runs as the hermes user so
+  # every file it writes is owned hermes:hermes.
+  #
+  # CAVEAT, corrected 2026-07-27: this comment used to claim the org-db
+  # password "never appears in argv". It does. The injection in the script
+  # below is `jq --arg pass "$ORG_DB_PASS" …`, so the plaintext value is in
+  # jq's argv and readable from /proc/<pid>/cmdline for the life of that
+  # process. Only the resulting file is protected (mode 600), not the
+  # injection itself. openclaw-vm.nix uses the identical pattern. If that
+  # exposure window matters, pass the value from the secret file rather than
+  # on the command line — but that is a code change, not a comment change.
   systemd.services.hermes-tools-setup = {
     description = "Hermes MCP tool config + initial contact sync";
     before = [ "hermes-agent.service" ];
@@ -1065,10 +1084,13 @@ in
     createHome = true; # defensive — state share is also tmpfiles'd on host
     shell = pkgs.bashInteractive;
     openssh.authorizedKeys.keys = [
-      # Ephemeral debug key generated on the host at /root/.ssh/hermes-debug.
-      # Used for interactive debugging from the host (Claude shelling in).
-      # Remove once debugging is complete and replace with the proper
-      # Phase-2 nightly-report probe key, mirroring the openclaw pattern.
+      # Originally an ephemeral debug key generated on the host at
+      # /root/.ssh/hermes-debug for interactive debugging (Claude shelling in).
+      # It has since become the nightly-report probe key it was supposed to be
+      # replaced by: hermes-nightly-report.nix:30-33 documents this same key,
+      # private half in SOPS as hermes/probe-ssh-private-key, as the credential
+      # for its in-VM corroboration step. So do NOT remove it — that would
+      # break the nightly report. Mirrors openclaw-vm.nix:525-528.
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINYXL7oqQT3RgRbnWRQNcKNrywkP3TV2F5m8w02+eGUB claude-hermes-debug"
     ];
   };

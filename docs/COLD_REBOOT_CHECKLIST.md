@@ -1,12 +1,23 @@
 # Cold-Reboot Validation Checklist — vulcan
 
+> **Status (2026-07-27):** the cold reboot this checklist was written for **happened
+> on 2026-06-10 and passed** — 21 PASS / 0 WARN / 0 FAIL / 1 INFO, recorded in
+> [`REBOOT_RESILIENCE.md`](./REBOOT_RESILIENCE.md), which is now the authoritative
+> account of the validated end-state and the per-subsystem recovery runbook. Its one
+> gated follow-up (section (d) below) was completed the same day. This document is
+> kept as the standing operator procedure to run around **any future** cold reboot;
+> the "has never cold-booted" framing is historical.
+
 A batch of boot/switch-robustness fixes was deployed 2026-06-08..10. **Almost all
-were verified only at `nixos-rebuild switch` time — the generation that carries them
-has never cold-booted.** This checklist exists to validate them on the **next clean
-cold reboot** (the operator reboots; nothing here reboots or asks you to).
+were verified only at `nixos-rebuild switch` time — when this was written the
+generation that carried them had never cold-booted.** This checklist exists to
+validate them on a **clean cold reboot** (the operator reboots; nothing here reboots
+or asks you to).
 
 Background and the full reasoning live in
-[`BOOT_SWITCH_ROBUSTNESS_AUDIT.md`](./BOOT_SWITCH_ROBUSTNESS_AUDIT.md).
+[`BOOT_SWITCH_ROBUSTNESS_AUDIT.md`](./BOOT_SWITCH_ROBUSTNESS_AUDIT.md); the
+consolidated outcome and recovery steps live in
+[`REBOOT_RESILIENCE.md`](./REBOOT_RESILIENCE.md).
 
 ---
 
@@ -93,19 +104,22 @@ the conditions they were written for.
 
 ---
 
-## (d) Follow-up after a clean cold reboot
+## (d) Follow-up after a clean cold reboot — **DONE 2026-06-10**
 
-**If — and only if — check 4 PASSes on a real cold boot** (prio 50 + 51 present,
-`asymmetric-routing.service` success, gauge == 1), the dead NetworkManager
-`ensureProfiles` routing-rule keys can be deleted. They are documented as kept *only*
-until a cold reboot proves the fail-loud oneshot lands the rules at boot
-(see `modules/core/networking.nix` comment block, lines ~112–119, and
-`BOOT_SWITCH_ROBUSTNESS_AUDIT.md` "asymmetric-routing, Phase B").
+This section's condition has been met and the action taken; it is kept for the
+reasoning. Nothing here is outstanding.
 
-In `modules/core/networking.nix`, inside the `end0-wired` profile's `ipv4 = { … }`
-block, **delete these two lines** (NetworkManager never materializes them into the
-kernel — verified 2026-06-09; the only live prio 50/51 rules are `proto unspec`, added
-by the oneshot, never `proto static` as NM would tag its own):
+The gate was: **if — and only if — check 4 PASSes on a real cold boot** (prio 50 + 51
+present, `asymmetric-routing.service` success, gauge == 1), the dead NetworkManager
+`ensureProfiles` routing-rule keys may be deleted. They had been kept *only* until a
+cold reboot proved the fail-loud oneshot lands the rules at boot.
+
+**Outcome:** the 2026-06-10 cold boot PASSed check 4, and the two dead keys — which
+NetworkManager never materialized into the kernel (verified 2026-06-09; the only live
+prio 50/51 rules are `proto unspec`, added by the oneshot, never `proto static` as NM
+would tag its own) — were removed from the `end0-wired` profile's `ipv4` block in
+commit `8839776` ("networking: remove dead NM routing-rule keys (Phase B, cold-boot
+confirmed)"). They looked like this:
 
 ```nix
         # Force all traffic from 192.168.1.2 destined for 192.168.x.x back via
@@ -115,11 +129,12 @@ by the oneshot, never `proto static` as NM would tag its own):
         "routing-rule2" = "priority 51 from 192.168.1.2/32 to 10.0.0.0/8 table 200";
 ```
 
-(i.e. remove the `routing-rule1` / `routing-rule2` keys and their preceding comments;
-keep `method`, `route-metric`, and the rest of the profile intact.) Then update the
-comment block above the profile so it no longer says the keys are "kept FOR NOW", and
-`nixos-rebuild switch`. The oneshot + the NM dispatcher (`re-apply-asymmetric-routing`)
-remain the sole authoritative writers — removing the dead keys is purely tidying.
+The comment block above the profile (`modules/core/networking.nix`, lines ~112–122)
+was updated to record the removal and now says **do not re-add them**. The oneshot +
+the NM dispatcher (`re-apply-asymmetric-routing`) remain the sole authoritative
+writers. See `REBOOT_RESILIENCE.md` § 2.2 "Asymmetric source-policy routing rules
+vanished" (Phase B) for the full chain and the recovery steps if the rules ever go
+missing again.
 
 ---
 

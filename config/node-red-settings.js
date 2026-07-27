@@ -1,10 +1,12 @@
 /**
  * Node-RED Settings Configuration
- * Deployed to /var/lib/node-red/settings.js by NixOS
+ * Copied into the Nix store by modules/services/node-red.nix and passed to
+ * node-red as `--settings <store path>`; it is NOT written to
+ * /var/lib/node-red/settings.js (that path stays the userDir only).
  *
  * Security Features:
  * - adminAuth: Username/password authentication for editor and Admin API
- * - httpNodeAuth: Bearer token authentication for HTTP nodes (API endpoints)
+ * - httpNodeMiddleware: Bearer token authentication for HTTP nodes (API endpoints)
  * - Credentials stored in SOPS and loaded from /run/secrets/
  */
 
@@ -13,7 +15,8 @@ const path = require('path');
 
 /**
  * Load secrets from SOPS-deployed files
- * These files are created by the SOPS service and mounted into /run/secrets/
+ * These files are created by sops-nix during system activation (there is no
+ * sops-install-secrets.service on this host) and appear under /run/secrets/
  */
 function loadSecret(secretPath) {
     try {
@@ -64,7 +67,10 @@ module.exports = {
             password: adminPasswordHash,
             permissions: "*"
         }],
-        // Tokens expire after 7 days of inactivity
+        // Editor login sessions expire 7 days after login. Node-RED sets the
+        // expiry once at session creation (editor-api auth/tokens.js) and does
+        // not extend it on use, so this is an absolute lifetime, not an
+        // inactivity timeout. Does not apply to the service tokens below.
         sessionExpiryTime: 604800,
         // Service tokens: same SOPS-managed tokens used by httpNodeMiddleware
         // also authorize the Admin API, with full permissions. Lets local
@@ -208,7 +214,7 @@ module.exports = {
     // Require HTTPS for editor (handled by nginx proxy)
     requireHttps: false, // nginx handles SSL termination
 
-    // Content Security Policy
+    // Cross-Origin Resource Sharing for HTTP-In endpoints (not a CSP)
     httpNodeCors: {
         origin: "*",
         methods: "GET,PUT,POST,DELETE"

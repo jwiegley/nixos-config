@@ -396,7 +396,8 @@ in
     # Configure workers to include override directory for password
     workers.controller = {
       includes = [ "/var/lib/rspamd/override.d/worker-controller.inc" ];
-      # Explicitly configure secure IPs and bind socket
+      # Explicitly configure secure IPs and force a single worker
+      # (the bind socket comes from the NixOS module default, localhost:11334)
       extraConfig = ''
         # Secure web interface access from localhost
         secure_ip = "127.0.0.1";
@@ -423,7 +424,8 @@ in
       '';
     };
 
-    # Use local Redis instance for statistics
+    # local.d/* overrides: Redis-backed statistics plus logging, DNS, TLD map,
+    # actions, milter headers, policy scores, metrics, GPT, phishing and RBLs
     locals = {
       "logging.inc".text = ''
         # Logging configuration
@@ -755,7 +757,8 @@ in
     };
   };
 
-  # Systemd service override to inject password into controller configuration
+  # Systemd service override to inject the controller password and the LiteLLM
+  # API key (GPT module) into /var/lib/rspamd/override.d at preStart
   systemd.services.rspamd = {
     preStart = ''
       # Create override directory for controller worker

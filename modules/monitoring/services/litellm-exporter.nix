@@ -139,8 +139,10 @@ in
     };
   };
 
-  # Create a systemd credential file that sources the LiteLLM master key
-  # and exports it as LITELLM_API_KEY for the exporter
+  # Deliberately empty: no API key is set here. The key reaches the exporter
+  # through EnvironmentFile (the litellm-secrets SOPS file, wired just below),
+  # and the health-check script picks up LITELLM_API_KEY or LITELLM_MASTER_KEY
+  # from that environment.
   systemd.services.litellm-exporter.environment = {
     # The exporter will use the master key directly for simplicity
     # In production, you should generate a dedicated virtual key
@@ -152,5 +154,7 @@ in
       config.sops.secrets."litellm-secrets".path;
 
   # Ensure prometheus-node-exporter textfile directory exists and is writable
-  # Directory is already created by node-exporter.nix with 1777 permissions
+  # Directory is already created with 1777 permissions by the tmpfiles rule in
+  # modules/monitoring/services/system-exporters.nix (node-exporter.nix, the
+  # module this used to name, was removed 2025-10-31)
 }

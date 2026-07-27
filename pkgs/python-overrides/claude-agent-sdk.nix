@@ -17,9 +17,10 @@
 
 python.pkgs.buildPythonPackage rec {
   pname = "claude-agent-sdk";
-  # The PyPI sdist is named claude_agent_sdk-<version>.tar.gz; fetchPypi
-  # handles the underscore mapping automatically when format = "pyproject"
-  # but the source pname must match the canonical name on PyPI.
+  # The PyPI sdist is named claude_agent_sdk-<version>.tar.gz. fetchPypi does
+  # NO name normalization — it builds the URL verbatim from the pname it is
+  # handed — so the underscored sdist name is passed to fetchPypi explicitly
+  # below, while this derivation keeps the canonical hyphenated PyPI name.
   version = "0.1.30";
   pyproject = true;
 

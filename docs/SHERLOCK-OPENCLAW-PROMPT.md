@@ -1,5 +1,34 @@
 # Task: Add Sherlock Database Tool to OpenClaw on Vulcan
 
+> **Status (2026-07-27): this task is DONE.** The document below is the original
+> task prompt, kept for background on *why* things are shaped the way they are.
+> What actually shipped:
+>
+> - **Package:** `overlays/sherlock.nix` (attribute `sherlock-db`, sherlock v1.3.0)
+>   — pre-built binaries for `aarch64-darwin` / `x86_64-linux`, built from source
+>   with Bun for `aarch64-linux`. Re-exported from `overlays/default.nix:288`. This
+>   is Option A, in a *local* vulcan overlay; `nix-config/overlays/30-sherlock-db.nix`
+>   was not extended.
+> - **Network:** `5432` is in `dnatPorts` (`openclaw-microvm.nix:132`, commented
+>   "PostgreSQL — Sherlock queries the org database").
+> - **pg_hba:** bridge rules exist for **both** VMs —
+>   `host org openclaw 10.99.0.0/30 scram-sha-256` (`databases.nix:267`) and
+>   `host org openclaw 10.99.1.0/30 scram-sha-256` for Hermes (`:273`).
+> - **Role + secret:** the `openclaw` PostgreSQL role is provisioned via
+>   `mkPostgresUserSetup` (`databases.nix:59-64`) from SOPS secret
+>   `openclaw/org-db-password`, staged to the VM at
+>   `/run/openclaw-secrets/org-db-password`.
+> - **Config:** written at preStart to `/var/lib/openclaw/.config/sherlock/config.json`
+>   (mode 600) — *not* the `.openclaw/.config/...` path proposed below.
+> - **Agent integration:** CLI-in-PATH, as recommended. `sherlock-db` is in the VM
+>   service path (`openclaw-vm.nix:333`, `:596`) and usage instructions live in a
+>   `tools-sherlock.md` system-prompt fragment (`openclaw-vm.nix:142-172`).
+> - **Beyond the original scope:** the same setup was replicated for the Hermes VM
+>   (the `systemd.services.hermes-tools-setup` script in `hermes-vm.nix`), a
+>   semantic-search companion `org-db-search` was
+>   added (`openclaw-microvm.nix:99-110`), and `openclaw-health-check.nix` probes
+>   the connection on every run (`:224`, `:234`, `:643`).
+
 ## Context
 
 I want to give my OpenClaw AI gateway the ability to query my `org` PostgreSQL database using the Sherlock tool. Sherlock is a read-only database query CLI that translates natural language into SQL. It's already working on my macOS machines (hera, clio) via `overlays/30-sherlock-db.nix` in my nix-config repo.
@@ -21,7 +50,8 @@ The microVM architecture:
 - Guest VM is on bridge network `10.99.0.2/30`, host bridge at `10.99.0.1/30`
 - Guest accesses host loopback services via two-stage DNAT (guest rewrites 127.0.0.1:PORT to 10.99.0.1:PORT, host PREROUTING rewrites that to 127.0.0.1:PORT)
 - The `dnatPorts` list in `openclaw-microvm.nix` controls which host ports are reachable from the VM
-- **Port 5432 (PostgreSQL) is NOT currently in `dnatPorts`** — this must be added
+- **Port 5432 (PostgreSQL) was NOT in `dnatPorts`** when this prompt was written —
+  it has since been added (`openclaw-microvm.nix:132`)
 - State directory `/var/lib/openclaw` is shared via virtiofs
 - Secrets are staged to `/var/lib/microvms/openclaw/secrets/` on host, mounted at `/run/openclaw-secrets/` in the guest
 
@@ -44,8 +74,15 @@ Sherlock (https://github.com/michaelbromley/sherlock) is a TypeScript CLI tool c
 ### The `org` Database
 
 PostgreSQL on vulcan (port 5432) has an `org` database containing Org-mode data:
-- 14 tables: `files`, `entries`, `entry_tags`, `entry_stamps`, `entry_log_entries`, `entry_properties`, `entry_links`, `entry_embeddings`, `entry_body_blocks`, `entry_categories`, `entry_relationships`, `entry_body_blocks`, `log_entry_body_blocks`, `schema_version`
-- ~72K entries, ~384K body blocks, ~378K properties, ~281K embeddings
+- 15 tables in `public` as of 2026-07-27: `db_settings`, `entries`,
+  `entry_body_blocks`, `entry_categories`, `entry_embeddings`, `entry_links`,
+  `entry_log_entries`, `entry_properties`, `entry_relationships`, `entry_stamps`,
+  `entry_tags`, `file_properties`, `files`, `log_entry_body_blocks`,
+  `schema_version`. (The original list here said "14 tables" but named
+  `entry_body_blocks` twice, and predates `db_settings` and `file_properties`.)
+- Row counts as of 2026-07-27: ~47K entries, ~258K body blocks, ~234K properties,
+  ~179K embeddings. (When this prompt was written on 2026-04-10 the figures were
+  ~72K / ~384K / ~378K / ~281K — the database was re-derived since.)
 - Timestamps use Modified Julian Day integers (today 2026-04-10 = MJD 61140). Convert with: `DATE '1858-11-17' + day`
 - The `entries` table has a `tsv` column (tsvector) for full-text search
 - The `entry_embeddings` table has a `embedding` column (pgvector) for semantic search
@@ -53,7 +90,9 @@ PostgreSQL on vulcan (port 5432) has an `org` database containing Org-mode data:
 PostgreSQL auth rules (from `databases.nix`):
 - Localhost (127.0.0.1): `scram-sha-256` (password required)
 - 192.168.0.0/16: `hostssl` with `scram-sha-256` (SSL + password required)
-- **The 10.99.0.0/30 bridge network has NO auth rule** — connections would be rejected
+- **The 10.99.0.0/30 bridge network had NO auth rule** when this prompt was written
+  — a `host org openclaw 10.99.0.0/30 scram-sha-256` rule has since been added
+  (`databases.nix:267`), plus `10.99.1.0/30` for the Hermes VM (`:273`)
 
 ### What's Already on Hera (nix-config)
 
@@ -102,7 +141,9 @@ Note: After DNAT, PostgreSQL may see the source as 10.99.0.2 (VM) or 127.0.0.1 (
 ### 3. Credentials: PostgreSQL Password for OpenClaw
 
 Create a dedicated PostgreSQL user for OpenClaw (or reuse an existing one):
-- Add a SOPS secret for the database password: `sops /etc/nixos/secrets.yaml` → add `openclaw/org-db-password`
+- Add a SOPS secret for the database password: `sops /etc/nixos/secrets/secrets.yaml`
+  (the encrypted store is a separate git repo consumed as the `secrets` flake
+  input; there is no `/etc/nixos/secrets.yaml`) → add `openclaw/org-db-password`
 - Stage it in `openclaw-prepare-secrets` service to `/var/lib/microvms/openclaw/secrets/org-db-password`
 - The sherlock config inside the VM should reference this password file
 
@@ -186,7 +227,7 @@ The `org` database is already created by the org-jw system. Verify:
 | `/etc/nixos/modules/services/openclaw-microvm.nix` | Add 5432 to `dnatPorts` |
 | `/etc/nixos/modules/services/openclaw-vm.nix` | Add sherlock to service PATH, set up config |
 | `/etc/nixos/modules/services/databases.nix` | Add pg_hba.conf rule for bridge network; add openclaw user/grants |
-| `/etc/nixos/secrets.yaml` | Add `openclaw/org-db-password` secret |
+| `/etc/nixos/secrets/secrets.yaml` | Add `openclaw/org-db-password` secret (separate `secrets` flake-input repo) |
 
 Optionally:
 | `/etc/nixos/overlays/sherlock.nix` | New overlay if building sherlock from source locally |

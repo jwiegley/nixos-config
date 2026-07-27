@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 
 # Nginx certificate renewal script using the general renew-certificate.sh
-# This script renews certificates for all nginx virtual hosts
+# This script renews certificates for the 37 hosts hardcoded in DOMAINS below.
+# That is a SUBSET of the vhosts nginx serves out of /var/lib/nginx-certs: as of
+# 2026-07-27 atd, budget, changes, chat, llama-swap, mailarchiver, shlink,
+# shlink-api and vulcan.lan are NOT renewed here. atd and budget have their own
+# *-certificate systemd units (modules/services/atd-nginx.nix:61,
+# modules/containers/budgetboard-quadlet.nix:248); the rest have no automatic
+# renewal at all. Add a domain here when you add a vhost.
 
 set -euo pipefail
 

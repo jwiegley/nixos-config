@@ -73,8 +73,9 @@ groups:
       #
       # alertmanager_notifications_failed_total is broken down per integration
       # (email/discord/webhook/etc). This metric only becomes available once the
-      # new `alertmanager` scrape job lands (same deploy as this file). The metric
-      # NAME is confirmed present at the 9093 /metrics endpoint.
+      # `alertmanager` scrape job lands (it shipped in the same deploy as this
+      # file). That job is live — verified 2026-07-27: up{job="alertmanager"}==1
+      # on localhost:9093 and the counter is present per integration.
       - alert: AlertmanagerNotificationsFailed
         expr: |
           rate(alertmanager_notifications_failed_total[10m]) > 0
@@ -168,9 +169,12 @@ groups:
       # web-blackbox workstream (a GET probe of the /alert endpoint, accepting
       # 404/405 since it is a POST-only route — any response proves the listener is
       # up). The instance is matched by host:port regex because the exact target
-      # string (path / trailing slash) is owned by the other workstream. Until that
-      # target lands, probe_success{instance=~"...1880..."} has no series, so ==0
-      # yields nothing and this does NOT fire (dormant by design).
+      # string (path / trailing slash) is owned by the other workstream. That
+      # target has since landed — verified 2026-07-27:
+      # probe_success{job="blackbox_iphone_relay",
+      # instance="http://127.0.0.1:1880/alert"} == 1 — so this rule is live, not
+      # dormant. (Were the target ever removed, the selector would match no
+      # series and the rule would silently stop firing.)
       - alert: IphoneRelayEndpointDown
         expr: |
           probe_success{instance=~"https?://127\\.0\\.0\\.1:1880(/.*)?"} == 0
@@ -185,11 +189,12 @@ groups:
       # vmalert down (P1, monitoring-self).
       #
       # vmalert evaluates alerting/recording rules against VictoriaMetrics (the
-      # HA-pushed pool/water/sensor series). The `vmalert` scrape job is added by
-      # the vmalert workstream in this same deploy; until that job exists,
-      # up{job="vmalert"} has no series, so ==0 yields nothing and this is dormant
-      # by design (does NOT fire on absent series). Once vmalert is scraped, this
-      # catches the VM-side rule evaluator going down.
+      # HA-pushed pool/water/sensor series). The `vmalert` scrape job was added by
+      # the vmalert workstream in the same deploy as this rule; that job now
+      # exists — verified 2026-07-27: up{job="vmalert"}==1 on 127.0.0.1:8880 — so
+      # this rule is live and catches the VM-side rule evaluator going down. (If
+      # the job were ever removed, up{job="vmalert"} would have no series and
+      # ==0 would yield nothing, i.e. the rule fails silent, not loud.)
       - alert: VMAlertDown
         expr: up{job="vmalert"} == 0
         for: 5m

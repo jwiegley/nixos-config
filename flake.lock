@@ -2265,11 +2265,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1785051551,
-        "narHash": "sha256-EvKunqz8rBQXNKI7Yhmymrtiv2BCEfDzoptbNQooj2I=",
+        "lastModified": 1785182640,
+        "narHash": "sha256-YYykDr8FlhHyUYv5oNJ/t7LDtfpVpmlj7dygwtZUwrk=",
         "ref": "refs/heads/main",
-        "rev": "a36d3f51d92158e4e055e3baca85044f575e25a6",
-        "revCount": 2366,
+        "rev": "03b5eeccae6689a7c7051756ac4ea020f69008ed",
+        "revCount": 2404,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2294,18 +2294,17 @@
         "pi-mcp-adapter": "pi-mcp-adapter",
         "pi-openai-server-compaction": "pi-openai-server-compaction",
         "pi-quiet": "pi-quiet",
-        "pi-subagentura": "pi-subagentura",
         "ponytail": "ponytail",
         "rust-overlay": "rust-overlay_2",
         "translate-tool": "translate-tool"
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1785051551,
-        "narHash": "sha256-EvKunqz8rBQXNKI7Yhmymrtiv2BCEfDzoptbNQooj2I=",
+        "lastModified": 1785182640,
+        "narHash": "sha256-YYykDr8FlhHyUYv5oNJ/t7LDtfpVpmlj7dygwtZUwrk=",
         "ref": "refs/heads/main",
-        "rev": "a36d3f51d92158e4e055e3baca85044f575e25a6",
-        "revCount": 2366,
+        "rev": "03b5eeccae6689a7c7051756ac4ea020f69008ed",
+        "revCount": 2404,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3059,23 +3058,6 @@
       "original": {
         "owner": "zenspc",
         "repo": "pi-extensions",
-        "type": "github"
-      }
-    },
-    "pi-subagentura": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1784958996,
-        "narHash": "sha256-ogj1OQNS+gJ8mZPctnPL+fxQhSCQ8o9iOCLdIt32/7c=",
-        "owner": "jwiegley",
-        "repo": "pi-subagentura",
-        "rev": "f71281bce8f88741da0e2f9f7ba722964f19d4f0",
-        "type": "github"
-      },
-      "original": {
-        "owner": "jwiegley",
-        "ref": "main",
-        "repo": "pi-subagentura",
         "type": "github"
       }
     },

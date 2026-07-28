@@ -351,6 +351,54 @@
               || pkgs.llama-cpp ? npmDeps;
             pkgs.runCommand "llama-cpp-overlay-compat-check" { } "touch $out";
 
+          # Canary for the nix-config reach-in contract.
+          #
+          # overlays/default.nix cherry-picks six packages out of nix-config's
+          # *internal* overlay files. That is not a supported API. nix-config
+          # a3cc3843 changed several of those files from two-level `final: prev:`
+          # overlays into three-level factories taking a strict argument set, and
+          # vulcan's entire system evaluation broke the moment its lock crossed
+          # that commit — `function called with unexpected argument 'system'`.
+          #
+          # The call sites are fixed, but nothing upstream stops the next
+          # signature change from re-arming them, and nix-config's own
+          # cross-consumer gate cannot see vulcan's call sites. This check forces
+          # that class of breakage to surface here, at `nix flake check`, rather
+          # than partway through a rebuild.
+          #
+          # Each package name is interpolated into the command, so an attribute
+          # that merely *exists* while throwing on use fails this too.
+          #
+          # Retire this together with the reach-in itself (jwiegley/nixos-config#4).
+          nix-config-reachin-compat =
+            let
+              vp = inputs.self.nixosConfigurations.vulcan.pkgs;
+              want = [
+                "tsvutils"
+                "filetags"
+                "nix-scripts"
+                "hammer"
+                "linkdups"
+                "lipotell"
+              ];
+              missing = builtins.filter (n: !(vp ? ${n})) want;
+            in
+            if missing != [ ] then
+              throw (
+                "nix-config reach-in broke: "
+                + builtins.concatStringsSep ", " missing
+                + " absent from vulcan's package set. nix-config's internal overlay "
+                + "signatures have most likely changed again — check the calling "
+                + "convention in overlays/default.nix against the overlay files at "
+                + "the current nix-config lock. See jwiegley/nixos-config#4."
+              )
+            else
+              pkgs.runCommand "nix-config-reachin-compat-check" { } ''
+                printf '%s\n' ${
+                  pkgs.lib.escapeShellArg (builtins.concatStringsSep " " (map (n: vp.${n}.name) want))
+                } > "$out"
+              '';
+
           openclaw-config-schema = import ./tests/openclaw/check-schema.nix {
             inherit pkgs;
             inherit (inputs.self.nixosConfigurations.vulcan.pkgs)

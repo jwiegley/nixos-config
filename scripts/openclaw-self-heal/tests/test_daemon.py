@@ -154,7 +154,11 @@ def test_render_prompt_includes_alert_and_attempts():
 def test_render_prompt_redacts_discord_token_pattern():
     inc = daemon.new_incident({"alert_name": "OpenClawDiscordWsDown",
                                "vm_active_enter_ts": 1, "starts_at": 1})
-    tok = "DISCORD_TOKEN_REDACTED"
+    # Fixture assembled at runtime: a Discord-token-SHAPED literal in a tracked
+    # file trips GitHub push protection, which silently broke the Gitea->GitHub
+    # mirror for 10+ days (found 2026-07-28). The redactor matches on shape only
+    # ({24,40}.{6}.{27,}), so this exercises it identically.
+    tok = ".".join(("N" + "0" * 23, "A" * 6, "z" * 27))
     msgs = daemon.render_prompt(inc, metrics={}, err_log_tail=f"got token={tok}",
                                 out_log_tail="")
     joined = " ".join(m["content"] for m in msgs)

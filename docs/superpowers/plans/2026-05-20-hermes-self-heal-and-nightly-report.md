@@ -611,9 +611,9 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 
 ```python
 def test_redact_discord_token():
-    s = "Bot is online with token DISCORD_TOKEN_REDACTED OK"
+    s = "Bot is online with token <DISCORD_BOT_TOKEN_REDACTED_2026-07-28> OK"
     out = daemon.redact(s)
-    assert "NTk5MTYzMTM1OTUwNDMyNTc3" not in out
+    assert "<BOT_ID_B64_REDACTED>" not in out
     assert "[REDACTED]" in out
 
 

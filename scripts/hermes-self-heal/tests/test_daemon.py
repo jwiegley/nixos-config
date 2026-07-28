@@ -127,9 +127,14 @@ def test_first_attempt_action_does_NOT_default_for_HermesApiKeyMissing():
 
 
 def test_redact_discord_token():
-    s = "Bot is online with token DISCORD_TOKEN_REDACTED OK"
-    out = daemon.redact(s)
-    assert "NTk5MTYzMTM1OTUwNDMyNTc3" not in out
+    # Fixture assembled at runtime: a Discord-token-SHAPED literal in a tracked
+    # file trips GitHub push protection, which silently broke the Gitea->GitHub
+    # mirror for 10+ days (found 2026-07-28). The previous fixture was a real
+    # 2019-era bot token and has been rotated. redact() matches shape only.
+    seg0 = "N" + "0" * 23
+    fake = ".".join((seg0, "A" * 6, "z" * 27))
+    out = daemon.redact(f"Bot is online with token {fake} OK")
+    assert seg0 not in out
     assert "[REDACTED]" in out
 
 

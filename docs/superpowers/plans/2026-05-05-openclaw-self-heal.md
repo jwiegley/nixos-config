@@ -1039,7 +1039,7 @@ This is the new long-running webhook receiver. Built TDD-style.
   def test_render_prompt_redacts_discord_token_pattern():
       inc = daemon.new_incident({"alert_name": "OpenClawDiscordWsDown",
                                  "vm_active_enter_ts": 1, "starts_at": 1})
-      tok = "DISCORD_TOKEN_REDACTED"
+      tok = "<DISCORD_BOT_TOKEN_REDACTED_2026-07-28>"
       msgs = daemon.render_prompt(inc, metrics={}, err_log_tail=f"got token={tok}",
                                   out_log_tail="")
       joined = " ".join(m["content"] for m in msgs)

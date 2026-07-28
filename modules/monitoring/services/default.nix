@@ -53,6 +53,7 @@
     ./jupyterlab-alerts.nix
     ./vdirsyncer-exporter.nix
     ./gitea-exporter.nix
+    ./gitea-push-mirror-exporter.nix
     ./aria2-exporter.nix
     ./aria2-alerts.nix
     ./qdrant-exporter.nix

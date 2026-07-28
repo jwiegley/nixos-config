@@ -90,3 +90,71 @@ groups:
         annotations:
           summary: "GitHub→Gitea mirror discovery has not run"
           description: "github-mirror.timer last triggered {{ $value | humanizeDuration }} ago (daily schedule); the mirror-discovery job appears to have stopped running. Check: systemctl list-timers github-mirror.timer"
+
+  # Gitea -> GitHub PUSH MIRROR outcome.
+  #
+  # The group above watches the GitHub->Gitea discovery direction. Nothing watched
+  # the push direction until 2026-07-28, when the nixos-config mirror was found to
+  # have been rejected by GitHub push protection every day since 2026-05-05 -- 678
+  # commits behind -- while github-mirror.service, update-github-mirror-tokens.service
+  # and the sync wrapper all reported success. The wrapper only *triggers* a push and
+  # its shell loop cannot distinguish "POST failed" from "repo has no mirrors", so it
+  # exits 0 either way. These rules read the recorded per-mirror OUTCOME from
+  # gitea-push-mirror-exporter instead of the trigger.
+  - name: gitea_push_mirror
+    rules:
+      # THE rule that would have caught the 2026-05-05 regression on day one.
+      # last_error is set by Gitea when the actual push to the remote is rejected and
+      # stays set until a later push succeeds, so this is level-triggered, not edge.
+      # for: 2h spans two hourly scrapes, riding out a single transient network blip
+      # without waiting out the 8h mirror interval.
+      - alert: GiteaPushMirrorFailing
+        expr: gitea_push_mirror_failed == 1
+        for: 2h
+        labels:
+          severity: warning
+          service: gitea
+          category: backup
+        annotations:
+          summary: "Gitea push mirror for {{ $labels.repo }} is failing"
+          description: "The last push of {{ $labels.repo }} to its '{{ $labels.remote_name }}' remote was rejected and has not recovered for over 2 hours, so the off-site copy of that repository is going stale while the sync job keeps reporting success. The error text is deliberately NOT included here (it quotes the remote URL, which embeds an auth token) -- read it in the Gitea UI under Settings -> Repository -> Mirror Settings."
+
+      # The exporter must not become the next silent failure: alert if it stops
+      # producing metrics at all. Hourly timer + 5m jitter, so 3h is ~3 missed runs.
+      - alert: GiteaPushMirrorExporterStale
+        expr: |
+          time() - gitea_push_mirror_scrape_timestamp_seconds > 3 * 3600
+        for: 15m
+        labels:
+          severity: warning
+          service: gitea
+          category: monitoring
+        annotations:
+          summary: "Gitea push-mirror exporter has stopped reporting"
+          description: "gitea_push_mirror_scrape_timestamp_seconds is {{ $value | humanizeDuration }} old (hourly timer). Push-mirror failures are currently undetected. Check: systemctl status gitea-push-mirror-exporter.service"
+
+      # A partial pass (API errors mid-sweep) exits non-zero AND sets this to 0, so a
+      # half-scraped result cannot masquerade as "no mirrors are failing".
+      - alert: GiteaPushMirrorExporterFailing
+        expr: gitea_push_mirror_scrape_success == 0
+        for: 1h
+        labels:
+          severity: warning
+          service: gitea
+          category: monitoring
+        annotations:
+          summary: "Gitea push-mirror exporter completed only a partial pass"
+          description: "The exporter could not enumerate every repository, so gitea_push_mirror_failed may be incomplete and an absent series does not mean healthy. Check: journalctl -u gitea-push-mirror-exporter.service"
+
+      # Absent-metric guard: if the exporter has never run since a rebuild, the two
+      # rules above have nothing to evaluate and the mirror is unmonitored.
+      - alert: GiteaPushMirrorMetricsAbsent
+        expr: absent(gitea_push_mirror_count)
+        for: 6h
+        labels:
+          severity: warning
+          service: gitea
+          category: monitoring
+        annotations:
+          summary: "Gitea push-mirror metrics are absent entirely"
+          description: "gitea_push_mirror_count has no series, so no push-mirror monitoring is in effect. Expected from gitea-push-mirror-exporter.timer (hourly)."

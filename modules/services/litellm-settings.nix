@@ -529,6 +529,22 @@
       };
     }
     {
+      model_name = "openrouter/deepseek/deepseek-v4-flash";
+      litellm_params = {
+        model = "openrouter/deepseek/deepseek-v4-flash";
+        litellm_credential_name = "openrouter_credential";
+        supports_system_message = true;
+      };
+      model_info = {
+        mode = "chat";
+        description = "";
+        max_output_tokens = 81920;
+        supports_function_calling = true;
+        supports_reasoning = true;
+        supports_response_schema = false;
+      };
+    }
+    {
       model_name = "positron_openai/gpt-5.5";
       litellm_params = {
         model = "openai/gpt-5.5";

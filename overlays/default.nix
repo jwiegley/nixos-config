@@ -304,14 +304,31 @@ in
   inherit (import "${inputs.nix-config}/overlays/30-markless.nix" final (prev // { inherit inputs; }))
     markless
     ;
-  inherit (import "${inputs.nix-config}/overlays/30-data-tools.nix" final prevWithMyLib)
+  # NOTE the leading `{ }` on three of these. As of the 2026-07-27 nix-config
+  # bump, 30-data-tools, 30-text-tools and 30-user-scripts each take an
+  # attrset of optional flake sources BEFORE `final: prev:`
+  # (`{ dirscan ? null }`, `{ org2tc ? null }`, `{ scripts ? null }`). Calling
+  # them the old two-argument way passes `final` where the attrset belongs, and
+  # eval dies with "function 'anonymous lambda' called with unexpected argument
+  # 'system'" — which is what broke `nixos-rebuild` after that bump.
+  #
+  # `{ }` is correct rather than merely sufficient: each of those args only
+  # gates an EXTRA package via `optionalAttrs (x != null)` — `dirscan`,
+  # `org2tc` and `my-scripts` respectively — and vulcan inherits none of them.
+  # It takes `tsvutils`, `filetags` and `nix-scripts`, all ungated, and gets
+  # its own `dirscan` from ./dirscan.nix. Pass a real source here only if you
+  # actually want one of the gated packages.
+  #
+  # 00-lib, 30-misc-tools and 30-markless are still two-argument; do not add
+  # `{ }` to those.
+  inherit (import "${inputs.nix-config}/overlays/30-data-tools.nix" { } final prevWithMyLib)
     tsvutils
     ;
   inherit
-    (import "${inputs.nix-config}/overlays/30-text-tools.nix" final (prev // { inherit inputs; }))
+    (import "${inputs.nix-config}/overlays/30-text-tools.nix" { } final (prev // { inherit inputs; }))
     filetags
     ;
-  inherit (import "${inputs.nix-config}/overlays/30-user-scripts.nix" final prevWithMyLib)
+  inherit (import "${inputs.nix-config}/overlays/30-user-scripts.nix" { } final prevWithMyLib)
     nix-scripts
     ;
 

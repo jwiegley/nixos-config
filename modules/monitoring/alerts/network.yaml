@@ -157,9 +157,22 @@ groups:
           summary: "Internet (WAN) degraded — majority of external targets unreachable"
           description: "{{ $value | humanizePercentage }} of external backbone targets (Google, Cloudflare, MIT, Berkeley, UCSD, UMN, OSU) are simultaneously unreachable — an upstream ISP/WAN problem, not a single remote host. Individual target flaps no longer page."
 
-      # HTTP/HTTPS service monitoring
+      # HTTP/HTTPS service monitoring for LAN-internal vhosts only.
+      #
+      # blackbox_https_public is deliberately excluded: that job traverses the
+      # FULL public path (Cloudflare edge -> cloudflared tunnel -> origin nginx),
+      # so it is sensitive to third-party QUIC/UDP transients that no local
+      # remediation can fix. It is already owned by PublicEdgeDown in the
+      # public_edge group below, which has a dwell long enough to ride out an
+      # edge reconnect cycle plus public-edge-specific annotations. Before this
+      # exclusion (2026-07-28) both rules covered the job, and the 1m dwell here
+      # meant a Cloudflare edge flap paged CRITICAL "IMMEDIATE ACTION REQUIRED"
+      # repeatedly while PublicEdgeDown correctly stayed silent — see the
+      # 2026-07-28 10:47-11:08 incident (ha_connections 4->1, self-healed, zero
+      # cloudflared restarts). The 1m dwell is kept for the *_local/auth jobs,
+      # where a failure is genuinely local and fast notice is actionable.
       - alert: WebServiceDown
-        expr: probe_success{job=~"blackbox_http.*"} == 0
+        expr: probe_success{job=~"blackbox_http.*", job!="blackbox_https_public"} == 0
         for: 1m
         labels:
           severity: critical
@@ -367,9 +380,17 @@ groups:
       # public-edge-specific context. Live baseline: probe_success==1 for both
       # data.newartisans.com (200) and calendar.newartisans.com (404 accepted by
       # the https_public module).
+      #
+      # This rule is now the SOLE owner of the blackbox_https_public job —
+      # WebServiceDown explicitly excludes it (network_connectivity group).
+      # Dwell is 10m rather than 5m: the 2026-07-28 edge incident produced
+      # repeated ~4-minute failure bursts as cloudflared re-registered its four
+      # HA connections (4->1->4, self-healed in ~20min, zero restarts). 5m
+      # already rode that out, but 10m leaves margin for a slower reconnect
+      # cycle while still paging well inside a genuine sustained outage.
       - alert: PublicEdgeDown
         expr: probe_success{job="blackbox_https_public"} == 0
-        for: 5m
+        for: 10m
         labels:
           severity: critical
           category: network

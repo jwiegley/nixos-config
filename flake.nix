@@ -373,6 +373,11 @@
           nix-config-reachin-compat =
             let
               vp = inputs.self.nixosConfigurations.vulcan.pkgs;
+              # All SEVEN attributes this repo cherry-picks out of nix-config's
+              # internal overlays. An earlier revision listed six, taken from an
+              # issue's acceptance criteria rather than from overlays/default.nix,
+              # and silently omitted `markless`. Derive this list from the actual
+              # cherry-picks, never from prose.
               want = [
                 "tsvutils"
                 "filetags"
@@ -380,6 +385,7 @@
                 "hammer"
                 "linkdups"
                 "lipotell"
+                "markless"
               ];
               missing = builtins.filter (n: !(vp ? ${n})) want;
             in

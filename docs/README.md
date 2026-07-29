@@ -98,7 +98,6 @@ wins.
 | [NESTED_CONTAINERS_PODMAN_QUADLET.md](NESTED_CONTAINERS_PODMAN_QUADLET.md) | A research memo answering "*could* rootless Podman quadlets run inside a NixOS `systemd-nspawn` container?" Its banner states plainly that this is **not** how vulcan is configured: quadlets run rootless via home-manager directly on the host, and none of the four nspawn containers enable Podman inside. | archival |
 | [LITELLM_TOOL_USE_BUG_REPORT.md](LITELLM_TOOL_USE_BUG_REPORT.md) | A ready-to-file upstream bug report against LiteLLM 1.82.3: the Anthropic → Responses-API converter emits `function_call` before assistant text, with root cause, reproduction, suggested fix, and user-side workarounds. Useful if the same symptom reappears. | archival |
 | [SHERLOCK-OPENCLAW-PROMPT.md](SHERLOCK-OPENCLAW-PROMPT.md) | A task prompt written *for an agent* — how to give OpenClaw the Sherlock read-only SQL tool across the microVM boundary. Not documentation of the system; its banner records the task as done. | archival |
-| [prd.md](prd.md) | An early product-requirements-style enhancement plan for vulcan (security hardening, monitoring, modernization phases). Carries a 2025-09-24 archival banner. Its stated constraints are now factually wrong — it forbids systemd-boot and mandates GRUB, but the host boots systemd-boot (`modules/core/base.nix`). | archival |
 
 ## Setup — one-time integration guides
 
@@ -221,11 +220,9 @@ Of the 46 pre-existing markdown files at the root of `docs/`, the split is:
 - **UPPERCASE-WITH-HYPHENS** — 3 files: `OPNSENSE-EXPORTER-SETUP.md`,
   `OPNSENSE-EXPORTER-WORKAROUND.md`, `SHERLOCK-OPENCLAW-PROMPT.md`.
 - **lowercase** — 3 files: `openclaw-hermes-integration.md`,
-  `quadlet-guide.md`, `prd.md`.
 
 All 43 files under `superpowers/` use dated `YYYY-MM-DD-kebab-case.md`. The
 split does not track content: `quadlet-guide.md` and
-`HOME_ASSISTANT_DEVICES.md` are both living reference; `prd.md` and
 `BOOT_SLOWNESS_RCA_2026-06-24.md` are both archival. Nor is dating consistent —
 `BOOT_SLOWNESS_RCA_2026-06-24.md` and `POST_REBOOT_AUDIT_2026-07-03.md` carry
 their date in the filename, while the equally dated

@@ -170,7 +170,6 @@ The script:
 
 ## Related Files
 
-- `/etc/nixos/scripts/add-push-mirrors.sh` - Original bash script for adding push mirrors
 - `/etc/nixos/modules/services/github-gitea-mirror.nix` - Gitea mirroring service configuration
 - `/etc/nixos/secrets/secrets.yaml` - SOPS-encrypted secrets (contains tokens).
   This is a separate git repo consumed as the `secrets` flake input; edit it with

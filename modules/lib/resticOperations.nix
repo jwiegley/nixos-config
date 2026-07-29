@@ -67,9 +67,9 @@ in
         # ISO weeks run 01..53; folding 53 back onto part 1 keeps the divisor at 52 rather
         # than leaving one part unreachable. Verified: week 53 -> part 1, week 52 -> 52.
 
-        # Budgets. The systemd RuntimeMaxSec=4h backstop is a HARD kill that would abort
-        # the loop mid-repo and destroy exactly the per-repo accounting established above,
-        # so these keep it a genuine last resort rather than an expected outcome:
+        # Budgets for the read-data pass specifically. Note these bound ONLY read-data --
+        # the whole-loop deadline above is what keeps the systemd hard kill unreachable,
+        # because prune/repair/check are untimed. Within the read-data pass:
         #   - a 3h global budget, leaving an hour of headroom under RuntimeMaxSec
         #   - a 1h per-repo cap so one hung repo cannot consume the whole budget
         #     (the largest slice, Photos at 7.71 GB, needs ~32 min at the 4 MB/s implied
@@ -86,17 +86,43 @@ in
         # as a journal line nobody reads. That is precisely the silent-degradation shape
         # this work exists to remove, so coverage is measured, not merely logged.
         #
-        # Invariant: verified + skipped + failed == total, for the `check` operation. A repo
-        # is counted in exactly one bucket -- a data error is NOT a skip, and a repo whose
-        # structure check failed never reaches the data pass and so lands in none of the
-        # three (it is short of `total` by construction, which is why `total` is published
-        # rather than assumed to be 9).
+        # Invariant, CORRECTED 2026-07-29. An earlier version of this comment asserted
+        # `verified + skipped + failed == total` and then, two lines later, that a repo whose
+        # structure check failed "lands in none of the three" -- which contradicts it. The
+        # correct relation is:
+        #
+        #   verified + skipped + failed == (repos that PASSED their structure check)
+        #                               <= total
+        #
+        # with equality only when every repo passed. A repo is counted in at most one bucket:
+        # a data error is NOT a skip, and a structure-check failure never reaches the data
+        # pass so it is counted in none of them (it is still in `total`, and in the
+        # `failed_repos` list that fails the run). Do NOT write an alert that assumes the
+        # equality -- neither of the two rules added with this feature does.
+        # WHOLE-LOOP deadline. The read-data pass is budgeted below, but the structure
+        # check, prune and repair are NOT -- each passes `--retry-lock=1h`, so lock
+        # contention alone can block up to an hour per operation, and three operations
+        # across nine repos can far exceed systemd's RuntimeMaxSec=4h. An earlier version of
+        # the comment below claimed the script's own budgeting kept that hard kill "a last
+        # resort"; that was true only of read-data. The kill aborts the loop mid-repo and
+        # destroys the per-repo accounting this script exists to provide, so stop ourselves
+        # first, half an hour short of it, and NAME what we never reached.
+        LOOP_BUDGET_SEC=12600
+        loop_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + LOOP_BUDGET_SEC ))
+        unreached_repos=""
+
         read_data_verified_count=0
         read_data_skipped_count=0
         read_data_failed_count=0
         repo_count=0
 
         for fileset in ${attrNameList backups} ; do
+          # Checked BEFORE repo_count, so `total` counts repos actually visited and an
+          # unreached repo is not silently miscounted as verified-nothing.
+          if [ "$(${pkgs.coreutils}/bin/date +%s)" -ge "$loop_deadline" ]; then
+            unreached_repos="$unreached_repos $fileset"
+            continue
+          fi
           echo "=== $fileset ==="
           repo_failed=0
           repo_count=$(( repo_count + 1 ))
@@ -256,8 +282,17 @@ in
         # `check`, and into the daily report body for `snapshots`. The Prometheus alert
         # itself carries just "the check failed" plus a pointer to journalctl, because
         # restic_integrity_check_success is a single unlabelled gauge.
-        if [ -n "$failed_repos" ]; then
-          echo "FAILED REPOS:$failed_repos"
+        # Unreached repos FAIL the run, and rank above a read-data skip: those repos got no
+        # integrity check of any kind this week. Reporting without failing would let "the
+        # check passed" mean "we ran out of time before looking at three repositories".
+        if [ -n "$unreached_repos" ]; then
+          echo "NOT REACHED (loop budget of ''${LOOP_BUDGET_SEC}s exhausted):$unreached_repos"
+        fi
+
+        if [ -n "$failed_repos" ] || [ -n "$unreached_repos" ]; then
+          if [ -n "$failed_repos" ]; then
+            echo "FAILED REPOS:$failed_repos"
+          fi
           exit 1
         fi
       '';

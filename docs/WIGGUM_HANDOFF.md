@@ -159,6 +159,24 @@ Append one line per completed logical unit. Newest last.
   rules, 0 err**. Audit then found three FALSE coverage claims in my comments (see the
   recurring-defect section above) plus an undisclosed 5m→15m dwell regression; all corrected
   in `c15581b2`.
+- `2026-07-28` — **PHASE 2 CLOSED.** Units: `895a39e7`+`c15581b2` (jupyterlab/aria2, 10 dead
+  rules -> 6 live), `ed211f95` (dead `backup_alerts` group deleted, rule-loading
+  de-duplicated -19, mbsync consolidated +rbcca coverage, inhibit rule retargeted and
+  functional for the first time), `ba6c87e5` (7 Technitium ratio rules repaired + retuned
+  from a 30d distribution after finding the plan's 7d/5m thresholds would have fired FOUR
+  rules in normal operation), `f66e9077` (4 more unfireable rules deleted + 7 audit
+  corrections), `8b644d82` (3 DNS-exporter warmup gates, ResticRepositorySizeGrowing's
+  86,400x unit error, and MY OWN PublicEdgeDown dwell regression: 10m could not fire on any
+  observed outage and the plan's recommended 5m could not either — measured at 30s
+  resolution, only 3m works; HostUnreachable now genuinely excludes the public job, which
+  9d4ad5b6 had claimed but not achieved).
+  **Gates: 538 -> 506 rules (alerting 505 + recording 1), 0 err, all 60 GENERATED rule files
+  pass promtool --lint-fatal (the pre-existing health-checks.yaml rc=3 is closed),
+  systemctl --failed empty, switch rc=0.**
+  Method note worth keeping: `sum(prometheus_rule_group_rules)` is NOT usable for counting —
+  it is labelled by rule-file store path, so after a reload both old and new paths sit in the
+  lookback window and it double-counts (observed 985, 958 against a true 506). Use
+  /api/v1/rules and remember to include the recording rule.
 - **Switch exit-4 pattern (2 occurrences, NOT a gate failure):** budget-board-server's
   podman healthcheck runs while `health_status=starting` and returns 1, creating a transient
   failed unit that makes `switch-to-configuration` exit 4 even though the switch applied
@@ -274,6 +292,46 @@ remove.
 4. Quote headroom against the observed **maximum**, not the median — the max is what
    determines false-fire risk.
 5. Prefer "I verified X returns N series" over "X is broken".
+
+## OPEN FINDING — memory-qdrant: loaded but unusable (operator-reported 2026-07-28)
+
+The operator asked OpenClaw to query memory-qdrant and it could not: the Qdrant API key is
+not readable as a file inside the VM (it lives in the gateway config, redacted on read), so
+`memory_search` is not invocable from the in-VM CLI path.
+
+**Every monitoring signal for this was, and still is, GREEN:**
+
+| Signal | Value | What it actually proves |
+|---|---|---|
+| `openclaw_channel_plugin_loaded{channel="memory-qdrant"}` | 1 | the plugin NAME appeared in the gateway's `[gateway] ready (N plugins: …)` startup LOG LINE, which the canary parses |
+| `openclaw_gateway_ready_plugins_total` | 6 | a count from that same log line |
+| `openclaw_plugin_init_failures_recent_total` | 0 | the ABSENCE of a failure log line |
+| `up{job="qdrant"}`, `probe_success{qdrant.vulcan.lan}` | 1, 1 | the backing store answers |
+| `QdrantDown` / `ServiceFailed` / `CollectionsEmptyUnexpectedly` | inactive | correctly |
+
+Not one of them exercises the tool. This is the purest archetype-1 (success-that-isn't) case
+found so far, and it sat inside the monitoring the audit rated healthy.
+
+**A WRONG FIX I PROPOSED AND MUST NOT BE RETRIED:** adding `memory-qdrant` to
+`EXPECTED_SERVERS` in `modules/monitoring/services/openclaw-mcporter-check.nix`. That file's
+own comment (lines 40-50) forbids it: memory-qdrant is an in-process OpenClaw PLUGIN
+(`openclaw.plugin.json` declares `kind="memory"`), loaded via `plugins.entries` in
+openclaw-config.nix, exposing tools through the GATEWAY rather than mcporter. It will never
+appear in `mcporter.json`, so listing it there emits a permanently-0 gauge. The comment
+records that "an agent-authored health check made this exact category error and reported the
+plugin as down (2026-07-27)" — i.e. the day before I proposed the same thing. `memory-vault`
+IS a real MCP server; the similar name is the trap.
+
+**What would actually detect it:** a capability probe that INVOKES a tool through the gateway
+and asserts a sane response, rather than parsing a startup line. This is genuine new
+implementation work, not a config tweak — it needs a gateway endpoint plus an auth path, and
+the credential plumbing is the very thing that is broken. Size it honestly.
+
+**Why the audit missed it:** it asked "is it up?" not "can it do its job?", for the OpenClaw
+VM specifically. It also disclosed it could not reach inside either guest (johnw's SSH is
+locked out of both — host-key mismatch in `~/.config/ssh/known_hosts`, password auth
+disabled), so only host-visible signals were available. The disabled D18 Discord canaries
+would NOT have caught this either: they test a Discord reply round-trip, not tool capability.
 
 ## Resume instructions
 

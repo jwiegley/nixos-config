@@ -143,7 +143,7 @@ require operator action). Do NOT perform them autonomously.
 |---|---|
 | **D2 — `git filter-repo` + force-push to Gitea and GitHub** | Rewrites 675 commits and force-pushes shared history. Terminal, human-gated. Prepare and verify only; never push. |
 | **Drop `LiteLLM_SpendLogs_prescrub_20260728`** | Operator chose 2026-07-29, after a full day of litellm on the scrubbed table. |
-| **D8 — Machines (307 GB) first B2 upload** | Load-induced enclosure hang is a documented failure mode. Manual daytime run with `uas_eh_abort` watch. |
+| ~~**D8 — Machines (307 GB) B2 upload**~~ **STRUCK 2026-07-29** | Operator: "That's not a volume I want to back up." Verified never implemented -- `Machines` is in `backupExcludes` (modules/storage/backups.nix:133) and its `mkBackup` call stays commented out; no commit of mine touched the exclusion. The decisions doc's "all three" answer is superseded for this volume. DO NOT un-exclude it. |
 | **D8 — PostgreSQL B2 un-exclude** | Gated on the next nightly dump proving the ~8 GB shrink. |
 | **D7 — destroy legacy snapshots** | Decided: NO ACTION (listed here for completeness, not because it awaits a gate). Let the ladder expire them. |
 | **D4 — UPS self-test** | State change that transfers the host to a 4-year-old battery. Operator-triggered, AFTER NUT monitoring lands. |
@@ -449,9 +449,14 @@ So a sweep keyed on state+age would kill a live `nix-daemon` (the exact hazard t
 named), break GPG agent caching, and destroy a user's terminal session. An alert on "closing
 sessions older than N days" would also be pure noise, since GPG agents lingering is normal.
 
-**Genuinely actionable residue, for the operator:** 14 leaked `nix-daemon --stdio` processes
-surviving 6–17 days. Root-causing that (which remote nix client abandons them) is new
-investigation beyond this plan. The logind sessions are a symptom, not the problem.
+**RETRACTED 2026-07-29 — the "14 leaked nix-daemon --stdio processes" claim was WRONG.**
+Operator checked and found none; re-verified: exactly ONE `nix-daemon` process exists
+(`nix-daemon --daemon`, the system daemon), and the closing-session count has fallen 17 -> 3 on
+its own. I read only `/proc/PID/comm` (to avoid leaking a cmdline) and then INFERRED `--stdio`
+from the name. They were almost certainly ordinary per-connection daemon workers that exited when
+their clients went away. Nothing leaked and nothing needs root-causing. Same defect as my other
+false assertions, inverted: I stated a specific MECHANISM from evidence that identified only a
+process NAME. The right move was to field-target the cmdline safely, not to guess.
 
 ## D14 — verified and staged, DROP deliberately NOT executed (2026-07-29)
 

@@ -13,8 +13,15 @@ groups:
   #   battery.runtime   2322 s  (38.7 min) at 17-18 % load
   #   input.voltage     121 V   (nominal 120)
   #   battery.mfr.date  2022/08/13  -> ~4 years old, top of APC's 3-5 year window
-  #   ups.test.result   "No test initiated"  -> the runtime figure is a VENDOR ESTIMATE
-  #                                             that has never been validated under load
+  #   ups.test.result   "No test initiated"  -> no SELF-TEST has been run, but see below
+  #
+  # CORRECTED 2026-07-29: an earlier version of this comment said the runtime figure "has never
+  # been validated under load". That is FALSE. The operator reports a real utility outage on
+  # 2026-07-03 which the battery carried without incident -- corroborated on this host by
+  # postgresql's ActiveEnterTimestamp of 2026-07-03 11:38, i.e. the reboot that followed. So the
+  # battery has been validated by an actual event, which is stronger evidence than a self-test.
+  # What remains unmeasured is only the runtime CEILING (how long it would have lasted), not
+  # whether it works. D4's self-test is therefore a nice-to-have, not a gap -- deferred.
   - name: ups_power
     interval: 30s
     rules:

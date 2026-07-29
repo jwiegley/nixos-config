@@ -117,14 +117,28 @@ let
                   fi
 
                   # Get raw data stats (total repository size)
+                  #
+                  # NOTE: total_file_count is deliberately NOT read here. `--mode raw-data`
+                  # counts BLOBS, not files -- restic's own help says it "Counts the size of
+                  # blobs in the repository" -- so the field is simply absent from this
+                  # mode's JSON and `// 0` silently produced 0. That made
+                  # restic_repo_files_total read 0 for all nine repos for its entire life,
+                  # while its siblings from the other two modes populated correctly
+                  # (restic_unique_files_total is in the thousands). Fixed 2026-07-29 by
+                  # sourcing the count from restore-size below.
                   if RAW_STATS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" stats --mode raw-data --json 2>/dev/null); then
                     REPO_SIZE=$(echo "$RAW_STATS" | ${pkgs.jq}/bin/jq -r '.total_size // 0')
-                    REPO_FILES=$(echo "$RAW_STATS" | ${pkgs.jq}/bin/jq -r '.total_file_count // 0')
                   fi
 
-                  # Get restore size stats (size if all files were restored)
+                  # Get restore size stats (size if all files were restored).
+                  # restore-size is the mode that reports total_file_count as a FILE count
+                  # (files summed across all snapshots), which is what
+                  # restic_repo_files_total is documented to mean. The unique-by-content
+                  # count is tracked separately as restic_unique_files_total below, so the
+                  # two are complementary rather than redundant.
                   if RESTORE_STATS=$(${pkgs.restic}/bin/restic --no-lock -r "$REPO_URL" stats --mode restore-size --json 2>/dev/null); then
                     RESTORE_SIZE=$(echo "$RESTORE_STATS" | ${pkgs.jq}/bin/jq -r '.total_size // 0')
+                    REPO_FILES=$(echo "$RESTORE_STATS" | ${pkgs.jq}/bin/jq -r '.total_file_count // 0')
                   fi
 
                   # Get unique files stats (deduplication info)

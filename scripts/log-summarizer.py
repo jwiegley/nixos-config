@@ -798,22 +798,34 @@ class AlertHistory:
         ]
         rows.sort(key=lambda r: (-r["longest_hours"], -r["total_hours"]))
 
+        # Currently-firing alerts. A 7-day window necessarily includes alerts that have
+        # since been DISABLED or resolved (e.g. the Schwab token rules, which show 140h of
+        # firing in the window but were commented out mid-week by ee03dd75), so
+        # "still firing now" has to be answered separately or the table misleads.
+        #
+        # NOTE the bare `except: pass` that used to be here was itself the bug this whole
+        # report section exists to prevent: the URL was malformed
+        # ("/api/v2/../api/v1/alerts", which urllib does not normalise), the request failed
+        # on every run, and the swallowed exception meant the "STILL FIRING NOW" line simply
+        # never appeared -- indistinguishable from "nothing is firing". Now the URL is
+        # correct and a failure is REPORTED rather than swallowed.
         active = []
+        active_ok = True
         try:
-            with urllib.request.urlopen(
-                f"{self.prom}/api/v2/../api/v1/alerts", timeout=30
-            ) as resp:
+            with urllib.request.urlopen(f"{self.prom}/api/v1/alerts", timeout=30) as resp:
                 for a in json.load(resp).get("data", {}).get("alerts", []):
                     if a.get("state") == "firing":
                         active.append({
                             "alertname": a["labels"].get("alertname", "?"),
                             "severity": a["labels"].get("severity", "?"),
                         })
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            active_ok = False
+            print(f"WARN: active-alert query failed: {type(exc).__name__}", file=sys.stderr)
 
         long_runs.sort(key=lambda x: -x[2])
-        return {"ok": True, "fired": rows, "long": long_runs, "active": active}
+        return {"ok": True, "fired": rows, "long": long_runs, "active": active,
+                "active_ok": active_ok}
 
     def render(self) -> str:
         d = self.collect()
@@ -839,9 +851,15 @@ class AlertHistory:
         crit = [r for r in d["fired"] if r["severity"] == "critical"]
         out.append("")
         out.append(f"{len(d['fired'])} distinct alerts fired ({len(crit)} critical).")
-        if d["active"]:
+        if not d.get("active_ok", True):
+            out.append("STILL FIRING NOW: UNKNOWN (the active-alert query failed) --")
+            out.append("   treat the table above as history only; it includes alerts that")
+            out.append("   may since have been resolved OR disabled.")
+        elif d["active"]:
             names = ", ".join(sorted({a["alertname"] for a in d["active"]}))
             out.append(f"STILL FIRING NOW: {names}")
+        else:
+            out.append("STILL FIRING NOW: nothing (verified, not assumed).")
         out.append("")
 
         if d["long"]:

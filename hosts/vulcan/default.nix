@@ -235,21 +235,34 @@
   services.discordCanary.probes = {
     # @Claw (OpenClaw) posts, Hermes must reply -> tests Hermes.
     hermes = {
+      # HELD DISABLED pending one Discord permission, 2026-07-29. The channel and interval are
+      # correct and this is one flag away from working -- but the first live run returned
+      # HTTP 403 when deleting the TARGET bot's reply, because neither bot has MANAGE_MESSAGES
+      # in #interconnect. Deleting our own probe works without it; deleting the reply does not.
+      # So every successful round-trip would leave one undeletable message, ~192/day, and the
+      # operator granted this channel on the explicit condition that it stays clean.
+      # TO ENABLE: grant MANAGE_MESSAGES to both bots in #interconnect, then set enable = true
+      # here and in the openclaw probe below. HermesDiscordCanaryNotCleaningUp /
+      # OpenClawDiscordCanaryNotCleaningUp will catch a regression.
       enable = false;
-      channelId = ""; # shared canary channel snowflake
+      # #interconnect -- created 2026-07-29 by the operator specifically for this: private,
+      # muted, members are ONLY the two bots. Granted on the explicit condition that the
+      # canary keeps it clean, which is why cleanup failures are now counted and alerted on
+      # rather than ignored (see scripts/discord_canary.py).
+      channelId = "1532127247211827322";
       targetUserId = "1503619790261194793"; # Hermes bot
       targetName = "Hermes";
       tokenFile = config.sops.secrets."openclaw/discord-token".path;
-      intervalSeconds = 300;
+      intervalSeconds = 900;
     };
     # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
     openclaw = {
-      enable = false;
-      channelId = ""; # shared canary channel snowflake
+      enable = false; # see the MANAGE_MESSAGES note on the hermes probe above
+      channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
       targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
       targetName = "OpenClaw";
       envFile = config.sops.secrets."hermes/env".path; # provides DISCORD_BOT_TOKEN
-      intervalSeconds = 300;
+      intervalSeconds = 900;
     };
   };
   services.hermesFallbackCounter.enable = true;

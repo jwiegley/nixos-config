@@ -99,6 +99,12 @@ class ProbeResult:
     post_http_code: int = 0
     timestamp: float = 0.0
     detail: str = ""
+    # Messages this run failed to delete. Deleting our OWN probe needs no permission, but
+    # deleting the TARGET's reply needs MANAGE_MESSAGES. Cleanup used to be fire-and-forget,
+    # so without that permission the channel silently accumulated ~576 replies/day with no
+    # signal anywhere. The operator granted a dedicated channel on the explicit condition
+    # that it stays clean, so "we could not clean up" has to be observable, not ignored.
+    cleanup_failed: int = 0
 
 
 def _request(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
@@ -181,12 +187,22 @@ def run_probe() -> ProbeResult:
     if not result.ok:
         result.detail = "no reply within timeout"
 
-    # Best-effort cleanup so the channel doesn't accumulate probe chatter.
-    # Deleting our own message needs no special perm; deleting the target's
-    # reply needs MANAGE_MESSAGES — ignore failures either way.
+    # Cleanup so the channel doesn't accumulate probe chatter. Deleting our own message
+    # needs no special permission; deleting the target's reply needs MANAGE_MESSAGES.
+    # Failures no longer pass silently -- they are counted and exported, because an
+    # undetected cleanup failure turns this canary into a channel-spammer.
+    # 204 = deleted, 404 = already gone (both fine). Anything else, notably 403 Forbidden
+    # for a missing MANAGE_MESSAGES, is a real failure.
     for mid in (posted_id, reply_id):
         if mid:
-            _request("DELETE", f"/channels/{CHANNEL_ID}/messages/{mid}")
+            code, _ = _request("DELETE", f"/channels/{CHANNEL_ID}/messages/{mid}")
+            if code not in (204, 404):
+                result.cleanup_failed += 1
+                print(
+                    f"canary cleanup FAILED for message in channel (http {code}); "
+                    "the bot likely lacks MANAGE_MESSAGES, so replies will accumulate",
+                    file=sys.stderr,
+                )
 
     return result
 
@@ -222,6 +238,9 @@ def write_metrics(result: ProbeResult, target: str = METRIC_PATH) -> None:
         f"# HELP {n}_last_run_timestamp_seconds When the canary last ran (Unix epoch)",
         f"# TYPE {n}_last_run_timestamp_seconds gauge",
         f"{n}_last_run_timestamp_seconds {result.timestamp}",
+        f"# HELP {n}_cleanup_failed Messages this run could not delete (non-zero means the channel is accumulating)",
+        f"# TYPE {n}_cleanup_failed gauge",
+        f"{n}_cleanup_failed {result.cleanup_failed}",
         f"# HELP {n}_last_success_timestamp_seconds When the canary last succeeded (Unix epoch, carried forward)",
         f"# TYPE {n}_last_success_timestamp_seconds gauge",
         f"{n}_last_success_timestamp_seconds {last_success}",

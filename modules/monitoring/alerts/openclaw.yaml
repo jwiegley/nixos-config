@@ -197,7 +197,12 @@ groups:
 
       # The OpenClaw-direction canary/probe stopped producing fresh metrics.
       - alert: OpenClawDiscordCanaryStale
-        expr: time() - openclaw_discord_canary_last_run_timestamp_seconds > 1200
+        expr: time() - openclaw_discord_canary_last_run_timestamp_seconds > 2400
+        # RETUNED 300s -> 900s interval, 2026-07-29. The old 1200s threshold was sized for a
+        # 300s canary interval. The interval is now 900s (to cut Discord traffic from 1,152 to
+        # 384 messages/day), which leaves 1200s only 5 minutes of grace -- a single delayed run
+        # would have false-fired. 2400s tolerates one missed run with slack and still catches a
+        # genuinely stopped canary.
         for: 10m
         labels:
           severity: warning
@@ -212,6 +217,27 @@ groups:
             invocation's journal.
 
       # B-floor signal — gateway HTTP /health probe failing.
+      # The operator created #interconnect for this canary on the explicit condition that it
+      # stays clean. Deleting the probe's OWN message needs no permission, but deleting the
+      # TARGET bot's reply needs MANAGE_MESSAGES -- and cleanup used to fail SILENTLY, which
+      # would have accumulated ~192 undeleted replies/day per direction with no signal. This
+      # makes that condition enforceable rather than a promise.
+      - alert: OpenClawDiscordCanaryNotCleaningUp
+        expr: openclaw_discord_canary_cleanup_failed > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw
+        annotations:
+          summary: "OpenClaw Discord canary cannot delete its probe messages"
+          description: |
+            The canary posted to #interconnect but could not delete {{ $value }} message(s),
+            so the channel is accumulating. Almost certainly the bot lacks MANAGE_MESSAGES in
+            that channel; without it the target's replies cannot be removed.
+            Action: grant MANAGE_MESSAGES to both bots in #interconnect, or set
+            services.discordCanary.probes.<n>.enable = false to stop the traffic.
+
       - alert: OpenClawHttpHealthDown
         # VM-uptime warmup gate: suppress for the first 600s after a (re)boot
         # so a still-initializing gateway HTTP listener does not trip a

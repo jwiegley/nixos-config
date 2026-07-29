@@ -260,8 +260,14 @@ groups:
           summary: "Restic repository has no snapshots"
           description: "Repository {{ $labels.repository }} has no snapshots at all"
 
+      # UNIT ERROR FIXED 2026-07-28: this was off by 86,400x and could never fire.
+      # `rate()` returns a PER-SECOND change, but the threshold 10737418240 is 10 GiB and
+      # the annotation promises "per day" -- so the rule actually demanded 10 GiB/SECOND,
+      # i.e. 864 PB/day. delta() over an explicit 24h window gives the per-day change the
+      # annotation describes. delta() is also the correct function here: restic_repo_size_bytes
+      # is a GAUGE that can decrease (prune/forget), and rate() is only valid on counters.
       - alert: ResticRepositorySizeGrowing
-        expr: rate(restic_repo_size_bytes{repository!=""}[24h]) > 10737418240
+        expr: delta(restic_repo_size_bytes{repository!=""}[24h]) > 10737418240
         for: 1h
         labels:
           severity: info

@@ -23,7 +23,7 @@ groups:
         # DNSServerDown at once — ~20 emails for one 30-min WAN blip with no
         # real outage. They are now covered by the aggregate WANDegraded /
         # DNSResolversDown rules below, which fire only on a genuine WAN outage.
-        expr: probe_success{job=~"blackbox_.*",job!="blackbox_hera_mlx",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
+        expr: probe_success{job=~"blackbox_.*",job!~"blackbox_hera_mlx|blackbox_https_public",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
         for: 2m
         labels:
           severity: critical
@@ -381,23 +381,34 @@ groups:
       # data.newartisans.com (200) and calendar.newartisans.com (404 accepted by
       # the https_public module).
       #
-      # This rule is now the SOLE owner of the blackbox_https_public job —
-      # WebServiceDown explicitly excludes it (network_connectivity group).
-      # Dwell is 10m rather than 5m: the 2026-07-28 edge incident produced
-      # repeated ~4-minute failure bursts as cloudflared re-registered its four
-      # HA connections (4->1->4, self-healed in ~20min, zero restarts). 5m
-      # already rode that out, but 10m leaves margin for a slower reconnect
-      # cycle while still paging well inside a genuine sustained outage.
+      # SOLE OWNER of the blackbox_https_public job as of 2026-07-28: both
+      # WebServiceDown (network_connectivity group) and HostUnreachable (above) now
+      # exclude it, so this rule is the only public-edge coverage and its dwell has to
+      # be capable of firing.
+      #
+      # DWELL CORRECTED 10m -> 3m, and this is a REGRESSION FIX for my own earlier change.
+      # Measuring contiguous probe_success==0 runs at 30s resolution over 3 days:
+      #   calendar.newartisans.com  5 runs, longest 4.00 min
+      #   data.newartisans.com      5 runs, longest 3.00 min
+      #   for=2m  would fire on 3 / 2 runs
+      #   for=3m  would fire on 2 / 2 runs
+      #   for=5m  would fire on 0 / 0 runs   <-- the originally proposed value
+      #   for=10m would fire on 0 / 0 runs   <-- what I had shipped
+      # So 10m was incapable of firing on ANY observed outage, and 5m would have been too.
+      # 3m fires on the genuine multi-minute outages while still ignoring the 1-2 minute
+      # blips that made the old 1m WebServiceDown page repeatedly -- which was the whole
+      # point of moving ownership here. It also sits above HostUnreachable's 2m, so this is
+      # a deliberate step down in sensitivity rather than an accidental duplicate.
       - alert: PublicEdgeDown
         expr: probe_success{job="blackbox_https_public"} == 0
-        for: 10m
+        for: 3m
         labels:
           severity: critical
           category: network
           service: public_edge
         annotations:
           summary: "Public edge {{ $labels.instance }} is unreachable"
-          description: "Public-tunnel probe to {{ $labels.instance }} (via cloudflared) has been failing for more than 5 minutes — the public path (Cloudflare edge / tunnel / origin nginx / cert) is broken."
+          description: "Public-tunnel probe to {{ $labels.instance }} (via cloudflared) has been failing for more than 3 minutes — the public path (Cloudflare edge / tunnel / origin nginx / cert) is broken."
 
   - name: probe_latency
     rules:

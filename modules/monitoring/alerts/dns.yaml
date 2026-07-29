@@ -256,15 +256,25 @@ groups:
 
       # API error rate monitoring
       - alert: DnsQueryExporterHighAPIErrorRate
-        expr: rate(api_errors_total{job="dns_query_logs"}[5m]) > 0.1
-        for: 3m
+        # WARMUP-GATED 2026-07-28. api_errors_total is a LAZILY-CREATED counter: it does
+        # not exist until the first error, so `increase()` over a window that spans the
+        # exporter's start sees the series appear from nothing and reports a spurious jump.
+        # The gate requires >1h of exporter uptime, matching the [1h] window, so a restart
+        # cannot page. This mirrors the boot-window gating already used for the OpenClaw and
+        # Hermes self-heal rules. Deliberately NOT an absent() guard -- absent() would fire
+        # when the exporter is healthy and has simply never errored.
+        # Threshold moved from a per-SECOND rate to a per-hour count: `rate(...) > 0.05`
+        # meant 180 errors/hour, which is not what the annotation described.
+        # error_type is aggregated away here, so the annotation must not interpolate it.
+        expr: sum by(instance,job) (increase(api_errors_total{job="dns_query_logs",error_type!~"network|timeout|auth"}[1h])) > 5 and on(instance,job) (time() - process_start_time_seconds{job="dns_query_logs"}) > 3600
+        for: 5m
         labels:
           severity: warning
           category: dns
           service: dns-query-log-exporter
         annotations:
           summary: "DNS Query Log Exporter has high API error rate"
-          description: "Elevated API error rate detected ({{ $value | humanize }} errors/sec). Error types: {{ $labels.error_type }}. Check Technitium DNS API health and network connectivity."
+          description: "{{ $value | humanize }} uncategorised API errors in the last hour (network/timeout/auth have their own rules). Check Technitium DNS API health and network connectivity."
 
       # Stale data monitoring - no successful queries in last 5 minutes
       - alert: DnsQueryExporterStaleData
@@ -304,27 +314,45 @@ groups:
 
       # Network-specific errors
       - alert: DnsQueryExporterNetworkErrors
-        expr: rate(api_errors_total{job="dns_query_logs",error_type="network"}[5m]) > 0.05
-        for: 3m
+        # WARMUP-GATED 2026-07-28. api_errors_total is a LAZILY-CREATED counter: it does
+        # not exist until the first error, so `increase()` over a window that spans the
+        # exporter's start sees the series appear from nothing and reports a spurious jump.
+        # The gate requires >1h of exporter uptime, matching the [1h] window, so a restart
+        # cannot page. This mirrors the boot-window gating already used for the OpenClaw and
+        # Hermes self-heal rules. Deliberately NOT an absent() guard -- absent() would fire
+        # when the exporter is healthy and has simply never errored.
+        # Threshold moved from a per-SECOND rate to a per-hour count: `rate(...) > 0.05`
+        # meant 180 errors/hour, which is not what the annotation described.
+        expr: increase(api_errors_total{job="dns_query_logs",error_type="network"}[1h]) > 5 and on(instance,job) (time() - process_start_time_seconds{job="dns_query_logs"}) > 3600
+        for: 5m
         labels:
           severity: warning
           category: dns
           service: dns-query-log-exporter
         annotations:
           summary: "DNS Query Log Exporter experiencing network errors"
-          description: "Network errors connecting to Technitium DNS API ({{ $value | humanize }} errors/sec). Check network connectivity and Technitium DNS service health."
+          description: "{{ $value | humanize }} network errors connecting to the Technitium DNS API in the last hour. Check network connectivity and Technitium DNS service health."
 
       # Timeout-specific errors
       - alert: DnsQueryExporterTimeouts
-        expr: rate(api_errors_total{job="dns_query_logs",error_type="timeout"}[5m]) > 0.05
-        for: 3m
+        # WARMUP-GATED 2026-07-28. api_errors_total is a LAZILY-CREATED counter: it does
+        # not exist until the first error, so `increase()` over a window that spans the
+        # exporter's start sees the series appear from nothing and reports a spurious jump.
+        # The gate requires >1h of exporter uptime, matching the [1h] window, so a restart
+        # cannot page. This mirrors the boot-window gating already used for the OpenClaw and
+        # Hermes self-heal rules. Deliberately NOT an absent() guard -- absent() would fire
+        # when the exporter is healthy and has simply never errored.
+        # Threshold moved from a per-SECOND rate to a per-hour count: `rate(...) > 0.05`
+        # meant 180 errors/hour, which is not what the annotation described.
+        expr: increase(api_errors_total{job="dns_query_logs",error_type="timeout"}[1h]) > 5 and on(instance,job) (time() - process_start_time_seconds{job="dns_query_logs"}) > 3600
+        for: 5m
         labels:
           severity: warning
           category: dns
           service: dns-query-log-exporter
         annotations:
           summary: "DNS Query Log Exporter experiencing API timeouts"
-          description: "API request timeouts detected ({{ $value | humanize }} timeouts/sec). Technitium DNS API may be overloaded or experiencing performance issues."
+          description: "{{ $value | humanize }} API request timeouts in the last hour. Technitium DNS API may be overloaded or experiencing performance issues."
 
   # Internal-zone DNS resolution correctness (blackbox dns_internal probe)
   - name: dns_internal_resolution

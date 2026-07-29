@@ -293,6 +293,13 @@ in
         serviceConfig = {
           ExecStart = "${lib.getExe (resticOperations config.services.restic.backups)} check";
           User = "root";
+          # Backstop only. Rotating data verification put a real network-dependent workload
+          # in this unit (~2h expected), so it needs an upper bound -- but this is a HARD
+          # kill that would abort the per-repo loop and lose the per-repo failure accounting,
+          # so the script carries its own 3h budget and 1h per-repo cap to stay inside it.
+          # Reaching 4h means the script's own budgeting failed and the loud failure is
+          # correct: the unit fails, the gauge goes 0, and ResticIntegrityCheckFailed pages.
+          RuntimeMaxSec = "4h";
           # Export the integrity-check outcome as node-exporter textfile metrics so
           # a silent failure (exit != 0, lock loss, repo corruption) becomes alertable.
           # ExecStopPost runs in both success and failure paths; $SERVICE_RESULT is
@@ -351,7 +358,12 @@ in
         "timers.target"
       ];
       timerConfig = {
-        OnCalendar = "weekly";
+        # Moved off `weekly` (= Mon 00:00) 2026-07-29, when rotating data verification
+        # took this job from ~7 minutes to ~2 hours. At 00:00 a 2-3h run would have
+        # spilled straight into the staggered backup herd that starts at 02:10, and those
+        # jobs' `forget --prune` only waits `--retry-lock=5m` before failing. 06:30 sits
+        # after the last backup (05:30) with the whole morning clear.
+        OnCalendar = "Mon 06:30";
         Persistent = true;
       };
     };

@@ -94,6 +94,56 @@ groups:
             (last run {{ $value | humanizeDuration }} ago; expected weekly).
             Action: check systemctl status restic-check.timer and journalctl -u restic-check.
 
+      # ---- Rotating data verification (bit-rot) ----------------------------------------
+      # Added 2026-07-29 alongside `check --read-data-subset=P/52`. A plain structure check
+      # never reads pack payloads, so bit-rot in the backup DATA was undetectable; the new
+      # pass reads 1/52 of every repo each week for full coverage in a year.
+      #
+      # These rules exist because restic_integrity_check_success cannot express coverage.
+      # It is a single unlabelled gauge for the run's exit status, and a run that exhausts
+      # its 3h data budget exits 0 having verified almost nothing -- reporting success while
+      # silently doing far less work. A genuine data error DOES fail the run and is already
+      # covered by ResticIntegrityCheckFailed above; these catch the quiet degradation.
+      #
+      # No absent() guard, matching ResticIntegrityCheckStale's reasoning: the series only
+      # appears after the first weekly run following deploy, and a fresh deploy must not
+      # alarm before that. The stale rule below is what catches a metric that never arrives.
+      - alert: ResticReadDataCoverageDegraded
+        expr: restic_read_data_repos_skipped > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: storage
+          service: restic-check
+        annotations:
+          summary: "{{ $value }} restic repo(s) went data-unverified in the last check"
+          description: |
+            The weekly data-verification pass left {{ $value }} repository(ies) without
+            reading their pack payloads — either a per-repo 1h cap or the 3h global budget
+            was hit. The run still exited 0 because a slow week is a budget outcome, not a
+            data error, so nothing else would have reported this. Left unaddressed the
+            52-week full-coverage cycle silently stops completing.
+            Action: journalctl -u restic-check | grep READ-DATA names the repos. If this
+            recurs, either raise READ_DATA_BUDGET_SEC in modules/lib/resticOperations.nix
+            or check B2 throughput.
+
+      - alert: ResticReadDataStale
+        expr: (time() - restic_read_data_timestamp_seconds) > 9 * 86400
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+          service: restic-check
+        annotations:
+          summary: "restic data verification is stale on {{ $labels.instance }}"
+          description: |
+            No data-verification pass has completed in over 9 days (last
+            {{ $value | humanizeDuration }} ago; expected weekly at Mon 06:30). This also
+            fires if the textfile write itself keeps failing, which is deliberately
+            non-fatal to the check run.
+            Action: systemctl status restic-check.timer, and confirm
+            /var/lib/prometheus-node-exporter-textfiles/restic_read_data.prom is fresh.
+
       # Technitium DNS backup last-success triad (technitium-dns-backup.timer,
       # daily 03:00). A green Type=oneshot exit is NOT proof of a complete backup
       # — the metrics are emitted by ExecStopPost so this catches a non-zero exit

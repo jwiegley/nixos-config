@@ -300,7 +300,17 @@ in
           # mirroring container-health-exporter.nix. Runs as root (User=root) so it
           # can write into the world-writable textfile dir and chmod the result.
           ExecStopPost = pkgs.writeShellScript "restic-check-metrics" ''
-            set -u
+            # `-e` added 2026-07-29. With only `set -u`, a failed write left the PREVIOUS
+            # file in place -- so a run that failed to record SUCCESS=0 kept publishing the
+            # stale 1 from last week, and the script still exited 0 because the final chmod
+            # succeeded against that surviving file. The one gauge whose job is to report a
+            # failed integrity check could therefore report success indefinitely, with no
+            # trace. With `-e` the write failure fails ExecStopPost, which marks the unit
+            # failed and is caught by the fleet node_systemd_unit_state alerting.
+            #
+            # The mv itself is safe: METRICS_TMP is in the same directory as METRICS_FILE,
+            # so it is a rename(2) and node-exporter can never observe a half-written file.
+            set -eu
 
             METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/restic_check.prom"
             METRICS_TMP="$METRICS_FILE.tmp"

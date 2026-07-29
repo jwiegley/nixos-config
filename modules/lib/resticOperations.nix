@@ -25,9 +25,12 @@ in
         # pkgs.writeShellApplication injects `set -euo pipefail`, so before this change a
         # single failing repo ABORTED THE WHOLE SCRIPT and every repo later in the list got
         # NO integrity check at all that week -- silently, because the alert fired for the
-        # run rather than naming what had been skipped. With 9 repos ordered
-        # alphabetically, a persistent problem in an early one meant the rest were never
-        # verified.
+        # run rather than naming what had been skipped. builtins.attrNames sorts by BYTE
+        # value, giving
+        #   Audio Backups Databases Home Photos Public Video doc src
+        # -- lowercase sorts AFTER every uppercase name, so `doc` and `src` are last rather
+        # than interleaved where a case-insensitive alphabetical order would put them. A
+        # persistent problem in an early repo therefore meant the rest were never verified.
         #
         # The idiom matters. The obvious `if ! ( check; prune; repair ); then` is WRONG:
         # bash SUPPRESSES errexit inside a condition-context subshell, so prune and repair
@@ -36,9 +39,9 @@ in
         # fire when a failure is handled by `||`, and each command's status is captured
         # individually.
         #
-        # prune/repair are SKIPPED when check fails for a repo, deliberately: a failed
-        # integrity check means the repository may be damaged, and pruning a damaged repo
-        # can destroy the very data needed to recover it.
+        # BOTH operations are isolated. The first version of this block guarded only
+        # `check`, leaving the `snapshots` listing carrying the exact bug described above
+        # while these comments claimed the whole script was covered.
         failed_repos=""
 
         for fileset in ${attrNameList backups} ; do
@@ -46,14 +49,31 @@ in
           repo_failed=0
           case "$operation" in
             check)
-              # Unlock any stale locks before starting check operations
+              # Unlock any stale locks before starting check operations.
+              # `|| true` is deliberate: this is best-effort stale-lock clearing, and a real
+              # problem here resurfaces immediately as a check failure for the SAME repo,
+              # which is then recorded by name. The accepted tradeoff is that an unlock
+              # failure on a repo whose check then succeeds produces no signal at all.
               /run/current-system/sw/bin/restic-$fileset unlock || true
               if /run/current-system/sw/bin/restic-$fileset \
                    --retry-lock=1h check ; then
-                /run/current-system/sw/bin/restic-$fileset \
-                  --retry-lock=1h prune || repo_failed=1
-                /run/current-system/sw/bin/restic-$fileset \
-                  --retry-lock=1h repair snapshots || repo_failed=1
+                # repair is gated on prune SUCCEEDING, not merely on check succeeding.
+                # `restic repair snapshots` documents a dependency on a correct index
+                # ("The command depends on a correct index, thus make sure to run
+                # 'repair index' first!"), and a prune that fails partway can leave the
+                # index disagreeing with the pack files. We deliberately do NOT pass
+                # --forget, so repair only ADDS corrected snapshots and cannot delete the
+                # originals -- but running it against an index prune just failed to rewrite
+                # is still the wrong order of operations.
+                if /run/current-system/sw/bin/restic-$fileset \
+                     --retry-lock=1h prune ; then
+                  /run/current-system/sw/bin/restic-$fileset \
+                    --retry-lock=1h repair snapshots || repo_failed=1
+                else
+                  repo_failed=1
+                  echo "PRUNE FAILED for $fileset -- skipping repair snapshots, which" \
+                       "depends on an index that a failed prune may have left inconsistent."
+                fi
               else
                 repo_failed=1
                 echo "CHECK FAILED for $fileset -- skipping prune and repair, because" \
@@ -61,9 +81,19 @@ in
               fi
               ;;
             snapshots)
-              /run/current-system/sw/bin/restic-$fileset snapshots --json | \
-                ${pkgs.jq}/bin/jq -r \
-                  'sort_by(.time) | reverse | .[:4][] | .time'
+              # Isolated for the same reason as check, and it matters MORE here than the
+              # exit code suggests: this path feeds the "Restic Snapshots" section of the
+              # daily logwatch report, and logwatch IGNORES the script's exit status
+              # entirely -- logwatch.pl runs it as `open(TESTFILE, $Command . " |")` and
+              # never checks close(), emitting whatever reached stdout (stderr is folded in
+              # by its own `2>&1`). So the exit code is invisible downstream and the ONLY
+              # signal is the text. Before this guard a failing repo truncated the section
+              # at that repo with nothing saying the remaining ones were never listed.
+              # The exit status is unchanged from the old behaviour (errexit already
+              # aborted with 1), so nothing downstream regresses.
+              /run/current-system/sw/bin/restic-$fileset snapshots --json \
+                | ${pkgs.jq}/bin/jq -r 'sort_by(.time) | reverse | .[:4][] | .time' \
+                || repo_failed=1
               ;;
             *)
               echo "Unknown operation: $operation"
@@ -76,9 +106,11 @@ in
           fi
         done
 
-        # Fail LOUDLY and name the repos, so $SERVICE_RESULT reflects reality and the
-        # operator learns WHICH repository is broken rather than only that "the check
-        # failed". Every other repo has still been verified by this point.
+        # Fail LOUDLY and name the repos, so $SERVICE_RESULT reflects reality for the
+        # restic-check timer. Note the NAMES travel by stdout only -- into the journal for
+        # `check`, and into the daily report body for `snapshots`. The Prometheus alert
+        # itself carries just "the check failed" plus a pointer to journalctl, because
+        # restic_integrity_check_success is a single unlabelled gauge.
         if [ -n "$failed_repos" ]; then
           echo "FAILED REPOS:$failed_repos"
           exit 1

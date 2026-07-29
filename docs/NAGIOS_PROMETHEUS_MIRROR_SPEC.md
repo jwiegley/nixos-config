@@ -139,13 +139,13 @@ check_prom_rule --datasource {prometheus|loki|vm} --query-file <store path>
   0% real loss yet 1.2s avg / 2.9s max RTT) makes per-instant blips
   routine, so at nearly every
   sample SOME device reads as down. The ruler's `for:` (10m when this was
-  written; widened to `1h` in commit df0c1c8, still 1h as of 2026-07-27)
+  written; widened to `1h` in commit 2b02e8c, still 1h as of 2026-07-27)
   requires ONE
   device continuously down; the mirror latched HARD WARNING for hours on a
   rotating cast (13 distinct devices in 2h, ≥1 failing at every 10-min
   sample, observed 2026-06-12) while the ruler stayed correctly silent —
   chronic `nagios_only` divergence, surfacing two days after the IoT
-  blackbox probes landed (66e1ec8). Coverage retained: the live ruler rule
+  blackbox probes landed (eeeb3d5). Coverage retained: the live ruler rule
   plus the native Nagios PING services on the IoT fleet.
 - All 6 rules in `nagios.yaml` — Nagios checking "is Nagios up" through its
   own scheduler is circular; the Prometheus side owns those.

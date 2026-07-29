@@ -154,7 +154,7 @@ git add modules/services/openclaw-microvm.nix
 git commit -m "$(cat <<'EOF'
 Strip devDependencies from OpenClaw plugin package.json files
 
-OpenClaw 2026.4.21 (pulled via f28f416 flake.lock bump) invokes
+OpenClaw 2026.4.21 (pulled via 90c4934 flake.lock bump) invokes
 `npm install <provider-sdk>` inside each bundled extension directory
 at runtime. npm then re-resolves the existing package.json's
 devDependencies and dies on `"workspace:*"` (pnpm-only protocol),

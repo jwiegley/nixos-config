@@ -13,13 +13,13 @@ Pick this work up here. The integration is **deployed** but the final end-to-end
 - **Spec:** `docs/superpowers/specs/2026-05-05-openclaw-stock-trader-integration-design.md`
 - **Plan:** `docs/superpowers/plans/2026-05-05-openclaw-stock-trader-integration.md`
 - **Commits on `main`** (in order):
-  - `91bb2da` — spec doc
-  - `0986246` — plan doc (first draft)
-  - `a939654` — plan doc (reviewer cleanups)
-  - `a6e3df3` — Task 1: MCP server skeleton + `get_quote`
-  - `55ee68b` — Task 2: 4 GET tools (history, technical, sentiment, schwab-status)
-  - `e80c5c4` — Task 3: scan, options, risk
-  - `4acb1c7a` — Task 4: register with mcporter via `openclaw-vm.nix`
+  - `e4a6412` — spec doc
+  - `114f531` — plan doc (first draft)
+  - `711aae7` — plan doc (reviewer cleanups)
+  - `f092b87` — Task 1: MCP server skeleton + `get_quote`
+  - `d75d199` — Task 2: 4 GET tools (history, technical, sentiment, schwab-status)
+  - `6961c0e` — Task 3: scan, options, risk
+  - `538d5555` — Task 4: register with mcporter via `openclaw-vm.nix`
 - **Task 5 (deploy + verify):** done — at the time, `mcporter.json` showed `stock-trader` registered with the correct `/nix/store/.../stock-trader-mcp` wrapper path, gateway started cleanly, no errors.
 - **Task 6 (Discord E2E):** still **in_progress**. The blocker was that the Schwab OAuth token had lapsed, so `/api/quote/AAPL` was returning `data_unavailable`.
 
@@ -115,7 +115,7 @@ If all five pass, mark Task 6 complete:
 ```sh
 # from /etc/nixos
 git -C /etc/nixos log --oneline -5
-# confirm last commit is 4acb1c7a; integration is fully shipped
+# confirm last commit is 538d5555; integration is fully shipped
 ```
 
 If something fails, capture the failure window from the gateway logs:
@@ -130,7 +130,7 @@ sudo journalctl -u microvm@openclaw --since '10 minutes ago' --no-pager | \
 After Task 6 passes, add a memory entry so future sessions know the integration is live and how to use it. A minimal addition for `/home/johnw/.claude/projects/-etc-nixos/memory/`:
 
 - New file `project_openclaw_stock_trader.md` (type: project), one-line index entry in `MEMORY.md`.
-- Body: name the 8 tools, mention `STOCK_TRADER_BASE_URL` env override knob, link the commit `4acb1c7a`, note the laptop-side Schwab token bootstrap as the only ongoing operator burden.
+- Body: name the 8 tools, mention `STOCK_TRADER_BASE_URL` env override knob, link the commit `538d5555`, note the laptop-side Schwab token bootstrap as the only ongoing operator burden.
 
 ## Failure modes & quick recovery
 

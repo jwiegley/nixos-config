@@ -26,7 +26,7 @@ This repository contains personal NixOS system configurations.
 >   **2026-05-05**, so anything running GitHub-side is looking at a stale tree.
 > - There is **no `.github/workflows/` directory at all** — no CodeQL workflow,
 >   no CI security workflow. The one third-party scanner that was wired up
->   (`.github/workflows/codacy.yml`) was removed on 2025-10-31 (commit f66c29c).
+>   (`.github/workflows/codacy.yml`) was removed on 2025-10-31 (commit 3455881).
 > - `.github/dependabot.yml` is present but only covers the `github-actions`
 >   and `docker` ecosystems, and the repo contains neither GitHub Actions
 >   workflow files nor a Dockerfile — so it has nothing to update.

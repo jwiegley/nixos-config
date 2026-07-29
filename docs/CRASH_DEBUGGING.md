@@ -3,7 +3,7 @@
 This document describes the debugging infrastructure configured on vulcan to help diagnose spontaneous reboots and system crashes.
 
 **Configuration Module:** `/etc/nixos/modules/core/crash-debug.nix`
-**Date Implemented:** 2025-11-24 (commit `17810eb`, "crash-debug: Add comprehensive
+**Date Implemented:** 2025-11-24 (commit `9a7b8f2`, "crash-debug: Add comprehensive
 crash debugging infrastructure")
 
 ---

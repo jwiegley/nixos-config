@@ -55,14 +55,14 @@ None of the residual issues cause data loss. The worst (cloudflared, immich) lea
 |---|---|---|
 | **systemd-networkd-wait-online deadlock** | RESOLVED | Masked (networking.nix:154); the self-referential cycle (only networkd-managed links were microVM bridges/taps gated behind network-online.target) is now structurally impossible. networkd half of the RCA verified live. |
 | **NM-wait-online flag change** | PARTIAL — see residual | Live ExecStart is `nm-online -s -q -t 60` (networking.nix:175), but the only successful run observed (13:43:48) was during the mid-boot switch with NM already connected. This generation has **never cold-booted**; `-s` may fast-fail like the old `-x`. The premature `network-online.target` is a secondary correctness issue, not the cloudflared outage cause. |
-| **hermes-agent aarch64 pin** | RESOLVED (workaround) | Pinned to pre-refactor rev c47b9d12 (flake.nix, commit e313bca); microvm@hermes active, NRestarts=0. Unpin when upstream makes npmDepsHash arch-independent. |
+| **hermes-agent aarch64 pin** | RESOLVED (workaround) | Pinned to pre-refactor rev c47b9d12 (flake.nix, commit deb36eb); microvm@hermes active, NRestarts=0. Unpin when upstream makes npmDepsHash arch-independent. |
 | **restic stale-lock (reboot-interrupted)** | NOT the recurring failure | The documented stale-lock that `restic unlock` fixes is distinct from the **boot-herd live-lock** that recurs every reboot (see residual). |
 | **No boot-time ordering cycle** | CONFIRMED | network-online.target has no microvm/dnat/tap/bridge edges; VMs are After=network.target; dnat is Before=microvm@* / soft-Wants network-online.target. systemd-analyze verify clean. |
 | **ZFS tank import (soft-fail)** | CONFIRMED | Stock 60×1s poolReady retry; fails soft (tank.mount RequiredBy/WantedBy empty, binds carry nofail, tank-binds-ensure mountpoint-q-guarded). UAS-disable quirk live. *USB enclosure remains a SPOF with manual-only recovery — inherent.* |
-| **Bind-mount ordering** | CONFIRMED | ea0c800 + 177866a live; the poisonous auto-generated tank-<dataset>.mount Requires is gone; prior 5afc85a boot failure fixed. |
+| **Bind-mount ordering** | CONFIRMED | b1b69ca + b919cd0 live; the poisonous auto-generated tank-<dataset>.mount Requires is gone; prior d707818 boot failure fixed. |
 | **tmpfiles destructive directives** | CLEAN | Zero D/R/r against persistent data; all D-class lines target transient paths. 2025-11 data-loss vectors do not recur. |
 | **switch-restart semantics** | CONFIRMED | zimit/local-backup/mbsync correctly restartIfChanged=false; a switch won't kill the 30-day crawl or backups. |
-| **Kernel/initrd in 13:43 switch** | CONFIRMED | Byte-identical booted-vs-current; only /etc delta was the NM-wait-online change + temp probe removal (da1946b). nm-boot-state-capture cleanly gone. |
+| **Kernel/initrd in 13:43 switch** | CONFIRMED | Byte-identical booted-vs-current; only /etc delta was the NM-wait-online change + temp probe removal (f6a20cb). nm-boot-state-capture cleanly gone. |
 | **Hermes self-heal at boot** | CONFIRMED CORRECT | Zero actions taken; ApiServerDown gated on `hermes_vm_uptime_seconds>600`; E2eChatFailing correctly not in ACTION_MAP. This is the safe pattern OpenClaw lacks. |
 
 ---

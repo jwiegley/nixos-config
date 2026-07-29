@@ -166,7 +166,7 @@ Simply wait for the maintainers to merge the fix and release a new version.
 ## Current Status
 - Workaround is **ACTIVE**
 - Gateway collector fix implemented: 2025-10-03 (commit 7db36d1)
-- Firmware collector fix implemented: 2025-11-12 (commit bf3e14f)
+- Firmware collector fix implemented: 2025-11-12 (commit c2d3e17)
 - Last verified: 2026-07-27 — `opnsense-api-transformer.service` active, and
   `curl -s http://127.0.0.1:9273/metrics | grep opnsense_gateway` returns series
 - Gateway upstream issue: Open (#70, still open as of 2026-07-27)

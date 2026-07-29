@@ -113,7 +113,7 @@ fi
 
 # ===========================================================================
 # (b) NetworkManager-wait-online — active(exited), success, runtime sane (<=65s)
-#     Fix: commit da1946b — upstream `nm-online -s -q -t 60`. NB the "old `-x`
+#     Fix: commit f6a20cb — upstream `nm-online -s -q -t 60`. NB the "old `-x`
 #     burned 60s" theory was DISPROVED by the 2026-06-08 boot capture: `-x`
 #     fast-failed rc=1 in ~62ms while NM was still connecting, releasing
 #     network-online.target ~10s before the link was up. The <=65s bound below
@@ -148,14 +148,14 @@ fi
 
 # ===========================================================================
 # (c) systemd-networkd-wait-online MASKED
-#     Fix: commit f3706d2 — systemd.network.wait-online.enable = false
+#     Fix: commit deef5be — systemd.network.wait-online.enable = false
 # ===========================================================================
 check "networkd-wait-online masked"
 nwd_load=$(load_state systemd-networkd-wait-online)
 if [ "$nwd_load" = "masked" ]; then
   pass "LoadState=masked"
 else
-  fail "LoadState=$nwd_load (expected masked — f3706d2 should mask it)"
+  fail "LoadState=$nwd_load (expected masked — deef5be should mask it)"
 fi
 
 # ===========================================================================
@@ -189,7 +189,7 @@ fi
 
 # ===========================================================================
 # (e) cloudflared-tunnel-data — active, NOT in give-up, NRestarts small, no
-#     StartLimit hit. Fix: 2c15db1 (After=technitium + StartLimitIntervalSec=0).
+#     StartLimit hit. Fix: 30e5d5c (After=technitium + StartLimitIntervalSec=0).
 # ===========================================================================
 check "cloudflared tunnel healthy"
 cf_active=$(active_state cloudflared-tunnel-data)
@@ -199,7 +199,7 @@ cf_nrestarts=$(sc NRestarts cloudflared-tunnel-data); cf_nrestarts=${cf_nrestart
 cf_limitint=$(sc StartLimitIntervalUSec cloudflared-tunnel-data)
 if [ "$cf_active" != "active" ]; then
   if [ "$cf_result" = "start-limit-hit" ]; then
-    fail "INACTIVE, Result=start-limit-hit — gave up permanently (the pre-2c15db1 failure mode)"
+    fail "INACTIVE, Result=start-limit-hit — gave up permanently (the pre-30e5d5c failure mode)"
   elif in_boot_window; then
     warn "state=$cf_active/$cf_sub result=$cf_result (still within boot window)"
   else
@@ -215,7 +215,7 @@ fi
 
 # ===========================================================================
 # (f) Technitium DNS active AND a live dig resolves vulcan.lan @127.0.0.1.
-#     Fix: 2c15db1 (ExecStartPost probe + nss-lookup.target gate).
+#     Fix: 30e5d5c (ExecStartPost probe + nss-lookup.target gate).
 # ===========================================================================
 check "Technitium DNS resolves"
 td_active=$(active_state technitium-dns-server)
@@ -281,7 +281,7 @@ fi
 
 # ===========================================================================
 # (h) immich-server active (ConditionPathIsMountPoint=/tank/Photos/Immich).
-#     Distinguish condition-skipped vs crashed.  Fix: 2c15db1.
+#     Distinguish condition-skipped vs crashed.  Fix: 30e5d5c.
 # ===========================================================================
 check "immich-server active"
 im_active=$(active_state immich-server)
@@ -306,7 +306,7 @@ fi
 
 # ===========================================================================
 # (i) No stale restic locks: no restic-* in failed; restic-check.timer exists
-#     and did NOT trigger at boot (weekly-only now — 2c15db1/213d0ea).
+#     and did NOT trigger at boot (weekly-only now — 30e5d5c/31512a2).
 # ===========================================================================
 check "no failed restic units"
 restic_failed=$(systemctl list-units 'restic-*' --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' || true)

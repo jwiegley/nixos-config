@@ -29,20 +29,20 @@ a fix whose *cold-boot* behavior is still unproven:
 | Check | What it asserts | Originating fix (commit) |
 |---|---|---|
 | 1 | `systemctl --failed` empty | (baseline — all fixes) |
-| 2 | `NetworkManager-wait-online` active(exited), `Result=success`, runtime **≤ 65s** | **da1946b** — reverted override to upstream `nm-online -s -q -t 60`. The old `-x` either fast-failed (releasing `network-online.target` early) or burned the full 60s timeout. This is the single check the audit explicitly called out as *unproven on cold boot* (Residual #6, Next-Action 6). |
-| 3 | `systemd-networkd-wait-online` is **masked** | **f3706d2** — `systemd.network.wait-online.enable = false`. Kills the self-referential 120s-timeout deadlock (networkd could only count microVM bridges, which gain carrier behind `network-online.target`). |
+| 2 | `NetworkManager-wait-online` active(exited), `Result=success`, runtime **≤ 65s** | **f6a20cb** — reverted override to upstream `nm-online -s -q -t 60`. The old `-x` either fast-failed (releasing `network-online.target` early) or burned the full 60s timeout. This is the single check the audit explicitly called out as *unproven on cold boot* (Residual #6, Next-Action 6). |
+| 3 | `systemd-networkd-wait-online` is **masked** | **deef5be** — `systemd.network.wait-online.enable = false`. Kills the self-referential 120s-timeout deadlock (networkd could only count microVM bridges, which gain carrier behind `network-online.target`). |
 | 4 | `ip rule` has exactly prio 50 + 51, `asymmetric-routing.service` success, gauge `asymmetric_routing_rules_present == 1` | The oneshot is now **fail-loud** (no `\|\| true`; verifies the rules landed). **5dcb038** told networkd `ManageForeignRoutingPolicyRules=false` / `ManageForeignRoutes=false` so a switch no longer flushes the prio 50/51 rules + `end0_return` routes. The audit's out-of-scope finding 7(a) was "rules absent post-boot" — this check proves they land **at boot**, not just after an `end0` dispatcher event. |
-| 5 | `cloudflared-tunnel-data` active, not `start-limit-hit`, `NRestarts` small | **2c15db1** — added `After=technitium-dns-server.service` + `StartLimitIntervalSec=0`. Pre-fix, cloudflared hit its burst cap ~8s before Technitium answered `:53` and gave up **permanently** (~9.5 min dead public tunnel on the audit boot; would be indefinite with no human present). |
-| 6 | Technitium active **and** a live `dig vulcan.lan @127.0.0.1` resolves | **2c15db1** — `ExecStartPost` `:53` readiness probe + `Before`/`WantedBy=nss-lookup.target`. Converts the previously *false* `After=nss-lookup.target` DNS gate into a truthful one. |
+| 5 | `cloudflared-tunnel-data` active, not `start-limit-hit`, `NRestarts` small | **30e5d5c** — added `After=technitium-dns-server.service` + `StartLimitIntervalSec=0`. Pre-fix, cloudflared hit its burst cap ~8s before Technitium answered `:53` and gave up **permanently** (~9.5 min dead public tunnel on the audit boot; would be indefinite with no human present). |
+| 6 | Technitium active **and** a live `dig vulcan.lan @127.0.0.1` resolves | **30e5d5c** — `ExecStartPost` `:53` readiness probe + `Before`/`WantedBy=nss-lookup.target`. Converts the previously *false* `After=nss-lookup.target` DNS gate into a truthful one. |
 | 7 | `tank` pool listed + `zpool status -x` healthy; key mounts present | (ZFS soft-fail import — confirmed solid; sanity gate so checks 8–11 aren't misread). |
-| 8 | `immich-server` active (or condition-skip vs crash distinguished) | **2c15db1** — added `ConditionPathIsMountPoint=/tank/Photos/Immich` so a late tank mount makes it **skip** instead of crash-looping into a permanent give-up. |
-| 9 | No failed `restic-*` units; `restic-check.timer` did **not** trigger at boot | **2c15db1 / 213d0ea (finding A)** — de-herded restic-check + 8 backups from `tank.mount` (weekly-timer-only now) and added `forget --retry-lock`. Pre-fix: guaranteed exit-11 + page on every reboot (boot-herd live-lock; `restic unlock` could not clear a *live* lock). |
-| 10 | microVMs `openclaw` + `hermes` active; uptime gauges present | **347f3da** — OpenClaw self-heal got a VM-uptime warmup gate so a cold boot no longer triggers a wasteful mid-cold-start VM restart (Residual #5/#6). |
-| 11 | Monitoring stack active; Prometheus rules `health=err == 0`; Loki ruler ≥ 10 groups; **Watchdog firing** | **213d0ea (findings D/E/F)** + the broader dead-metric / coverage sweeps. `health=err == 0` proves no rule references a non-existent metric (the `systemd_unit_state` → `node_systemd_unit_state` class of bug). Watchdog **firing is good** — its *absence* means the alert pipeline died. |
+| 8 | `immich-server` active (or condition-skip vs crash distinguished) | **30e5d5c** — added `ConditionPathIsMountPoint=/tank/Photos/Immich` so a late tank mount makes it **skip** instead of crash-looping into a permanent give-up. |
+| 9 | No failed `restic-*` units; `restic-check.timer` did **not** trigger at boot | **30e5d5c / 31512a2 (finding A)** — de-herded restic-check + 8 backups from `tank.mount` (weekly-timer-only now) and added `forget --retry-lock`. Pre-fix: guaranteed exit-11 + page on every reboot (boot-herd live-lock; `restic unlock` could not clear a *live* lock). |
+| 10 | microVMs `openclaw` + `hermes` active; uptime gauges present | **7c89c68** — OpenClaw self-heal got a VM-uptime warmup gate so a cold boot no longer triggers a wasteful mid-cold-start VM restart (Residual #5/#6). |
+| 11 | Monitoring stack active; Prometheus rules `health=err == 0`; Loki ruler ≥ 10 groups; **Watchdog firing** | **31512a2 (findings D/E/F)** + the broader dead-metric / coverage sweeps. `health=err == 0` proves no rule references a non-existent metric (the `systemd_unit_state` → `node_systemd_unit_state` class of bug). Watchdog **firing is good** — its *absence* means the alert pipeline died. |
 | 12 | Prometheus targets: ≤ 3 down | Coverage sweep added many exporters/probes; a clean boot should bring them all up. |
 | 13 | PostgreSQL active; `shared_preload_libraries` includes `pg_stat_statements` | Validates the PG config persisted across the restart. |
 | 14 | node-red / nagios / home-assistant active | (baseline app health.) |
-| 15 | All 9 monitoring exporter timers active | **213d0ea / Phase 3–4 coverage** — confirms the timer fleet armed at boot. |
+| 15 | All 9 monitoring exporter timers active | **31512a2 / Phase 3–4 coverage** — confirms the timer fleet armed at boot. |
 | 16 | Boot timing (`systemd-analyze time` + `blame`) | Informational only — not a gate. |
 
 > The check numbers above are the *logical groups* from the script's design (a–p in the
@@ -118,7 +118,7 @@ cold reboot proved the fail-loud oneshot lands the rules at boot.
 NetworkManager never materialized into the kernel (verified 2026-06-09; the only live
 prio 50/51 rules are `proto unspec`, added by the oneshot, never `proto static` as NM
 would tag its own) — were removed from the `end0-wired` profile's `ipv4` block in
-commit `8839776` ("networking: remove dead NM routing-rule keys (Phase B, cold-boot
+commit `c9c1c5c` ("networking: remove dead NM routing-rule keys (Phase B, cold-boot
 confirmed)"). They looked like this:
 
 ```nix
@@ -151,7 +151,7 @@ These are **expected** and not a sign of a failed boot:
   counter-productively restart it mid-init. If it persists well past ~15 min, treat as
   real.
 - **OpenClawHttpHealthDown / DiscordWsDown** — similarly warmup-gated
-  (`> 600s` active-enter clause, commit 347f3da); transient during the first ~10 min.
+  (`> 600s` active-enter clause, commit 7c89c68); transient during the first ~10 min.
 - **rclone per-remote**, **StockTraderSchwabDataSourceDown** — independently noisy
   (expired Google OAuth on disabled remotes; Schwab off-hours / 7-day token cycle).
   Not boot-related; out of scope for this checklist.

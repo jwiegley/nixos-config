@@ -5,7 +5,7 @@ Complete guide for migrating DNS from Name.com to Cloudflare and setting up n8n 
 > **Status (2026-07-27):** The DNS half of this migration is **done** —
 > `newartisans.com` is served by Cloudflare nameservers today. The n8n half is
 > **obsolete**. n8n and its webhook proxy were removed from this repository on
-> 2026-03-14 in commit `5f56003` ("remove n8n, Windows 11, NocoBase, and ntopng
+> 2026-03-14 in commit `f40e2ac` ("remove n8n, Windows 11, NocoBase, and ntopng
 > services"), which deleted `modules/services/n8n.nix`,
 > `modules/services/nginx-n8n-webhook.nix`, `modules/monitoring/services/n8n-alerts.nix`,
 > `modules/monitoring/services/n8n-exporter.nix`, and `docs/N8N_WEBHOOK_SETUP.md`.
@@ -616,7 +616,7 @@ n8n-webhook-disable
 **Optional - Automate with systemd timers:**
 
 See documentation: `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md` (section: "Automating Enable/Disable")
-— **removed 2026-03-14 in commit `5f56003`; that document no longer exists.**
+— **removed 2026-03-14 in commit `f40e2ac`; that document no longer exists.**
 
 ### Monitoring
 
@@ -1130,7 +1130,7 @@ If something goes wrong and you need to revert:
 ### Disable N8N Webhook Proxy
 
 **Already done permanently** — the module was removed from the configuration on
-2026-03-14 (commit `5f56003`). There is nothing left to disable. Kept for
+2026-03-14 (commit `f40e2ac`). There is nothing left to disable. Kept for
 background:
 
 ```bash
@@ -1183,7 +1183,7 @@ n8n-webhook-disable
 ### Documentation
 
 - **N8N Webhook Setup:** `/etc/nixos/docs/N8N_WEBHOOK_SETUP.md` — **deleted 2026-03-14
-  (commit `5f56003`)**; for the tunnels that exist today see
+  (commit `f40e2ac`)**; for the tunnels that exist today see
   [CLOUDFLARE_TUNNELS.md](CLOUDFLARE_TUNNELS.md)
 - **Cloudflare Tunnels:** https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
 - **Cloudflare API:** https://api.cloudflare.com/
@@ -1192,7 +1192,7 @@ n8n-webhook-disable
 
 All installed as part of the nginx-n8n-webhook module. **None of these commands
 exist as of 2026-07-27** — the module that provided them was deleted on 2026-03-14
-(commit `5f56003`):
+(commit `f40e2ac`):
 
 ```bash
 n8n-webhook-enable    # Start webhook proxy
@@ -1204,7 +1204,7 @@ n8n-webhook-test      # Test connectivity
 
 ### Configuration Files
 
-**Historical — all removed on 2026-03-14 (commit `5f56003`):**
+**Historical — all removed on 2026-03-14 (commit `f40e2ac`):**
 
 - **Nginx config:** `/etc/nginx/nginx-n8n-webhook.conf`
 - **Service definition:** `/etc/nixos/modules/services/nginx-n8n-webhook.nix`

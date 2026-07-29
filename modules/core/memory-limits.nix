@@ -73,8 +73,20 @@
   # actuals across all capped services total ~9.5 GiB against ~30 GiB MemAvailable; and
   # `memory.events` oom_kill is 0 on every cgroup inspected, historically included. Note
   # the microVM figures are the QEMU `microvm.mem` allocations, NOT cgroup limits -- both
-  # microvm@ units report MemoryMax=infinity, so the MemoryMax values in openclaw-vm.nix
-  # and hermes-vm.nix cap the host-side gateway services, not the guests.
+  # microvm@ units report MemoryMax=infinity.
+  #
+  # CORRECTED 2026-07-29. An earlier version of this note claimed "the MemoryMax values in
+  # openclaw-vm.nix and hermes-vm.nix cap the host-side gateway services, not the guests".
+  # Both halves were wrong. hermes-vm.nix declares NO MemoryMax at all -- its only memory
+  # setting is `microvm.mem = 3072`. And openclaw-vm.nix's single `MemoryMax = "4G"` sits in
+  # `systemd.services.openclaw` inside a file imported via `microvm.vms.openclaw.config`, so
+  # it is a GUEST-internal cgroup cap, the exact inverse of what was claimed.
+  #
+  # Consequence for the budget above: that 4 GiB was counted twice -- once in the 26.00 GiB
+  # "MemoryMax elsewhere" line as if it were a host cap, and again inside the 7.00 GiB microVM
+  # allocation line. The host-side total is therefore ~70.50 GiB / ~113%, not the ~74.50 GiB
+  # / 120% stated. The error was conservative (it overstated commitment), which is why nothing
+  # broke, but the table should not be trusted to the GiB until re-derived.
 
   systemd.services = {
     # NOTE: Container services managed by quadlet have their resource limits

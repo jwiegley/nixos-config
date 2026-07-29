@@ -52,7 +52,7 @@ must never be used to skip or soften any earlier phase. Runs only AFTER all impl
 work is complete — the operator was explicit: "once you are done with all of your
 implementation work".
 
-**Scope:** every commit produced by this effort, i.e. `b2ff8976..HEAD` (41 at the time this
+**Scope:** every commit produced by this effort, i.e. `660269e9..HEAD` (41 at the time this
 was written; the range grows as the loop continues, so recompute it, do not hardcode a count).
 
 **The question to answer**, in the operator's own framing: have we *not* regressed any
@@ -101,10 +101,10 @@ top of blind monitoring.
   jupyterlab re-pointing (4), the dead `backup_alerts` group (delete, 3), the
   `health-checks.yaml` double-inclusion, `ResticRepositorySizeGrowing`'s 86,400x unit
   error, D15 (drop the `notebook.vulcan.lan` serverAlias), D18's rules, and the
-  PublicEdgeDown dwell regression from commit `9d4ad5b6`.
+  PublicEdgeDown dwell regression from commit `374ff659`.
 - **Phase 3 — the three archetypes.** Success-that-isn't, outcome-vs-execution, ratio
   invariants, derived-data freshness, chronic availability, alert-history blindness.
-  (Archetype (c), the push mirror, is ALREADY DONE — commit `63dfb993`.)
+  (Archetype (c), the push mirror, is ALREADY DONE — commit `ed235bbc`.)
 - **Phase 4 — daily-report redesign** (`scripts/log-summarizer.py`).
 - **Phase 5 — alert fatigue**: resolve the two standing conditions, then D13 routing
   (promote 4 info alerts, digest 17).
@@ -170,13 +170,13 @@ Escalate at 3.
 Append one line per completed logical unit. Newest last.
 
 - `2026-07-28` — Loop initialised. Anvil absent. Durable docs installed under `docs/`.
-  Pre-loop work already committed and verified: `8762657d` (Discord fixture redaction,
-  131 tests pass), `63dfb993` (push-mirror outcome exporter; archetype (c) closed;
-  `GiteaPushMirrorFailing` pending on nixos-config as designed), `5552318b` (LiteLLM
+  Pre-loop work already committed and verified: `182ae2cb` (Discord fixture redaction,
+  131 tests pass), `ed235bbc` (push-mirror outcome exporter; archetype (c) closed;
+  `GiteaPushMirrorFailing` pending on nixos-config as designed), `72ffe46a` (LiteLLM
   prompt-body scrub: 57 GB → 701 MB, 220,021 rows intact, store_prompts=false,
   retention interval 7d→6h). B2 `/etc/nixos` addition reverted at operator request;
   system store path verified byte-identical to the pre-change generation.
-- `2026-07-28` — **Unit 1: durable state committed** (`b79dc574`, docs-only). Its fess
+- `2026-07-28` — **Unit 1: durable state committed** (`44f70e30`, docs-only). Its fess
   audit found the private-IP note undercounted (10 → **14 files / 160 occurrences**, four
   omitted holding 102), an M-91/D9 scope contradiction, three decided items with no home in
   either list, and two wrong counts in the commit message. All corrected in the
@@ -186,7 +186,7 @@ Append one line per completed logical unit. Newest last.
   coverage** at all. DoD item 3 strengthened to require `--lint-fatal` (verified: plain
   rc=0 vs `--lint-fatal` rc=3; health-checks.yaml is the only file failing it). Self-heal
   suites re-run fresh: openclaw **45/45**, hermes **86/86**.
-- `2026-07-28` — **Unit 2: memory limits** (`0df1e897`, corrected by `273d4c52`).
+- `2026-07-28` — **Unit 2: memory limits** (`3a615cf5`, corrected by `1b63cc3a`).
   postgresql/loki/home-assistant raised off self-inflicted MemoryHigh values; postgres was
   pinned AT 3.5G with 3,899,187 throttle events. Audit found my `effective_cache_size`
   justification materially false and the 12G ceiling unmeasured → retuned to **6G/8G**
@@ -197,26 +197,26 @@ Append one line per completed logical unit. Newest last.
   samples with live queries between; oom_kill=0. Also repaired a pre-existing `.gitignore`
   corruption: the fused pattern `/prd.md.nixos-build` meant NEITHER `/prd.md` nor the build
   mutex was ignored.
-- `2026-07-28` — **Unit 3: jupyterlab/aria2 rule repair** (`895a39e7`, corrected by
-  `c15581b2`). 10 dead rules → 6 live: 5 job-label/metric repairs + 4 deletions + 1
+- `2026-07-28` — **Unit 3: jupyterlab/aria2 rule repair** (`d3ada911`, corrected by
+  `b5c9b3b7`). 10 dead rules → 6 live: 5 job-label/metric repairs + 4 deletions + 1
   threshold revision. Two root causes: the job `blackbox-https` (hyphen) never existed, and
   the trap is that the underscore `blackbox_https` is a DIFFERENT job (google.com only) so a
   naive swap would have left them dead — correct job is `blackbox_https_local`. Backtested
   against the real 2026-07-03 18:00–18:48 UTC outage (49 contiguous minutes). Fleet: **534
   rules, 0 err**. Audit then found three FALSE coverage claims in my comments (see the
   recurring-defect section above) plus an undisclosed 5m→15m dwell regression; all corrected
-  in `c15581b2`.
-- `2026-07-28` — **PHASE 2 CLOSED.** Units: `895a39e7`+`c15581b2` (jupyterlab/aria2, 10 dead
-  rules -> 6 live), `ed211f95` (dead `backup_alerts` group deleted, rule-loading
+  in `b5c9b3b7`.
+- `2026-07-28` — **PHASE 2 CLOSED.** Units: `d3ada911`+`b5c9b3b7` (jupyterlab/aria2, 10 dead
+  rules -> 6 live), `3bb77e8a` (dead `backup_alerts` group deleted, rule-loading
   de-duplicated -19, mbsync consolidated +rbcca coverage, inhibit rule retargeted and
-  functional for the first time), `ba6c87e5` (7 Technitium ratio rules repaired + retuned
+  functional for the first time), `a86be1e8` (7 Technitium ratio rules repaired + retuned
   from a 30d distribution after finding the plan's 7d/5m thresholds would have fired FOUR
-  rules in normal operation), `f66e9077` (4 more unfireable rules deleted + 7 audit
-  corrections), `8b644d82` (3 DNS-exporter warmup gates, ResticRepositorySizeGrowing's
+  rules in normal operation), `bbb5a8b1` (4 more unfireable rules deleted + 7 audit
+  corrections), `e20936bb` (3 DNS-exporter warmup gates, ResticRepositorySizeGrowing's
   86,400x unit error, and MY OWN PublicEdgeDown dwell regression: 10m could not fire on any
   observed outage and the plan's recommended 5m could not either — measured at 30s
   resolution, only 3m works; HostUnreachable now genuinely excludes the public job, which
-  9d4ad5b6 had claimed but not achieved).
+  374ff659 had claimed but not achieved).
   **Gates: 538 -> 506 rules (alerting 505 + recording 1), 0 err, all 60 GENERATED rule files
   pass promtool --lint-fatal (the pre-existing health-checks.yaml rc=3 is closed),
   systemctl --failed empty, switch rc=0.**
@@ -244,7 +244,7 @@ Append one line per completed logical unit. Newest last.
 - `systemctl --failed`: **empty**.
 - Self-heal suites: openclaw 45/45, hermes 86/86 (verified earlier this session).
 
-## Corrections to commit b79dc574 (from its fess audit)
+## Corrections to commit 44f70e30 (from its fess audit)
 
 Recorded here rather than by rewriting history — it would be absurd to rewrite history to
 fix a note about rewriting history.
@@ -642,7 +642,7 @@ re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` 
   Two false readings caught before acting: the amtool harness reported 0/27 because the config
   path lives in the pre-start script not the unit file; and a grep suggested the fix was missing
   from the deployed config because the generated JSON escapes quotes as `severity!=\"critical\"`.
-  **BRANCH STATE:** 26 local commits vs 1 on origin/main (the other session's `89f0c818`).
+  **BRANCH STATE:** 26 local commits vs 1 on origin/main (the other session's `1e7c5e00`).
   Diverged, NOT pushed — pushing is human-gated. Do not resolve this autonomously.
 
 ## fess-auditor SINGLE-AGENT form has now failed 3 times — use WORKFLOWS only (2026-07-29)
@@ -678,13 +678,13 @@ there. Awaiting the channel choice; config stays `enable = false` so nothing is 
 
 ## CONCURRENT-SESSION COLLISION produced a MISLABELED commit (2026-07-29)
 
-`1fc87237`, whose message describes the M-91 HA exporter, actually contains the OTHER session's
+`c00e4993`, whose message describes the M-91 HA exporter, actually contains the OTHER session's
 work: `nagios-mirror.yaml` (+67), `home-assistant-errors.yaml` (+62) and
 `nagios-mirror-divergence.py` (+238), plus an 18-line timing correction of mine. It does NOT
-contain the M-91 module or the default.nix import -- those are in `92af1ce8`, which is also in
+contain the M-91 module or the default.nix import -- those are in `1f99bc63`, which is also in
 history. So the M-91 exporter arrived across two commits and one of them is mislabeled.
 
-Cause: I amended `92af1ce8` while the other session had 303 uncommitted lines in the tree, and
+Cause: I amended `1f99bc63` while the other session had 303 uncommitted lines in the tree, and
 that session committed/reshuffled around the same moment. `git add <explicit paths>` was not
 enough protection because the amend picked up a base that had moved.
 
@@ -696,7 +696,36 @@ filter-repo will rewrite all of this history anyway.
 **Rule strengthened:** in this shared tree, do not `git commit --amend` at all. Amending assumes
 a stable base, and the base is not stable here. Make a follow-up commit instead.
 
-## D2 filter-repo — now UNBLOCKED, still awaiting an explicit go (2026-07-29)
+## D2 filter-repo — EXECUTED AND PUSHED 2026-07-29 (was: awaiting a go)
+
+**DONE. Do not re-run.** The operator gave an explicit go ("I want to perform the rewrite and
+force-push now"), and it was carried out:
+
+- `git filter-repo --replace-text` applied to /etc/nixos in **TWO passes**. The first pass used a
+  pattern set derived from a clone that had only `main` (2026 commits) and MISSED a third token
+  literal living on another branch -- the live repo has 4 branches plus notes and a tag (2509
+  commits). Caught by re-scanning the live repo after applying, not by trusting the clone.
+- Final state VERIFIED: **0 token-shaped literals across all 7 refs**, and independently
+  confirmed by cloning fresh FROM GITEA and scanning that (0 literals, 2024 commits).
+- `HEAD` tree stayed **byte-identical** throughout, and the rewritten repo builds to a closure
+  identical to `/run/current-system` -- the rewrite changed no configuration.
+- Force-pushed `main`, `open-source-secretary` and `refs/notes/ai` to Gitea. Local and remote
+  `main` agree.
+- **OUTCOME: the Gitea->GitHub push mirror recovered.** Gitea's own `push_mirror` row went to
+  `err_len=0`, `gitea_push_mirror_failed_count` reached 0 across all 12 mirrors, and
+  `GiteaPushMirrorFailing` resolved.
+
+**Residual, still true and NOT closed by the rewrite:** three `refs/pull/{1,2,3}/head` refs in
+Gitea still point at pre-rewrite commits and Gitea manages those, so the token remains
+retrievable from Gitea. Combined with the repo having been public ~69 days, **D1 (rotate the
+token) is the actual remedy and remains outstanding.** Rewriting history unblocked the mirror; it
+did not un-leak the credential.
+
+**Also note:** `.git/filter-repo/already_ran` exists, so a naive re-run would PROCEED rather than
+refuse. There is nothing left to do here -- if a future session thinks D2 is unstarted, it is
+reading a stale note, not this one.
+
+## Superseded note (kept for the record)
 
 The blocker is gone: the tree is clean, the other session committed its work. Prep and
 verification remain complete and clean in the isolated clone (0 token-shaped literals remain in

@@ -58,7 +58,7 @@ HELP = {
     "nvme_smart_available_spare": ("Percent of spare capacity remaining", "gauge"),
     "nvme_smart_available_spare_threshold": ("Vendor floor below which spare is critical", "gauge"),
     "nvme_smart_temperature_celsius": ("Composite temperature", "gauge"),
-    "nvme_smart_data_units_written": ("Data units written (512 KiB each)", "counter"),
+    "nvme_smart_data_units_written": ("Data units written (512,000 bytes each)", "counter"),
     "nvme_smart_collector_success": ("1 if this collector read the device successfully", "gauge"),
     "nvme_smart_collector_timestamp_seconds": ("Unix time of the last collector run", "gauge"),
 }

@@ -94,7 +94,7 @@ If the drift-check timer or service fails repeatedly, the daily cadence + system
 
 ### Pre-requisite gate (must precede C's wiring)
 
-`scripts/openclaw-self-heal/tests/test_daemon.py::test_allowlist_is_exactly_the_authorized_actions` currently **fails** — the audit work in commit `64ed83c` added `restart_canary` and `restart_mcporter_check` to `ACTION_ALLOWLIST` but didn't update the test. C's wiring would have `nix flake check` fail on day one for an unrelated reason. The plan's first step under C must update this assertion to match the current 6-tuple. Empirically verified: `1 failed, 24 passed` today.
+`scripts/openclaw-self-heal/tests/test_daemon.py::test_allowlist_is_exactly_the_authorized_actions` currently **fails** — the audit work in commit `19d2b10` added `restart_canary` and `restart_mcporter_check` to `ACTION_ALLOWLIST` but didn't update the test. C's wiring would have `nix flake check` fail on day one for an unrelated reason. The plan's first step under C must update this assertion to match the current 6-tuple. Empirically verified: `1 failed, 24 passed` today.
 
 ### Scope
 

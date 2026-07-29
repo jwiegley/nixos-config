@@ -71,11 +71,11 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
 - **Fix:**
   - `systemd.network.wait-online.enable = false;` — masks the networkd half
     (`modules/core/networking.nix` · *"disable systemd-networkd-wait-online"* ·
-    `f3706d2`). NM is the sole correct owner of `network-online.target` here.
+    `deef5be`). NM is the sole correct owner of `network-online.target` here.
   - Revert NM-wait-online to upstream `nm-online -s -q -t 60` (`-s` = wait for
     NM **startup-complete**; returns in ~5 s at boot, ~13 ms on switch)
     (`modules/core/networking.nix` · *"fix NetworkManager-wait-online (-x -> -s
-    -q)"* · `da1946b`).
+    -q)"* · `f6a20cb`).
 - **Verify (checks 2 & 3):** `NetworkManager-wait-online` active/exited, runtime
   ≤ 65 s; `systemd-networkd-wait-online` LoadState=masked.
 - **Recover if regressed:** if boot hangs on a wait-online unit, check
@@ -103,17 +103,17 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
      including the oneshot's prio 50/51 rules and the `end0_return`-table routes.
 - **Fix:**
   - Make the oneshot **fail-loud** (drop `|| true`, verify each rule landed, exit
-    1 otherwise) (`modules/core/networking.nix` · audit finding F · `213d0ea`).
+    1 otherwise) (`modules/core/networking.nix` · audit finding F · `31512a2`).
   - `systemd.network.config.networkConfig.ManageForeignRoutingPolicyRules = false;`
     + `ManageForeignRoutes = false;` so networkd leaves the oneshot/NM/podman
     rules alone while still managing its own bridges (`modules/core/networking.nix`
     · *"stop networkd flushing the asymmetric-routing rules on switch"* ·
-    `7e41912`). **Proven** by surviving a `networkctl reconfigure vm-openclaw`.
+    `3e1dce5`). **Proven** by surviving a `networkctl reconfigure vm-openclaw`.
   - The oneshot is the **single authoritative writer**, re-run by the NM
     dispatcher on every `end0` up/dhcp event.
   - **Phase B (2026-06-10, after cold-boot confirmation):** removed the dead NM
     `routing-rule1/2` keys entirely (`modules/core/networking.nix` · *"remove dead
-    NM routing-rule keys (Phase B)"* · `8839776`).
+    NM routing-rule keys (Phase B)"* · `c9c1c5c`).
 - **Verify (check 4):** `ip rule show | grep -cE '^(50|51):'` == 2;
   `asymmetric-routing.service` active/success; gauge
   `asymmetric_routing_rules_present` == 1.
@@ -131,7 +131,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   tripped `StartLimitBurst`. With a finite limit, systemd stopped restarting it.
 - **Fix:** `After=technitium-dns-server.service` (don't start before DNS) +
   `StartLimitIntervalSec=0` (retry forever — it self-reconnects)
-  (`modules/services/cloudflare-tunnels.nix` · audit fix · `2c15db1`).
+  (`modules/services/cloudflare-tunnels.nix` · audit fix · `30e5d5c`).
 - **Verify (check 5):** `cloudflared-tunnel-data` active/running, `NRestarts`
   small, `StartLimitIntervalUSec=0`.
 - **Recover:** `sudo systemctl restart cloudflared-tunnel-data`; check it isn't
@@ -143,7 +143,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   actually resolve, causing cascading early-boot failures (incl. 2.3).
 - **Fix:** `ExecStartPost` dig-probe so the unit isn't "started" until it
   actually answers, plus `Before=`/`WantedBy=nss-lookup.target`
-  (`modules/services/dns.nix` · `2c15db1`).
+  (`modules/services/dns.nix` · `30e5d5c`).
 - **Verify (check 6):** service active **and** `dig +short vulcan.lan @127.0.0.1`
   returns an answer.
 - **Recover:** `systemctl status technitium-dns-server`; if the ExecStartPost
@@ -158,13 +158,13 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
 - **Fix:**
   - immich: `ConditionPathIsMountPoint=/tank/Photos/Immich` +
     `wantedBy = tank-Photos-Immich.mount` — it waits for the mount instead of
-    crash-looping (`2c15db1`).
+    crash-looping (`30e5d5c`).
   - tank binds: order after `zfs-mount.service` + a `tank-binds-ensure` oneshot
     boot safety-net (*"bindTank: order tank binds after zfs-mount.service"*
-    `5afc85a`, *"tank-binds-ensure oneshot"* `177866a`).
+    `d707818`, *"tank-binds-ensure oneshot"* `b919cd0`).
   - **Hardware mitigation:** the enclosure is forced off UAS
     (`usb-storage.quirks=...:u`) to stop the bridge hangs that make the pool go
-    MISSING under heavy I/O (*"force OWC tank enclosure off UAS"* `0a60dc6`).
+    MISSING under heavy I/O (*"force OWC tank enclosure off UAS"* `6dbda35`).
     See memory `project_tank_uas_enclosure_failure` for the full hang signature
     and the physical power-cycle recovery runbook.
 - **Verify (checks 7-9):** `zpool status -x` healthy; key mounts present;
@@ -180,9 +180,9 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   ran at boot competing with the import; stale locks left exit-11 failures every
   reboot.
 - **Fix:** stagger jobs off 02:00 (*"stagger restic jobs off the 02:00 thundering
-  herd"* `1622ee9`); `restic-check` is weekly-timer-only, de-herded from
+  herd"* `a4ca50f`); `restic-check` is weekly-timer-only, de-herded from
   `tank.mount`; `forget --retry-lock=5m` so a stale lock self-heals instead of
-  needing manual `restic unlock` (`2c15db1` / `213d0ea`).
+  needing manual `restic unlock` (`30e5d5c` / `31512a2`).
 - **Verify (checks 10-11):** no `restic-*` units failed; `restic-check.timer` not
   triggered this boot.
 - **Recover:** a one-off stale lock → `restic unlock` on the named repo; but the
@@ -195,8 +195,8 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
 - **Root cause:** the dominant defect (48 rules) used `systemd_unit_state` instead
   of `node_systemd_unit_state`, plus a `type=` label confusion and unescaped
   regex dots.
-- **Fix:** fleet-wide repair (*"repair 80 dead alert rules"* `662c18e`, *"recover
-  dead alerts"* `f4ea7e1`, + the coverage-plan sweeps `2a2575e`/`1e0cc48`/`a337e43`).
+- **Fix:** fleet-wide repair (*"repair 80 dead alert rules"* `27a71ea`, *"recover
+  dead alerts"* `d4b1ac4`, + the coverage-plan sweeps `dc9056f`/`4a1c1ec`/`66991d8`).
   See memory `project_alert_dead_metric_remediation`.
 - **Verify (checks 15-18):** 0 rules with `health=err`; ≥10 Loki ruler groups;
   Watchdog firing (= pipeline alive); ≤3 targets down.
@@ -217,7 +217,7 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   normal (slow) boot warm-up, fighting the boot instead of helping.
 - **Fix:** VM-uptime warm-up gate (`> 600 s` boot window) on the HTTP/WS health
   alerts + bounded resolved-incident retention (*"bound resolved-incident
-  retention + boot-window alert gates"* `347f3da`).
+  retention + boot-window alert gates"* `7c89c68`).
 - **Verify (checks 12-13):** both microVMs active; uptime gauges present. Expect
   Hermes API warm-up noise for ~10-15 min post-boot — that's normal, not a fault
   (memory `project_hermes_apiserver_down_rootcause`).
@@ -281,16 +281,16 @@ which store path that was.
 
 Boot/switch resilience, roughly chronological (hashes as of 2026-06-10):
 
-- `f3706d2` networking: disable systemd-networkd-wait-online; add temp NM boot probe
-- `da1946b` networking: fix NetworkManager-wait-online (-x -> -s -q); drop boot probe
-- `2c15db1` boot robustness: fix cold-reboot DNS race, immich late-mount, restic herd
-- `213d0ea` boot/switch robustness: audit findings A, B, D, E, F
-- `347f3da` openclaw-self-heal: bound resolved-incident retention + boot-window alert gates
-- `5afc85a` / `ea0c800` / `177866a` bindTank ordering + tank-binds-ensure safety-net
-- `0a60dc6` zfs: force OWC tank enclosure off UAS to stop bridge hangs
-- `1622ee9` backups: stagger restic jobs off the 02:00 thundering herd
-- `7e41912` networking: stop networkd flushing the asymmetric-routing rules on switch
-- `40641fa` docs+scripts: cold-reboot validation harness
-- `8839776` networking: remove dead NM routing-rule keys (Phase B, cold-boot confirmed)
+- `deef5be` networking: disable systemd-networkd-wait-online; add temp NM boot probe
+- `f6a20cb` networking: fix NetworkManager-wait-online (-x -> -s -q); drop boot probe
+- `30e5d5c` boot robustness: fix cold-reboot DNS race, immich late-mount, restic herd
+- `31512a2` boot/switch robustness: audit findings A, B, D, E, F
+- `7c89c68` openclaw-self-heal: bound resolved-incident retention + boot-window alert gates
+- `d707818` / `b1b69ca` / `b919cd0` bindTank ordering + tank-binds-ensure safety-net
+- `6dbda35` zfs: force OWC tank enclosure off UAS to stop bridge hangs
+- `a4ca50f` backups: stagger restic jobs off the 02:00 thundering herd
+- `3e1dce5` networking: stop networkd flushing the asymmetric-routing rules on switch
+- `198e1c9` docs+scripts: cold-reboot validation harness
+- `c9c1c5c` networking: remove dead NM routing-rule keys (Phase B, cold-boot confirmed)
 
 Full audit context: `docs/BOOT_SWITCH_ROBUSTNESS_AUDIT.md`.

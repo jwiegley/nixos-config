@@ -168,7 +168,7 @@ Add one line to `grafana.nix`'s `localDashboards`:
 
 ## Already done (no plan tasks required)
 
-The Phase 1 Hermes sshd was actually implemented in `modules/services/hermes-vm.nix` (line 346+) — `services.openssh.enable = true`, listening on `10.99.1.2:22`, host-only via `networking.firewall.extraInputRules`. The `/root/.ssh/hermes-debug` probe key has been in place since 2026-05-12. The ports.txt comment was corrected to remove the stale "Phase 2; not enabled" suffix in the same commit batch (c7cbecb). Listed here for spec completeness; the plan does not need to repeat this work.
+The Phase 1 Hermes sshd was actually implemented in `modules/services/hermes-vm.nix` (line 346+) — `services.openssh.enable = true`, listening on `10.99.1.2:22`, host-only via `networking.firewall.extraInputRules`. The `/root/.ssh/hermes-debug` probe key has been in place since 2026-05-12. The ports.txt comment was corrected to remove the stale "Phase 2; not enabled" suffix in the same commit batch (c345038). Listed here for spec completeness; the plan does not need to repeat this work.
 
 ## Risks
 

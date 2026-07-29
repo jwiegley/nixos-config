@@ -172,7 +172,7 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
    uses the **authoritative deployed inventory** (the 6 servers in
    `services.hermes-agent.mcpServers`: `vane`, `home-assistant`, `stock-trader`,
    `email-contacts`, `perplexity`, `org-db` — SearXNG is the native web backend,
-   not an MCP server). **UPDATE (post-review, commit f7c22d5):** that "no
+   not an MCP server). **UPDATE (post-review, commit 1afdefe):** that "no
    per-server counts" conclusion was premature — the NousResearch agent **logs
    per-server tool counts** to `agent.log` at startup (`MCP server 'X' (stdio):
    registered N tool(s)` + `MCP: registered 67 tool(s) from 6 server(s)`). So
@@ -198,7 +198,7 @@ Fixed order, identical for both agents. Bold = newly-wired real coverage.
    gateway log uses a different vocabulary; the canary already distills it).
 7. **HA-MCP.** OpenClaw: token-present / reachable / bearer-accepted + last-check
    age from `openclaw_mcporter_*` gauges (dedicated `openclaw-mcporter-check`
-   probe). **Hermes (UPDATE, commit f7c22d5): real** — `home-assistant`'s
+   probe). **Hermes (UPDATE, commit 1afdefe): real** — `home-assistant`'s
    successful tool registration in `agent.log` (N tools) proves token present +
    endpoint reachable + bearer accepted (a bad token/endpoint registers 0 tools),
    so §7 shows OK/OK/OK rather than `n/a`. §3 (Gateway) is likewise a real

@@ -1,9 +1,9 @@
 # Flume v3 Design — Per-Minute Attribution + User Feedback Loop
 
 > **Status (2026-07-27):** this is the **design record**, not a to-do list and not the
-> as-built schema. Most of it shipped on 2026-05-23 (phase 3a `503bcff`, 3b `7e179e3`,
-> 3c `b21395e`), **but the per-minute table was immediately rebuilt in long format**
-> (commit `e9beaf0`, "replace wide `flume_minute_attributions` with long format"), so
+> as-built schema. Most of it shipped on 2026-05-23 (phase 3a `32fc3c4`, 3b `76cc9ba`,
+> 3c `364315d`), **but the per-minute table was immediately rebuilt in long format**
+> (commit `8ebf3e1`, "replace wide `flume_minute_attributions` with long format"), so
 > the wide one-column-per-fixture schema in section 1 below **does not exist**. For the
 > schema that is actually deployed read
 > [`FLUME_DATA_REFERENCE.md`](./FLUME_DATA_REFERENCE.md) and the authoritative DDL in

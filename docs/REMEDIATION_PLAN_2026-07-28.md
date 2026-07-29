@@ -48,13 +48,13 @@ Where an adversary proved a proposed fix could not work — the `if ! ( … )` r
 
 | # | Change | Verified state | Residue this plan must handle |
 |---|---|---|---|
-| 1 | **Discord-token-shaped test fixtures removed** from tracked files (commit `8762657d`), pushed. | Fixtures gone from the working tree. | **Root problem untouched.** The token is still in git *history*; the Gitea repo is **public** and served it for ~69 days; the GitHub mirror is still blocked (144 × `GITHUB PUSH PROTECTION` per 2 days). → decisions **D1** (rotate) and **D2** (history). Detection → **M-01**. |
+| 1 | **Discord-token-shaped test fixtures removed** from tracked files (commit `182ae2cb`), pushed. | Fixtures gone from the working tree. | **Root problem untouched.** The token is still in git *history*; the Gitea repo is **public** and served it for ~69 days; the GitHub mirror is still blocked (144 × `GITHUB PUSH PROTECTION` per 2 days). → decisions **D1** (rotate) and **D2** (history). Detection → **M-01**. |
 | 2 | **`/etc/nixos` added to the restic `Backups` B2 job** via `extraPaths` (`modules/storage/backups.nix:213`). | Broader than reported: `secrets/` and `nagios/` live *under* `/etc/nixos` on disk and no path component collides with `backupExcludes`, so the SOPS store and private network topology now reach B2 encrypted. | Materially reduces D2's urgency. The git-*history* mirror is what remains. |
-| 3 | **`WebServiceDown` excludes `job="blackbox_https_public"`** (commit `9d4ad5b6`). | Confirmed live in `/api/v1/rules`: `job!="blackbox_https_public"`, `for: 60`. | **REGRESSION.** `PublicEdgeDown` (`for: 10m`) now solely owns that job, and the longest recorded public-edge outage is **3.8 min** — verified it reached `pending` 11 times and never fired during the 07-28 incident. Its own annotation says "more than 5 minutes". → **M-17R**. Note `HostUnreachable` still matches those 2 targets (`job=~"blackbox_.*"`, no exclusion) and **did** fire critical on both, so the commit halved the emails without removing critical paging. |
+| 3 | **`WebServiceDown` excludes `job="blackbox_https_public"`** (commit `374ff659`). | Confirmed live in `/api/v1/rules`: `job!="blackbox_https_public"`, `for: 60`. | **REGRESSION.** `PublicEdgeDown` (`for: 10m`) now solely owns that job, and the longest recorded public-edge outage is **3.8 min** — verified it reached `pending` 11 times and never fired during the 07-28 incident. Its own annotation says "more than 5 minutes". → **M-17R**. Note `HostUnreachable` still matches those 2 targets (`job=~"blackbox_.*"`, no exclusion) and **did** fire critical on both, so the commit halved the emails without removing critical paging. |
 | 4 | **`usb-storage.quirks=1e91:a4a7:u`** UAS-disable mitigation **is applied and active** (in `/proc/cmdline`; all four disks bound to `usb-storage`; `uas` at refcount 0). | Applied — project memory still says "offered, not applied". | Two of the five UAS Loki patterns are now **dead by construction**. → **D-14/S-05R** (BOT-mode vocabulary), **A-03** (memory correction). |
 | 5 | **hermes microVM runs on 1 vCPU deliberately** — `vcpu=4` was tried and reverted with rationale at `hermes-vm.nix:357-370`. | Confirmed. | Memory still calls it "staged, needs switch". → **A-03**. |
 | 6 | **`aide-update.service` IS wired and DOES run** — triggered post-rebuild by `system.activationScripts.aide-post-rebuild` via `systemd-run --on-active=60` (`aide.nix:318-325`); 14,184 journal lines/7 d; `aide.db` mtime today. | The audit's "wired to nothing" claim is **REFUTED**. | Only the `aide-metrics` / `aide-check` ordering race is real (metrics exits 00:00:15, check exits 00:01:48 — 93 s early). → **M-20R**. |
-| 7 | **`ee03dd75` deliberately disabled the two Schwab token alerts**, with the cost stated in the commit message. | Confirmed; agent `schwab-alert-disable` active this session. | → decision **D3** and **A-U1s**. |
+| 7 | **`232e53ea` deliberately disabled the two Schwab token alerts**, with the cost stated in the commit message. | Confirmed; agent `schwab-alert-disable` active this session. | → decision **D3** and **A-U1s**. |
 | 8 | **`ServiceStuckActivating` needs no change** — already `for: 900s`, which a 60 s oneshot cannot satisfy, and already excludes known long-activating units. | The audit's own verifier marked this REFUTED. | None. |
 | 9 | **`technitium_dns_status = 0` is the SUCCESS code** (the shipped dashboard maps 0 → green). | No exporter defect. | Genuine residue is `technitium_dns_update_available` pinned at `-1`. → **M-10R**. |
 | 10 | **The 10 s ICMP ceiling on `iot`/`iot-noping`/`iot-quiet` is deliberate** (`blackbox-monitoring.nix:633-644`, long-timeout module, `scrape_timeout` raised to 12 s). The 3 permanently-silent Nests are registered non-responders, correctly excluded. | Confirmed. | Do not "fix". |
@@ -397,6 +397,7 @@ defect is invisible: *a selector that matches nothing evaluates cleanly forever.
 * **DELETE** `Aria2HighErrorRate` (`aria2_error_downloads` absent; do **not** re-point at
   `aria2_stopped_downloads`, which includes normal completions), `Aria2ExporterStale`
   (`Aria2ServiceDown` on `up{job="aria2"}` already covers it), `StockTraderChatErrorRate`
+  > **CORRECTED 2026-07-29 by a Phase 8 review: the DELETE recommendation below was based on a FALSE premise. `stock_trader_chat_errors_total` is NOT absent from the app -- it is defined at share/stock-trader/src/utils/prom.py:49 as `Counter(..., ["kind"])` and incremented in three places in web/routes/chat.py, and prom.py:6 calls it "the load-bearing one". A LABELED prometheus_client Counter emits no series until its first child exists, so zero series in the TSDB means ZERO CHAT ERRORS, not a missing metric. Deleting StockTraderChatErrorRate would remove working coverage of the LiteLLM adapter-misorder regression it exists to catch. DO NOT EXECUTE THAT ITEM.**
   (`stock_trader_chat_errors_total` absent; `StockTraderQuotesUnavailable` covers the quote path),
   `VdirsyncerSlowSync` (no duration metric; `vdirsyncer_sync_healthy` + `vdirsyncer_last_sync_timestamp`
   are already alerted).
@@ -415,12 +416,12 @@ defect is invisible: *a selector that matches nothing evaluates cleanly forever.
 * **Verification** `count(probe_success{host_group="dns"})` must return **6**.
 * **Effort/Risk** trivial / low.
 
-#### M-17R — Fix the `PublicEdgeDown` regression from `9d4ad5b6`
+#### M-17R — Fix the `PublicEdgeDown` regression from `374ff659`
 `REVISED — the design's PublicEdgeDegraded backtest was a data-gap artifact; that half is dropped`
 * **Files** `modules/monitoring/alerts/network.yaml:165-173`
 * **Change (ship)** (a) Add `job!="blackbox_https_public"` to `HostUnreachable` — verified the current
   selector matches **71** series and the exclusion drops it to **69**, exactly the 2 public targets, which
-  *did* fire critical (46 and 36 samples/30 d). This finishes what `9d4ad5b6` started. (b) Correct
+  *did* fire critical (46 and 36 samples/30 d). This finishes what `374ff659` started. (b) Correct
   `PublicEdgeDown`'s annotation from "more than 5 minutes" to match its actual `for: 10m`.
 * **Change (DROP)** The proposed `PublicEdgeDegraded` on `avg_over_time(probe_success[6h]) < 0.9`. The
   design's supporting number (0.6579) is **exactly 25/38** — a window holding 38 samples instead of 360,
@@ -460,7 +461,7 @@ defect is invisible: *a selector that matches nothing evaluates cleanly forever.
   scoped to `job=~"blackbox_https_(local|auth)"`.
 * **Why the scope** The 2 public targets are Cloudflare-fronted; `min_over_time(…[30d])` shows a served
   cert only ~3.6 days ahead vs 62.58 days now, i.e. a rotation already occurred on Cloudflare's schedule.
-  A critical page this host cannot remediate is the exact unactionable class `9d4ad5b6` was written to
+  A critical page this host cannot remediate is the exact unactionable class `374ff659` was written to
   remove three hours before this plan.
 * **FP trap checked and does NOT apply** A failed TLS handshake normally yields expiry=0, making
   `0 - time() < 7d` fire critical on every probe failure. Verified
@@ -737,7 +738,7 @@ not inside the LLM path.**
     max **82.69**, **zero** below 10× — a >10× invariant would have been breached at every sample for
     30 consecutive days, i.e. archetype (a) with a **30-day head start**.
     **Do NOT emit this as an alertable gauge with a static threshold** — see S-01R; report it with the
-    annotation *"known-elevated since 2026-06, tracking down from 83×"* since fa3026e and bf1ce08 are
+    annotation *"known-elevated since 2026-06, tracking down from 83×"* since 5463884 and 247c725 are
     visibly working (77 → 44 over the window). Replace the guard `usedbydataset > 1 GiB` (a magic constant
     that silently *drops* a dataset instead of reporting it) with an explicit denominator-validity test
     rendering `NOT CHECKED`.
@@ -1340,7 +1341,7 @@ while the heartbeat gauge ticks. This makes the **next** storm reconstructable; 
 * **Non-flapping proven, not asserted** `changes(schwab_refresh_token_expiry_timestamp_seconds[7d])` = **0**,
   versus `changes(stock_trader_data_source_up{source="schwab"}[24h])` = **8** and
   `avg_over_time(…[24h])` = **0.9746** — the up-gauge reads UP 97% of the time while the source has been dead 34
-  days, which is plausibly the flapping that got the old alert disabled in `ee03dd75`.
+  days, which is plausibly the flapping that got the old alert disabled in `232e53ea`.
 * **Add the absent-arm** `or absent(schwab_refresh_token_expiry_timestamp_seconds)` at `for: 1h` — otherwise a
   `< 0` comparison over an empty vector silently yields nothing and the alert **resolves and looks healthy at
   the exact moment monitoring dies**.
@@ -1891,7 +1892,7 @@ Nothing in this section is actioned without your answer. Each carries my recomme
 
 **D1 — Rotate the Discord bot token that GitHub's scanner found in `nixos-config` history.**
 The Gitea repo is **public** and served this token for ~69 days; GitHub push-protection has rejected the mirror
-on it **144 times per 2 days**. Removing the fixtures (`8762657d`) did not remove it from history.
+on it **144 times per 2 days**. Removing the fixtures (`182ae2cb`) did not remove it from history.
 * (a) **Rotate now** in the Discord developer portal, update the SOPS secret, rebuild — treat the old value as burned
 * (b) Rotate **and** purge the blobs from history (pairs with D2-a)
 * (c) Confirm the token is already dead/unused and take no action
@@ -1920,13 +1921,13 @@ one afternoon. If you pick (d), you must still land **M-01/D-09** — a *deliber
 
 **D3 — Schwab OAuth re-auth, and what to alert on afterwards.**
 The refresh token expired **2026-06-24 (34.2 days ago)**; re-auth requires browser OAuth on hera per the
-documented runbook, which only you can do. `ee03dd75` deliberately removed both token alerts.
+documented runbook, which only you can do. `232e53ea` deliberately removed both token alerts.
 * (a) **Re-auth now**, then enable a single expiry-only alert on `schwab_refresh_token_expiry_timestamp_seconds`
-* (b) Re-auth now and leave it unalerted, as `ee03dd75` chose
+* (b) Re-auth now and leave it unalerted, as `232e53ea` chose
 * (c) Retire the Schwab data source entirely and rely on alpha_vantage
 * (d) Leave expired; the app serves quotes from alpha_vantage today
 
-**→ Recommend (a) with A-U1s.** The reason `ee03dd75` disabled the old alerts was flapping, and I can now show
+**→ Recommend (a) with A-U1s.** The reason `232e53ea` disabled the old alerts was flapping, and I can now show
 *why*: the old input `stock_trader_data_source_up{source="schwab"}` has `changes[24h] = 8` and reads UP **97.5%**
 of the time while dead. The new input has **`changes[7d] = 0`** — monotone, cannot flap. Add the absent-arm.
 

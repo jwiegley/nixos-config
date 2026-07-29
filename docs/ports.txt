@@ -185,7 +185,7 @@
 # 8580 and 8090, all registered in the Web Applications section above.
 9301 127.0.0.1 cloudflared tunnel metrics (TUNNEL_METRICS on cloudflared-tunnel-data; scraped by job=cloudflared)
 # 18873 - RESERVED, not listening. Was the rsync.newartisans.com tunnel backend;
-#         that tunnel was removed 2025-11-17 (commit b93020b) and nothing binds
+#         that tunnel was removed 2025-11-17 (commit 44ab9e6) and nothing binds
 #         this port. Kept registered so the port is not silently reused.
 # 20241 - RESERVED, not listening. cloudflared's DEFAULT metrics port range
 #         (20241-20245); superseded once the unit began setting

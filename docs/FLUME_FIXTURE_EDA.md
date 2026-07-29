@@ -11,7 +11,7 @@ re-calibrated every ~2 weeks as more data accumulates.
 > 2026-05-20..23 window and has **not** been refreshed. The promised ~2-weekly
 > re-calibration has not happened: `scripts/flume-data/flume_data/fixtures.py`, the
 > library that actually runs, has not been touched since it was committed on
-> 2026-05-23 (`7e179e3`). Read `fixtures.py` for the live fixture ranges and
+> 2026-05-23 (`76cc9ba`). Read `fixtures.py` for the live fixture ranges and
 > `FLUME_DATA_REFERENCE.md` for the deployed schema; use this document only as the
 > record of how those numbers were derived.
 

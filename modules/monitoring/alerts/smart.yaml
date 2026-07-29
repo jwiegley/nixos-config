@@ -81,7 +81,12 @@ groups:
       # from the exporter's device list on 2026-07-03 (see
       # modules/monitoring/services/smartctl-exporter.nix:36), so as of
       # 2026-07-27 no smartctl_device_media_errors series is produced and this
-      # rule cannot fire; boot-NVMe coverage is a deferred follow-up.
+      # rule cannot fire. Boot-NVMe coverage is NO LONGER deferred: it was delivered
+      # 2026-07-29 by modules/monitoring/services/nvme-smart-exporter.nix, which reads
+      # /dev/nvme0n1 with `smartctl -j -H -A` (avoiding the log page that breaks
+      # smartctl_exporter) and publishes nvme_smart_* via the textfile collector, with
+      # rules in modules/monitoring/alerts/nvme-smart.yaml. The note above about THIS
+      # rule being unable to fire remains accurate and is unrelated.
       - alert: SmartNVMeMediaErrors
         expr: smartctl_device_media_errors > 0
         for: 5m

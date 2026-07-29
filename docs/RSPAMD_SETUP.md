@@ -5,7 +5,7 @@
 > structural things changed after the original write-up and are corrected below:
 >
 > 1. The `rspamd-scan-mailboxes` service/timer **no longer exists.** It was removed
->    on 2025-11-06 (commit 25bad76, "Remove 183-line mailboxScannerScript,
+>    on 2025-11-06 (commit 3daa14b, "Remove 183-line mailboxScannerScript,
 >    rspamd-scan-mailboxes systemd service, mbsync-johnw OnSuccess hook"). Mail is
 >    now scanned inline by Rspamd as a **Postfix milter**, not by a 15-minute
 >    polling sweep of the Maildir. `systemctl status rspamd-scan-mailboxes.*` will
@@ -13,7 +13,7 @@
 >    timer as a monitored unit — that is a live defect in the Nagios config, not a
 >    doc error.)
 > 2. Sieve pipe scripts moved out of `/usr/local/bin` into
->    `/var/lib/dovecot/sieve-pipe-bin/` on 2025-11-06 (commit 2e709e2).
+>    `/var/lib/dovecot/sieve-pipe-bin/` on 2025-11-06 (commit f71f7ec).
 
 This document describes the comprehensive Rspamd installation on the vulcan NixOS system.
 

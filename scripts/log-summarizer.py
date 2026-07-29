@@ -813,7 +813,7 @@ class AlertHistory:
 
         # Currently-firing alerts. A 7-day window necessarily includes alerts that have
         # since been DISABLED or resolved (e.g. the Schwab token rules, which show 140h of
-        # firing in the window but were commented out mid-week by ee03dd75), so
+        # firing in the window but were commented out mid-week by 232e53ea), so
         # "still firing now" has to be answered separately or the table misleads.
         #
         # NOTE the bare `except: pass` that used to be here was itself the bug this whole

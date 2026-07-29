@@ -24,7 +24,7 @@ Explicit `/home/%u` paths are used rather than `~` because Dovecot's userdb
 overrides `home` to `/var/mail/%u` (`dovecot.nix:278,287`) so that autoexpunge lock
 files are not written to the system home.
 An earlier layout under `/var/lib/dovecot/sieve/users/<username>/` was replaced on
-2025-11-05 (commit `ae35b8a`) and again refined on 2025-12-16 (commit `85fd6b4`);
+2025-11-05 (commit `c03ff26`) and again refined on 2025-12-16 (commit `77fd1ca`);
 that directory no longer exists.
 
 ### How to Edit Your Rules

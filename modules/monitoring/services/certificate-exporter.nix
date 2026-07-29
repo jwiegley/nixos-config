@@ -146,7 +146,7 @@ let
         # dead name. These were verified stale (no nginx vhost, no systemd unit,
         # no repo reference) during the 2026-06 monitoring-coverage sweep:
         #   - kibana.vulcan.lan      (Elastic/Kibana removed; zero git history)
-        #   - perplexica.vulcan.lan  (renamed to vane.vulcan.lan, commit 93a4b56;
+        #   - perplexica.vulcan.lan  (renamed to vane.vulcan.lan, commit 0360fd1;
         #                             vane.vulcan.lan.crt is the live replacement)
         # (copyparty.vulcan.lan is NOT listed, but note (2026-07-03 audit): no
         #  host nginx vhost serves that name — requests fell through to the

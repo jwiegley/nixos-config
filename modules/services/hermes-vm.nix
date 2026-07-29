@@ -356,7 +356,7 @@ in
 
   # vCPU intentionally left at the microvm.nix default (1).
   #
-  # A 4-vCPU bump (2fa452c) was tried 2026-05-31 to "fix" the recurring
+  # A 4-vCPU bump (614b191) was tried 2026-05-31 to "fix" the recurring
   # HermesApiServerDown alert, on the theory that serial init on one core
   # pushed the api_server cold-start to ~10 min. That premise was wrong: the
   # api_server BINDS in ~8s regardless of vCPU, and deploying 4 vCPU did not
@@ -482,7 +482,7 @@ in
   # Embed the host's root CA at evaluation time so it lands in the
   # nss-cacert bundle at build time. The host used to stage a runtime copy at
   # ${stateDir}/vulcan-root-ca.crt via a tmpfiles `C+` entry; that entry was
-  # dropped (commit e850935) because this readFile burns the cert content into
+  # dropped (commit a776481) because this readFile burns the cert content into
   # the store, so nothing needs the staged copy for trust any more. Same
   # pattern as openclaw-vm.nix:293.
   security.pki.certificates = [

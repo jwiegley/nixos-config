@@ -38,7 +38,10 @@
       # 4, and exporter 0.14.0 discards the device — it never appeared in
       # smartctl_devices despite being listed (SmartDeviceMissing fired on
       # every boot). Health `smartctl -H /dev/nvme0n1` works fine; boot-NVMe
-      # coverage via a textfile gauge is a deferred follow-up.
+      # coverage via a textfile gauge was DELIVERED 2026-07-29 -- see
+      # modules/monitoring/services/nvme-smart-exporter.nix and
+      # modules/monitoring/alerts/nvme-smart.yaml. Do not re-add nvme0n1 here: this
+      # exporter hardcodes --log=error, which is the reason it was removed.
     ];
     # Limit how often each disk is polled. Spinning the UAS bridge harder than
     # necessary is exactly what triggers its abort-storm, so keep it gentle.

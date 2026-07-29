@@ -47,7 +47,14 @@ let
   # daemon / 6h-event-driven entries.
   #
   # EXCLUDED (orphaned — writers removed Nov 2025, files deleted at deploy):
-  #   paperless.prom, paperless_ai.prom
+  #   paperless.prom, paperless_ai.prom  (writers removed Nov 2025)
+  #   schwab_token.prom                  (writer deleted 2026-07-29 with plan item D3,
+  #                                       which retired the Schwab source. Its check was left
+  #                                       behind and became the ONLY critical on the host,
+  #                                       pinning NagiosServicesCritical permanently on so
+  #                                       that a real second critical produced no transition.
+  #                                       A freshness check on a file that will never be
+  #                                       written again is a permanent CRITICAL, not a monitor.
   # --------------------------------------------------------------------------
   textfileChecks = [
     # 1m cadence -> floored to 600s warn = 600s crit
@@ -220,12 +227,6 @@ let
     }
     {
       file = "microvm_state_share.prom";
-      warn = 10800;
-      crit = 21600;
-      template = "standard";
-    }
-    {
-      file = "schwab_token.prom";
       warn = 10800;
       crit = 21600;
       template = "standard";

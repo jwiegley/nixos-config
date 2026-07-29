@@ -65,7 +65,7 @@ in
   systemd.services = lib.mkMerge [
     # Alert service template
     # Instantiated on demand only (no wantedBy — see the NOTE below); the
-    # incorrect wantedBy=tank.mount was removed in commit 7e2f7fe.
+    # incorrect wantedBy=tank.mount was removed in commit b135cd1.
     # ConditionPathIsMountPoint prevents "failed" status during rebuild when mount unavailable
     {
       "backup-alert@" = {

@@ -221,7 +221,7 @@ groups:
       # — the source could be empty or the copy left half-written when /tank drops
       # mid-write. Mirrors PgDumpSizeShrunk (database.yaml). The >0 guard avoids a
       # divide-by-baseline false-fire while the 14d window is still filling in.
-      # Since fa3026e (2026-06-10) this backup is an rsync MIRROR, not a dated
+      # Since 5463884 (2026-06-10) this backup is an rsync MIRROR, not a dated
       # tar.xz, so the gauge is `du -sb` of the whole mirror (~731 MB as of
       # 2026-07-27) rather than a per-run artifact; a sudden <50% drop is still a
       # real red flag. for:6h because the size is only refreshed on the daily
@@ -277,7 +277,7 @@ groups:
 
       # Output-sanity: catches a run that exited clean but captured no flows (e.g. a
       # shadow /var/lib/node-red with only skeleton files, the documented failure
-      # mode). Mirrors PgDumpSizeShrunk / TechnitiumBackupSizeShrunk. Since fa3026e
+      # mode). Mirrors PgDumpSizeShrunk / TechnitiumBackupSizeShrunk. Since 5463884
       # (2026-06-10) this is an rsync MIRROR rather than a dated zstd tarball, so
       # the gauge is `du -sb` of the whole mirror (~6 MB as of 2026-07-27, not the
       # old ~290 KB per-day artifact); flows shrinking below half the 14d average

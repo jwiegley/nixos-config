@@ -92,8 +92,9 @@ groups:
           description: |
             get_quote raised DataUnavailableError (all sources stale/failed) in
             the last 15m and is still doing so. In enforce mode the service is
-            correctly 503-ing rather than serving stale data. Usually a Schwab
-            auth problem -- see StockTraderSchwabDataSourceDown.
+            correctly 503-ing rather than serving stale data. The live source is
+            alpha_vantage (Schwab was retired 2026-07-29, plan item D3); check
+            StockTraderEndpointDown and journalctl -u stock-trader.
       - alert: StockTraderStaleQuotesRejected
         expr: |
           increase(stock_trader_quote_stale_rejected_total[15m]) > 0
@@ -107,4 +108,6 @@ groups:
             The freshness gate rejected stale quotes from {{ $labels.source }}
             for 15m. In warn mode stale data is served labeled (stale=true); in
             enforce mode the source is falling through. Brief during an outage;
-            sustained means the degraded path is the steady state -- re-auth.
+            sustained means the degraded path is the steady state -- check the
+            alpha_vantage source rather than re-authenticating anything, since the
+            Schwab OAuth chore was retired with the source on 2026-07-29.

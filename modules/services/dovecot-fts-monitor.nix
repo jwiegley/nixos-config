@@ -38,7 +38,7 @@
 # Baseline measured live 2026-06-10: clamped max lag = 0 s for all three users
 # (johnw 29 fts-flatcurve folders, assembly 2, bia 1) at ~211-306 delivered
 # msgs/day, so the 48h/7d thresholds sit far above noise. A fourth mail user,
-# rbcca, was added on 2026-07-02 (commit 68b8c27) and is covered by the loop
+# rbcca, was added on 2026-07-02 (commit ac8c2cf) and is covered by the loop
 # below but is not part of that baseline measurement.
 #
 # FORMAL RETIREMENT — DovecotHighConnectionCount: this intent is consciously

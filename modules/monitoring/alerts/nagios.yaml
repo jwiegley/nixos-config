@@ -49,6 +49,31 @@ groups:
           summary: "Nagios reports {{ $value | printf \"%.0f\" }} service(s) in HARD CRITICAL"
           description: "Nagios has {{ $value | printf \"%.0f\" }} service check(s) in a hard CRITICAL state for over 15 minutes (parsed from status.dat). Open the Nagios web UI for the specific hosts/services — this bridge intentionally emits counts only."
 
+      # Companion to NagiosServicesCritical, added 2026-07-29 after a review found the
+      # masking hole this closes.
+      #
+      # nagios_services_critical_total is a LABEL-LESS SCALAR, so `> 0` conveys "at least one"
+      # and nothing more. Once it is firing it stays firing, and a second service going
+      # critical moves the count 1 -> 2 with NO new Alertmanager transition and no new
+      # notification. That is not hypothetical: a stale tier-1 freshness check for a deleted
+      # textfile (schwab_token.prom) sat as the host's only critical and pinned this rule on,
+      # so for that period a genuine second critical would have been silent on this path.
+      # Nagios's own per-service email path still worked, but the Prometheus path did not.
+      #
+      # `increase(...[30m]) > 0` fires on the 1 -> 2 EDGE regardless of whether the base rule
+      # is already active, which restores a signal per new critical without giving the
+      # counts-only bridge per-service cardinality. Deliberately NOT `changes()`: that also
+      # fires on recovery, which is not news.
+      - alert: NagiosServicesCriticalIncreased
+        expr: increase(nagios_services_critical_total[30m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios critical count INCREASED by {{ $value | printf \"%.0f\" }} — a new service failed"
+          description: "The number of Nagios services in HARD CRITICAL rose in the last 30 minutes, which means a NEW service failed. This exists because NagiosServicesCritical is a scalar `> 0` rule that cannot signal an increase once it is already firing. Open the Nagios web UI for the specific hosts/services — this bridge intentionally emits counts only."
+
       # One or more Nagios hosts in a HARD DOWN/UNREACHABLE state.
       - alert: NagiosHostsDown
         expr: nagios_hosts_down_total > 0

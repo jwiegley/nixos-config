@@ -5,7 +5,7 @@ Persistent CloudFlare Tunnel connections for external service access without por
 > **Status (2026-07-27):** There is now exactly **one** tunnel, named `data`
 > (unit `cloudflared-tunnel-data.service`), and it fronts **four** hostnames.
 > The second "rsync" tunnel described by earlier revisions of this document was
-> removed on 2025-11-17 in commit `b93020b` ("cloudflare-tunnels: Remove rsync
+> removed on 2025-11-17 in commit `44ab9e6` ("cloudflare-tunnels: Remove rsync
 > tunnel configuration"): `rsync.newartisans.com`, the
 > `cloudflared-tunnel-rsync.service` unit and the `cloudflared/rsync` SOPS
 > secret no longer exist, and nothing listens on port 18873. The
@@ -278,7 +278,7 @@ localhost:8090   (calendar → calendar publisher, plain HTTP by design)
 ### N8N Webhook Tunnel (removed)
 
 n8n and its manually controlled webhook tunnel were removed from this repository
-on 2026-03-14 (commit `5f56003`), together with `docs/N8N_WEBHOOK_SETUP.md`.
+on 2026-03-14 (commit `f40e2ac`), together with `docs/N8N_WEBHOOK_SETUP.md`.
 There is no `n8n-webhook-*` command, `cloudflared-tunnel-n8n-webhook.service`
 unit, or `n8n.newartisans.com` hostname any more. The historical procedure is
 kept for background in [CLOUDFLARE_MIGRATION.md](CLOUDFLARE_MIGRATION.md).

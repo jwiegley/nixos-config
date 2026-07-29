@@ -15,8 +15,9 @@
 # — the alert catches that bug regressing (or model prompt-adherence
 # drifting and re-triggering it) without anyone having to type into
 # the chat panel. Since stock-trader v0.2.0 (2026-06-09) this scrape job
-# also backs the live-data freshness alerts StockTraderSchwabDataSourceDown,
-# StockTraderQuotesUnavailable and StockTraderStaleQuotesRejected.
+# also backs the live-data freshness alerts StockTraderQuotesUnavailable and
+# StockTraderStaleQuotesRejected. (It used to back StockTraderSchwabDataSourceDown
+# as well; that rule was deleted 2026-07-29 with the Schwab source, plan item D3.)
 {
   config,
   lib,

@@ -125,7 +125,7 @@
     # 2026-07-23 bump (e2587caef) broke several HA Python deps sourced from this
     # channel: langfuse 4.0.2 pins wrapt<2.0 but the channel ships wrapt 2.2.2,
     # and a new pyprojectVersionPatchHook rejects pybose's version metadata. This
-    # rev is the last one that built cleanly (matches vulcan gen at ac85b36).
+    # rev is the last one that built cleanly (matches vulcan gen at 3ef83cb).
     # Re-float to `nixos-unstable` once nixpkgs' HA Python packages catch up.
     nixpkgs-unstable = {
       url = "github:NixOS/nixpkgs/241313f4e8e508cb9b13278c2b0fa25b9ca27163";

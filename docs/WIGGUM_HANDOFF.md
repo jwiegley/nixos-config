@@ -45,6 +45,52 @@ Exit ONLY when all hold, with shown evidence:
 No parity target was given, so DoD = every objective of the frozen plan's in-scope
 portion complete and independently verified.
 
+## PHASE 8 — final adversarial review of the whole body of work (ADDED BY OPERATOR 2026-07-29)
+
+**This is an ADDITION to the Definition of Done, not a replacement.** It RAISES the bar; it
+must never be used to skip or soften any earlier phase. Runs only AFTER all implementation
+work is complete — the operator was explicit: "once you are done with all of your
+implementation work".
+
+**Scope:** every commit produced by this effort, i.e. `b2ff8976..HEAD` (41 at the time this
+was written; the range grows as the loop continues, so recompute it, do not hardcode a count).
+
+**The question to answer**, in the operator's own framing: have we *not* regressed any
+behaviour, not broken anything, not added unnecessary code, and not added unnecessary
+complications — and has the overall **quality, clarity and simplicity** of this system
+configuration genuinely increased as a result of all this work?
+
+Note this is deliberately BROADER than a per-commit fess audit. Those asked "is this commit's
+claim true?". Phase 8 asks "is the SYSTEM better, taken as a whole?" — which can be false even
+when every individual commit is defensible. Specifically hunt for:
+
+1. **Behavioural regressions** — anything that used to notify/verify/run and now does not.
+   The alert-routing and severity changes are the highest-risk class here, along with the
+   restic loop rewrite and the timer reschedule.
+2. **Breakage** — dead references, rules that can no longer fire, metrics no longer produced,
+   units that fail only on a cold boot (not observable from a running system).
+3. **Unnecessary code** — anything added that duplicates an existing mechanism, or that guards
+   a condition already guarded elsewhere. Candidates to challenge honestly: the whole-loop
+   deadline vs `RuntimeMaxSec`, the coverage metric vs the daily report's alert history, and
+   the volume of explanatory comment now in `resticOperations.nix`.
+4. **Unnecessary complexity** — where a simpler construct would do the same job. Challenge the
+   two-pass structure/data split, the three-bucket counter scheme, and the severity split.
+5. **Clarity** — comments that are now wrong, stale, or contradict the code. This effort has
+   already produced two self-contradictory comments that measurement caught; assume more.
+6. **Net effect** — is the config simpler or merely more heavily annotated? Volume of
+   justification is NOT quality.
+
+**Method:** a multi-agent workflow (ultracode is on) — parallel reviewers with distinct lenses,
+then ADVERSARIAL verification of every finding before it is reported, then synthesis. Findings
+must be reproduced against the DEPLOYED artifact, not the diff. Report honestly even where the
+verdict is "this commit made things worse".
+
+**Standing constraints for every agent in it:** read-only; no `nixos-rebuild`; no unit
+start/stop/restart; no real `restic` commands (B2 egress); never write to
+`/var/lib/prometheus-node-exporter-textfiles` (mode 1777 — writing there injects fake metrics
+into production); never read `/etc/litellm/config.yaml`; no `sops -d`; never surface secrets,
+keys, tokens or private IPs.
+
 ## IN SCOPE for the autonomous loop
 
 Ordered as agreed: restore broken detection first, so later changes are not made on

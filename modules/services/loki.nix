@@ -124,6 +124,10 @@
     "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
     "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
     "L+ /var/lib/loki/rules/fake/openclaw-plugin-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/openclaw-plugin-errors.yaml"
+    # Added 2026-07-29 alongside the dedicated ha-nodered promtail scrape; without that
+    # scrape these rules could never match, since HA/node-red log at priority 6 and the
+    # consolidated journal scrape drops 5-7.
+    "L+ /var/lib/loki/rules/fake/home-assistant-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/home-assistant-errors.yaml"
     "L+ /var/lib/loki/rules/fake/uas-enclosure.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/uas-enclosure.yaml"
     "L+ /var/lib/loki/rules/fake/ssh-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/ssh-security.yaml"
     "L+ /var/lib/loki/rules/fake/nginx-web.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/nginx-web.yaml"

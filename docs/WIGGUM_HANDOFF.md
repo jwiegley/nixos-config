@@ -618,6 +618,28 @@ re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` 
   synthesis) worked where a single auditor failed twice. **Reuse it.** The 12 refutations were
   as valuable as the 4 findings — several objections were already anticipated in comments.
 
+- `2026-07-29` — **D13 landed** (`602418a7`) + **a serious pre-existing paging gap fixed**
+  (`f181eb48`). D13 verified with 26 amtool route tests (4 promoted → email, 17 → null-receiver,
+  4 regression cases). The gap was found BY those regression tests, not by the plan: the storage
+  route matched `category="storage"` alone, had no `continue`, and preceded both critical routes,
+  so **19 critical storage alerts never paged** — TankMountGone, all 5 ZFS pool alerts, all 4
+  NVMe boot-disk alerts, all restic failures — email-only on a 12h repeat. Four of those NVMe
+  rules are ones I added earlier in THIS effort, so I had shipped critical boot-disk alerting
+  into a bucket that could not page. Fixed by `severity!="critical"` on that route (not
+  `continue=true`, which would double-deliver warnings). 28 amtool tests pass.
+  **CONCURRENT-SESSION HAZARD, now costly:** the `f181eb48` edit was LOST after building and
+  deploying — no stash, no checkout/reset in reflog, and the other session's commit touched only
+  litellm-settings.nix, so a stale-content file write from it. Result was source/system drift with
+  the RUNNING system holding a fix the source lacked, which the next rebuild would have silently
+  reverted. Recovered and proven complete by rebuilding to a closure **byte-identical** to
+  `/run/current-system`. **Rule for this tree: commit immediately; never leave a verified edit
+  uncommitted.**
+  Two false readings caught before acting: the amtool harness reported 0/27 because the config
+  path lives in the pre-start script not the unit file; and a grep suggested the fix was missing
+  from the deployed config because the generated JSON escapes quotes as `severity!=\"critical\"`.
+  **BRANCH STATE:** 26 local commits vs 1 on origin/main (the other session's `89f0c818`).
+  Diverged, NOT pushed — pushing is human-gated. Do not resolve this autonomously.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

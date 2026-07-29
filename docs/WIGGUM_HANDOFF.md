@@ -645,6 +645,37 @@ re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` 
   **BRANCH STATE:** 26 local commits vs 1 on origin/main (the other session's `89f0c818`).
   Diverged, NOT pushed — pushing is human-gated. Do not resolve this autonomously.
 
+## fess-auditor SINGLE-AGENT form has now failed 3 times — use WORKFLOWS only (2026-07-29)
+
+Three separate `fess-auditor` subagent spawns went idle with no report (read-data audit x2 after
+an explicit re-request, then the M-91 audit). The WORKFLOW form has succeeded twice on the same
+kind of task and produced findings materially better than my own self-review. **Do not spawn a
+bare fess-auditor agent again in this project — author a workflow (lenses -> refute-first
+skeptic -> synthesis) instead.** Attempt counter for the single-agent form: 3, closed as
+abandoned rather than escalated, because a working alternative exists.
+
+When the M-91 auditor died I verified its two highest-value checks by hand, and one produced a
+real correction to my own commit: my "26x faster" query figure was a COLD-CACHE artifact. Re-timed
+twice in each order, the true ratio is ~11.5x (2.30-2.33 s vs 0.19-0.22 s) and order-independent.
+Query correctness confirmed structurally too: `states.state_id` is an IDENTITY bigint so
+max(state_id) is genuinely the newest row, and comparing against newest-`last_updated_ts` gives 0
+disagreements across all entities. Lesson: never quote a benchmark from a single first run.
+
+## D18 — channel IDs received, but NOT wired: volume makes #general wrong (2026-07-29)
+
+Operator supplied: `#general` 1477037636957765787 (both bots can post), `#hermes`
+1503620940247076944, `#agent-deck` 1526997740444192799, and offered to create another.
+
+**Do not use #general.** At the configured `intervalSeconds = 300` with 2 probe directions, each
+cycle is 1 probe post + 1 target reply, so the canary generates **1,152 messages/day** into
+whatever channel it targets. In a human channel that is unusable. At 900s it is 384/day, at
+1800s 192/day.
+
+Recommendation put to the operator: a DEDICATED canary channel both bots can read+send in, plus
+dropping the interval 300s -> 900s (a 5-minute round-trip canary is more aggressive than needed
+to detect a dead bot). `#hermes` cannot serve as the shared channel unless OpenClaw can also post
+there. Awaiting the channel choice; config stays `enable = false` so nothing is half-wired.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

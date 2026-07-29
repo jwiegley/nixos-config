@@ -333,6 +333,111 @@ locked out of both — host-key mismatch in `~/.config/ssh/known_hosts`, passwor
 disabled), so only host-visible signals were available. The disabled D18 Discord canaries
 would NOT have caught this either: they test a Discord reply round-trip, not tool capability.
 
+- `2026-07-29` — **Unit: restic snapshots isolation + gauge hardening** (`f4684b7c`). Resolves
+  the fess audit of `2616b0b6`, which found isolation applied only to the `check` branch while
+  the comments claimed it script-wide. Also: `repair` now gated on prune succeeding (restic's
+  own help requires a correct index); `restic-check-metrics` moved `set -u` → `set -eu`
+  (a failed write kept publishing last week's stale `1` and still exited 0); corrected my own
+  false "ordered alphabetically" comment (`builtins.attrNames` is BYTE order, so `doc`/`src`
+  sort last). Established by reading logwatch.pl that it runs report scripts via
+  `open(TESTFILE, $Command . " |")` and **never checks close()** — so the exit status is
+  invisible downstream and a bad repo silently TRUNCATED the daily report's restic section.
+  14/14 harness scenarios; pre-fix control reached 1 of 9 repos vs 9 of 9 fixed.
+  Per the wiggum skill, NOT re-audited (its only purpose was resolving an audit).
+- `2026-07-29` — **Unit: D10 rotating data verification** (`3cd32cc1`). Bit-rot was
+  undetectable: a plain `restic check` never reads pack payloads. Two deliberate deviations
+  from the plan text, both recorded in the commit: `--read-data-subset=P/52` keyed to the ISO
+  week instead of `2%` (a percentage subset is RANDOM, so it never guarantees coverage; P/52
+  gives deterministic full coverage in a year at the same cost), and the plan's
+  metrics-collision rationale is FALSE — `restic-metrics` passes `--no-lock` on every
+  operation so it cannot contend for the repo lock. The 06:30 de-herd is still right for a
+  different, verified reason: at `weekly` (Mon 00:00) a multi-hour run spills into the 02:10
+  backup herd whose `forget --prune` waits only `--retry-lock=5m`.
+  A harness scenario exposed a NEW silent failure I was about to ship — budget exhaustion left
+  7 of 9 repos data-unverified while the run exited 0 reporting success. Closed by publishing
+  `restic_read_data_*` with the invariant verified+skipped+failed==total, plus
+  `ResticReadDataCoverageDegraded` and `ResticReadDataStale`. Severity is split: timeout
+  (exit 124) must NOT page, a real pack error MUST.
+  **LIVE VERIFICATION**: the switch triggered an immediate catch-up run (Persistent=true saw
+  Mon 06:30 as a missed elapse). First production execution of this path. Measured throughput
+  ~24 MB/s, i.e. **6x better than the 4 MB/s I projected** — the real run is ~20-25 min, not
+  the ~2h estimated in the commit. The 3h budget has far more headroom than claimed.
+- `2026-07-29` — **Unit: restic_repo_files_total dead since inception** (`0149d13d`). Found
+  while auditing the textfile collector, not from the plan. The count was read from
+  `stats --mode raw-data`, which counts BLOBS; `total_file_count` is absent from that mode's
+  JSON (verified against the live binary: its keys are compression_*, snapshots_count,
+  total_blob_count, total_size, total_uncompressed_size). So `// 0` silently produced 0 for
+  all nine repos forever, hidden because the sibling metrics from the other two modes worked.
+  Re-sourced from `restore-size`; verified it returns total_file_count 52717 for the smallest
+  repo with a total_size matching that repo's live metric exactly. Nothing depended on the
+  dead metric, so this closes a gap rather than correcting a false signal.
+- `2026-07-29` — **Phase 7 cleanup: orphaned textfiles removed.** 7 leftover `*.prom.<pid>`
+  files (Jun 14 – Jul 16) from writes that died before their `mv`. Proved they were NOT being
+  scraped before deleting: `restic.prom.12358` held `restic_repo_size_bytes{Audio} 0` while the
+  live series read 100899567908, with exactly 9 series not 18, and
+  `node_textfile_scrape_error` 0 on all three instances. NOTE the `mbsync_assembly/bia.prom`
+  files are email-sync metrics and are CURRENT — not the disabled rclone remotes; my initial
+  grep was too loose.
+
+## D12 — PREMISE DISPROVED, work item NOT implemented (2026-07-29)
+
+The decision was "periodic guarded sweep, log-only for the first cycle" for "17 abandoned
+logind sessions". The log-only caution was right, and it paid off: the sessions are **not
+abandoned**, so no sweeper was built.
+
+Evidence — all 17 `closing` sessions still host LIVE processes; **zero** are empty:
+
+| Contents | Sessions | Note |
+|---|---|---|
+| live `nix-daemon` | 14 | leaked `--stdio` instances, 6–17 days old |
+| `dirmngr` | 1 | GPG, lingers BY DESIGN |
+| `gpg-agent` + `keyboxd` + `scdaemon` | 1 | GPG agent stack, lingers BY DESIGN |
+| `etterminal` + `zsh` | 1 | a real live terminal with a shell in it |
+
+Total cost across all 17 scopes: **36 MiB**. Precision note: `TasksCurrent=11` counts
+THREADS, not processes — each of those sessions holds one 11-threaded `nix-daemon`, not 11
+processes.
+
+So a sweep keyed on state+age would kill a live `nix-daemon` (the exact hazard the decision
+named), break GPG agent caching, and destroy a user's terminal session. An alert on "closing
+sessions older than N days" would also be pure noise, since GPG agents lingering is normal.
+
+**Genuinely actionable residue, for the operator:** 14 leaked `nix-daemon --stdio` processes
+surviving 6–17 days. Root-causing that (which remote nix client abandons them) is new
+investigation beyond this plan. The logind sessions are a symptom, not the problem.
+
+## D14 — verified and staged, DROP deliberately NOT executed (2026-07-29)
+
+Operator reiterated caution about destructive actions and direct database manipulation
+mid-session, so the verification was done and the drop was left for explicit confirmation.
+
+Re-verified (not taken from the plan): 0 user relations, 0 non-default schemas, 0 active
+connections, 0 references anywhere in the repo outside the plan docs. 7670 kB is empty-database
+template overhead, not content. Owner `postgres`, grants to `litellm`.
+
+Schema record captured at
+`<scratchpad>/litellm.public.schema.sql` — contains only CREATE DATABASE + GRANTs, no tables.
+
+Command awaiting confirmation:
+```
+sudo -u postgres psql -c 'DROP DATABASE "litellm.public";'
+```
+
+## Concurrent-session hazard observed (2026-07-29)
+
+`modules/services/litellm-settings.nix` was modified at 10:45 by a DIFFERENT session while I
+was building. Two consequences worth knowing:
+
+1. `git add -A` staged it into my commit; caught and unstaged. **Use explicit paths, not
+   `-A`, in this shared tree.**
+2. My `nixos-rebuild switch` therefore DEPLOYED that session's uncommitted work-in-progress
+   (a `model_group_settings.forward_client_headers_to_llm_api` entry). Benign config, but the
+   operator should know it went live via my switch rather than theirs.
+
+Also: `sudo nixos-rebuild --flake .` on a dirty tree makes nix's git fetcher write
+root-owned objects into `.git/objects`, which then breaks `git commit` with "insufficient
+permission for adding an object". Fix: `sudo chown -R johnw:users /etc/nixos/.git`.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

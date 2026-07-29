@@ -112,18 +112,44 @@ let
           description: "{{ $value | humanizePercentage }} of repositories ({{ query \"git_workspace_stale_repos_total\" | first | value }}/{{ query \"git_workspace_repos_total\" | first | value }}) haven't been updated in over 3 days. This indicates a widespread sync problem. Check if the service is running properly and verify network/GitHub connectivity."
 
       # Alert if specific critical repos are stale (>7 days old)
-      # GitWorkspaceImportantRepoStale DELETED 2026-07-28: it selected
-      #   repository=~"github/jwiegley/.*", and NO git_workspace_* metric carries a
-      #   `repository` label at all -- every one of the 9 published series is an aggregate
-      #   (repos_total=634, repos_successful, repos_failed, stale_repos_total,
-      #   last_sync_timestamp_seconds, sync_duration_seconds, scrape_*). A per-repository
-      #   selector can therefore never match, so this rule was structurally incapable of
-      #   firing rather than merely mis-scoped.
-      #   Per-repo staleness cannot be expressed against this exporter. The aggregate is
-      #   already covered by GitWorkspaceManyStaleRepos and
-      #   GitWorkspaceCriticallyManyStaleRepos over git_workspace_stale_repos_total, so
-      #   nothing is lost except the ability to name WHICH repo -- which would require the
-      #   exporter to emit per-repository series.
+      # RESTORED 2026-07-29, having been deleted a day earlier on a FALSE PREMISE.
+      #
+      # I deleted this claiming "NO git_workspace_* metric carries a `repository` label at
+      # all" and that per-repo staleness "cannot be expressed against this exporter". Both
+      # were wrong, and the way I got them wrong is worth recording: I used an INSTANT query,
+      # and `git_workspace_repo_age_seconds` is published only INTERMITTENTLY -- in short
+      # windows roughly twice a day -- so at the moment I looked it genuinely returned
+      # nothing. An instant query cannot distinguish "this metric does not exist" from "this
+      # metric is not being published right now".
+      #   count(git_workspace_repo_age_seconds)                        -> ABSENT
+      #   count(last_over_time(git_workspace_repo_age_seconds[30d]))   -> 51 series
+      #   distinct `repository` label values over 30d                  -> 51
+      # The deleted rule had also genuinely FIRED: its condition held with a maximum observed
+      # age of 628,830s against its 604,800s threshold.
+      #
+      # It is NOT restored verbatim, because the original form could not work either -- for a
+      # different reason. With samples appearing only in brief windows, an instant selector
+      # plus `for: 1h` can essentially never be satisfied: the dwell, not the label, was the
+      # real obstacle. max_over_time([24h]) spans the publication gap and sees all 50 repos,
+      # verified, so the rule is now robust to intermittent publication.
+      #
+      # Also corrected: I claimed the aggregate rules covered this. They do not.
+      # GitWorkspaceManyStaleRepos needs >10% of 634 repos (~64) to fire, so a single stale
+      # repository is 0.16% and CANNOT trip it. Per-repo detection was lost outright.
+      #
+      # Selector kept broad (all repos, not just github/jwiegley/*) because the original
+      # narrow selector is what made the rule's silence ambiguous -- those repos stopped
+      # being archived after 2026-03-06, and a rule that goes quiet because its subject
+      # disappeared looks identical to one that is healthy.
+      - alert: GitWorkspaceRepoStale
+        expr: max_over_time(git_workspace_repo_age_seconds[24h]) > 1209600
+        for: 30m
+        labels:
+          severity: warning
+          service: git-workspace
+        annotations:
+          summary: "Archived repo {{ $labels.repository }} has not been fetched in {{ $value | humanizeDuration }}"
+          description: "git-workspace has not successfully fetched {{ $labels.repository }} for over 14 days. Threshold is 14d rather than 7d because the exporter publishes per-repo ages only intermittently and a 7d floor sits close to normal archive cadence; verified quiet at 7d, 14d and 30d at restore time. The aggregate GitWorkspaceManyStaleRepos rule cannot catch this -- it needs ~64 stale repos out of 634 before it fires."
       - alert: GitWorkspaceNoStateFile
         expr: absent(git_workspace_last_sync_timestamp_seconds) or git_workspace_last_sync_timestamp_seconds == 0
         for: 2h

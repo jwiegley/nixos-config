@@ -126,9 +126,13 @@ groups:
       #     in normal operation (nx_domain >0.50 against a 0.5353 real spike, refused >0.10
       #     against 0.1285, cached <0.40 against a p1 of 0.3896, server_failure >0.05
       #     against 9 routine samples above it).
-      #   - Brief 1-minute spikes exist but CANNOT satisfy these 5-15m dwells, so the
-      #     sustained (10m-step) distribution is the correct basis, with thresholds placed
-      #     above the 1m absolute max wherever that is still practical.
+      #   - Brief 1-minute spikes exist but CANNOT satisfy these 5-15m dwells. NOTE the
+      #     10m-step figures quoted below are NOT a "sustained" statistic -- a 10m step
+      #     samples the gauge instantaneously every 10 minutes, so whether a spike is caught
+      #     is pure grid alignment and the numbers are not reproducible run to run (a repeat
+      #     of the same refused query 40 minutes later gave 0.0558 where the first gave
+      #     0.1285). The 1-minute figures DO reproduce exactly. The sound method, used per
+      #     rule, is contiguous-run analysis against each rule's own dwell.
       #   - One outlier is excluded deliberately: a single sample on 2026-07-03 11:33
       #     (SERVFAIL ratio 0.34-0.39, recursion ratio 7.38 -- a ratio above 1.0 is
       #     impossible, proving numerator and denominator came from non-commensurable
@@ -236,7 +240,7 @@ groups:
           component: dns
         annotations:
           summary: "High failure rate for recursive DNS queries"
-          description: "More than 50% of recursive queries (to upstream resolvers) are failing (30d p99 is 12%). Check upstream resolver connectivity and performance. Current failure rate: {{ $value | humanizePercentage }}."
+          description: "Ratio of SERVFAIL responses to recursive-query count exceeded 0.50 (30d p99 is 0.12). NOTE this is NOT a clean percentage of recursive queries: the numerator counts server_failure across ALL requests while the denominator counts only recursive ones, and the two gauges use non-commensurable rolling windows -- so treat it as a relative indicator, not a rate. Check upstream resolver connectivity. Current value: {{ $value }}."
 
   # DNS Query Log Exporter Health Monitoring
   - name: dns_query_exporter_health

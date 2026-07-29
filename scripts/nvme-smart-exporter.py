@@ -26,7 +26,7 @@ Metrics emitted (all labelled device="nvme0n1"):
   nvme_smart_available_spare         percent of spare capacity remaining
   nvme_smart_available_spare_threshold  vendor floor below which spare is critical
   nvme_smart_temperature_celsius
-  nvme_smart_data_units_written      512-KiB units, for endurance trending
+  nvme_smart_data_units_written      512,000-byte units, for endurance trending
   nvme_smart_collector_success       0 if this script could not read the device
   nvme_smart_collector_timestamp_seconds
 """
@@ -96,13 +96,34 @@ def main() -> int:
         # failures (command line / device open / SMART command failed) while higher bits
         # are advisory (e.g. bit 3 = disk failing, which is exactly what we want to
         # REPORT rather than treat as a collector error). Only bail on the low bits.
-        hard = (data.get("smartctl", {}).get("exit_status", 0)) & 0b111
-        if hard:
+        status = data.get("smartctl", {}).get("exit_status", 0)
+        hard = status & 0b111
+        # Bit 3 means "DISK FAILING" -- an advisory we must REPORT, not swallow. But a real
+        # failing disk often sets bit 3 TOGETHER with a low bit (e.g. exit_status 12 = bits
+        # 3+2), and the first version of this code bailed on any low bit, dropping every
+        # device metric. That made NVMeSmartFailed (critical) unable to fire in exactly the
+        # case it exists for, leaving only NVMeSmartCollectorFailing (warning). So when bit 3
+        # is set we continue and publish, even if a low bit is also set.
+        disk_failing = bool(status & 0b1000)
+        if hard and not disk_failing:
             print(f"smartctl hard failure, exit_status bits {hard}", file=sys.stderr)
             _emit({}, 0)
             return 1
         log = data.get("nvme_smart_health_information_log", {}) or {}
-        rows["nvme_smart_healthy"] = 1 if data.get("smart_status", {}).get("passed") else 0
+        # Only trust smart_status if it is actually PRESENT. Assigning unconditionally (as the
+        # first version did) turned malformed or truncated smartctl JSON into healthy=0 with
+        # collector_success=1 -- i.e. NVMeSmartFailed CRITICAL on a perfectly healthy disk,
+        # the exact inverse of this collector's purpose. It also made the later
+        # "not in rows" guard unreachable.
+        smart_status = data.get("smart_status") or {}
+        if "passed" not in smart_status:
+            print("smartctl output has no smart_status.passed field", file=sys.stderr)
+            _emit({}, 0)
+            return 1
+        rows["nvme_smart_healthy"] = 1 if smart_status.get("passed") else 0
+        if disk_failing:
+            print("smartctl reports DISK FAILING (exit_status bit 3)", file=sys.stderr)
+            rows["nvme_smart_healthy"] = 0
         for key, metric in (
             ("critical_warning", "nvme_smart_critical_warning"),
             ("media_errors", "nvme_smart_media_errors"),
@@ -110,17 +131,13 @@ def main() -> int:
             ("percentage_used", "nvme_smart_percentage_used"),
             ("available_spare", "nvme_smart_available_spare"),
             ("available_spare_threshold", "nvme_smart_available_spare_threshold"),
-            ("data_units_written", "nvme_smart_data_units_written"),
+            ("data_units_written", "nvme_smart_data_units_written"),  # 512,000-byte units
         ):
             if key in log:
                 rows[metric] = log[key]
         temp = log.get("temperature", data.get("temperature", {}).get("current"))
         if temp is not None:
             rows["nvme_smart_temperature_celsius"] = temp
-        if "nvme_smart_healthy" not in rows:
-            print("no smart_status in output", file=sys.stderr)
-            _emit({}, 0)
-            return 1
     except Exception as exc:  # noqa: BLE001
         # Emit collector_success=0 rather than nothing: an ABSENT metric set is
         # indistinguishable from a healthy disk, which is the failure mode this whole

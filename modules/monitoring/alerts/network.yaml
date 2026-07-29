@@ -394,10 +394,21 @@ groups:
       #   for=3m  would fire on 2 / 2 runs
       #   for=5m  would fire on 0 / 0 runs   <-- the originally proposed value
       #   for=10m would fire on 0 / 0 runs   <-- what I had shipped
-      # So 10m was incapable of firing on ANY observed outage, and 5m would have been too.
+      # CORRECTION: "10m was incapable of firing on ANY observed outage" -- which an earlier
+      # version of this comment asserted -- is FALSE. Widening from 3 days to 30 days finds a
+      # 14.00-minute outage on 2026-07-03 that BOTH 10m and 5m would have caught. My 3-day
+      # window missed the only large outage of the month, which is exactly the error my own
+      # sibling commit warns about (short windows understate extremes). 3m is still the right
+      # value -- it additionally catches the 3-4 minute bursts that 10m misses -- but the
+      # justification is "too slow for the observed burst class", not "incapable of firing".
       # 3m fires on the genuine multi-minute outages while still ignoring the 1-2 minute
       # blips that made the old 1m WebServiceDown page repeatedly -- which was the whole
-      # point of moving ownership here. It also sits above HostUnreachable's 2m, so this is
+      # point of moving ownership here. DISCLOSED COST, quantified over 30 days: of 29
+      # contiguous zero-runs for calendar and 24 for data, only 3 each reach the 3m dwell, so
+      # roughly 26 and 21 sub-3-minute events now page nothing. Residual coverage for those
+      # is only cloudflared_tunnel_ha_connections, which was <2 for just 35 minutes across the
+      # month and never 0 -- it covers tunnel-connection causes but NOT origin, cert or
+      # Cloudflare-edge failures. That is a real gap, accepted deliberately. It also sits above HostUnreachable's 2m, so this is
       # a deliberate step down in sensitivity rather than an accidental duplicate.
       - alert: PublicEdgeDown
         expr: probe_success{job="blackbox_https_public"} == 0

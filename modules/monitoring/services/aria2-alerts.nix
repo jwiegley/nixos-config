@@ -38,7 +38,13 @@ let
       # Aria2HighErrorRate DELETED 2026-07-28: it selected `aria2_error_downloads`, which
       #   this exporter does not publish -- 0 series now AND 0 across 30 days, while the
       #   exporter is demonstrably healthy (aria2_up=1, up{job="aria2"}=1) and publishing 8
-      #   other aria2_* metrics. So this was a wrong metric NAME, not a dead service.
+      #   other aria2_* metrics.
+      #   DIAGNOSIS CORRECTED 2026-07-29: I called this "a wrong metric NAME". It was not.
+      #   aria2_error_downloads has 54,937 samples over 365d, existing 2026-01-10 to 01-19 and
+      #   then vanishing along with aria2_completed_downloads and aria2_removed_downloads. The
+      #   name was RIGHT for a January exporter that has since regressed and stopped
+      #   publishing those three counters. The deletion still stands (0 series now and across
+      #   30d), but the real follow-up is restoring the exporter's counters, not renaming.
       #   No replacement exists: the full published set is aria2_up, aria2_version_info,
       #   aria2_download_speed_bytes, aria2_upload_speed_bytes, aria2_active_downloads,
       #   aria2_waiting_downloads, aria2_stopped_downloads and aria2_stopped_total_downloads

@@ -19,7 +19,7 @@ groups:
       # raises an unhandled TypeError at homeassistant/components/nest/climate.py:317
       # ("unsupported operand type(s) for -: 'float' and 'NoneType'"), because
       # target_temperature_high is None when the Nest is not in a heat_cool mode. Measured
-      # 33 failures over 3 days (~11/day), and EVERY ONE silently discards the setpoint --
+      # 28 failures over 3.2 days (~8.75/day), and EVERY ONE silently discards the setpoint --
       # the thermostat simply never receives it. The caller is versatile_thermostat.
       #
       # Detection-only on purpose: the fix is upstream in the Nest component or a VTherm
@@ -33,9 +33,10 @@ groups:
       # TypeError message alone gives exactly those 28 and is specific enough (bare
       # "TypeError" appears 128 times from unrelated faults).
       #
-      # THRESHOLD from measured clustering over 5 days, not convention: per-day counts were
+      # THRESHOLD from measured clustering over the retained 3.2-day journal (NOT 5 days, as
+      # an earlier version said): per-day counts were
       # 3 / 12 / 10 / 3 and the busiest single HOUR held only 4. So the ">3 in 1h" I first
-      # wrote would have fired on exactly ONE hour in five days. A 24h window catches the
+      # wrote would have fired on exactly ONE hour in that window. A 24h window catches the
       # sustained condition (the 10-12/day stretches) while ignoring an isolated one-off.
       # Note ANY occurrence means a setpoint was silently discarded, so the threshold is
       # about actionability, not about which failures matter.
@@ -52,35 +53,52 @@ groups:
           category: logs
           service: home-assistant
         annotations:
-          summary: "Home Assistant climate setpoints are failing silently ({{ $value }} in the last hour)"
+          summary: "Home Assistant climate setpoints are failing silently ({{ $value }} in the last 24 hours)"
           description: "climate.set_temperature is raising TypeError in the Nest component, so the requested temperature is NEVER APPLIED and nothing else reports a failure. Root cause is a range-vs-single setpoint mismatch: versatile_thermostat sends target_temp_high/low to a Nest that is not in a heat_cool mode. Check `journalctl -u home-assistant | grep climate.py`."
 
       # Generic unhandled-exception detector. The specific rule above exists because that
       # bug is known and quantified; this one catches the NEXT one. Deliberately broad --
       # any Traceback in HA means an integration or automation aborted mid-flight.
-      # Threshold measured against the pre-change baseline: ~1,046 error-shaped lines in 3
-      # days is ~15/hour, but most are warnings rather than tracebacks, so >10 tracebacks
-      # per hour indicates something genuinely wrong rather than routine noise.
+      # THRESHOLD AND WINDOW CORRECTED. My first version used >10 per [1h] with for:15m,
+      # derived from "~1,046 error-shaped lines in 3 days is ~15/hour". That average was
+      # taken over a violently bursty distribution and the traceback count itself was never
+      # measured. Measuring it: of 17 hours containing tracebacks, 15 held <=4 -- and the
+      # only two that crossed 10 held 129 and 89, and were EXACTLY the two hours with
+      # systemd restart activity for the unit. So the rule was a guaranteed false positive on
+      # the next `nixos-rebuild switch` that restarts Home Assistant.
+      #
+      # The fix exploits the burst SHAPE rather than raising the threshold (raising it is
+      # impossible -- restart bursts are far larger than any real signal). Those 129
+      # tracebacks span just 3 distinct minutes (56 at 20:36, 72 at 20:56), i.e. two
+      # ~1-minute bursts. With a [15m] window a single burst holds the count above threshold
+      # for only ~15 minutes and then rolls off, so a for:30m dwell cannot be satisfied by a
+      # restart. A genuinely sustained fault keeps it above threshold continuously and does
+      # fire. Non-restart hours peak at 4, so >10 in 15m retains wide margin.
       - alert: HomeAssistantUnhandledExceptions
         expr: |
           sum(count_over_time(
             {job="ha-nodered", unit="home-assistant.service"}
             |~ "Traceback \\(most recent call last\\)"
-            [1h]
+            [15m]
           )) > 10
-        for: 15m
+        for: 30m
         labels:
           severity: warning
           category: logs
           service: home-assistant
         annotations:
-          summary: "Home Assistant logged {{ $value }} tracebacks in the last hour"
+          summary: "Home Assistant logged {{ $value }} tracebacks in 15 minutes, sustained"
           description: "Unhandled exceptions in Home Assistant. Each one means an integration or automation aborted part-way, usually silently -- service calls that raise do not surface anywhere else. Check `journalctl -u home-assistant -n 200`."
 
       # Integration setup failures. This is the class that hid the 17-day-dead
       # mail_and_packages integration, whose config entry kept reporting "loaded" while all
-      # 26 of its entities sat unavailable. Setup retries DO log, but at priority 6, so they
-      # were dropped before this scrape existed.
+      # 26 of its entities sat unavailable.
+      # HONEST STATUS: this rule is PLAUSIBLE BUT UNVERIFIED. All three strings are real --
+      # confirmed present in the deployed homeassistant package source -- but NONE of them
+      # appears anywhere in the retained journal, at any priority. The mail_and_packages
+      # failure predates journal retention, so I cannot confirm which string that specific
+      # failure mode emits. An earlier version of this comment asserted "setup retries DO log
+      # at priority 6" as established fact; that was unsupported and is withdrawn.
       - alert: HomeAssistantIntegrationSetupFailing
         expr: |
           sum by (unit) (count_over_time(
@@ -97,16 +115,26 @@ groups:
           summary: "A Home Assistant integration is failing to set up"
           description: "Setup failure or retry logged in the last hour. A config entry can report 'loaded' while its entities are all unavailable, so this log signal is the reliable indicator. Check `journalctl -u home-assistant | grep -E 'Setup failed|Error setting up'`."
 
-      # Node-RED flow errors. The Pool tab has been failing every morning at 05:00 for
-      # three days ("OpenUV forecast missing or too short") because sensor.openuv_forecast
-      # is unavailable, and nothing alerted.
+      # Node-RED flow errors.
+      #
+      # THRESHOLD AND PATTERN CORRECTED, both were wrong. Measured over 8 days of journal:
+      # node-red emits only 171 lines total, of which 6 match (?i)(error|exception|failed),
+      # with a busiest hour of 4. So my ">5 per 1h" sat ABOVE the observed maximum and would
+      # never have fired. The pattern is fine -- node-red is simply near-silent -- so the
+      # threshold was the defect, and >0 is the correct choice for a service this quiet.
+      #
+      # The pattern also could not see the defect I cited to justify the rule. The Pool tab's
+      # "OpenUV forecast missing or too short" lines DO exist at 05:00 (2 on 07-26, 2 on
+      # 07-27, 1 on 07-28) but NONE of them contains error/exception/failed, and there are
+      # zero error-shaped node-red lines in hour 05 on any day. The alternation now includes
+      # that message explicitly.
       - alert: NodeRedFlowErrors
         expr: |
           sum(count_over_time(
             {job="ha-nodered", unit="node-red.service"}
-            |~ "(?i)(error|exception|failed)"
+            |~ "(?i)(error|exception|failed|missing or too short)"
             [1h]
-          )) > 5
+          )) > 0
         for: 15m
         labels:
           severity: warning

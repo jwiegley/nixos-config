@@ -83,7 +83,7 @@ groups:
       - alert: UPSBatteryRuntimeDegraded
         expr: |
           network_ups_tools_battery_runtime < 900
-          and on(instance,job) network_ups_tools_battery_charge >= 95
+          and on(instance,job,service) network_ups_tools_battery_charge >= 95
         for: 30m
         labels:
           severity: warning
@@ -108,7 +108,7 @@ groups:
           or network_ups_tools_ups_status{flag="SD"} == 1
           or (
             network_ups_tools_battery_charge < 50
-            and on(instance,job) network_ups_tools_ups_status{flag="OB"} == 1
+            and on(instance,job,service) network_ups_tools_ups_status{flag="OB"} == 1
           )
         for: 0s
         labels:
@@ -139,7 +139,14 @@ groups:
       # collecting nothing. This catches that specific misconfiguration, which is easy to
       # reintroduce because /metrics is the Prometheus default.
       - alert: UPSExporterServingNoUPSData
-        expr: up{job="nut"} == 1 and absent(network_ups_tools_ups_status)
+        # `and on() absent(...)` -- the `on()` is LOAD-BEARING and its absence made this rule
+        # DEAD. Bare `and` requires identical label sets on both sides, and absent() returns a
+        # series with an EMPTY label set while up{job="nut"} carries __name__/instance/job/
+        # service, so the intersection was always empty. Proven: `up{job="nut"}==1 and
+        # absent(nonexistent)` returns 0 series; adding `on()` returns 1. The rule that exists
+        # to catch the metrics_path regression could not fire, in the very commit that
+        # advertised catching that regression.
+        expr: up{job="nut"} == 1 and on() absent(network_ups_tools_ups_status)
         for: 15m
         labels:
           severity: warning

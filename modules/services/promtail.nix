@@ -237,15 +237,17 @@
         # write plain text to stdout with no "<N>" syslog prefix, so the consolidated
         # systemd-journal scrape above -- which drops priority 5-7 -- discarded 100% of their
         # output including every traceback. Measured over 3 days before this change:
-        #   home-assistant  12,276 of 12,279 lines at priority 6, containing 1,046
+        #   home-assistant  12,276 of 12,279 lines at priority 6, containing ~1,046
         #                   error-shaped lines (Error/Traceback/Exception/failed)
         #   node-red        144 of 145 at priority 6, 5 error-shaped
         # None of it reached Loki. That is why the HA climate.set_temperature TypeError
-        # (33 failures over 3 days, setpoints silently never applied) and the 17-day-dead
+        # (28 failures over 3.2 days, setpoints silently never applied) and the 17-day-dead
         # mail_and_packages integration were invisible to every log-based rule.
         #
         # matter-server is deliberately NOT included: it logs at priority 3, so it already
-        # passes the consolidated scrape. Verified -- 12,197 of 12,281 lines at priority 3.
+        # passes the consolidated scrape. Re-measured over the full journal: 27,494 of 27,662
+        # lines at priority 3 (99.4%). An earlier version of this comment said 12,197 of 12,281,
+        # which was a narrower window -- the load-bearing conclusion is unchanged.
         #
         # Same shape as the sshd and postgres scrapes above: same journal, action=keep on the
         # units of interest, and NO priority-drop stage.

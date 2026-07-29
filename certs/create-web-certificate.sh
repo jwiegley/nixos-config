@@ -62,7 +62,22 @@ echo "Output directory: $OUTPUT_DIR"
 echo -e "\n${YELLOW}Step 1: Generating private key...${NC}"
 if [ -f "$KEY_FILE" ]; then
     echo -e "${YELLOW}  Warning: Key file already exists. Backing up...${NC}"
-    cp "$KEY_FILE" "${KEY_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
+    KEY_BAK="${KEY_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$KEY_FILE" "$KEY_BAK"
+    # Lock the BACKUP down explicitly. Without this it inherits the invoking user's
+    # ownership and umask: an audit on 2026-07-29 found
+    # /var/lib/dovecot-certs/imap.vulcan.lan.key.bak.20250924-161750 sitting at
+    # 0640 johnw:users -- a copy of a TLS private key readable by an unprivileged
+    # login with no sudo. The script chmods the NEW key but never the backup.
+    chmod 600 "$KEY_BAK"
+    chown root:root "$KEY_BAK" 2>/dev/null || sudo chown root:root "$KEY_BAK"
+    # Bound the blast radius: keep only the 3 newest key backups. Retaining every
+    # historical private key indefinitely means one future permission mistake in this
+    # directory exposes years of keys at once, not one.
+    ls -1dt "${KEY_FILE}.bak."* 2>/dev/null | tail -n +4 | while read -r old_bak; do
+        echo "  Removing superseded key backup: $(basename "$old_bak")"
+        rm -f "$old_bak" 2>/dev/null || sudo rm -f "$old_bak"
+    done
 fi
 
 openssl genrsa -out "$KEY_FILE" 2048 2>/dev/null || {

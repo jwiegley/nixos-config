@@ -453,6 +453,19 @@ in
     "d /var/lib/dovecot-certs 0755 root root -"
     "d /var/lib/dovecot2 0755 dovecot2 dovecot2 -"
     "d /var/lib/dovecot 0755 root dovecot2 -"
+    # ENFORCE 0600 root:root on the passdb. `e` adjusts permissions on an EXISTING path
+    # and never creates or deletes, which is what we want -- this file is a
+    # hand-maintained credential store, not Nix-generated, so it must not be recreated
+    # or truncated by tmpfiles (see the CLAUDE.md warning about `D`).
+    #
+    # WHY: an audit on 2026-07-29 found it at 0640 johnw:users. It is dovecot's passdb
+    # (referenced twice below with `scheme=SHA512-CRYPT`), so it holds offline-crackable
+    # password hashes for the mail accounts -- and any process running as johnw, including
+    # agent processes, could read them without sudo. Verified safe to restrict: dovecot's
+    # `auth` process runs as ROOT (confirmed in the live process table), nothing outside
+    # this module references the path, and `doveadm user johnw` still resolves correctly
+    # after the change.
+    "e /var/lib/dovecot/users 0600 root root -"
     "d /var/lib/dovecot-fts 0755 dovecot2 dovecot2 -"
     # Sieve directories. Only global/rspamd is group-writable (0775
     # dovecot2:mail); the two parents above it are 0755 dovecot2:dovecot2.

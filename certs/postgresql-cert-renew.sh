@@ -129,8 +129,25 @@ echo -e "\n${YELLOW}Step 4: Installing certificates...${NC}"
 # Backup existing certificates if they exist
 if [ -f "$CERT_DIR/server.crt" ]; then
     echo "  Backing up existing certificates..."
-    cp "$CERT_DIR/server.crt" "$CERT_DIR/server.crt.bak.$(date +%Y%m%d-%H%M%S)"
-    [ -f "$CERT_DIR/server.key" ] && cp "$CERT_DIR/server.key" "$CERT_DIR/server.key.bak.$(date +%Y%m%d-%H%M%S)"
+    TS="$(date +%Y%m%d-%H%M%S)"
+    cp "$CERT_DIR/server.crt" "$CERT_DIR/server.crt.bak.$TS"
+    if [ -f "$CERT_DIR/server.key" ]; then
+        cp "$CERT_DIR/server.key" "$CERT_DIR/server.key.bak.$TS"
+        # Explicit, not inherited -- see the matching note in create-web-certificate.sh.
+        chmod 600 "$CERT_DIR/server.key.bak.$TS"
+    fi
+
+    # RETENTION, added 2026-07-29. There was none, and an audit found 13 accumulated
+    # server.key.bak.* files -- one per monthly renewal back to 2025-09-23, each a full
+    # copy of a then-live TLS private key, retained forever. All were mode 600 so there
+    # was no exposure, but it means a single future permission mistake in this directory
+    # leaks a year of keys rather than one. Keep the 3 newest of each kind.
+    for pattern in "$CERT_DIR/server.key.bak." "$CERT_DIR/server.crt.bak." ; do
+        ls -1dt "$pattern"* 2>/dev/null | tail -n +4 | while read -r old_bak; do
+            echo "  Removing superseded backup: $(basename "$old_bak")"
+            rm -f "$old_bak"
+        done
+    done
 fi
 
 # Install new certificate and key

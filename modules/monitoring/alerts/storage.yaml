@@ -260,6 +260,70 @@ groups:
           summary: "Restic repository has no snapshots"
           description: "Repository {{ $labels.repository }} has no snapshots at all"
 
+      # ===================================================================
+      # ARCHETYPE (a): SNAPSHOT AMPLIFICATION ON A BACKUP MIRROR
+      # ===================================================================
+      # Added 2026-07-28. This is one of the three silent failures the operator named:
+      # tank/Backups/PostgreSQL was holding ~1.7 TiB of snapshot residue for ~40 GiB of
+      # live data and NOTHING alerted, because every existing storage rule watches POOL
+      # capacity or absolute growth, never the relationship between a dataset's total
+      # `used` and its live `usedbydataset`.
+      #
+      # Why the rule is shaped like this, having disproved two simpler forms live:
+      #
+      #  1. NOT `used_by_snapshot_bytes` -- that metric DOES NOT EXIST on this host. The
+      #     zfs exporter emits only available/logical_used/quota/referenced/used/
+      #     used_by_dataset/written. So amplification has to be inferred as
+      #     used - usedbydataset, which is snapshots PLUS children.
+      #  2. NOT a bare ratio, and NOT a ratio with a size floor. Because the proxy folds in
+      #     CHILDREN, container datasets dominate it absurdly: measured live, tank/Models
+      #     shows a ratio of 99,160,352 and tank/Backups/Contracts 5,916,881, simply because
+      #     their own usedbydataset is near zero while `used` includes descendants. A
+      #     `used > 100GiB` floor does NOT fix this (all those containers are huge), and a
+      #     `usedbydataset > 1GiB` guard still lets tank/Backups through at 83.7. PromQL
+      #     cannot express "is a leaf dataset" -- that would need a used_by_children_bytes
+      #     metric the exporter does not provide.
+      #
+      # So the rule is scoped to the datasets where the invariant is actually MEANINGFUL:
+      # the flat rsync MIRRORS created by the 2026-06-10 conversion. For a mirror, live data
+      # and snapshot residue should stay within an order of magnitude, because rsync
+      # --checksum is supposed to let unchanged blocks be shared. A high ratio there means
+      # block sharing has stopped working. For an arbitrary dataset a high ratio can be
+      # perfectly legitimate (long retention over churny data), which is why this is NOT a
+      # fleet-wide rule.
+      #
+      # BOTH conditions are required, and each earns its place:
+      #   ratio > 10          -- the invariant is violated
+      #   wasted > 100 GiB    -- and it is worth acting on
+      # Measured live at authoring time, all three mirrors violate the RATIO but only one is
+      # actionable:
+      #   tank/Backups/PostgreSQL     ratio  43.7   wasted 1719.6 GiB  -> FIRES
+      #   tank/Backups/TechnitiumDNS  ratio 130.6   wasted   20.0 GiB  -> quiet (worst ratio
+      #                                                                  on the host, but
+      #                                                                  20 GiB is not worth
+      #                                                                  a page)
+      #   tank/Backups/NodeRED        ratio  15.9   wasted    0.0 GiB  -> quiet
+      # Ratio alone would have paged for 20 GiB; absolute waste alone would have missed the
+      # invariant entirely. Verified: the combined expression returns exactly 1 series.
+      #
+      # MAINTENANCE: adding a new flat-mirror dataset means adding it to the name regex.
+      # This is deliberate over a fleet-wide rule, for the container-dataset reason above.
+      - alert: BackupMirrorSnapshotAmplification
+        expr: |
+          (zfs_dataset_used_bytes{name=~"tank/Backups/(PostgreSQL|TechnitiumDNS|NodeRED)"}
+            - on(name,pool,instance,job) zfs_dataset_used_by_dataset_bytes) > 100*1024*1024*1024
+          and on(name,pool,instance,job)
+          (zfs_dataset_used_bytes{name=~"tank/Backups/(PostgreSQL|TechnitiumDNS|NodeRED)"}
+            / on(name,pool,instance,job) zfs_dataset_used_by_dataset_bytes) > 10
+        for: 1h
+        labels:
+          severity: warning
+          category: storage
+          service: restic
+        annotations:
+          summary: "Backup mirror {{ $labels.name }} is wasting {{ $value | humanize1024 }}B in snapshot residue"
+          description: "Dataset {{ $labels.name }} is a flat rsync mirror, so its snapshots should share blocks with live data. It is currently holding {{ $value | humanize1024 }}B more than its live size, at over 10x amplification -- meaning block sharing has stopped working. Usual cause: a large file rewritten in full on every run (an uncompressed pg_dump of a high-churn table defeats rsync --checksum), so each snapshot pins a near-complete copy. Check `zfs list -o name,used,usedbydataset,usedbysnapshots -r tank/Backups` and `zfs list -t snapshot -r <dataset>`."
+
       # UNIT ERROR FIXED 2026-07-28: this was off by 86,400x and could never fire.
       # `rate()` returns a PER-SECOND change, but the threshold 10737418240 is 10 GiB and
       # the annotation promises "per day" -- so the rule actually demanded 10 GiB/SECOND,

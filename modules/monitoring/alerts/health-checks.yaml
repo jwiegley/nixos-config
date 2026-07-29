@@ -82,13 +82,22 @@ groups:
       #     sync FAILURE by MbsyncLastSyncFailed but a silent stall was invisible. The
       #     negated selector below closes that for free.
       #
-      # `for: 15m`, not 5m. Reconstructing 2026-07-03 at 15s resolution (the deployed
-      # evaluation_interval), the post-outage >3600s breach spans were bia 300s, rbcca
-      # 315s and johnw 285s -- so `for: 5m` would have SPURIOUSLY FIRED on bia and rbcca,
-      # and the only reason the old rules never did is that johnw happened to miss the
-      # dwell by 15 seconds. 15m clears the worst observed breach with margin, at a cost
-      # of 10 extra minutes' detection latency against a 1h threshold (and 36h for
-      # assembly) -- negligible either way.
+      # `for: 15m`, not 5m -- a conservative choice, and the reasoning below is corrected
+      # from an earlier version of this comment that got it wrong.
+      # The TSDB facts: reconstructing 2026-07-03 at 15s resolution, the post-outage
+      # >3600s breach spans were bia 300s, rbcca 315s and johnw 285s.
+      # What an earlier version wrongly inferred: that `for: 5m` would therefore have
+      # SPURIOUSLY FIRED. Two things disprove that. (a) This group declares `interval: 5m`
+      # (line 3), which OVERRIDES the global 15s evaluation_interval -- so the rule is
+      # evaluated every 300s, 20x less often than that reasoning assumed, and a 300s
+      # breach is observed at most once. (b) Empirically, bia ALREADY had a `for: 5m` rule
+      # at this exact >3600 threshold and ALERTS{alertname="MbsyncNotRunRecently"} has
+      # ZERO samples in ANY state (pending or firing) across 28 days -- while the same
+      # group was demonstrably recording (BackupNotRunRecently logged 748 samples on
+      # 07-03). rbcca could not have fired either: it had no rule at all.
+      # So 15m is retained for margin, not because 5m was proven harmful: 4 consecutive
+      # evaluations at this interval, costing 10 extra minutes against a 1h threshold
+      # (36h for assembly) -- negligible either way.
       #
       # The two branches are per-account thresholds, keyed off the ONE account whose sync
       # cadence is daily rather than sub-hourly. Adding a new account inherits the 1h

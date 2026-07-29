@@ -35,17 +35,16 @@ let
           description: "The aria2 RPC interface is not responding to queries. Check if the service is running and the RPC secret is correctly configured."
 
       # Alert if there are many error downloads
-      - alert: Aria2HighErrorRate
-        expr: aria2_error_downloads > 10
-        for: 10m
-        labels:
-          severity: warning
-          service: aria2
-        annotations:
-          summary: "aria2 has many failed downloads"
-          description: "aria2 has {{ $value }} failed downloads. Check the aria2 web UI at https://aria.vulcan.lan to investigate errors."
-
-      # Alert if download queue is backing up
+      # Aria2HighErrorRate DELETED 2026-07-28: it selected `aria2_error_downloads`, which
+      #   this exporter does not publish -- 0 series now AND 0 across 30 days, while the
+      #   exporter is demonstrably healthy (aria2_up=1, up{job="aria2"}=1) and publishing 8
+      #   other aria2_* metrics. So this was a wrong metric NAME, not a dead service.
+      #   No replacement exists: the full published set is aria2_up, aria2_version_info,
+      #   aria2_download_speed_bytes, aria2_upload_speed_bytes, aria2_active_downloads,
+      #   aria2_waiting_downloads, aria2_stopped_downloads and aria2_stopped_total_downloads
+      #   -- none of which distinguishes an errored download from a completed one
+      #   ("stopped" covers both), so an error RATE cannot be derived. Reinstating this
+      #   needs an exporter change to publish an error counter first.
       - alert: Aria2QueueBacklog
         expr: aria2_waiting_downloads > 50
         for: 15m
@@ -79,25 +78,15 @@ let
           description: "aria2 download speed is {{ $value | humanize }}B/s with active downloads. This may indicate network issues, slow servers, or bandwidth limitations."
 
       # Alert if exporter is behind (stale metrics)
-      - alert: Aria2ExporterStale
-        expr: time() - aria2_exporter_last_scrape_timestamp_seconds > 300
-        for: 5m
-        labels:
-          severity: warning
-          service: aria2
-        annotations:
-          summary: "aria2 metrics exporter is stale"
-          description: "The aria2 Prometheus exporter hasn't updated metrics in {{ $value | humanizeDuration }}. Check 'systemctl status aria2-exporter.service'"
-
-      # Alert if AriaNG web UI is not accessible
-      #
-      # 2026-07-28: job label repaired from "blackbox-https" (hyphen) to
-      # "blackbox_https_local". The hyphenated job never existed, so this rule could not
-      # fire. Note the underscore job `blackbox_https` is a DIFFERENT job carrying only
-      # https://google.com -- a naive hyphen-to-underscore swap would have left it dead.
-      # Backtested: would have fired on the real 2026-07-03 18:01-18:46 UTC outage (~49
-      # contiguous minutes of probe_success==0 at 1m scrape cadence vs this 5m dwell), and
-      # has 0 breach samples in the last 7 days.
+      # Aria2ExporterStale DELETED 2026-07-28: it selected
+      #   `aria2_exporter_last_scrape_timestamp_seconds`, which does not exist -- 0 series
+      #   now and 0 across 30 days. Nor is a replacement needed: this exporter is scraped
+      #   as its own Prometheus job, so `up{job="aria2"}` already distinguishes "not
+      #   responding" and is what Aria2ServiceDown / Aria2RpcNotResponding above use. The
+      #   "up but silently frozen" case that a last-scrape timestamp would catch does not
+      #   apply to an HTTP-scraped exporter: if it cannot answer, the scrape fails and `up`
+      #   goes to 0. (Textfile collectors DO need such a timestamp -- that is why
+      #   TextfileCollectorStale exists -- but this is not one.)
       - alert: Aria2WebUiDown
         expr: probe_success{job="blackbox_https_local", instance="https://aria.vulcan.lan"} == 0
         for: 5m

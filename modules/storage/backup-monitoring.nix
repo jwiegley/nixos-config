@@ -35,7 +35,7 @@ let
   #
   #   count(systemd_unit_state)                             -> no data
   #   count(systemd_service_last_trigger_timestamp_seconds) -> no data
-  #   count(node_systemd_unit_state)                        -> ~3055 series
+  #   count(node_systemd_unit_state)                        -> ~3065 series (fluctuates)
   #
   # The `systemd_*` metric family simply does not exist on this host; node-exporter
   # publishes `node_systemd_*`. BackupNotRunning additionally selected on a `unit` label,
@@ -52,8 +52,11 @@ let
   # health_check_alerts), verified 9 series each:
   #   BackupServiceFailed   -> backup_service_failed == 1
   #   BackupNotRunRecently  -> (time() - backup_last_run_timestamp_seconds) > 129600
-  #                            (identical 36h/129600s threshold)
-  #   BackupTimerInactive   -> backup_timer_active == 0
+  #                            (identical 36h/129600s threshold, but note it measures the
+  #                            SERVICE's last run rather than the TIMER's last trigger --
+  #                            not literally like-for-like, and the stronger signal)
+  #   BackupTimerInactive   -> backup_timer_active == 0   (dwell 5m -> 10m, the one
+  #                            dwell that changed; +5min latency on a 36h-cadence signal)
   # A third BackupServiceFailed also exists in group systemd_service_health over
   # node_systemd_unit_state, so that condition is doubly covered.
 in

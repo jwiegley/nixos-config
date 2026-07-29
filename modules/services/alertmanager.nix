@@ -399,12 +399,25 @@
         #     modules/storage/backup-monitoring.nix); the live equivalent is
         #     BackupNotRunRecently in health-checks.yaml.
         #  2. Even had it fired, `equal = [ "name" ]` could never have matched. The old
-        #     target's expr selected a `unit` label; nothing in that pair carried `name`
-        #     on both sides. Alertmanager silently drops an inhibition whose `equal` label
-        #     is absent, so this produced no error and no effect.
-        # Both live alerts derive from the backup_* textfile metrics, which carry
-        # `backup` (e.g. backup="Audio") across all 9 repositories -- verified -- so
-        # `equal = [ "backup" ]` joins them correctly and per-repository.
+        #     target's expr selected a `unit` label, so `name` was PRESENT on the source
+        #     (restic-backups-X.service) and ABSENT on the target. Precise mechanism:
+        #     Alertmanager compares source.Labels[n] against target.Labels[n] on a Go map
+        #     where a missing key yields "", so a label absent from BOTH sides compares
+        #     equal and the inhibition WOULD apply -- it was the one-sided mismatch that
+        #     defeated it, not the mere absence. Either way: no error, no effect.
+        # `equal = [ "backup" ]` is correct, but note precisely WHICH source serves it.
+        # There are TWO live alerts named BackupServiceFailed:
+        #   health_check_alerts    `backup_service_failed == 1`              for=300s, HAS `backup`
+        #   systemd_service_health `node_systemd_unit_state{...} == 1`       for=60s,  has `name`, NOT `backup`
+        # Only the first can satisfy this join. That is fine -- Alertmanager scans all
+        # cached source alerts rather than just the first alertname match, so the
+        # label-less variant does not block the working one -- but it has two consequences
+        # worth knowing: the target is UNINHIBITED during the 60s-300s window when only the
+        # faster source has fired, and the pair co-fires rarely in practice because the
+        # exporter refreshes backup_last_run_timestamp_seconds from the unit's activation
+        # timestamps on EVERY attempt, so a repeatedly-failing-but-still-triggering backup
+        # keeps a fresh last-run. The inhibition mainly engages in the "service failed AND
+        # timer stopped" case.
         {
           source_match = {
             alertname = "BackupServiceFailed";

@@ -294,8 +294,15 @@ in
   # directory glob in monitoring/services/alerting.nix, so it was being loaded TWICE and
   # every rule in it evaluated twice -- directly observable in the live rules API, where
   # health_check_alerts' BackupServiceFailed and BackupNotRunRecently each appeared as two
-  # separate entries. Duplicate evaluation also inflated the total rule count and doubled
-  # the notification volume for anything in this file.
+  # separate entries. health-checks.yaml contains TWO groups -- health_check_alerts (12
+  # rules) and certificate_alerts (7) -- so 19 rules were being evaluated twice, which is
+  # the entire 534->510 delta apart from the 3 deleted backup rules and the 2 absorbed by
+  # the mbsync consolidation.
+  # NOTE, corrected: this did NOT affect the `certificates` group, which lives in
+  # certificates.yaml and was never double-loaded -- only groups inside the one file listed
+  # here were shadowed. And it did NOT double NOTIFICATION volume: both copies wrote into
+  # the SAME series (10 distinct label sets, not 20), so identical Alertmanager
+  # fingerprints deduplicated to one notification. The waste was evaluation, not paging.
   #
   # The glob in alerting.nix is now the single inclusion path for everything under
   # monitoring/alerts/. Do NOT re-add individual files here; add them to that directory

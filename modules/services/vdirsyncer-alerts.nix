@@ -57,17 +57,14 @@ let
           description: "No collections are being synced by vdirsyncer. This may indicate a discovery issue or authentication problem. Run 'sudo -u vdirsyncer vdirsyncer --config /etc/vdirsyncer/config discover' to troubleshoot."
 
       # Alert if sync duration is unusually long (potential performance issue)
-      - alert: VdirsyncerSlowSync
-        expr: vdirsyncer_last_sync_duration_seconds > 300
-        for: 5m
-        labels:
-          severity: warning
-          service: vdirsyncer
-        annotations:
-          summary: "vdirsyncer sync is taking unusually long"
-          description: "The last vdirsyncer sync took {{ $value }} seconds (over 5 minutes). This may indicate network issues, large data sync, or service problems."
-
-      # Alert if vdirsyncer status service is down
+      # VdirsyncerSlowSync DELETED 2026-07-28: it selected
+      #   `vdirsyncer_last_sync_duration_seconds`, which is not published -- 0 series now
+      #   and 0 across 30 days, despite a module comment claiming otherwise. The exporter
+      #   publishes only vdirsyncer_last_sync_timestamp, vdirsyncer_sync_healthy,
+      #   vdirsyncer_collections_total and vdirsyncer_sync_pairs_total, so sync DURATION
+      #   cannot be derived at all. VdirsyncerNotSyncing / VdirsyncerNotSyncingCritical
+      #   already cover the outcome that matters (sync not completing), which is the
+      #   symptom a slow sync would eventually produce.
       - alert: VdirsyncerStatusServiceDown
         expr: up{job="vdirsyncer"} == 0
         for: 5m

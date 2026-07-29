@@ -112,18 +112,18 @@ let
           description: "{{ $value | humanizePercentage }} of repositories ({{ query \"git_workspace_stale_repos_total\" | first | value }}/{{ query \"git_workspace_repos_total\" | first | value }}) haven't been updated in over 3 days. This indicates a widespread sync problem. Check if the service is running properly and verify network/GitHub connectivity."
 
       # Alert if specific critical repos are stale (>7 days old)
-      - alert: GitWorkspaceImportantRepoStale
-        expr: git_workspace_repo_age_seconds{repository=~"github/jwiegley/.*"} > 604800
-        for: 1h
-        labels:
-          severity: warning
-          service: git-workspace-archive
-          repository: "{{ $labels.repository }}"
-        annotations:
-          summary: "Important repository {{ $labels.repository }} is stale"
-          description: "Repository {{ $labels.repository }} hasn't been updated in {{ $value | humanizeDuration }} (over 7 days). This is unusual for a frequently-updated repository. Verify the repository still exists on GitHub and check for sync errors."
-
-      # Alert if service is running but state file wasn't created
+      # GitWorkspaceImportantRepoStale DELETED 2026-07-28: it selected
+      #   repository=~"github/jwiegley/.*", and NO git_workspace_* metric carries a
+      #   `repository` label at all -- every one of the 9 published series is an aggregate
+      #   (repos_total=634, repos_successful, repos_failed, stale_repos_total,
+      #   last_sync_timestamp_seconds, sync_duration_seconds, scrape_*). A per-repository
+      #   selector can therefore never match, so this rule was structurally incapable of
+      #   firing rather than merely mis-scoped.
+      #   Per-repo staleness cannot be expressed against this exporter. The aggregate is
+      #   already covered by GitWorkspaceManyStaleRepos and
+      #   GitWorkspaceCriticallyManyStaleRepos over git_workspace_stale_repos_total, so
+      #   nothing is lost except the ability to name WHICH repo -- which would require the
+      #   exporter to emit per-repository series.
       - alert: GitWorkspaceNoStateFile
         expr: absent(git_workspace_last_sync_timestamp_seconds) or git_workspace_last_sync_timestamp_seconds == 0
         for: 2h

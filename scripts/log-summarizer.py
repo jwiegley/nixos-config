@@ -733,7 +733,12 @@ class AlertHistory:
     """
 
     PROM = "http://127.0.0.1:9090"
-    STEP_SEC = 300  # 5-minute resolution: 2016 points over 7d, well inside Prometheus limits
+    # 60s, NOT 300s. At a 5-minute step this section SILENTLY LOST short-lived alerts,
+    # including a CRITICAL one: CloudflaredTunnelDegraded and HermesAskFailing are both
+    # visible at a 1-minute step and absent at 5 minutes. A section whose entire purpose is
+    # surfacing untriaged alerts must not drop a critical because of sampling coarseness.
+    # 60s over 7d is 10,080 points per series, comfortably inside Prometheus' 11,000 limit.
+    STEP_SEC = 60
 
     def __init__(self, days: int = 7, prom: Optional[str] = None):
         self.days = days
@@ -778,6 +783,10 @@ class AlertHistory:
             prev_t = None
             for t, _v in pts:
                 t = int(t)
+                # <= 2 steps tolerates ONE missing grid point. Consequence to know: two
+                # runs separated by a single missing sample are MERGED, so "longest
+                # unbroken run" is a slight over-estimate and the run count a slight
+                # under-estimate. Preferred over splitting on every scrape hiccup.
                 if prev_t is not None and t - prev_t <= self.STEP_SEC * 2:
                     cur += 1
                 else:
@@ -785,14 +794,18 @@ class AlertHistory:
                 best = max(best, cur)
                 prev_t = t
             agg["runs"] = max(agg["runs"], best)
-            if best * self.STEP_SEC >= 4 * 3600:
-                long_runs.append((name, sev, best * self.STEP_SEC))
+            if max(best - 1, 0) * self.STEP_SEC >= 4 * 3600:
+                long_runs.append((name, sev, max(best - 1, 0) * self.STEP_SEC))
 
+        # Durations use (samples - 1) * STEP_SEC, which is the wall span between the first
+        # and last sample of a run. Using samples * STEP_SEC (as the first version did)
+        # over-counts every run by exactly one step -- negligible for a 22-hour outage but
+        # dominant for short alerts, where it reported 5 minutes for a single sample.
         rows = [
             {
                 "alertname": n, "severity": sv,
-                "total_hours": a["samples"] * self.STEP_SEC / 3600.0,
-                "longest_hours": a["runs"] * self.STEP_SEC / 3600.0,
+                "total_hours": max(a["samples"] - 1, 0) * self.STEP_SEC / 3600.0,
+                "longest_hours": max(a["runs"] - 1, 0) * self.STEP_SEC / 3600.0,
             }
             for (n, sv), a in fired.items()
         ]

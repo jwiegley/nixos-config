@@ -421,10 +421,26 @@ groups:
   # unnoticed, and it is why its 22.6-hour outage on 2026-07-23 (CopypartyDown, critical)
   # left exactly one line in its journal and was never triaged.
   #
-  # These rules deliberately do NOT try to catch outages -- HostUnreachable, the per-service
-  # *Down rules and the blackbox probes already do that, faster. They catch the DIFFERENT
-  # failure: something that is chronically unreliable rather than acutely broken. Hence a 7d
-  # window, a 1h dwell (a chronic condition needs no fast dwell) and warning severity.
+  # PREMISE CORRECTED 2026-07-29. An earlier version of this comment claimed these rules
+  # catch failures "too short to trip the acute rules", and cited copyparty and openclaw as
+  # examples. That was FALSE, and measuring it properly is instructive:
+  #   copyparty's 13.49% unavailability is ONE contiguous 22.65-hour outage (07-23 07:02Z ->
+  #     07-24 05:41Z), not many short ones. CopypartyDown (critical, for:5m) DID fire --
+  #     2,709 firing samples in the window.
+  #   openclaw /health's 5.84% is ONE contiguous 9.73-hour outage plus ~4 minutes of blips.
+  #     OpenClawHttpHealthDown (critical, for:1m) DID fire -- 88 firing samples.
+  # So the acute coverage worked. The actual defect was that a CRITICAL alert fired for 22.65
+  # hours and nobody triaged it -- a delivery/attention problem, not a detection gap, and it
+  # is addressed by the alert-history section of the daily report (scripts/log-summarizer.py),
+  # not here.
+  #
+  # These rules are therefore kept on a NARROWER and honest justification: they are a
+  # weekly-scale BACKSTOP. They answer "what has been unreliable over a week", which no
+  # instantaneous rule answers, and they will catch a genuinely flapping service whose
+  # individual failures are too short to trip an acute dwell -- a real class, just not the one
+  # the current two matches demonstrate. Consequence to expect: both will fire as LAGGING
+  # duplicates of alerts already delivered, until the 07-23/07-24 samples age out of the 7d
+  # window. That is the honest cost of a 7-day lookback.
   #
   # Threshold 98% over 7 days, chosen from the measured distribution rather than picked:
   #   scraped jobs   copyparty 86.51%  |  next worst darwin-hera 99.95%  -> 1 match
@@ -436,8 +452,29 @@ groups:
   - name: chronic_availability
     interval: 15m
     rules:
+      # COVERAGE GUARD, and note it is a RATIO not an absolute count -- that detail is the
+      # whole point. avg_over_time normalises over PRESENT samples only, which gives two
+      # failure modes: a newly-added target with a short, partly-down life reports a low
+      # average and pages spuriously, and a DECOMMISSIONED target keeps matching for up to
+      # 7 days after its last sample.
+      #
+      # My first attempt at the guard used `count_over_time(up[7d]) > 0.8 * 40320`, taking
+      # 40320 = 7d/15s from the global scrape_interval. That was WRONG and silenced the rule
+      # for most targets, because scrape intervals vary per job -- measured: copyparty 20,149
+      # samples/7d (30s), all blackbox jobs 10,072 (60s), node-red 40,302 (15s),
+      # critical-services-health 60,449 (faster than 15s). A fixed count excluded copyparty,
+      # the rule's only real finding.
+      #
+      # The 7d:1d ratio is self-calibrating to whatever interval a job actually uses: a target
+      # present all week has ~7x its 1-day sample count regardless of interval. 5.6 = 0.8*7,
+      # tolerating restarts. Verified per case: copyparty passes, node-red passes, the `nut`
+      # job added 30 minutes earlier correctly FAILS, and a decommissioned target drops out
+      # because its 1d count is absent so the join finds no match.
       - alert: ServiceChronicallyUnavailable
-        expr: avg_over_time(up[7d]) < 0.98
+        expr: |
+          avg_over_time(up[7d]) < 0.98
+          and on(job,instance)
+          (count_over_time(up[7d]) / on(job,instance) count_over_time(up[1d])) > 5.6
         for: 1h
         labels:
           severity: warning
@@ -445,21 +482,28 @@ groups:
           service: availability
         annotations:
           summary: "{{ $labels.job }} has only {{ $value | humanizePercentage }} availability over 7 days"
-          description: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) has been up only {{ $value | humanizePercentage }} of the last 7 days. This is a CHRONIC reliability problem rather than an outage -- short repeated failures that individually never last long enough to trip the acute *Down rules. Healthy targets on this host sit above 99.9%."
+          description: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) has been up only {{ $value | humanizePercentage }} of the last 7 days. Healthy targets here sit above 99.9%. NOTE this is a weekly BACKSTOP, not proof that acute alerting missed anything -- check whether a *Down alert already fired and went untriaged before assuming this is a new discovery. Intermittent-by-design targets (laptops, sleepy devices) should be excluded rather than tolerated."
 
       # host_group iot/iot-noping/iot-quiet excluded for the same reason they are excluded
       # from HostUnreachable: those devices sleep by design and would sit permanently below
       # any availability floor.
-      # TL-WPA8630.lan excluded because it is effectively DEAD, not chronically flaky: 0.28%
-      # over 7 days. Including it would mean a permanently-firing rule, which trains you to
-      # ignore the alert -- the precise failure mode this whole effort exists to remove. That
-      # powerline adapter is already excluded from HighLatency/CriticalLatency by IP, so this
-      # is consistent precedent rather than a new carve-out. It needs an operator decision
-      # (repair or remove from the target list); it is deliberately NOT laundered into an
-      # alert that fires forever.
+      #
+      # A TL-WPA8630 carve-out was REMOVED 2026-07-29: it rested on a false premise. I had
+      # read 0.28% availability as "the device is effectively dead". It is not -- the powerline
+      # adapter is probed by IP LITERAL (its DHCP name does not resolve; see
+      # blackbox-monitoring.nix) and that target reads 99.978% over both 7d and 30d. The 0.28%
+      # belongs to a RETIRED hostname-labelled series that stopped being scraped on 07-22, and
+      # which the coverage guard below now excludes automatically. The carve-out would also
+      # have become dead config on its own once those stale samples aged out.
+      #
+      # Coverage guard, same self-calibrating 7d:1d ratio as rule A -- and it is what makes
+      # the removed TL-WPA8630 carve-out unnecessary: that retired hostname series has stale
+      # 7d samples but none in the last day, so the join drops it automatically. Verified.
       - alert: ProbeTargetChronicallyFailing
         expr: |
-          avg_over_time(probe_success{host_group!~"iot|iot-noping|iot-quiet",instance!~".*TL-WPA8630.*"}[7d]) < 0.98
+          avg_over_time(probe_success{host_group!~"iot|iot-noping|iot-quiet"}[7d]) < 0.98
+          and on(job,instance)
+          (count_over_time(probe_success[7d]) / on(job,instance) count_over_time(probe_success[1d])) > 5.6
         for: 1h
         labels:
           severity: warning
@@ -467,7 +511,7 @@ groups:
           service: availability
         annotations:
           summary: "Probe {{ $labels.instance }} succeeded only {{ $value | humanizePercentage }} of the last 7 days"
-          description: "Blackbox probe {{ $labels.instance }} (job {{ $labels.job }}) has succeeded only {{ $value | humanizePercentage }} of the last 7 days. Chronic unreliability, not an outage -- the acute probe rules never fired because no single failure lasted long enough. Healthy probe targets here sit above 99.85%."
+          description: "Blackbox probe {{ $labels.instance }} (job {{ $labels.job }}) has succeeded only {{ $value | humanizePercentage }} of the last 7 days. Healthy probe targets here sit above 99.85%. NOTE this is a weekly BACKSTOP: check whether an acute probe alert already fired and went untriaged before treating this as a new finding."
 
   - name: probe_latency
     rules:

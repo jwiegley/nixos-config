@@ -280,9 +280,13 @@ groups:
       #     shows a ratio of 99,160,352 and tank/Backups/Contracts 5,916,881, simply because
       #     their own usedbydataset is near zero while `used` includes descendants. A
       #     `used > 100GiB` floor does NOT fix this (all those containers are huge), and a
-      #     `usedbydataset > 1GiB` guard still lets tank/Backups through at 83.7. PromQL
-      #     cannot express "is a leaf dataset" -- that would need a used_by_children_bytes
-      #     metric the exporter does not provide.
+      #     `usedbydataset > 1GiB` guard still lets tank/Backups through at 83.7.
+      #     CORRECTION 2026-07-29: an earlier version of this comment claimed PromQL "cannot
+      #     express is-a-leaf-dataset". That is FALSE -- the container set is derivable with
+      #     label_replace(..., "name", "$1", "name", "(.+)/[^/]+") and removable with
+      #     `unless on(name)`, using only metrics that exist. The narrow scoping below is kept
+      #     for the OTHER reason given (a high ratio is legitimate on many datasets, so this
+      #     invariant is only meaningful for mirrors), not because it was impossible.
       #
       # So the rule is scoped to the datasets where the invariant is actually MEANINGFUL:
       # the flat rsync MIRRORS created by the 2026-06-10 conversion. For a mirror, live data
@@ -299,7 +303,11 @@ groups:
       # actionable:
       #   tank/Backups/PostgreSQL     ratio  43.7   wasted 1719.6 GiB  -> FIRES
       #   tank/Backups/TechnitiumDNS  ratio 130.6   wasted   20.0 GiB  -> quiet (worst ratio
-      #                                                                  on the host, but
+      #                                                                  among the three
+      #                                                                  MIRRORS -- not on the
+      #                                                                  host; container
+      #                                                                  datasets reach
+      #                                                                  99,160,352 -- but
       #                                                                  20 GiB is not worth
       #                                                                  a page)
       #   tank/Backups/NodeRED        ratio  15.9   wasted    0.0 GiB  -> quiet
@@ -308,6 +316,18 @@ groups:
       #
       # MAINTENANCE: adding a new flat-mirror dataset means adding it to the name regex.
       # This is deliberate over a fleet-wide rule, for the container-dataset reason above.
+      # Known blind spot from that choice: tank/iCloud currently sits at ratio 14.0 with
+      # 64.4 GiB of waste -- a leaf the regex will never see, and the next candidate to cross
+      # the 100 GiB threshold.
+      #
+      # KNOWN LIMITATION of the two ANDed conditions: because both must hold, the rule goes
+      # SILENT if the ratio falls below 10 while the waste stays high. Concretely, with
+      # today's ~1.76 TiB used, once live data exceeds roughly 176 GiB the ratio drops under
+      # 10 and this stops firing with ~1.58 TiB of residue still present. The absolute-waste
+      # condition can never page on its own. Accepted for now because the ratio is what
+      # distinguishes broken block-sharing from a legitimately large dataset, but if the
+      # PostgreSQL dump grows substantially this needs revisiting -- a separate
+      # absolute-waste-only rule at a much higher floor would cover the gap.
       - alert: BackupMirrorSnapshotAmplification
         expr: |
           (zfs_dataset_used_bytes{name=~"tank/Backups/(PostgreSQL|TechnitiumDNS|NodeRED)"}

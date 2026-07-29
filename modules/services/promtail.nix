@@ -231,6 +231,64 @@
           ];
         }
 
+        # Home Assistant + Node-RED journal scrape (application error visibility).
+        #
+        # Added 2026-07-29. Both services log EVERYTHING at priority 6 (info) because they
+        # write plain text to stdout with no "<N>" syslog prefix, so the consolidated
+        # systemd-journal scrape above -- which drops priority 5-7 -- discarded 100% of their
+        # output including every traceback. Measured over 3 days before this change:
+        #   home-assistant  12,276 of 12,279 lines at priority 6, containing 1,046
+        #                   error-shaped lines (Error/Traceback/Exception/failed)
+        #   node-red        144 of 145 at priority 6, 5 error-shaped
+        # None of it reached Loki. That is why the HA climate.set_temperature TypeError
+        # (33 failures over 3 days, setpoints silently never applied) and the 17-day-dead
+        # mail_and_packages integration were invisible to every log-based rule.
+        #
+        # matter-server is deliberately NOT included: it logs at priority 3, so it already
+        # passes the consolidated scrape. Verified -- 12,197 of 12,281 lines at priority 3.
+        #
+        # Same shape as the sshd and postgres scrapes above: same journal, action=keep on the
+        # units of interest, and NO priority-drop stage.
+        {
+          job_name = "ha-nodered";
+          journal = {
+            json = true;
+            max_age = "5m"; # Match the main journal scrape window
+            labels = {
+              job = "ha-nodered";
+              host = "vulcan";
+            };
+          };
+          relabel_configs = [
+            # Keep ONLY these two units so nothing else is duplicated into Loki.
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              regex = "(home-assistant|node-red)\\.service";
+              action = "keep";
+            }
+            {
+              source_labels = [ "__journal__systemd_unit" ];
+              target_label = "unit";
+            }
+            {
+              source_labels = [ "__journal__hostname" ];
+              target_label = "hostname";
+            }
+            {
+              source_labels = [ "__journal_priority" ];
+              target_label = "priority";
+            }
+            {
+              source_labels = [ "__journal_syslog_identifier" ];
+              target_label = "syslog_identifier";
+            }
+            {
+              source_labels = [ "__journal__comm" ];
+              target_label = "process";
+            }
+          ];
+        }
+
         # PostgreSQL authentication journal scrape (security monitoring)
         # postgresql.service logs to the journal (StandardOutput=journal,
         # StandardError=inherit), but its stderr lines carry NO sd-daemon

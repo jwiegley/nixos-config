@@ -410,6 +410,65 @@ groups:
           summary: "Public edge {{ $labels.instance }} is unreachable"
           description: "Public-tunnel probe to {{ $labels.instance }} (via cloudflared) has been failing for more than 3 minutes — the public path (Cloudflare edge / tunnel / origin nginx / cert) is broken."
 
+  # ===================================================================
+  # ARCHETYPE (5): CHRONIC AVAILABILITY
+  # ===================================================================
+  # Added 2026-07-28. Before this, NOT ONE of the ~500 rules on this host used
+  # avg_over_time() on `up` or `probe_success` -- verified by scanning every rule
+  # expression. Every availability rule was instantaneous with a short dwell, which means a
+  # service that is down 13% of the time but never for more than a few minutes at a stretch
+  # was completely invisible. That is how copyparty sat at 86.5% weekly availability
+  # unnoticed, and it is why its 22.6-hour outage on 2026-07-23 (CopypartyDown, critical)
+  # left exactly one line in its journal and was never triaged.
+  #
+  # These rules deliberately do NOT try to catch outages -- HostUnreachable, the per-service
+  # *Down rules and the blackbox probes already do that, faster. They catch the DIFFERENT
+  # failure: something that is chronically unreliable rather than acutely broken. Hence a 7d
+  # window, a 1h dwell (a chronic condition needs no fast dwell) and warning severity.
+  #
+  # Threshold 98% over 7 days, chosen from the measured distribution rather than picked:
+  #   scraped jobs   copyparty 86.51%  |  next worst darwin-hera 99.95%  -> 1 match
+  #   blackbox       openclaw /health 94.16%  |  next worst 99.86%       -> 1 match
+  # So 98% sits in a wide empty band -- everything healthy is above 99.85% and the two real
+  # offenders are below 95%. Verified live: rule A returns exactly copyparty, rule B exactly
+  # openclaw. Rule B is threshold-insensitive between 95% and 99%, confirming openclaw is a
+  # genuine outlier and not a boundary artefact.
+  - name: chronic_availability
+    interval: 15m
+    rules:
+      - alert: ServiceChronicallyUnavailable
+        expr: avg_over_time(up[7d]) < 0.98
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+          service: availability
+        annotations:
+          summary: "{{ $labels.job }} has only {{ $value | humanizePercentage }} availability over 7 days"
+          description: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) has been up only {{ $value | humanizePercentage }} of the last 7 days. This is a CHRONIC reliability problem rather than an outage -- short repeated failures that individually never last long enough to trip the acute *Down rules. Healthy targets on this host sit above 99.9%."
+
+      # host_group iot/iot-noping/iot-quiet excluded for the same reason they are excluded
+      # from HostUnreachable: those devices sleep by design and would sit permanently below
+      # any availability floor.
+      # TL-WPA8630.lan excluded because it is effectively DEAD, not chronically flaky: 0.28%
+      # over 7 days. Including it would mean a permanently-firing rule, which trains you to
+      # ignore the alert -- the precise failure mode this whole effort exists to remove. That
+      # powerline adapter is already excluded from HighLatency/CriticalLatency by IP, so this
+      # is consistent precedent rather than a new carve-out. It needs an operator decision
+      # (repair or remove from the target list); it is deliberately NOT laundered into an
+      # alert that fires forever.
+      - alert: ProbeTargetChronicallyFailing
+        expr: |
+          avg_over_time(probe_success{host_group!~"iot|iot-noping|iot-quiet",instance!~".*TL-WPA8630.*"}[7d]) < 0.98
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+          service: availability
+        annotations:
+          summary: "Probe {{ $labels.instance }} succeeded only {{ $value | humanizePercentage }} of the last 7 days"
+          description: "Blackbox probe {{ $labels.instance }} (job {{ $labels.job }}) has succeeded only {{ $value | humanizePercentage }} of the last 7 days. Chronic unreliability, not an outage -- the acute probe rules never fired because no single failure lasted long enough. Healthy probe targets here sit above 99.85%."
+
   - name: probe_latency
     rules:
       # Generic internal-vhost latency. probe_duration_seconds for the local

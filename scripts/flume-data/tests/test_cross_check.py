@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from flume_data import cross_check
 from flume_data.cross_check import (
     CategoryComparison,
     Tolerances,
@@ -438,3 +440,86 @@ def test_build_daily_breakdown_local_day_totals_and_real_categories():
     assert all("[10m]" not in c[0] for c in calls)
     # every read is anchored at the local-midnight reset = 07:00 UTC (PDT June)
     assert all(c[2].hour == 7 for c in cd)
+
+
+# ---------------------------------------------------------------------------
+# Degradation tally (added 2026-07-28)
+#
+# Before this, every read helper caught broadly, returned 0.0, and run() returned 0
+# unconditionally -- so the unit reported success no matter how much of the check had
+# been skipped, and FlumeCrossCheckFailed could never fire even though it is correctly
+# wired to $SERVICE_RESULT. A failed VM read also became a FABRICATED zero that the
+# comparison treated as real data. These tests pin the fix.
+# ---------------------------------------------------------------------------
+
+
+def test_degraded_records_and_prints(capsys):
+    """_degraded() both tallies and echoes, so journal and exit code agree."""
+    cross_check._DEGRADATIONS.clear()
+    cross_check._degraded("vm_lookup_failed", "sensor.foo: TimeoutError")
+    assert cross_check._DEGRADATIONS == ["vm_lookup_failed: sensor.foo: TimeoutError"]
+    assert "WARN: vm_lookup_failed: sensor.foo: TimeoutError" in capsys.readouterr().out
+
+
+def test_failed_vm_lookup_is_tallied_not_silent(capsys):
+    """A failing VM read must degrade LOUDLY, not just return a quiet 0.0.
+
+    The 0.0 return is retained deliberately (the report must stay renderable), which
+    is exactly why the tally is required: 0.0 is indistinguishable from a real reading.
+    """
+    cross_check._DEGRADATIONS.clear()
+
+    class Boom:
+        def query_range(self, **_kw):
+            raise TimeoutError("vm unreachable")
+
+    val = cross_check._query_ha_total_via_vm(
+        Boom(), "sensor.water_pool_autofill_total", datetime(2026, 7, 20, tzinfo=UTC)
+    )
+    assert val == 0.0, "still returns 0.0 so the report renders"
+    assert len(cross_check._DEGRADATIONS) == 1, "but the skip is now recorded"
+    assert "vm_lookup_failed" in cross_check._DEGRADATIONS[0]
+    # The exception BODY must never be echoed -- it can carry request/response
+    # material. Only the type name.
+    assert "vm unreachable" not in capsys.readouterr().out
+
+
+def test_daily_read_failure_is_tallied():
+    cross_check._DEGRADATIONS.clear()
+
+    class Boom:
+        def query_range(self, **_kw):
+            raise ConnectionError("nope")
+
+    assert cross_check._completed_period_total(
+        Boom(), "flume_sensor_x", datetime(2026, 7, 20, tzinfo=UTC)
+    ) == 0.0
+    assert any("daily_read_failed" in d for d in cross_check._DEGRADATIONS)
+
+
+def test_daily_total_failure_is_tallied():
+    cross_check._DEGRADATIONS.clear()
+
+    class Boom:
+        def query_range(self, **_kw):
+            raise ConnectionError("nope")
+
+    assert cross_check._whole_house_day_total(
+        Boom(), datetime(2026, 7, 20, tzinfo=UTC)
+    ) == 0.0
+    assert any("daily_total_read_failed" in d for d in cross_check._DEGRADATIONS)
+
+
+def test_tally_is_empty_on_clean_path():
+    """No degradation recorded when reads succeed -- the rule must not fire always."""
+    cross_check._DEGRADATIONS.clear()
+
+    class Fine:
+        def query_range(self, **_kw):
+            return [(1785000000, "12.5")]
+
+    val = cross_check._query_ha_total_via_vm(
+        Fine(), "sensor.water_pool_autofill_total", datetime(2026, 7, 20, tzinfo=UTC)
+    )
+    assert val == 12.5
+    assert cross_check._DEGRADATIONS == []

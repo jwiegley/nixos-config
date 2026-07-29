@@ -86,6 +86,29 @@ def summarize(comps: list[CategoryComparison], tol: Tolerances) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# DEGRADATION TALLY — makes a silently-skipped check impossible.
+#
+# Every read helper below catches broadly and returns 0.0 on failure. That is a
+# reasonable way to keep the report renderable, but it had a serious consequence:
+# `run()` returned 0 unconditionally, so the unit reported Result=success, so the
+# ExecStopPost metric wrote "success", so FlumeCrossCheckFailed could NEVER fire --
+# and a failed VM read silently became a 0-gallon reading that the comparison then
+# treated as real data. The check could skip its entire job and still look green.
+# This is the "success-that-isn't" archetype in its purest form.
+#
+# Every handler now records WHY it degraded, and run() exits non-zero if the tally is
+# non-empty, so $SERVICE_RESULT reflects reality and the existing alert works.
+_DEGRADATIONS: list[str] = []
+
+
+def _degraded(kind: str, detail: str) -> None:
+    """Record a degradation and echo it, so the journal and exit code agree."""
+    msg = f"{kind}: {detail}"
+    _DEGRADATIONS.append(msg)
+    print(f"WARN: {msg}")
+
+
 def _query_ha_total_via_vm(
     vm,
     entity_id: str,
@@ -134,9 +157,9 @@ def _query_ha_total_via_vm(
         # Take the latest value at or before at_time.
         return float(series[-1][1])
     except Exception as exc:  # noqa: BLE001
-        print(
-            f"WARN: VM lookup for {entity_id} failed: {type(exc).__name__}"
-        )
+        # NOT harmless: returning 0.0 here feeds a FABRICATED zero into the
+        # category comparison, so the cross-check would "pass" on invented data.
+        _degraded("vm_lookup_failed", f"{entity_id}: {type(exc).__name__}")
         return 0.0
 
 
@@ -251,7 +274,7 @@ def _completed_period_total(vm, daily_entity: str, reset_utc: datetime) -> float
         )
         return float(series[-1][1]) if series else 0.0
     except Exception as exc:  # noqa: BLE001
-        print(f"WARN: daily read for {daily_entity} failed: {type(exc).__name__}")
+        _degraded("daily_read_failed", f"{daily_entity}: {type(exc).__name__}")
         return 0.0
 
 
@@ -280,7 +303,7 @@ def _whole_house_day_total(vm, reset_utc: datetime) -> float:
         )
         return float(series[-1][1]) if series else 0.0
     except Exception as exc:  # noqa: BLE001
-        print(f"WARN: daily total read failed: {type(exc).__name__}")
+        _degraded("daily_total_read_failed", type(exc).__name__)
         return 0.0
 
 
@@ -441,7 +464,7 @@ def _post_cross_check_sensor(
     except Exception as exc:  # noqa: BLE001 — broad on purpose
         # Type name only, never the exception body — request bodies and
         # response headers can echo Bearer tokens in some library versions.
-        print(f"WARN: HA write-back failed: {type(exc).__name__}")
+        _degraded("ha_writeback_failed", type(exc).__name__)
 
 
 def run(days: int = 7) -> int:
@@ -466,6 +489,10 @@ def run(days: int = 7) -> int:
     name of any exception, never its repr (which can include the value
     of the offending argument).
     """
+    # Reset the tally so a second call in the same process (tests, ad-hoc
+    # imports) cannot inherit a previous run's degradations.
+    _DEGRADATIONS.clear()
+
     import subprocess
     from datetime import timezone
     from email.message import EmailMessage
@@ -676,6 +703,19 @@ def run(days: int = 7) -> int:
         check=False,
     )
     if result.returncode != 0:
-        print(f"WARN: sendmail exited {result.returncode}")
+        _degraded("sendmail_failed", f"exit {result.returncode}")
+
+    # FAIL LOUDLY. Before 2026-07-28 this was an unconditional `return 0`, which made
+    # the unit's Result=success regardless of how much of the check had been skipped,
+    # and therefore made FlumeCrossCheckFailed structurally incapable of firing even
+    # though it is correctly wired to $SERVICE_RESULT via ExecStopPost.
+    if _DEGRADATIONS:
+        print(
+            f"FAIL: cross-check degraded in {len(_DEGRADATIONS)} place(s); "
+            "results above are incomplete and may include fabricated zero readings:"
+        )
+        for d in _DEGRADATIONS:
+            print(f"  - {d}")
+        return 1
 
     return 0

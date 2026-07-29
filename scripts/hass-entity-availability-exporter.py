@@ -23,10 +23,20 @@ peer auth as the postgres user, so this needs no credential at all.
 
 WHY max()/GROUP BY AND NOT DISTINCT ON
 --------------------------------------
-Measured on the live table (3.8M rows, 1243 MB), the obvious `DISTINCT ON (metadata_id)
-... ORDER BY state_id DESC` form takes 5.42 s, while the `state_id IN (SELECT
-max(state_id) ... GROUP BY metadata_id)` form takes 0.21 s -- 26x faster. Both return the
-same count. Do not "optimise" this into DISTINCT ON.
+Measured on the live table (3.8M rows, 1243 MB): the obvious `DISTINCT ON (metadata_id)
+... ORDER BY state_id DESC` form takes 2.30-2.33 s, while the `state_id IN (SELECT
+max(state_id) ... GROUP BY metadata_id)` form takes 0.19-0.22 s -- about 11.5x faster. Both
+return the same count. Do not "optimise" this into DISTINCT ON.
+
+FIGURE CORRECTED: a first measurement recorded 5.42 s for DISTINCT ON and claimed 26x. That
+was a COLD-CACHE artifact of running it first. Re-timed twice in each order, the steady-state
+ratio is ~11.5x and is order-independent, which makes the conclusion stronger than the
+original inflated number did -- but the original number was wrong.
+
+Correctness of this form is not just empirical: `states.state_id` is an IDENTITY bigint, so it
+increases monotonically with insertion order, which is why max(state_id) is the newest row.
+Confirmed against live data too -- comparing max(state_id) per entity against the row with the
+newest last_updated_ts gives 0 disagreements across all entities.
 
 Metrics emitted:
   hass_entity_unavailable_total          entities whose latest state is unavailable/unknown

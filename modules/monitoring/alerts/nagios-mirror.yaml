@@ -14,6 +14,33 @@ groups:
       # -----------------------------------------------------------------------
 
       # Sustained disagreement between the Nagios mirror and the rulers.
+      #
+      # 2026-07-29: this alert fired four times in one day, ALL FALSE, and the
+      # defects were in the reconciler rather than here. Two were fixed in
+      # nagios-mirror-divergence.py; see that file for the full reasoning.
+      #   1. It counted only state=firing, so every Prometheus restart -- i.e.
+      #      every nixos-rebuild -- reset all for:-timers and parked the long-dwell
+      #      rules in "pending" while Nagios kept its own state and stayed HARD
+      #      WARNING. That manufactured 34-50 minute nagios_only waves. The
+      #      diverged names were exactly the long-dwell rules:
+      #      ServiceChronicallyUnavailable and ProbeTargetChronicallyFailing and
+      #      AideChangesDetected (for:1h) and GiteaPushMirrorFailing (for:2h).
+      #      Pending now counts as agreement; a dead rule never reaches pending, so
+      #      dead-rule detection is intact.
+      #   2. THIS alertname was not in the reconciler's exclusion set, so its own
+      #      mirror going HARD WARNING fed its own gauge. Verified in the act: at
+      #      2026-07-29 20:41Z, same instant and same status.dat, the pre-fix code
+      #      emitted nagios_only=1 naming NagiosMirrorDivergence while the fixed
+      #      code emitted 0.
+      #
+      # The count-level dwell below is deliberately LEFT AS IS. "max(count) > 0 for
+      # 30m" tests whether the count is nonzero for 30 continuous minutes, not
+      # whether any single alertname stays diverged that long, so in principle a
+      # rotating cast of transiently-diverged names can hold it above zero. Measured
+      # over the four 07-29 firings that was not the operative mechanism -- each had
+      # a single alertname diverged for >=29.8 min -- and with (1) and (2) fixed the
+      # rotating-cast supply is largely gone. If this recurs, move the dwell onto the
+      # per-alertname series (nagios_mirror_diverged_alert) rather than the count.
       - alert: NagiosMirrorDivergence
         expr: max by (direction) (nagios_mirror_divergence_total) > 0
         for: 30m
@@ -48,6 +75,46 @@ groups:
             nagios-mirror-divergence has not written its textfile in over 30
             minutes (timer is OnUnitActiveSec=5min). Divergence detection
             between the Nagios mirror and the rulers is no longer running.
+
+      # Guards the 2026-07-29 nagios_only fix against becoming a vacuous check.
+      # That fix suppresses nagios_only for any mirror whose rule no ruler has
+      # evaluated. The suppression is correct for the first minute after a ruler
+      # restart, but if it were ever to become permanent -- a ruler /rules endpoint
+      # changing shape, or tier 2 generating a mirror for an alertname that no rule
+      # file declares any more -- then nagios_only would sit at 0 forever and the
+      # whole dead-rule detector would be silently dead, which is the exact failure
+      # class this mirror exists to catch.
+      #
+      # THE DWELL IS SET BY THE SLOWEST RULE GROUP, and 1h -- the obvious first
+      # guess -- is WRONG. A group does not evaluate until one full interval has
+      # elapsed after ruler start, so worst-case warmup equals the longest
+      # configured group interval. Measured 2026-07-29 across all three rulers:
+      # prometheus 15s x18, 30s x27, 60s x37, 300s x7, 900s x2 (config_drift,
+      # chronic_availability), and 3600s x1 (security_system_age); loki ruler max
+      # 300s; vmalert 3600s (water_attribution). So the true worst case is 3600s,
+      # exactly equal to a 1h dwell -- which would have made this rule fire after
+      # every single nixos-rebuild. 2h gives 2x margin over the slowest group.
+      # Directly observed during this change: 290s after a switch, config_drift and
+      # chronic_availability still read lastEvaluation="0001-01-01T00:00:00Z",
+      # holding nagios_mirror_unevaluated_mirrors at 3.
+      - alert: NagiosMirrorUnevaluatedMirrors
+        expr: nagios_mirror_unevaluated_mirrors > 0
+        for: 2h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Nagios mirror divergence detection is partly suppressed"
+          description: >-
+            {{ $value }} non-OK Nagios mirror service(s) have been skipped by the
+            divergence reconciler for over an hour because no ruler reports having
+            evaluated the matching rule. Briefly non-zero after a ruler restart is
+            normal. Sustained means either a mirror exists for an alertname no rule
+            file declares any more (tier-2 drift -- check the PROM-MIRROR service
+            list against modules/monitoring/{alerts,loki-rules,vm-alerts}/*.yaml),
+            or a ruler's /api/v1/rules response shape changed and
+            fetch_evaluated() can no longer parse it. Until resolved, nagios_only
+            divergence is not being asserted for those alertnames.
 
       # The reconciler ran but could not read status.dat.
       - alert: NagiosMirrorReconcilerFailed

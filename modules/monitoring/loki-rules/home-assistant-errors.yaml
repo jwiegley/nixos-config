@@ -93,17 +93,33 @@ groups:
       # Integration setup failures. This is the class that hid the 17-day-dead
       # mail_and_packages integration, whose config entry kept reporting "loaded" while all
       # 26 of its entities sat unavailable.
-      # HONEST STATUS: this rule is PLAUSIBLE BUT UNVERIFIED. All three strings are real --
-      # confirmed present in the deployed homeassistant package source -- but NONE of them
-      # appears anywhere in the retained journal, at any priority. The mail_and_packages
+      # HONEST STATUS of the original three strings: PLAUSIBLE BUT UNVERIFIED. All three are
+      # real -- confirmed present in the deployed homeassistant package source -- but NONE of
+      # them appears anywhere in the retained journal, at any priority. The mail_and_packages
       # failure predates journal retention, so I cannot confirm which string that specific
       # failure mode emits. An earlier version of this comment asserted "setup retries DO log
       # at priority 6" as established fact; that was unsupported and is withdrawn.
+      #
+      # "could not authenticate" ADDED 2026-07-29 pm, and this is the verified half. The rule
+      # as originally written was BLIND to a live failure: over the 8-day journal the three
+      # strings above match exactly 0 lines, while 2-3 google config entries were verifiably
+      # in setup_error the whole time. The real signature, measured 6 times in that window
+      # (3 at 2026-07-28 20:37:46 and 3 at 20:56:47), is emitted at WARNING:
+      #   [homeassistant.config_entries] Config entry '<title>' for google integration
+      #   could not authenticate: 400, ...
+      # That is the ConfigEntryAuthFailed class, which is how an expired OAuth refresh token
+      # actually surfaces. KNOWN LIMITATION: config_entries logs it only on a (re)setup
+      # attempt, so both clusters above land at HA restart moments and this rule gives roughly
+      # one hour of visibility per restart -- it is not a continuous state check. The
+      # continuous signal is the Node-RED HA-integration health flow, whose own [info] debug
+      # payload is what accidentally tripped NodeRedFlowErrors below before its matcher was
+      # anchored. Expect this to fire on the next HA restart while any google entry is
+      # unauthenticated; that is the coverage gap closing, not a false positive.
       - alert: HomeAssistantIntegrationSetupFailing
         expr: |
           sum by (unit) (count_over_time(
             {job="ha-nodered", unit="home-assistant.service"}
-            |~ "(Setup failed for|Error setting up entry|Unable to prepare setup for)"
+            |~ "(Setup failed for|Error setting up entry|Unable to prepare setup for|could not authenticate)"
             [1h]
           )) > 0
         for: 30m
@@ -117,22 +133,36 @@ groups:
 
       # Node-RED flow errors.
       #
-      # THRESHOLD AND PATTERN CORRECTED, both were wrong. Measured over 8 days of journal:
-      # node-red emits only 171 lines total, of which 6 match (?i)(error|exception|failed),
-      # with a busiest hour of 4. So my ">5 per 1h" sat ABOVE the observed maximum and would
-      # never have fired. The pattern is fine -- node-red is simply near-silent -- so the
-      # threshold was the defect, and >0 is the correct choice for a service this quiet.
+      # THRESHOLD CORRECTED first. Measured over 8 days of journal: node-red is near-silent
+      # (a few hundred lines total, busiest error hour 4), so the original ">5 per 1h" sat
+      # ABOVE the observed maximum and would never have fired. >0 is the correct choice for
+      # a service this quiet: a single [error]-tagged line means a flow aborted.
       #
-      # The pattern also could not see the defect I cited to justify the rule. The Pool tab's
-      # "OpenUV forecast missing or too short" lines DO exist at 05:00 (2 on 07-26, 2 on
-      # 07-27, 1 on 07-28) but NONE of them contains error/exception/failed, and there are
-      # zero error-shaped node-red lines in hour 05 on any day. The alternation now includes
-      # that message explicitly.
+      # The Pool tab's "OpenUV forecast missing or too short" lines DO exist at 05:00 (2 on
+      # 07-26, 2 on 07-27, 1 on 07-28) but node-red tags them [warn], not [error], so the
+      # alternation includes that message explicitly.
+      #
+      # PATTERN CORRECTED 2026-07-29 pm; the earlier claim here that "the pattern is fine"
+      # was FALSE. (?i)(error|exception|failed|...) is a bare, unanchored substring, and it
+      # matched "error" INSIDE "setup_error" in an [info]-severity debug-node payload dump
+      # (the HA-integration health flow, working exactly as designed). That produced the
+      # 10:19 PDT NodeRedFlowErrors email with value=2 -- the two
+      # "- <account> (google): setup_error" payload fragments. Re-measured over the 8-day
+      # journal (334 lines): the old pattern matched 19 lines, of which 12 were NOT node-red
+      # errors -- 11 setup_error payload fragments plus 1 untagged direct-stdout line
+      # ("Failed to resolve IPv4 addresses..."). node-red's own logger prefixes every line
+      # it emits with "D Mon HH:MM:SS - [level]", so the matcher now keys on that severity
+      # tag instead: " - [error] " plus the [warn]-tagged OpenUV message matches exactly 7
+      # lines over the same 8 days (2 genuine [error] api-call-service NoConnectionError +
+      # the 5 OpenUV [warn] lines). NOTE this scrape stores each entry as journal-JSON
+      # (promtail journal.json=true), so ^-anchoring on the message is impossible; the
+      # bracketed severity tag as a substring is the anchor. A debug payload would now have
+      # to contain the literal " - [error] " to false-positive (0 occurrences in 8 days).
       - alert: NodeRedFlowErrors
         expr: |
           sum(count_over_time(
             {job="ha-nodered", unit="node-red.service"}
-            |~ "(?i)(error|exception|failed|missing or too short)"
+            |~ " - \\[error\\] |missing or too short"
             [1h]
           )) > 0
         for: 15m
@@ -142,4 +172,4 @@ groups:
           service: node-red
         annotations:
           summary: "Node-RED logged {{ $value }} errors in the last hour"
-          description: "Flow errors in Node-RED. A failing flow usually produces no other signal -- the service stays active and its HTTP endpoint stays healthy -- so this log path is the only indicator. Check `journalctl -u node-red -n 100`."
+          description: "Flow errors in Node-RED, matched on node-red's own ' - [error] ' severity tag (plus the Pool tab's [warn] 'OpenUV forecast missing or too short'). A failing flow usually produces no other signal -- the service stays active and its HTTP endpoint stays healthy -- so this log path is the only indicator. Check `journalctl -u node-red -n 100`."

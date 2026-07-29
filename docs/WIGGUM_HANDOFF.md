@@ -438,6 +438,44 @@ Also: `sudo nixos-rebuild --flake .` on a dirty tree makes nix's git fetcher wri
 root-owned objects into `.git/objects`, which then breaks `git commit` with "insufficient
 permission for adding an object". Fix: `sudo chown -R johnw:users /etc/nixos/.git`.
 
+- `2026-07-29` — **Unit: postgresql memory ceiling 10G/12G** (`d62dcb9e`). M-92's memory half
+  was already applied 07-28; re-measuring showed loki (1,037 events → 0) and home-assistant
+  (184 → 0) are FIXED and must NOT be raised further, while postgresql under-corrected. Its
+  07-28 prediction ("working set fits without reclaim" at 6G) is falsified: peak is now 6.002
+  GiB, above the 6.000 GiB soft limit. Method note worth keeping: `memory.pressure`
+  UNDERSTATES this (68 s stall over 26 days) because evicting cache is not a stall — it
+  returns as disk reads. The real signal is the buffer cache hit ratio: **89.38%** overall vs
+  the >99% norm, litellm 62.94%, mailarchiver 84.04% on 472.6M reads, ~4.6 TB re-read.
+  Confirmed the cgroup is the governing constraint (data dir on ext4 `/dev/nvme0n1p5` → kernel
+  page cache, not ZFS ARC). Budget table updated 113% → 120%.
+
+## budget-board switch exit 4 — PREMISE DISPROVED, no config fix (2026-07-29)
+
+The open item was "budget-board healthcheck start-period (fixes recurring switch exit 4)".
+`healthStartPeriod = "120s"` is **already set** (budgetboard-quadlet.nix:107) and is already
+working correctly, so that fix would do nothing. Hit it live during this session's switch and
+traced the real mechanism:
+
+1. The switch restarts the pod; the server needs time for DB migrations.
+2. The healthcheck timer fires ~30 s in and the check fails (app not yet listening).
+3. Podman honors the start period correctly — the event log shows
+   `health_status=starting, health_failing_streak=0`, so the CONTAINER is never marked
+   unhealthy.
+4. But the transient systemd unit that RAN the check exits 1, and podman creates that unit
+   with **no `CollectMode`** (verified: 0 occurrences in
+   `/run/systemd/transient/<id>-<hash>.service`), so it persists in `failed` state.
+5. `switch-to-configuration` enumerates failed units at that instant → exit 4.
+6. ~30 s later the next healthcheck succeeds and the state clears by itself.
+
+Verified benign and self-healing: `systemctl --failed` empty afterwards, container
+`healthy failingStreak=0`, generation switched and the intended change live. This is podman
+transient-unit behavior, not a missing setting; raising the start period or the interval
+cannot change step 4.
+
+**Real residual risk worth the operator's attention:** a spurious exit 4 can MASK a genuine
+switch failure. The mitigation is to verify a switch by checking the generation and
+`systemctl --failed` rather than trusting the exit code — which is what was done here.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

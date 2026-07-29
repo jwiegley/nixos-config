@@ -56,6 +56,7 @@
     ./gitea-push-mirror-exporter.nix
     ./nut-exporter.nix
     ./nvme-smart-exporter.nix
+    ./hass-entity-availability-exporter.nix
     ./aria2-exporter.nix
     ./aria2-alerts.nix
     ./qdrant-exporter.nix

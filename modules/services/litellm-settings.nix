@@ -1238,6 +1238,9 @@
     streaming_request_timeout = 300;
     ssl_verify = false;
     drop_params = true;
+    model_group_settings = {
+      forward_client_headers_to_llm_api = [ "openrouter/z-ai/glm-5.2" ];
+    };
     cache = true;
     cache_params = {
       type = "redis";

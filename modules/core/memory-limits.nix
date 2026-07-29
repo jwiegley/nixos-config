@@ -8,11 +8,15 @@
 {
   # Memory limits for resource-intensive services to prevent OOM crashes
   #
-  # These limits are based on observed memory usage patterns. Measured
-  # 2026-07-27 with `systemctl show -p MemoryCurrent -p MemoryPeak <unit>`:
-  # - Promtail: 91 MiB current, 224 MiB peak. Its cap is NOT set here — it is
-  #   MemoryMax = 512M in modules/services/promtail.nix.
-  # - Home Assistant: 1.15 GiB current, 1.50 GiB peak.
+  # These limits are based on observed memory usage patterns. Per-service
+  # measurements live in the comment on each service below -- do NOT add a summary
+  # block here. A stale header measurement contradicting the per-service comment 37
+  # lines further down is exactly the trap that was removed on 2026-07-28: the header
+  # carried 2026-07-27 figures for Home Assistant while the service comment carried
+  # newer ones, and the header reads as more authoritative.
+  #
+  # Promtail's cap is NOT set here -- it is MemoryMax = 512M in
+  # modules/services/promtail.nix.
   #
   # Philosophy:
   # - MemoryMax: Hard limit, kills service if exceeded
@@ -29,14 +33,38 @@
   #   postgresql      current 3.5GB == High 3.5GB, peak 3.6GB, 3,899,187 throttle events
   #   loki            current 522MB,  peak 2.1GB   > High 2.0GB, 1,037 events
   #   home-assistant  current 1.2GB,  peak 1.6GB   > High 1.5GB,   184 events
-  #   victoriametrics/grafana/jellyfin              0 events, ample room -- left alone
+  #   victoriametrics/grafana/jellyfin              0 events -- left alone, but see below
+  #
+  # "0 events" is not the same as "ample room". victoriametrics (363 MiB peak / 2G high)
+  # and grafana (340 MiB / 1.2G) genuinely have room. JELLYFIN DOES NOT: its peak is
+  # 1.82 GiB against a 2.5 GiB soft limit, i.e. 73% consumed with ~680 MiB spare, on a
+  # transcoding workload whose spikes depend on what is being transcoded. It has not
+  # throttled yet, so it is not changed here, but it is the next candidate and should not
+  # be read as comfortable.
   #
   # Note MemoryHigh/MemoryMax account PAGE CACHE, not just anonymous memory, so an
   # I/O-heavy service is throttled on cache it would otherwise be free to keep. That is
   # the dominant term for postgresql. Host has 62 GiB total with ~26 GiB available, so
   # none of this was capacity pressure -- it was self-inflicted.
   #
-  # MemoryMax is a ceiling, not a reservation: raising it costs nothing until used.
+  # MemoryMax is a ceiling, not a reservation -- but that is not a blank cheque, so the
+  # budget is written down rather than asserted. Summed 2026-07-28 against MemTotal
+  # 62.25 GiB:
+  #
+  #   MemoryMax in this file (6 services)                        21.50 GiB
+  #   MemoryMax elsewhere under modules/ (12 services)           26.00 GiB
+  #   microVM QEMU allocations (openclaw 4 + hermes 3)            7.00 GiB
+  #   ZFS ARC c_max                                              16.00 GiB
+  #                                                             ----------
+  #   nominal total                                              70.50 GiB  = 113%
+  #
+  # Deliberately over 100%, and that is safe here for four measured reasons: ceilings are
+  # not reservations; ARC is elastic and currently sits at ~7 of its 16 GiB; observed
+  # actuals across all capped services total ~9.5 GiB against ~30 GiB MemAvailable; and
+  # `memory.events` oom_kill is 0 on every cgroup inspected, historically included. Note
+  # the microVM figures are the QEMU `microvm.mem` allocations, NOT cgroup limits -- both
+  # microvm@ units report MemoryMax=infinity, so the MemoryMax values in openclaw-vm.nix
+  # and hermes-vm.nix cap the host-side gateway services, not the guests.
 
   systemd.services = {
     # NOTE: Container services managed by quadlet have their resource limits
@@ -95,25 +123,48 @@
     # disruption" but were the single worst offender on the host: current sat exactly AT
     # the 3.5G soft limit with 3,899,187 throttle events, i.e. permanently in reclaim.
     #
-    # Arithmetic showing why 3.5G could never work, from live pg_settings:
-    #   shared_buffers       = 2 GiB   (262144 x 8kB)  -- resident, always
-    #   maintenance_work_mem = 1 GiB                   -- during any VACUUM / CREATE INDEX
-    #   work_mem             = 32 MiB per sort/hash node, max_connections = 200
-    # So a single autovacuum put it at 3 GiB of a 3.5 GiB ceiling before one byte of
-    # page cache or a single sort. Everything else was fighting for ~0.5 GiB.
+    # THE DECISIVE EVIDENCE is the reclaim profile, not a static budget:
+    #   pgscan_direct           328,982,937   <- 92% of all reclaim was SYNCHRONOUS,
+    #   pgscan_kswapd            28,148,500      done in the allocating process's context
+    #   workingset_refault_file 278,216,158   <- file pages evicted then immediately needed
+    #   memory.peak           4.77 GiB        <- EXCEEDS the old MemoryMax of 4 GiB
+    # The working set was genuinely larger than the old HARD ceiling and was only held
+    # under it by relentless reclaim, ~278 million times re-reading pages it had just
+    # dropped. That is the argument for this change.
     #
-    # There was also a direct contradiction: effective_cache_size = 4 GiB told the query
-    # PLANNER to assume 4 GiB of OS cache while the cgroup ceiling for the entire service
-    # was 3.5 GiB, so the planner costed index scans against cache that could not exist.
-    # Raising the cgroup ceiling resolves that inconsistency without touching planner
-    # settings (which would change query plans and belongs in a separate tuning change).
+    # Composition, from live cgroup memory.stat -- note what is NOT the problem:
+    #   shmem 2.05 GiB  = shared_buffers, charged to memory.current because
+    #                     huge_pages=try fell back (HugePages_Total 0); with huge pages
+    #                     granted it would be accounted by a separate controller instead
+    #   file  4.54 GiB  = page cache -- the dominant and elastic term
+    #   anon  0.23 GiB  = everything else
+    # So the binding constraint was shared_buffers + page cache. maintenance_work_mem is
+    # NOT a flat global line item as an earlier version of this comment implied: it is
+    # per-worker, and with autovacuum_max_workers=2 and autovacuum_work_mem=-1 the
+    # autovacuum path alone can claim 2 x 1 GiB, which exceeded even the old MemoryMax --
+    # but anon never approaches that in practice, so it is a tail risk, not the cause.
     #
-    # New values give shared_buffers + maintenance_work_mem + concurrent work_mem + several
-    # GiB of page cache, with Max as a genuine safety net rather than a routine ceiling.
+    # effective_cache_size, corrected 2026-07-28: it is 4 GiB, and an earlier version of
+    # this comment got it wrong twice. It is the planner's estimate of TOTAL effective
+    # cache for one query INCLUDING shared_buffers, not "4 GiB of OS cache", so the
+    # OS-cache component being assumed was ~2 GiB -- comparing 4 GiB against the 3.5 GiB
+    # cgroup ceiling double-counted shared_buffers on one side. It also allocates and
+    # reserves nothing, so it caused exactly none of the throttling. And raising the
+    # ceiling did not "resolve" the mismatch, it INVERTED the sign: at 4 GiB against the
+    # new ceiling and a 4.5 GiB resident footprint, e_c_s is now the CONSERVATIVE side,
+    # biasing the planner toward sequential and bitmap scans rather than index scans.
+    # Left alone deliberately -- changing planner settings alters query plans and belongs
+    # in a separate, separately-verified tuning change. Recorded so the next reader knows
+    # it is a known open item, not an oversight.
+    #
+    # Sizing: High 6G sits ~1.26x above the measured 4.77 GiB peak so the working set
+    # fits without reclaim, and Max 8G is a genuine safety net. An earlier draft used
+    # 8G/12G, which had no measurement behind it and inflated the ceiling budget above by
+    # 4 GiB for no benefit.
     postgresql = {
       serviceConfig = {
-        MemoryMax = "12G";
-        MemoryHigh = "8G";
+        MemoryMax = "8G";
+        MemoryHigh = "6G";
       };
     };
 

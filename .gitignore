@@ -49,4 +49,8 @@ node_modules/
 /.env.example
 /.mcp.json
 /.taskmaster/
-/prd.md.nixos-build
+/prd.md
+
+# Build/switch mutex used by the nixos workflow (see CLAUDE.md). Created before a
+# rebuild and removed after; must never be committed.
+/.nixos-build

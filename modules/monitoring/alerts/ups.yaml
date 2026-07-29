@@ -1,0 +1,150 @@
+groups:
+  # =====================================================================
+  # UPS / POWER PROTECTION
+  # =====================================================================
+  # Added 2026-07-29. Before this the UPS was COMPLETELY unmonitored: no exporter, no rule,
+  # no Nagios check. A scan of all ~500 rules for ups/nut/battery/power/apc matched nothing.
+  # The exporter that feeds these rules is modules/monitoring/services/nut-exporter.nix.
+  #
+  # Baseline measured at authoring time, on mains, so the thresholds below are anchored to
+  # real values rather than guesses:
+  #   ups.status        OL (online), every other flag 0
+  #   battery.charge    100 %
+  #   battery.runtime   2322 s  (38.7 min) at 17-18 % load
+  #   input.voltage     121 V   (nominal 120)
+  #   battery.mfr.date  2022/08/13  -> ~4 years old, top of APC's 3-5 year window
+  #   ups.test.result   "No test initiated"  -> the runtime figure is a VENDOR ESTIMATE
+  #                                             that has never been validated under load
+  - name: ups_power
+    interval: 30s
+    rules:
+      # ---- Utility power lost -------------------------------------------------------
+      # OB = "on battery". A 30s dwell rides out the sub-second transfer blips that are
+      # normal on utility power without hiding a real outage.
+      - alert: UPSOnBattery
+        expr: network_ups_tools_ups_status{flag="OB"} == 1
+        for: 30s
+        labels:
+          severity: warning
+          category: power
+          service: ups
+        annotations:
+          summary: "UPS is running on battery — utility power lost"
+          description: "The UPS has been on battery for over 30 seconds. Charge and runtime are tracked separately; if this persists, UPSOnBatterySustained escalates. Baseline runtime on a full charge is ~39 min at normal load."
+
+      - alert: UPSOnBatterySustained
+        expr: network_ups_tools_ups_status{flag="OB"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          category: power
+          service: ups
+        annotations:
+          summary: "UPS has been on battery for over 5 minutes"
+          description: "Sustained utility power loss. This host will be powered off automatically once charge drops below 50% (see the poll script in modules/services/nut.nix), so treat remaining runtime as a hard deadline for a graceful stop of anything expensive — in particular the tank USB enclosure, whose documented failure mode is load-induced."
+
+      # ---- Battery state -----------------------------------------------------------
+      # LB is the UPS's own "low battery" determination and immediately precedes shutdown,
+      # so it gets no dwell at all.
+      - alert: UPSLowBattery
+        expr: network_ups_tools_ups_status{flag="LB"} == 1
+        for: 0s
+        labels:
+          severity: critical
+          category: power
+          service: ups
+        annotations:
+          summary: "UPS reports LOW BATTERY — shutdown imminent"
+          description: "The UPS has raised its own low-battery flag. upsmon will begin a graceful shutdown. Nothing to do but let it finish."
+
+      # RB is the UPS's self-diagnosed "replace battery" verdict. 1h dwell because it is a
+      # standing condition, not an event, and should not re-page on every scrape.
+      - alert: UPSBatteryNeedsReplacement
+        expr: network_ups_tools_ups_status{flag="RB"} == 1
+        for: 1h
+        labels:
+          severity: warning
+          category: power
+          service: ups
+        annotations:
+          summary: "UPS reports the battery needs replacing"
+          description: "The UPS has set its RB (replace battery) flag. This battery was manufactured 2022/08/13, so it is already at the top of APC's 3-5 year replacement window."
+
+      # ---- Runtime floor -----------------------------------------------------------
+      # Catches a battery that has aged into uselessness WITHOUT waiting for a real outage
+      # to discover it. The gap this closes: ups.test.result is "No test initiated", so the
+      # 39-minute figure has never been validated, and a degraded battery looks identical to
+      # a healthy one until the power actually fails.
+      # 900s (15 min) is ~2.6x below the measured 2322s baseline, so normal fluctuation with
+      # load cannot reach it; crossing it means real capacity loss.
+      # Guarded on charge >= 95 so it compares like with like -- runtime naturally falls as
+      # the battery discharges, and without this guard the rule would fire during every
+      # genuine outage, duplicating UPSOnBattery.
+      - alert: UPSBatteryRuntimeDegraded
+        expr: |
+          network_ups_tools_battery_runtime < 900
+          and on(instance,job) network_ups_tools_battery_charge >= 95
+        for: 30m
+        labels:
+          severity: warning
+          category: power
+          service: ups
+        annotations:
+          summary: "UPS runtime on a full battery has fallen to {{ $value | humanizeDuration }}"
+          description: "At >=95% charge the UPS estimates only {{ $value | humanizeDuration }} of runtime, against a 2026-07-29 baseline of ~39 minutes at 17-18% load. That indicates real capacity loss rather than load variation. Note this estimate has never been validated by a self-test."
+
+      # ---- The automated poweroff path ---------------------------------------------
+      # THIS IS THE MOST IMPORTANT RULE HERE. modules/services/nut.nix runs a 30s poll that
+      # execs `systemctl poweroff` when the UPS is OB and charge < 50, and its ONLY trace is
+      # a single `logger -p daemon.warning` line that nothing scrapes. So before this rule an
+      # automatic shutdown of this host produced NO alert whatsoever -- the operator would
+      # learn about it when the machine stopped answering.
+      # FSD (forced shutdown) and SD (shutdown imminent) are the UPS-side signals; the
+      # charge<50-while-OB clause mirrors the local script's own trigger so the alert fires
+      # even if the UPS itself never raises a flag.
+      - alert: UPSShutdownTriggered
+        expr: |
+          network_ups_tools_ups_status{flag="FSD"} == 1
+          or network_ups_tools_ups_status{flag="SD"} == 1
+          or (
+            network_ups_tools_battery_charge < 50
+            and on(instance,job) network_ups_tools_ups_status{flag="OB"} == 1
+          )
+        for: 0s
+        labels:
+          severity: critical
+          category: power
+          service: ups
+        annotations:
+          summary: "AUTOMATED POWEROFF of vulcan is imminent or in progress"
+          description: "Either the UPS raised FSD/SD, or the host is on battery below 50% charge — which is the exact trigger condition of the nut-low-battery-poweroff poll in modules/services/nut.nix. That script will run `systemctl poweroff`. Until this rule existed, that shutdown left only one daemon.warning log line and generated no alert at all."
+
+      # ---- Meta: the monitor must not fail silently --------------------------------
+      # Without this, the exporter dying looks exactly like a healthy UPS: every rule above
+      # is a comparison against a series, so an ABSENT series makes them all evaluate to
+      # nothing. That is the precise shape of failure this whole effort exists to remove.
+      - alert: UPSMetricsAbsent
+        expr: absent(network_ups_tools_battery_charge)
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: ups
+        annotations:
+          summary: "UPS metrics have disappeared — power protection is unmonitored"
+          description: "network_ups_tools_battery_charge has no series, so every UPS rule above is silently inert and an outage or automated poweroff would go unalerted. Check prometheus-nut-exporter.service and upsd. NOTE the scrape must target /ups_metrics, NOT /metrics -- the latter returns HTTP 200 with only Go runtime metrics and no UPS data."
+
+      # Guards against a subtler version of the same thing: the exporter serving the WRONG
+      # path. /metrics returns 200 with go_* metrics only, so the target reads `up` while
+      # collecting nothing. This catches that specific misconfiguration, which is easy to
+      # reintroduce because /metrics is the Prometheus default.
+      - alert: UPSExporterServingNoUPSData
+        expr: up{job="nut"} == 1 and absent(network_ups_tools_ups_status)
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: ups
+        annotations:
+          summary: "UPS exporter is up but returning no UPS variables"
+          description: "The nut job scrapes successfully (up==1) but network_ups_tools_ups_status is absent. Almost certainly metrics_path has reverted to the default /metrics, which serves only the exporter's own Go runtime metrics. It must be /ups_metrics."

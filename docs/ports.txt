@@ -34,6 +34,7 @@
 993 0.0.0.0 :: Dovecot IMAPS
 2525 0.0.0.0 :: Postfix plain-SMTP for containers/microVMs (no TLS, mynetworks only)
 4190 0.0.0.0 :: Dovecot ManageSieve
+9199 127.0.0.1 Prometheus nut exporter (UPS/NUT metrics from upsd)
 11332 127.0.0.1 ::1 rspamd controller
 11334 127.0.0.1 ::1 rspamd web UI
 

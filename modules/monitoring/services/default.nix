@@ -54,6 +54,7 @@
     ./vdirsyncer-exporter.nix
     ./gitea-exporter.nix
     ./gitea-push-mirror-exporter.nix
+    ./nut-exporter.nix
     ./aria2-exporter.nix
     ./aria2-alerts.nix
     ./qdrant-exporter.nix

@@ -180,10 +180,20 @@
           #   SmartDevice{Unhealthy,Missing}, LocalBackup{Missing,Stale},
           #   NodeRedBackupFailed, TechnitiumBackupFailed
           #
-          # Excluding critical here (rather than adding `continue = true`) is deliberate: with
-          # `continue` the WARNING storage alerts would also fall through and be delivered
-          # twice, once by storage-receiver and again by default-receiver. This way criticals
-          # page normally and everything else keeps the quieter grouped storage treatment.
+          # Excluding critical here (rather than adding `continue = true`) is deliberate, but
+          # CORRECTED 2026-07-29 -- the reason first recorded here was mechanically wrong and an
+          # audit reproduced the counterfactual. `continue = true` advances to the next SIBLING
+          # route; the PARENT receiver is appended only when no child matched at all. So it
+          # would NOT have double-delivered the warnings via default-receiver: with
+          # `continue = true` all 32 warning-storage labelsets still resolve to storage-receiver
+          # alone, exactly as they do now.
+          #
+          # The double delivery `continue = true` would really have caused is on the 19
+          # CRITICALS -- storage-receiver AND critical-receiver, both of which email
+          # johnw@vulcan.lan, plus the iPhone webhook. So the design choice stands; only its
+          # stated justification was wrong. Getting `continue` backwards matters beyond this
+          # route: it governs four others in this file.
+          #
           # Info-severity storage alerts never reach this route at all -- the D13 digest route
           # above catches them first.
           {
@@ -428,13 +438,34 @@
         }
         # Suppress warning backup alerts when critical backup alerts are firing for same repo
         {
+          # `repository=~".+"` added 2026-07-29. `equal = [ "repository" ]` compares label
+          # VALUES, and Alertmanager's comparison is a plain map lookup -- so when the label is
+          # absent from BOTH sides it compares "" == "" and the inhibition APPLIES. Only
+          # restic_* and git_workspace_* series carry a repository label, so 17 of the 19
+          # critical and 30 of the 32 warning storage rules have none: any repository-less
+          # storage critical was muting every repository-less storage warning, ACROSS UNRELATED
+          # HARDWARE -- e.g. TankMountGone on the USB enclosure silencing NVMe wear and pending
+          # sector warnings on the boot disk. This is the same "" == "" semantics this file
+          # already documents two rules below, which had simply never been applied here.
+          #
+          # Requiring a non-empty repository on both sides confines the rule to the
+          # same-repository case it was written for. Measured before changing it: the loud
+          # cross-device pairs had 0 minutes of real overlap in 30d and TankMountGone never
+          # fired, so this was latent rather than actively harmful -- fixed on the semantics,
+          # not on an observed incident.
           source_match = {
             severity = "critical";
             category = "storage";
           };
+          source_match_re = {
+            repository = ".+";
+          };
           target_match = {
             severity = "warning";
             category = "storage";
+          };
+          target_match_re = {
+            repository = ".+";
           };
           equal = [ "repository" ];
         }

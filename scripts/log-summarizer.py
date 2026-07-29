@@ -882,15 +882,47 @@ class AlertHistory:
                 out.append(f"   {secs/3600:6.1f}h  [{sev:8}] {name}")
             out.append("")
 
+        # TRUNCATION IS SEVERITY-AWARE, and that is load-bearing rather than cosmetic.
+        #
+        # This table used to be a flat `[:25]` sorted by duration. An adversarial audit found
+        # that combination had quietly become a delivery hole: Alertmanager's D13 policy
+        # (2026-07-29) routes 17 info-severity alerts to a receiver with no notifier, on the
+        # stated premise that they "still appear in the daily report". They do appear in
+        # collect() -- there is no severity filter there -- but a SHORT-LIVED info alert sorts
+        # to the bottom by duration and was then dropped by the cap into an anonymous
+        # "... and N more", so it reached the operator through no channel whatsoever.
+        # Demonstrated with CopypartyRecentRestart, whose expression (uptime < 300s) means it
+        # can never run more than ~4 minutes: it ranked 37th of 42 against a 25th-row cutoff
+        # of 0.15h.
+        #
+        # Info-severity rows are therefore never truncated: for them this report is the ONLY
+        # delivery path, so dropping one is data loss, whereas a dropped warning/critical row
+        # has already paged or emailed on its own. The cap still applies to everything else,
+        # which is what keeps the mail readable. Note the old cutoff was data-dependent -- a
+        # noisier week raised it and would have swallowed more of the 17 -- so this is not
+        # fixable by simply choosing a bigger number.
+        CAP = 25
+        info_rows = [r for r in d["fired"] if r["severity"] == "info"]
+        other_rows = [r for r in d["fired"] if r["severity"] != "info"]
+        shown = other_rows[:CAP] + info_rows
+        # Re-sort so the table still reads longest-first after the info rows are spliced back.
+        shown.sort(key=lambda r: (-r["longest_hours"], -r["total_hours"]))
+        dropped = len(other_rows) - len(other_rows[:CAP])
+
         out.append(f"{'longest':>9} {'total':>9}  severity   alertname")
         out.append(f"{'-'*9} {'-'*9}  {'-'*8}   {'-'*40}")
-        for r in d["fired"][:25]:
+        for r in shown:
             out.append(
                 f"{r['longest_hours']:8.1f}h {r['total_hours']:8.1f}h  "
                 f"{r['severity']:8}   {r['alertname']}"
             )
-        if len(d["fired"]) > 25:
-            out.append(f"   ... and {len(d['fired']) - 25} more")
+        if dropped:
+            # Names the severities dropped, so "and N more" can never again hide the one class
+            # for which this table is the sole delivery path.
+            out.append(
+                f"   ... and {dropped} more (warning/critical only; all info rows shown above, "
+                f"because the daily report is their only delivery path)"
+            )
         out.append("")
         return "\n".join(out)
 

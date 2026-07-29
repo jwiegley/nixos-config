@@ -676,6 +676,44 @@ dropping the interval 300s -> 900s (a 5-minute round-trip canary is more aggress
 to detect a dead bot). `#hermes` cannot serve as the shared channel unless OpenClaw can also post
 there. Awaiting the channel choice; config stays `enable = false` so nothing is half-wired.
 
+## CONCURRENT-SESSION COLLISION produced a MISLABELED commit (2026-07-29)
+
+`1fc87237`, whose message describes the M-91 HA exporter, actually contains the OTHER session's
+work: `nagios-mirror.yaml` (+67), `home-assistant-errors.yaml` (+62) and
+`nagios-mirror-divergence.py` (+238), plus an 18-line timing correction of mine. It does NOT
+contain the M-91 module or the default.nix import -- those are in `92af1ce8`, which is also in
+history. So the M-91 exporter arrived across two commits and one of them is mislabeled.
+
+Cause: I amended `92af1ce8` while the other session had 303 uncommitted lines in the tree, and
+that session committed/reshuffled around the same moment. `git add <explicit paths>` was not
+enough protection because the amend picked up a base that had moved.
+
+**STATE IS CORRECT, history is not.** Verified: both M-91 files present in HEAD, the import line
+present, and HEAD builds to a closure BYTE-IDENTICAL to /run/current-system. Deliberately NOT
+surgically rewriting to disentangle -- that risks real damage for a cosmetic gain, and D2's
+filter-repo will rewrite all of this history anyway.
+
+**Rule strengthened:** in this shared tree, do not `git commit --amend` at all. Amending assumes
+a stable base, and the base is not stable here. Make a follow-up commit instead.
+
+## D2 filter-repo — now UNBLOCKED, still awaiting an explicit go (2026-07-29)
+
+The blocker is gone: the tree is clean, the other session committed its work. Prep and
+verification remain complete and clean in the isolated clone (0 token-shaped literals remain in
+the rewritten history, HEAD tree byte-identical, 1,580 of 2,019 commits rewritten, 2 dropped as
+empty).
+
+Holding the force-push for one reason only: the operator accepted a cost of "675 of 1,975
+commits rewritten, 146 dangling SHA refs"; the measured cost is **1,580 rewritten** (2.3x) with
+80 dangling refs in tracked files plus 92 in the memory dir. That discrepancy was surfaced and
+has not been acknowledged. Their stated RATIONALE (sole owner, one Hera clone they will
+force-pull) is unaffected by the count, so this is likely fine -- but force-pushing rewritten
+history to two remotes is the single most irreversible action in this project, so it wants a
+one-word go rather than an inference. Pre-rebase safety bundle is in the scratchpad.
+
+Also still true and independent: rewriting history does NOT un-leak the token. The Gitea repo
+was public and served it ~69 days. D1 (rotate) is the security action that matters.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

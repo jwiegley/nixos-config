@@ -139,6 +139,34 @@ Append one line per completed logical unit. Newest last.
   coverage** at all. DoD item 3 strengthened to require `--lint-fatal` (verified: plain
   rc=0 vs `--lint-fatal` rc=3; health-checks.yaml is the only file failing it). Self-heal
   suites re-run fresh: openclaw **45/45**, hermes **86/86**.
+- `2026-07-28` — **Unit 2: memory limits** (`0df1e897`, corrected by `273d4c52`).
+  postgresql/loki/home-assistant raised off self-inflicted MemoryHigh values; postgres was
+  pinned AT 3.5G with 3,899,187 throttle events. Audit found my `effective_cache_size`
+  justification materially false and the 12G ceiling unmeasured → retuned to **6G/8G**
+  (1.26x above the measured 4.8 GiB peak), real evidence substituted (pgscan_direct
+  328,982,937 vs pgscan_kswapd 28,148,500 = 92% synchronous reclaim; 278M file refaults;
+  peak exceeded the OLD MemoryMax), ceiling budget written down (70.5 GiB vs 62.25 GiB
+  MemTotal = 113%, safe for four measured reasons). Throttle counter **frozen** across 3
+  samples with live queries between; oom_kill=0. Also repaired a pre-existing `.gitignore`
+  corruption: the fused pattern `/prd.md.nixos-build` meant NEITHER `/prd.md` nor the build
+  mutex was ignored.
+- `2026-07-28` — **Unit 3: jupyterlab/aria2 rule repair** (`895a39e7`, corrected by
+  `c15581b2`). 10 dead rules → 6 live: 5 job-label/metric repairs + 4 deletions + 1
+  threshold revision. Two root causes: the job `blackbox-https` (hyphen) never existed, and
+  the trap is that the underscore `blackbox_https` is a DIFFERENT job (google.com only) so a
+  naive swap would have left them dead — correct job is `blackbox_https_local`. Backtested
+  against the real 2026-07-03 18:00–18:48 UTC outage (49 contiguous minutes). Fleet: **534
+  rules, 0 err**. Audit then found three FALSE coverage claims in my comments (see the
+  recurring-defect section above) plus an undisclosed 5m→15m dwell regression; all corrected
+  in `c15581b2`.
+- **Switch exit-4 pattern (2 occurrences, NOT a gate failure):** budget-board-server's
+  podman healthcheck runs while `health_status=starting` and returns 1, creating a transient
+  failed unit that makes `switch-to-configuration` exit 4 even though the switch applied
+  correctly. Journal confirms `health_status=starting` with `failingStreak=0`. **This
+  matters beyond cosmetics: a real switch failure and this benign race are
+  indistinguishable by exit code, which undermines DoD gate 2.** Fix (a healthcheck
+  start-period on the budget-board quadlet) is queued as a Phase 6 item rather than
+  hand-clearing the unit every cycle.
 
 ## Baseline at loop start (2026-07-28)
 
@@ -219,6 +247,33 @@ this for free; make sure it does.
 - The openclaw self-heal suite is recorded at 45 tests, but project memory records 31 in
   June 2026. The growth is plausible but was not confirmed; re-run before relying on it as
   a DoD gate.
+
+## RECURRING DEFECT IN MY OWN OUTPUT — read this before writing any comment
+
+Three separate audits this session caught the SAME class of error from me: **asserting a
+negative or a coverage claim without querying for it.** Not one of these was an expression
+defect; every one was a false statement written into a permanent comment or commit message,
+where it would mislead the next reader — the exact defect class this whole effort exists to
+remove.
+
+| Claim I wrote | Reality |
+|---|---|
+| "ten pre-existing docs contain private IPs" | 14 files / 160 occurrences; I had piped the scan through `head` |
+| "effective_cache_size told the planner to assume 4 GiB of OS cache … raising the ceiling resolves that" | e_c_s is TOTAL cache incl. shared_buffers; it caused zero throttling; raising the ceiling INVERTED the mismatch |
+| "probe_http_duration_seconds has zero series under any job" | 205 series under one job incl. jupyter; real defect was per-PHASE labelling |
+| "a single OOM-and-restart would go unpaged" | `KernelOOMKill` (for=0) already pages; and the unit transits `activating`, never `failed` (30d max = 0) |
+| "nothing else watches jupyter's served cert" | cert-exporter tracks it at 337d; several fleet rules have NO selector and already match |
+
+**Rules adopted for the rest of this loop:**
+1. Never write "X does not exist", "nothing covers Y", or "Z would go unpaged" without
+   running the query that would disprove it. Put the query's result in the comment.
+2. Before claiming a deletion is covered by a parent rule, compare the **dwell** as well as
+   the selector. A parent with a longer `for:` is a latency REGRESSION and must be disclosed
+   (this caught the 5m→15m `ServiceStuckActivating` regression).
+3. Never derive a count from a `head`/`tail`-truncated stream.
+4. Quote headroom against the observed **maximum**, not the median — the max is what
+   determines false-fire risk.
+5. Prefer "I verified X returns N series" over "X is broken".
 
 ## Resume instructions
 

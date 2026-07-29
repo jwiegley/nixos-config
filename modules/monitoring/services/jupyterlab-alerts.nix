@@ -60,8 +60,21 @@ let
         # `- time()` form is already CORRECT here: probe_ssl_earliest_cert_expiry is an
         # absolute Unix epoch (verified live), so do NOT add a second `- time()` -- that
         # would yield expiry - 2*time(), go hugely negative, and fire forever. Only the
-        # job label changed. Nothing else watches jupyter's served cert: the generic
-        # SSLCertificate* rules select job="blackbox_https", which is google.com only.
+        # job label changed.
+        # CORRECTED 2026-07-28: an earlier version claimed "nothing else watches jupyter's
+        # served cert". FALSE. The file-based cert-exporter already tracks it --
+        # certificate_days_until_expiry{name="jupyter.vulcan.lan",type="nginx"} = 337 --
+        # and several fleet rules carry NO label selector at all, so they already match it
+        # at both 30d and 7d (certificates/CertificateExpiringSoon,
+        # certificate_alerts/CertificateExpiringSoon, certificate_alerts/
+        # CertificateExpiryCritical, plus CertificateExpired and friends; note
+        # certificate_alerts is currently loaded TWICE, so each counts double).
+        # This rule is still worth keeping, but for a NARROWER reason than "nothing else
+        # covers it": the cert-exporter reads the file ON DISK while this probes the cert
+        # actually SERVED on the wire, so it is the only thing that catches
+        # renewed-but-nginx-not-reloaded divergence. It IS otherwise redundant with the
+        # existing 7d rule. (The generic SSLCertificate* probe rules are a separate matter
+        # -- those select job="blackbox_https", which carries only google.com.)
         expr: probe_ssl_earliest_cert_expiry{job="blackbox_https_local",instance="https://jupyter.vulcan.lan"} - time() < 86400 * 7
         for: 1h
         labels:
@@ -92,13 +105,24 @@ let
       #
       # 2026-07-28, three separate defects fixed here:
       #  1. job label "blackbox-https" -> "blackbox_https_local" (see above).
-      #  2. metric probe_http_duration_seconds -> probe_duration_seconds. The former has
-      #     zero series on this host under any job.
-      #  3. threshold 5s -> 1s. A 5s threshold was UNREACHABLE while the endpoint works:
-      #     the 30-day maximum probe_duration_seconds with probe_success==1 is 0.26s for
-      #     jupyter (0.20s for aria), and the blackbox module's own timeout is 10s, so the
-      #     only way to exceed 5s was a probe already failing -- which JupyterLabHttpsDown
-      #     covers. Live duration is ~0.02s, so 1s is ~40x headroom over normal.
+      #  2. metric probe_http_duration_seconds -> probe_duration_seconds. CORRECTED
+      #     2026-07-28: an earlier version of this comment claimed the old metric had
+      #     "zero series on this host under any job". That was FALSE -- it has 205 series
+      #     under blackbox_https_local alone (and exists under 9 other jobs), including
+      #     jupyter. The actual defect is that blackbox publishes it PER PHASE: jupyter
+      #     carries 5 series labelled phase=resolve|connect|tls|processing|transfer, so
+      #     `probe_http_duration_seconds > 5` compared each phase INDEPENDENTLY and
+      #     {{ $value }} would have reported a single phase rather than total response
+      #     time. Fixing it in place would have required `sum by (instance) (...)`;
+      #     probe_duration_seconds (total probe wall time) is the simpler correct signal.
+      #  3. threshold 5s -> 1s. 5s was effectively unreachable on total probe time: the
+      #     30-day maximum probe_duration_seconds with probe_success==1 is 0.2606s for
+      #     jupyter (0.2032s for aria), so only an already-failing probe could exceed 5s
+      #     -- and JupyterLabHttpsDown covers that. Headroom at 1s is 3.8x over the
+      #     30-day MAXIMUM (0.2606s) and ~40x over the ~0.025s typical; quote the former,
+      #     since the maximum is what determines false-fire risk. The threshold is
+      #     genuinely reachable rather than merely quieter: summed per-phase HTTP duration
+      #     for this instance peaked at 1.7999s within the same 30-day window.
       # The `and probe_success == 1` guard is what makes this a LATENCY rule rather than a
       # duplicate outage rule: without it, a timing-out probe reports a large duration and
       # would double-page alongside JupyterLabHttpsDown.
@@ -126,16 +150,40 @@ let
       #   {__name__=~".*memory.*(current|high|max).*"} yields only
       #   process_virtual_memory_max_bytes, microvm_memory_current_bytes,
       #   redis_memory_max_bytes and grafana_*.
-      #   HONEST COVERAGE NOTE: an OOM kill here is only PARTIALLY covered. jupyterlab
-      #   runs OOMPolicy=stop with Restart=on-failure and RestartSec=10s, so its `failed`
-      #   window after an OOM is roughly 10s -- BELOW SystemdServiceFailed's for=60. A
-      #   single OOM-and-restart would therefore go unpaged; only a restart LOOP trips
-      #   ServiceRestartLooping. Do not record this as covered. Closing it properly needs
-      #   the per-cgroup exporter tracked as M-92.
+      #   COVERAGE NOTE, corrected 2026-07-28. An earlier version of this comment claimed
+      #   "a single OOM-and-restart would go unpaged". That was FALSE and would have
+      #   misled the next reader into building something already present: the live
+      #   fleet rule KernelOOMKill (`increase(node_vmstat_oom_kill[15m]) > 0`, for=0,
+      #   health=ok) pages on ANY kernel or memcg OOM, and jupyterlab has
+      #   MemoryMax=8G so exceeding it is a memcg OOM, which the kernel counts in
+      #   /proc/vmstat oom_kill. What is genuinely missing is narrower than claimed:
+      #     - ATTRIBUTION: node_vmstat_oom_kill is host-scoped with no unit label, so the
+      #       page says "something was OOM-killed", not "jupyterlab was".
+      #     - PRE-OOM EARLY WARNING: nothing fires as the unit APPROACHES its limit.
+      #   Only those two gaps justify M-92; scope it accordingly rather than on a
+      #   nonexistent missing page.
+      #   The mechanism in that earlier comment was also wrong in a load-bearing way. With
+      #   Restart=on-failure systemd routes the unit through auto-restart, so it transits
+      #   `activating`, NOT a ~10s `failed` window. Measured over 30 days:
+      #   max_over_time(node_systemd_unit_state{name="jupyterlab.service",state="failed"})
+      #   = 0 -- never once observed failed -- while the same query for state="activating"
+      #   = 1. So raising RestartSec above 60s would NOT make SystemdServiceFailed catch
+      #   this, which is exactly the wrong conclusion the old wording invited.
 
-      # JupyterLabKernelIssue deleted 2026-07-28: strict subset of the host-wide
-      #   ServiceStuckActivating rule, and its own expr referenced the nonexistent
-      #   `systemd_unit_state`.
+      # JupyterLabKernelIssue deleted 2026-07-28: its own expr referenced the nonexistent
+      #   `systemd_unit_state` and so could never fire. The host-wide
+      #   ServiceStuckActivating rule takes over, and jupyterlab.service is confirmed
+      #   inside its selector (it is not in that rule's seven-unit exclusion list).
+      #   DISCLOSED DWELL REGRESSION: "strict subset" is true of the SELECTOR but NOT of
+      #   the dwell -- ServiceStuckActivating is for=900 (15m) against this rule's former
+      #   for=300 (5m), so a hung SageMath kernel install is now detected 10 minutes
+      #   later. Accepted as a deliberate trade (one host-wide rule beats nine per-service
+      #   ones), but recorded rather than glossed: if the 5m latency ever matters for
+      #   kernel installs specifically, the fix is a per-service rule with the CORRECT
+      #   metric, not a resurrection of this one.
+      #   For contrast, the other two deletions carry no such regression:
+      #   SystemdServiceFailed's for=60 EQUALS the deleted child's 1m, and
+      #   ServiceRestartLooping's for=300 is FASTER than the child's 600.
   '';
 in
 {

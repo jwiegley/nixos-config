@@ -590,6 +590,34 @@ re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` 
   without filtering `--retry-lock=1h`, so injected failures never fired and two scenarios
   tested nothing while appearing green. Always assert the injection actually took effect.
 
+- `2026-07-29` — **Independent adversarial audit + fixes** (workflow `wf_2aa5ff44-590`, fixes in
+  `8e1940a6`). Restored the evaluator separation that broke when the earlier subagent failed
+  twice: 3 lenses → a refute-first skeptic per finding → synthesis. **15 raised, 12 refuted, 4
+  survived.** It REFUTED my biggest open risk — the `--read-data-subset=P/52` coverage claim
+  holds (1.56–1.95% per bucket, finite-pack rounding), so the feature's justification stands.
+  - **F1 (my own half-fix):** the whole-loop deadline is tested only at the TOP of an iteration,
+    so it bounds when a repo may START, not run length. With fixed `--retry-lock=1h` on
+    check/prune/repair, worst case was `12600 + 3×3600 = 6.5h` — ABOVE the 4h kill it exists to
+    avoid, with 1800s slack smaller than ONE operation's lock allowance. Auditor reproduced 6h.
+    Fixed by scaling lock wait to remaining budget / 3 (floor 60s, cap 3600s). Took the
+    auditor's advice to scale `--retry-lock` rather than wrap in `timeout` — a kill mid-prune is
+    itself a data risk. Bound now holds: a repo starting at T with remaining R waits
+    `3 × min(3600, R/3) <= R`, finishing by `T + R`.
+  - **F2:** `ResticReadDataStale` cannot catch a metric that NEVER arrives (absent series →
+    empty vector), and nothing seeds these six series or covers them via
+    TextfileCollectorStale*. Added `ResticReadDataMetricsAbsent` (24h). Safe now, not at
+    authoring time — the series exist post-first-run.
+  - **F3:** three above/below inversions introduced by `81ee8ed5`, the commit whose purpose was
+    fixing comment-truth defects. Rejected the same reviewer's "delete ~40 lines of changelog"
+    — recording why a mistake was made is this repo's convention, and its own verifier
+    discarded it as style.
+  - **INFO:** replaced projections the live run falsified (~9x off): 800s total, 402s structure
+    / 398s read-data, Photos 103s, ~40 MB/s. Budgets deliberately NOT tightened — B2 bandwidth
+    varies, repos grow, over-provisioning is free, a spurious cut costs coverage.
+  Method note for Phase 8: the workflow shape (distinct lenses → refute-first verifier →
+  synthesis) worked where a single auditor failed twice. **Reuse it.** The 12 refutations were
+  as valuable as the 4 findings — several objections were already anticipated in comments.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

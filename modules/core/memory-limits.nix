@@ -35,6 +35,12 @@
   #   home-assistant  current 1.2GB,  peak 1.6GB   > High 1.5GB,   184 events
   #   victoriametrics/grafana/jellyfin              0 events -- left alone, but see below
   #
+  # OUTCOME, re-measured 2026-07-29: the loki and home-assistant raises WORKED and need no
+  # further change -- loki went 1,037 events -> 0 (peak 289 MiB against a 3G soft limit)
+  # and home-assistant 184 -> 0 (peak 1.47 GiB against 2G). Only postgresql still throttles,
+  # and it is re-sized below. Do not raise loki or home-assistant "for symmetry": neither
+  # is anywhere near its ceiling and there is nothing to gain.
+  #
   # "0 events" is not the same as "ample room". victoriametrics (363 MiB peak / 2G high)
   # and grafana (340 MiB / 1.2G) genuinely have room. JELLYFIN DOES NOT: its peak is
   # 1.82 GiB against a 2.5 GiB soft limit, i.e. 73% consumed with ~680 MiB spare, on a
@@ -51,12 +57,16 @@
   # budget is written down rather than asserted. Summed 2026-07-28 against MemTotal
   # 62.25 GiB:
   #
-  #   MemoryMax in this file (6 services)                        21.50 GiB
+  #   MemoryMax in this file (6 services)                        25.50 GiB
   #   MemoryMax elsewhere under modules/ (12 services)           26.00 GiB
   #   microVM QEMU allocations (openclaw 4 + hermes 3)            7.00 GiB
   #   ZFS ARC c_max                                              16.00 GiB
   #                                                             ----------
-  #   nominal total                                              70.50 GiB  = 113%
+  #   nominal total                                              74.50 GiB  = 120%
+  #
+  # Updated 2026-07-29: postgresql's MemoryMax went 8G -> 12G on measured evidence (see
+  # its block below), moving this file's six caps from 21.50 to 25.50 GiB and the nominal
+  # total from 113% to 120% of MemTotal 62.25 GiB.
   #
   # Deliberately over 100%, and that is safe here for four measured reasons: ceilings are
   # not reservations; ARC is elastic and currently sits at ~7 of its 16 GiB; observed
@@ -157,14 +167,46 @@
     # in a separate, separately-verified tuning change. Recorded so the next reader knows
     # it is a known open item, not an oversight.
     #
-    # Sizing: High 6G sits ~1.26x above the measured 4.77 GiB peak so the working set
-    # fits without reclaim, and Max 8G is a genuine safety net. An earlier draft used
-    # 8G/12G, which had no measurement behind it and inflated the ceiling budget above by
-    # 4 GiB for no benefit.
+    # Sizing, REVISED 2026-07-29. The 2026-07-28 note claimed "High 6G sits ~1.26x above
+    # the measured 4.77 GiB peak so the working set fits without reclaim". Measurement has
+    # FALSIFIED that prediction, and it is worth being explicit about why rather than
+    # quietly re-tuning:
+    #
+    #   memory.peak  6,445,318,144 B = 6.002 GiB  <- now ABOVE MemoryHigh's 6.000 GiB
+    #   memory.events high  3,932,280            <- was 3,899,187 on 2026-07-28
+    #
+    # The 6G raise DID help substantially -- throttling fell from ~156,000 events/day
+    # (3.9M over the 25 days from the 07-03 start) to ~33,000/day -- but it did not stop.
+    # The page-cache term is elastic, so the working set simply grew into the new ceiling.
+    # By this file's own stated rule (MemoryHigh above OBSERVED PEAK plus headroom) the
+    # current value is now a violation, not a fit.
+    #
+    # memory.pressure UNDERSTATES the cost and should not be used alone to judge this:
+    # cumulative stall is only 68 s over 26 days, because evicting cache is not a stall --
+    # it reappears later as disk reads. The metric that actually shows the damage:
+    #
+    #   overall buffer cache hit ratio  89.38%   (blks_read 597,678,414 = ~4.6 TB re-read)
+    #   litellm                         62.94%   (91.8M reads)
+    #   mailarchiver                    84.04%   (472.6M reads -- the largest single source)
+    #
+    # ~89% is poor for PostgreSQL, where >99% is the normal target, and it is a direct
+    # consequence of cgroup reclaim dropping pages this instance immediately needs again
+    # (workingset_refault_file above). Confirmed relevant: the data directory is on
+    # /dev/nvme0n1p5, ext4 -- so it is served by the kernel PAGE CACHE governed by this
+    # cgroup limit, not by ZFS ARC, which caps separately at 16 GiB.
+    #
+    # So: High 10G / Max 12G. This is the same shape as an earlier draft that was rejected
+    # on 2026-07-28 for having "no measurement behind it" -- the difference is that it now
+    # does. Host has 62.25 GiB with ~33 GiB available and oom_kill has been 0 on every
+    # cgroup inspected, so the added ceiling is affordable.
+    #
+    # Re-validate by RE-MEASURING THE HIT RATIO, not by looking for zero reclaim: a finite
+    # ceiling on an elastic cache will always eventually be filled, so the goal is fitting
+    # the working set, not eliminating reclaim.
     postgresql = {
       serviceConfig = {
-        MemoryMax = "8G";
-        MemoryHigh = "6G";
+        MemoryMax = "12G";
+        MemoryHigh = "10G";
       };
     };
 

@@ -1,0 +1,125 @@
+groups:
+  # =====================================================================
+  # BOOT NVMe SMART HEALTH
+  # =====================================================================
+  # Added 2026-07-29. /dev/nvme0n1 backs / and /nix/store and had NO automated SMART
+  # coverage at all -- the only rule that ever referenced it (SmartNVMeMediaErrors) was a
+  # knowingly-dead rule, because the device cannot be served by smartctl_exporter on this
+  # hardware (see modules/monitoring/services/nvme-smart-exporter.nix for why: exporter
+  # 0.14.0 hardcodes --log=error, which hits unsupported log page 0x109 on Apple ANS NVMe
+  # and makes it discard the device). Metrics now come from a textfile collector that avoids
+  # that log page.
+  #
+  # Baseline measured 2026-07-29 at authoring time, so the thresholds are anchored to real
+  # values rather than convention:
+  #   healthy 1 | critical_warning 0 | media_errors 0 | error_log_entries 0
+  #   percentage_used 13 %   (wear; 100 = rated life)
+  #   available_spare 100 %  against a vendor threshold of 99 %  <- unusually tight
+  #   temperature 38 C
+  - name: nvme_smart
+    interval: 5m
+    rules:
+      # The device's own overall verdict. No dwell games: if the controller says it is
+      # failing, that is the signal.
+      - alert: NVMeSmartFailed
+        expr: nvme_smart_healthy == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} reports SMART FAILED"
+          description: "The SMART overall-health self-assessment on {{ $labels.device }} has failed. This device backs / and /nix/store. Back up and plan replacement now: `sudo smartctl -a /dev/{{ $labels.device }}`."
+
+      # NVMe critical_warning is a bitfield the controller sets for spare-below-threshold,
+      # temperature excursion, degraded reliability, read-only mode and volatile-memory
+      # backup failure. Any non-zero value is worth a look.
+      - alert: NVMeCriticalWarning
+        expr: nvme_smart_critical_warning > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} raised critical warning bitfield {{ $value }}"
+          description: "The NVMe controller set a critical warning (bitfield {{ $value }}): spare below threshold, temperature excursion, degraded reliability, read-only mode, or volatile-memory backup failure. Baseline is 0. Inspect with `sudo smartctl -a /dev/{{ $labels.device }}`."
+
+      # media_errors counts UNRECOVERABLE data-integrity errors. Baseline is 0 and any
+      # increase is meaningful, so this alerts on the delta rather than an absolute floor --
+      # an absolute threshold would either fire forever once crossed or hide slow growth.
+      - alert: NVMeMediaErrors
+        expr: increase(nvme_smart_media_errors[24h]) > 0
+        for: 15m
+        labels:
+          severity: critical
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} logged {{ $value }} new media errors in 24h"
+          description: "Unrecoverable data-integrity errors on the device backing / and /nix/store. Baseline was 0 with zero growth. Any non-zero increase warrants investigation and a backup check."
+
+      # available_spare falling to the VENDOR threshold is the controller's own
+      # end-of-life signal. Comparing against the reported threshold rather than a
+      # hardcoded number matters here: this device reports a threshold of 99, not the ~10
+      # typical elsewhere, so a fixed "< 10" rule would never fire before failure.
+      - alert: NVMeSpareExhausted
+        expr: nvme_smart_available_spare <= nvme_smart_available_spare_threshold
+        for: 30m
+        labels:
+          severity: critical
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} spare capacity reached the vendor threshold"
+          description: "available_spare has fallen to or below the controller's own threshold. This device reports a threshold of 99% (unusually tight), so treat this as an end-of-life indicator rather than a soft warning."
+
+      # Wear. 13% used after ~4 years means this drive is nowhere near its rated life, so
+      # 80% is a comfortable early warning with years of headroom rather than a nag.
+      - alert: NVMeWearHigh
+        expr: nvme_smart_percentage_used >= 80
+        for: 1h
+        labels:
+          severity: warning
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} is {{ $value }}% through its rated life"
+          description: "Vendor wear estimate has reached {{ $value }}%. Baseline on 2026-07-29 was 13%, so this represents substantial additional wear. Plan replacement before 100%."
+
+      - alert: NVMeTemperatureHigh
+        expr: nvme_smart_temperature_celsius > 70
+        for: 15m
+        labels:
+          severity: warning
+          category: storage
+          service: nvme
+        annotations:
+          summary: "Boot NVMe {{ $labels.device }} at {{ $value }}C"
+          description: "Sustained temperature above 70C (baseline 38C). Sustained heat accelerates wear and can trigger controller throttling."
+
+      # Meta: every rule above compares against a series, so an ABSENT series makes them all
+      # silently inert -- indistinguishable from a healthy disk. These two make the collector
+      # itself observable, which is the whole point of the exercise.
+      - alert: NVMeSmartCollectorFailing
+        expr: nvme_smart_collector_success == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+          service: nvme
+        annotations:
+          summary: "Boot-NVMe SMART collector cannot read the device"
+          description: "The collector ran but could not read SMART data, so every NVMe rule above is inert. Check `journalctl -u nvme-smart-exporter`. Note smartctl's exit status is a BITFIELD -- the collector deliberately treats only bits 0-2 as hard failures, so a 'disk failing' verdict is REPORTED rather than swallowed as a collector error."
+
+      - alert: NVMeSmartMetricsStale
+        expr: time() - nvme_smart_collector_timestamp_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: nvme
+        annotations:
+          summary: "Boot-NVMe SMART metrics are {{ $value | humanizeDuration }} stale"
+          description: "The collector timer runs every 15 minutes; metrics older than an hour mean it has stopped. Boot-drive health is currently unmonitored. Check nvme-smart-exporter.timer."

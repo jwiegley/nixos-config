@@ -90,6 +90,33 @@
       # Number of daily snapshots to retain
       RETENTION_COUNT=2
 
+      # Wait for Prometheus to actually be READY before snapshotting.
+      #
+      # Added 2026-07-29 after this unit failed with status=7/NOTRUNNING: the timer fired
+      # while Prometheus was restarting during a nixos-rebuild switch, curl could not
+      # connect, and `set -euo pipefail` aborted the whole job. Requires=prometheus.service
+      # is NOT sufficient -- systemd considers the unit started as soon as the process
+      # execs, but Prometheus needs to replay its WAL before the admin API answers, and on
+      # this host that window is long enough for the timer to land inside it.
+      #
+      # This is the same readiness-vs-liveness distinction already fixed elsewhere in this
+      # config (cloudflared waiting on technitium, immich gated on its mount): "the unit is
+      # active" and "the service can serve a request" are different claims.
+      echo "Waiting for the Prometheus admin API to become ready..."
+      READY=0
+      for _ in $(seq 1 30); do
+        if curl -sf -o /dev/null "http://127.0.0.1:9090/-/ready"; then
+          READY=1
+          break
+        fi
+        sleep 10
+      done
+      if [ "$READY" -ne 1 ]; then
+        echo "ERROR: Prometheus admin API not ready after 5 minutes; skipping this run."
+        echo "This is a genuine failure (the snapshot did NOT happen), not a transient."
+        exit 1
+      fi
+
       # Create snapshot via admin API
       echo "Creating TSDB snapshot..."
       RESPONSE=$(curl -sf -X POST "http://127.0.0.1:9090/api/v1/admin/tsdb/snapshot")

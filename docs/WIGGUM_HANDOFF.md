@@ -117,6 +117,7 @@ Escalate at 3.
 | `promtool check rules` | 0 | — |
 | 0 err rules live | 0 | — |
 | self-heal test suites | 0 | — |
+| **fess-auditor subagent (read-data audit)** | **2** | **ESCALATION-WORTHY — went idle twice with no report, including after an explicit request naming the exact structure wanted. Did NOT send a third message (that is thrashing). Fell back to running the two highest-value checks by hand; both found real defects, fixed in `81ee8ed5`. NOTE this breaks the loop's evaluator-separation rule: those findings are me re-checking my own work. A future iteration should spawn a FRESH auditor for `3cd32cc1` + `81ee8ed5` rather than reuse this one.** |
 
 ## Progress log
 
@@ -527,6 +528,21 @@ the OpenClawConfigDrift route (single alertname, :75), the three self-heal route
 alertnames, asserting the 4 land on `default-receiver` and the 17 on `null-receiver`. Also
 re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` and
 `critical-receiver`, since a mis-ordered insert could shadow them.
+
+- `2026-07-29` — **Unit: invariant + whole-loop deadline** (`81ee8ed5`). Fixes two defects in
+  `3cd32cc1` found by running its own audit checks 6 and 8 by hand after the subagent failed.
+  (1) The published invariant was SELF-CONTRADICTORY — it claimed
+  `verified+skipped+failed==total` and then that a structure-check failure lands in none of
+  the three. Reproduced: fail Home → 8+0+0 vs total 9. Correct relation now written down as
+  `== repos that passed their structure check <= total`. No alert depended on the equality, so
+  nothing fired wrongly, but the comment would have misled someone into writing one that did.
+  (2) The 4h RuntimeMaxSec hard kill WAS reachable: only read-data was budgeted, while
+  check/prune/repair are untimed and each waits `--retry-lock=1h`. A kill aborts mid-loop and
+  destroys the per-repo accounting the whole Phase-7 effort provides. Added a 3.5h whole-loop
+  deadline that NAMES unreached repos and fails the run.
+  Method lesson: my first harness for this reported false passes because the stub read `$1`
+  without filtering `--retry-lock=1h`, so injected failures never fired and two scenarios
+  tested nothing while appearing green. Always assert the injection actually took effect.
 
 ## Resume instructions
 

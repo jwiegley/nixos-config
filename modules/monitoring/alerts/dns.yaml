@@ -103,8 +103,44 @@ groups:
           description: "DNS query rate has dropped to less than 10% of the average over the last hour. This could indicate network issues or client problems. Current rate: {{ $value | humanize }} queries/sec."
 
       # DNS Failure Rate (Consistency) Alerts
+      #
+      # ALL SEVEN RATIO RULES IN THIS SECTION WERE REPAIRED AND RETUNED 2026-07-28.
+      # Every one returned 0 series and could never fire. Two independent defects:
+      #
+      #  1. VECTOR MATCHING. The old form divided a labelled vector by a bare `sum(...)`,
+      #     which strips all labels, so one-to-one matching found nothing on either side
+      #     and the result was empty. Verified: stripping the threshold from the old shape
+      #     STILL returned 0 series, which is how you distinguish a broken match from a
+      #     merely-false condition. The working form is
+      #     `sum by(instance,job)(X{result=...}) / on(instance,job) group_left sum by(instance,job)(X)`.
+      #  2. GAUGE SEMANTICS. `rate()` is illegal on these metrics. Technitium publishes
+      #     ROLLING-HOUR WINDOW gauges that move DOWN as well as up; rate() assumes a
+      #     monotonic counter. The raw ratio already IS the last-hour ratio, so rate() is
+      #     both wrong and unnecessary.
+      #
+      # THRESHOLDS are set from the measured 30-day distribution (n=4288 samples at 10m
+      # step), NOT from the old aspirational values and NOT from raw maxima. Method and
+      # why it matters:
+      #   - A 7-day window at 5m step understates every extreme on this host. The original
+      #     retune proposal used exactly that and would have shipped FOUR rules that fire
+      #     in normal operation (nx_domain >0.50 against a 0.5353 real spike, refused >0.10
+      #     against 0.1285, cached <0.40 against a p1 of 0.3896, server_failure >0.05
+      #     against 9 routine samples above it).
+      #   - Brief 1-minute spikes exist but CANNOT satisfy these 5-15m dwells, so the
+      #     sustained (10m-step) distribution is the correct basis, with thresholds placed
+      #     above the 1m absolute max wherever that is still practical.
+      #   - One outlier is excluded deliberately: a single sample on 2026-07-03 11:33
+      #     (SERVFAIL ratio 0.34-0.39, recursion ratio 7.38 -- a ratio above 1.0 is
+      #     impossible, proving numerator and denominator came from non-commensurable
+      #     window states). 07-03 is a known-anomalous day and the exporter was serving
+      #     byte-identical frozen samples around then. Thresholds are set to still catch
+      #     that magnitude of event while ignoring routine noise.
+      #
+      # server_failure: 9 of 4288 samples exceed 0.05 (0.2%) and only 1 exceeds 0.15, so
+      # the old 0.01 and the proposed 0.05 both sit inside normal variation. 0.10 warning
+      # clears all routine noise; 0.20 critical is ~4x the p99.
       - alert: HighDNSServerFailureRate
-        expr: rate(technitium_dns_request_result_count{result="server_failure"}[5m]) / sum(rate(technitium_dns_request_result_count[5m])) > 0.01
+        expr: sum by(instance,job)(technitium_dns_request_result_count{result="server_failure"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_request_result_count) > 0.10
         for: 5m
         labels:
           severity: warning
@@ -112,10 +148,10 @@ groups:
           component: dns
         annotations:
           summary: "High DNS SERVFAIL rate detected"
-          description: "More than 1% of DNS queries are returning SERVFAIL. This indicates problems with upstream resolvers or DNS configuration. Current rate: {{ $value | humanizePercentage }}."
+          description: "More than 10% of DNS queries are returning SERVFAIL (30d p99 is well under this). Indicates problems with upstream resolvers or DNS configuration. Current rate: {{ $value | humanizePercentage }}."
 
       - alert: CriticalDNSServerFailureRate
-        expr: rate(technitium_dns_request_result_count{result="server_failure"}[5m]) / sum(rate(technitium_dns_request_result_count[5m])) > 0.05
+        expr: sum by(instance,job)(technitium_dns_request_result_count{result="server_failure"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_request_result_count) > 0.20
         for: 2m
         labels:
           severity: critical
@@ -123,10 +159,12 @@ groups:
           component: dns
         annotations:
           summary: "Critical DNS SERVFAIL rate detected"
-          description: "More than 5% of DNS queries are returning SERVFAIL. Immediate investigation required. Current rate: {{ $value | humanizePercentage }}."
+          description: "More than 20% of DNS queries are returning SERVFAIL -- roughly 4x the 30-day p99. Immediate investigation required. Current rate: {{ $value | humanizePercentage }}."
 
       - alert: HighDNSRefusedRate
-        expr: rate(technitium_dns_request_result_count{result="refused"}[5m]) / sum(rate(technitium_dns_request_result_count[5m])) > 0.02
+        # refused: 30d p99.9 = 0.0501, sustained max 0.0526, briefest 1m spike 0.1285.
+        # 0.15 sits above even that spike, so only a sustained regime change fires.
+        expr: sum by(instance,job)(technitium_dns_request_result_count{result="refused"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_request_result_count) > 0.15
         for: 5m
         labels:
           severity: warning
@@ -134,10 +172,13 @@ groups:
           component: dns
         annotations:
           summary: "High DNS REFUSED response rate"
-          description: "More than 2% of DNS queries are being refused. This could indicate ACL issues or security policy triggering. Current rate: {{ $value | humanizePercentage }}."
+          description: "More than 15% of DNS queries are being refused (30d p99.9 is 5%). Could indicate ACL issues or security policy triggering. Current rate: {{ $value | humanizePercentage }}."
 
       - alert: HighDNSNameErrorRate
-        expr: rate(technitium_dns_request_result_count{result="nx_domain"}[5m]) / sum(rate(technitium_dns_request_result_count[5m])) > 0.15
+        # nx_domain: NXDOMAIN is genuinely noisy on a home LAN (typos, Bonjour/mDNS
+        # lookups, ad-block domains). 30d p50 = 0.1175, p99.9 = 0.4618, sustained max
+        # 0.4733, briefest 1m spike 0.5353 -- so the proposed 0.50 WOULD have fired.
+        expr: sum by(instance,job)(technitium_dns_request_result_count{result="nx_domain"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_request_result_count) > 0.60
         for: 10m
         labels:
           severity: warning
@@ -145,11 +186,15 @@ groups:
           component: dns
         annotations:
           summary: "Unusually high NXDOMAIN rate detected"
-          description: "More than 15% of DNS queries are returning NXDOMAIN (non-existent domain). This could indicate misconfigurations, typos, or reconnaissance activity. Current rate: {{ $value | humanizePercentage }}."
+          description: "More than 60% of DNS queries are returning NXDOMAIN (30d median is 12%, p99.9 is 46%). Could indicate misconfigurations, a broken search domain, or reconnaissance. Current rate: {{ $value | humanizePercentage }}."
 
       # DNS Cache Performance (Consistency)
       - alert: LowDNSCacheHitRate
-        expr: rate(technitium_dns_resolve_mode_count{result="cached"}[5m]) / sum(rate(technitium_dns_resolve_mode_count[5m])) < 0.7
+        # cached: a FLOOR rule, so the relevant statistic is the low tail. 30d p1 =
+        # 0.3896 and sustained min 0.3597, so the old 0.70 and the proposed 0.40 both sit
+        # ABOVE normal operation and would fire routinely. 0.25 is below the sustained
+        # minimum with margin; the briefest 1m dip reached 0.1963 but cannot hold 15m.
+        expr: sum by(instance,job)(technitium_dns_resolve_mode_count{result="cached"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_resolve_mode_count) < 0.25
         for: 15m
         labels:
           severity: warning
@@ -157,11 +202,14 @@ groups:
           component: dns
         annotations:
           summary: "Low DNS cache hit rate"
-          description: "DNS cache hit rate is below 70% for the last 15 minutes. This reduces performance and increases load on upstream resolvers. Current rate: {{ $value | humanizePercentage }}."
+          description: "DNS cache hit rate is below 25% for 15 minutes (30d median is 63%, p1 is 39%). Reduces performance and increases upstream load. Current rate: {{ $value | humanizePercentage }}."
 
       # DNS Blocking Statistics (if using blocking)
       - alert: HighDNSBlockRate
-        expr: rate(technitium_dns_resolve_mode_count{result="blocked"}[5m]) / sum(rate(technitium_dns_resolve_mode_count[5m])) > 0.5
+        # blocked: threshold UNCHANGED at 0.50 -- it is the one rule in this section whose
+        # value was already sane. 30d p99.9 = 0.2767, max 0.2925, so 0.50 keeps ~1.7x
+        # margin. Expression-only repair.
+        expr: sum by(instance,job)(technitium_dns_resolve_mode_count{result="blocked"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_resolve_mode_count) > 0.50
         for: 10m
         labels:
           severity: info
@@ -173,7 +221,14 @@ groups:
 
       # Upstream Resolver Issues
       - alert: HighDNSRecursionFailureRate
-        expr: rate(technitium_dns_resolve_mode_count{result="recursive"}[5m]) > 0 and (rate(technitium_dns_request_result_count{result="server_failure"}[5m]) / rate(technitium_dns_resolve_mode_count{result="recursive"}[5m])) > 0.1
+        # recursion failures: operand order is deliberately RATIO FIRST, guard second, so
+        # that {{ $value }} interpolates the ratio rather than the guard. The `> 0` guard is
+        # retained despite recursive never being observed at 0 in 4288 samples, because a
+        # zero denominator yields +Inf which would fire unconditionally.
+        # 30d p99 = 0.1163, p99.9 = 0.3103, so the proposed 0.30 would fire ~5x/month.
+        # 0.50 leaves only the single 07-03 artifact (which reached 7.38 -- a ratio above
+        # 1.0 is impossible and proves the two gauges use non-commensurable windows).
+        expr: (sum by(instance,job)(technitium_dns_request_result_count{result="server_failure"}) / on(instance,job) group_left sum by(instance,job)(technitium_dns_resolve_mode_count{result="recursive"})) > 0.50 and on(instance,job) sum by(instance,job)(technitium_dns_resolve_mode_count{result="recursive"}) > 0
         for: 5m
         labels:
           severity: warning
@@ -181,7 +236,7 @@ groups:
           component: dns
         annotations:
           summary: "High failure rate for recursive DNS queries"
-          description: "More than 10% of recursive queries (to upstream resolvers) are failing. Check upstream resolver connectivity and performance. Current failure rate: {{ $value | humanizePercentage }}."
+          description: "More than 50% of recursive queries (to upstream resolvers) are failing (30d p99 is 12%). Check upstream resolver connectivity and performance. Current failure rate: {{ $value | humanizePercentage }}."
 
   # DNS Query Log Exporter Health Monitoring
   - name: dns_query_exporter_health

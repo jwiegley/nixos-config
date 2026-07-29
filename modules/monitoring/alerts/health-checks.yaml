@@ -65,38 +65,43 @@ groups:
           description: "The backup timer for {{ $labels.backup }} is not active, backups won't run automatically"
 
       # Mbsync Health Alerts
-      # Alert if johnw mbsync hasn't run in over 1 hour (runs every 15 minutes)
+      #
+      # CONSOLIDATED 2026-07-28 from three separate MbsyncNotRunRecently rules (johnw,
+      # assembly, bia) into this one. Three things made that necessary:
+      #
+      #  1. promtool reported "1 duplicate rule(s) found" and FAILED the lint on this
+      #     file, because it compares only STATICALLY DECLARED labels ({component,
+      #     severity}) and cannot see the per-account selector inside each expr. Note
+      #     plain `promtool check rules` prints FAILED and still EXITS 0 -- only
+      #     `--lint-fatal` (rc=3) catches it, which is why this sat here unnoticed.
+      #  2. The naive fix -- deleting two "duplicates" -- would have SILENTLY DROPPED
+      #     staleness monitoring for two real mail accounts. The three rules were
+      #     semantically distinct: johnw >3600, assembly >129600, bia >3600.
+      #  3. `rbcca` had NO staleness coverage at all. The TSDB carries FOUR accounts
+      #     (assembly, bia, johnw, rbcca) against three rules; rbcca was covered for
+      #     sync FAILURE by MbsyncLastSyncFailed but a silent stall was invisible. The
+      #     negated selector below closes that for free.
+      #
+      # `for: 15m`, not 5m. Reconstructing 2026-07-03 at 15s resolution (the deployed
+      # evaluation_interval), the post-outage >3600s breach spans were bia 300s, rbcca
+      # 315s and johnw 285s -- so `for: 5m` would have SPURIOUSLY FIRED on bia and rbcca,
+      # and the only reason the old rules never did is that johnw happened to miss the
+      # dwell by 15 seconds. 15m clears the worst observed breach with margin, at a cost
+      # of 10 extra minutes' detection latency against a 1h threshold (and 36h for
+      # assembly) -- negligible either way.
+      #
+      # The two branches are per-account thresholds, keyed off the ONE account whose sync
+      # cadence is daily rather than sub-hourly. Adding a new account inherits the 1h
+      # branch automatically, which is the safe default.
       - alert: MbsyncNotRunRecently
-        expr: (time() - mbsync_last_sync_timestamp_seconds{account="johnw"}) > 3600
-        for: 5m
+        expr: ((time() - mbsync_last_sync_timestamp_seconds{account!="assembly"}) > 3600) or ((time() - mbsync_last_sync_timestamp_seconds{account="assembly"}) > 129600)
+        for: 15m
         labels:
           severity: warning
           component: mail_sync
         annotations:
-          summary: "Mail sync for {{ $labels.account }} hasn't run in over 1 hour"
-          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected every 15-30 minutes)"
-
-      # Alert if assembly mbsync hasn't run in over 36 hours (runs daily)
-      - alert: MbsyncNotRunRecently
-        expr: (time() - mbsync_last_sync_timestamp_seconds{account="assembly"}) > 129600
-        for: 5m
-        labels:
-          severity: warning
-          component: mail_sync
-        annotations:
-          summary: "Mail sync for {{ $labels.account }} hasn't run in over 36 hours"
-          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected daily)"
-
-      # Alert if bia mbsync hasn't run in over 1 hour (runs every 15 minutes)
-      - alert: MbsyncNotRunRecently
-        expr: (time() - mbsync_last_sync_timestamp_seconds{account="bia"}) > 3600
-        for: 5m
-        labels:
-          severity: warning
-          component: mail_sync
-        annotations:
-          summary: "Mail sync for {{ $labels.account }} hasn't run in over 1 hour"
-          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago (expected every 15-30 minutes)"
+          summary: "Mail sync for {{ $labels.account }} is stale"
+          description: "The mbsync service for {{ $labels.account }} last ran {{ $value | humanizeDuration }} ago. Expected every 15-30 minutes for most accounts; daily for assembly."
 
       - alert: MbsyncLastSyncFailed
         expr: mbsync_last_sync_status == 0

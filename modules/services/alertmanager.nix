@@ -389,15 +389,30 @@
           };
           equal = [ "repository" ];
         }
-        # Suppress BackupNotRunning when BackupServiceFailed is firing for same backup
+        # Suppress the "backup is stale" alert when the backup SERVICE is already failing
+        # for the same repository -- the staleness is a consequence, not new information.
+        #
+        # RETARGETED 2026-07-28. This rule was a double no-op as originally written:
+        #  1. Its target, alertname "BackupNotRunning", came from the generated
+        #     `backup_alerts` group whose metrics do not exist on this host, so the target
+        #     could never fire. That group has now been deleted (see
+        #     modules/storage/backup-monitoring.nix); the live equivalent is
+        #     BackupNotRunRecently in health-checks.yaml.
+        #  2. Even had it fired, `equal = [ "name" ]` could never have matched. The old
+        #     target's expr selected a `unit` label; nothing in that pair carried `name`
+        #     on both sides. Alertmanager silently drops an inhibition whose `equal` label
+        #     is absent, so this produced no error and no effect.
+        # Both live alerts derive from the backup_* textfile metrics, which carry
+        # `backup` (e.g. backup="Audio") across all 9 repositories -- verified -- so
+        # `equal = [ "backup" ]` joins them correctly and per-repository.
         {
           source_match = {
             alertname = "BackupServiceFailed";
           };
           target_match = {
-            alertname = "BackupNotRunning";
+            alertname = "BackupNotRunRecently";
           };
-          equal = [ "name" ];
+          equal = [ "backup" ];
         }
         # Parent/child network topology for the IoT ICMP coverage. The IoT
         # devices all hang off the IoT-subnet network gear (the ASUS

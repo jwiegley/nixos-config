@@ -289,8 +289,16 @@ in
     }
   ];
 
-  # Add health check alert rules
-  services.prometheus.ruleFiles = [
-    ../../monitoring/alerts/health-checks.yaml
-  ];
+  # REMOVED 2026-07-28: this module used to add health-checks.yaml to
+  # services.prometheus.ruleFiles explicitly. That file is ALREADY picked up by the
+  # directory glob in monitoring/services/alerting.nix, so it was being loaded TWICE and
+  # every rule in it evaluated twice -- directly observable in the live rules API, where
+  # health_check_alerts' BackupServiceFailed and BackupNotRunRecently each appeared as two
+  # separate entries. Duplicate evaluation also inflated the total rule count and doubled
+  # the notification volume for anything in this file.
+  #
+  # The glob in alerting.nix is now the single inclusion path for everything under
+  # monitoring/alerts/. Do NOT re-add individual files here; add them to that directory
+  # instead. The scrapeConfigs above are unaffected and remain live -- only the redundant
+  # ruleFiles entry was removed.
 }

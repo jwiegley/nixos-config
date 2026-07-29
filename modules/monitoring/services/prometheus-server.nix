@@ -41,17 +41,14 @@
     };
 
     # Alert rules are loaded by monitoring/services/alerting.nix (auto-discovers from alerts/)
-
-    # Alertmanager configuration
-    alertmanagers = lib.mkIf config.services.prometheus.alertmanager.enable [
-      {
-        static_configs = [
-          {
-            targets = [ "localhost:9093" ];
-          }
-        ];
-      }
-    ];
+    #
+    # Alertmanager registration REMOVED here 2026-07-28: it was declared in BOTH this file
+    # and modules/services/alertmanager.nix, so Prometheus held two entries for the same
+    # Alertmanager. The one in alertmanager.nix is the better survivor -- it sets
+    # `scheme = "http"` explicitly and derives the port from
+    # config.services.prometheus.alertmanager.port rather than hardcoding 9093, so it
+    # cannot drift if that port is ever changed. Keeping the registration next to the
+    # Alertmanager service definition is also where a reader would look for it.
   };
 
   # OOM protection and service hardening

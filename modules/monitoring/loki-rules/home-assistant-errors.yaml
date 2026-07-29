@@ -101,7 +101,9 @@ groups:
       # at priority 6" as established fact; that was unsupported and is withdrawn.
       #
       # "could not authenticate" ADDED 2026-07-29 pm, and this is the verified half. The rule
-      # as originally written was BLIND to a live failure: over the 8-day journal the three
+      # as originally written was BLIND to a live failure: across home-assistant's whole
+      # retained journal -- 15,371 lines from its last restart at 2026-07-26 10:39:55, so
+      # ~3.1 days, NOT the 8 days an earlier version of this comment claimed -- the three
       # strings above match exactly 0 lines, while 2-3 google config entries were verifiably
       # in setup_error the whole time. The real signature, measured 6 times in that window
       # (3 at 2026-07-28 20:37:46 and 3 at 20:56:47), is emitted at WARNING:
@@ -147,17 +149,24 @@ groups:
       # matched "error" INSIDE "setup_error" in an [info]-severity debug-node payload dump
       # (the HA-integration health flow, working exactly as designed). That produced the
       # 10:19 PDT NodeRedFlowErrors email with value=2 -- the two
-      # "- <account> (google): setup_error" payload fragments. Re-measured over the 8-day
-      # journal (334 lines): the old pattern matched 19 lines, of which 12 were NOT node-red
-      # errors -- 11 setup_error payload fragments plus 1 untagged direct-stdout line
-      # ("Failed to resolve IPv4 addresses..."). node-red's own logger prefixes every line
-      # it emits with "D Mon HH:MM:SS - [level]", so the matcher now keys on that severity
-      # tag instead: " - [error] " plus the [warn]-tagged OpenUV message matches exactly 7
-      # lines over the same 8 days (2 genuine [error] api-call-service NoConnectionError +
-      # the 5 OpenUV [warn] lines). NOTE this scrape stores each entry as journal-JSON
-      # (promtail journal.json=true), so ^-anchoring on the message is impossible; the
-      # bracketed severity tag as a substring is the anchor. A debug payload would now have
-      # to contain the literal " - [error] " to false-positive (0 occurrences in 8 days).
+      # "- <account> (google): setup_error" payload fragments.
+      #
+      # MEASUREMENT WINDOW, stated honestly: node-red's journal begins at its last restart,
+      # 2026-07-26 22:13:42, so every count below covers ~2.7 days (334 lines), NOT the
+      # 8 days an earlier version of this comment claimed. System journal retention is much
+      # longer (oldest entry 2026-07-02) -- the bound is the service's current run, and it
+      # resets on every node-red restart. Re-measured over that window: the old pattern
+      # matched 19 lines, of which 12 were NOT node-red errors -- 11 setup_error payload
+      # fragments plus 1 untagged direct-stdout line ("Failed to resolve IPv4
+      # addresses..."). node-red's own logger prefixes every line it emits with
+      # "D Mon HH:MM:SS - [level]", so the matcher now keys on that severity tag instead:
+      # " - [error] " plus the [warn]-tagged OpenUV message matches exactly 7 lines over the
+      # same window (2 genuine [error] api-call-service NoConnectionError + the 5 OpenUV
+      # [warn] lines). NOTE this scrape stores each entry as journal-JSON (promtail
+      # journal.json=true), so ^-anchoring on the message is impossible; the bracketed
+      # severity tag as a substring is the anchor. A debug payload would now have to contain
+      # the literal " - [error] " to false-positive: 0 occurrences in those ~2.7 days, which
+      # is real but weaker headroom evidence than "8 days" implied.
       - alert: NodeRedFlowErrors
         expr: |
           sum(count_over_time(

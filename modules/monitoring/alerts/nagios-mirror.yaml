@@ -28,10 +28,12 @@ groups:
       #      Pending now counts as agreement; a dead rule never reaches pending, so
       #      dead-rule detection is intact.
       #   2. THIS alertname was not in the reconciler's exclusion set, so its own
-      #      mirror going HARD WARNING fed its own gauge. Verified in the act: at
-      #      2026-07-29 20:41Z, same instant and same status.dat, the pre-fix code
+      #      mirror going HARD WARNING fed its own gauge. Verified in the act at
+      #      2026-07-29T20:01:51Z (an earlier version of this comment said 20:41Z,
+      #      which was wrong): same instant, same status.dat, the pre-fix code
       #      emitted nagios_only=1 naming NagiosMirrorDivergence while the fixed
-      #      code emitted 0.
+      #      code emitted 0. Re-run at 20:06:22Z in a genuine post-rebuild window,
+      #      pre-fix emitted 4 and fixed emitted 0.
       #
       # The count-level dwell below is deliberately LEFT AS IS. "max(count) > 0 for
       # 30m" tests whether the count is nonzero for 30 continuous minutes, not

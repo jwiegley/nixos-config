@@ -476,6 +476,58 @@ cannot change step 4.
 switch failure. The mitigation is to verify a switch by checking the generation and
 `systemctl --failed` rather than trusting the exit code — which is what was done here.
 
+## D13 — analysis COMPLETE, implementation deliberately deferred (2026-07-29)
+
+Stopped before editing on purpose: this change silences 17 alerts, and doing it with little
+context left risks exactly the silent-monitoring-loss this project exists to remove. Every
+fact below is verified, so the next pass can implement directly.
+
+**Prerequisite CONFIRMED — "digest" is real, not a euphemism.** `AlertHistory` in
+`scripts/log-summarizer.py` collects `ALERTS{alertstate="firing"}` with NO severity filter
+(grouping by `(alertname, severity)`), so info alerts DO appear in the daily report. Null-routing
+them at Alertmanager while they remain in that section genuinely implements "digest". Had it
+filtered to warning+, null-routing would have been true silencing and D13 would need rework.
+
+**Inventory: exactly 21 info rules**, matching the plan's count. All four D13 names exist:
+`HostUnexpectedReboot` (category=system), `ContainerCVEScanFailed` (no category),
+`ContainerCVEDBStale` (no category), `MicroVMStateShareExporterStale` (monitoring-meta).
+
+**The `health_report_*` exemption is MOOT** — no rule matching `health_report|HealthReport`
+exists at any severity. Do not add config for it.
+
+**The one thing that changes the shape of the edit:** the `storage-receiver` route
+(alertmanager.nix:138) matches `category = "storage"` with NO severity condition and NO
+`continue = true`, so it TERMINATES. Exactly one info rule carries that category —
+`ResticRepositorySizeGrowing` — so it currently goes to storage-receiver, not email. The other
+20 fall through to `default-receiver`. Therefore a new info route must be inserted **before**
+the storage route to catch all 17; placed after, `ResticRepositorySizeGrowing` would silently
+escape the digest.
+
+**Routes verified NOT to interfere:** watchdog-deadman (severity=watchdog),
+the OpenClawConfigDrift route (single alertname, :75), the three self-heal routes, and both
+`severity = "critical"` routes. None can intercept an info alert.
+
+**Implementation:**
+1. Add a receiver `{ name = "null-receiver"; }` (no notifiers) alongside the existing 8.
+2. Insert BEFORE the storage route at :138:
+   ```
+   { matchers = [
+       "severity=\"info\""
+       "alertname!~\"HostUnexpectedReboot|ContainerCVEScanFailed|ContainerCVEDBStale|MicroVMStateShareExporterStale\""
+     ];
+     receiver = "null-receiver";
+     continue = false; }
+   ```
+   Note `matchers` (Alertmanager >= 0.22) is needed for the NEGATIVE regex; the file's existing
+   `match`/`match_re` cannot express `!~`. This would be the file's first use of `matchers`.
+3. The promoted 4 then fall through to `default-receiver` (email) as intended.
+
+**Verification REQUIRED before trusting it** — do not rely on reading the config:
+`amtool config routes test --config.file=<generated alertmanager.yml>` for each of the 21
+alertnames, asserting the 4 land on `default-receiver` and the 17 on `null-receiver`. Also
+re-assert that a `severity=critical` alert still reaches BOTH `iphone-notifier` and
+`critical-receiver`, since a mis-ordered insert could shadow them.
+
 ## Resume instructions
 
 1. Re-read this file, the frozen plan, and the decisions doc in full.

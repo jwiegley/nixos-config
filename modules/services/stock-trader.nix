@@ -43,21 +43,13 @@ let
   # the service degrades gracefully if either is missing (the chat
   # engine will fall back to the litellm proxy on :4000 when the
   # Anthropic key is absent, and Polygon is an optional fallback
-  # source after Schwab and yfinance).
+  # source after alpha_vantage and yfinance; Schwab was retired 2026-07-29).
   startScript = pkgs.writeShellScript "stock-trader-start" ''
     set -euo pipefail
 
     if [ -f "$CREDENTIALS_DIRECTORY/anthropic-api-key" ]; then
       ANTHROPIC_API_KEY="$(cat "$CREDENTIALS_DIRECTORY/anthropic-api-key")"
       export ANTHROPIC_API_KEY
-    fi
-    if [ -f "$CREDENTIALS_DIRECTORY/schwab-app-key" ]; then
-      SCHWAB_APP_KEY="$(cat "$CREDENTIALS_DIRECTORY/schwab-app-key")"
-      export SCHWAB_APP_KEY
-    fi
-    if [ -f "$CREDENTIALS_DIRECTORY/schwab-app-secret" ]; then
-      SCHWAB_APP_SECRET="$(cat "$CREDENTIALS_DIRECTORY/schwab-app-secret")"
-      export SCHWAB_APP_SECRET
     fi
     if [ -f "$CREDENTIALS_DIRECTORY/finnhub-api-key" ]; then
       FINNHUB_API_KEY="$(cat "$CREDENTIALS_DIRECTORY/finnhub-api-key")"
@@ -92,16 +84,6 @@ in
     # credential dir owned by root mode 0400, systemd then bind-mounts
     # that directory into the unit's namespace).
     sops.secrets."stock-trader/anthropic-api-key" = {
-      owner = "root";
-      mode = "0400";
-      restartUnits = [ "stock-trader.service" ];
-    };
-    sops.secrets."stock-trader/schwab-app-key" = {
-      owner = "root";
-      mode = "0400";
-      restartUnits = [ "stock-trader.service" ];
-    };
-    sops.secrets."stock-trader/schwab-app-secret" = {
       owner = "root";
       mode = "0400";
       restartUnits = [ "stock-trader.service" ];
@@ -153,11 +135,9 @@ in
         STOCK_TRADER_HOST = "127.0.0.1";
         STOCK_TRADER_PORT = "8234";
 
-        # %S expands to /var/lib/private/<StateDirectory> for
-        # DynamicUser units; sub-dirs cache and schwab_token.json
-        # live there (RW for the dynamic user).
+        # %S expands to /var/lib/private/<StateDirectory> for DynamicUser units;
+        # the cache sub-dir lives there (RW for the dynamic user).
         STOCK_TRADER_CACHE_DIR = "%S/stock-trader/cache";
-        SCHWAB_TOKEN_PATH = "%S/stock-trader/schwab_token.json";
 
         # Static SPA bundle, served by FastAPI's StaticFiles. Points
         # at the package's read-only share/ directory.
@@ -195,12 +175,21 @@ in
         # StateDirectory so claude-code's session writes succeed.
         HOME = "%S/stock-trader";
 
-        # STOCK_TRADER_ALLOW_OAUTH_BOOTSTRAP is intentionally NOT
-        # set here. The Schwab OAuth flow does not run on the server
-        # — the laptop bootstraps the token and we copy/mount the
-        # resulting JSON into %S/stock-trader/schwab_token.json.
-        # Leaving this unset disables the bootstrap routes via the
-        # Chunk 1 Task 3 gate.
+        # SCHWAB RETIRED 2026-07-29 (plan item D3). The Schwab source is gone: its
+        # credentials are no longer provided, SCHWAB_TOKEN_PATH is unset, and the
+        # token exporter and its alerts are deleted. alpha_vantage is now the source.
+        #
+        # Why retire rather than repair: the OAuth refresh token had to be
+        # re-bootstrapped in a browser on another machine roughly every 7 days and
+        # copied here by hand, which is a chore no amount of alerting improves. It had
+        # in fact been expired 35 days (since 2026-06-24) at retirement, while
+        # stock_trader_data_source_up{source="schwab"} still reported 1 -- so the
+        # source was contributing nothing but a false healthy signal. Deleting it
+        # removes the lying gauge outright instead of trying to fix the upstream app,
+        # and removes the need for a token-expiry alert.
+        #
+        # STOCK_TRADER_ALLOW_OAUTH_BOOTSTRAP remains intentionally unset, which keeps
+        # the bootstrap routes disabled.
         #
         # SSL_CERT_FILE and REQUESTS_CA_BUNDLE are also intentionally
         # NOT set here. NixOS exports them globally via security.pki
@@ -223,8 +212,6 @@ in
 
         LoadCredential = [
           "anthropic-api-key:${config.sops.secrets."stock-trader/anthropic-api-key".path}"
-          "schwab-app-key:${config.sops.secrets."stock-trader/schwab-app-key".path}"
-          "schwab-app-secret:${config.sops.secrets."stock-trader/schwab-app-secret".path}"
           "finnhub-api-key:${config.sops.secrets."stock-trader/finnhub-api-key".path}"
           "fred-api-key:${config.sops.secrets."stock-trader/fred-api-key".path}"
           "polygon-api-key:${config.sops.secrets."stock-trader/polygon-api-key".path}"

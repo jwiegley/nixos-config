@@ -64,126 +64,22 @@ groups:
                 in /tmp/stock-trader-work to reproduce.
 
       # ----------------------------------------------------------------------
-      # Schwab OAuth refresh-token lifetime (docs/MONITORING_COVERAGE_PLAN.md
-      # P0 #15; memory: project_stock_trader). The refresh token dies ~every 7
-      # days and renewal is a manual hera re-bootstrap that today is always
-      # REACTIVE (the trader breaks first). The schwab-token-exporter textfile
-      # collector emits schwab_refresh_token_expiry_timestamp_seconds; the two
-      # threshold alerts that read it are DISABLED (see below), but the metric
-      # itself keeps flowing so expiry stays visible in Grafana.
+      # The Schwab OAuth section that used to live here is GONE, along with the source.
       #
-      # Renewal runbook (still current — SchwabTokenFileMissing and
-      # StockTraderSchwabDataSourceDown remain live and point here):
-      #   1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
-      #   2. Push the token to vulcan (vulcan cannot ssh hera; push from hera).
-      #   3. Install at /var/lib/stock-trader/schwab_token.json mode 0600.
-      #   4. systemctl restart stock-trader; verify /api/quote is live.
+      # Plan item D3 retired the Schwab data source entirely on 2026-07-29. Four rules
+      # (SchwabTokenExpiringSoon, SchwabTokenExpiryCritical, SchwabTokenFileMissing,
+      # StockTraderSchwabDataSourceDown) had already been commented out on 2026-07-27
+      # because the refresh token expires every ~7 days by design, so they fired weekly
+      # and were noise rather than signal. Roughly 100 lines of disabled rules plus a
+      # manual re-auth runbook were left behind.
+      #
+      # Deleting the source removes the reason for all of it: no token, no expiry to
+      # alert on, no weekly browser re-bootstrap chore, and no
+      # stock_trader_data_source_up{source="schwab"} gauge reporting 1 while the token
+      # had in fact been dead for 35 days. alpha_vantage is the source now.
+      # Retirement rationale is recorded at modules/services/stock-trader.nix.
       # ----------------------------------------------------------------------
-      # DISABLED 2026-07-27 at John's request — the Schwab refresh token expires
-      # every ~7 days by design, so these fired on a weekly cadence and became
-      # noise rather than signal. The exporter still emits
-      # schwab_refresh_token_expiry_timestamp_seconds, so expiry remains visible
-      # in Grafana. Re-enable by uncommenting the two rules below.
-      #
-      # NOTE: monitoring/services/nagios-prometheus-mirror.nix parses this file
-      # as YAML and auto-generates one "PROM-MIRROR <alertname>" Nagios service
-      # per rule, so commenting these out here also removes their independent
-      # Nagios notification path. Uncommenting restores both pipelines.
-      #
-      # - alert: SchwabTokenExpiringSoon
-      #   expr: |
-      #     schwab_refresh_token_expiry_timestamp_seconds - time() < 2 * 86400
-      #   for: 30m
-      #   labels:
-      #     severity: warning
-      #     component: stock-trader
-      #   annotations:
-      #     summary: "Schwab refresh token expires in less than 2 days"
-      #     description: |
-      #       The Schwab OAuth refresh token expires in {{ $value | humanizeDuration }}.
-      #       It dies ~every 7 days and renewal is MANUAL — start the re-bootstrap on
-      #       hera now, while there is still slack:
-      #         1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
-      #         2. Push the token to vulcan (vulcan can't ssh hera; push from hera).
-      #         3. Install /var/lib/stock-trader/schwab_token.json mode 0600.
-      #         4. systemctl restart stock-trader; confirm /api/quote is live.
-      #       Runbook: memory project_stock_trader.
-      #
-      # - alert: SchwabTokenExpiryCritical
-      #   expr: |
-      #     schwab_refresh_token_expiry_timestamp_seconds - time() < 6 * 3600
-      #   for: 10m
-      #   labels:
-      #     severity: critical
-      #     component: stock-trader
-      #   annotations:
-      #     summary: "Schwab refresh token expires in less than 6 hours"
-      #     description: |
-      #       The Schwab OAuth refresh token expires in {{ $value | humanizeDuration }}.
-      #       Once it dies the trader's Schwab calls fail until re-bootstrapped. Renew
-      #       immediately on hera:
-      #         1. Re-bootstrap Schwab OAuth on hera (browser flow) → new token JSON.
-      #         2. Push the token to vulcan (vulcan can't ssh hera; push from hera).
-      #         3. Install /var/lib/stock-trader/schwab_token.json mode 0600.
-      #         4. systemctl restart stock-trader; confirm /api/quote is live.
-      #       Runbook: memory project_stock_trader.
 
-      # DISABLED 2026-07-27 at John's request ("I don't care about it right
-      # now"). Companion to the two expiry-threshold rules disabled above: this
-      # is the only OTHER rule keyed on the Schwab token itself. It fires when
-      # the token FILE is absent, not when it expires, so it was never part of
-      # the weekly expiry noise -- it is silenced here only so that "Schwab
-      # token" is uniformly quiet rather than half-quiet.
-      #
-      # WHAT YOU LOSE: if the token file is deleted or a re-bootstrap installs
-      # it to the wrong path, nothing pages. The exporter still emits
-      # schwab_token_file_exists, so it stays visible in Grafana.
-      # Re-enable by uncommenting.
-      # - alert: SchwabTokenFileMissing
-      #   expr: |
-      #     schwab_token_file_exists == 0
-      #   for: 30m
-      #   labels:
-      #     severity: warning
-      #     component: stock-trader
-      #   annotations:
-      #     summary: "Schwab OAuth token file is missing"
-      #     description: |
-      #       /var/lib/stock-trader/schwab_token.json is absent — the Schwab OAuth
-      #       token has not been provisioned (or was removed). The trader cannot
-      #       authenticate to Schwab without it. Re-bootstrap on hera and install
-      #       the token (mode 0600), then restart stock-trader.
-      #       Runbook: memory project_stock_trader.
-
-  - name: stock_trader_freshness
-    interval: 60s
-    rules:
-      # DISABLED 2026-07-27 at John's request, same reason. This is the rule
-      # that ACTUALLY fired weekly: the refresh token dies every ~7 days by
-      # design and this trips ~30 min later, which is why silencing only the
-      # two expiry-threshold rules did not stop the pages.
-      #
-      # WHAT YOU LOSE, and it is broader than the token: this is the only alert
-      # on the live Schwab probe, so a Schwab outage or a credential problem
-      # unrelated to expiry is now also silent. stock_trader_data_source_up
-      # keeps flowing to Grafana, and StockTraderQuotesUnavailable below still
-      # fires if quotes actually start failing (503s), which is the
-      # user-visible symptom. Re-enable by uncommenting.
-      # - alert: StockTraderSchwabDataSourceDown
-      #   expr: |
-      #     stock_trader_data_source_up{source="schwab"} == 0
-      #   for: 30m
-      #   labels:
-      #     severity: warning
-      #     component: stock-trader
-      #   annotations:
-      #     summary: "stock-trader: Schwab data source is down"
-      #     description: |
-      #       The live Schwab probe has reported available=0 for 30m (window > the
-      #       25m pinger gauge-masking interval + 45s probe cache). Quotes are
-      #       served by the EOD fallback or failing. Likely a revoked/expired
-      #       Schwab OAuth refresh token -- run the re-auth runbook and copy the
-      #       new token to %S/stock-trader/schwab_token.json, then restart.
       - alert: StockTraderQuotesUnavailable
         expr: |
           increase(stock_trader_quote_unavailable_total[15m]) > 0

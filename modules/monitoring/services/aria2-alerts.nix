@@ -90,8 +90,16 @@ let
           description: "The aria2 Prometheus exporter hasn't updated metrics in {{ $value | humanizeDuration }}. Check 'systemctl status aria2-exporter.service'"
 
       # Alert if AriaNG web UI is not accessible
+      #
+      # 2026-07-28: job label repaired from "blackbox-https" (hyphen) to
+      # "blackbox_https_local". The hyphenated job never existed, so this rule could not
+      # fire. Note the underscore job `blackbox_https` is a DIFFERENT job carrying only
+      # https://google.com -- a naive hyphen-to-underscore swap would have left it dead.
+      # Backtested: would have fired on the real 2026-07-03 18:01-18:46 UTC outage (~49
+      # contiguous minutes of probe_success==0 at 1m scrape cadence vs this 5m dwell), and
+      # has 0 breach samples in the last 7 days.
       - alert: Aria2WebUiDown
-        expr: probe_success{job="blackbox-https", instance="https://aria.vulcan.lan"} == 0
+        expr: probe_success{job="blackbox_https_local", instance="https://aria.vulcan.lan"} == 0
         for: 5m
         labels:
           severity: warning

@@ -222,9 +222,9 @@
       };
     }
     {
-      model_name = "hera/claude-opus-4-8-thinking-32000";
+      model_name = "hera/claude-opus-5-thinking-32000";
       litellm_params = {
-        model = "openai/claude-opus-4-8";
+        model = "openai/claude-opus-5";
         litellm_credential_name = "hera_vibe_proxy_credential";
         supports_system_message = true;
       };
@@ -238,9 +238,9 @@
       };
     }
     {
-      model_name = "hera/claude-opus-4-8";
+      model_name = "hera/claude-opus-5";
       litellm_params = {
-        model = "openai/claude-opus-4-8";
+        model = "openai/claude-opus-5";
         litellm_credential_name = "hera_vibe_proxy_credential";
         supports_system_message = true;
       };
@@ -254,9 +254,9 @@
       };
     }
     {
-      model_name = "positron_anthropic/claude-opus-4-8";
+      model_name = "positron_anthropic/claude-opus-5";
       litellm_params = {
-        model = "anthropic/claude-opus-4-8";
+        model = "anthropic/claude-opus-5";
         litellm_credential_name = "positron_anthropic_credential";
         supports_system_message = true;
       };
@@ -270,9 +270,9 @@
       };
     }
     {
-      model_name = "positron_anthropic/claude-opus-4-8[1m]";
+      model_name = "positron_anthropic/claude-opus-5[1m]";
       litellm_params = {
-        model = "anthropic/claude-opus-4-8[1m]";
+        model = "anthropic/claude-opus-5[1m]";
         litellm_credential_name = "positron_anthropic_credential";
         supports_system_message = true;
       };
@@ -286,9 +286,9 @@
       };
     }
     {
-      model_name = "anthropic/claude-opus-4-8";
+      model_name = "anthropic/claude-opus-5";
       litellm_params = {
-        model = "anthropic/claude-opus-4-8";
+        model = "anthropic/claude-opus-5";
         litellm_credential_name = "anthropic_credential";
         supports_system_message = true;
       };

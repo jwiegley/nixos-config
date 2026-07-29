@@ -4,6 +4,8 @@ AI-Powered Log Summarization for LogWatch
 Collects logs from journalctl and uses LiteLLM for intelligent summarization.
 """
 
+import time
+import urllib.parse
 import argparse
 import glob
 import json
@@ -710,6 +712,158 @@ class AnalysisHistory:
             print(f"Warning: Failed to append to wisdom file: {e}", file=sys.stderr)
 
 
+class AlertHistory:
+    """Deterministic 7-day alert history from Prometheus.
+
+    WHY THIS EXISTS. Before 2026-07-28 this report analysed only the JOURNAL and never
+    queried Prometheus at all, so it had no idea what had actually ALERTED. On 2026-07-28 it
+    printed "critical issues: none" on a host that had, in the preceding week, fired 36
+    distinct alerts including 12 criticals and four multi-hour outages (copyparty down 22.6h,
+    an unexpected wildcard listener firing 24.7h, a Nagios mirror divergence 21.75h, and a
+    47-restart OpenClaw storm). The report was not wrong about the logs; it was blind to a
+    whole plane of evidence.
+
+    This section is DELIBERATELY DETERMINISTIC -- plain queries rendered as text, never passed
+    through the LLM. The failure being fixed is a confident narrative contradicting the facts
+    underneath it, so the facts are emitted directly and placed BEFORE the narrative. An LLM
+    cannot summarise away a table it did not write.
+
+    Everything here is read-only and label-limited to alertname/severity, deliberately not
+    instance/target labels, so the section cannot leak host or credential detail into email.
+    """
+
+    PROM = "http://127.0.0.1:9090"
+    STEP_SEC = 300  # 5-minute resolution: 2016 points over 7d, well inside Prometheus limits
+
+    def __init__(self, days: int = 7, prom: Optional[str] = None):
+        self.days = days
+        self.prom = prom or self.PROM
+
+    def _range(self, query: str) -> list:
+        end = int(time.time())
+        start = end - self.days * 86400
+        params = urllib.parse.urlencode({
+            "query": query, "start": start, "end": end, "step": self.STEP_SEC,
+        })
+        try:
+            with urllib.request.urlopen(
+                f"{self.prom}/api/v1/query_range?{params}", timeout=60
+            ) as resp:
+                return json.load(resp).get("data", {}).get("result", [])
+        except Exception as exc:  # noqa: BLE001
+            # Never let a monitoring-plane outage kill the whole report -- but say so
+            # loudly rather than silently emitting an empty (falsely reassuring) section.
+            print(f"WARN: alert-history query failed: {type(exc).__name__}", file=sys.stderr)
+            return None  # type: ignore[return-value]
+
+    def collect(self) -> dict:
+        """Return {'ok': bool, 'fired': [...], 'long': [...], 'active': [...]}."""
+        res = self._range('ALERTS{alertstate="firing"}')
+        if res is None:
+            return {"ok": False, "fired": [], "long": [], "active": []}
+
+        fired: dict = {}
+        long_runs: list = []
+        for series in res:
+            m = series.get("metric", {})
+            name = m.get("alertname", "?")
+            sev = m.get("severity", "?")
+            pts = series.get("values", [])
+            key = (name, sev)
+            agg = fired.setdefault(key, {"samples": 0, "runs": 0})
+            agg["samples"] += len(pts)
+            # Longest contiguous run, so a multi-hour outage is distinguishable from
+            # the same total spread thinly across a flapping week.
+            best = cur = 0
+            prev_t = None
+            for t, _v in pts:
+                t = int(t)
+                if prev_t is not None and t - prev_t <= self.STEP_SEC * 2:
+                    cur += 1
+                else:
+                    cur = 1
+                best = max(best, cur)
+                prev_t = t
+            agg["runs"] = max(agg["runs"], best)
+            if best * self.STEP_SEC >= 4 * 3600:
+                long_runs.append((name, sev, best * self.STEP_SEC))
+
+        rows = [
+            {
+                "alertname": n, "severity": sv,
+                "total_hours": a["samples"] * self.STEP_SEC / 3600.0,
+                "longest_hours": a["runs"] * self.STEP_SEC / 3600.0,
+            }
+            for (n, sv), a in fired.items()
+        ]
+        rows.sort(key=lambda r: (-r["longest_hours"], -r["total_hours"]))
+
+        active = []
+        try:
+            with urllib.request.urlopen(
+                f"{self.prom}/api/v2/../api/v1/alerts", timeout=30
+            ) as resp:
+                for a in json.load(resp).get("data", {}).get("alerts", []):
+                    if a.get("state") == "firing":
+                        active.append({
+                            "alertname": a["labels"].get("alertname", "?"),
+                            "severity": a["labels"].get("severity", "?"),
+                        })
+        except Exception:  # noqa: BLE001
+            pass
+
+        long_runs.sort(key=lambda x: -x[2])
+        return {"ok": True, "fired": rows, "long": long_runs, "active": active}
+
+    def render(self) -> str:
+        d = self.collect()
+        out = []
+        out.append("=" * 70)
+        out.append(f"ALERT HISTORY -- last {self.days} days (deterministic, not AI-summarised)")
+        out.append("=" * 70)
+
+        if not d["ok"]:
+            out.append("")
+            out.append("!! COULD NOT QUERY PROMETHEUS -- this section is UNKNOWN, not empty.")
+            out.append("   Do not read the absence of alerts below as 'nothing fired'.")
+            out.append("")
+            return "\n".join(out)
+
+        if not d["fired"]:
+            out.append("")
+            out.append("No alerts fired in the window. (Queried successfully -- this is a")
+            out.append("verified empty result, not a failure to look.)")
+            out.append("")
+            return "\n".join(out)
+
+        crit = [r for r in d["fired"] if r["severity"] == "critical"]
+        out.append("")
+        out.append(f"{len(d['fired'])} distinct alerts fired ({len(crit)} critical).")
+        if d["active"]:
+            names = ", ".join(sorted({a["alertname"] for a in d["active"]}))
+            out.append(f"STILL FIRING NOW: {names}")
+        out.append("")
+
+        if d["long"]:
+            out.append("SUSTAINED (a single unbroken run of 4h or more) -- these are the ones")
+            out.append("that an instantaneous 'what is broken right now' check cannot show:")
+            for name, sev, secs in d["long"]:
+                out.append(f"   {secs/3600:6.1f}h  [{sev:8}] {name}")
+            out.append("")
+
+        out.append(f"{'longest':>9} {'total':>9}  severity   alertname")
+        out.append(f"{'-'*9} {'-'*9}  {'-'*8}   {'-'*40}")
+        for r in d["fired"][:25]:
+            out.append(
+                f"{r['longest_hours']:8.1f}h {r['total_hours']:8.1f}h  "
+                f"{r['severity']:8}   {r['alertname']}"
+            )
+        if len(d["fired"]) > 25:
+            out.append(f"   ... and {len(d['fired']) - 25} more")
+        out.append("")
+        return "\n".join(out)
+
+
 def parse_time_range(time_str: str) -> Tuple[str, str]:
     """
     Parse user-friendly time range into journalctl --since format.
@@ -815,6 +969,18 @@ Examples:
              'Bypasses the model cascade and uses only this model.'
     )
     parser.add_argument(
+        '--no-alert-history',
+        action='store_true',
+        help='Skip the deterministic Prometheus alert-history section'
+    )
+    parser.add_argument(
+        '--alert-history-days',
+        type=int,
+        default=7,
+        metavar='N',
+        help='Window for the alert-history section (default: 7)'
+    )
+    parser.add_argument(
         '--models-config',
         default=None,
         metavar='PATH',
@@ -878,6 +1044,15 @@ Examples:
                 print(f"Added new entries to {history.wisdom_path}", file=sys.stderr)
         if not args.quiet:
             print(f"Saved analysis to {args.history_dir}/", file=sys.stderr)
+
+    # Output the DETERMINISTIC alert history FIRST, then the AI narrative.
+    # Order matters: the defect being fixed is a confident narrative that contradicted
+    # the facts underneath it, so the facts lead and are not routed through the model.
+    if not args.no_alert_history:
+        if not args.quiet:
+            print("Querying 7-day alert history...", file=sys.stderr)
+        print(AlertHistory(days=args.alert_history_days).render())
+        print()
 
     # Output summary
     print(summary)

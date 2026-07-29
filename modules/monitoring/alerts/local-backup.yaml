@@ -97,7 +97,8 @@ groups:
       # ---- Rotating data verification (bit-rot) ----------------------------------------
       # Added 2026-07-29 alongside `check --read-data-subset=P/52`. A plain structure check
       # never reads pack payloads, so bit-rot in the backup DATA was undetectable; the new
-      # pass reads 1/52 of every repo each week for full coverage in a year.
+      # pass reads 1/52 of every repo each week, cycling to full coverage over a year (audit
+      # measured 1.56-1.95% per bucket rather than exactly 1.92%, i.e. finite-pack rounding).
       #
       # These rules exist because restic_integrity_check_success cannot express coverage.
       # It is a single unlabelled gauge for the run's exit status, and a run that exhausts
@@ -105,9 +106,13 @@ groups:
       # silently doing far less work. A genuine data error DOES fail the run and is already
       # covered by ResticIntegrityCheckFailed above; these catch the quiet degradation.
       #
-      # No absent() guard, matching ResticIntegrityCheckStale's reasoning: the series only
-      # appears after the first weekly run following deploy, and a fresh deploy must not
-      # alarm before that. The stale rule below is what catches a metric that never arrives.
+      # The first two rules below carry no absent() guard, matching ResticIntegrityCheckStale's
+      # reasoning: the series only appear after the first run following deploy, and a fresh
+      # deploy must not alarm before that. That left a real gap an audit reproduced -- if the
+      # FIRST write never succeeds, both sit over an absent series and neither can ever fire.
+      # ResticReadDataMetricsAbsent (added after the first run made the series live) closes it.
+      # Note the stale rule does NOT cover that case, contrary to what this comment said
+      # before: over an absent series its expression is an empty vector, not a large number.
       - alert: ResticReadDataCoverageDegraded
         expr: restic_read_data_repos_skipped > 0
         for: 15m
@@ -139,10 +144,43 @@ groups:
           description: |
             No data-verification pass has completed in over 9 days (last
             {{ $value | humanizeDuration }} ago; expected weekly at Mon 06:30). This also
-            fires if the textfile write itself keeps failing, which is deliberately
-            non-fatal to the check run.
+            fires if the textfile write itself keeps failing AFTER at least one successful
+            run, because the writer is `> tmp && mv tmp file` -- a failing write leaves the
+            previous file in place, so its timestamp genuinely does go stale. It canNOT catch
+            a metric that never arrived at all: over an absent series this expression is an
+            empty vector. ResticReadDataMetricsAbsent below covers that case.
             Action: systemctl status restic-check.timer, and confirm
             /var/lib/prometheus-node-exporter-textfiles/restic_read_data.prom is fresh.
+
+      # Closes the one gap an independent audit found in the two rules above: BOTH are
+      # comparisons against a series, so if the very first textfile write never succeeds
+      # (ENOSPC, a renamed textfile directory) they sit over an ABSENT series and neither can
+      # ever fire -- read-data coverage would then be unmeasured AND unalerted indefinitely.
+      # Verified: substituting a nonexistent metric name into the stale expression returns an
+      # empty result, while absent() returns 1. Nothing else covers these six series -- they
+      # are deliberately excluded from TextfileCollectorStaleFast/Daily in meta-monitoring.yaml
+      # -- and nothing seeds them at activation.
+      #
+      # Safe to assert absence now, which it would NOT have been at authoring time: all six
+      # series are live following the first completed run (confirmed via
+      # count(last_over_time(X[30d]))). The 24h dwell is long enough that a Prometheus restart
+      # or a single missed weekly run cannot trip it.
+      - alert: ResticReadDataMetricsAbsent
+        expr: absent(restic_read_data_timestamp_seconds)
+        for: 24h
+        labels:
+          severity: warning
+          category: storage
+          service: restic-check
+        annotations:
+          summary: "restic data-verification metrics have disappeared entirely"
+          description: |
+            restic_read_data_timestamp_seconds has no series at all, so both
+            ResticReadDataCoverageDegraded and ResticReadDataStale are silently inert and
+            bit-rot coverage is unreported. Most likely the textfile write is failing, which
+            is deliberately non-fatal to the check itself.
+            Action: check /var/lib/prometheus-node-exporter-textfiles/restic_read_data.prom
+            exists and is fresh, and journalctl -u restic-check for a "could not write" warning.
 
       # Technitium DNS backup last-success triad (technitium-dns-backup.timer,
       # daily 03:00). A green Type=oneshot exit is NOT proof of a complete backup

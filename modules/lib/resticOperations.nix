@@ -67,15 +67,22 @@ in
         # ISO weeks run 01..53; folding 53 back onto part 1 keeps the divisor at 52 rather
         # than leaving one part unreachable. Verified: week 53 -> part 1, week 52 -> 52.
 
-        # Budgets for the read-data pass specifically. Note these bound ONLY read-data --
-        # the whole-loop deadline above is what keeps the systemd hard kill unreachable,
-        # because prune/repair/check are untimed. Within the read-data pass:
+        # Budgets for the read-data pass specifically. These bound ONLY read-data; the
+        # whole-loop deadline declared BELOW, together with the per-repo lock-wait scaling
+        # inside the loop, is what bounds everything else. Within the read-data pass:
         #   - a 3h global budget, leaving an hour of headroom under RuntimeMaxSec
         #   - a 1h per-repo cap so one hung repo cannot consume the whole budget
-        #     (the largest slice, Photos at 7.71 GB, needs ~32 min at the 4 MB/s implied
-        #      by the last run's 1.6 GB / 6m42s)
         #   - a 5m floor below which a repo is reported as skipped instead of started
-        # Expected total is ~2h at that throughput, i.e. 1.5x inside the 3h budget.
+        #
+        # MEASURED 2026-07-29 by the first real run, replacing the pre-deployment projection
+        # (which guessed 4 MB/s and ~2h from a structure-only run, and was wrong by ~9x):
+        #   whole run        800s (13m20s) for all nine repos, 31.9 GB downloaded
+        #   structure phase  402s          read-data phase 398s
+        #   largest slice    Photos 103s   (projected ~32 min)
+        # Actual throughput is ~40 MB/s, so the 3h budget carries ~13x headroom rather than
+        # the 1.5x originally claimed. The budgets are deliberately NOT tightened to match:
+        # B2 bandwidth is variable and repo size grows, and the cost of over-provisioning
+        # here is zero while the cost of a spurious mid-run cut is lost coverage.
         READ_DATA_BUDGET_SEC=10800
         READ_DATA_REPO_MAX_SEC=3600
         READ_DATA_MIN_SEC=300
@@ -99,14 +106,16 @@ in
         # pass so it is counted in none of them (it is still in `total`, and in the
         # `failed_repos` list that fails the run). Do NOT write an alert that assumes the
         # equality -- neither of the two rules added with this feature does.
-        # WHOLE-LOOP deadline. The read-data pass is budgeted below, but the structure
-        # check, prune and repair are NOT -- each passes `--retry-lock=1h`, so lock
-        # contention alone can block up to an hour per operation, and three operations
-        # across nine repos can far exceed systemd's RuntimeMaxSec=4h. An earlier version of
-        # the comment below claimed the script's own budgeting kept that hard kill "a last
-        # resort"; that was true only of read-data. The kill aborts the loop mid-repo and
-        # destroys the per-repo accounting this script exists to provide, so stop ourselves
-        # first, half an hour short of it, and NAME what we never reached.
+
+        # WHOLE-LOOP deadline. The read-data pass is budgeted ABOVE, but the structure check,
+        # prune and repair are not -- they take a lock, and an earlier version of this script
+        # gave each a fixed `--retry-lock=1h`, so lock contention across nine repos could far
+        # exceed systemd's RuntimeMaxSec=4h. An earlier version of the comment ABOVE claimed
+        # the script's own budgeting kept that hard kill "a last resort"; that was true only
+        # of read-data. The kill aborts the loop mid-repo and destroys the per-repo accounting
+        # this script exists to provide, so stop ourselves first, half an hour short of it,
+        # and NAME what we never reached. The lock-wait scaling inside the loop is the other
+        # half of this bound -- this declaration alone gates only when a repo may START.
         LOOP_BUDGET_SEC=12600
         loop_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + LOOP_BUDGET_SEC ))
         unreached_repos=""
@@ -126,6 +135,26 @@ in
           echo "=== $fileset ==="
           repo_failed=0
           repo_count=$(( repo_count + 1 ))
+
+          # Bound the per-repo LOCK WAIT by what remains of the loop budget.
+          #
+          # An independent audit reproduced the hole this closes: the deadline above is tested
+          # only at the TOP of each iteration, so it bounds when a repo may START, not how long
+          # the run lasts. With a fixed --retry-lock=1h on each of check/prune/repair, a repo
+          # entering at 3h29m could still wait 3h on locks, making the true worst case
+          # LOOP_BUDGET_SEC + 3*3600 = 23400s (6.5h) -- ABOVE the RuntimeMaxSec=4h kill this
+          # deadline exists to avoid, with 1800s of slack that is smaller than a SINGLE
+          # operation's lock allowance. Measured 6h in a stubbed run of the deployed script.
+          #
+          # Dividing the remaining budget by the three lock-taking operations keeps their
+          # combined wait inside it. Deliberately NOT wrapping the operations in `timeout`:
+          # a kill landing mid-prune is itself a data risk, which is why they are untimed.
+          # So only the WAIT is bounded here -- genuine operation time is not, leaving a
+          # residual worst case of LOOP_BUDGET_SEC + real work, which is what the 1800s of
+          # slack under RuntimeMaxSec now actually covers.
+          repo_lock_wait=$(( (loop_deadline - $(${pkgs.coreutils}/bin/date +%s)) / 3 ))
+          if [ "$repo_lock_wait" -lt 60 ]; then repo_lock_wait=60; fi
+          if [ "$repo_lock_wait" -gt 3600 ]; then repo_lock_wait=3600; fi
           case "$operation" in
             check)
               # Unlock any stale locks before starting check operations.
@@ -135,7 +164,7 @@ in
               # failure on a repo whose check then succeeds produces no signal at all.
               /run/current-system/sw/bin/restic-$fileset unlock || true
               if /run/current-system/sw/bin/restic-$fileset \
-                   --retry-lock=1h check ; then
+                   --retry-lock="''${repo_lock_wait}s" check ; then
                 # repair is gated on prune SUCCEEDING, not merely on check succeeding.
                 # `restic repair snapshots` documents a dependency on a correct index
                 # ("The command depends on a correct index, thus make sure to run
@@ -145,9 +174,9 @@ in
                 # originals -- but running it against an index prune just failed to rewrite
                 # is still the wrong order of operations.
                 if /run/current-system/sw/bin/restic-$fileset \
-                     --retry-lock=1h prune ; then
+                     --retry-lock="''${repo_lock_wait}s" prune ; then
                   /run/current-system/sw/bin/restic-$fileset \
-                    --retry-lock=1h repair snapshots || repo_failed=1
+                    --retry-lock="''${repo_lock_wait}s" repair snapshots || repo_failed=1
                 else
                   repo_failed=1
                   echo "PRUNE FAILED for $fileset -- skipping repair snapshots, which" \
@@ -175,6 +204,9 @@ in
                   echo "Reading data subset $READ_DATA_PART/52 for $fileset" \
                        "(cap ''${read_data_cap}s)"
                   read_data_rc=0
+                  # Keeps a fixed --retry-lock=1h rather than the scaled repo_lock_wait used
+                  # above, because THIS call is already wrapped in `timeout "$read_data_cap"`
+                  # -- the timeout bounds the lock wait, so scaling it would be redundant.
                   ${pkgs.coreutils}/bin/timeout "$read_data_cap" \
                     /run/current-system/sw/bin/restic-$fileset \
                       --retry-lock=1h check --read-data-subset="$READ_DATA_PART/52" \

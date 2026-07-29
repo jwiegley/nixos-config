@@ -134,6 +134,36 @@
             repeat_interval = "4h";
             continue = true;
           }
+          # D13 (2026-07-29): info-severity paging policy -- promote 4, digest the other 17.
+          #
+          # Before this, info alerts emailed like anything else, which is the bulk of the
+          # notification volume this host produces. The four promoted here keep notifying
+          # because each is a COVERAGE failure rather than a status report: a CVE scanner that
+          # stops scanning, or a stale CVE database, means the check silently stopped checking
+          # (the vacuous-check class), and on this host only the operator reboots, so an
+          # unexpected reboot is always worth knowing about.
+          #
+          # "Digest" is not a euphemism for dropping them -- VERIFIED before making this change:
+          # AlertHistory in scripts/log-summarizer.py collects ALERTS{alertstate="firing"} with
+          # NO severity filter, so all 17 still appear in the daily report's alert-history
+          # section with their firing durations. Had that section filtered to warning+, this
+          # route would be silent suppression and D13 would need a different design.
+          #
+          # PLACEMENT IS LOAD-BEARING: this must precede the storage route below, which matches
+          # `category = "storage"` with no severity condition and no `continue`, so it
+          # TERMINATES. Exactly one info rule carries that category (ResticRepositorySizeGrowing);
+          # placed after, it would silently escape the digest and keep emailing.
+          #
+          # `matchers` rather than match/match_re because the negative regex `!~` cannot be
+          # expressed by either of those (Alertmanager >= 0.22). First use of it in this file.
+          {
+            matchers = [
+              "severity=\"info\""
+              "alertname!~\"HostUnexpectedReboot|ContainerCVEScanFailed|ContainerCVEDBStale|MicroVMStateShareExporterStale\""
+            ];
+            receiver = "null-receiver";
+            continue = false;
+          }
           # Backup and storage alerts - group by category and reduce noise
           {
             match = {
@@ -184,6 +214,13 @@
 
       # Receivers configuration
       receivers = [
+        # Digest-only sink for D13's 17 non-promoted info alerts. Deliberately has no
+        # notifier: these alerts still reach the operator through the daily report's
+        # alert-history section (see the route comment above), so a second delivery path
+        # here would defeat the purpose.
+        {
+          name = "null-receiver";
+        }
         {
           name = "default-receiver";
           email_configs = [

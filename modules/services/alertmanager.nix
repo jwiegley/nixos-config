@@ -164,11 +164,33 @@
             receiver = "null-receiver";
             continue = false;
           }
-          # Backup and storage alerts - group by category and reduce noise
+          # Backup and storage alerts - group by category and reduce noise.
+          #
+          # `severity!="critical"` added 2026-07-29. This route has no `continue`, so it
+          # TERMINATES -- and because it sat ahead of both critical routes and matched on
+          # category alone, every CRITICAL storage alert was swallowed here: email only, on
+          # this route's 12h repeat_interval, never reaching iphone-notifier or
+          # critical-receiver's 4h. That silently covered the most severe failures this host
+          # can have. Found by an amtool regression test while implementing D13; 19 rules were
+          # affected:
+          #   TankMountGone (the documented USB/UAS enclosure failure mode)
+          #   ZFSPool{Suspended,Degraded,DataErrors,CapacityCritical}, ZFSScrubErrors
+          #   NVMe{SmartFailed,MediaErrors,CriticalWarning,SpareExhausted}  (the boot disk)
+          #   Restic{IntegrityCheckFailed,CheckFailed,NoSnapshots}
+          #   SmartDevice{Unhealthy,Missing}, LocalBackup{Missing,Stale},
+          #   NodeRedBackupFailed, TechnitiumBackupFailed
+          #
+          # Excluding critical here (rather than adding `continue = true`) is deliberate: with
+          # `continue` the WARNING storage alerts would also fall through and be delivered
+          # twice, once by storage-receiver and again by default-receiver. This way criticals
+          # page normally and everything else keeps the quieter grouped storage treatment.
+          # Info-severity storage alerts never reach this route at all -- the D13 digest route
+          # above catches them first.
           {
-            match = {
-              category = "storage";
-            };
+            matchers = [
+              "category=\"storage\""
+              "severity!=\"critical\""
+            ];
             receiver = "storage-receiver";
             group_by = [
               "alertname"

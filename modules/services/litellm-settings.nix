@@ -1277,9 +1277,24 @@
     background_health_checks = false;
     health_check_interval = 0;
     store_model_in_db = true;
-    store_prompts_in_spend_logs = true;
+    # Prompt/response BODIES are no longer persisted. Set false 2026-07-28 after an
+    # audit found LiteLLM_SpendLogs holding 273 days of request and response bodies
+    # in 55 GB of TOAST -- three times the 90d policy below, because that policy had
+    # never once executed (see the interval note). The bodies land in
+    # `proxy_server_request` (~38 GB) and `response` (~17 GB), NOT in the
+    # innocuously-named `messages` column, which held 21 kB. On a host whose
+    # CLAUDE.md documents repeated pasted-secret incidents, and which proxies for
+    # Claude Code / OpenClaw / Hermes, that table was a standing privacy surface.
+    # Cost/attribution data is unaffected: model, model_group, provider, spend,
+    # token counts, timings, cache_hit, session_id, metadata and tags all persist.
+    store_prompts_in_spend_logs = false;
     maximum_spend_logs_retention_period = "90d";
-    maximum_spend_logs_retention_interval = "7d";
+    # 7d -> 6h. The retention sweep is gated on PROCESS UPTIME, and this rootless
+    # container is restarted nightly by update-containers.timer, so uptime never
+    # reached 7d and the 90d retention above was dead config from the day it was
+    # written. Any value below the ~24h restart cadence works; 6h gives four
+    # chances per day so a single missed window is not a lost day.
+    maximum_spend_logs_retention_interval = "6h";
     enable_pass_through_endpoints = true;
   };
 }

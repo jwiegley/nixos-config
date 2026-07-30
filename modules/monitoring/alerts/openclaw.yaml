@@ -177,10 +177,29 @@ groups:
       # self-heal daemon triggers on named rules, not a label — to close the
       # loop, add OpenClawDiscordCanaryDown to its watched-rules set. No data
       # (canary disabled) never fires.
+      # PROVEN-GREEN GATE (last_success > 0), added 2026-07-30 after this rule
+      # rebooted the OpenClaw VM every ~26 minutes for an hour.
+      #
+      # The canary was enabled before setup step 2 of docs/DISCORD_CANARY_SETUP.md
+      # was done, so @Claw's allowlist did not contain Hermes and it could never
+      # reply. The canary therefore reported ok=0 from its very first run, this
+      # rule fired, self-heal restarted the VM, the restart re-stamped
+      # openclaw_microvm_active_enter_timestamp_seconds, the >600 warmup gate
+      # went false, the alert RESOLVED, and 25 minutes later (600s warmup + 15m
+      # for:) it fired and restarted again. One critical+resolved pair per cycle,
+      # forever, and the first restart killed a VM healthy for 62 hours.
+      #
+      # last_success is carried forward across failing runs by the probe, so this
+      # only suppresses a canary that has NEVER worked -- exactly the unproven
+      # case. Once it goes green even once, the gate is permanently satisfied and
+      # a genuine regression pages normally. A canary stuck at never-green is not
+      # silent either: OpenClawDiscordCanaryNeverSucceeded below reports it as a
+      # setup fault, which is what it actually is.
       - alert: OpenClawDiscordCanaryDown
         expr: |
           openclaw_discord_canary_ok == 0
           and ignoring(__name__) (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
+          and ignoring(__name__) openclaw_discord_canary_last_success_timestamp_seconds > 0
         for: 15m
         labels:
           severity: critical
@@ -194,6 +213,37 @@ groups:
             timeout, sustained for 15m. This is the inbound MESSAGE_CREATE ->
             dispatch -> reply pipeline; the WS can be "connected" and still
             not deliver. Restart microvm@openclaw to re-establish a clean WS.
+
+      # The signal that the proven-green gate above would otherwise swallow: a
+      # canary that is running and reporting, but has never once succeeded. That
+      # is a setup/permission fault rather than an outage, so it is a warning for
+      # a human and carries service=openclaw-canary so it does NOT reach the
+      # self-heal webhook (same technique as OpenClawSelfHealDown below) -- there
+      # is no automated remediation for "an allowlist is missing an entry".
+      # `== 0` needs the series to exist, so a disabled canary cannot fire this.
+      # 2h tolerates the first few runs of a legitimately warming probe.
+      - alert: OpenClawDiscordCanaryNeverSucceeded
+        expr: openclaw_discord_canary_last_success_timestamp_seconds == 0
+        for: 2h
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw-canary
+        annotations:
+          summary: "OpenClaw Discord canary has never succeeded — setup incomplete"
+          description: |
+            The canary has been posting for over 2 hours and @Claw has never
+            replied once, so the round-trip has never been proven and
+            OpenClawDiscordCanaryDown is deliberately gated off (it cannot
+            distinguish "broken" from "never worked", and firing on the latter
+            made self-heal reboot the VM in a 26-minute loop on 2026-07-30).
+            Almost always setup step 2 of docs/DISCORD_CANARY_SETUP.md: @Claw's
+            Discord allowlist must contain Hermes' bot id 1503619790261194793,
+            and Hermes' DISCORD_ALLOWED_USERS must contain @Claw's
+            1477036366138445905. Check the probe's own verdict with
+            `journalctl -u discord-canary-openclaw.service | tail -1`;
+            `post_http=200` with `no reply within timeout` means posting works
+            and the target is ignoring the mention.
 
       # The OpenClaw-direction canary/probe stopped producing fresh metrics.
       - alert: OpenClawDiscordCanaryStale

@@ -46,6 +46,7 @@ channels
 channels.discord
 channels.discord.allowFrom
 channels.discord.allowFrom.0
+channels.discord.allowFrom.1
 channels.discord.dmPolicy
 channels.discord.enabled
 channels.discord.groupPolicy
@@ -143,6 +144,8 @@ plugins.entries.memory-qdrant.config.maxMemorySize
 plugins.entries.memory-qdrant.config.qdrantApiKey
 plugins.entries.memory-qdrant.config.qdrantUrl
 plugins.entries.memory-qdrant.enabled
+plugins.entries.memory-qdrant.hooks
+plugins.entries.memory-qdrant.hooks.allowConversationAccess
 plugins.entries.perplexity
 plugins.entries.perplexity.enabled
 plugins.entries.whatsapp

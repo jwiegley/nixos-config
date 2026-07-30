@@ -22,6 +22,34 @@ probe missed it because they bypass Discord (`e2e-chat` → api_server,
 `OpenClawDiscordWsDown`) which a still-ACKing zombie keeps fresh. Only an
 active message→reply round-trip proves the inbound path delivers.
 
+## ⚠️ What happens if you enable before step 3 (2026-07-30 incident)
+
+Both directions were enabled on 2026-07-30 **without** completing step 2, so
+neither bot could answer the other and both canaries reported `ok=0` from their
+very first run. That produced a self-inflicted outage loop:
+
+`OpenClawDiscordCanaryDown` fired → the self-heal daemon had no explicit action
+mapped for it and fell back to its `restart_microvm` default → the restart
+re-stamped `openclaw_microvm_active_enter_timestamp_seconds`, which the alert's
+own `> 600` warmup gate reads → the alert **resolved** → 25 minutes later
+(600 s warmup + `for: 15m`) it fired and restarted the VM again. One
+critical-then-resolved email pair every ~26 minutes, and the first restart killed
+a VM that had been healthy for 62 hours.
+
+Three defences were added so this cannot recur:
+
+1. **Proven-green gate.** `*DiscordCanaryDown` now also requires
+   `last_success_timestamp_seconds > 0`. A canary that has *never* worked is
+   unproven, not broken — you cannot remediate toward a state never observed.
+2. **No default remediation.** `openclaw-self-heal` no longer defaults unmapped
+   alerts to `restart_microvm` (hermes never did). Unmapped alerts are ignored
+   and counted in `openclaw_self_heal_unknown_alerts_total`.
+3. **A setup-fault alert.** `*DiscordCanaryNeverSucceeded` fires after 2 h so a
+   permanently never-green canary is reported rather than silently inert.
+
+The gate means enabling early is now *safe*, but step 3 is still the right
+order: until it passes, the canary is monitoring nothing.
+
 ## Known values (already wired)
 
 - **@Claw (OpenClaw)** bot user id: `1477036366138445905`
@@ -29,14 +57,20 @@ active message→reply round-trip proves the inbound path delivers.
 - Tokens (reused, no new secret): OpenClaw → `openclaw/discord-token`;
   Hermes → `DISCORD_BOT_TOKEN` inside `hermes/env`.
 
-## Components (built, `enable = false`)
+## Components (both directions `enable = true` since 2026-07-30)
 
 - `scripts/discord_canary.py` — direction-agnostic probe (Discord REST v10, stdlib)
-- `modules/monitoring/services/discord-canary.nix` — `services.discordCanary.probes.<name>`
+- `modules/monitoring/services/discord-canary.nix` — `services.discordCanary.probes.<name>`.
+  Timers use `OnActiveSec`, not `OnBootSec`: a timer first created by a
+  `nixos-rebuild switch` on a long-uptime host would otherwise have its only
+  anchor in the past and never fire, which is exactly what left
+  `discord-canary-hermes.timer` dead from birth (`SubState=elapsed`, empty
+  NextElapse — indistinguishable from healthy in `systemctl status`).
 - `hosts/vulcan/default.nix` — two probes (`hermes`, `openclaw`), pre-filled ids
-- Alerts: `HermesDiscordCanaryDown` (self-heal-eligible) / `HermesDiscordCanaryStale`
-  in `hermes.yaml`; `OpenClawDiscordCanaryDown` / `OpenClawDiscordCanaryStale`
-  in `openclaw.yaml`.
+- Alerts, per direction: `…DiscordCanaryDown` (critical, gated on
+  `last_success > 0`, self-heal-eligible), `…DiscordCanaryNeverSucceeded`
+  (warning, setup fault, deliberately **not** self-heal-routed),
+  `…DiscordCanaryStale` (warning), `…DiscordCanaryNotCleaningUp` (warning).
 
 ## One-time setup
 

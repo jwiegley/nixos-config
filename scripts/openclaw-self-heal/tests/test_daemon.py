@@ -588,3 +588,63 @@ def test_handle_payload_acts_when_budget_available(monkeypatch, tmp_path):
                            "startsAt": "2026-07-22T11:30:00Z"}]}
     daemon.handle_alertmanager_payload(payload)
     assert ran == ["restart_microvm"]
+
+
+# ── no default remediation ────────────────────────────────────────────────────
+# Regression tests for 2026-07-30: first_attempt_action defaulted to
+# "restart_microvm", so every alert nobody had mapped silently acquired "reboot
+# the VM" as its remediation. OpenClawDiscordCanaryDown then rebooted a healthy
+# VM every ~26 minutes in a closed loop (reboot -> warmup gate re-stamped ->
+# alert resolves -> re-fires 25m later -> reboot). OpenClawConfigDrift had hit
+# the same default earlier and was patched with an Alertmanager routing
+# carve-out instead of here.
+
+def test_unknown_alert_gets_no_action():
+    assert daemon.first_attempt_action("OpenClawSomethingNobodyMappedYet") is None
+
+
+def test_no_default_fallback_to_restart_microvm():
+    """The specific defect: an unmapped name must not resolve to a VM restart."""
+    assert daemon.first_attempt_action("TotallyUnknownAlert") != "restart_microvm"
+
+
+def test_alerts_a_reboot_cannot_fix_are_unmapped():
+    """These fired the old default and a VM restart cannot address any of them:
+    config drift is a JSON schema mismatch, the self-heal daemon runs on the
+    HOST, and cleanup failure is a missing Discord permission."""
+    for name in ("OpenClawConfigDrift",
+                 "OpenClawSelfHealDown",
+                 "OpenClawDiscordCanaryNotCleaningUp"):
+        assert daemon.first_attempt_action(name) is None, name
+
+
+def test_discord_canary_down_is_explicitly_mapped_to_restart():
+    """A sustained round-trip failure IS the zombied-gateway case a restart
+    clears, so this one is deliberately mapped -- explicitly, not by fallback.
+    Safe only because the alert is gated on last_success > 0 (openclaw.yaml)."""
+    assert daemon.first_attempt_action("OpenClawDiscordCanaryDown") == "restart_microvm"
+
+
+def test_every_mapped_action_is_allowlisted():
+    """A map entry naming an action the runner would reject is a latent failure."""
+    for name, action in daemon.ACTION_MAP.items():
+        if action == "wait_60s":
+            continue  # handled inline, never dispatched to run_action
+        assert daemon.validate_action(action) == action, name
+
+
+def test_unknown_alert_counter_is_exported():
+    daemon._UNKNOWN_ALERTS_TOTAL = 0
+    daemon._bump_unknown_counter()
+    daemon._bump_unknown_counter()
+    assert daemon._UNKNOWN_ALERTS_TOTAL == 2
+
+
+def test_heartbeat_exports_unknown_alert_total(tmp_path):
+    """Ignoring an alert must be observable, or removing the default would trade
+    a harmful action for an invisible no-op."""
+    out = tmp_path / "hb.prom"
+    daemon.write_heartbeat(out_path=out, unknown_alerts=7)
+    body = out.read_text()
+    assert "openclaw_self_heal_unknown_alerts_total 7" in body
+    assert "# TYPE openclaw_self_heal_unknown_alerts_total counter" in body

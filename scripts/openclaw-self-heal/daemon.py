@@ -261,11 +261,40 @@ ACTION_MAP = {
     "OpenClawCanaryStale":               "restart_canary",
     "OpenClawCanaryMetricAbsent":        "restart_canary",
     "OpenClawMcporterCheckStale":        "restart_mcporter_check",
+    # Discord round-trip canary. A sustained round-trip failure is precisely the
+    # zombied-gateway signature from the 2026-07-15 incident, which a VM restart
+    # does clear -- so unlike the other canary alerts this one genuinely is a
+    # restart. It is safe to automate ONLY because the alert is additionally
+    # gated on the canary having succeeded at least once (see openclaw.yaml): a
+    # canary that has never been green is unproven, not broken, and you cannot
+    # remediate toward a state that was never observed.
+    "OpenClawDiscordCanaryDown":         "restart_microvm",
 }
 
 
-def first_attempt_action(alert_name: str) -> str:
-    return ACTION_MAP.get(alert_name, "restart_microvm")
+def first_attempt_action(alert_name: str) -> str | None:
+    """Return the deterministic first-attempt action for an alert name, or None
+    if the alert is unknown.
+
+    There is deliberately NO default. An unmapped alert gets no automated
+    action at all, because the alternative -- falling back to restart_microvm --
+    means every alert anyone adds later silently acquires "reboot the VM" as its
+    remediation, including alerts a reboot cannot possibly fix.
+
+    That is not hypothetical; it has now happened twice:
+      - OpenClawConfigDrift bounced the VM on Alertmanager's repeat_interval
+        indefinitely, patched at the time with a routing carve-out in
+        alertmanager.nix rather than here.
+      - OpenClawDiscordCanaryDown (2026-07-30) rebooted the VM every ~26min in
+        a closed loop: the reboot re-stamped the warmup gate's
+        vm_active_enter_ts, which resolved the alert, which then re-fired 25min
+        later (600s warmup + 15m for:) and rebooted again. The first reboot
+        killed a VM that had been healthy for 62 hours.
+
+    Hermes' daemon has had no fallback since its spec §6.2; this brings OpenClaw
+    into line with it rather than leaving the two watchdogs divergent.
+    """
+    return ACTION_MAP.get(alert_name)
 
 
 ACTIONS_DIR = "/etc/nixos/scripts/openclaw-self-heal/actions"
@@ -462,8 +491,18 @@ def handle_alertmanager_payload(payload):
     for a in payload.get("alerts", []):
         if a.get("status") != "firing":
             continue
+        alert_name = a["labels"]["alertname"]
+        # Ignore alerts with no mapped remediation, rather than reaching for a
+        # default. See first_attempt_action for why a default is unsafe. The
+        # human still gets the notification -- Alertmanager fans out to the
+        # email/critical receivers independently of this webhook -- so ignoring
+        # here drops the automated action, not the signal.
+        if alert_name not in ACTION_MAP:
+            _bump_unknown_counter()
+            print(f"ignoring unknown alert (no mapped action): {alert_name}", flush=True)
+            continue
         alert_meta = {
-            "alert_name":         a["labels"]["alertname"],
+            "alert_name":         alert_name,
             "vm_active_enter_ts": vm_ts,
             "starts_at":          int(datetime.fromisoformat(a["startsAt"].replace("Z", "+00:00")).timestamp()),
         }
@@ -491,7 +530,10 @@ def handle_alertmanager_payload(payload):
         n = next_attempt_n(inc)
         ai_reason = None
         if n == 1:
-            action = first_attempt_action(alert_meta["alert_name"])
+            # Membership validated at ingest; subscripting rather than calling
+            # first_attempt_action keeps the type non-Optional. Same shape as
+            # hermes-self-heal.
+            action = ACTION_MAP[alert_meta["alert_name"]]
             by = "deterministic"
         elif n in (2, 3):
             try:
@@ -552,12 +594,26 @@ def handle_alertmanager_payload(payload):
         save_state(STATE_PATH, state)
 
 
+_UNKNOWN_ALERTS_TOTAL = 0
+
+
+def _bump_unknown_counter():
+    """Count an alert that arrived with no mapped remediation.
+
+    Exported so "the daemon is deliberately ignoring something" is observable
+    rather than silent -- otherwise removing the restart_microvm default would
+    trade a harmful action for an invisible no-op.
+    """
+    global _UNKNOWN_ALERTS_TOTAL
+    _UNKNOWN_ALERTS_TOTAL += 1
+
+
 TEXTFILE_DIR = "/var/lib/prometheus-node-exporter-textfiles"
 HEARTBEAT_PATH = pathlib.Path(TEXTFILE_DIR) / "openclaw_self_heal.prom"
 
 
 def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
-                    litellm_unreachable=0):
+                    litellm_unreachable=0, unknown_alerts=0):
     action_counts = action_counts or {}
     tmp = pathlib.Path(str(out_path) + ".tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -578,6 +634,9 @@ def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
             "# HELP openclaw_self_heal_litellm_unreachable_total Cumulative LiteLLM unreachable events\n"
             "# TYPE openclaw_self_heal_litellm_unreachable_total counter\n"
             f"openclaw_self_heal_litellm_unreachable_total {litellm_unreachable}\n"
+            "# HELP openclaw_self_heal_unknown_alerts_total Cumulative unknown-alert ignore events\n"
+            "# TYPE openclaw_self_heal_unknown_alerts_total counter\n"
+            f"openclaw_self_heal_unknown_alerts_total {unknown_alerts}\n"
         )
     os.replace(tmp, out_path)
 
@@ -598,7 +657,8 @@ def heartbeat_tick():
         for att in inc.get("attempts", []):
             if att.get("action") in counts:
                 counts[att["action"]] += 1
-    write_heartbeat(active_count=active, action_counts=counts)
+    write_heartbeat(active_count=active, action_counts=counts,
+                    unknown_alerts=_UNKNOWN_ALERTS_TOTAL)
 
 
 def heartbeat_loop():

@@ -4,7 +4,7 @@
 See docs/superpowers/specs/2026-05-20-hermes-self-heal-and-nightly-report-design.md.
 Ported from scripts/openclaw-self-heal/daemon.py with Hermes-specific
 action set, alert mapping, metric prefix, and the explicit-ignore behavior
-on unknown alerts (NO default fallback — diverges from OpenClaw).
+on unknown alerts (NO default fallback; OpenClaw's daemon matches this since 2026-07-30).
 """
 __version__ = "0.1.0"
 
@@ -249,9 +249,13 @@ def first_attempt_action(alert_name: str) -> str | None:
     """Return the deterministic first-attempt action for an alert name,
     or None if the alert is unknown.
 
-    DIVERGES FROM OpenClaw: no default fallback. Spec §6.2 decision.
-    Unknown alerts are explicitly ignored (counted in
-    hermes_self_heal_unknown_alerts_total).
+    No default fallback (spec §6.2). Unknown alerts are explicitly ignored and
+    counted in hermes_self_heal_unknown_alerts_total.
+
+    This was originally a deliberate divergence from OpenClaw's daemon, which
+    defaulted to restart_microvm. OpenClaw adopted the same no-fallback rule on
+    2026-07-30 after that default rebooted its VM every ~26min in a closed loop,
+    so the two daemons now agree; keep them that way.
     """
     return ACTION_MAP.get(alert_name)
 
@@ -496,7 +500,7 @@ def handle_alertmanager_payload(payload):
             continue
         alert_name = a["labels"]["alertname"]
 
-        # Explicit ignore on unknown alerts — Hermes diverges from OpenClaw here.
+        # Explicit ignore on unknown alerts — no default remediation exists.
         if alert_name not in ACTION_MAP:
             _bump_unknown_counter()
             print(f"ignoring unknown alert: {alert_name}", flush=True)

@@ -138,12 +138,28 @@ let
       description = "Discord round-trip canary timer: ${p.targetName}";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnBootSec = "3min";
+        # OnActiveSec, NOT OnBootSec. OnBootSec is relative to BOOT, so a timer
+        # first created by a `nixos-rebuild switch` on a long-uptime host has its
+        # only anchor already far in the past and never fires -- and
+        # OnUnitActiveSec cannot rescue it, because that anchors on the last
+        # activation of the *service*, which has never run. The timer sits in
+        # ActiveState=active/SubState=elapsed with an EMPTY NextElapse forever,
+        # which looks healthy in `systemctl status`.
+        #
+        # That is not theoretical: discord-canary-hermes.timer was created by a
+        # switch on 2026-07-30 at 10:15 against a 2026-07-03 boot, so its
+        # OnBootSec=3min resolved to 27 days earlier and the hermes direction was
+        # dead from birth. Its openclaw twin only worked because the service had
+        # been started by hand, which gave OnUnitActiveSec an anchor.
+        #
+        # OnActiveSec is relative to the TIMER's own activation, so it arms on a
+        # switch and on a boot alike. (Persistent= was dropped here: it only
+        # affects OnCalendar= timers, so it was always a no-op.)
+        OnActiveSec = "3min";
         OnUnitActiveSec = "${toString p.intervalSeconds}s";
         RandomizedDelaySec = "20s";
         AccuracySec = "10s";
         Unit = "discord-canary-${name}.service";
-        Persistent = true;
       };
     };
 in

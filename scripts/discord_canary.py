@@ -11,9 +11,15 @@ probe-bot design):
   - OpenClaw's @Claw probes Hermes   -> metric hermes_discord_canary_*
   - Hermes probes OpenClaw's @Claw   -> metric openclaw_discord_canary_*
 Blind spot (accepted): if BOTH gateways die at once, neither probe reports.
-NOT YET LIVE as of 2026-07-27: both directions are declared in
-hosts/vulcan/default.nix with enable = false and an empty channelId,
-pending the one-time shared-channel setup in docs/DISCORD_CANARY_SETUP.md.
+
+LIVE since 2026-07-30 in #interconnect, but NOT YET PROVEN GREEN in either
+direction: both report post_http=200 with "no reply within timeout", because
+setup step 2 of docs/DISCORD_CANARY_SETUP.md (each bot must allow-list the
+other) was not completed before enabling. Until a direction succeeds once, its
+*DiscordCanaryDown alert is deliberately suppressed by a last_success > 0 gate
+and *DiscordCanaryNeverSucceeded reports the setup gap instead -- see that gate's
+comment in modules/monitoring/alerts/openclaw.yaml for why ungated firing on a
+never-green canary rebooted the OpenClaw VM every 26 minutes.
 
 Why this is needed (2026-07-15 incident):
   Hermes' Discord connection zombied — the WebSocket stayed "connected" and

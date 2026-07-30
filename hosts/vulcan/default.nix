@@ -234,15 +234,19 @@
   services.discordCanary.probes = {
     # @Claw (OpenClaw) posts, Hermes must reply -> tests Hermes.
     hermes = {
-      # HELD DISABLED pending one Discord permission, 2026-07-29. The channel and interval are
-      # correct and this is one flag away from working -- but the first live run returned
-      # HTTP 403 when deleting the TARGET bot's reply, because neither bot has MANAGE_MESSAGES
-      # in #interconnect. Deleting our own probe works without it; deleting the reply does not.
-      # So every successful round-trip would leave one undeletable message, ~192/day, and the
-      # operator granted this channel on the explicit condition that it stays clean.
-      # TO ENABLE: grant MANAGE_MESSAGES to both bots in #interconnect, then set enable = true
-      # here and in the openclaw probe below. HermesDiscordCanaryNotCleaningUp /
-      # OpenClawDiscordCanaryNotCleaningUp will catch a regression.
+      # Enabled 2026-07-30 once the operator granted MANAGE_MESSAGES to both bots in
+      # #interconnect (without it, deleting the TARGET's reply returns 403 and every
+      # successful round-trip would leave ~192 undeletable messages/day in a channel granted
+      # on the condition that it stays clean). *DiscordCanaryNotCleaningUp catches a regression.
+      #
+      # NOT YET PROVEN GREEN. Setup step 3 of docs/DISCORD_CANARY_SETUP.md ("verify each answers
+      # the other, BEFORE enabling") was skipped, and both directions have reported
+      # post_http=200 / "no reply within timeout" on every run since: each bot's allowlist was
+      # missing the other. @Claw's half is fixed in modules/services/openclaw-config.nix; this
+      # direction additionally needs DISCORD_ALLOWED_USERS in the hermes/env SOPS secret to
+      # contain @Claw's 1477036366138445905. Leaving both enabled is safe because
+      # *DiscordCanaryDown is now gated on last_success > 0, so a never-green canary cannot page
+      # or trigger self-heal; *DiscordCanaryNeverSucceeded reports the setup gap instead.
       enable = true;
       # #interconnect -- created 2026-07-29 by the operator specifically for this: private,
       # muted, members are ONLY the two bots. Granted on the explicit condition that the
@@ -256,9 +260,10 @@
     };
     # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
     openclaw = {
-      enable = true; # MANAGE_MESSAGES granted by the operator 2026-07-30; cleanup=0 not yet
-      # observed at enable time -- OpenClawDiscordCanaryNotCleaningUp will fire within 30m if
-      # the grant did not take, which is the intended proof.
+      enable = true; # MANAGE_MESSAGES granted by the operator 2026-07-30 and CONFIRMED live:
+      # openclaw_discord_canary_cleanup_failed has read 0 across every run since, so the probe
+      # deletes its own message successfully. See the hermes probe above for why this direction
+      # is enabled but not yet proven green.
       channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
       targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
       targetName = "OpenClaw";

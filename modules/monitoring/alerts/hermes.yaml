@@ -162,8 +162,19 @@ groups:
       # window + the probe's own one-retry guard against a flap-triggered
       # restart loop. Make it page-only (drop self_heal_eligible) if it ever
       # proves noisy. No data (canary not deployed) never fires.
+      # PROVEN-GREEN GATE (last_success > 0) -- see the twin gate and its full
+      # incident write-up on OpenClawDiscordCanaryDown in openclaw.yaml. Short
+      # version: a canary that has never once succeeded is unproven, not broken,
+      # and firing on it made self-heal reboot the VM in a 26-minute loop. This
+      # direction has also never been green, so without the gate enabling it
+      # would reproduce the same loop against microvm@hermes.
+      # A permanently never-green canary is still reported, as a setup fault, by
+      # HermesDiscordCanaryNeverSucceeded below.
       - alert: HermesDiscordCanaryDown
-        expr: hermes_discord_canary_ok == 0 and ignoring(__name__) hermes_vm_uptime_seconds > 600
+        expr: |
+          hermes_discord_canary_ok == 0
+          and ignoring(__name__) hermes_vm_uptime_seconds > 600
+          and ignoring(__name__) hermes_discord_canary_last_success_timestamp_seconds > 0
         for: 15m
         labels:
           severity: critical
@@ -180,6 +191,30 @@ groups:
             WebSocket can be "connected" and still zombied here (heartbeats
             keep ACKing). Restarting microvm@hermes re-establishes a clean
             WS session and message routing (2026-07-15 runbook).
+
+      # Twin of OpenClawDiscordCanaryNeverSucceeded -- the signal the proven-green
+      # gate above would otherwise swallow. service=hermes-canary deliberately
+      # does not match the self-heal route's `hermes-(mcp|agent)` regex: there is
+      # no automated fix for a missing allowlist entry.
+      - alert: HermesDiscordCanaryNeverSucceeded
+        expr: hermes_discord_canary_last_success_timestamp_seconds == 0
+        for: 2h
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-canary
+        annotations:
+          summary: "Hermes Discord canary has never succeeded — setup incomplete"
+          description: |
+            The canary has been posting for over 2 hours and Hermes has never
+            replied once, so the round-trip has never been proven and
+            HermesDiscordCanaryDown is deliberately gated off. Almost always
+            setup step 2 of docs/DISCORD_CANARY_SETUP.md: Hermes'
+            DISCORD_ALLOWED_USERS (in the hermes/env SOPS secret) must contain
+            @Claw's bot id 1477036366138445905, and DISCORD_ALLOWED_CHANNELS the
+            canary channel. Check `journalctl -u discord-canary-hermes.service
+            | tail -1`; `post_http=200` with `no reply within timeout` means
+            posting works and the target is ignoring the mention.
 
       # The canary/probe itself stopped producing fresh metrics.
       - alert: HermesDiscordCanaryStale

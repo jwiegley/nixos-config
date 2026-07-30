@@ -143,7 +143,22 @@ let
         groupPolicy = "allowlist";
         streaming = { };
         dmPolicy = "allowlist";
-        allowFrom = [ "639822278535807007" ];
+        allowFrom = [
+          "639822278535807007"
+          # Hermes' bot user id — setup step 2 of docs/DISCORD_CANARY_SETUP.md.
+          # The round-trip canary posts an @Claw mention AS Hermes, and with
+          # dmPolicy/groupPolicy = "allowlist" @Claw silently drops a sender that
+          # is not listed, which is why the canary reported ok=0 on every run from
+          # the moment it was enabled (post_http=200, "no reply within timeout").
+          # Deliberately NOT also added to guilds.<id>.users: that list is paired
+          # with requireMention = false, so a bot listed there would be answered
+          # on EVERY message, and two agents that answer each other unprompted in
+          # a shared channel can ping-pong without bound. Requiring the explicit
+          # mention keeps the canary working (it always mentions) while denying
+          # that loop. If the round-trip still fails after the operator's half of
+          # step 2, verify against guild scope before widening this.
+          "1503619790261194793"
+        ];
         guilds = {
           "1477037634931916891" = {
             requireMention = false;

@@ -72,9 +72,24 @@ let
           default = 300;
           description = "Probe cadence in seconds (default 5 min).";
         };
+        retries = lib.mkOption {
+          type = lib.types.int;
+          default = 0;
+          description = ''
+            Extra probe attempts after a failure (CANARY_RETRIES). 0 means one attempt.
+
+            Deliberately 0 by default. A retry only helps when failures are independent,
+            but the dominant failure mode here is a reply that exceeds timeoutSeconds --
+            and a second attempt draws from the same latency distribution, so it mostly
+            doubles the Discord traffic and the wall-clock cost without changing the
+            verdict. One attempt with a generous timeout beats two short ones. Total run
+            time is timeoutSeconds * (retries + 1), which must stay below intervalSeconds
+            or runs overlap.
+          '';
+        };
         timeoutSeconds = lib.mkOption {
           type = lib.types.int;
-          default = 90;
+          default = 420;
           description = "Seconds to wait for the target's reply before scoring failure.";
         };
       };
@@ -98,6 +113,7 @@ let
         CANARY_TARGET_NAME = p.targetName;
         CANARY_METRIC_NAME = p.metricName;
         CANARY_TIMEOUT = toString p.timeoutSeconds;
+        CANARY_RETRIES = toString p.retries;
       }
       // lib.optionalAttrs (p.tokenFile != null) {
         # LoadCredential exposes the raw token under $CREDENTIALS_DIRECTORY.
@@ -108,12 +124,12 @@ let
         User = "hermes-mcp";
         Group = "hermes-mcp";
         ExecStart = "${script}/bin/discord-canary";
-        # Derived from timeoutSeconds, never hardcoded: the probe makes 1 + CANARY_RETRIES
-        # attempts (2 by default) with a 5s gap, so a hardcoded ceiling silently truncates
-        # the last attempt as soon as timeoutSeconds is raised. At 180s that is 365s of real
-        # work, which the previous fixed 240s would have killed mid-probe -- scoring a
-        # systemd timeout as a failed round-trip.
-        TimeoutStartSec = "${toString (p.timeoutSeconds * 2 + 60)}s";
+        # Derived from timeoutSeconds AND retries, never hardcoded: the probe makes
+        # 1 + retries attempts with a 5s gap, so a fixed ceiling silently truncates the
+        # last attempt as soon as either is raised, scoring a systemd kill as a failed
+        # round-trip. (The original hardcoded 240s would have killed a 180s-timeout probe
+        # mid-second-attempt.)
+        TimeoutStartSec = "${toString (p.timeoutSeconds * (p.retries + 1) + 60)}s";
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];

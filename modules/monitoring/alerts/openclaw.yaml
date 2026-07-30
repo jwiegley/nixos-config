@@ -207,8 +207,9 @@ groups:
       # KEYED ON TIME-SINCE-LAST-SUCCESS, NOT ON A FAILURE STREAK (2026-07-30).
       #
       # The original `ok == 0 for: 15m` form assumed a failing probe stays failing.
-      # It does not: the target is an LLM agent that answers roughly half of its
-      # mentions, so measured runs alternate
+      # It does not. The target is an LLM agent whose reply latency is heavy-tailed
+      # (3.5s to 179.9s measured), so with any timeout short of that tail some
+      # healthy runs score as failures and measured runs alternate
       #   ok=1(7.4s) ok=1(85.3s) ok=1(87.8s) ok=0 ...
       # and on a 900s cadence any two consecutive misses satisfy for: 15m. That
       # pages critical, then resolves on the next success, then pages again --
@@ -279,6 +280,36 @@ groups:
             shows the round-trip times, and a run whose reply lands after
             timeoutSeconds (180s) scores as a miss. Sustained values near 0.5 with
             fast successes point at the agent dropping messages while busy.
+
+      # THE GUARD THAT WOULD HAVE PREVENTED THREE WRONG DIAGNOSES IN ONE DAY.
+      # On 2026-07-30 the timeout was too short three times over (90s, then 180s
+      # cleared by 0.06s), and each time "no reply within timeout" was read as the
+      # target rejecting or dropping the message. It never was. This alert makes the
+      # approach-to-ceiling visible BEFORE it starts manufacturing false failures.
+      #
+      # 250s is ~60% of timeoutSeconds (420s, set in hosts/vulcan/default.nix).
+      # THAT COUPLING IS MANUAL: this threshold lives in Prometheus and the timeout
+      # lives in Nix, so if you change timeoutSeconds, change this with it. Keeping
+      # it at ~60% leaves room to react before replies start being scored as
+      # failures. roundtrip_seconds is 0 on failure, so max_over_time picks the
+      # slowest SUCCESSFUL reply and failures cannot depress it.
+      - alert: OpenClawDiscordCanarySlowReply
+        expr: max_over_time(openclaw_discord_canary_roundtrip_seconds[6h]) > 250
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: openclaw-canary
+        annotations:
+          summary: "OpenClaw canary replies approaching the timeout ({{ $value | humanizeDuration }})"
+          description: |
+            The slowest successful Discord round-trip in the last 6h took
+            {{ $value | humanizeDuration }}, against a configured timeout of 420s.
+            Replies this close to the ceiling will start being scored as failures,
+            which reads as a dead round-trip and is how 2026-07-30 produced three
+            successive wrong diagnoses. Either raise
+            services.discordCanary.probes.openclaw.timeoutSeconds (and this rule's
+            threshold with it), or investigate why OpenClaw has become slow to answer.
 
       # The signal that the proven-green gate above would otherwise swallow: a
       # canary that is running and reporting, but has never once succeeded. That

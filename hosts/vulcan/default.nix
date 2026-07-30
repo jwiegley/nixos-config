@@ -255,10 +255,15 @@
       targetName = "Hermes";
       tokenFile = config.sops.secrets."openclaw/discord-token".path;
       intervalSeconds = 900;
-      # 90s (the module default) is not a margin: observed replies include 85.3s and 87.8s,
-      # i.e. within 2s of the limit, so a slow-but-healthy reply scored as a dead round-trip.
-      # These targets are LLM agents whose reply latency spans ~3s to ~90s.
-      timeoutSeconds = 180;
+      # These targets are LLM agents with a heavy-tailed reply latency: measured 3.5, 3.7,
+      # 6.8, 7.4, 30.2, 85.3, 87.8 and 179.9 seconds. Every timeout tried so far has been
+      # too short and each one manufactured a false "dead round-trip" -- 90s (the module
+      # default) failed against the 85-88s replies, and 180s was cleared by only 0.06s by
+      # the 179.9s one. 420s is ~2.3x the observed maximum. retries = 0 keeps one attempt
+      # inside the 900s cadence; see the module option for why a retry does not help when
+      # the failure mode is latency.
+      timeoutSeconds = 420;
+      retries = 0;
     };
     # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
     openclaw = {
@@ -277,7 +282,8 @@
       targetName = "OpenClaw";
       envFile = config.sops.secrets."hermes/env".path; # provides DISCORD_BOT_TOKEN
       intervalSeconds = 900;
-      timeoutSeconds = 180; # see the hermes probe above
+      timeoutSeconds = 420; # see the hermes probe above
+      retries = 0;
 
     };
   };

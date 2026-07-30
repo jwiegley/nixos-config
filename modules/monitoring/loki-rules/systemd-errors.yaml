@@ -11,6 +11,15 @@ groups:
             != "max retries"
             != "Temporary failure in name resolution"
             != "No Sieve errors"
+            # WARNING: the two CHIP filters below strip 100% of matter-server's error
+            # volume (17,283 lines over 7d, ZERO residual, measured 2026-07-29), so a
+            # GREEN SystemdJournalHighErrorRate must NEVER be read as Matter is healthy.
+            # Matter has exactly one alert -- MatterServerDown in alerts/container-health.yaml
+            # -- and it only covers liveness; nothing watches CHIP subscription churn.
+            # Baseline for whoever writes that churn rule (Loki, 21d in 6h buckets):
+            # CHIP_ERROR min 99 / median 184 / max 485; broad error pattern min 198 /
+            # median 344 / max 926. A 120-per-6h threshold fires permanently; to stay
+            # quiet at baseline a rule must clear ~500 (CHIP_ERROR) or ~930 (broad).
             != "CHIP_ERROR"
             != "Subscription failed with CHIP"
             != "SearxEngineAccessDeniedException"
@@ -50,6 +59,8 @@ groups:
             |~ "level=error|ERROR"
             != "connection refused"
             != "database system is shutting down"
+            # WARNING: same CHIP strip as the first rule (8,815 matter-server lines over
+            # 7d, ZERO residual) -- matter-server can NEVER appear in this per-unit alert.
             != "CHIP_ERROR"
             != "Subscription failed with CHIP"
             != "Direct fetch of page URL timed out"

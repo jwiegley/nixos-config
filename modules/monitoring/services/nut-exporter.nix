@@ -6,30 +6,9 @@
 }:
 
 {
-  # UPS / power monitoring — closes a total blind spot.
-  #
-  # Until 2026-07-29 the UPS was COMPLETELY unmonitored: no exporter, no alert rule, no
-  # Nagios check. `{__name__=~"nut_.*|network_ups_.*|ups_.*"}` returned zero series, and a
-  # scan of all ~500 alert rules for ups/nut/battery/power/apc matched nothing about the
-  # UPS. That mattered more than it sounds, for three compounding reasons:
-  #
-  #   1. There is an AUTOMATED SHUTDOWN PATH. modules/services/nut.nix runs a 30s poll that
-  #      execs `systemctl poweroff` when status contains OB and charge < 50. The script is
-  #      fail-safe, but its only trace is a single `logger -p daemon.warning` line, which
-  #      nothing scrapes — so an automatic poweroff of this host would generate NO alert.
-  #   2. The battery is at the end of its service life: battery.mfr.date 2022/08/13, i.e.
-  #      ~4 years, at the top of APC's 3-5 year replacement window.
-  #   3. ups.test.result reads "No test initiated", so the 43-minute battery.runtime figure
-  #      is an unvalidated vendor estimate, never confirmed under load.
-  #
-  # So the machine could lose power protection silently, and the first symptom would be the
-  # host disappearing. This is also cross-domain: the tank pool lives in a USB enclosure whose
-  # documented 2026-06-02 failure mode is a load-induced bridge hang, and unclean power is the
-  # classic trigger for exactly that.
-  #
-  # NOTE this is a first-class NixOS option (services.prometheus.exporters.nut), NOT a
-  # bespoke script. The remediation plan classified UPS monitoring as possible scope-creep
-  # requiring a new textfile collector; that was wrong, and it is why this is a small module.
+  # UPS / power monitoring. Feeds the rules in modules/monitoring/alerts/ups.yaml, which
+  # carries the why: the measured baseline, the battery's age, and the automated
+  # `systemctl poweroff` path in modules/services/nut.nix that this exporter makes visible.
 
   services.prometheus.exporters.nut = {
     enable = true;
@@ -87,6 +66,4 @@
       scrape_interval = "30s";
     }
   ];
-
-  environment.systemPackages = [ ];
 }

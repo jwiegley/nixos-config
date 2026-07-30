@@ -14,20 +14,8 @@ groups:
           summary: "Qdrant vector database is unreachable"
           description: "Qdrant metrics endpoint (localhost:6333/metrics) has been unreachable for more than 3 minutes. Vector search may be unavailable."
 
-      - alert: QdrantServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="qdrant.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: vector-database
-          service: qdrant
-        annotations:
-          summary: "Qdrant service has failed"
-          description: "Qdrant systemd service is in failed state. Check logs: journalctl -u qdrant"
+      # QdrantServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); QdrantDown above carries the impact.
 
       # Memory usage (Qdrant loads HNSW index graphs into memory)
       # Metric: memory_resident_bytes (jemalloc resident pages)

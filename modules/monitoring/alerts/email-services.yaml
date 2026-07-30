@@ -175,22 +175,10 @@ groups:
       # NOTE: the "rspamd down" signal lives in rspamd-alerts.nix as
       # RspamdServiceDown (up{job="rspamd"}==0, the canonical probe-based
       # signal). A duplicate-named systemd-active rule was removed here on
-      # 2026-06-10 to avoid an alert-name collision; this file keeps only the
-      # complementary failed-state rule below.
-      - alert: RspamdServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="rspamd.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: email
-          service: rspamd
-        annotations:
-          summary: "Rspamd service has failed"
-          description: "Rspamd service is in failed state. Check logs for errors."
+      # 2026-06-10 to avoid an alert-name collision; this file now keeps NO
+      # rspamd rules at all.
+      # RspamdServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); RspamdServiceDown carries the impact.
 
       # Dovecot Message/Byte Delivery Metrics
       - alert: DovecotNoRecentActivity
@@ -205,20 +193,11 @@ groups:
           summary: "Dovecot user {{ $labels.user }} has no recent activity"
           description: "User {{ $labels.user }} has had no IMAP activity for more than 24 hours. Last activity: {{ $value | humanizeDuration }} ago."
 
-      - alert: DovecotServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="dovecot.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: email
-          service: dovecot
-        annotations:
-          summary: "Dovecot IMAP service has failed"
-          description: "Dovecot service is in failed state. Check logs: journalctl -u dovecot2 -n 50"
+      # DovecotServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); DovecotServiceInactive below carries the
+      # impact. Its `journalctl -u dovecot2` hint was NOT carried forward: dovecot2.service is
+      # only a systemd alias of dovecot.service, so that command returns 0 lines. Use
+      # `journalctl -u dovecot`.
 
       - alert: DovecotServiceInactive
         expr: |
@@ -276,20 +255,8 @@ groups:
           summary: "Postfix message processing has stalled"
           description: "Postfix has {{ $value }} messages in queue but is not delivering them. Check service health and network connectivity."
 
-      - alert: PostfixServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="postfix.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: email
-          service: postfix
-        annotations:
-          summary: "Postfix mail service has failed"
-          description: "Postfix service is in failed state. Check logs: journalctl -u postfix -n 50"
+      # PostfixServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); PostfixServiceInactive below carries the impact.
 
       - alert: PostfixServiceInactive
         expr: |

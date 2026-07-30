@@ -31,6 +31,12 @@
 
       # Persistent storage for Matter fabric credentials, node state, and certificates
       # IMPORTANT: This directory must persist across rebuilds - uses 'd' directive (not 'D')
+      #
+      # WARNING: /var/lib/matter-server IS the Matter fabric identity (credentials/,
+      # chip_factory.ini, <fabric-id>.json). Lose it and every paired device must be
+      # physically re-paired -- HA cannot re-adopt them, a Matter device only trusts the
+      # fabric CA that commissioned it. Before re-commissioning, recreating the container,
+      # or changing this volume: stop the unit and `cp -a /var/lib/matter-server <backup>`.
       volumes = [
         "/var/lib/matter-server:/data:rw"
       ];
@@ -64,6 +70,9 @@
 
   # Persistent data directory for Matter fabric credentials
   # Uses 'd' (not 'D') directive to PRESERVE contents on rebuild
+  # WARNING: 'D' here would empty the fabric identity on every rebuild and force a
+  # physical re-pairing of EVERY Matter device. Back it up with
+  # `cp -a /var/lib/matter-server <backup>` (unit stopped) before editing this rule.
   systemd.tmpfiles.rules = [
     "d /var/lib/matter-server 0700 root root -"
   ];

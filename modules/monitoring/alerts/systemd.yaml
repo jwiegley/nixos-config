@@ -2,7 +2,15 @@ groups:
   - name: systemd_service_health
     interval: 30s
     rules:
-      # Critical service failure - any service in failed state
+      # Critical service failure - any service in failed state.
+      # This is the host-wide catch-all: no exclusion list, for=1m, 30s group
+      # interval. Eleven per-service `<X>ServiceFailed` clones were deleted on
+      # 2026-07-29 because each was a strict subset of this rule (see the
+      # one-line notes left at each former site). Do NOT re-add a per-service
+      # failed-state rule unless it needs a DIFFERENT dwell or a label this
+      # rule cannot carry -- otherwise it only produces a second alertname that
+      # the critical->warning inhibit (equal=[alertname,instance]) cannot
+      # suppress, i.e. two notifications per failure.
       - alert: SystemdServiceFailed
         expr: node_systemd_unit_state{state="failed",name=~".*\\.service"} == 1
         for: 1m
@@ -11,7 +19,7 @@ groups:
           category: systemd
         annotations:
           summary: "Systemd service {{ $labels.name }} has failed"
-          description: "Service {{ $labels.name }} is in failed state on {{ $labels.instance }}"
+          description: "Service {{ $labels.name }} is in failed state on {{ $labels.instance }}. Check logs: journalctl -u {{ $labels.name }} -n 50"
 
       # Critical services that should always be running
       - alert: CriticalServiceInactive
@@ -102,8 +110,22 @@ groups:
           summary: "Monitoring service {{ $labels.name }} is down"
           description: "Monitoring service {{ $labels.name }} is not active on {{ $labels.instance }}"
 
-      # Backup services
-      - alert: BackupServiceFailed
+      # Backup services.
+      # RENAMED from BackupServiceFailed on 2026-07-29: health-checks.yaml
+      # (group health_check_alerts) has a DIFFERENT rule that also carried that
+      # name -- `backup_service_failed == 1`, for=5m, with a `backup` label. Two
+      # rules sharing one alertname meant one email could not say which fired
+      # and one silence killed both. This one is the systemd-unit view
+      # (node_systemd_unit_state over restic-backups-*.service, for=1m, label
+      # `name`, no `backup` label); it is deliberately NOT the source of the
+      # BackupServiceFailed -> BackupNotRunRecently inhibit in alertmanager.nix,
+      # which joins on `backup` and so can only ever be served by the
+      # health-checks.yaml rule. Renaming this one therefore changes no
+      # inhibition. NOTE for a future cleanup pass: this rule is itself a strict
+      # subset of SystemdServiceFailed above (same group, same for=1m, narrower
+      # selector), differing only in severity warning-vs-critical -- kept for
+      # now because the restic-specific summary is what the backup routes read.
+      - alert: ResticBackupUnitFailed
         expr: |
           node_systemd_unit_state{
             name=~"restic-backups-.*\\.service",

@@ -18,20 +18,8 @@ groups:
           summary: "SearXNG service is down"
           description: "SearXNG uWSGI service is not active. Metasearch engine is unavailable."
 
-      - alert: SearXNGServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="uwsgi.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: search
-          service: searxng
-        annotations:
-          summary: "SearXNG service has failed"
-          description: "SearXNG uWSGI service is in failed state. Check logs with: journalctl -u uwsgi"
+      # SearXNGServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); SearXNGServiceDown above carries the impact.
 
       # SearXNG Redis Instance Alerts
       - alert: SearXNGRedisDown
@@ -49,20 +37,8 @@ groups:
           summary: "SearXNG Redis instance is down"
           description: "Redis instance for SearXNG rate limiting is not active. Rate limiting and bot protection may not work."
 
-      - alert: SearXNGRedisServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="redis-searxng.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: warning
-          category: search
-          service: searxng
-        annotations:
-          summary: "SearXNG Redis service has failed"
-          description: "Redis service for SearXNG is in failed state. Rate limiting disabled."
+      # SearXNGRedisServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); SearXNGRedisDown above carries the impact.
 
       # HTTP Health Check (via blackbox exporter if configured)
       - alert: SearXNGHTTPDown

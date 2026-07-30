@@ -32,19 +32,13 @@ let
           instance: good
         annotations:
           summary: "Fetchmail Good folder service is down"
-          description: "The fetchmail-good service (IDLE mode for Good folder) has been down for more than 5 minutes. Check logs: journalctl -u fetchmail-good"
+          description: "The fetchmail-good service (IDLE mode for Good folder) has been down for more than 5 minutes. Check logs: journalctl -u fetchmail-good and /var/log/fetchmail-good/fetchmail.log"
 
-      # Alert if fetchmail-good service is failed
-      - alert: FetchmailGoodFailed
-        expr: node_systemd_unit_state{name="fetchmail-good.service",state="failed"} == 1
-        for: 1m
-        labels:
-          severity: critical
-          service: fetchmail
-          instance: good
-        annotations:
-          summary: "Fetchmail Good folder service has failed"
-          description: "The fetchmail-good service is in failed state. Check logs: journalctl -u fetchmail-good and /var/log/fetchmail-good/fetchmail.log"
+      # FetchmailGoodFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); FetchmailGoodDown above carries the impact.
+      # Its one unique string, the /var/log/fetchmail-good/fetchmail.log path, was moved up into
+      # FetchmailGoodDown's description rather than dropped -- the journal alone does not hold
+      # fetchmail's own verbose per-poll output.
 
       # Alert if fetchmail-good service is restarting frequently
       - alert: FetchmailGoodFlapping

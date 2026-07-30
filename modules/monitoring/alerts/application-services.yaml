@@ -14,20 +14,8 @@ groups:
           summary: "Node-RED automation service is unreachable"
           description: "Node-RED metrics endpoint has been unreachable for more than 3 minutes. Automation flows may not be running."
 
-      - alert: NodeRedServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="node-red.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: automation
-          service: node-red
-        annotations:
-          summary: "Node-RED service has failed"
-          description: "Node-RED systemd service is in failed state. Check logs for errors."
+      # NodeRedServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); NodeRedDown above carries the impact.
 
       # vdirsyncer Contact/Calendar Sync Alerts
       - alert: VdirsyncerSyncStale
@@ -52,20 +40,13 @@ groups:
           summary: "vdirsyncer {{ $labels.pair }} sync is unhealthy"
           description: "Sync pair {{ $labels.pair }} status is unhealthy. Check logs for sync errors."
 
-      - alert: VdirsyncerServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="vdirsyncer.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: warning
-          category: sync
-          service: vdirsyncer
-        annotations:
-          summary: "vdirsyncer service has failed"
-          description: "vdirsyncer systemd service is in failed state. Last sync may have encountered errors."
+      # VdirsyncerServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); VdirsyncerSyncStale above carries the impact.
+      # This is the ONE of the eleven deleted clones that had actually fired (once in the 30d to
+      # 2026-07-29) -- and SystemdServiceFailed fired for vdirsyncer.service in the same window,
+      # which is the empirical proof of the subset relation. modules/services/vdirsyncer.nix
+      # references this alertname in a comment about its 3-attempt retry wrapper; that comment
+      # now means SystemdServiceFailed.
 
       - alert: VdirsyncerStatusDashboardDown
         expr: |
@@ -98,20 +79,8 @@ groups:
           summary: "Mosquitto MQTT broker is down"
           description: "Mosquitto service is not active. IoT device communication is unavailable."
 
-      - alert: MosquittoServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="mosquitto.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: iot
-          service: mosquitto
-        annotations:
-          summary: "Mosquitto service has failed"
-          description: "Mosquitto MQTT broker is in failed state. Check logs for errors."
+      # MosquittoServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); MosquittoServiceDown above carries the impact.
 
       # Samba File Sharing Alerts
       - alert: SambaSMBDDown
@@ -175,20 +144,8 @@ groups:
           summary: "Radicale CalDAV/CardDAV server is down"
           description: "Radicale service is not active. Calendar and contact sync is unavailable."
 
-      - alert: RadicaleServiceFailed
-        expr: |
-          node_systemd_unit_state{
-            name="radicale.service",
-            state="failed"
-          } == 1
-        for: 1m
-        labels:
-          severity: critical
-          category: groupware
-          service: radicale
-        annotations:
-          summary: "Radicale service has failed"
-          description: "Radicale CalDAV/CardDAV server is in failed state. Check logs for errors."
+      # RadicaleServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
+      # (systemd.yaml, for=60s, no exclusion list); RadicaleServiceDown above carries the impact.
 
       # Glance Dashboard Alerts
       - alert: GlanceServiceDown

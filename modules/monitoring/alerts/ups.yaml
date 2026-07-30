@@ -130,8 +130,23 @@ groups:
       # Without this, the exporter dying looks exactly like a healthy UPS: every rule above
       # is a comparison against a series, so an ABSENT series makes them all evaluate to
       # nothing. That is the precise shape of failure this whole effort exists to remove.
+      # ONE alert, not two, because both failure shapes kill both series together: the
+      # exporter or upsd dying, and metrics_path reverting to the Prometheus DEFAULT /metrics
+      # (answers 200 with go_* only, so the target reads up==1 while collecting nothing --
+      # easy to reintroduce precisely because it is the default). Folded so the 15m dwell
+      # does not reset when one shape transitions into the other.
       - alert: UPSMetricsAbsent
-        expr: absent(network_ups_tools_battery_charge)
+        # TRAP, for whoever next edits this expr: in `and`, `on()` is LOAD-BEARING. Bare `and`
+        # requires identical label sets on both sides, and absent() returns a series with an
+        # EMPTY label set while up{job="nut"} carries __name__/instance/job/service, so the
+        # intersection is always empty -- measured, `up{job="nut"}==1 and absent(nonexistent)`
+        # returns 0 series and adding `on()` returns 1. `or` needs no modifier: both absent()
+        # results below carry the empty label set, so they match and collapse to ONE series
+        # (measured: 1 series, labels {}) -- hence one alert identity, one dwell. This matters
+        # because docs/MONITORING_COVERAGE_PLAN.md:611 still recommends, as an unimplemented
+        # item, wrapping down-alerts in `or on() absent(...)`: harmless spelled with `or`,
+        # silently dead the moment it is transcribed to `and` without the `on()`.
+        expr: absent(network_ups_tools_battery_charge) or absent(network_ups_tools_ups_status)
         for: 15m
         labels:
           severity: warning
@@ -139,26 +154,4 @@ groups:
           service: ups
         annotations:
           summary: "UPS metrics have disappeared — power protection is unmonitored"
-          description: "network_ups_tools_battery_charge has no series, so every UPS rule above is silently inert and an outage or automated poweroff would go unalerted. Check prometheus-nut-exporter.service and upsd. NOTE the scrape must target /ups_metrics, NOT /metrics -- the latter returns HTTP 200 with only Go runtime metrics and no UPS data."
-
-      # Guards against a subtler version of the same thing: the exporter serving the WRONG
-      # path. /metrics returns 200 with go_* metrics only, so the target reads `up` while
-      # collecting nothing. This catches that specific misconfiguration, which is easy to
-      # reintroduce because /metrics is the Prometheus default.
-      - alert: UPSExporterServingNoUPSData
-        # `and on() absent(...)` -- the `on()` is LOAD-BEARING and its absence made this rule
-        # DEAD. Bare `and` requires identical label sets on both sides, and absent() returns a
-        # series with an EMPTY label set while up{job="nut"} carries __name__/instance/job/
-        # service, so the intersection was always empty. Proven: `up{job="nut"}==1 and
-        # absent(nonexistent)` returns 0 series; adding `on()` returns 1. The rule that exists
-        # to catch the metrics_path regression could not fire, in the very commit that
-        # advertised catching that regression.
-        expr: up{job="nut"} == 1 and on() absent(network_ups_tools_ups_status)
-        for: 15m
-        labels:
-          severity: warning
-          category: monitoring
-          service: ups
-        annotations:
-          summary: "UPS exporter is up but returning no UPS variables"
-          description: "The nut job scrapes successfully (up==1) but network_ups_tools_ups_status is absent. Almost certainly metrics_path has reverted to the default /metrics, which serves only the exporter's own Go runtime metrics. It must be /ups_metrics."
+          description: "One or both of network_ups_tools_battery_charge and network_ups_tools_ups_status has no series (in practice they vanish together), so every UPS rule above is silently inert and an outage or automated poweroff would go unalerted. Check prometheus-nut-exporter.service and upsd. NOTE the scrape must target /ups_metrics, NOT the default /metrics -- the latter returns HTTP 200 with only Go runtime metrics and no UPS data, which reads as a healthy up==1 target."

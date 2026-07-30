@@ -24,6 +24,13 @@ groups:
           description: "The critical service {{ $labels.service }} has entered a failed state and requires immediate attention"
 
       # Backup Health Alerts
+      # This rule KEEPS the name BackupServiceFailed; the systemd-unit-state
+      # rule in systemd.yaml that used to share it was renamed to
+      # ResticBackupUnitFailed on 2026-07-29 (one alertname for two different
+      # rules meant one email could not say which fired and one silence killed
+      # both). This is the variant the alertmanager.nix inhibit
+      # BackupServiceFailed -> BackupNotRunRecently joins on, because only this
+      # one carries the `backup` label -- do not rename it.
       - alert: BackupServiceFailed
         expr: backup_service_failed == 1
         for: 5m

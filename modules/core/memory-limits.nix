@@ -179,42 +179,23 @@
     # in a separate, separately-verified tuning change. Recorded so the next reader knows
     # it is a known open item, not an oversight.
     #
-    # Sizing, REVISED 2026-07-29. The 2026-07-28 note claimed "High 6G sits ~1.26x above
-    # the measured 4.77 GiB peak so the working set fits without reclaim". Measurement has
-    # FALSIFIED that prediction, and it is worth being explicit about why rather than
-    # quietly re-tuning:
+    # Sizing: High 10G / Max 12G, raised on the evidence above. Verified 2026-07-29 --
+    # memory.peak 6.27 GiB, so the working set now sits under the soft limit.
     #
-    #   memory.peak  6,445,318,144 B = 6.002 GiB  <- now ABOVE MemoryHigh's 6.000 GiB
-    #   memory.events high  3,932,280            <- was 3,899,187 on 2026-07-28
+    # HOW TO RE-VALIDATE: re-measure the BUFFER CACHE HIT RATIO. Do NOT look for zero
+    # reclaim -- a finite ceiling on an elastic page cache will always eventually be
+    # filled, so the goal is fitting the working set, not eliminating reclaim. And do NOT
+    # judge by memory.pressure, which badly understates the cost (68 s cumulative stall
+    # over 26 days) because evicting cache is not a stall; it reappears later as disk
+    # reads. Baseline to beat, from pg_stat_database:
     #
-    # The 6G raise DID help substantially -- throttling fell from ~156,000 events/day
-    # (3.9M over the 25 days from the 07-03 start) to ~33,000/day -- but it did not stop.
-    # The page-cache term is elastic, so the working set simply grew into the new ceiling.
-    # By this file's own stated rule (MemoryHigh above OBSERVED PEAK plus headroom) the
-    # current value is now a violation, not a fit.
+    #   overall buffer cache hit ratio  89.4%   (blks_read ~609M = ~4.6 TB re-read)
+    #   litellm 62.9% / mailarchiver 84.0%      <- worst two; mailarchiver is the largest
     #
-    # memory.pressure UNDERSTATES the cost and should not be used alone to judge this:
-    # cumulative stall is only 68 s over 26 days, because evicting cache is not a stall --
-    # it reappears later as disk reads. The metric that actually shows the damage:
-    #
-    #   overall buffer cache hit ratio  89.38%   (blks_read 597,678,414 = ~4.6 TB re-read)
-    #   litellm                         62.94%   (91.8M reads)
-    #   mailarchiver                    84.04%   (472.6M reads -- the largest single source)
-    #
-    # ~89% is poor for PostgreSQL, where >99% is the normal target, and it is a direct
-    # consequence of cgroup reclaim dropping pages this instance immediately needs again
-    # (workingset_refault_file above). Confirmed relevant: the data directory is on
-    # /dev/nvme0n1p5, ext4 -- so it is served by the kernel PAGE CACHE governed by this
-    # cgroup limit, not by ZFS ARC, which caps separately at 16 GiB.
-    #
-    # So: High 10G / Max 12G. This is the same shape as an earlier draft that was rejected
-    # on 2026-07-28 for having "no measurement behind it" -- the difference is that it now
-    # does. Host has 62.25 GiB with ~33 GiB available and oom_kill has been 0 on every
-    # cgroup inspected, so the added ceiling is affordable.
-    #
-    # Re-validate by RE-MEASURING THE HIT RATIO, not by looking for zero reclaim: a finite
-    # ceiling on an elastic cache will always eventually be filled, so the goal is fitting
-    # the working set, not eliminating reclaim.
+    # ~89% is poor for PostgreSQL, where >99% is the normal target. Confirmed relevant:
+    # the data directory is on /dev/nvme0n1p5, ext4, so it is served by the kernel PAGE
+    # CACHE governed by this cgroup limit -- NOT by ZFS ARC, which caps separately at
+    # 16 GiB.
     postgresql = {
       serviceConfig = {
         MemoryMax = "12G";

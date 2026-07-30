@@ -12,25 +12,39 @@ probe-bot design):
   - Hermes probes OpenClaw's @Claw   -> metric openclaw_discord_canary_*
 Blind spot (accepted): if BOTH gateways die at once, neither probe reports.
 
-LIVE since 2026-07-30 in #interconnect, and BOTH directions have gone green:
-  - hermes_discord_canary  (tests Hermes)   first green 12:01, rt=6.773s. Its only
-    defect was a dead timer, NOT a missing allowlist entry.
-  - openclaw_discord_canary (tests OpenClaw) first green 12:46, rt=7.437s, once
-    Hermes was added to @Claw's channels.discord.allowFrom.
+LIVE since 2026-07-30 in #interconnect. NEITHER DIRECTION IS PROVEN YET -- read on before
+trusting a green.
 
-REPLY LATENCY IS THE SUBTLE PART, and it shaped both the timeout and the alerts.
-These targets are LLM agents, so a reply takes anywhere from ~3s to ~90s (measured:
-3.5, 6.8, 7.4, 30.2, 85.3, 87.8). The original 90s timeout therefore scored healthy
-slow replies as dead round-trips, which produced a confidently wrong diagnosis
-before the pattern was visible. timeoutSeconds is now 180.
+THE PAIR USED TO SCORE ITSELF GREEN BY ACCIDENT (found 2026-07-30, fixed here). The two
+directions share one channel and are mirror images: this probe waits for a message from
+TARGET, and the opposite probe POSTS as TARGET. So each probe saw the other's probe post,
+counted it as its own reply, and then DELETED it during cleanup -- a false success for one
+direction and a starved, genuinely-failing run for the other. Measured: all 21 "successes"
+that day were this cross-detection, every one labelled `reply` and NOT ONE `reply+nonce`;
+openclaw's runs ended within 1-2s of hermes posting and vice versa; and hermes then failed
+three consecutive times with its messages deleted out from under it.
 
-Worse, the agents answer only about HALF their mentions, so ok flips between 1 and 0
-run to run. Alerting on that directly (`ok == 0 for: 15m`) pages on any two
-consecutive misses, so the *DiscordCanaryDown rules key on the AGE of
-last_success_timestamp_seconds instead -- monotonic, so it cannot oscillate -- and
-*DiscordCanaryDegraded reports the success RATE. See
-modules/monitoring/alerts/openclaw.yaml, which also records why a canary-down alert
-must NOT auto-restart the VM.
+It hid while timeoutSeconds was 90s, because a probe timed out before the opposite direction
+posted. Raising it to 420s (for genuinely slow LLM replies) widened the window enough for the
+two to start eating each other, which is how it surfaced. _is_probe_message() now excludes the
+other direction's template, and `detail` distinguishes `reply+nonce` (proof this reply answers
+THIS probe) from `reply-unverified` (a non-probe message from the target, weaker evidence).
+
+CONSEQUENCE, stated plainly: because no agent has ever been observed echoing the nonce, both
+directions may now read RED where they previously read green. That is the honest state, not a
+regression -- a green that came from the sibling probe measured nothing about the agent.
+
+REPLY LATENCY: these targets are LLM agents, so a reply takes anywhere from ~3s to ~285s
+(measured 3.5, 6.8, 7.4, 30.2, 85.3, 87.8, 176, 179, 284 -- though note the longer figures may
+themselves be cross-detection artifacts and need re-measuring now that the filter is in). The
+original 90s timeout scored healthy slow replies as dead round-trips; timeoutSeconds is 420
+with retries = 0.
+
+ALERTING SHAPE: *DiscordCanaryDown keys on the AGE of last_success_timestamp_seconds, which is
+monotonic and so cannot oscillate, rather than on `ok == 0` which flips run to run.
+*DiscordCanaryDegraded reports the success RATE, and *DiscordCanarySlowReply warns when the
+slowest reply approaches the timeout. See modules/monitoring/alerts/openclaw.yaml, which also
+records why a canary-down alert must NOT auto-restart the VM.
 
 Why this is needed (2026-07-15 incident):
   Hermes' Discord connection zombied — the WebSocket stayed "connected" and
@@ -158,6 +172,19 @@ def _request(method: str, path: str, body: dict | None = None) -> tuple[int, obj
     return 0, None
 
 
+def _is_probe_message(content: str) -> bool:
+    """True if `content` looks like a canary probe post rather than a reply to one.
+
+    Both directions post into the same channel, and each waits for a message from the
+    user the OTHER direction posts as -- so without this filter each probe scores the
+    other's post as its own reply and then deletes it. Matching on the template this
+    script itself emits ("<@id> canary <nonce> - reply with `CANARY OK <nonce>`") is
+    exact for our own traffic and cannot exclude a genuine reply unless an agent quotes
+    the instruction back verbatim, which would be indistinguishable anyway.
+    """
+    return "canary " in content and "reply with" in content
+
+
 def run_probe() -> ProbeResult:
     now = time.time()
     result = ProbeResult(timestamp=now)
@@ -190,14 +217,34 @@ def run_probe() -> ProbeResult:
         if code == 200 and isinstance(msgs, list):
             for m in msgs:
                 author = (m.get("author") or {}).get("id", "")
-                if author == str(TARGET_USER_ID):
-                    result.ok = True
-                    result.roundtrip_seconds = round(time.monotonic() - start, 3)
-                    reply_id = m.get("id", "")
-                    # nonce echo is a bonus signal, not required — any reply
-                    # from the target in this dedicated channel proves routing.
-                    result.detail = "reply+nonce" if nonce in (m.get("content") or "") else "reply"
-                    break
+                if author != str(TARGET_USER_ID):
+                    continue
+                content = m.get("content") or ""
+                # EXCLUDE THE OTHER DIRECTION'S PROBE POST. Both directions run in the
+                # SAME channel, and the two are mirror images: this probe waits for a
+                # message from TARGET, while the opposite probe POSTS as TARGET. So the
+                # opposite probe's own canary message is authored by exactly the user we
+                # are waiting for, and counting it is a false success -- made worse
+                # because cleanup below then DELETES it, starving the other direction.
+                #
+                # That is not theoretical. On 2026-07-30 every one of 21 "successes"
+                # across both directions was this cross-detection: openclaw's runs ended
+                # within 1-2s of hermes posting (and vice versa), never with a nonce echo,
+                # and hermes then failed three consecutive times with its messages gone.
+                # It stayed hidden while timeoutSeconds was 90s, because a probe timed out
+                # before the opposite direction posted; raising it to 420s widened the
+                # window enough for the two to start eating each other.
+                if _is_probe_message(content):
+                    continue
+                # Prefer a nonce echo -- that is proof this reply answers THIS probe.
+                # A non-probe message from the target is accepted as weaker evidence,
+                # because an agent may answer conversationally without echoing, but it is
+                # labelled differently so the distinction stays visible in the metrics.
+                result.ok = True
+                result.roundtrip_seconds = round(time.monotonic() - start, 3)
+                reply_id = m.get("id", "")
+                result.detail = "reply+nonce" if nonce in content else "reply-unverified"
+                break
         if result.ok:
             break
 

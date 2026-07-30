@@ -103,11 +103,17 @@ in
 
   # tmpfiles rules for state directories
   # NOTE: Using 'd' directive to preserve contents - NEVER use 'D' for persistent data!
+  #
+  # /run/secrets-openproject is deliberately NOT declared here: it is owned by
+  # modules/users/container-users-dedicated.nix, together with every other
+  # /run/secrets-<container-user> directory, at mode 0750. A duplicate 0755 rule
+  # used to live here; because systemd-tmpfiles applies the FIRST rule for a path
+  # and this module sorted earlier in 00-nixos.conf, the looser 0755 won and the
+  # live directory was drwxr-xr-x. Do not re-add it.
   systemd.tmpfiles.rules = [
     "d /var/lib/containers/openproject 0755 openproject openproject -"
     "d /var/lib/containers/openproject/assets 0755 openproject openproject -"
     "d /var/lib/containers/openproject/tmp 0755 openproject openproject -"
-    "d /run/secrets-openproject 0755 openproject openproject -"
   ];
 
   # Redis server for OpenProject cache

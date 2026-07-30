@@ -5,112 +5,102 @@
   ...
 }:
 
+# AIDE **database** dead-man collector.
+#
+# SCOPE (deliberately narrow since 2026-07-29): this collector emits ONLY
+#   aide_database_exists
+#   aide_database_age_seconds
+# and it does NOT run `aide --check`.
+#
+# Why it used to do more, and why it must not any more: this file previously
+# parsed its OWN full `aide --check` walk into aide.prom (aide_check_status,
+# aide_added/removed/changed_files, aide_total_entries) while
+# modules/security/aide.nix separately derived aide_changes_detected from the
+# same check's exit status. Two independent computations of one security fact
+# drifted, and live they contradicted each other outright: aide_check_status=0
+# ("clean") in the same scrape as aide_changes_detected=1 and
+# aide_changed_files=71. Root cause was the shape
+#     CHECK_OUTPUT=$(aide --check 2>&1 || true); EXIT_CODE=$?
+# — `|| true` makes the substitution succeed, so EXIT_CODE was ALWAYS 0, which
+# pinned aide_check_status at 0 forever and made both AIDEChangesDetected and
+# AIDECheckError structurally unfirable. All of those check-derived metrics now
+# come from the single walk in aide-check.service's ExecStart wrapper
+# (modules/security/aide.nix), which keeps the real exit code.
+#
+# Why the database metrics STAY here, separately: they are the only dead-man for
+# "aide-check never ran at all". If they were folded into the check's emitter
+# they would freeze in lockstep with the very failure they are meant to detect.
+# aide*.prom is in NEITHER TextfileCollectorStale tier
+# (meta-monitoring.yaml:324 fast / :336 daily), so this independent timer is the
+# primary staleness signal; aide.prom's mtime is additionally watched by
+# nagios-tier1-mirror.nix:263 (26h warn / 50h crit), which this daily timer
+# satisfies. Alerts AIDEDatabaseMissing / AIDEDatabaseStale (security.yaml) read
+# these two gauges.
+#
+# Cheap by construction: a stat(2), no filesystem walk, so it is also wired as
+# an ExecStartPre on aide-check.service (see below).
+
 let
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
-  # AIDE metrics collection script
-  aideMetrics = pkgs.writeShellScript "aide-metrics" ''
-        set -euo pipefail
+  aideDbMetrics = pkgs.writeShellScript "aide-db-metrics" ''
+    set -u
+    OUTPUT_FILE="${textfileDir}/aide.prom"
+    TEMP_FILE="$OUTPUT_FILE.$$"
+    DB_PATH=/var/lib/aide/aide.db
 
-        OUTPUT_FILE="${textfileDir}/aide.prom"
-        TEMP_FILE="$OUTPUT_FILE.$$"
+    if [ -f "$DB_PATH" ]; then
+      EXISTS=1
+      AGE=$(( $(${pkgs.coreutils}/bin/date +%s) - $(${pkgs.coreutils}/bin/stat -c %Y "$DB_PATH") ))
+    else
+      EXISTS=0
+      AGE=0
+    fi
 
-        # Write metrics header
-        cat > "$TEMP_FILE" <<'HEADER'
-    # HELP aide_database_age_seconds Age of AIDE database in seconds
-    # TYPE aide_database_age_seconds gauge
-    # HELP aide_database_exists Whether AIDE database exists
-    # TYPE aide_database_exists gauge
-    # HELP aide_check_status Status of last AIDE check (0=OK, 1=changes, 2=error, 3=unknown)
-    # TYPE aide_check_status gauge
-    # HELP aide_added_files Number of files added since last database update
-    # TYPE aide_added_files gauge
-    # HELP aide_removed_files Number of files removed since last database update
-    # TYPE aide_removed_files gauge
-    # HELP aide_changed_files Number of files changed since last database update
-    # TYPE aide_changed_files gauge
-    # HELP aide_total_entries Total number of database entries
-    # TYPE aide_total_entries gauge
-    HEADER
-
-        # Check if AIDE database exists
-        DB_PATH="/var/lib/aide/aide.db"
-        if [[ ! -f "$DB_PATH" ]]; then
-          cat >> "$TEMP_FILE" <<EOF
-    aide_database_exists 0
-    aide_database_age_seconds 0
-    aide_check_status 3
-    aide_added_files 0
-    aide_removed_files 0
-    aide_changed_files 0
-    aide_total_entries 0
-    EOF
-          mv "$TEMP_FILE" "$OUTPUT_FILE"
-          exit 0
-        fi
-
-        # Database exists
-        DB_AGE=$(( $(date +%s) - $(stat -c %Y "$DB_PATH") ))
-        echo "aide_database_exists 1" >> "$TEMP_FILE"
-        echo "aide_database_age_seconds $DB_AGE" >> "$TEMP_FILE"
-
-        # Run AIDE check and capture output
-        CHECK_OUTPUT=$(${pkgs.aide}/bin/aide --check 2>&1 || true)
-        EXIT_CODE=$?
-
-        # Parse output (use $NF to get last field, handles tabs)
-        # Note: AIDE prints "Number of entries:" when OK, "  Total number of entries:" when changes detected
-        TOTAL=$(echo "$CHECK_OUTPUT" | grep "Number of entries:" | head -1 | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
-        ADDED=$(echo "$CHECK_OUTPUT" | grep "^  Added entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
-        REMOVED=$(echo "$CHECK_OUTPUT" | grep "^  Removed entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
-        CHANGED=$(echo "$CHECK_OUTPUT" | grep "^  Changed entries:" | ${pkgs.gawk}/bin/awk '{print $NF}' || echo "0")
-
-        # Determine status
-        # 0=OK, 1-7=changes detected, 14+=error
-        if [[ $EXIT_CODE -eq 0 ]]; then
-          STATUS=0  # OK
-        elif [[ $EXIT_CODE -ge 1 && $EXIT_CODE -le 7 ]]; then
-          STATUS=1  # Changes detected
-        else
-          STATUS=2  # Error
-        fi
-
-        # Write metrics
-        cat >> "$TEMP_FILE" <<EOF
-    aide_check_status $STATUS
-    aide_added_files $ADDED
-    aide_removed_files $REMOVED
-    aide_changed_files $CHANGED
-    aide_total_entries $TOTAL
-    EOF
-
-        # Atomic move
-        mv "$TEMP_FILE" "$OUTPUT_FILE"
+    [ -d "${textfileDir}" ] || ${pkgs.coreutils}/bin/mkdir -p "${textfileDir}"
+    {
+      ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_database_exists Whether the AIDE integrity database exists'
+      ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_database_exists gauge'
+      ${pkgs.coreutils}/bin/printf 'aide_database_exists %s\n' "$EXISTS"
+      ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_database_age_seconds Age of the AIDE integrity database in seconds'
+      ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_database_age_seconds gauge'
+      ${pkgs.coreutils}/bin/printf 'aide_database_age_seconds %s\n' "$AGE"
+    } > "$TEMP_FILE"
+    ${pkgs.coreutils}/bin/chmod 0644 "$TEMP_FILE"
+    ${pkgs.coreutils}/bin/mv -f "$TEMP_FILE" "$OUTPUT_FILE"
   '';
 
 in
 {
-  # Run AIDE metrics collection daily after AIDE check
   systemd.services.aide-metrics = {
-    description = "Collect AIDE metrics for Prometheus";
-    after = [ "aide-check.service" ];
+    description = "Collect AIDE database freshness metrics for Prometheus";
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${aideMetrics}";
+      ExecStart = "${aideDbMetrics}";
       User = "root";
     };
   };
 
-  # Run metrics collection after AIDE check
-  systemd.services.aide-check.serviceConfig.ExecStartPost = [
-    "${aideMetrics}"
+  # Also refresh the database gauges immediately BEFORE each check. Two reasons:
+  #   1. it keeps aide_database_age_seconds honest at the moment the check runs;
+  #   2. it guarantees aide.prom has been rewritten in its new (db-only) form
+  #      before aide-check's ExecStart writes aide_check_status into
+  #      aide_result.prom, so the two textfiles can never both declare the same
+  #      metric family in one scrape (which node-exporter reports as a textfile
+  #      collector error). This matters only in the window right after the
+  #      switch that introduced the split, but it is free.
+  # `-` prefix: a failure here must never prevent the integrity check itself.
+  # Runs BEFORE ExecStart, so it does NOT add a filesystem walk.
+  systemd.services.aide-check.serviceConfig.ExecStartPre = [
+    "-${aideDbMetrics}"
   ];
 
-  # Also run metrics on timer to ensure Prometheus has fresh data
-  # Note: This runs AIDE check, so it should match aide-check.timer frequency
+  # Independent daily timer — the dead-man. Must stay independent of
+  # aide-check.timer: if the check stops running, aide_database_age_seconds has
+  # to keep climbing so AIDEDatabaseStale can fire.
   systemd.timers.aide-metrics = {
-    description = "Collect AIDE metrics daily";
+    description = "Collect AIDE database freshness metrics daily";
     wantedBy = [ "timers.target" ];
 
     timerConfig = {
@@ -123,8 +113,7 @@ in
   # Defensive, not corrective: nixpkgs already defaults `wantedBy` to [ ]
   # (nixos/lib/systemd-unit-options.nix), so there is no multi-user.target
   # default to undo. The mkForce just guarantees that no other definition of
-  # this option can pull aide-metrics.service into a boot target. The service
-  # is started by aide-metrics.timer above; aide-check.service separately runs
-  # the same script via its ExecStartPost.
+  # this option can pull aide-metrics.service into a boot target. The service is
+  # started by aide-metrics.timer above.
   systemd.services.aide-metrics.wantedBy = lib.mkForce [ ];
 }

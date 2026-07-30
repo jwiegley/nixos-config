@@ -1,30 +1,147 @@
 groups:
+  # SINGLE HOME for every rule over the certificate-exporter metrics
+  # (modules/monitoring/services/certificate-exporter.nix -> node-exporter
+  # textfile certificates.prom: certificate_file_exists, certificate_valid,
+  # certificate_days_until_expiry, certificate_expiry_seconds,
+  # certificate_key_matches, certificate_chain_valid,
+  # certificate_exporter_last_run_timestamp_seconds).
+  #
+  # CONSOLIDATED 2026-07-29 from the `certificate_alerts` group that used to
+  # live in health-checks.yaml (that file is about service/backup/mbsync health;
+  # certificate rules had no business there). Both files declared
+  # CertificateExpiringSoon and CertificateExpired with the SAME label set
+  # ({component=certificates, severity=warning|critical}) over series carrying
+  # the same {name,type,path} -- i.e. ONE Alertmanager fingerprint fed by TWO
+  # rules on TWO intervals (60s here, 300s there), so the delivered annotation
+  # flip-flopped between the two files' wordings depending on which group
+  # evaluated last. The exprs had also DIVERGED; see the per-rule notes.
+  #
+  # Interval stays 60s (the value this group already used, so StepCADown is
+  # unchanged). The moved rules now evaluate 5x more often than they did at
+  # 300s, which only shortens detection -- `for:` is wall-clock, so no rule
+  # becomes more trigger-happy.
   - name: certificates
     interval: 60s
     rules:
-      # Alert for certificate expiration
+      # -------------------------------------------------------------------
+      # Expiry ladder.
+      #
+      # The two survivors are health-checks.yaml's GUARDED forms, not the
+      # unguarded `certificate_days_until_expiry < 30` / `<= 0` that used to
+      # live here. The unguarded pair was actively wrong: the exporter writes
+      # certificate_days_until_expiry 0 for a MISSING file
+      # (certificate-exporter.nix:63), so a deleted cert raised
+      # CertificateExpired -- a wrong diagnosis -- next to the correct
+      # CertificateFileMissing.
+      #
+      # But the `> 0` lower bound that guard originally used was ALSO wrong,
+      # and in the more dangerous direction. certificate-exporter.nix:91 is
+      #     days_remaining=$((seconds_remaining / 86400))
+      # and bash integer division TRUNCATES, so a certificate with 23h left
+      # reports days == 0 while still perfectly valid -- exactly the moment
+      # you most want the warning, and exactly when a `> 0` guard goes SILENT.
+      # (Truncation is toward zero, so a cert 12h PAST expiry also reports 0.)
+      # The guard therefore keys off certificate_file_exists, which is the
+      # condition it was actually reaching for, and has no lower bound.
+      #
+      # Operand order is deliberate: `certificate_days_until_expiry <= N` must
+      # be the LHS of the `and`, because `and` yields the LEFT side's values
+      # and the annotations interpolate {{ $value }} as a day count. Writing
+      # `certificate_file_exists == 1 and ...` selects the same series but
+      # makes every message read "expires in 1 days".
       - alert: CertificateExpiringSoon
-        expr: certificate_days_until_expiry < 30
+        expr: certificate_days_until_expiry <= 30 and certificate_file_exists == 1
         for: 1h
         labels:
           severity: warning
           component: certificates
         annotations:
-          summary: "Certificate expiring soon for {{ $labels.name }}"
-          description: "Certificate {{ $labels.name }} will expire in {{ $value }} days"
+          summary: "Certificate {{ $labels.name }} expires in {{ $value }} days"
+          description: "The certificate {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} will expire in {{ $value }} days"
 
-      # Alert for certificate already expired
-      - alert: CertificateExpired
-        expr: certificate_days_until_expiry <= 0
-        for: 1m
+      - alert: CertificateExpiryCritical
+        expr: certificate_days_until_expiry <= 7 and certificate_file_exists == 1
+        for: 30m
         labels:
           severity: critical
           component: certificates
         annotations:
-          summary: "Certificate expired for {{ $labels.name }}"
-          description: "Certificate {{ $labels.name }} has expired"
+          summary: "Certificate {{ $labels.name }} expires in {{ $value }} days - URGENT"
+          description: "CRITICAL: The certificate {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} will expire in only {{ $value }} days. Immediate renewal required!"
 
-      # Alert for Step-CA service down
+      # Expiry is asserted from certificate_valid (openssl x509 -checkend 0,
+      # certificate-exporter.nix:95), NOT from a `days <= 0` threshold: the
+      # truncation described above makes days == 0 ambiguous between "23h
+      # left", "12h overdue" and "file missing". -checkend is exact.
+      # certificate_valid is also 0 for a present-but-UNPARSEABLE cert
+      # (certificate-exporter.nix:78), which is why the description says
+      # "expired or unreadable" rather than asserting expiry outright.
+      - alert: CertificateExpired
+        expr: certificate_valid == 0 and certificate_file_exists == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: certificates
+        annotations:
+          summary: "Certificate {{ $labels.name }} has EXPIRED"
+          description: "CRITICAL: The certificate {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} is expired or unreadable and is no longer valid"
+
+      - alert: CertificateFileMissing
+        expr: certificate_file_exists == 0
+        for: 10m
+        labels:
+          severity: critical
+          component: certificates
+        annotations:
+          summary: "Certificate file {{ $labels.name }} is missing"
+          description: "The certificate file {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} does not exist"
+
+      # Guarded because a missing file also reports key_matches 0
+      # (certificate-exporter.nix:64); CertificateFileMissing owns that case.
+      # CA certs report -1 (key stored separately) and are excluded by `== 0`.
+      - alert: CertificateKeyMismatch
+        expr: certificate_key_matches == 0 and certificate_file_exists == 1
+        for: 10m
+        labels:
+          severity: critical
+          component: certificates
+        annotations:
+          summary: "Certificate key mismatch for {{ $labels.name }}"
+          description: "The private key for certificate {{ $labels.name }} ({{ $labels.type }}) at {{ $labels.path }} does not match the certificate or is missing"
+
+      # Needs no file_exists guard: the missing-file and unparseable-file
+      # branches both write chain_valid -1, so `== 0` cannot match them.
+      - alert: CertificateChainInvalid
+        expr: certificate_chain_valid == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: certificates
+        annotations:
+          summary: "Certificate chain validation failed for {{ $labels.name }}"
+          description: "The certificate {{ $labels.name }} ({{ $labels.type }}) could not be verified against the CA chain"
+
+      - alert: CertificateExporterStale
+        expr: (time() - certificate_exporter_last_run_timestamp_seconds) > 7200
+        for: 10m
+        labels:
+          severity: warning
+          component: certificates
+        annotations:
+          summary: "Certificate exporter hasn't run in over 2 hours"
+          description: "The certificate metrics exporter last ran {{ $value | humanizeDuration }} ago (expected hourly)"
+
+      # -------------------------------------------------------------------
+      # Certificate authority process health.
+      #
+      # NOTE: systemd.yaml carries CertificateAuthorityDown over the same
+      # selector (`... state="active"} == 0`, equivalent to `!= 1` for this
+      # 0/1 gauge), also severity critical, at interval 30s. Because the two
+      # carry DIFFERENT labels (component=certificates here vs
+      # category=systemd there) they are two fingerprints, so a step-ca outage
+      # pages twice. That is a cross-file consolidation and systemd.yaml is
+      # not owned by this change -- deliberately left alone rather than
+      # deleted from one side while another edit deletes the other.
       - alert: StepCADown
         expr: node_systemd_unit_state{name="step-ca.service",state="active"} != 1
         for: 5m

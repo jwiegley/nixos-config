@@ -59,30 +59,26 @@
 # container-store-size-exporter / container-cve-exporter.
 
 let
-  # Rootless quadlet users with a persistent podman store, copied verbatim from
-  # container-health-exporter.nix:159 (the canonical, drift-checked enumeration,
-  # verified 2026-06-10). EXCLUDES zimit (transient on-demand containers, no
-  # persistent PODMAN_SYSTEMD_UNIT container) and johnw (human account). root
-  # quadlets (matter-server, budget-board-{client,server}, wyoming-openai) fall
-  # under the root sweep below. localhost/* (locally-built, e.g.
-  # technitium-dns-exporter) are skipped in-script — they have no upstream tag
-  # to drift against.
-  rootlessUsers = [
-    "changedetection"
-    "litellm"
-    "mailarchiver"
-    "memory-vault"
-    "openspeedtest"
-    "opnsense-exporter"
-    "open-webui"
-    "openproject"
-    "shlink"
-    "shlink-web-client"
-    "speedtest-tracker"
-    "teable"
-    "vane"
-    "wallabag"
-  ];
+  # Rootless quadlet users with a persistent podman store. DERIVED, not copied:
+  # a user has a per-user podman graphroot iff its Home Manager home lives under
+  # /var/lib/containers/. This is the same structural predicate that
+  # modules/users/home-manager/rootless-podman-image-prune.nix:38 uses to decide
+  # which users get the weekly image-prune timer, so the two can never disagree.
+  #
+  # Verified 2026-07-29 by `nix eval`: yields exactly the 14 names that used to be
+  # hand-listed here, in container-health-exporter.nix, in container-cve-exporter.nix
+  # and in maintenance/timers.nix. Structural exclusions, all correct:
+  #   - technitium-dns-exporter: ROOT podman quadlet, no HM user — covered by the
+  #     root sweep below, and its localhost/* image has no upstream tag to drift
+  #     against. (config.users.users would wrongly include it: 15 names. That is
+  #     why this derives from home-manager.users, not users.users.)
+  #   - zimit: transient on-demand containers, no persistent PODMAN_SYSTEMD_UNIT.
+  #   - johnw: human account (/home/johnw).
+  # Other root quadlets (matter-server, budget-board-{client,server},
+  # wyoming-openai) likewise fall under the root sweep below.
+  rootlessUsers = lib.filter (
+    u: lib.hasPrefix "/var/lib/containers/" config.home-manager.users.${u}.home.homeDirectory
+  ) (lib.attrNames config.home-manager.users);
 
   rootlessUsersShell = lib.concatStringsSep " " rootlessUsers;
 in

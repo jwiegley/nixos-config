@@ -218,7 +218,129 @@
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.aide}/bin/aide --check";
+      # SINGLE SOURCE OF TRUTH for every check-derived AIDE metric.
+      #
+      # Before 2026-07-29 this was a bare `aide --check` and the metrics were
+      # computed TWICE, independently, from TWO separate full-filesystem walks:
+      #   * aide-metrics.nix parsed its OWN `aide --check` into aide.prom
+      #     (aide_check_status, aide_added/removed/changed_files, aide_total_entries)
+      #   * this unit's ExecStopPost derived aide_changes_detected from
+      #     $EXIT_STATUS into aide_result.prom
+      # The two disagreed live (aide_check_status=0 while aide_changes_detected=1
+      # and aide_changed_files=71 in the SAME scrape) because aide-metrics.nix
+      # used the shape `OUT=$(aide --check || true); EC=$?` — the `|| true` makes
+      # the command substitution succeed, so `$?` is ALWAYS 0. aide_check_status
+      # therefore had a 30-day maximum of 0, which made both AIDEChangesDetected
+      # and AIDECheckError structurally unfirable. A file-integrity control that
+      # reports two contradictory answers is worse than none.
+      #
+      # Now ONE walk produces both the parsed counts AND the real exit code, and
+      # ONE emitter writes them all to aide_result.prom. `set +e` around a bare
+      # assignment (no `||`) preserves the true exit status.
+      #
+      # aide_database_exists / aide_database_age_seconds are DELIBERATELY NOT
+      # emitted here: they are the only dead-man for "aide-check never ran at
+      # all", so they keep their own independent timer and their own file
+      # (aide.prom, aide-metrics.nix). aide*.prom is in NEITHER
+      # TextfileCollectorStale tier (meta-monitoring.yaml:324,336), so that
+      # independence is the only thing standing between a dead check and silence.
+      # (aide.prom mtime IS watched by nagios-tier1-mirror.nix:263 at 26h/50h.)
+      #
+      # COUNTS/BOOLEANS/TIMESTAMPS ONLY in the .prom — never AIDE report lines
+      # or paths. The full report still goes to the journal (report_url=stdout,
+      # see the aide.conf above: there is NO report file on disk to parse).
+      ExecStart = "${pkgs.writeShellScript "aide-check-emit" ''
+        set -u
+        DIR=/var/lib/prometheus-node-exporter-textfiles
+        OUT="$DIR/aide_result.prom"
+        TMP="$OUT.$$"
+
+        # ---- the one and only walk -------------------------------------------
+        # NOTE the shape: `set +e`, a bare assignment, then `EC=$?`. Do NOT
+        # reintroduce `|| true` — that is exactly what destroyed the exit code.
+        set +e
+        REPORT=$(${pkgs.aide}/bin/aide --check 2>&1)
+        EC=$?
+        # Re-emit the report so `journalctl -u aide-check` still shows it.
+        # BUILTIN printf, deliberately -- do NOT add a ${pkgs.coreutils}/bin/ prefix to the two
+        # whole-report printfs. An external printf receives the entire AIDE report as ONE argv
+        # element and dies with E2BIG past MAX_ARG_STRLEN (32 * PAGESIZE = 524288 bytes here,
+        # but only 131072 on a 4K-page host). At roughly 338 bytes per changed entry that is
+        # breached around 1,550 of the 3,189 watched entries. The failure is silent in the worst
+        # way: the report vanishes from the journal AND every parsed count zeroes while
+        # aide_check_status still reads 1 -- "changes detected, 0 added, 0 removed, 0 changed"
+        # with no report to consult. That is exactly the large-change case this control exists
+        # to catch. The shell builtin has no argv limit. The short .prom printfs below are fine.
+        printf '%s\n' "$REPORT"
+
+        # ---- parse the summary block -----------------------------------------
+        # AIDE 0.19.2 prints "  Total number of entries:<tab>N"; older releases
+        # printed "Number of entries:". Match case-insensitively on the common
+        # substring so a package bump cannot silently zero the gauge (the old
+        # case-sensitive "Number of entries:" grep is why aide_total_entries read
+        # 0 live while its 30-day max was 3163).
+        num() {
+          case "$1" in
+            "" | *[!0-9]*) ${pkgs.coreutils}/bin/printf '0\n' ;;
+            *)             ${pkgs.coreutils}/bin/printf '%s\n' "$1" ;;
+          esac
+        }
+        field() {
+          printf '%s\n' "$REPORT" \
+            | ${pkgs.gnugrep}/bin/grep -i -m1 -e "$1" \
+            | ${pkgs.gawk}/bin/awk '{print $NF}'
+        }
+        # The two-space anchor keeps us inside the Summary block: the per-file
+        # detail section further down repeats "Changed entries:" unindented and
+        # with no number.
+        TOTAL=$(num "$(field 'number of entries:')")
+        ADDED=$(num "$(field '^  Added entries:')")
+        REMOVED=$(num "$(field '^  Removed entries:')")
+        CHANGED=$(num "$(field '^  Changed entries:')")
+
+        # ---- authoritative status from the REAL exit code --------------------
+        # 0 = clean, 1-7 = additive change bits (1 new, 2 removed, 4 changed),
+        # 14+ = genuine error (config/database unreadable, etc).
+        if [ "$EC" -eq 0 ]; then
+          STATUS=0; CHANGES=0
+        elif [ "$EC" -ge 1 ] && [ "$EC" -le 7 ]; then
+          STATUS=1; CHANGES=1
+        else
+          STATUS=2; CHANGES=0
+        fi
+
+        [ -d "$DIR" ] || ${pkgs.coreutils}/bin/mkdir -p "$DIR"
+        {
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_check_status Status of last AIDE check (0=OK, 1=changes, 2=error)'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_check_status gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_check_status %s\n' "$STATUS"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_changes_detected 1 if the last aide --check reported changes (exit 1-7), 0 otherwise'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_changes_detected gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_changes_detected %s\n' "$CHANGES"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_added_files Number of files added since last database update'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_added_files gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_added_files %s\n' "$ADDED"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_removed_files Number of files removed since last database update'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_removed_files gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_removed_files %s\n' "$REMOVED"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_changed_files Number of files changed since last database update'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_changed_files gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_changed_files %s\n' "$CHANGED"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_total_entries Total number of database entries'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_total_entries gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_total_entries %s\n' "$TOTAL"
+          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_last_check_timestamp_seconds Unix time the last aide --check completed'
+          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_last_check_timestamp_seconds gauge'
+          ${pkgs.coreutils}/bin/printf 'aide_last_check_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
+        } > "$TMP"
+        ${pkgs.coreutils}/bin/chmod 0644 "$TMP"
+        ${pkgs.coreutils}/bin/mv -f "$TMP" "$OUT"
+
+        # Propagate the real code so SuccessExitStatus below still absorbs
+        # 1-7 (changes are informational) while a genuine 14+ error fails the
+        # unit and reaches SystemdServiceFailed as well as AIDECheckError.
+        exit "$EC"
+      ''}";
       # AIDE exit codes: 0=no changes, 1-7=changes detected (all informational)
       # Treat changes as success so systemd doesn't enter "failed" state and trigger
       # SystemdServiceFailed alerts. Changes are tracked via aide_check_status Prometheus metric.
@@ -232,41 +354,15 @@
         6
         7
       ];
-      # Additive result-emission (does NOT conflict with aide-metrics.nix's
-      # ExecStartPost full-walk nor aide-nagios-check's check_aide). ExecStopPost
-      # runs after the primary `aide --check` ExecStart and reads $EXIT_STATUS
-      # (the REAL numeric exit code, before SuccessExitStatus masks it to 0) to
-      # emit two metrics into a SEPARATE textfile (aide_result.prom), so the
-      # change-detection signal is driven by the authoritative exit code, not by
-      # aide-metrics.nix's brittle count parse:
-      #   aide_changes_detected         1 if exit 1-7 (changes), 0 if exit 0
-      #   aide_last_check_timestamp_seconds  wall-clock of this check
-      # COUNTS/BOOLEANS/TIMESTAMPS ONLY — never AIDE report lines / paths.
-      ExecStopPost = "${pkgs.writeShellScript "aide-result-emit" ''
-        set -u
-        DIR=/var/lib/prometheus-node-exporter-textfiles
-        OUT="$DIR/aide_result.prom"
-        TMP="$OUT.$$"
-        # $EXIT_STATUS is the real exit code (numeric for an exited service).
-        # Treat non-numeric / missing as unknown -> changes=0 but timestamp still
-        # advances so AideResultStale catches a dead check.
-        EC="''${EXIT_STATUS:-}"
-        case "$EC" in
-          1|2|3|4|5|6|7) CHANGES=1 ;;
-          *)             CHANGES=0 ;;
-        esac
-        [ -d "$DIR" ] || ${pkgs.coreutils}/bin/mkdir -p "$DIR"
-        {
-          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_changes_detected 1 if the last aide --check reported changes (exit 1-7), 0 if clean'
-          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_changes_detected gauge'
-          ${pkgs.coreutils}/bin/printf 'aide_changes_detected %s\n' "$CHANGES"
-          ${pkgs.coreutils}/bin/printf '%s\n' '# HELP aide_last_check_timestamp_seconds Unix time the last aide --check completed'
-          ${pkgs.coreutils}/bin/printf '%s\n' '# TYPE aide_last_check_timestamp_seconds gauge'
-          ${pkgs.coreutils}/bin/printf 'aide_last_check_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
-        } > "$TMP"
-        ${pkgs.coreutils}/bin/chmod 0644 "$TMP"
-        ${pkgs.coreutils}/bin/mv -f "$TMP" "$OUT"
-      ''}";
+      # NOTE: the former ExecStopPost "aide-result-emit" hook is GONE. It emitted
+      # aide_changes_detected + aide_last_check_timestamp_seconds from
+      # $EXIT_STATUS; both are now emitted by the ExecStart wrapper above, from
+      # the same walk that produces the counts, so the two can no longer drift.
+      # Moving the timestamp into ExecStart also FIXES the dead-man: the old hook
+      # ran even when the check died and still advanced
+      # aide_last_check_timestamp_seconds, which SUPPRESSED AideResultStale
+      # (config-drift.yaml) exactly when it should have fired. Now the timestamp
+      # only advances when a walk actually completed.
     };
   };
 

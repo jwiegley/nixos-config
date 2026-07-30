@@ -1,6 +1,57 @@
 groups:
   - name: litellm_gateway
     interval: 30s
+    # -------------------------------------------------------------------------
+    # CONSOLIDATED HERE 2026-07-29. These rules previously existed in TWO
+    # places: this file and modules/monitoring/services/litellm-availability-alerts.nix,
+    # which built its own rule file with pkgs.writeText and registered it via
+    # services.prometheus.ruleFiles. That was a second, parallel mechanism for
+    # something this repo otherwise does one way (468 of 516 rules are plain
+    # YAML under modules/monitoring/alerts/, auto-discovered by alerting.nix),
+    # and the two copies had DRIFTED three ways. Both copies were confirmed
+    # live-firing in the same 30-day window, i.e. every gateway outage paged
+    # twice (LiteLLMModelUnavailable firing 233 sample-minutes alongside
+    # LitellmBackendDown 479; LiteLLMSlowResponse 136 alongside
+    # LitellmSlowResponse 434).
+    #
+    # Retired rule -> successor, and which half of each diverged pair won:
+    #
+    #   LiteLLMModelUnavailable (for: 5m) -> LitellmBackendDown (for: 3m).
+    #     3m wins. litellm_availability is a textfile gauge refreshed every
+    #     20 min, so its value is CONSTANT between exporter runs: no `for`
+    #     shorter than the 20-min cadence can require a second independent
+    #     probe, which makes 5m vs 3m purely detection latency with no added
+    #     debounce. The health check already retries once after 60s internally,
+    #     so a 0 is a twice-confirmed failure by the time it is published.
+    #
+    #   LiteLLMSlowResponse (> 30) -> LitellmSlowResponse (> 10).
+    #     > 10 wins because > 30 is a strict subset of it and could never fire
+    #     alone; keeping > 30 would have LOST the 10-30s degraded band.
+    #     Live 30-day distribution: avg 1.4s, p99 9.35s, max 98s, 428 of 43200
+    #     sample-minutes above 10s (~1% duty cycle) vs 289 above 30s.
+    #
+    #   LiteLLMExporterDown (up{job="node"} == 1 unless litellm_availability,
+    #     for: 1h) -> LitellmMetricsAbsent (below) PLUS the new
+    #     LitellmExporterStale (below). The retired rule was an obfuscated
+    #     absent() -- it only ever fired when the series vanished outright, the
+    #     exact case LitellmMetricsAbsent already covers, and it depended on
+    #     up{job="node"} resolving to exactly one series (verified: it does
+    #     today, but hera/opnsense node exporters live under other job names by
+    #     accident, not by design). What NEITHER of them covered is the actual
+    #     failure mode of a textfile collector -- a dead timer leaves the .prom
+    #     file in place and node-exporter keeps republishing FROZEN values
+    #     forever -- so LitellmExporterStale was added to close it.
+    #
+    # The .nix file existed only because it interpolated the primary model name
+    # from models.nix into the rule text, which plain YAML cannot do. That is
+    # now a `model` LABEL stamped on the metric at all four emission sites in
+    # litellm-exporter.nix, rendered below as {{ $labels.model }}.
+    #
+    # No routing change: Alertmanager's route tree matches on severity,
+    # service, alertname and category only -- never on the `component` label
+    # the retired rules set -- and the severities are preserved (critical for
+    # backend-down, warning for slow/absent).
+    # -------------------------------------------------------------------------
     rules:
       # LiteLLM is the single shared model gateway for BOTH agent microVMs
       # (OpenClaw + Hermes) and the stock-trader Anthropic path. Until
@@ -14,12 +65,15 @@ groups:
           severity: critical
           category: ai-gateway
         annotations:
-          summary: "LiteLLM gateway is down"
-          description: "litellm_availability has been 0 for 3 minutes — the shared model backend for OpenClaw, Hermes, and stock-trader is unavailable. Check the litellm container (rootless user litellm) and its Redis."
+          summary: "LiteLLM gateway is down (model {{ $labels.model }})"
+          description: "litellm_availability has been 0 for 3 minutes — the shared model backend for OpenClaw, Hermes, and stock-trader is unavailable. The health check probes model {{ $labels.model }} and already retried once internally, so this is a twice-confirmed failure. Check the litellm container (rootless user litellm) and its Redis."
 
       # The availability gauge comes from the litellm-exporter timer; if the
       # exporter dies, the series goes stale and LitellmBackendDown can never
       # fire. absent() distinguishes a dead collector from a dead gateway.
+      #
+      # NOTE: absent() synthesizes its output labels from the equality matchers
+      # in the selector, so there is no {{ $labels.model }} to render here.
       - alert: LitellmMetricsAbsent
         expr: absent(litellm_availability) == 1
         for: 15m
@@ -29,6 +83,36 @@ groups:
         annotations:
           summary: "LiteLLM availability metric has disappeared"
           description: "litellm_availability has been absent from the TSDB for 15 minutes — the litellm-exporter is no longer producing samples, so gateway-down conditions are currently invisible. Check litellm-exporter.service/timer."
+
+      # Freshness guard for the collector itself (coverage plan P2, and the
+      # successor half of the retired LiteLLMExporterDown).
+      #
+      # absent() above only catches litellm.prom being DELETED. The far more
+      # likely failure is the oneshot starting to fail or the timer dying while
+      # the file stays on disk: node-exporter then keeps exporting the last
+      # values forever, litellm_availability sits pinned at 1, and both
+      # LitellmBackendDown and LitellmSlowResponse are silently reading a
+      # frozen gauge.
+      #
+      # litellm.prom is deliberately NOT in the generic
+      # TextfileCollectorStaleFast/Daily allowlists in meta-monitoring.yaml —
+      # its 20-min cadence fits neither tier (>30m fast would false-fire; >26h
+      # daily would be useless) — so per the policy documented there it gets
+      # its own rule. Threshold: timer is OnUnitActiveSec=20min and a run can
+      # legitimately take ~7min (2 attempts x 180s + a 60s sleep, bounded by
+      # TimeoutStartSec=12min), so the worst legitimate gap is ~27min; 1h is
+      # two missed cycles plus grace, and preserves the retired rule's 1h
+      # intent.
+      - alert: LitellmExporterStale
+        expr: |
+          time() - node_textfile_mtime_seconds{file=~".*/litellm\\.prom"} > 3600
+        for: 5m
+        labels:
+          severity: warning
+          category: ai-gateway
+        annotations:
+          summary: "LiteLLM exporter textfile is stale"
+          description: "/var/lib/prometheus-node-exporter-textfiles/litellm.prom has not been rewritten in over an hour (its timer runs every 20 minutes). litellm_availability and litellm_response_time_seconds are now FROZEN at their last values, so LitellmBackendDown and LitellmSlowResponse are reading stale data and a real outage would go unreported. Check litellm-exporter.service/timer."
 
       # The Anthropic-compat "fixup" proxy on 127.0.0.1:4001 is a separate
       # uvicorn listener that the stock-trader Anthropic path rides through —
@@ -47,10 +131,11 @@ groups:
           description: "The blackbox probe to the litellm-fixup proxy (http://127.0.0.1:4001/) has reported probe_success=0 for 3 minutes — the entire stock-trader Anthropic path rides this proxy. Check the litellm-fixup listener on port 4001."
 
       # litellm_response_time_seconds is a textfile gauge from the
-      # litellm-exporter (job=node). Steady-state baseline is ~0; sustained
-      # values >10s mean the gateway is up but degraded (slow upstream model
-      # responses), which still breaks agent/trader timeouts. (coverage plan
-      # P1 #5, web-blackbox — "scraped but unalerted" pattern.)
+      # litellm-exporter (job=node). Steady-state baseline is ~0 (30-day avg
+      # 1.4s, p99 9.35s); sustained values >10s mean the gateway is up but
+      # degraded (slow upstream model responses), which still breaks
+      # agent/trader timeouts. (coverage plan P1 #5, web-blackbox — "scraped
+      # but unalerted" pattern.)
       - alert: LitellmSlowResponse
         expr: litellm_response_time_seconds > 10
         for: 10m
@@ -58,5 +143,5 @@ groups:
           severity: warning
           category: ai-gateway
         annotations:
-          summary: "LiteLLM gateway responses are slow"
-          description: "litellm_response_time_seconds has exceeded 10s for over 10 minutes (currently {{ $value }}s) — the shared model gateway is up but degraded, which can time out OpenClaw, Hermes, and stock-trader requests."
+          summary: "LiteLLM gateway responses are slow (model {{ $labels.model }})"
+          description: "litellm_response_time_seconds has exceeded 10s for over 10 minutes (currently {{ $value }}s) for model {{ $labels.model }} — the shared model gateway is up but degraded, which can time out OpenClaw, Hermes, and stock-trader requests."

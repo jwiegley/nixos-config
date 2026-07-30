@@ -1,24 +1,39 @@
 groups:
+  # ===========================================================================
+  # AIDE file-integrity monitoring.
+  #
+  # SINGLE SOURCE OF TRUTH (since 2026-07-29): every check-derived AIDE metric
+  # (aide_check_status, aide_changes_detected, aide_added/removed/changed_files,
+  # aide_total_entries, aide_last_check_timestamp_seconds) is produced by ONE
+  # walk in aide-check.service's ExecStart wrapper (modules/security/aide.nix)
+  # and written to ONE file (aide_result.prom). The database dead-man gauges
+  # (aide_database_exists / aide_database_age_seconds, read by the two rules at
+  # the bottom of this group) are the sole exception: they keep their own
+  # independent timer and their own file (aide.prom,
+  # modules/monitoring/services/aide-metrics.nix) precisely so they cannot
+  # freeze in lockstep with the check they are meant to police.
+  #
+  # RETIRED: `AIDEChangesDetected` (was `aide_check_status == 1`, for: 5m). It
+  # duplicated `AideChangesDetected` in config-drift.yaml case-insensitively —
+  # two alertnames differing only in capitalisation, on one condition, which
+  # Alertmanager grouping and every human reader will confuse. The surviving
+  # rule is config-drift.yaml's `AideChangesDetected`
+  # (`aide_changes_detected == 1`, for: 1h): same fact, the longer dwell that
+  # lets the post-rebuild aide-update re-baseline settle, and it is the one
+  # scripts/nagios-mirror-divergence.py already knows about (lines 197, 255).
+  # This rule was in any case structurally unfirable: aide_check_status had a
+  # 30-day maximum of 0 because the old collector destroyed the exit code with
+  # `$(aide --check || true)` followed by `$?`.
+  # ===========================================================================
   - name: security_aide
     interval: 5m
     rules:
-      - alert: AIDEChangesDetected
-        expr: aide_check_status == 1
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-        annotations:
-          summary: "AIDE detected filesystem changes"
-          description: |
-            AIDE file integrity check found changes ({{ with query "aide_added_files" }}{{ . | first | value }}{{ end }} added,
-            {{ with query "aide_removed_files" }}{{ . | first | value }}{{ end }} removed,
-            {{ with query "aide_changed_files" }}{{ . | first | value }}{{ end }} changed).
-
-            Review changes: journalctl -u aide-check --since "1 day ago"
-            If changes are expected (e.g. after nixos-rebuild), update the database:
-              sudo systemctl start aide-update.service
-
+      # Now genuinely firable. Before 2026-07-29 the exit code reaching this
+      # gauge was always 0 (see the group header), so an unreadable database or
+      # broken aide.conf — AIDE exit >= 14 — was reported as "clean". The
+      # ExecStart wrapper now propagates the real code, and 14+ additionally
+      # fails the unit (SuccessExitStatus only absorbs 0-7), so a genuine error
+      # reaches both this alert and SystemdServiceFailed.
       - alert: AIDECheckError
         expr: aide_check_status == 2
         for: 5m
@@ -29,7 +44,8 @@ groups:
           summary: "AIDE check encountered an error"
           description: |
             AIDE file integrity check failed with an error (exit code >= 14).
-            The integrity database may be corrupted or inaccessible.
+            The integrity database may be corrupted or inaccessible — file
+            integrity monitoring is NOT reporting a trustworthy answer.
 
             Check AIDE status: systemctl status aide-check
             View logs: journalctl -u aide-check -f

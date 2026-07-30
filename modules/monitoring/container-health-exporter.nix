@@ -5,6 +5,30 @@
   ...
 }:
 
+let
+  # Rootless quadlet users with a persistent podman store. DERIVED, not
+  # hand-listed: a user has a per-user podman graphroot iff its Home Manager home
+  # lives under /var/lib/containers/. Same structural predicate as
+  # modules/users/home-manager/rootless-podman-image-prune.nix:38, which installs
+  # the podman-image-prune.{timer,service} this exporter then reports on — so the
+  # producer of those units and the reader of them can never drift apart.
+  #
+  # Verified 2026-07-29 by `nix eval` and against live TSDB
+  # (count by (user) (last_over_time(container_image_prune_failed[30d])) = these
+  # 14 users): exactly the 14 names formerly hardcoded in the ROOTLESS_USERS
+  # string below. Excluded structurally, and correctly:
+  #   - technitium-dns-exporter: runs as a ROOT podman container (already covered
+  #     by the root sweep), no rootless store, no HM user. config.users.users
+  #     WOULD include it (15 names) — hence home-manager.users, not users.users.
+  #   - zimit: transient on-demand containers per archive job (no persistent
+  #     PODMAN_SYSTEMD_UNIT container to track).
+  #   - johnw: human account (/home/johnw).
+  # A full rootless sweep measures ~1.7s wall (ps+inspect+stats per container),
+  # comfortably inside the 2-min cadence.
+  rootlessUsers = lib.filter (
+    u: lib.hasPrefix "/var/lib/containers/" config.home-manager.users.${u}.home.homeDirectory
+  ) (lib.attrNames config.home-manager.users);
+in
 {
   # Container Health Exporter for Prometheus
   # Monitors Podman container health status and exposes metrics for alerting
@@ -146,17 +170,11 @@
                 # Collect metrics from root podman
                 collect_container_metrics "${pkgs.podman}/bin/podman" "root"
 
-                # Collect metrics from rootless podman users.
-                # Every user here was verified (2026-06-10) to run at least one
-                # quadlet/podman container under /var/lib/containers/<user>.
-                # Excluded on purpose:
-                #   - technitium-dns-exporter: runs as a ROOT podman container
-                #     (already covered by the root sweep above), no rootless store.
-                #   - zimit: spawns transient on-demand containers per archive job
-                #     (no persistent PODMAN_SYSTEMD_UNIT container to track).
-                # A full rootless sweep measures ~1.7s wall (ps+inspect+stats per
-                # container across 13 users), comfortably inside the 2-min cadence.
-                ROOTLESS_USERS="changedetection litellm mailarchiver memory-vault openspeedtest opnsense-exporter open-webui openproject shlink shlink-web-client speedtest-tracker teable vane wallabag"
+                # Collect metrics from rootless podman users. This list is derived
+                # from home-manager.users at eval time — see the rootlessUsers
+                # let-binding at the top of this file for the predicate and the
+                # rationale for each structural exclusion.
+                ROOTLESS_USERS="${lib.concatStringsSep " " rootlessUsers}"
 
                 for user in $ROOTLESS_USERS; do
                   if id "$user" &>/dev/null; then
@@ -258,6 +276,16 @@
         # One entry per top-level dir under /var/lib/containers. The root graphroot
         # is the directory literally named "storage"; relabel it user="root" so the
         # series matches the convention used by container_running{user="root"}.
+        #
+        # DELIBERATELY a runtime glob, NOT the derived `rootlessUsers` list above.
+        # This collector measures disk reality, not declared intent, and the whole
+        # point is to see stores that NO LONGER have an owner: the 2026-06-01
+        # cleanup found ~18G of orphaned images in legacy container-db / mindsdb /
+        # container-misc stores whose HM users had already been removed and whose
+        # UIDs had been recycled. Deriving this loop from home-manager.users would
+        # make exactly those orphans invisible — i.e. it would blind the exporter
+        # to its primary failure mode. It also legitimately sees "storage" (root)
+        # and technitium-dns-exporter, neither of which is an HM user.
         for dir in /var/lib/containers/*/; do
           [[ -d "$dir" ]] || continue
           name="$(${pkgs.coreutils}/bin/basename "$dir")"

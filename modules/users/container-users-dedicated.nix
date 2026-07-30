@@ -256,55 +256,63 @@
   ];
 
   # Create per-user SOPS secrets directories with proper ownership and permissions
-  # These directories are used for deploying user-specific secrets via SOPS
-  # Permissions: 0750 (owner: rwx, group: r-x, others: ---)
-  # This allows the user to read/write secrets, group members to list, and prevents other users from accessing
+  # These directories are used for deploying user-specific secrets via SOPS.
+  # Permissions: 0750 (owner: rwx, group: r-x, others: ---) — the container user
+  # reads its own secrets, group members may list, everyone else is shut out.
   #
-  # Symlinks are created to make SOPS secrets (in /run/secrets/<service>/) accessible
-  # to user services as /run/secrets-<service>/<service>/ for container environmentFiles.
+  # These `d` rules are the ONLY thing this module contributes to secret exposure.
+  # The secrets themselves are placed inside these directories by exactly one
+  # mechanism: a sops `path = "/run/secrets-<user>/<secret>"` override, either
+  # written out by modules/lib/mkQuadletService.nix (see its `sops.secrets` block)
+  # or spelled out in the service's own module. sops-nix creates a
+  # user-owned symlink at `path` pointing at the real /run/secrets/<secret> file.
   #
-  # The convention holds for only 2 of the 13 `L+` rules below. Checked against
-  # the live /run/secrets on 2026-07-27 (names and stat only, contents never read):
-  #   - 2 match: changedetection, litellm — target is an existing directory.
-  #   - 3 point at a single regular FILE, not a per-service directory:
-  #     shlink-web-client, open-webui-secrets, speedtest-tracker-secrets.
-  #   - 8 targets do not exist at all, so the symlink dangles: mailarchiver,
-  #     wallabag, teable, opnsense-exporter, technitium-dns-exporter,
-  #     openspeedtest, openproject, shlink. (Several of those services do have
-  #     secrets under other top-level names, e.g. mailarchiver-env,
-  #     openproject-env, opnsense-exporter-secrets — the per-service directory
-  #     these rules expect is what is missing. Not investigated further here.)
-  # Treat the layout below as historical, not as a description of what exists.
+  # A second, competing mechanism used to live here: 13 `L+` tmpfiles symlink rules
+  # of the form `L+ /run/secrets-<user>/<name> -> /run/secrets/<name>`. They were
+  # removed on 2026-07-29 after a per-path audit against the live system (names,
+  # ownership and stat only; no secret contents read). Per path:
+  #   - 3 were exact duplicates of a sops `path=` override that names the very same
+  #     path, and sops had already won: the live symlink was owned by the service
+  #     user, not root. shlink-web-client (modules/containers/shlink-quadlet.nix),
+  #     open-webui-secrets (open-webui-quadlet.nix), speedtest-tracker-secrets
+  #     (speedtest-tracker-quadlet.nix). Those overrides remain and are unchanged.
+  #   - 9 had no consumer anywhere — not in any unit, --env-file, EnvironmentFile,
+  #     LoadCredential or volume mount under /etc/systemd or the rootless users'
+  #     ~/.config: litellm, mailarchiver, wallabag, teable, opnsense-exporter,
+  #     technitium-dns-exporter, openspeedtest, openproject, shlink. Seven of the
+  #     nine dangled outright (target did not exist); each of those services reaches
+  #     its secret by a sibling sops `path=` file instead (…/litellm-secrets,
+  #     …/mailarchiver-env, …/wallabag-secrets, …/teable-env,
+  #     …/opnsense-exporter-secrets, …/openproject-env, …/shlink-secrets), while
+  #     technitium-dns-exporter reads /run/secrets/technitium-dns-exporter-env
+  #     directly and openspeedtest has no secrets at all.
+  #   - 1 was genuinely load-bearing: changedetection consumed
+  #     /run/secrets-changedetection/changedetection/api-key through the symlink.
+  #     It was converted to the sops `path=` form
+  #     (/run/secrets-changedetection/api-key) in
+  #     modules/containers/changedetection-quadlet.nix, and its consumer in
+  #     modules/users/home-manager/changedetection.nix was updated to match.
+  # Do not reintroduce `L+` rules here; add a sops `path=` override instead.
   systemd.tmpfiles.rules = [
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
-    "L+ /run/secrets-changedetection/changedetection - - - - /run/secrets/changedetection"
     "d /run/secrets-litellm 0750 litellm litellm - -"
-    "L+ /run/secrets-litellm/litellm - - - - /run/secrets/litellm"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
-    "L+ /run/secrets-mailarchiver/mailarchiver - - - - /run/secrets/mailarchiver"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
-    "L+ /run/secrets-wallabag/wallabag - - - - /run/secrets/wallabag"
     "d /run/secrets-teable 0750 teable teable - -"
-    "L+ /run/secrets-teable/teable - - - - /run/secrets/teable"
-    # memory-vault: sops.templates renders /run/secrets-memory-vault/env directly
-    # (no /run/secrets symlink needed), so only the dir is required here.
+    # memory-vault: sops.templates renders /run/secrets-memory-vault/env directly,
+    # so only the dir is required here.
     "d /run/secrets-memory-vault 0750 memory-vault memory-vault - -"
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
-    "L+ /run/secrets-opnsense-exporter/opnsense-exporter - - - - /run/secrets/opnsense-exporter"
+    # technitium-dns-exporter and openspeedtest have no secrets under
+    # /run/secrets-<user> at all; the dirs are kept only so the convention holds if
+    # one is added later.
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"
-    "L+ /run/secrets-technitium-dns-exporter/technitium-dns-exporter - - - - /run/secrets/technitium-dns-exporter"
     "d /run/secrets-openspeedtest 0750 openspeedtest openspeedtest - -"
-    "L+ /run/secrets-openspeedtest/openspeedtest - - - - /run/secrets/openspeedtest"
     "d /run/secrets-openproject 0750 openproject openproject - -"
-    "L+ /run/secrets-openproject/openproject - - - - /run/secrets/openproject"
     "d /run/secrets-shlink 0750 shlink shlink - -"
-    "L+ /run/secrets-shlink/shlink - - - - /run/secrets/shlink"
     "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"
-    "L+ /run/secrets-shlink-web-client/shlink-web-client - - - - /run/secrets/shlink-web-client"
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
-    "L+ /run/secrets-open-webui/open-webui-secrets - - - - /run/secrets/open-webui-secrets"
     "d /run/secrets-speedtest-tracker 0750 speedtest-tracker speedtest-tracker - -"
-    "L+ /run/secrets-speedtest-tracker/speedtest-tracker-secrets - - - - /run/secrets/speedtest-tracker-secrets"
   ];
   # Note: vane currently has no SOPS secrets (configured via web UI)
   # Add secret entries here if/when API keys are managed via SOPS

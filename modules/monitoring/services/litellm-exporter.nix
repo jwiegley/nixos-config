@@ -8,9 +8,30 @@
 let
   models = import ../../../models.nix;
 
+  # Prometheus label set stamped on EVERY litellm_* sample this exporter emits.
+  #
+  # Defined ONCE here, and injected verbatim into both scripts below, because
+  # the series identity has to be byte-identical across all FOUR emission
+  # sites: the up-path, the HTTP-error path, the response-validation-failure
+  # path, and the wrapper's last-resort `|| ...` fallback. If the down-state
+  # carried a different label set from the up-state, litellm_availability
+  # would resolve to two distinct series and LitellmBackendDown
+  # (modules/monitoring/alerts/litellm.yaml) would silently stop matching the
+  # moment the gateway actually broke.
+  #
+  # The model name is a LABEL rather than build-time text so that plain-YAML
+  # alert rules can render it as {{ $labels.model }}. That is what allowed
+  # litellm-availability-alerts.nix -- a second, parallel rule mechanism whose
+  # only reason to be Nix was interpolating this model name into rule text --
+  # to be retired in favour of alerts/litellm.yaml (see that file's header).
+  labelSet = ''{model="${models.llm.primary.name}"}'';
+
   # Script that tests LiteLLM availability by making a simple query
   litellmHealthCheck = pkgs.writeShellScript "litellm-health-check" ''
     set -uo pipefail
+
+    # Label set for every sample below -- see `labelSet` in the Nix let block.
+    LABELS='${labelSet}'
 
     # Get API key from environment (use LITELLM_MASTER_KEY if available)
     API_KEY="''${LITELLM_API_KEY:-''${LITELLM_MASTER_KEY:-}}"
@@ -49,8 +70,8 @@ let
 
     # Check HTTP status
     if [ "$HTTP_CODE" != "200" ]; then
-      echo "litellm_availability 0"
-      echo "litellm_response_time_seconds 0"
+      echo "litellm_availability$LABELS 0"
+      echo "litellm_response_time_seconds$LABELS 0"
       echo "# HTTP error: $HTTP_CODE (after 2 attempts)"
       exit 0
     fi
@@ -67,11 +88,11 @@ let
       # For reasoning models, just verify we got some content back
       # We don't strictly validate the answer is "4" since the model might reason differently
       if [ -n "$CONTENT" ] && [ "$CONTENT" != "null" ]; then
-        echo "litellm_availability 1"
+        echo "litellm_availability$LABELS 1"
 
         # Extract response time if available
         RESPONSE_TIME=$(echo "$BODY" | ${pkgs.jq}/bin/jq -r '.usage.total_time // 0')
-        echo "litellm_response_time_seconds $RESPONSE_TIME"
+        echo "litellm_response_time_seconds$LABELS $RESPONSE_TIME"
 
         echo "# Last successful query: $(date -Iseconds)"
         exit 0
@@ -79,8 +100,8 @@ let
     fi
 
     # If we got here, something failed
-    echo "litellm_availability 0"
-    echo "litellm_response_time_seconds 0"
+    echo "litellm_availability$LABELS 0"
+    echo "litellm_response_time_seconds$LABELS 0"
     echo "# Response validation failed"
   '';
 
@@ -92,6 +113,11 @@ let
     METRICS_FILE="$METRICS_DIR/litellm.prom"
     TEMP_FILE="$METRICS_DIR/litellm.prom.$$"
 
+    # Same label set as the health-check script -- see `labelSet` in the Nix
+    # let block. The fallback below is the FOURTH emission site and must not
+    # drift from the other three.
+    LABELS='${labelSet}'
+
     # Ensure directory exists
     mkdir -p "$METRICS_DIR"
 
@@ -102,7 +128,15 @@ let
       echo "# HELP litellm_response_time_seconds LiteLLM response time in seconds"
       echo "# TYPE litellm_response_time_seconds gauge"
 
-      ${litellmHealthCheck} || echo "litellm_availability 0"
+      # Last-resort fallback: the health-check script exits non-zero only
+      # BEFORE it has emitted any sample (missing API key, or a crash), so this
+      # cannot duplicate a metric line. It must carry $LABELS and BOTH series,
+      # or a hard exporter failure would publish a differently-identified
+      # litellm_availability and drop litellm_response_time_seconds entirely.
+      ${litellmHealthCheck} || {
+        echo "litellm_availability$LABELS 0"
+        echo "litellm_response_time_seconds$LABELS 0"
+      }
     } > "$TEMP_FILE"
 
     # Atomic move

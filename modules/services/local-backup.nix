@@ -48,10 +48,58 @@ let
         "lock/"
 
         # === LARGE ARCHIVE/BACKUP DATA (30GB+) ===
-        # Already backed up or archived elsewhere
+        # Already backed up or archived elsewhere.
+        # NOTE: all three of these are bind mounts of tank/Backups/* datasets
+        # (findmnt-verified 2026-07-29), so --one-file-system already stops
+        # rsync at them. The exclusions are belt-and-braces, not the mechanism.
         "lib/git-workspace-archive/" # 23GB - Git archives
         "lib/postgresql-backup/" # 7.5GB - Already backed up dumps
         "lib/technitium-dns-backup/" # 1.2GB - DNS backups
+
+        # === STATE DIRS WITH A DEDICATED MIRROR (added 2026-07-29) ===
+        # These were being copied down TWO paths and only one of them is a real
+        # backup. Each has a dedicated nightly rsync mirror onto its own
+        # tank/Backups/* dataset (ZFS sanoid snapshots = retention), and this
+        # module was ALSO dragging the live state dir into
+        # /tank/Backups/Machines/Vulcan/var 4x a day. Both copies land on the
+        # same pool, in the same enclosure, under the same recursive `archival`
+        # sanoid template (modules/storage/zfs.nix), so the second copy buys no
+        # independent failure domain -- it only adds churn to a pool whose USB
+        # bridge has already hung once under backup I/O (2026-06-02).
+        #
+        # Verified byte-for-byte before excluding, so nothing unrecoverable is
+        # being dropped:
+        #
+        #   lib/node-red -> modules/services/node-red-backup.nix mirrors it to
+        #   /var/lib/node-red-backup (= tank/Backups/NodeRED) minus
+        #   node_modules/.npm/.cache/*.tmp; `npm install` regenerates those per
+        #   that module's step-5 restore procedure. Top-level entry lists of the
+        #   mirror and the live dir are identical. That mirror is additionally
+        #   the ONE mirror that goes offsite: "NodeRED" is absent from
+        #   backupExcludes in modules/storage/backups.nix, so restic pushes it to
+        #   B2. The copy removed here was 217MB (59MB of it node_modules) and had
+        #   no offsite path at all, since "Machines" IS in backupExcludes.
+        #
+        #   lib/private/technitium-dns-server -> modules/services/technitium-dns-backup.nix
+        #   mirrors /var/lib/technitium-dns-server (a symlink into private/) to
+        #   /var/lib/technitium-dns-backup (= tank/Backups/TechnitiumDNS),
+        #   excluding only /cache.bin, /logs and /stats. Confirmed the mirror
+        #   holds every config/zone/app/blocklist/scope entry the live dir has;
+        #   the 324MB copied here was those same entries plus exactly those three
+        #   rebuildable runtime items.
+        #
+        #   Unlike node-red above, there is nothing stranded to clean up for this one:
+        #   /tank/Backups/Machines/Vulcan/var/lib/private/technitium-dns-server does NOT
+        #   exist in the mirror (checked 2026-07-29), so this exclusion leaves no
+        #   pre-existing destination tree behind. Do not infer from the node-red case
+        #   that this one also needs a manual rm.
+        #
+        # NOT excluded, deliberately: lib/hass/backups (301MB of Home Assistant's
+        # own backup tarballs). Those have NO dedicated mirror -- this rsync is
+        # the only thing that gets them off the nvme onto tank, so excluding them
+        # would be a real loss of coverage, not a de-duplication.
+        "lib/node-red/" # 217MB - mirror: /tank/Backups/NodeRED (+ offsite B2)
+        "lib/private/technitium-dns-server/" # 324MB - mirror: /tank/Backups/TechnitiumDNS
 
         # === ACTIVE DATABASES (Need special handling) ===
         # These should use proper dump commands, not file copies

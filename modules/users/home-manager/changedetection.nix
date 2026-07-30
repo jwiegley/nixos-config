@@ -55,7 +55,10 @@
             TZ = "America/Los_Angeles";
           };
 
-          environmentFiles = [ "/run/secrets-changedetection/changedetection/api-key" ];
+          # Deployed by the sops `path=` override in
+          # modules/containers/changedetection-quadlet.nix (was reached through a
+          # tmpfiles `L+ .../changedetection -> /run/secrets/changedetection` symlink).
+          environmentFiles = [ "/run/secrets-changedetection/api-key" ];
 
           volumes = [
             "/var/lib/changedetection:/datastore:rw"

@@ -43,10 +43,23 @@
   };
 
   # SOPS secrets
+  #
+  # `path` deploys the secret straight into the container user's own secrets
+  # directory (/run/secrets-changedetection, created at 0750 by
+  # modules/users/container-users-dedicated.nix). This is the same mechanism every
+  # other rootless container uses — see modules/lib/mkQuadletService.nix, which
+  # sets `path = "/run/secrets-<containerUser>/<sopsKey>"`.
+  #
+  # It replaces the old indirection, a `L+ /run/secrets-changedetection/changedetection
+  # -> /run/secrets/changedetection` tmpfiles symlink, which was the last consumed
+  # symlink of that family. The consumer path changed with it, see
+  # modules/users/home-manager/changedetection.nix.
   sops.secrets."changedetection/api-key" = {
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
     owner = "changedetection";
+    group = "changedetection";
+    path = "/run/secrets-changedetection/api-key";
   };
 
   # Ensure data directory has correct ownership for container data

@@ -9,6 +9,36 @@ let
   bindTankLib = import ../lib/bindTankModule.nix { inherit config lib pkgs; };
   inherit (bindTankLib) bindTankPath;
 
+  # Rootless container users, DERIVED from home-manager.users rather than
+  # hand-listed: a user has a per-user podman graphroot iff its Home Manager home
+  # lives under /var/lib/containers/. Same predicate as
+  # modules/users/home-manager/rootless-podman-image-prune.nix:38 and as the
+  # `rootlessUsers` bindings in modules/monitoring/container-health-exporter.nix,
+  # .../services/container-image-staleness-exporter.nix and
+  # .../services/container-cve-exporter.nix.
+  #
+  # This enumeration is why the derivation exists: the old hand-maintained copy
+  # here was MISSING speedtest-tracker (≠ openspeedtest) and vane, so they
+  # silently went stale for weeks (ContainerImageOutdated fired for
+  # speedtest-tracker at 35d, 2026-07-16). Deriving it makes that class of drift
+  # impossible.
+  #
+  # Verified 2026-07-29 by `nix eval`: the unfiltered derivation yields exactly the
+  # 14 names the three exporters use. config.users.users would yield 15 (it adds
+  # technitium-dns-exporter, a ROOT quadlet with no rootless store) — hence
+  # home-manager.users.
+  rootlessContainerUsers = lib.filter (
+    u: lib.hasPrefix "/var/lib/containers/" config.home-manager.users.${u}.home.homeDirectory
+  ) (lib.attrNames config.home-manager.users);
+
+  # The ONE intentional difference between this list and the exporters': this
+  # script auto-PULLS, so it must cover only users running MOVING image tags
+  # (:latest, :slim-latest). memory-vault runs pinned tags
+  # (ghcr.io/.../memory-vault*:1.0.6), so auto-pulling would defeat the pin — and
+  # a pinned tag never trips ContainerImageOutdated, so nothing is lost by
+  # skipping it here. It is still monitored by the three exporters.
+  updatableContainerUsers = lib.subtractLists [ "memory-vault" ] rootlessContainerUsers;
+
   updateContainersScript = pkgs.writeShellScript "update-containers" ''
     set -euo pipefail
 
@@ -118,29 +148,11 @@ let
 
     # --- Rootless containers (dedicated users) ---
     # Each user has linger enabled so their XDG_RUNTIME_DIR exists at /run/user/<uid>
-    # Rootless container users with MOVING image tags (:latest, :slim-latest)
-    # that should track upstream. Keep in sync with ROOTLESS_USERS in
-    # container-health-exporter.nix. NOTE: memory-vault is intentionally NOT
-    # here — it runs pinned tags (ghcr.io/.../memory-vault*:1.0.6), so
-    # auto-pulling would defeat the pin (and a pinned tag never trips
-    # ContainerImageOutdated). speedtest-tracker (≠ openspeedtest) and vane were
-    # missing, silently going stale for weeks (ContainerImageOutdated fired for
-    # speedtest-tracker at 35d, 2026-07-16).
-    CONTAINER_USERS=(
-      changedetection
-      litellm
-      mailarchiver
-      open-webui
-      openproject
-      openspeedtest
-      opnsense-exporter
-      shlink
-      shlink-web-client
-      speedtest-tracker
-      teable
-      vane
-      wallabag
-    )
+    # Rootless container users with MOVING image tags (:latest, :slim-latest) that
+    # should track upstream. Derived at eval time from home-manager.users, minus
+    # memory-vault (pinned tags) — see the updatableContainerUsers let-binding at
+    # the top of this file for the predicate and the pin rationale.
+    CONTAINER_USERS=(${lib.concatStringsSep " " updatableContainerUsers})
 
     for user in "''${CONTAINER_USERS[@]}"; do
       uid=$(id -u "$user" 2>/dev/null || echo "")

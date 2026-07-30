@@ -36,19 +36,32 @@ own `> 600` warmup gate reads → the alert **resolved** → 25 minutes later
 critical-then-resolved email pair every ~26 minutes, and the first restart killed
 a VM that had been healthy for 62 hours.
 
-Three defences were added so this cannot recur:
+Three changes were made. Read the last paragraph for what they do and do **not**
+guarantee — an earlier version of this section claimed the loop "cannot recur",
+which was wrong.
 
-1. **Proven-green gate.** `*DiscordCanaryDown` now also requires
-   `last_success_timestamp_seconds > 0`. A canary that has *never* worked is
-   unproven, not broken — you cannot remediate toward a state never observed.
-2. **No default remediation.** `openclaw-self-heal` no longer defaults unmapped
-   alerts to `restart_microvm` (hermes never did). Unmapped alerts are ignored
-   and counted in `openclaw_self_heal_unknown_alerts_total`.
-3. **A setup-fault alert.** `*DiscordCanaryNeverSucceeded` fires after 2 h so a
-   permanently never-green canary is reported rather than silently inert.
+1. **No canary-down auto-restart.** `OpenClawDiscordCanaryDown` is deliberately
+   absent from `openclaw-self-heal`'s `ACTION_MAP`, and must stay absent. This is
+   the change that actually breaks the loop.
+2. **No default remediation.** The daemon no longer defaults *unmapped* alerts to
+   `restart_microvm` (hermes never did). Unmapped alerts are ignored and counted
+   in `openclaw_self_heal_unknown_alerts_total`.
+3. **Proven-green gate + setup-fault alert.** `*DiscordCanaryDown` also requires
+   `last_success_timestamp_seconds > 0`, and `*DiscordCanaryNeverSucceeded` fires
+   after 2 h so a never-green canary is reported rather than silently inert.
 
-The gate means enabling early is now *safe*, but step 3 is still the right
-order: until it passes, the canary is monitoring nothing.
+**What the gate does not do.** `last_success > 0` is satisfied *permanently* once
+a canary goes green even once. It stops an unproven probe being mistaken for a
+regression; it does **not** bound the restart loop. If this alert were ever mapped
+to a restart again, a genuine post-green failure would loop exactly as before:
+restart → warmup gate re-stamped → resolve → re-fire 25 min later with a new
+`startsAt` → new incident at attempt 1 → restart. Per-incident escalation never
+accumulates, and the circuit breaker (3 actions/hour) paces it without ending it.
+Any future attempt to automate this needs a bound that survives its own
+remediation re-stamping the gate metric.
+
+Enabling early is now *safe* (it can neither page nor remediate), but step 3 is
+still the right order: until it passes, the canary is monitoring nothing.
 
 ## Known values (already wired)
 
@@ -84,24 +97,37 @@ With Developer Mode on, right-click the channel → **Copy Channel ID**.
 ### 2. Allow each bot to answer the other (the real caveat)
 
 Both gateways only respond to allow-listed senders, and many bots ignore
-bot-authored messages entirely. You must:
+bot-authored messages entirely. What 2026-07-30 established, per direction:
 
-- **Hermes must accept @Claw:** add `1477036366138445905` to
-  `DISCORD_ALLOWED_USERS` (and the channel to `DISCORD_ALLOWED_CHANNELS`) in
-  the `hermes/env` SOPS secret (`cd /etc/nixos && sops secrets/secrets.yaml` —
-  the encrypted store lives in the separate `secrets` flake-input repo at
-  `/etc/nixos/secrets/secrets.yaml`, not at the repo root).
-- **OpenClaw must accept Hermes:** add `1503619790261194793` to the Discord
-  `allowFrom` list in `modules/services/openclaw-config.nix` (the
-  `channels.discord` block).
+- **Hermes accepting @Claw: NOTHING TO DO.** It already answers @Claw — verified
+  ok=1 / rt=6.773s. Do **not** edit `DISCORD_ALLOWED_USERS` in the `hermes/env`
+  SOPS secret on the strength of a red canary; an earlier version of this runbook
+  prescribed that, and it would have been a pointless secrets edit. This direction
+  was red because its *timer* never fired.
+- **OpenClaw accepting Hermes: NOT SOLVED by `allowFrom` alone.**
+  `1503619790261194793` is in `channels.discord.allowFrom`
+  (`modules/services/openclaw-config.nix`), confirmed present in the *running* VM
+  config with the gateway ready — and @Claw still does not reply. So `allowFrom`
+  does not gate guild-channel messages. The remaining candidate is the
+  guild-scoped allowlist, `channels.discord.guilds.<id>.users`, which is
+  **deliberately unset**: that guild has `requireMention = false`, so a guild-wide
+  grant would make @Claw answer *every* Hermes message anywhere in the guild, and
+  since Hermes answers @Claw the two could ping-pong without bound. Prefer
+  per-channel scoping under `guilds.<id>.channels` if openclaw honours it; confirm
+  with `openclaw_config_drift_keys_added` (the live config is compared against the
+  Nix template, so keys openclaw discards show up as drift) plus a canary run.
 
 ### 3. Verify each answers the other (do this BEFORE enabling)
 
 Post one manual message in each direction and confirm a reply. Example
 (OpenClaw→Hermes; swap token/target for the other direction):
 
+Do NOT substitute `sudo cat` on the token path to inspect it — see the
+FORBIDDEN-BY-DEFAULT list in `CLAUDE.md`. Reading it into a variable that is never
+echoed (and `unset` at the end) is the only form used here.
+
 ```bash
-TOK=$(sudo cat /run/secrets/openclaw/discord-token)      # post as @Claw
+TOK=$(sudo cat /run/secrets/openclaw/discord-token)      # post as @Claw; never echo $TOK
 CH=<channel_id>; TARGET=1503619790261194793               # mention Hermes
 MID=$(curl -s -X POST "https://discord.com/api/v10/channels/$CH/messages" \
   -H "Authorization: Bot $TOK" -H 'Content-Type: application/json' \

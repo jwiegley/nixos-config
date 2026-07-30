@@ -239,14 +239,12 @@
       # successful round-trip would leave ~192 undeletable messages/day in a channel granted
       # on the condition that it stays clean). *DiscordCanaryNotCleaningUp catches a regression.
       #
-      # NOT YET PROVEN GREEN. Setup step 3 of docs/DISCORD_CANARY_SETUP.md ("verify each answers
-      # the other, BEFORE enabling") was skipped, and both directions have reported
-      # post_http=200 / "no reply within timeout" on every run since: each bot's allowlist was
-      # missing the other. @Claw's half is fixed in modules/services/openclaw-config.nix; this
-      # direction additionally needs DISCORD_ALLOWED_USERS in the hermes/env SOPS secret to
-      # contain @Claw's 1477036366138445905. Leaving both enabled is safe because
-      # *DiscordCanaryDown is now gated on last_success > 0, so a never-green canary cannot page
-      # or trigger self-heal; *DiscordCanaryNeverSucceeded reports the setup gap instead.
+      # PROVEN GREEN 2026-07-30 12:01 (ok=1, rt=6.773s) on the first run after the timer was
+      # fixed in modules/monitoring/services/discord-canary.nix. This direction needed NO
+      # allowlist change -- Hermes already answers @Claw. Its only defect was that its timer
+      # never fired, which is worth remembering: setup step 3 of docs/DISCORD_CANARY_SETUP.md
+      # was skipped, so a dead timer and a missing allowlist looked identical from the metrics
+      # (both simply never report ok=1). The probe's own log line distinguishes them.
       enable = true;
       # #interconnect -- created 2026-07-29 by the operator specifically for this: private,
       # muted, members are ONLY the two bots. Granted on the explicit condition that the
@@ -262,8 +260,17 @@
     openclaw = {
       enable = true; # MANAGE_MESSAGES granted by the operator 2026-07-30 and CONFIRMED live:
       # openclaw_discord_canary_cleanup_failed has read 0 across every run since, so the probe
-      # deletes its own message successfully. See the hermes probe above for why this direction
-      # is enabled but not yet proven green.
+      # deletes its own message successfully.
+      #
+      # NOT YET GREEN, unlike the hermes direction above: @Claw does not answer Hermes'
+      # mention (post_http=200 / "no reply within timeout"). Hermes was added to
+      # channels.discord.allowFrom in modules/services/openclaw-config.nix, and that was
+      # verified live in the running VM config with the gateway ready -- still no reply, so
+      # allowFrom does not gate guild-channel messages. The guild-scoped allowlist is the
+      # remaining candidate and is deliberately NOT set; see the comment on allowFrom for the
+      # ping-pong hazard that makes it an operator decision. Harmless meanwhile: the
+      # last_success > 0 gate means this cannot page or trigger self-heal, and
+      # OpenClawDiscordCanaryNeverSucceeded reports the gap at warning severity.
       channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
       targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
       targetName = "OpenClaw";

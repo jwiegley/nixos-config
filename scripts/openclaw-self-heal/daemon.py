@@ -261,15 +261,37 @@ ACTION_MAP = {
     "OpenClawCanaryStale":               "restart_canary",
     "OpenClawCanaryMetricAbsent":        "restart_canary",
     "OpenClawMcporterCheckStale":        "restart_mcporter_check",
-    # Discord round-trip canary. A sustained round-trip failure is precisely the
-    # zombied-gateway signature from the 2026-07-15 incident, which a VM restart
-    # does clear -- so unlike the other canary alerts this one genuinely is a
-    # restart. It is safe to automate ONLY because the alert is additionally
-    # gated on the canary having succeeded at least once (see openclaw.yaml): a
-    # canary that has never been green is unproven, not broken, and you cannot
-    # remediate toward a state that was never observed.
-    "OpenClawDiscordCanaryDown":         "restart_microvm",
+    # Same predicate as OpenClawDiscordPluginMissing above, split only by channel,
+    # so it gets the same action. This was briefly left unmapped on 2026-07-30 when
+    # the default fallback was removed; that was a regression. State history shows
+    # restart_microvm alone resolved it six times in May 2026, and in July it took
+    # restart_microvm followed by doctor_fix twice. doctor_fix is the superset (it
+    # ends in a microvm restart of its own), and unmapping it removed BOTH the
+    # first attempt and the AI escalation, because the unmapped-alert guard skips
+    # incident creation entirely.
+    "OpenClawChannelPluginMissing":      "doctor_fix",
 }
+
+# DELIBERATELY ABSENT: OpenClawDiscordCanaryDown.
+#
+# A restart is the documented human fix for a zombied gateway, and it is tempting
+# to automate here -- the canary detects exactly the 2026-07-15 case that
+# OpenClawDiscordWsDown cannot see (WS "connected", MESSAGE_CREATE not flowing).
+# It is left unmapped anyway, because automating it is unbounded:
+#
+#   restart -> re-stamps openclaw_microvm_active_enter_timestamp_seconds, which the
+#   alert's own >600s warmup gate reads -> alert RESOLVES -> re-fires ~25min later
+#   (600s warmup + for: 15m) with a NEW startsAt -> correlation_key buckets on
+#   starts_at, so that is a NEW incident at attempt 1 -> restart again.
+#
+# Per-incident escalation (should_escalate, >=3 attempts) therefore never
+# accumulates, and the circuit breaker (3 actions/hour) paces the loop without
+# ending it: one slot frees every cycle. That produced 3 reboots of a healthy VM
+# on 2026-07-30. The last_success > 0 gate added the same day bounds only the
+# never-green case -- once the canary goes green once it is satisfied forever, so
+# it does NOT bound this. Detection is the canary's job; a human decides whether to
+# restart. Re-mapping this needs a bound that survives its own remediation
+# re-stamping the gate metric, which no mechanism here currently provides.
 
 
 def first_attempt_action(alert_name: str) -> str | None:
@@ -289,10 +311,14 @@ def first_attempt_action(alert_name: str) -> str | None:
         a closed loop: the reboot re-stamped the warmup gate's
         vm_active_enter_ts, which resolved the alert, which then re-fired 25min
         later (600s warmup + 15m for:) and rebooted again. The first reboot
-        killed a VM that had been healthy for 62 hours.
+        killed a VM that had been healthy for 62 hours. See the DELIBERATELY
+        ABSENT note under ACTION_MAP for why that alert stays unmapped.
 
     Hermes' daemon has had no fallback since its spec §6.2; this brings OpenClaw
     into line with it rather than leaving the two watchdogs divergent.
+
+    This is the gate the ingest loop consults, so an alert added to ACTION_MAP is
+    acted on and anything else is ignored-and-counted from one decision point.
     """
     return ACTION_MAP.get(alert_name)
 
@@ -497,7 +523,7 @@ def handle_alertmanager_payload(payload):
         # human still gets the notification -- Alertmanager fans out to the
         # email/critical receivers independently of this webhook -- so ignoring
         # here drops the automated action, not the signal.
-        if alert_name not in ACTION_MAP:
+        if first_attempt_action(alert_name) is None:
             _bump_unknown_counter()
             print(f"ignoring unknown alert (no mapped action): {alert_name}", flush=True)
             continue

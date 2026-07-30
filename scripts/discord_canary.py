@@ -12,14 +12,20 @@ probe-bot design):
   - Hermes probes OpenClaw's @Claw   -> metric openclaw_discord_canary_*
 Blind spot (accepted): if BOTH gateways die at once, neither probe reports.
 
-LIVE since 2026-07-30 in #interconnect, but NOT YET PROVEN GREEN in either
-direction: both report post_http=200 with "no reply within timeout", because
-setup step 2 of docs/DISCORD_CANARY_SETUP.md (each bot must allow-list the
-other) was not completed before enabling. Until a direction succeeds once, its
-*DiscordCanaryDown alert is deliberately suppressed by a last_success > 0 gate
-and *DiscordCanaryNeverSucceeded reports the setup gap instead -- see that gate's
-comment in modules/monitoring/alerts/openclaw.yaml for why ungated firing on a
-never-green canary rebooted the OpenClaw VM every 26 minutes.
+LIVE since 2026-07-30 in #interconnect. Status by direction:
+  - hermes_discord_canary  (tests Hermes)   GREEN. First run after the timer fix
+    succeeded: ok=1, rt=6.773s. Its only defect was a dead timer, NOT a missing
+    allowlist entry -- nothing about Hermes' allowlist was changed.
+  - openclaw_discord_canary (tests OpenClaw) NOT GREEN. post_http=200 with "no
+    reply within timeout": @Claw does not answer Hermes' mention. Adding Hermes to
+    channels.discord.allowFrom was necessary but not sufficient (verified with the
+    id live in the running VM config and the gateway ready), so the guild-scoped
+    allowlist is the remaining candidate.
+
+Until a direction succeeds once, its *DiscordCanaryDown alert is suppressed by a
+last_success > 0 gate and *DiscordCanaryNeverSucceeded reports the setup gap
+instead -- see that gate's comment in modules/monitoring/alerts/openclaw.yaml,
+which also records why a canary-down alert must NOT auto-restart the VM.
 
 Why this is needed (2026-07-15 incident):
   Hermes' Discord connection zombied — the WebSocket stayed "connected" and

@@ -155,6 +155,16 @@ let
         # OnActiveSec is relative to the TIMER's own activation, so it arms on a
         # switch and on a boot alike. (Persistent= was dropped here: it only
         # affects OnCalendar= timers, so it was always a no-op.)
+        #
+        # ACCEPTED COST: systemd fires at the minimum of the enabled values, so
+        # every switch that restarts this timer schedules a probe 3 min later
+        # regardless of when the canary last ran. OnBootSec did not do that. On a
+        # switch-heavy day that exceeds the 900s cadence intervalSeconds was
+        # retuned to (to hold #interconnect traffic at 384 msgs/day rather than
+        # 1,152), in a channel granted on the condition it stays clean. Accepted
+        # because the alternative is a timer that silently never fires at all; each
+        # probe still deletes its own message, and OpenClawDiscordCanaryStale
+        # tolerates one missed run either way.
         OnActiveSec = "3min";
         OnUnitActiveSec = "${toString p.intervalSeconds}s";
         RandomizedDelaySec = "20s";

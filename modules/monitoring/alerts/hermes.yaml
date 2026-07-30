@@ -157,18 +157,25 @@ groups:
       # while dropping MESSAGE_CREATE (the 2026-07-15 silent outage) — this
       # keys off a real message->reply round-trip and so proves the inbound
       # dispatch pipeline actually delivers. Warmup-gated (>600s uptime) so a
-      # fresh VM's ~8-min MLX cold-start doesn't page. self_heal_eligible so a
-      # sustained failure auto-restarts the microvm (the proven fix); the 15m
-      # window + the probe's own one-retry guard against a flap-triggered
-      # restart loop. Make it page-only (drop self_heal_eligible) if it ever
-      # proves noisy. No data (canary not deployed) never fires.
-      # PROVEN-GREEN GATE (last_success > 0) -- see the twin gate and its full
-      # incident write-up on OpenClawDiscordCanaryDown in openclaw.yaml. Short
-      # version: a canary that has never once succeeded is unproven, not broken,
-      # and firing on it made self-heal reboot the VM in a 26-minute loop. This
-      # direction has also never been green, so without the gate enabling it
-      # would reproduce the same loop against microvm@hermes.
-      # A permanently never-green canary is still reported, as a setup fault, by
+      # fresh VM's ~8-min MLX cold-start doesn't page.
+      #
+      # This carries self_heal_eligible, but that label is DECORATIVE here: both
+      # self-heal daemons dispatch on alertname via ACTION_MAP, not on this label,
+      # and HermesDiscordCanaryDown is not in hermes' map. So it reaches the
+      # hermes-self-heal webhook (service: hermes-agent matches the route) and is
+      # ignored and counted in hermes_self_heal_unknown_alerts_total. It pages a
+      # human; it does not auto-restart the microvm. An earlier version of this
+      # comment claimed it did, which was never true. Keep it that way: see the
+      # DELIBERATELY ABSENT note in scripts/openclaw-self-heal/daemon.py for why
+      # automating a canary-down restart is unbounded.
+      #
+      # PROVEN-GREEN GATE (last_success > 0) -- twin of the gate on
+      # OpenClawDiscordCanaryDown; the full incident write-up lives there. A canary
+      # that has never once succeeded is unproven, not broken, so firing on it
+      # treats a setup gap as a regression. THIS direction went green on its first
+      # run after the timer fix (ok=1, rt=6.773s, 2026-07-30 12:01), so the gate is
+      # satisfied here and this alert is live and armed.
+      # A never-green canary is still reported, as a setup fault, by
       # HermesDiscordCanaryNeverSucceeded below.
       - alert: HermesDiscordCanaryDown
         expr: |
@@ -208,13 +215,21 @@ groups:
           description: |
             The canary has been posting for over 2 hours and Hermes has never
             replied once, so the round-trip has never been proven and
-            HermesDiscordCanaryDown is deliberately gated off. Almost always
-            setup step 2 of docs/DISCORD_CANARY_SETUP.md: Hermes'
-            DISCORD_ALLOWED_USERS (in the hermes/env SOPS secret) must contain
-            @Claw's bot id 1477036366138445905, and DISCORD_ALLOWED_CHANNELS the
-            canary channel. Check `journalctl -u discord-canary-hermes.service
-            | tail -1`; `post_http=200` with `no reply within timeout` means
-            posting works and the target is ignoring the mention.
+            HermesDiscordCanaryDown is deliberately gated off.
+            START WITH THE PROBE'S OWN VERDICT, which distinguishes the causes:
+            `journalctl -u discord-canary-hermes.service | tail -1`.
+              - `post_http=200` + `no reply within timeout` -> posting works and
+                Hermes is not answering the mention. Check its allowlist
+                (DISCORD_ALLOWED_USERS / DISCORD_ALLOWED_CHANNELS in the
+                hermes/env SOPS secret) only after ruling out the gateway: this
+                direction was already known-good on 2026-07-30, so a regression
+                here is more likely a zombied inbound path than a config change.
+              - `post_http` 401/403 -> the POSTING bot's token or channel
+                permissions, not the target.
+              - No recent log line at all -> the probe is not running; check
+                `systemctl list-timers discord-canary-hermes.timer` for an EMPTY
+                next-elapse, which is how this direction was silently dead until
+                2026-07-30.
 
       # The canary/probe itself stopped producing fresh metrics.
       - alert: HermesDiscordCanaryStale

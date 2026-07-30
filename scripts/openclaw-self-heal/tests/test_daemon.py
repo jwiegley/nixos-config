@@ -603,33 +603,101 @@ def test_unknown_alert_gets_no_action():
     assert daemon.first_attempt_action("OpenClawSomethingNobodyMappedYet") is None
 
 
-def test_no_default_fallback_to_restart_microvm():
-    """The specific defect: an unmapped name must not resolve to a VM restart."""
-    assert daemon.first_attempt_action("TotallyUnknownAlert") != "restart_microvm"
+def test_unmapped_alert_dispatches_nothing_and_creates_no_incident(monkeypatch, tmp_path):
+    """The actual production behaviour change, driven through the ingest path.
+
+    Before 2026-07-30 this payload rebooted the microVM. Asserts all three
+    consequences: no action dispatched, no incident recorded (so the AI
+    escalation path is not reachable either), and the ignore is counted.
+    """
+    monkeypatch.setattr(daemon, "STATE_PATH", tmp_path / "incidents.json")
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 9999})
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda name: ran.append(name) or {"ok": True})
+    monkeypatch.setattr(daemon, "probe_clear", lambda inc: True)
+    monkeypatch.setattr(daemon, "_kick_canary", lambda: None)
+    monkeypatch.setattr(daemon, "emit_synthetic_alert", lambda *a, **k: None)
+    monkeypatch.setattr(daemon.time, "sleep", lambda *_: None)
+    daemon._UNKNOWN_ALERTS_TOTAL = 0
+
+    payload = {"alerts": [{"status": "firing",
+                           "labels": {"alertname": "OpenClawNobodyMappedThis",
+                                      "service": "openclaw"},
+                           "startsAt": "2026-07-30T17:30:00Z"}]}
+    daemon.handle_alertmanager_payload(payload)
+
+    assert ran == [], "an unmapped alert must dispatch no remediation"
+    assert daemon._UNKNOWN_ALERTS_TOTAL == 1
+    assert daemon.load_state(daemon.STATE_PATH)["active"] == {}
+
+
+def test_mapped_alert_still_dispatches(monkeypatch, tmp_path):
+    """Guard against the ignore-guard swallowing legitimate remediations."""
+    monkeypatch.setattr(daemon, "STATE_PATH", tmp_path / "incidents.json")
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: {"openclaw_microvm_active_enter_timestamp_seconds": 9999})
+    ran = []
+    monkeypatch.setattr(daemon, "run_action", lambda name: ran.append(name) or {"ok": True})
+    monkeypatch.setattr(daemon, "probe_clear", lambda inc: True)
+    monkeypatch.setattr(daemon, "_kick_canary", lambda: None)
+    monkeypatch.setattr(daemon, "emit_synthetic_alert", lambda *a, **k: None)
+    monkeypatch.setattr(daemon.time, "sleep", lambda *_: None)
+    payload = {"alerts": [{"status": "firing",
+                           "labels": {"alertname": "OpenClawChannelPluginMissing",
+                                      "service": "openclaw"},
+                           "startsAt": "2026-07-30T17:30:00Z"}]}
+    daemon.handle_alertmanager_payload(payload)
+    assert ran == ["doctor_fix"]
 
 
 def test_alerts_a_reboot_cannot_fix_are_unmapped():
-    """These fired the old default and a VM restart cannot address any of them:
-    config drift is a JSON schema mismatch, the self-heal daemon runs on the
-    HOST, and cleanup failure is a missing Discord permission."""
+    """A VM restart cannot address any of these: config drift is a JSON schema
+    mismatch, and cleanup failure is a missing Discord permission.
+
+    Deliberately does NOT claim these all reached the daemon before the default
+    was removed. OpenClawConfigDrift did (which is why the alertmanager.nix
+    carve-out exists), but OpenClawSelfHealDown never could -- it carries
+    service: openclaw-self-heal, and the self-heal route matches service exactly
+    on "openclaw". It is excluded here on merit, not history."""
     for name in ("OpenClawConfigDrift",
                  "OpenClawSelfHealDown",
                  "OpenClawDiscordCanaryNotCleaningUp"):
         assert daemon.first_attempt_action(name) is None, name
 
 
-def test_discord_canary_down_is_explicitly_mapped_to_restart():
-    """A sustained round-trip failure IS the zombied-gateway case a restart
-    clears, so this one is deliberately mapped -- explicitly, not by fallback.
-    Safe only because the alert is gated on last_success > 0 (openclaw.yaml)."""
-    assert daemon.first_attempt_action("OpenClawDiscordCanaryDown") == "restart_microvm"
+def test_discord_canary_down_stays_unmapped():
+    """Automating a restart here is unbounded: the restart re-stamps the metric
+    the alert's own warmup gate reads, so the alert resolves and re-fires with a
+    new startsAt -- a new incident at attempt 1 every cycle, so per-incident
+    escalation never accumulates and the circuit breaker only paces it. The
+    last_success > 0 gate does NOT bound this, because it is satisfied forever
+    once the canary goes green once. See the note under ACTION_MAP."""
+    assert daemon.first_attempt_action("OpenClawDiscordCanaryDown") is None
+
+
+def test_channel_plugin_missing_matches_its_sibling():
+    """Same predicate as OpenClawDiscordPluginMissing, split only by channel, so
+    it must get the same action. Left unmapped briefly on 2026-07-30; that lost a
+    remediation which state history shows resolved it nine times."""
+    assert daemon.first_attempt_action("OpenClawChannelPluginMissing") == "doctor_fix"
+    assert (daemon.first_attempt_action("OpenClawChannelPluginMissing")
+            == daemon.first_attempt_action("OpenClawDiscordPluginMissing"))
 
 
 def test_every_mapped_action_is_allowlisted():
     """A map entry naming an action the runner would reject is a latent failure."""
+    import inspect
+    src = inspect.getsource(daemon.handle_alertmanager_payload)
     for name, action in daemon.ACTION_MAP.items():
-        if action == "wait_60s":
-            continue  # handled inline, never dispatched to run_action
+        if action not in daemon.ACTION_ALLOWLIST:
+            # The one value that is not allowlisted must be handled inline before
+            # run_action, or it would raise ActionRejectedError in production.
+            # Assert that branch exists rather than silently skipping the only
+            # entry this test could ever catch.
+            assert f'== "{action}"' in src, (
+                f"{name} maps to non-allowlisted {action!r} with no inline branch")
+            continue
         assert daemon.validate_action(action) == action, name
 
 

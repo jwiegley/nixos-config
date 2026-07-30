@@ -243,7 +243,7 @@
       # TO ENABLE: grant MANAGE_MESSAGES to both bots in #interconnect, then set enable = true
       # here and in the openclaw probe below. HermesDiscordCanaryNotCleaningUp /
       # OpenClawDiscordCanaryNotCleaningUp will catch a regression.
-      enable = false;
+      enable = true;
       # #interconnect -- created 2026-07-29 by the operator specifically for this: private,
       # muted, members are ONLY the two bots. Granted on the explicit condition that the
       # canary keeps it clean, which is why cleanup failures are now counted and alerted on
@@ -256,7 +256,9 @@
     };
     # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
     openclaw = {
-      enable = false; # see the MANAGE_MESSAGES note on the hermes probe above
+      enable = true; # MANAGE_MESSAGES granted by the operator 2026-07-30; cleanup=0 not yet
+      # observed at enable time -- OpenClawDiscordCanaryNotCleaningUp will fire within 30m if
+      # the grant did not take, which is the intended proof.
       channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
       targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
       targetName = "OpenClaw";

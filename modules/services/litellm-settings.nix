@@ -1235,7 +1235,7 @@
   };
   litellm_settings = {
     request_timeout = 7200;
-    streaming_request_timeout = 300;
+    streaming_request_timeout = 7200;
     ssl_verify = false;
     drop_params = true;
     model_group_settings = {
@@ -1271,7 +1271,7 @@
     routing_strategy = "least-busy";
     num_retries = 3;
     request_timeout = 7200;
-    streaming_request_timeout = 300;
+    streaming_request_timeout = 7200;
     max_parallel_requests = 100;
     allowed_fails = 3;
     cooldown_time = 30;

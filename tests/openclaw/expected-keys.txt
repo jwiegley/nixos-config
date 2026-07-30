@@ -53,11 +53,6 @@ channels.discord.groupPolicy
 channels.discord.guilds
 channels.discord.guilds.1477037634931916891
 channels.discord.guilds.1477037634931916891.channels
-channels.discord.guilds.1477037634931916891.channels.1532127247211827322
-channels.discord.guilds.1477037634931916891.channels.1532127247211827322.requireMention
-channels.discord.guilds.1477037634931916891.channels.1532127247211827322.users
-channels.discord.guilds.1477037634931916891.channels.1532127247211827322.users.0
-channels.discord.guilds.1477037634931916891.channels.1532127247211827322.users.1
 channels.discord.guilds.1477037634931916891.requireMention
 channels.discord.guilds.1477037634931916891.users
 channels.discord.guilds.1477037634931916891.users.0

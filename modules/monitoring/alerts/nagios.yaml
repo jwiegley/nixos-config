@@ -60,12 +60,26 @@ groups:
       # so for that period a genuine second critical would have been silent on this path.
       # Nagios's own per-service email path still worked, but the Prometheus path did not.
       #
-      # `increase(...[30m]) > 0` fires on the 1 -> 2 EDGE regardless of whether the base rule
-      # is already active, which restores a signal per new critical without giving the
+      # Firing on the 1 -> 2 EDGE restores a signal per new critical without giving the
       # counts-only bridge per-service cardinality. Deliberately NOT `changes()`: that also
       # fires on recovery, which is not news.
+      #
+      # A PLAIN SUBTRACTION, NOT increase() (corrected 2026-07-30). This metric is declared
+      # `# TYPE nagios_services_critical_total gauge` -- the `_total` suffix is a misnomer, it
+      # is a live count of services in HARD CRITICAL, not a monotonic counter. increase() is
+      # a counter function and was wrong here twice over:
+      #   - it EXTRAPOLATES to the window edges, so a genuine 0 -> 1 step reported 3.0055
+      #     (measured), and the summary below prints $value, so a single new critical was
+      #     announced as "INCREASED by 3";
+      #   - it treats any DECREASE as a counter reset, so a recovery (2 -> 1) can synthesise a
+      #     phantom increase -- a false page on an improving system.
+      # `x - (x offset 30m) > 0` is exact, extrapolation-free, and makes $value the true
+      # delta. Trade-off accepted: if the series is ABSENT 30m ago (exporter restart) the
+      # subtraction yields no sample and this cannot fire, so a restart can mask one
+      # increase. That fails closed rather than crying wolf, and NagiosServicesCritical
+      # still covers the standing condition.
       - alert: NagiosServicesCriticalIncreased
-        expr: increase(nagios_services_critical_total[30m]) > 0
+        expr: nagios_services_critical_total - (nagios_services_critical_total offset 30m) > 0
         for: 5m
         labels:
           severity: warning

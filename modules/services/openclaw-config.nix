@@ -172,39 +172,17 @@ let
           "1477037634931916891" = {
             requireMention = false;
             users = [ "639822278535807007" ];
-            channels = {
-              # #interconnect -- the private two-bot channel the operator created for
-              # the round-trip canary. This is the least-privilege form of "let Hermes
-              # reach @Claw": scoped to ONE channel and gated on an explicit mention,
-              # rather than adding Hermes to the guild-wide `users` list above, which
-              # pairs with requireMention = false and would have @Claw answer every
-              # Hermes message in every channel. The canary always @-mentions its
-              # target, so requireMention = true costs it nothing while denying the
-              # unprompted agent-to-agent ping-pong that the guild-wide form allows.
-              #
-              # STATUS: accepted by openclaw but NOT load-bearing, and not proven to
-              # have any semantic effect. The canary had already gone green on
-              # allowFrom alone (see above) before this block existed, so nothing here
-              # is required for the canary to work. What IS established:
-              # openclaw_config_drift_keys_removed reads 0 with the block deployed, so
-              # openclaw does not strip these keys when it rewrites its config -- they
-              # survive in the live config. Whether it honours them is untested, and
-              # cannot be tested while allowFrom alone already admits Hermes.
-              #
-              # Kept anyway, deliberately: it costs nothing, it is strictly narrower
-              # than the guild-wide alternative, and if allowFrom is ever tightened
-              # this is the scope that should survive. Do not read its presence as
-              # evidence that per-channel scoping works. Schema mirrors the guild
-              # submodule's own key names; openclaw runs inside the microVM, so its
-              # allowlist implementation was not readable from the host.
-              "1532127247211827322" = {
-                requireMention = true;
-                users = [
-                  "639822278535807007"
-                  "1503619790261194793"
-                ];
-              };
-            };
+            # channels intentionally EMPTY. A per-channel grant for #interconnect
+            # (requireMention = true + a users list) was added 2026-07-30 as a
+            # least-privilege alternative to a guild-wide users entry, then REVERTED
+            # the same day: @Claw stopped processing inbound Discord messages from the
+            # moment it took effect (VM restart 13:21), with gateway-vm.log going
+            # silent and no dispatch activity for probes at 15:46 and 15:58. openclaw
+            # RETAINS these keys (config-drift keys_removed stayed 0) but evidently
+            # does not honour them the way the guild submodule's own key names imply,
+            # and an unhonoured allowlist that silently drops everything is worse than
+            # no entry. channels.discord.allowFrom alone is sufficient and proven.
+            channels = { };
           };
         };
       };

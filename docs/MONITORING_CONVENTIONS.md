@@ -69,8 +69,25 @@ which reaches HARD ~69 h early). Not fixed here — do not add more.
 ## 4. Every threshold ships with its measured over-threshold fraction
 
 One range query per new threshold, over the longest window available, recorded in the commit or
-a comment. Prometheus retention is `100y` and `ALERTS` reaches back to at least **2026-03-08**
-(~144 d), so month-scale backtests are queryable today.
+a comment. "Longest available" is a measured date, not retention, and it differs per TSDB —
+both are configured `100y`, so the binding limit is when data starts:
+
+| TSDB | Data starts | Age on 2026-07-30 | How measured |
+|---|---|---|---|
+| Prometheus `:9090` | **2026-01-10** | ~202 d | `count(up)` is empty at 2026-01-09T12:00 and 88 at 2026-01-10T12:00; `count(ALERTS)` also answers from 2026-01-10 |
+| VictoriaMetrics `:8428` (HA) | **2025-11-11** | ~261 d | `min(tfirst_over_time({__name__="°F_value"}[1000d]))` = 2025-11-11T10:33, identical for `%_value` and `W_value` |
+
+`ALERTS` therefore backtests to 2026-01-10, not to the 2026-03-08 (~144 d) an earlier write-up
+of this page claimed. Note `tfirst_over_time` is MetricsQL only — Prometheus rejects it
+(`unknown function`); there, bracket the start with a `query_range` at `step=86400`.
+
+Corollary — **size a seasonal threshold from the whole record, never a convenient window.**
+The pool water-temperature series `°F_value{entity_id="water_sensor_1"}` holds **29,003 samples
+from 2025-11-11**. A 14-day window is 5% of that record and a 90-day window ending in July lies
+entirely inside the warm season — so both encode summer as normal, and a threshold fitted to
+either fires all winter or never fires. The rule exists because this sensor family was mis-sized
+twice on the record — first from 14 days, then from 90, both against the longer history that was
+already there. Fit against the full record, and state in the commit which window you used.
 
 Corollary — **never threshold the growth rate of a saturating stock.** `delta(<snapshot
 residue>[7d]) > 100 GiB` was TRUE for 30 consecutive days of normal June operation and FALSE

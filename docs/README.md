@@ -1,13 +1,14 @@
 # `/etc/nixos/docs/` — Index
 
-Compiled 2026-07-27 by opening every file in this tree. This is a map, not a
-rewrite: nothing was renamed, moved, or edited to produce it.
+Compiled 2026-07-27 by opening every file in this tree; re-surveyed 2026-07-30.
+This is a map, not a rewrite: nothing was renamed, moved, or edited to produce it.
 
-Scope of what is catalogued below: **92 files under `docs/`** — 90 markdown
-(47 at the root of `docs/`, including this index, plus 43 under
-`superpowers/`) and 2 non-markdown (`ports.txt`, `create-postgres-user.sql`) —
-together with the **10 markdown files that live outside `docs/`** and are real
-documentation rather than pytest scaffolding.
+Scope of what is catalogued below, measured 2026-07-30 (`find docs -type f | wc -l`):
+**97 files under `docs/`** — 95 markdown (52 at the root of `docs/`, including this
+index, plus 43 under `superpowers/`) and 2 non-markdown (`ports.txt`,
+`create-postgres-user.sql`) — together with the **10 markdown files that live outside
+`docs/`** and are real documentation rather than pytest scaffolding (`find . -name
+'*.md' -not -path './docs/*'`, excluding `.pytest_cache/`).
 
 ## Start here — which documents are authoritative
 
@@ -39,11 +40,62 @@ checklists.
   be reconciled with the repository or the running host as of 2026-07-27.
   Verify before acting on it.
 
-As of 2026-07-27, 28 of the 46 pre-existing documents at the root of `docs/`
-open with a self-describing status or archival banner of their own — usually
-`> **Status (2026-07-27):** …` or `> **Archival — <date>.**`. Where a file's
-own banner and this table disagree, the banner is closer to the document and
-wins.
+Measured 2026-07-30: **24 of the 52** markdown files at the root of `docs/` open
+with a self-describing status or archival banner of their own — usually
+`> **Status (2026-07-27):** …` or `> **Archival — <date>.**`
+(`grep -lE '^> \*\*(Status|Archival)|^\*\*Status' docs/*.md | wc -l`). Where a
+file's own banner and this table disagree, the banner is closer to the document
+and wins. All 43 files under `superpowers/` carry a banner.
+
+Those three labels say whether a document is *true*. They do not say whether it
+is *safe to delete*, which is a different question and the one the size of this
+tree now raises. The survey immediately below answers that one, per area, with
+four classes:
+
+- **DURABLE REFERENCE** — describes the running system or is a runbook; edit in
+  place, never delete.
+- **COMPLETED TRACKING** — a finished plan, audit, or loop log. Its value is
+  provenance. Deletable *only* after checking whether code cites it. Nix and
+  Python outside `docs/` name a `docs/` path on **98 lines** covering 25 distinct
+  paths (31 of the lines are `ports.txt`), and **42** of those lines point at
+  documents classed COMPLETED TRACKING below. Deleting such a file turns each
+  citation into a dangle. Counts move as other work lands — re-measure with
+  `grep -rhoE 'docs/[A-Za-z0-9_./-]+\.(md|txt|sql)' --exclude-dir=.git --exclude-dir=docs .`
+- **DEFERRED INTENT** — designed, not built. Deleting it discards the only
+  record of the decision. Keep until built or explicitly abandoned.
+- **STALE** — describes something that no longer exists. Delete, or rewrite to
+  say what replaced it. Actively harmful, because it reads as a runbook.
+
+## Deletion-readiness survey (2026-07-30)
+
+`docs/` is **3,352 KB**. Five artifacts — `MONITORING_COVERAGE_PLAN` (328 KB),
+`MONITORING_DEFERRED_SPECS` (300 KB), `REMEDIATION_PLAN_2026-07-28` (220 KB),
+`HEALTH_AUDIT_2026-07-28` (148 KB), `WIGGUM_HANDOFF` (52 KB) — are **1,048 KB of it (31%)**, and
+`superpowers/` is a further **1,516 KB across 43 files (45%)** — so 76% of the
+tree is plan and audit output, not reference. Sizes are `du -k`, citation counts
+are `grep -r 'docs/<name>' --exclude-dir=docs`.
+
+| Area | Size | Class | Evidence |
+|---|---|---|---|
+| Runbooks and recovery — `REBOOT_RESILIENCE`, `COLD_REBOOT_CHECKLIST`, `CRASH_DEBUGGING`, `UPDATE_GITHUB_TOKENS`, `SIEVE_FILTERING`, `openclaw-hermes-integration` | ~80 KB | DURABLE REFERENCE | `post-reboot-validation.sh` cites `COLD_REBOOT_CHECKLIST.md`; `pkgs/hermes-mcp/README.md` is a pointer to the OpenClaw↔Hermes runbook. Both describe units that exist. |
+| Subsystem reference — `ports.txt`, `HOME_ASSISTANT_DEVICES`, `WATER_ATTRIBUTION`, `FLUME_DATA_REFERENCE`, `RSPAMD_SETUP`, `MAC_STUDIO_POWER_MONITORING`, `NAGIOS_PROMETHEUS_MIRROR_SPEC`, `MONITORING_CONVENTIONS` | ~165 KB | DURABLE REFERENCE | Most-cited area: `ports.txt` 31 citations, `NAGIOS_PROMETHEUS_MIRROR_SPEC.md` 8 across 6 files (incl. `scripts/check_prom_rule.py`), `WATER_ATTRIBUTION.md` 4 from `scripts/flume-data/`. |
+| Monitoring plan artifacts — `MONITORING_COVERAGE_PLAN` (328 KB), `MONITORING_DEFERRED_SPECS` (300 KB) | 628 KB | COMPLETED TRACKING (the first) / DEFERRED INTENT (the second) | Coverage plan: 9 citations in 7 files, all as "why this rule exists". Deferred specs: 12 citations in 12 files — and several chapters have since been built (`port-drift-exporter.nix`, `vm-egress-exporter.nix`, `config-drift-exporter.nix` all cite it), so it is now part-built intent, not open work. |
+| The 2026-07-28 audit → remediation set — `HEALTH_AUDIT`, `REMEDIATION_PLAN`, `REMEDIATION_DECISIONS`, `WIGGUM_HANDOFF`, `HA_ENTITY_WORKLIST` | 444 KB | COMPLETED TRACKING, one loop still open | The three frozen documents are cited only by `WIGGUM_HANDOFF.md`, which is the live log of the loop consuming them; `HA_ENTITY_WORKLIST_2026-07-29.md` is cited twice from the entity-availability exporter. Not deletable while the loop runs — see the table below. |
+| `superpowers/plans/` (22 files) | 1,012 KB | COMPLETED TRACKING | All 22 open `> **Archival — <date>.**` and all 22 declare `> **Outcome:** implemented (see <path>)`. All 29 distinct repo paths named across those outcome lines exist (checked file-by-file 2026-07-30); the one outcome that names no path — the openuv plan's `openuv_forecast` REST sensor — resolves too (3 hits in `modules/services/home-assistant.nix`). 3 plans are cited from code, on 4 lines. |
+| `superpowers/specs/` (21 files) | 500 KB | COMPLETED TRACKING, except two | 19 of 21 declare an implemented outcome whose path exists. The exceptions are the two climate-comfort specs — see DEFERRED INTENT below. 3 specs are cited from code (`agent_health_report.py`, both self-heal daemons). |
+| `2026-05-14-climate-comfort-design.md`, `2026-05-15-climate-comfort-bias-regression-design.md` | 16 KB | DEFERRED INTENT | The only two `superpowers/` files with no `Outcome:` line, and `grep -rli 'climate.comfort\|comfort_setpoint\|climate-comfort'` outside `docs/` returns nothing. Designed 2026-05-14/15, never built. |
+| `TAILSCALE_HEADSCALE_PLAN.md` | 52 KB | DEFERRED INTENT | `grep -rn 'services.headscale\|services.tailscale' --include='*.nix'` returns nothing, so the 2026-07-27 "not implemented" finding still holds on 2026-07-30. |
+| `EMAIL_TESTER_MONITORING_SETUP.md` | 12 KB | DEFERRED INTENT | Its own banner enumerates the modules that do not exist; what exists is `modules/services/email-tester-manual.nix`, which records the omission as deliberate. |
+| `STOCK_TRADER_SCHWAB_TOKEN_RENEWAL.md` | 4 KB | **STALE** | The chore it documents was abolished. See its row below. |
+
+Two consequences worth acting on before any deletion pass:
+
+1. **A `superpowers/` file is not free to delete just because it is archival.**
+   Six of them are cited from Nix or Python. The cheap fix in each case is to
+   move the one durable sentence into the citing file's comment first.
+2. **Nothing under `superpowers/` needs re-reading to know its state.** The
+   banner plus `Outcome:` line is machine-checkable, and the check passed for
+   41 of 43 files. That is what makes a later bulk decision safe.
 
 ---
 
@@ -54,7 +106,7 @@ wins.
 | [REBOOT_RESILIENCE.md](REBOOT_RESILIENCE.md) | Consolidated per-subsystem symptom → cause → fix → verify record of everything that makes vulcan survive a cold boot, keyed to the checks in `scripts/post-reboot-validation.sh`. The first thing to open after any reboot or suspected boot problem. | current |
 | [COLD_REBOOT_CHECKLIST.md](COLD_REBOOT_CHECKLIST.md) | The pre-reboot ritual and per-check validation matrix. Its banner records that the reboot it was written for happened on 2026-06-10 and passed 21/0/0, and that the document is retained as the standing procedure to run around *any* future cold reboot. | current |
 | [CRASH_DEBUGGING.md](CRASH_DEBUGGING.md) | What `modules/core/crash-debug.nix` sets up (persistent journal, kernel log, sar/atop, kdump) and the ordered command sequence to run after a spontaneous reboot. For diagnosing unexplained restarts. | current |
-| [STOCK_TRADER_SCHWAB_TOKEN_RENEWAL.md](STOCK_TRADER_SCHWAB_TOKEN_RENEWAL.md) | Step-by-step recovery when `StockTraderSchwabDataSourceDown` fires: the browser OAuth must run on hera, the token is then pushed to vulcan and installed 0600. Short, verified, and needed roughly weekly. | current |
+| [STOCK_TRADER_SCHWAB_TOKEN_RENEWAL.md](STOCK_TRADER_SCHWAB_TOKEN_RENEWAL.md) | **STALE — the chore no longer exists.** The Schwab data source was retired entirely on 2026-07-29 (decision D3, commit `fc5835a9`): `modules/services/stock-trader.nix:178` records that the credentials are no longer provided and `SCHWAB_TOKEN_PATH` is unset, and `modules/monitoring/alerts/stock-trader.yaml:69-71` records the four Schwab rules as deleted — so `StockTraderSchwabDataSourceDown`, the alert this runbook is keyed to, cannot fire because it no longer exists. Nothing in the repo references this file except this index. Quotes are `alpha_vantage`/`yfinance` now. Delete, or keep only as the record of why the source was dropped. | needs-review |
 | [openclaw-hermes-integration.md](openclaw-hermes-integration.md) | Operator runbook for the OpenClaw ↔ Hermes bridge — topology, component map, the six MCP tools, paste-and-run verification, failure modes with one-command remediation, and the metrics reference. Fact-checked against the tree 2026-07-27. | current |
 | [UPDATE_GITHUB_TOKENS.md](UPDATE_GITHUB_TOKENS.md) | How to use `scripts/update-github-tokens.py` to bulk-rotate the GitHub PAT embedded in every Gitea push and pull mirror, including dry-run mode. Needed whenever the PAT expires. | current |
 | [SIEVE_FILTERING.md](SIEVE_FILTERING.md) | Where the delivery-time and IMAPSieve scripts live under `/var/lib/dovecot/sieve/users/<user>/`, and how to edit, compile, and test them. For mail-routing changes. | current |
@@ -75,8 +127,9 @@ wins.
 | [MAC_STUDIO_POWER_MONITORING.md](MAC_STUDIO_POWER_MONITORING.md) | How Apple Silicon SMC power, current and temperature sensors reach Prometheus through `macsmc_hwmon`, the full metric list, the Grafana dashboard, and example queries. Reference for anyone touching power telemetry on this hardware. | current |
 | [OPNSENSE-EXPORTER-SETUP.md](OPNSENSE-EXPORTER-SETUP.md) | Deploying the OPNsense Prometheus exporter as a Podman quadlet on `localhost:9273` — API key provisioning, SOPS wiring, verification, and the exact series it collects. | current |
 | [OPNSENSE-EXPORTER-WORKAROUND.md](OPNSENSE-EXPORTER-WORKAROUND.md) | The two upstream bugs (boolean `monitor_disable`, null `product_check`) first hit on v0.0.11 and the `opnsense-api-transformer` proxy that works around them. Its banner notes the deployed image now resolves to 0.0.16 but the workaround has not been re-tested without the proxy. | current |
-| [DISCORD_CANARY_SETUP.md](DISCORD_CANARY_SETUP.md) | The remaining one-time steps to activate the mutual OpenClaw ↔ Hermes Discord round-trip canary. `modules/monitoring/services/discord-canary.nix` is imported, but both probes are still `enable = false` with an empty `channelId` in `hosts/vulcan/default.nix`, exactly as the runbook says. | current |
+| [DISCORD_CANARY_SETUP.md](DISCORD_CANARY_SETUP.md) | The one-time steps to activate the mutual OpenClaw ↔ Hermes Discord round-trip canary. **Its "not yet wired" premise expired on 2026-07-29/30:** in `hosts/vulcan/default.nix` both probes now carry the `#interconnect` `channelId` and `enable = true` — the `openclaw` probe records the `MANAGE_MESSAGES` permission being granted 2026-07-30. Caution: the `hermes` probe's own comment block still reads "HELD DISABLED … TO ENABLE … set `enable = true`" directly above `enable = true`, so it contradicts its own value — trust the value. Read the module and the host file, not the setup steps. | needs-review |
 | [LOG_SUMMARIZER.md](LOG_SUMMARIZER.md) | What `scripts/log-summarizer.py` collects, how it calls LiteLLM, its logwatch integration, output format, and troubleshooting. For anyone changing the daily log digest. | current |
+| [MONITORING_CONVENTIONS.md](MONITORING_CONVENTIONS.md) | The authoring rules for a Prometheus / Loki / vmalert rule on this host: prove the metric exists with `count(last_over_time(X[30d]))`, know which of the two TSDBs your file is evaluated against, the `for:` budget the Nagios mirror imposes and its sanctioned escape hatch, and eight other measured constraints. Read before adding or retuning any alert rule. Each claim names the file that enforces it. | current |
 | [MONITORING_COVERAGE_PLAN.md](MONITORING_COVERAGE_PLAN.md) | The 2026-06-09 17-domain census of monitoring coverage (203 gaps: 15 P0 / 83 P1 / 105 P2) with a per-domain appendix. All phases shipped on 2026-06-09/10, so it now functions as provenance — eight Nix comments cite it as the reason a rule exists. 328 KB; navigate by heading. | archival |
 | [MONITORING_DEFERRED_SPECS.md](MONITORING_DEFERRED_SPECS.md) | Thirteen implementation-ready chapters for the items deliberately deferred out of the coverage plan (CVE scanning, VM egress, `pg_stat_statements`, HA `_str` purge, port drift, Nagios's future), each ending in a decision only the operator can make. Some have since been built anyway — the port-drift exporter exists — so check each chapter against the tree before treating it as open work. | archival |
 | [EMAIL_TESTER_MONITORING_SETUP.md](EMAIL_TESTER_MONITORING_SETUP.md) | A proposal for hourly automated mail-pipeline testing with Nagios and Prometheus that was **never deployed** — its banner enumerates the four modules, the timer, the exporter, the metrics and the alerts that do not exist. What exists is `modules/services/email-tester-manual.nix`, whose header records that automated monitoring was omitted deliberately to avoid over-training rspamd on test messages. | archival |
@@ -121,7 +174,22 @@ These were written as "do this once" procedures.
 
 | Document | What it covers / who needs it | Status |
 |---|---|---|
-| [TAILSCALE_HEADSCALE_PLAN.md](TAILSCALE_HEADSCALE_PLAN.md) | A 2026-07-11 two-part document: Part I weighs a self-hosted Headscale-coordinated Tailscale mesh against the existing OPNsense WireGuard and Cloudflare tunnels; Part II is an eleven-phase deployment runbook. Design accepted but **not implemented** — as of 2026-07-27 no `services.headscale` or `services.tailscale` declaration exists anywhere in this repository. Its appendix D lists the volatile version-specific facts to reconfirm before building. | current |
+| [TAILSCALE_HEADSCALE_PLAN.md](TAILSCALE_HEADSCALE_PLAN.md) | A 2026-07-11 two-part document: Part I weighs a self-hosted Headscale-coordinated Tailscale mesh against the existing OPNsense WireGuard and Cloudflare tunnels; Part II is an eleven-phase deployment runbook. Design accepted but **not implemented** — re-checked 2026-07-30, no `services.headscale` or `services.tailscale` declaration exists anywhere in this repository. Its appendix D lists the volatile version-specific facts to reconfirm before building. | current |
+
+### The 2026-07-28 audit → remediation set
+
+Five documents produced in sequence by one effort. Read them in this order; each
+supersedes part of the one before it. **The first three are frozen** — the loop
+that consumes them says so explicitly, and lowering their bar to make a gate pass
+is the failure mode they were frozen against.
+
+| Document | What it covers / who needs it | Status |
+|---|---|---|
+| [HEALTH_AUDIT_2026-07-28.md](HEALTH_AUDIT_2026-07-28.md) | The source audit: 7 read-only subsystem sweeps plus an adversarial re-verification pass, 116 findings (2 critical / 45 warning / 69 info), of which 34 were missed by the sweeps and caught only by the adversarial pass and 6 sweep findings were refuted. Its two most reusable lessons are method, not fact: every domain reasoned from an *instantaneous* Alertmanager state and so missed four multi-hour critical outages in the week, and a component can fail while every layer above it reports success. | archival |
+| [REMEDIATION_PLAN_2026-07-28.md](REMEDIATION_PLAN_2026-07-28.md) | 76 items in 7 phases derived from the audit, with every PromQL/LogQL expression executed live at plan time and expressions whose metric does not yet exist marked `UNVERIFIED (metric absent by design)`. 220 KB; navigate by phase heading. Header states plainly that nothing in it had been applied when it was written — check the loop log below for what since was. | archival |
+| [REMEDIATION_DECISIONS_2026-07-28.md](REMEDIATION_DECISIONS_2026-07-28.md) | The 18 operator decisions and 10 scope-creep items that resolve the plan's open questions; supersedes the plan's §8 and §9. Short, tabular, and the authoritative record of *why* a plan item was dropped, deferred or reshaped — including D3, which retired the Schwab data source and with it the weekly OAuth chore. | current |
+| [WIGGUM_HANDOFF.md](WIGGUM_HANDOFF.md) | The live log of the `/wiggum` loop executing that plan: per-phase progress, gate attempts, premises disproved mid-flight, and its own author's recurring defects. The one file in this set that is still being written. Read it before touching any monitoring file, because it records what is half-applied. | current |
+| [HA_ENTITY_WORKLIST_2026-07-29.md](HA_ENTITY_WORKLIST_2026-07-29.md) | Decision-D9 worklist generated from Home Assistant's recorder DB: the unavailable/unknown entities split into three groups needing three different actions (delete re-registration debris, fix one integration, accept the rest). Prerequisite for thresholding the entity-availability exporter, which cites this file twice — a threshold set against today's count would encode the debris as normal. | current |
 
 ### `docs/superpowers/`
 
@@ -131,9 +199,29 @@ design specs (`specs/`, 21 files) or task-by-task execution plans (`plans/`,
 Plans carry `- [ ]` checkboxes addressed to an implementing agent; those
 checkboxes reflect the state at the time of writing and must not be
 re-executed. Specs record the reasoning and trade-offs behind subsystems that
-now exist. Every document here is **archival** unless its own header says
-otherwise — a few (the climate-comfort bias regression, and the newest
-secretary work) say "draft" or "pending implementation".
+now exist.
+
+Surveyed file-by-file 2026-07-30, and the state of this directory is
+machine-checkable rather than a matter of judgement:
+
+- **43 of 43** open with `> **Archival — <date>.**`.
+- **41 of 43** then declare `> **Outcome:** implemented (see <path>)`, and every
+  repo path named on those lines exists today.
+- **2 of 43** declare no outcome: `2026-05-14-climate-comfort-design.md` and
+  `2026-05-15-climate-comfort-bias-regression-design.md`. Nothing in the repo
+  outside `docs/` mentions the feature. These are the directory's only genuinely
+  open design intent.
+- **6 of 43** are cited from Nix or Python outside `docs/` — the two self-heal
+  designs, the unified-health-report design, the MCP-bridge plan (twice), the
+  openuv plan and the openclaw-hardening plan. Those citations are load-bearing
+  provenance; do not delete the target without first moving the cited sentence
+  into the citing file.
+
+Ignore the in-body `**Status:**` line of any file here: several read "Draft" or
+"pending implementation" for work that shipped months ago (the open-source
+secretary spec says "pending spec review" while `pkgs/open-source-secretary/`
+and `modules/services/open-source-secretary.nix` both exist). The banner and
+the `Outcome:` line are the maintained fields; the body status is not.
 
 #### `superpowers/plans/`
 
@@ -212,14 +300,20 @@ generated by pytest and are not documentation.
 
 ## Observation: naming is inconsistent (no renames were made)
 
-Of the 46 pre-existing markdown files at the root of `docs/`, the split is:
+Of the 52 markdown files at the root of `docs/`, the split is (counted
+2026-07-30; these four groups partition the 52 exactly):
 
-- **SCREAMING_SNAKE_CASE** — 40 files, the large majority
+- **SCREAMING_SNAKE_CASE** — 41 files, the large majority
   (`REBOOT_RESILIENCE.md`, `HOME_ASSISTANT_DEVICES.md`,
   `MONITORING_COVERAGE_PLAN.md`, …).
+- **SCREAMING_SNAKE_CASE with a trailing date** — 6 files:
+  `BOOT_SLOWNESS_RCA_2026-06-24.md`, `POST_REBOOT_AUDIT_2026-07-03.md`,
+  `HEALTH_AUDIT_2026-07-28.md`, `REMEDIATION_PLAN_2026-07-28.md`,
+  `REMEDIATION_DECISIONS_2026-07-28.md`, `HA_ENTITY_WORKLIST_2026-07-29.md`.
 - **UPPERCASE-WITH-HYPHENS** — 3 files: `OPNSENSE-EXPORTER-SETUP.md`,
   `OPNSENSE-EXPORTER-WORKAROUND.md`, `SHERLOCK-OPENCLAW-PROMPT.md`.
-- **lowercase** — 3 files: `openclaw-hermes-integration.md`,
+- **lowercase** — 2 files: `openclaw-hermes-integration.md`,
+  `quadlet-guide.md`.
 
 All 43 files under `superpowers/` use dated `YYYY-MM-DD-kebab-case.md`. The
 split does not track content: `quadlet-guide.md` and
@@ -238,9 +332,9 @@ their date in the filename, while the equally dated
    edited in place rather than superseded.
 
 Renaming the existing files is a separate, deliberate change, not a cosmetic
-one. As of 2026-07-27, 14 distinct `docs/` paths are named across 50 lines of
-Nix comments, and the documents cross-reference each other and are referenced
-from `/etc/nixos/CLAUDE.md` in eleven places. A rename pass must fix every
+one. As of 2026-07-30, **25 distinct `docs/` paths are named across 98 lines** of
+Nix comments and Python docstrings, the documents cross-reference each other, and
+`/etc/nixos/CLAUDE.md` names a `docs/` path on 9 lines. A rename pass must fix every
 reference in the same commit. **Nothing was renamed in this pass.**
 
 Two of those 14 Nix-cited paths do not resolve inside this repository, and both

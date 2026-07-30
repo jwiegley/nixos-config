@@ -1,0 +1,124 @@
+groups:
+  # ==========================================================================
+  # Coverage gap: the "cleanly inactive" always-on service.
+  #
+  # systemd.yaml covers FOUR of the five unit states host-wide:
+  #   failed        -> SystemdServiceFailed        (all *.service, for=1m)
+  #   activating    -> ServiceStuckActivating      (all *.service, for=15m)
+  #   deactivating  -> ServiceStuckDeactivating    (all *.service, for=5m)
+  #   restart churn -> ServiceRestartLooping / ServiceRestartingFrequently
+  #
+  # The fifth state, `inactive`, has NO host-wide rule -- and cannot have one,
+  # because hundreds of oneshot/timer-driven units on this host sit inactive as
+  # their normal resting state. It is covered only by an ALLOWLIST:
+  #   - CriticalServiceInactive (systemd.yaml): sshd|postgresql|nginx|
+  #     prometheus|tailscaled|step-ca|docker
+  #   - CriticalServiceActive (health-checks.yaml) via the
+  #     critical-services-exporter's 16-service list on :9221
+  #   - assorted per-service `state="active" == 0` rules (mosquitto, samba
+  #     smbd/nmbd/winbindd, radicale, glance, glances, cockpit, fetchmail-good,
+  #     redis-gitea/immich, ...)
+  #
+  # `inactive` is the state a unit lands in when it is stopped cleanly and NOT
+  # restarted: a forgotten `systemctl stop` during maintenance, a dependency
+  # that was skipped at boot, or a Restart= policy that does not re-arm after a
+  # clean exit. None of the four rules above can see it. The units listed below
+  # are always-on services that fell through every allowlist -- verified against
+  # the LIVE rule set (all 511 alerting rules from Prometheus /api/v1/rules,
+  # 2026-07-30), not against the file tree, because this repo also defines rules
+  # inline in .nix modules (modules/services/fetchmail-alerts.nix,
+  # modules/monitoring/services/{aria2,atd,jupyterlab,git-workspace}-alerts.nix).
+  # Zero of the 511 rules reference any of these five unit names.
+  #
+  # Selecting on state="inactive" (rather than state="active" == 0) is
+  # deliberate: it makes this rule the exact orthogonal complement of the four
+  # rules above, so a crash-loop or a hung start produces ONE alertname, not
+  # two. Do not "simplify" it to active == 0.
+  #
+  # NOT included, and why:
+  #   fetchmail-good.service   -- already covered by FetchmailGoodDown
+  #                               (active == 0, for=5m, fetchmail-alerts.nix)
+  #   eternal-terminal.service -- only 31d of history in the TSDB; too short a
+  #                               window to size a dwell against. See residual.
+  #   gitea-runner-org\x2dbuilder.service -- no rule exists, but the systemd
+  #                               name-escaping makes the selector fragile and
+  #                               a stalled CI runner is not user-facing. See
+  #                               residual.
+  #   jellyfin / kiwix-serve / pgadmin / atd / aria2 / copyparty / litellm-
+  #   anthropic-fixup / immich-server / jupyterlab / stock-trader / zimit /
+  #   technitium-dns-server -- all covered by a blackbox probe (WebServiceDown,
+  #                               for=1m) or a scrape target (TargetDown,
+  #                               for=5m), both of which are host-wide
+  #                               catch-alls. Confirmed against the live
+  #                               blackbox target list and `up` job list.
+  #
+  # Dwell justification (measured, not chosen):
+  #   query_range over node_systemd_unit_state{name=<u>,state="inactive"} at
+  #   300s resolution across the FULL depth of this TSDB (oldest
+  #   node_systemd_unit_state sample is ~200d old; 270d/365d offsets return
+  #   empty), per unit:
+  #     zfs-zed.service                  200d, 57534 samples,  0 inactive
+  #     samba-wsdd.service               200d, 57534 samples,  0 inactive
+  #     immich-machine-learning.service  200d, 57534 samples,  6 inactive,
+  #                                      6 runs, longest run = 1 sample
+  #     qdrant-inference-bridge.service  146d, 42010 samples,  0 inactive
+  #     wyoming-openai.service            91d, 26098 samples,  0 inactive
+  #   The longest contiguous inactive run anywhere in that union is ONE sample.
+  #   At 300s resolution a single-sample run is bounded above by <10 minutes
+  #   (and cannot hide a longer run: a >=20m run would necessarily produce >=3
+  #   consecutive samples). for=20m is therefore >2x the longest observed run
+  #   and would have produced ZERO fires across the entire available history.
+  #   The two shorter windows (146d, 91d) are the units' full lifetimes, not a
+  #   convenience window.
+  #
+  # Severity is warning, not critical, and the category is deliberately NOT
+  # "storage" even though zfs-zed is storage-adjacent: category="storage" +
+  # severity!="critical" routes to storage-receiver, whose repeat_interval is
+  # 12h, and none of these five warrant a paging escalation -- each degrades a
+  # capability rather than taking down a user-facing surface, and for zfs-zed
+  # the primary pool-health signal (job="zfs" + storage.yaml) is independent.
+  # No `service` label is set: the values openclaw / hermes-(mcp|agent) /
+  # drafts-mcp are claimed by self-heal routes in alertmanager.nix and an
+  # unrelated match there would hand these to the wrong receiver.
+  # ==========================================================================
+  - name: service_coverage_inactive
+    interval: 30s
+    rules:
+      - alert: AlwaysOnServiceInactive
+        # Per-unit impact when inactive:
+        #   zfs-zed                  ZFS fault/resilver/degrade events stop
+        #                            being emailed (ZED is the only email path;
+        #                            see the 2026-06-02 tank UAS enclosure
+        #                            failure). Prometheus job="zfs" still sees
+        #                            pool state, so this is a lost second
+        #                            channel, not total blindness.
+        #   samba-wsdd               WSD/LLMNR discovery of the Samba shares
+        #                            stops; Windows/macOS clients lose
+        #                            smb://vulcan.lan browsing while smbd keeps
+        #                            serving. Restart=no on this unit, so a
+        #                            single exit is permanent.
+        #   immich-machine-learning  Immich smart search, CLIP and face
+        #                            recognition silently stop. immich-server
+        #                            keeps serving photos, so ImmichAPIDown and
+        #                            ImmichMicroservicesDown both stay green.
+        #   qdrant-inference-bridge  127.0.0.1:6335, the Qdrant -> LiteLLM
+        #                            embedding translator. Qdrant itself stays
+        #                            up (QdrantDown green) but every collection
+        #                            using native inference can no longer embed
+        #                            on upsert -- the "loaded but unusable"
+        #                            shape.
+        #   wyoming-openai           Home Assistant Assist loses its STT/TTS
+        #                            backend; voice commands fail while HA is
+        #                            otherwise healthy.
+        expr: |
+          node_systemd_unit_state{
+            name=~"(immich-machine-learning|qdrant-inference-bridge|samba-wsdd|wyoming-openai|zfs-zed)\\.service",
+            state="inactive"
+          } == 1
+        for: 20m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Always-on service {{ $labels.name }} is inactive"
+          description: "{{ $labels.name }} has been in systemd state `inactive` for more than 20 minutes on {{ $labels.instance }} — stopped cleanly and not restarted, so SystemdServiceFailed / ServiceStuckActivating / ServiceStuckDeactivating all stay silent. This unit had ZERO inactive samples (or at most one isolated 5-minute sample) across the full ~200d of TSDB history, so this is not routine churn. Check: systemctl status {{ $labels.name }}; journalctl -u {{ $labels.name }} -n 50; then systemctl start {{ $labels.name }}."

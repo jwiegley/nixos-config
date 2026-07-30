@@ -30,27 +30,51 @@
 # (modules/monitoring/services/victoriametrics.nix:34), so nothing had aged out --
 # the data was there and simply not asked for. ALWAYS export with start=-1000d.
 #
-# The long gaps are SEASONAL: every gap over 12h falls in Nov-Mar, when the pump is
-# off for the winter. A window that omits a winter cannot size these rules.
+# RE-MEASURED AGAIN 2026-07-30 from the full 260-day export, and TWO CLAIMS ABOVE
+# TURNED OUT TO BE FALSE. They are corrected below rather than quietly edited out,
+# because both were load-bearing for the salt threshold.
+#
+#   FALSE CLAIM 1: "every gap over 12h falls in Nov-Mar". Salt has FIVE summer gaps
+#   over 46h: 77.06h (2026-06-05), 67.07h (07-22), 57.88h (05-14), 48.71h (07-01),
+#   46.62h (06-20). The seasonality is real but it is a difference of DEGREE.
+#
+#   FALSE CLAIM 2: "when the pump is off for the winter". The pump was NOT off. Using
+#   the pool-circuit state series (state_value{entity_id="pool"}, an on-change series)
+#   as a step function, the pool circuit was ON for 50.3-59.2% of EVERY ONE of the nine
+#   winter salt gaps in the 94-165h range, with a 13.00-13.02h CONTIGUOUS on-stretch
+#   inside each one. (The tenth gap over 90h, 91.47h from 2026-02-24, is the integration
+#   outage described below — there the circuit series was itself frozen, which is why it
+#   reads 87.9% on.) The cell is running and still not reporting a changed salinity; whatever
+#   suppresses the reading in winter (cell output at 0 below ~52F is the likely
+#   mechanism) is not "the pump is off", and any rule reasoning from pump state is
+#   reasoning from a premise that does not hold.
 #
 #                             all-time max   all-time p95   record   alert >
-#     water_sensor_1               77.87h          1.10h     260d      24h
-#     intellichlor_1_salt         164.62h         48.71h     260d     180h
-#     pool_salt_temp_compensated   19.75h          1.28h      62d      24h
+#     water_sensor_1               77.87h          1.09h     261d      24h
+#     intellichlor_1_salt         164.62h         48.71h     260d     336h
+#     pool_salt_temp_compensated   19.75h          1.28h      63d      24h
 #
-# compensated's 62d IS its whole life (created 2026-05-28), so its 24h is sound.
+# water's 77.87h max was a TRUE POSITIVE, not a benign gap, and this is worth knowing
+# because it is the one demonstrated success of this whole file: on 2026-02-24 between
+# 15:03Z and 15:20Z EVERY pool entity stopped at once — water_sensor_1 (77.87h),
+# pool_last_temp (77.87h), the pool circuit (78.14h), ultratemp, and salt (91.47h) —
+# and all resumed together ~78h later on 02-27. That is the ScreenLogic/IntelliCenter
+# integration dead for three days, and PoolWaterTempStale at 24h catches it within a
+# day. The largest BENIGN water gap is 19.54h (2026-03-09), with 15 gaps over 12h and
+# all of them Nov-Mar, so 24h keeps ~23% headroom over benign behaviour.
 #
-# Both thresholds were raised (water 6h -> 12h, salt 72h -> 96h) because the old
-# values sat BELOW the real 90-day maximum: at 6h/72h these rules fire on real,
-# benign gaps — water on 2026-06-13, 07-03 and 07-11/12 (the 9.5h max), salt on
-# 2026-06-04 -> 06-07 (the 77.1h max, against a 72h threshold whose own comment
-# quoted a 14-day 65.3h max as if it bounded the risk). No such false page was ever
-# actually delivered, but only because the expression was broken too (next
-# paragraph) — the thresholds were still wrong, and become load-bearing the moment
-# the expression works. Do NOT re-tighten either one from a short measurement
-# window. The thin margin is the COMPENSATED sensor: it
-# stops updating every night (~15:00 -> ~06:30, i.e. 13-16h routinely), so 24h
-# leaves only ~4h of headroom; widen it if that nightly pause ever lengthens.
+# compensated's 63d IS its whole life (created 2026-05-28) — but that life is ENTIRELY
+# SUMMER, so its 19.75h max is measured on an unrepresentative window and its 24h
+# threshold is the one number in this file still sized off a window that omits a
+# winter. It is left at 24h because widening it now would be sizing from a prediction
+# instead of a measurement, but the risk is concrete and dated: this sensor recomputes
+# off water temperature, water temperature's own benign gaps stretch to 19.54h in
+# winter, and those stack on compensated's routine 13-19.75h overnight pause. REVIEW
+# THIS THRESHOLD IN NOVEMBER 2026 against real winter data; if it false-pages, the
+# remedy is to widen it (36h), never to delete it (see the note on the rule itself).
+#
+# Earlier passes raised water 6h -> 12h -> 24h and salt 72h -> 96h -> 180h -> 336h.
+# Do NOT re-tighten either one from a short measurement window.
 #
 # DO NOT REWRITE THE STALENESS EXPRESSION AS `time() - timestamp(last_over_time(X[Nd]))`.
 # That is what these three rules used until 2026-07-29, and in MetricsQL it silently
@@ -78,8 +102,9 @@
 # returns 42.49h at [10d:5m] and [2d:5m], EMPTY at [1d:5m]). So a permanently dead
 # sensor pages for a while and then goes QUIET, and the alert's own resolution is NOT
 # evidence of recovery — check the series. Each rule can only fire while the sample
-# age lies inside (threshold, 240h]: water 12h-240h, salt 96h-240h, compensated
-# 24h-240h. Widening the window widens that firing span and changes nothing else; it
+# age lies inside (threshold, window]: water 24h-240h ([10d:5m]), salt 336h-672h
+# ([28d:5m]), compensated 24h-240h ([10d:5m]).
+# Widening the window widens that firing span and changes nothing else; it
 # must stay well above the threshold anyway, since it is also what lets the query see
 # a most-recent sample older than VM's ~5m default lookback (these series are sparse).
 groups:
@@ -88,11 +113,15 @@ groups:
     rules:
       # Pool/spa water temperature — the most reliable, highest-cadence pool
       # sensor (the one referenced as sensor.water_sensor_1; the matcher resolves to
-      # the single series `°F_value`). If it goes quiet for > 12h while everything
-      # else is fine, the sensor or its HA integration is likely dead. 12h, not the
-      # original 6h: 90d max gap is 9.5h (see header). Window is [10d:5m], not the
-      # original [1d] — a 1-day window would leave only a 12h span between this
-      # threshold and the point where the expression goes NO_DATA and RESOLVES itself.
+      # the single series `°F_value`, median inter-sample gap 1 minute). If it goes
+      # quiet for > 24h while everything else is fine, the sensor or its HA
+      # integration is likely dead. 24h, sized off the full 261-day record: the
+      # largest BENIGN gap is 19.54h (2026-03-09) and 15 gaps exceed 12h, all of them
+      # Nov-Mar, so 24h keeps ~23% headroom. The one larger gap, 77.87h on 2026-02-24,
+      # was a true positive — the whole ScreenLogic integration was down for three
+      # days (header). Window is [10d:5m], not the original [1d] — a 1-day window
+      # would leave only a 12h span between this threshold and the point where the
+      # expression goes NO_DATA and RESOLVES itself.
       - alert: PoolWaterTempStale
         expr: |
           (time() - last_over_time(timestamp({entity_id="water_sensor_1", __name__=~".+_value"})[10d:5m])) > 86400
@@ -101,32 +130,63 @@ groups:
           severity: warning
           category: home-assistant
         annotations:
-          summary: "Pool water temperature sensor stale (>12h)"
-          description: "sensor.water_sensor_1 (water_sensor_1) has pushed no sample to VictoriaMetrics in over 12 hours. Max gap over the last 90d is 9.5h; the sensor/integration may be dead. Pool-time TTS and the heater-flow logic depend on this reading. Note: this alert RESOLVES on its own once the sample is >10d old (window-bounded expr) — check the series, not the alert, to confirm recovery."
+          summary: "Pool water temperature sensor stale (>24h)"
+          description: "sensor.water_sensor_1 (water_sensor_1) has pushed no sample to VictoriaMetrics in over 24 hours. Largest benign gap in the full 261-day record is 19.5h (winter); the sensor or the whole ScreenLogic integration may be dead — check pool_last_temp and the pool circuit state, which died together with it on 2026-02-24. Pool-time TTS and the heater-flow logic depend on this reading. Note: this alert RESOLVES on its own once the sample is >10d old (window-bounded expr) — check the series, not the alert, to confirm recovery."
 
-      # IntelliChlor salt reading. The cell stops reporting whenever the pump/flow
-      # is off, and those off-stretches are LONG: measured 90d max gap 77.1h
-      # (2026-06-04 17:30 -> 06-07 22:34), with 67.1h, 57.9h and 48.7h also in the
-      # last 90 days. The 72h threshold this replaces sat BELOW that max and would
-      # have false-paged on the 77.1h gap; 96h gives ~19h of headroom. Only re-tune
-      # from a >=90d measurement (a 14d window sees ~67h and looks safe at 72h).
+      # IntelliChlor salt reading — A DELIBERATELY SLOW BACKSTOP, AND THAT IS THE HONEST
+      # CEILING FOR THIS SERIES. Read this before touching the number.
+      #
+      # Threshold raised 180h -> 336h (14 days) on 2026-07-30. 180h was the thinnest
+      # margin in the whole ruleset: 1.09x over the all-time-max inter-sample gap of
+      # 164.62h (2026-01-21), on a series whose 260-day record contains ONE winter. The
+      # tail is dense and has no shoulder — 164.62, 135.73, 132.70, 123.29, 123.20,
+      # 120.92, 108.78, 100.69, 94.67, 91.47h, i.e. nine benign gaps over 90h in a
+      # single season — so "the max is 164.62h" is one sample of a seasonal maximum, not
+      # a bound. A second winter with one longer cold stretch overruns 180h and pages
+      # for nothing. 336h is 2.04x the observed max and requires the cell to be silent
+      # through a fortnight, which has never happened in 260 days.
+      #
+      # IS A STATIC THRESHOLD VIABLE AT ALL HERE? Only for total, extended death — and
+      # that is what this rule now is. The series is far sparser and far more
+      # seasonally split than earlier comments in this file claimed: 425 samples in 260
+      # days (~1.6/day), median gap 11.06h, p95 48.71h, and gaps run 91-165h in winter
+      # AND 46-77h in summer (2026-06-05 77.06h, 07-22 67.07h, 05-14 57.88h). There is
+      # no threshold that is both above the benign summer tail and fast enough to be
+      # actionable in winter; the distributions overlap. Two things make that
+      # acceptable rather than a hole:
+      #   1. the fast case is already covered — when the CONTROLLER dies, water
+      #      temperature dies with it, and PoolWaterTempStale catches that within 24h
+      #      (demonstrated on 2026-02-24, see header);
+      #   2. what is left for this rule is the cell dying ALONE while the rest of the
+      #      integration is healthy, for which a fortnight of silence is a true and
+      #      unambiguous signal even if it is not a fast one.
+      # If a faster salt-specific signal is ever wanted it needs a different shape
+      # entirely — a seasonal guard, or a rate-of-change/expected-cadence rule keyed to
+      # water temperature — not a smaller number here.
+      #
+      # Window widened [21d:5m] -> [28d:5m] to stay comfortably above the threshold: the
+      # rule can only fire while the sample age is inside (336h, 672h] (see header).
       - alert: PoolSaltSensorStale
         expr: |
-          (time() - last_over_time(timestamp(ppm_value{entity_id="intellichlor_1_salt"})[21d:5m])) > 648000
+          (time() - last_over_time(timestamp(ppm_value{entity_id="intellichlor_1_salt"})[28d:5m])) > 1209600
         for: 1h
         labels:
           severity: warning
           category: home-assistant
         annotations:
-          summary: "Pool salt (IntelliChlor) sensor stale (>96h)"
-          description: "ppm_value{entity_id=\"intellichlor_1_salt\"} has pushed no sample to VictoriaMetrics in over 96 hours. Even accounting for pump-off periods (max gap over the last 90d is 77.1h) this is past normal; the IntelliChlor or its HA integration may be offline. Note: this alert RESOLVES on its own once the sample is >10d old (window-bounded expr) — check the series, not the alert, to confirm recovery."
+          summary: "Pool salt (IntelliChlor) sensor silent for over 14 days"
+          description: "ppm_value{entity_id=\"intellichlor_1_salt\"} has pushed no sample to VictoriaMetrics in over 14 days. This is a deliberately slow backstop: benign gaps reach 164.6h (winter) and 77.1h (summer) on this series, so nothing shorter can be trusted, and 14 days of silence has never occurred in the 260-day record. Check the IntelliChlor cell first — if water temperature is also stale, the whole ScreenLogic integration is down and PoolWaterTempStale should already have paged a fortnight ago. Note: this alert RESOLVES on its own once the sample is >28d old (window-bounded expr) — check the series, not the alert, to confirm recovery."
 
       # The temperature-compensated virtual salt sensor (sensor.pool_salt_temp_
       # _compensated). It is derived/recomputed less often, and stops updating every
-      # night (~15:00 -> ~06:30), so a 13-16h gap is NORMAL and the 90d max is 19.8h
-      # — the 24h threshold flags a genuinely-stuck template/derivation, but with
-      # only ~4h of headroom. This is the tightest margin in this file: if the
-      # nightly pause lengthens, raise the threshold rather than deleting the rule.
+      # night, so a 13-16h gap is NORMAL: over its whole 63-day life it has 45 gaps
+      # above 12h and a maximum of 19.75h (2026-07-02). The 24h threshold flags a
+      # genuinely-stuck template/derivation with ~4h of headroom, and it is now the
+      # thinnest margin in this file — and worse, that 19.75h maximum is measured on a
+      # SUMMER-ONLY record, because the sensor was created 2026-05-28. Its driver
+      # (water temperature) has benign winter gaps up to 19.54h which will stack on the
+      # overnight pause. REVIEW IN NOVEMBER 2026: if it false-pages on winter data,
+      # raise the threshold to 36h. Never delete it — see the next paragraph.
       # DO NOT delete PoolSaltSensorStale on the theory that this rule covers it. That was
       # proposed and DISPROVED by measurement 2026-07-29: pool_salt_temp_compensated
       # recomputes whenever the WATER TEMPERATURE changes, reusing the last known salt
@@ -143,4 +203,4 @@ groups:
           category: home-assistant
         annotations:
           summary: "Temp-compensated pool salt sensor stale (>24h)"
-          description: "ppm_value{entity_id=\"pool_salt_temp_compensated\"} has not updated in VictoriaMetrics for over 24 hours (max gap over the last 90d is 19.8h, driven by a routine 13-16h overnight pause). The virtual sensor's template/derivation may be stuck or its source (intellichlor salt + water temp) is missing. Note: this alert RESOLVES on its own once the sample is >10d old (window-bounded expr) — check the series, not the alert, to confirm recovery."
+          description: "ppm_value{entity_id=\"pool_salt_temp_compensated\"} has not updated in VictoriaMetrics for over 24 hours (max gap over its whole 63-day life is 19.75h, driven by a routine 13-16h overnight pause). The virtual sensor's template/derivation may be stuck or its source (intellichlor salt + water temp) is missing. If this arrives between November and March, suspect the threshold before the sensor: the 19.75h maximum was measured on a summer-only record. Note: this alert RESOLVES on its own once the sample is >10d old (window-bounded expr) — check the series, not the alert, to confirm recovery."

@@ -70,6 +70,24 @@ groups:
       # host_group iot/iot-noping/iot-quiet excluded: sleepy battery devices
       # answer slowly (or never), so they would drive chronic latency noise —
       # they alert only via BlackboxICMPIoTDeviceDown.
+      #
+      # READ THIS BEFORE TRUSTING THIS RULE AS A LATENCY SIGNAL (measured 2026-07-30, 201d of
+      # TSDB). The `icmp_ping` prober TIMEOUT IS 5s (modules/services/blackbox-monitoring.nix:
+      # 49-51), and probe_duration_seconds is capped by it: the 200d maximum over this exact
+      # selector is 5.354s. So `> 5` is true only in the instant a probe TIMES OUT, which also
+      # sets probe_success=0. This rule therefore does not report "reachable but slow" -- it
+      # cannot -- it reports 5 minutes of sustained ICMP timeouts, i.e. it is a strictly LATER
+      # duplicate of HostUnreachable (critical, for:2m), and for the backbone/dns host_groups
+      # that HostUnreachable excludes it quietly re-introduces the per-host paging that
+      # DNSResolversDown was rewritten (2026-07-07, below) to stop doing. It has fired 17,997
+      # samples over 200d, top instances hera-wifi.lan / hera.lan / asus-bq16-pro-node.lan /
+      # google-home-hub.lan / osuosl.org -- every one of which also appears in HostUnreachable's
+      # firing history. Retuning it downward does not fix this: SUCCESSFUL icmp probes have
+      # reached 4.983s (www.berkeley.edu) over the same 200d as of 2026-07-30, so any threshold under the 5s cap
+      # is itself within 15% of the observed successful maximum. The only real fixes are an
+      # operator decision -- raise the prober timeout so slowness is observable below the cap,
+      # or delete this rule as a duplicate of the down rules. Left as-is deliberately: not
+      # changed without that decision.
       - alert: HighLatency
         expr: probe_duration_seconds{job="blackbox_icmp",instance!="192.168.30.49",host_group!~"iot|iot-noping|iot-quiet"} > 5
         for: 5m
@@ -84,6 +102,16 @@ groups:
       # Critical latency for ICMP probes
       # host_group iot/iot-noping/iot-quiet excluded: same rationale as HighLatency —
       # sleepy IoT devices must not trip an infrastructure-latency critical.
+      #
+      # THIS RULE CANNOT FIRE, measured 2026-07-30 and stated here rather than silently
+      # deleted. The `icmp_ping` prober timeout is 5s, so probe_duration_seconds on this
+      # selector is bounded: 200d max = 5.354s against a `> 10` threshold, and ALERTS shows 0
+      # firing and 0 pending samples over the same 200 days. The iot fleet is the only thing on
+      # this host probed with a 10s timeout (icmp_ping_iot) and it is excluded here by design.
+      # Fixing it is an operator decision, because every candidate threshold below the 5s cap
+      # collides with real successful probes (max successful 4.983s over 200d, 2026-07-30) and with
+      # HighLatency above; the coverage it nominally provides (an unreachable host, critical) is
+      # already delivered by HostUnreachable (for:2m).
       - alert: CriticalLatency
         expr: probe_duration_seconds{job="blackbox_icmp",instance!="192.168.30.49",host_group!~"iot|iot-noping|iot-quiet"} > 10
         for: 2m
@@ -224,6 +252,17 @@ groups:
       # host_group iot/iot-noping/iot-quiet excluded: intermittent sleepy IoT devices have
       # a naturally < 0.95 success rate and would drive chronic packet-loss
       # noise; this rule tracks infrastructure health only.
+      #
+      # THE EXPRESSION IS WRONG AND THE RULE HAS NEVER FIRED (measured 2026-07-30, 201d of
+      # TSDB). probe_success is a 0/1 GAUGE, so rate() over it is not a success ratio -- it is
+      # a per-second derivative that treats every 1->0 transition as a counter reset. Measured
+      # 200d maximum of rate(probe_success[5m]) across this selector is 0.0148, so the first
+      # conjunct (`< 0.95`) is effectively always true and the whole expression reduces to
+      # "there was a transition in the last 5 minutes". ALERTS over 200d: 0 firing samples,
+      # 76,300 PENDING samples -- it goes pending constantly and never survives the 8h dwell.
+      # The intended form is avg_over_time(probe_success[5m]), which really is the success
+      # ratio; whether an 8h-sustained partial-loss page is wanted at all, and at what dwell, is
+      # an operator decision, so this is documented rather than rewritten on my own authority.
       - alert: HighPacketLoss
         expr: |
           (
@@ -243,6 +282,12 @@ groups:
       # host_group iot/iot-noping/iot-quiet excluded: sleepy IoT devices answer with
       # highly variable latency and would drive chronic jitter noise; this rule
       # tracks infrastructure health only.
+      #
+      # NEVER FIRED IN 200 DAYS EITHER (measured 2026-07-30): 0 firing samples, 166,595 pending.
+      # The threshold is reachable on paper -- 200d max of stddev_over_time(...[10m]) is 2.498s
+      # -- but that spread comes from MIXING 5s timeouts with millisecond replies, i.e. it is a
+      # restatement of "the host is dropping probes", and the 8h continuous dwell is never met.
+      # Same operator decision as HighPacketLoss: keep, retune the dwell, or drop.
       - alert: HighNetworkJitter
         expr: |
           (
@@ -303,6 +348,18 @@ groups:
       # HTTP/HTTPS/DNS jobs (which carry no host_group) stay in scope, so a
       # genuine exporter overload is still caught. Mirrors the exclusion on the
       # sibling blackbox rules (HostUnreachable, HighLatency, CriticalLatency).
+      #
+      # SCOPE IS NARROWER THAN THE COMMENT ABOVE IMPLIES (measured 2026-07-30). Every prober
+      # module on this host except `https_public` AND `icmp_ping_iot` (both 10s, verified at
+      # modules/services/blackbox-monitoring.nix:69-71) has a 5s timeout, so a `> 10` threshold is
+      # reachable ONLY by the two public-tunnel targets (200d max 10.006s for
+      # calendar.newartisans.com, 10.002s for data.newartisans.com) -- for which it is a
+      # duplicate of PublicEdgeDown (critical, for:3m). It cannot detect exporter overload on
+      # the local HTTPS/DNS/TCP/ICMP jobs at all, because those probes are capped at ~5s. Its
+      # 200d firing history is dominated by iot/iot-noping instances that were scraped before
+      # the host_group label existed (nest-upstairs.lan, 1,910 samples) and would be excluded
+      # today. Same operator decision as HighLatency/ProbeSlowResponse: either the timeouts move
+      # or these pseudo-latency rules go.
       - alert: BlackboxProbeTimeout
         expr: probe_duration_seconds{job=~"blackbox_.*",host_group!~"iot|iot-noping|iot-quiet"} > 10
         for: 2m
@@ -449,9 +506,38 @@ groups:
   # weekly-scale BACKSTOP. They answer "what has been unreliable over a week", which no
   # instantaneous rule answers, and they will catch a genuinely flapping service whose
   # individual failures are too short to trip an acute dwell -- a real class, just not the one
-  # the current two matches demonstrate. Consequence to expect: both will fire as LAGGING
-  # duplicates of alerts already delivered, until the 07-23/07-24 samples age out of the 7d
-  # window. That is the honest cost of a 7-day lookback.
+  # the current two matches demonstrate.
+  #
+  # THE "LAGGING DUPLICATE" COST WAS NOT ACCEPTABLE, AND IS NOW FIXED (2026-07-30). The
+  # paragraph that used to sit here said both rules "will fire as LAGGING duplicates ... until
+  # the 07-23/07-24 samples age out of the 7d window. That is the honest cost of a 7-day
+  # lookback." It was honest but wrong to accept: measured on 2026-07-30, ServiceChronically-
+  # Unavailable was STILL PAGING for copyparty (7d avg 92.66%) about an incident that ended
+  # 2026-07-24 05:38Z. copyparty had been up for every single scrape since --
+  # avg_over_time(up[6d]) == 1 exactly, changes(up[7d]) == 1 -- so the page was six and a half
+  # days stale and there was nothing left to act on. An alert that pages for a week about a
+  # resolved incident is how an operator learns to ignore the alert.
+  #
+  # THE FIX IS A RECENCY CONJUNCT, NOT A SHORTER WINDOW. Both rules now also require
+  # min_over_time(<metric>[1d]) == 0, i.e. at least one FAILED sample in the last 24 hours. The
+  # 7d lookback is what accumulates a deficit that no single day exceeds, so it is kept; the
+  # guard simply insists the degradation is still CURRENT. Shortening the window instead would
+  # have destroyed the accumulation the rules exist for (a target losing 30 min every other
+  # day is 97.9% weekly but 100% on half its days).
+  #
+  # VERIFIED BY EVALUATING BOTH FORMS AT PAST TIMESTAMPS (Prometheus /api/v1/query&time=,
+  # 201 days of TSDB on hand), old vs new:
+  #   copyparty  07-23 09:00Z .. 07-25 04:00Z  old fires, new fires  (IDENTICAL detection --
+  #              the guard is trivially satisfied while the service is actually down)
+  #   copyparty  07-25 12:00Z .. 07-30 17:00Z  old fires, new SILENT (the stale tail, gone)
+  #   openclaw   07-23 .. 07-25 old fires, new fires; 07-26/07-27 both silent; 07-28 AND
+  #              07-29 old fires, new FIRES AGAIN -- openclaw had fresh failures on those days,
+  #              so the flapping/chronic case the rules were built for is preserved, and each
+  #              notification now points at an episode from the last 24h.
+  # Net effect on 2026-07-23: unchanged. It still crosses 0.98 after ~3.4h of downtime and
+  # pages ~1h later, mid-incident. Net effect afterwards: the stale tail shrinks from ~6.5 days
+  # to at most 24h. A rule that re-fires on each fresh failure day is the intended behaviour,
+  # not flapping to be suppressed.
   #
   # Threshold 98% over 7 days, chosen from the measured distribution rather than picked:
   #   scraped jobs   copyparty 86.51%  |  next worst darwin-hera 99.95%  -> 1 match
@@ -481,11 +567,20 @@ groups:
       # tolerating restarts. Verified per case: copyparty passes, node-red passes, the `nut`
       # job added 30 minutes earlier correctly FAILS, and a decommissioned target drops out
       # because its 1d count is absent so the join finds no match.
+      #
+      # RECENCY GUARD (third conjunct, added 2026-07-30): at least one failed scrape in the
+      # last 24h. Without it this rule pages for a full 7 days about an incident that ended on
+      # day one -- see the section header for the measured before/after. min_over_time on a 0/1
+      # gauge == 0 iff some scrape failed in the window; if the target has been absent for the
+      # whole day the conjunct is NO_DATA and the join drops it, which is correct (a wholly
+      # absent target is TargetDown's job, not this rule's).
       - alert: ServiceChronicallyUnavailable
         expr: |
           avg_over_time(up[7d]) < 0.98
           and on(job,instance)
           (count_over_time(up[7d]) / on(job,instance) count_over_time(up[1d])) > 5.6
+          and on(job,instance)
+          (min_over_time(up[1d]) == 0)
         for: 1h
         labels:
           severity: warning
@@ -493,7 +588,7 @@ groups:
           service: availability
         annotations:
           summary: "{{ $labels.job }} has only {{ $value | humanizePercentage }} availability over 7 days"
-          description: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) has been up only {{ $value | humanizePercentage }} of the last 7 days. Healthy targets here sit above 99.9%. NOTE this is a weekly BACKSTOP, not proof that acute alerting missed anything -- check whether a *Down alert already fired and went untriaged before assuming this is a new discovery. Intermittent-by-design targets (laptops, sleepy devices) should be excluded rather than tolerated."
+          description: "Scrape target {{ $labels.job }} ({{ $labels.instance }}) has been up only {{ $value | humanizePercentage }} of the last 7 days AND failed at least one scrape in the last 24 hours, so the degradation is still current. Healthy targets here sit above 99.9%. NOTE this is a weekly BACKSTOP, not proof that acute alerting missed anything -- check whether a *Down alert already fired and went untriaged before assuming this is a new discovery. Intermittent-by-design targets (laptops, sleepy devices) should be excluded rather than tolerated."
 
       # host_group iot/iot-noping/iot-quiet excluded for the same reason they are excluded
       # from HostUnreachable: those devices sleep by design and would sit permanently below
@@ -510,11 +605,18 @@ groups:
       # Coverage guard, same self-calibrating 7d:1d ratio as rule A -- and it is what makes
       # the removed TL-WPA8630 carve-out unnecessary: that retired hostname series has stale
       # 7d samples but none in the last day, so the join drops it automatically. Verified.
+      #
+      # Recency guard, same as rule A and for the same measured reason: require a failed probe
+      # in the last 24h so a resolved outage stops paging for the rest of the week. Verified on
+      # openclaw /health: it keeps firing 07-23..07-25, goes quiet 07-26/07-27, and fires again
+      # on 07-28 and 07-29 when fresh failures appeared.
       - alert: ProbeTargetChronicallyFailing
         expr: |
           avg_over_time(probe_success{host_group!~"iot|iot-noping|iot-quiet"}[7d]) < 0.98
           and on(job,instance)
           (count_over_time(probe_success[7d]) / on(job,instance) count_over_time(probe_success[1d])) > 5.6
+          and on(job,instance)
+          (min_over_time(probe_success[1d]) == 0)
         for: 1h
         labels:
           severity: warning
@@ -522,17 +624,35 @@ groups:
           service: availability
         annotations:
           summary: "Probe {{ $labels.instance }} succeeded only {{ $value | humanizePercentage }} of the last 7 days"
-          description: "Blackbox probe {{ $labels.instance }} (job {{ $labels.job }}) has succeeded only {{ $value | humanizePercentage }} of the last 7 days. Healthy probe targets here sit above 99.85%. NOTE this is a weekly BACKSTOP: check whether an acute probe alert already fired and went untriaged before treating this as a new finding."
+          description: "Blackbox probe {{ $labels.instance }} (job {{ $labels.job }}) has succeeded only {{ $value | humanizePercentage }} of the last 7 days AND failed at least once in the last 24 hours, so the degradation is still current. Healthy probe targets here sit above 99.85%. NOTE this is a weekly BACKSTOP: check whether an acute probe alert already fired and went untriaged before treating this as a new finding."
 
   - name: probe_latency
     rules:
       # Generic internal-vhost latency. probe_duration_seconds for the local
       # HTTPS job catches any internal vhost grinding (slow backend, swap
-      # pressure, GC pause). Live baseline: every instance is well under 1.5s
-      # even at 7d-max (slowest is litellm at 1.478s; current p-values are all
-      # <0.25s), so the >10s floor is ~7x above the observed worst case and
-      # needs no per-instance exclusions. A sustained >10s means a vhost is
-      # genuinely pathological, not merely a heavyweight app.
+      # pressure, GC pause).
+      #
+      # CLAIM CORRECTED AND THIS RULE IS DEAD (measured 2026-07-30, 201d of TSDB). The comment
+      # here used to say "every instance is well under 1.5s even at 7d-max (slowest is litellm
+      # at 1.478s) ... so the >10s floor is ~7x above the observed worst case". Both halves are
+      # wrong. The `https_local` prober TIMEOUT IS 5s (modules/services/blackbox-monitoring.nix:
+      # 110-112), so probe_duration_seconds on this job can never reach 10 -- 200d max is
+      # 5.009s, and ALERTS confirms 0 firing and 0 pending samples in 200 days. And the observed
+      # worst case is not 1.478s. MEASURED MAXIMA ARE WINDOW-DEPENDENT, so they are dated here
+      # rather than stated as timeless facts -- this file has already carried three different
+      # "observed max" figures, each correct only for the window it was taken over:
+      #   successful local probes, max over 200d as of 2026-07-30 : 4.699s (hass.vulcan.lan)
+      #   the same series, max over 30d  as of 2026-07-30         : 1.825s (promtail.vulcan.lan)
+      # Size thresholds off the LONGER window; quote the window whenever you cite a number.
+      # Query form that matters: filter on success, or you measure the timeout instead of the
+      # probe -- an unfiltered max over 30d returns ~5.0s for every instance, which is just the
+      # 5s cap being hit. Per-instance 99.9th
+      # percentiles up to 0.616s. That leaves no room for an absolute threshold: anything under
+      # the 5s cap sits within ~15-35% of a real successful probe, and anything at or above the
+      # cap is unreachable. A working "vhost grinding" signal needs either a longer prober
+      # timeout (blackbox-monitoring.nix) or a per-target relative rule (current 15m median vs
+      # that target's own 30d median). Both are operator decisions; the rule is left in place,
+      # inert, rather than deleted or retuned on a guess.
       - alert: ProbeSlowResponse
         expr: probe_duration_seconds{job="blackbox_https_local"} > 10
         for: 15m
@@ -614,8 +734,12 @@ groups:
     rules:
       # Physical-NIC receive errors. node_network_receive_errs_total accumulates
       # RX errors; scoped to the two real interfaces (end0 wired, wlp1s0f0 wifi)
-      # to avoid veth/bridge noise. Baseline verified: increase[1h] == 0 on both,
-      # so > 10 errors/hour is a real "cable/duplex/NIC half-dead" signal.
+      # to avoid veth/bridge noise. The "increase[1h] == 0 on both" baseline that used
+      # to be claimed here was an instantaneous reading, not the record: over the full
+      # 201 days of TSDB the maximum 1h increase is 4.01 on end0 (RX) and 2.01 on
+      # wlp1s0f0 (TX), so > 10 errors/hour keeps ~2.5x headroom over real background
+      # error bursts and is still a genuine "cable/duplex/NIC half-dead" signal.
+      # Neither rule has fired in 200d (0 firing, 0 pending samples).
       - alert: HostNICReceiveErrors
         expr: increase(node_network_receive_errs_total{device=~"end0|wlp1s0f0"}[1h]) > 10
         for: 5m
@@ -641,9 +765,13 @@ groups:
 
       # Carrier flapping on the wired uplink. node_network_carrier_changes_total
       # accumulates from boot, so we use increase() over a 1h window (NOT the
-      # absolute value, which is just 1-2 from the boot transition). Baseline
-      # verified: increase[1h] == 0 on end0, so > 4 link transitions/hour catches
-      # the boot-fragility / flapping-link class directly via the real signal.
+      # absolute value, which is just 1-2 from the boot transition). The "increase[1h]
+      # == 0" baseline claimed here was likewise an instantaneous reading: the 201-day
+      # maximum is 3.007 on end0, so > 4 sits only ~33% above observed benign
+      # behaviour — the thinnest real margin left in this file, and the one to revisit
+      # first if this ever pages during a reboot rather than a genuine flap. It has not
+      # fired in 200d (0 firing, 0 pending). > 4 transitions/hour still catches the
+      # boot-fragility / flapping-link class directly via the real signal.
       - alert: HostNICCarrierFlap
         expr: increase(node_network_carrier_changes_total{device="end0"}[1h]) > 4
         for: 5m

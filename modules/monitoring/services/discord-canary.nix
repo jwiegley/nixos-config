@@ -108,7 +108,12 @@ let
         User = "hermes-mcp";
         Group = "hermes-mcp";
         ExecStart = "${script}/bin/discord-canary";
-        TimeoutStartSec = "240s";
+        # Derived from timeoutSeconds, never hardcoded: the probe makes 1 + CANARY_RETRIES
+        # attempts (2 by default) with a 5s gap, so a hardcoded ceiling silently truncates
+        # the last attempt as soon as timeoutSeconds is raised. At 180s that is 365s of real
+        # work, which the previous fixed 240s would have killed mid-probe -- scoring a
+        # systemd timeout as a failed round-trip.
+        TimeoutStartSec = "${toString (p.timeoutSeconds * 2 + 60)}s";
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];

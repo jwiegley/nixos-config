@@ -255,6 +255,10 @@
       targetName = "Hermes";
       tokenFile = config.sops.secrets."openclaw/discord-token".path;
       intervalSeconds = 900;
+      # 90s (the module default) is not a margin: observed replies include 85.3s and 87.8s,
+      # i.e. within 2s of the limit, so a slow-but-healthy reply scored as a dead round-trip.
+      # These targets are LLM agents whose reply latency spans ~3s to ~90s.
+      timeoutSeconds = 180;
     };
     # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
     openclaw = {
@@ -276,6 +280,8 @@
       targetName = "OpenClaw";
       envFile = config.sops.secrets."hermes/env".path; # provides DISCORD_BOT_TOKEN
       intervalSeconds = 900;
+      timeoutSeconds = 180; # see the hermes probe above
+
     };
   };
   services.hermesFallbackCounter.enable = true;

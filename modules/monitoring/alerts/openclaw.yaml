@@ -204,12 +204,35 @@ groups:
       #    0.0 if that file is unreadable. So losing the textfile silently
       #    re-suppresses this critical alert until the canary next goes green.
       #    NeverSucceeded is the backstop for that path too, at warning severity.
+      # KEYED ON TIME-SINCE-LAST-SUCCESS, NOT ON A FAILURE STREAK (2026-07-30).
+      #
+      # The original `ok == 0 for: 15m` form assumed a failing probe stays failing.
+      # It does not: the target is an LLM agent that answers roughly half of its
+      # mentions, so measured runs alternate
+      #   ok=1(7.4s) ok=1(85.3s) ok=1(87.8s) ok=0 ...
+      # and on a 900s cadence any two consecutive misses satisfy for: 15m. That
+      # pages critical, then resolves on the next success, then pages again --
+      # precisely the churn this rule was rewritten to stop, now arriving from the
+      # probe's own variance rather than from a remediation loop.
+      #
+      # last_success is a monotonic timestamp carried forward across failures, so
+      # its age cannot oscillate: it rises steadily while the round-trip is broken
+      # and resets exactly once when it works. 7200s = 8 missed runs at the 900s
+      # cadence; at the observed ~50% per-run success rate the chance of 8
+      # consecutive misses by luck alone is well under 1%.
+      #
+      # ACCEPTED COST: up to 2h to notice a genuinely dead round-trip. That is the
+      # right trade for this signal specifically -- it is the slow, deep,
+      # end-to-end check, and the fast shallow ones (OpenClawDiscordWsDown,
+      # OpenClawHttpHealthDown, OpenClawGatewayReadyStale) still page in minutes.
+      # Partial degradation is not swallowed either: OpenClawDiscordCanaryDegraded
+      # below reports a sagging success RATE at warning severity.
       - alert: OpenClawDiscordCanaryDown
         expr: |
-          openclaw_discord_canary_ok == 0
-          and ignoring(__name__) (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
+          (time() - openclaw_discord_canary_last_success_timestamp_seconds) > 7200
           and ignoring(__name__) openclaw_discord_canary_last_success_timestamp_seconds > 0
-        for: 15m
+          and ignoring(__name__) (time() - openclaw_microvm_active_enter_timestamp_seconds) > 600
+        for: 10m
         labels:
           severity: critical
           category: availability
@@ -222,6 +245,40 @@ groups:
             timeout, sustained for 15m. This is the inbound MESSAGE_CREATE ->
             dispatch -> reply pipeline; the WS can be "connected" and still
             not deliver. Restart microvm@openclaw to re-establish a clean WS.
+
+      # The partial-failure signal. Down (above) only fires when the round-trip has
+      # been dead for 2h, so a target that answers SOME mentions and drops the rest
+      # would otherwise be invisible -- and "answers about half of them" is exactly
+      # the condition measured on 2026-07-30. That is a weaker form of the
+      # 2026-07-15 silent outage (answered nobody), so it needs its own signal
+      # rather than being absorbed into the Down threshold.
+      #
+      # A RATE over 6h, not a streak: with a 900s cadence that is ~24 samples, so
+      # one unlucky miss moves the average by ~4% and cannot trip this alone.
+      # Threshold 0.7 sits below a healthy probe (which should be ~1.0) and above
+      # the noise floor of a single slow reply. Gated on the canary having been
+      # green at least once, so an unproven probe reports as NeverSucceeded instead.
+      - alert: OpenClawDiscordCanaryDegraded
+        expr: |
+          avg_over_time(openclaw_discord_canary_ok[6h]) < 0.7
+          and ignoring(__name__) openclaw_discord_canary_last_success_timestamp_seconds > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: availability
+          service: openclaw-canary
+        annotations:
+          summary: "OpenClaw answers only {{ $value | humanizePercentage }} of canary mentions"
+          description: |
+            The Discord round-trip works but is unreliable: @Claw replied to only
+            {{ $value | humanizePercentage }} of probe mentions over the last 6h.
+            The inbound path is alive, so this is not the OpenClawDiscordWsDown
+            case; it is partial dispatch loss, which is the quiet form of the
+            2026-07-15 outage. Check whether replies are merely slow rather than
+            missing -- `journalctl -u discord-canary-openclaw.service | grep ok=`
+            shows the round-trip times, and a run whose reply lands after
+            timeoutSeconds (180s) scores as a miss. Sustained values near 0.5 with
+            fast successes point at the agent dropping messages while busy.
 
       # The signal that the proven-green gate above would otherwise swallow: a
       # canary that is running and reporting, but has never once succeeded. That

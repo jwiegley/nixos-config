@@ -177,12 +177,21 @@ groups:
       # satisfied here and this alert is live and armed.
       # A never-green canary is still reported, as a setup fault, by
       # HermesDiscordCanaryNeverSucceeded below.
+      # KEYED ON TIME-SINCE-LAST-SUCCESS, NOT ON A FAILURE STREAK -- twin of the
+      # rewrite on OpenClawDiscordCanaryDown, where the full reasoning lives. This
+      # direction is what exposed the problem: it alternated
+      #   ok=1(6.8s) ok=0 ok=1(3.5s) ok=0 ok=1(3.7s) ok=0 ok=0
+      # on 2026-07-30, and the two consecutive misses at the end crossed for: 15m
+      # and paged critical. The failures are not slow replies -- they are no reply
+      # at all inside the timeout -- so Hermes is answering only about half of its
+      # canary mentions. That is real and worth knowing, but it is degradation, not
+      # a dead round-trip, and it belongs in HermesDiscordCanaryDegraded below.
       - alert: HermesDiscordCanaryDown
         expr: |
-          hermes_discord_canary_ok == 0
-          and ignoring(__name__) hermes_vm_uptime_seconds > 600
+          (time() - hermes_discord_canary_last_success_timestamp_seconds) > 7200
           and ignoring(__name__) hermes_discord_canary_last_success_timestamp_seconds > 0
-        for: 15m
+          and ignoring(__name__) hermes_vm_uptime_seconds > 600
+        for: 10m
         labels:
           severity: critical
           category: availability
@@ -198,6 +207,30 @@ groups:
             WebSocket can be "connected" and still zombied here (heartbeats
             keep ACKing). Restarting microvm@hermes re-establishes a clean
             WS session and message routing (2026-07-15 runbook).
+
+      # Twin of OpenClawDiscordCanaryDegraded, where the reasoning lives. This is the
+      # direction currently in that state: measured 3 replies out of 7 mentions on
+      # 2026-07-30, with the successes fast (3.5-6.8s) and the failures total, so it
+      # is dropping mentions rather than replying slowly.
+      - alert: HermesDiscordCanaryDegraded
+        expr: |
+          avg_over_time(hermes_discord_canary_ok[6h]) < 0.7
+          and ignoring(__name__) hermes_discord_canary_last_success_timestamp_seconds > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-canary
+        annotations:
+          summary: "Hermes answers only {{ $value | humanizePercentage }} of canary mentions"
+          description: |
+            The Discord round-trip works but is unreliable: Hermes replied to only
+            {{ $value | humanizePercentage }} of probe mentions over the last 6h.
+            Successes have been fast (3.5-6.8s) while failures see no reply at all,
+            so this is dropped inbound dispatch rather than latency -- the partial
+            form of the 2026-07-15 silent outage. HermesDiscordZombieSuspected keys
+            off gateway-log event age and will NOT catch this, which is why the
+            canary exists.
 
       # Twin of OpenClawDiscordCanaryNeverSucceeded -- the signal the proven-green
       # gate above would otherwise swallow. service=hermes-canary deliberately

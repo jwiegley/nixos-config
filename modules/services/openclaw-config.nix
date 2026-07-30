@@ -150,17 +150,22 @@ let
           # dmPolicy/groupPolicy = "allowlist" @Claw silently drops a sender that
           # is not listed, which is why the canary reported ok=0 on every run from
           # the moment it was enabled (post_http=200, "no reply within timeout").
-          # Necessary but NOT sufficient on its own: verified 2026-07-30 with this
-          # id live in the running VM config and the gateway ready, @Claw still did
-          # not reply, so allowFrom does not gate guild-channel messages. Kept
-          # because it plausibly gates the sender globally, and the channel-scoped
-          # grant below is what actually admits Hermes.
+          # THIS is what unblocked the round-trip canary: it went green at 12:46 on
+          # 2026-07-30 (rt=7.4s) with only this entry in place, and has replied
+          # repeatedly since (30-88s typical).
+          #
+          # An intermediate diagnosis claimed allowFrom was insufficient and that
+          # guild-channel messages must be gated elsewhere. That was wrong, and the
+          # way it was wrong is worth keeping: the three runs it rested on were each
+          # invalidated by their own conditions -- two ran while the VM was still
+          # warming after a restart, and the third had a reply latency of 85-88s
+          # against a 90s timeout. "No reply within timeout" meant the timeout was
+          # too short, not that the sender was rejected.
           #
           # Deliberately NOT added to guilds.<id>.users: that list is paired with
           # requireMention = false, so a bot listed there is answered on EVERY
           # message anywhere in the guild, and two agents that answer each other
-          # unprompted can ping-pong without bound. The channel entry below is the
-          # least-privilege form of the same grant.
+          # unprompted can ping-pong without bound.
           "1503619790261194793"
         ];
         guilds = {
@@ -177,14 +182,21 @@ let
               # target, so requireMention = true costs it nothing while denying the
               # unprompted agent-to-agent ping-pong that the guild-wide form allows.
               #
-              # SCHEMA NOT VERIFIED UPSTREAM. openclaw runs inside the microVM, so its
-              # allowlist implementation was not readable from the host, and this block
-              # mirrors the guild submodule's own key names. If openclaw ignores it the
-              # canary simply stays red as before -- no breakage. Two failure shapes,
-              # distinguished by different signals: if openclaw STRIPS unknown keys when
-              # rewriting its config, openclaw_config_drift_keys_removed goes non-zero;
-              # if it keeps them but ignores them semantically, drift stays 0 and only a
-              # canary run reveals it. So the canary is the authority here, not drift.
+              # STATUS: accepted by openclaw but NOT load-bearing, and not proven to
+              # have any semantic effect. The canary had already gone green on
+              # allowFrom alone (see above) before this block existed, so nothing here
+              # is required for the canary to work. What IS established:
+              # openclaw_config_drift_keys_removed reads 0 with the block deployed, so
+              # openclaw does not strip these keys when it rewrites its config -- they
+              # survive in the live config. Whether it honours them is untested, and
+              # cannot be tested while allowFrom alone already admits Hermes.
+              #
+              # Kept anyway, deliberately: it costs nothing, it is strictly narrower
+              # than the guild-wide alternative, and if allowFrom is ever tightened
+              # this is the scope that should survive. Do not read its presence as
+              # evidence that per-channel scoping works. Schema mirrors the guild
+              # submodule's own key names; openclaw runs inside the microVM, so its
+              # allowlist implementation was not readable from the host.
               "1532127247211827322" = {
                 requireMention = true;
                 users = [

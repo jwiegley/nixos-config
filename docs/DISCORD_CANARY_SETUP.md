@@ -22,6 +22,28 @@ probe missed it because they bypass Discord (`e2e-chat` → api_server,
 `OpenClawDiscordWsDown`) which a still-ACKing zombie keeps fresh. Only an
 active message→reply round-trip proves the inbound path delivers.
 
+## ⚠️ Read this before diagnosing a red canary
+
+**`post_http=200` + `no reply within timeout` does NOT mean the target rejected the
+sender.** It means the post succeeded and no reply arrived *inside `timeoutSeconds`*.
+These targets are LLM agents: measured reply latencies are 3.5s, 6.8s, 7.4s, 30.2s,
+85.3s, 87.8s. Against the module's original 90s default, healthy slow replies scored
+as a dead round-trip, and reading that as "the allowlist is wrong" produced a
+confidently wrong diagnosis on 2026-07-30. `timeoutSeconds` is now 180 on both probes.
+
+Rule out, in this order, before touching any allowlist:
+1. **A still-warming VM** — compare the run's timestamp against
+   `microvm@<agent>.service`'s `ActiveEnterTimestamp`, and against
+   `openclaw_gateway_ready_timestamp_seconds` (which must POSTDATE the restart; a
+   `probe_success` of 1 seconds after a restart is usually a stale scrape).
+2. **A timeout that is simply too short** — see the latency spread above.
+3. **A dead timer** — `systemctl list-timers 'discord-canary*'` with an EMPTY
+   next-elapse. That is how the hermes direction was silently dead for a day.
+
+**The agents answer only about half their mentions.** That is why the alerts key on
+the *age of last success* and on a *success rate*, not on consecutive failures — see
+`*DiscordCanaryDown` / `*DiscordCanaryDegraded`.
+
 ## ⚠️ What happens if you enable before step 3 (2026-07-30 incident)
 
 Both directions were enabled on 2026-07-30 **without** completing step 2, so
@@ -104,18 +126,17 @@ bot-authored messages entirely. What 2026-07-30 established, per direction:
   SOPS secret on the strength of a red canary; an earlier version of this runbook
   prescribed that, and it would have been a pointless secrets edit. This direction
   was red because its *timer* never fired.
-- **OpenClaw accepting Hermes: NOT SOLVED by `allowFrom` alone.**
-  `1503619790261194793` is in `channels.discord.allowFrom`
-  (`modules/services/openclaw-config.nix`), confirmed present in the *running* VM
-  config with the gateway ready — and @Claw still does not reply. So `allowFrom`
-  does not gate guild-channel messages. The remaining candidate is the
-  guild-scoped allowlist, `channels.discord.guilds.<id>.users`, which is
-  **deliberately unset**: that guild has `requireMention = false`, so a guild-wide
-  grant would make @Claw answer *every* Hermes message anywhere in the guild, and
-  since Hermes answers @Claw the two could ping-pong without bound. Prefer
-  per-channel scoping under `guilds.<id>.channels` if openclaw honours it; confirm
-  with `openclaw_config_drift_keys_added` (the live config is compared against the
-  Nix template, so keys openclaw discards show up as drift) plus a canary run.
+- **OpenClaw accepting Hermes: `allowFrom` is enough.** Add
+  `1503619790261194793` to `channels.discord.allowFrom` in
+  `modules/services/openclaw-config.nix`, then restart `microvm@openclaw` (config is
+  injected at preStart). The canary went green on that alone. Hermes is *also*
+  scoped under `guilds.<id>.channels."<#interconnect>"` with
+  `requireMention = true`; that block is accepted by openclaw (drift shows it is not
+  stripped) but is **not** load-bearing and its semantic effect is untested — do not
+  cite it as proof that per-channel scoping works. Do **not** add Hermes to the
+  guild-wide `guilds.<id>.users`: that list pairs with `requireMention = false`, so
+  @Claw would answer every Hermes message anywhere in the guild, and since Hermes
+  answers @Claw they could ping-pong without bound.
 
 ### 3. Verify each answers the other (do this BEFORE enabling)
 

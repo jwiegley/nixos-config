@@ -266,15 +266,12 @@
       # openclaw_discord_canary_cleanup_failed has read 0 across every run since, so the probe
       # deletes its own message successfully.
       #
-      # NOT YET GREEN, unlike the hermes direction above: @Claw does not answer Hermes'
-      # mention (post_http=200 / "no reply within timeout"). Hermes was added to
-      # channels.discord.allowFrom in modules/services/openclaw-config.nix, and that was
-      # verified live in the running VM config with the gateway ready -- still no reply, so
-      # allowFrom does not gate guild-channel messages. The guild-scoped allowlist is the
-      # remaining candidate and is deliberately NOT set; see the comment on allowFrom for the
-      # ping-pong hazard that makes it an operator decision. Harmless meanwhile: the
-      # last_success > 0 gate means this cannot page or trigger self-heal, and
-      # OpenClawDiscordCanaryNeverSucceeded reports the gap at warning severity.
+      # GREEN since 2026-07-30 12:46 (rt=7.4s), once Hermes was added to
+      # channels.discord.allowFrom in modules/services/openclaw-config.nix. Reply latency is
+      # highly variable -- 7.4s, 30.2s, 85.3s, 87.8s measured -- which is why timeoutSeconds
+      # is 180 rather than the module's 90s default: at 90s the slow-but-healthy replies
+      # scored as a dead round-trip and briefly produced a wrong diagnosis (see that
+      # allowFrom comment).
       channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
       targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
       targetName = "OpenClaw";

@@ -12,20 +12,25 @@ probe-bot design):
   - Hermes probes OpenClaw's @Claw   -> metric openclaw_discord_canary_*
 Blind spot (accepted): if BOTH gateways die at once, neither probe reports.
 
-LIVE since 2026-07-30 in #interconnect. Status by direction:
-  - hermes_discord_canary  (tests Hermes)   GREEN. First run after the timer fix
-    succeeded: ok=1, rt=6.773s. Its only defect was a dead timer, NOT a missing
-    allowlist entry -- nothing about Hermes' allowlist was changed.
-  - openclaw_discord_canary (tests OpenClaw) NOT GREEN. post_http=200 with "no
-    reply within timeout": @Claw does not answer Hermes' mention. Adding Hermes to
-    channels.discord.allowFrom was necessary but not sufficient (verified with the
-    id live in the running VM config and the gateway ready), so the guild-scoped
-    allowlist is the remaining candidate.
+LIVE since 2026-07-30 in #interconnect, and BOTH directions have gone green:
+  - hermes_discord_canary  (tests Hermes)   first green 12:01, rt=6.773s. Its only
+    defect was a dead timer, NOT a missing allowlist entry.
+  - openclaw_discord_canary (tests OpenClaw) first green 12:46, rt=7.437s, once
+    Hermes was added to @Claw's channels.discord.allowFrom.
 
-Until a direction succeeds once, its *DiscordCanaryDown alert is suppressed by a
-last_success > 0 gate and *DiscordCanaryNeverSucceeded reports the setup gap
-instead -- see that gate's comment in modules/monitoring/alerts/openclaw.yaml,
-which also records why a canary-down alert must NOT auto-restart the VM.
+REPLY LATENCY IS THE SUBTLE PART, and it shaped both the timeout and the alerts.
+These targets are LLM agents, so a reply takes anywhere from ~3s to ~90s (measured:
+3.5, 6.8, 7.4, 30.2, 85.3, 87.8). The original 90s timeout therefore scored healthy
+slow replies as dead round-trips, which produced a confidently wrong diagnosis
+before the pattern was visible. timeoutSeconds is now 180.
+
+Worse, the agents answer only about HALF their mentions, so ok flips between 1 and 0
+run to run. Alerting on that directly (`ok == 0 for: 15m`) pages on any two
+consecutive misses, so the *DiscordCanaryDown rules key on the AGE of
+last_success_timestamp_seconds instead -- monotonic, so it cannot oscillate -- and
+*DiscordCanaryDegraded reports the success RATE. See
+modules/monitoring/alerts/openclaw.yaml, which also records why a canary-down alert
+must NOT auto-restart the VM.
 
 Why this is needed (2026-07-15 incident):
   Hermes' Discord connection zombied — the WebSocket stayed "connected" and

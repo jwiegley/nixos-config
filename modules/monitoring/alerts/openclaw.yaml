@@ -304,19 +304,18 @@ groups:
             distinguish "broken" from "never worked", and firing on the latter
             made self-heal reboot the VM in a 26-minute loop on 2026-07-30).
             This is setup step 2 of docs/DISCORD_CANARY_SETUP.md: @Claw must
-            allow-list Hermes (1503619790261194793). Adding Hermes to
-            channels.discord.allowFrom in modules/services/openclaw-config.nix was
-            necessary but NOT sufficient -- verified live 2026-07-30: with Hermes
-            in the running config and the gateway ready, @Claw still did not reply,
-            so allowFrom does not gate guild-channel messages. The remaining
-            candidate is the guild-scoped allowlist
-            (channels.discord.guilds.<id>.users), which is deliberately not set
-            because that guild has requireMention = false and a guild-wide grant
-            would let the two agents answer each other unprompted.
+            allow-list Hermes (1503619790261194793) in channels.discord.allowFrom
+            (modules/services/openclaw-config.nix). That entry alone was sufficient
+            when this was last established, on 2026-07-30.
             Check the probe's own verdict with
-            `journalctl -u discord-canary-openclaw.service | tail -1`;
-            `post_http=200` with `no reply within timeout` means posting works
-            and the target is ignoring the mention.
+            `journalctl -u discord-canary-openclaw.service | tail -1`, and read
+            `post_http=200` + `no reply within timeout` CAREFULLY: it means the post
+            succeeded and no reply was seen *inside timeoutSeconds*, which is not the
+            same as the target rejecting the sender. Replies here range ~3s to ~90s,
+            and reading that message as "rejected" once produced a confidently wrong
+            diagnosis. Rule out the cheap causes first: a still-warming VM (compare
+            the run time against microvm@openclaw's ActiveEnterTimestamp) and a
+            timeout that is merely too short.
 
       # The OpenClaw-direction canary/probe stopped producing fresh metrics.
       - alert: OpenClawDiscordCanaryStale

@@ -17,7 +17,28 @@ groups:
       # NodeRedServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
       # (systemd.yaml, for=60s, no exclusion list); NodeRedDown above carries the impact.
 
-      # vdirsyncer Contact/Calendar Sync Alerts
+      # ---------------------------------------------------------------------
+      # vdirsyncer contact/calendar sync.
+      #
+      # CONSOLIDATED HERE 2026-07-29. These rules previously existed in TWO places: this
+      # file and modules/services/vdirsyncer-alerts.nix, which built its own rule file
+      # with pkgs.writeText and registered it via services.prometheus.ruleFiles. That was
+      # a second, parallel mechanism for something this repo otherwise does one way --
+      # 469 of 524 rules are plain YAML under modules/monitoring/alerts/, auto-discovered.
+      # The .nix file needed no Nix at all (its only interpolation was the writeText
+      # wrapper itself), so it was deleted rather than kept in sync.
+      #
+      # The split had produced three duplicate pairs, each defining the SAME condition
+      # twice at DIFFERENT severities, so one failure notified twice and reached both the
+      # iPhone and the email path:
+      #   VdirsyncerSyncUnhealthy      identical expr, warning here vs critical there
+      #   VdirsyncerSyncStale          identical expr AND dwell as its
+      #                                VdirsyncerNotSyncingCritical twin
+      #   VdirsyncerStatusServiceDown  overlapped VdirsyncerStatusDashboardDown
+      # Also dropped: VdirsyncerNotSyncing (> 1800s), a same-severity second threshold on
+      # the same metric as VdirsyncerSyncStale. A warning ladder whose rungs share a
+      # severity is just a duplicate notification.
+      # ---------------------------------------------------------------------
       - alert: VdirsyncerSyncStale
         expr: (time() - vdirsyncer_last_sync_timestamp) > 3600
         for: 5m
@@ -29,41 +50,49 @@ groups:
           summary: "vdirsyncer {{ $labels.pair }} hasn't synced in over 1 hour"
           description: "Sync pair {{ $labels.pair }} last synced {{ $value | humanizeDuration }} ago (expected: every 15 minutes). Contacts/calendars may be out of sync."
 
+      # Severity is WARNING by operator decision 2026-07-29. The duplicate that lived in
+      # vdirsyncer-alerts.nix graded this critical; a sync falling behind is not a
+      # wake-someone event, and the critical twin also paged the iPhone.
       - alert: VdirsyncerSyncUnhealthy
         expr: vdirsyncer_sync_healthy == 0
         for: 10m
+        labels:
+          severity: warning
+          category: sync
+          service: vdirsyncer
+        annotations:
+          summary: "vdirsyncer {{ $labels.pair }} sync is unhealthy"
+          description: "Sync pair {{ $labels.pair }} has reported unhealthy for over 10 minutes. Check the dashboard at https://vdirsyncer.vulcan.lan or `journalctl -u vdirsyncer.service -f`."
+
+      # Stays CRITICAL, unlike the two above, because it is a different failure: not
+      # "sync is behind" but "nothing is configured to sync at all", which does not
+      # self-heal and usually means discovery or authentication broke.
+      - alert: VdirsyncerNoCollections
+        expr: vdirsyncer_collections_total == 0
+        for: 15m
         labels:
           severity: critical
           category: sync
           service: vdirsyncer
         annotations:
-          summary: "vdirsyncer {{ $labels.pair }} sync is unhealthy"
-          description: "Sync pair {{ $labels.pair }} status is unhealthy. Check logs for sync errors."
+          summary: "vdirsyncer has no collections configured"
+          description: "No collections are being synced. Likely a discovery or authentication problem. Troubleshoot with `sudo -u vdirsyncer vdirsyncer --config /etc/vdirsyncer/config discover`."
 
-      # VdirsyncerServiceFailed deleted 2026-07-29: strict subset of SystemdServiceFailed
-      # (systemd.yaml, for=60s, no exclusion list); VdirsyncerSyncStale above carries the impact.
-      # This is the ONE of the eleven deleted clones that had actually fired (once in the 30d to
-      # 2026-07-29) -- and SystemdServiceFailed fired for vdirsyncer.service in the same window,
-      # which is the empirical proof of the subset relation. modules/services/vdirsyncer.nix
-      # references this alertname in a comment about its 3-attempt retry wrapper; that comment
-      # now means SystemdServiceFailed.
-
-      - alert: VdirsyncerStatusDashboardDown
-        expr: |
-          node_systemd_unit_state{
-            name="vdirsyncer-status.service",
-            state="active"
-          } == 0
+      # Kept in preference to the former VdirsyncerStatusDashboardDown, which watched
+      # node_systemd_unit_state for vdirsyncer-status.service. `up` on the exporter that
+      # unit serves (localhost:8089) is the stronger signal: it also catches a process
+      # that is active but hung, which a unit-state check cannot see.
+      - alert: VdirsyncerStatusServiceDown
+        expr: up{job="vdirsyncer"} == 0
         for: 5m
         labels:
           severity: warning
           category: sync
           service: vdirsyncer
         annotations:
-          summary: "vdirsyncer status dashboard is down"
-          description: "vdirsyncer status dashboard service is not active. Metrics and web UI unavailable."
+          summary: "vdirsyncer status service is down"
+          description: "The vdirsyncer status dashboard and metrics exporter is not responding. Check with `systemctl status vdirsyncer-status.service`."
 
-      # Mosquitto MQTT Broker Alerts
       - alert: MosquittoServiceDown
         expr: |
           node_systemd_unit_state{

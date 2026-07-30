@@ -83,21 +83,28 @@ tile:
 
 ## Alert Rules
 
-The following Prometheus alerts are already configured (all six confirmed live
-in Prometheus group `vdirsyncer_alerts` on 2026-07-27, defined in
-`modules/services/vdirsyncer-alerts.nix`). Note that a second, overlapping set
-— `VdirsyncerSyncStale`, `VdirsyncerSyncUnhealthy`, `VdirsyncerServiceFailed`,
-`VdirsyncerStatusDashboardDown` — also exists in
-`modules/monitoring/alerts/application-services.yaml`:
+All vdirsyncer alerts live in ONE place: `modules/monitoring/alerts/application-services.yaml`.
 
-1. **VdirsyncerNotSyncing** - Triggers after 30 minutes without sync (warning)
-2. **VdirsyncerNotSyncingCritical** - Triggers after 1 hour without sync (critical)
-3. **VdirsyncerSyncUnhealthy** - Triggers when health check fails (warning)
-4. **VdirsyncerNoCollections** - Triggers when no collections are configured (critical)
-5. **VdirsyncerSlowSync** - Triggers when sync takes over 5 minutes (warning).
-   **Can never fire** — its expression uses `vdirsyncer_last_sync_duration_seconds`,
-   which the exporter does not emit.
-6. **VdirsyncerStatusServiceDown** - Triggers when metrics endpoint is down (warning)
+They were consolidated there on 2026-07-29. Previously they were split across that file and
+`modules/services/vdirsyncer-alerts.nix`, which has been deleted — it defined the same
+conditions again at different severities, so a single failure notified twice and reached both
+the iPhone and the email path.
+
+1. **VdirsyncerSyncStale** (warning) — no successful sync in over 1 hour, per sync pair.
+2. **VdirsyncerSyncUnhealthy** (warning) — health check failing for over 10 minutes, per pair.
+3. **VdirsyncerNoCollections** (critical) — nothing configured to sync at all. Critical, unlike
+   the two above, because it does not self-heal and usually means discovery or authentication
+   broke rather than a sync merely falling behind.
+4. **VdirsyncerStatusServiceDown** (warning) — the metrics endpoint on localhost:8089 is not
+   responding. Uses `up{job="vdirsyncer"}` rather than the unit state, so it also catches a
+   process that is active but hung.
+
+Removed in the same consolidation, so do not go looking for them: `VdirsyncerNotSyncing` (a
+same-severity 30-minute duplicate of `VdirsyncerSyncStale`), `VdirsyncerNotSyncingCritical`
+(identical expression and dwell to `VdirsyncerSyncStale`), `VdirsyncerStatusDashboardDown`
+(weaker unit-state form of `VdirsyncerStatusServiceDown`), and `VdirsyncerSlowSync` (deleted
+earlier — it selected `vdirsyncer_last_sync_duration_seconds`, which the exporter never emits).
+
 
 ## Useful PromQL Queries
 

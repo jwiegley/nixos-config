@@ -68,6 +68,8 @@
 
           # Environment configuration
           environments = {
+            # aiohttp cuts slow first-token streams at 300s despite LiteLLM's configured timeouts.
+            DISABLE_AIOHTTP_TRANSPORT = "True";
             POSTGRES_HOST = "127.0.0.1";
             PYTHONPATH = "/app";
             LITELLM_LOG = "WARNING"; # Suppress INFO-level scheduler logs

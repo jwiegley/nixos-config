@@ -169,7 +169,18 @@
     ../../modules/services/qdrant-inference-bridge.nix
     ../../modules/monitoring/services/qdrant-nagios.nix
     ../../modules/services/voice-assistant.nix
-    ../../modules/monitoring/services/nagios-prometheus-mirror.nix
+    # nagios-prometheus-mirror.nix REMOVED 2026-07-31 -- the operator is undoing the
+    # Nagios/Prometheus duplication. That module generated one `PROM-MIRROR <alertname>`
+    # Nagios service per Prometheus rule (499 of them, i.e. 60% of Nagios's entire service
+    # set) purely so each stack could re-check the other. It is duplication by construction,
+    # so it is the first thing to go.
+    #
+    # nagios-tier1-mirror.nix DELIBERATELY KEPT despite the name: it is NOT generated
+    # mirror machinery. Of its 84 hand-curated services, 6 textfile collectors have no
+    # Prometheus equivalent at all (atd, imapsieve, git_workspace, openclaw_hermes_smoke,
+    # fts_staleness, openclaw_config_drift). Deleting it would drop real coverage, and would
+    # also move the native check count 339 -> 255, breaking the acceptance invariant that
+    # this change leaves native checks untouched.
     ../../modules/monitoring/services/nagios-tier1-mirror.nix
 
     # Containers

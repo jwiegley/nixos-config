@@ -140,7 +140,6 @@
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/monitoring/services/openclaw-hermes-smoke.nix
     ../../modules/monitoring/services/hermes-e2e-chat-probe.nix
-    ../../modules/monitoring/services/discord-canary.nix
     ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/cockpit.nix
@@ -239,70 +238,20 @@
     # failures immediately. ~96 probes/day, ~11 min MLX compute/day.
     intervalSeconds = 900;
   };
-  # Active Discord round-trip canary — the only probe that exercises the
-  # inbound MESSAGE_CREATE -> reply pipeline (the leg that zombied silently on
-  # 2026-07-15). The two agents probe EACH OTHER, reusing their existing bot
-  # tokens (no new bot/secret). Blind spot: both dying at once is undetected.
-  # DISABLED until the one-time setup is done — pick a shared channel both
-  # bots can read+send in, add each bot to the OTHER's allow-list, verify each
-  # answers the other's @mention, then set channelId + flip enable=true.
-  # Full runbook: docs/DISCORD_CANARY_SETUP.md
-  services.discordCanary.probes = {
-    # @Claw (OpenClaw) posts, Hermes must reply -> tests Hermes.
-    hermes = {
-      # Enabled 2026-07-30 once the operator granted MANAGE_MESSAGES to both bots in
-      # #interconnect (without it, deleting the TARGET's reply returns 403 and every
-      # successful round-trip would leave ~192 undeletable messages/day in a channel granted
-      # on the condition that it stays clean). *DiscordCanaryNotCleaningUp catches a regression.
-      #
-      # PROVEN GREEN 2026-07-30 12:01 (ok=1, rt=6.773s) on the first run after the timer was
-      # fixed in modules/monitoring/services/discord-canary.nix. This direction needed NO
-      # allowlist change -- Hermes already answers @Claw. Its only defect was that its timer
-      # never fired, which is worth remembering: setup step 3 of docs/DISCORD_CANARY_SETUP.md
-      # was skipped, so a dead timer and a missing allowlist looked identical from the metrics
-      # (both simply never report ok=1). The probe's own log line distinguishes them.
-      enable = true;
-      # #interconnect -- created 2026-07-29 by the operator specifically for this: private,
-      # muted, members are ONLY the two bots. Granted on the explicit condition that the
-      # canary keeps it clean, which is why cleanup failures are now counted and alerted on
-      # rather than ignored (see scripts/discord_canary.py).
-      channelId = "1532127247211827322";
-      targetUserId = "1503619790261194793"; # Hermes bot
-      targetName = "Hermes";
-      tokenFile = config.sops.secrets."openclaw/discord-token".path;
-      intervalSeconds = 900;
-      # These targets are LLM agents with a heavy-tailed reply latency: measured 3.5, 3.7,
-      # 6.8, 7.4, 30.2, 85.3, 87.8 and 179.9 seconds. Every timeout tried so far has been
-      # too short and each one manufactured a false "dead round-trip" -- 90s (the module
-      # default) failed against the 85-88s replies, and 180s was cleared by only 0.06s by
-      # the 179.9s one. 420s is ~2.3x the observed maximum. retries = 0 keeps one attempt
-      # inside the 900s cadence; see the module option for why a retry does not help when
-      # the failure mode is latency.
-      timeoutSeconds = 420;
-      retries = 0;
-    };
-    # Hermes posts, @Claw (OpenClaw) must reply -> tests OpenClaw.
-    openclaw = {
-      enable = true; # MANAGE_MESSAGES granted by the operator 2026-07-30 and CONFIRMED live:
-      # openclaw_discord_canary_cleanup_failed has read 0 across every run since, so the probe
-      # deletes its own message successfully.
-      #
-      # GREEN since 2026-07-30 12:46 (rt=7.4s), once Hermes was added to
-      # channels.discord.allowFrom in modules/services/openclaw-config.nix. Reply latency is
-      # highly variable -- 7.4s, 30.2s, 85.3s, 87.8s measured -- which is why timeoutSeconds
-      # is 180 rather than the module's 90s default: at 90s the slow-but-healthy replies
-      # scored as a dead round-trip and briefly produced a wrong diagnosis (see that
-      # allowFrom comment).
-      channelId = "1532127247211827322"; # #interconnect, see the hermes probe above
-      targetUserId = "1477036366138445905"; # @Claw (OpenClaw) bot
-      targetName = "OpenClaw";
-      envFile = config.sops.secrets."hermes/env".path; # provides DISCORD_BOT_TOKEN
-      intervalSeconds = 900;
-      timeoutSeconds = 420; # see the hermes probe above
-      retries = 0;
-
-    };
-  };
+  # The Discord round-trip canary was REMOVED 2026-07-31 together with OpenClaw. It was
+  # inherently cross-agent -- the two agents probed EACH OTHER -- so it cannot outlive the
+  # removal of one of them. Both probes,
+  # modules/monitoring/services/discord-canary.nix, scripts/discord_canary.py and all 12
+  # *DiscordCanary* rules went with it.
+  #
+  # It never reached a clean steady state either: @Claw's bot holds neither MANAGE_MESSAGES
+  # nor MANAGE_THREADS in #interconnect, so every SUCCESSFUL round-trip left Hermes' reply
+  # undeletable inside a thread -- 8 of 8 final runs were reply+reference green followed by
+  # http 403 on both the thread delete and the message delete. Retiring it stops that
+  # accumulation in a channel granted on the condition it stays clean.
+  #
+  # Hermes' OWN monitoring is untouched and remains: the e2e chat probe, WS-zombie
+  # detection, the fallback counter and its freshness guard, and the nightly health report.
   services.hermesFallbackCounter.enable = true;
   services.openclawConfigDriftCheck.enable = true;
 

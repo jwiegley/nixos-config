@@ -28,7 +28,8 @@ It hid while timeoutSeconds was 90s, because a probe timed out before the opposi
 posted. Raising it to 420s (for genuinely slow LLM replies) widened the window enough for the
 two to start eating each other, which is how it surfaced. _is_probe_message() now excludes the
 other direction's template, and `detail` distinguishes `reply+nonce` (proof this reply answers
-THIS probe) from `reply-unverified` (a non-probe message from the target, weaker evidence).
+THIS probe) from `reply+reference` (Discord itself records the message as replying to
+ours). Nothing else is accepted, and nothing unattributed is ever deleted.
 
 CONSEQUENCE, stated plainly: because no agent has ever been observed echoing the nonce, both
 directions may now read RED where they previously read green. That is the honest state, not a
@@ -234,6 +235,25 @@ def run_probe() -> ProbeResult:
                 # It stayed hidden while timeoutSeconds was 90s, because a probe timed out
                 # before the opposite direction posted; raising it to 420s widened the
                 # window enough for the two to start eating each other.
+                # NONCE FIRST -- it outranks every heuristic below.
+                #
+                # This ordering is load-bearing. _is_probe_message() matches any message
+                # containing "canary " AND "reply with", which is exact for OUR template but
+                # over-broad for a conversational reply: on 2026-07-31 Hermes answered a
+                # probe WITH the nonce echoed (operator saw it in the channel) and the run
+                # still scored ok=0, because the template filter ran first and threw the
+                # reply away before the nonce was ever examined.
+                #
+                # Our nonce is 8 random hex characters generated for THIS run. The sibling
+                # direction's probe carries a different one, so a nonce match cannot be the
+                # other probe's post -- which is precisely what the filter exists to exclude.
+                # Checking it first is therefore strictly safer, not a relaxation.
+                if nonce in content:
+                    result.ok = True
+                    result.roundtrip_seconds = round(time.monotonic() - start, 3)
+                    reply_id = m.get("id", "")
+                    result.detail = "reply+nonce"
+                    break
                 if _is_probe_message(content):
                     continue
                 # POSITIVE ATTRIBUTION IS REQUIRED. Exactly two forms count, both exact:

@@ -211,8 +211,21 @@ groups:
           description: "HTTP/HTTPS probe to {{ $labels.instance }} has been failing for more than 1 minute."
 
       # SSL certificate expiry warning (from HTTPS probes)
+      #
+      # Selector widened 2026-07-31 from job="blackbox_https" to include
+      # blackbox_https_public, as part of retiring Nagios: "ATD SSL Certificate" and the other
+      # native Nagios cert checks go away with it, and blackbox_https carries exactly ONE
+      # series (https://google.com) while the public edge certs live in blackbox_https_public.
+      #
+      # blackbox_https_local is deliberately NOT included even though it carries 39 series.
+      # Those are LOCAL vhosts whose certs are files on disk, and the certificate exporter
+      # already watches all 56 of them by file (certificates.yaml:53 at <=30d and :63 at <=7d,
+      # plus certificate_valid and certificate_chain_valid). Adding _local here would raise a
+      # second, earlier-firing alert for every one of those 39 vhosts. The public certs are
+      # the genuine gap precisely BECAUSE they are terminated at the Cloudflare edge and
+      # therefore have no local file for the certificate exporter to inspect.
       - alert: SSLCertificateExpiringSoon
-        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https"} - time() < 7 * 24 * 3600
+        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_https(_public)?"} - time() < 7 * 24 * 3600
         for: 1h
         labels:
           severity: warning
@@ -222,9 +235,9 @@ groups:
           summary: "SSL certificate for {{ $labels.instance }} expires soon"
           description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
 
-      # SSL certificate expiry critical
+      # SSL certificate expiry critical -- same selector widening as above, same reasoning.
       - alert: SSLCertificateExpiringCritical
-        expr: probe_ssl_earliest_cert_expiry{job="blackbox_https"} - time() < 24 * 3600
+        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_https(_public)?"} - time() < 24 * 3600
         for: 15m
         labels:
           severity: critical

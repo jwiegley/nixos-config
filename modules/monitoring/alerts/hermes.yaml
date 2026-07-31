@@ -511,6 +511,34 @@ groups:
             banner. Check `/var/lib/hermes/.hermes/logs/errors.log`
             for the failing base_url and HTTP code.
 
+      # Freshness guard for the collector the rule above depends on.
+      #
+      # Added 2026-07-31 while retiring Nagios, which was the only watcher of this
+      # collector's liveness. HermesFallbackChainTriggered uses increase(...[10m]) > 0, so a
+      # DEAD collector reads exactly like a healthy system: the counter stops advancing,
+      # increase() returns 0, and the alert can never fire again. That is silent blindness
+      # rather than a visible failure, which is the whole reason this guard exists.
+      #
+      # service: hermes-collector (NOT hermes-*) so a dead collector is not routed to the
+      # self-heal daemon, which cannot fix a stopped timer by restarting the agent.
+      - alert: HermesFallbackCollectorStale
+        expr: time() - hermes_fallback_counter_last_run_timestamp_seconds > 600
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+          service: hermes-collector
+        annotations:
+          summary: "Hermes fallback counter collector is stale — HermesFallbackChainTriggered is blind"
+          description: |
+            hermes_fallback_counter_last_run_timestamp_seconds has not
+            advanced in over 10 minutes. While this is firing,
+            HermesFallbackChainTriggered CANNOT fire regardless of how
+            many fallbacks occur, because increase() over a frozen
+            counter is 0. Treat fallback-chain silence as unverified
+            until this clears. Check the hermes fallback-counter
+            oneshot/timer.
+
       # The self-heal daemon's own heartbeat. If the daemon dies, no
       # auto-remediation is happening — operator must intervene.
       # NOTE: service: hermes-self-heal (NOT hermes-*) so this alert

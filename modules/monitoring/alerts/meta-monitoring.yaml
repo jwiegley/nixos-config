@@ -330,10 +330,38 @@ groups:
           summary: "Fast-cadence textfile collector {{ $labels.file }} is stale"
           description: "{{ $labels.file }} has not been rewritten in over 30 minutes (its timer runs every 1-2 min). Every metric this collector produces is now FROZEN at its last value, so any alert reading those metrics is silently stale. Check the corresponding *-exporter oneshot/timer."
 
+      # Hourly-cadence collectors.
+      #
+      # Added 2026-07-31 while retiring Nagios. secrets-perms is SECURITY-relevant and was
+      # watched only by Nagios: secrets-perms.prom feeds exactly one rule,
+      # SecretsWorldReadable (security.yaml, secrets_world_readable_count > 0). If the scanner
+      # dies the gauge freezes at 0 and that alert becomes silently unfirable -- the failure
+      # mode where monitoring reports "no problem" because it stopped looking.
+      #
+      # 3h, not the 30m Fast tier: secrets-perms-exporter.timer is hourly (verified live), so
+      # a 30m threshold would false-positive between every run. 3h tolerates two missed runs.
+      - alert: TextfileCollectorStaleHourly
+        expr: |
+          time() - node_textfile_mtime_seconds{file=~".*/(secrets-perms)\\.prom"} > 10800
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Hourly textfile collector {{ $labels.file }} is stale"
+          description: "{{ $labels.file }} has not been rewritten in over 3 hours (its timer runs hourly). The metrics it produces are FROZEN at their last value. For secrets-perms this is security-relevant: SecretsWorldReadable reads secrets_world_readable_count, which freezes at its last value (normally 0) and stops being able to fire. Check secrets-perms-exporter.service/.timer."
+
       # Daily-cadence collectors (~24h timers).
+      #
+      # `aide` added 2026-07-31 while retiring Nagios. aide-metrics.nix and security/aide.nix
+      # both state in their own comments that the NAGIOS check was the only watcher of this
+      # collector's freshness. Without it, a dead aide-metrics.timer freezes
+      # aide_database_age_seconds at a small value and AIDEDatabaseStale (security.yaml)
+      # becomes structurally unfirable. Verified: aide-metrics.timer is OnCalendar daily at
+      # 00:00, so the existing 26h threshold fits without adjustment.
       - alert: TextfileCollectorStaleDaily
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(container_store_size|system_age|pg_dump|technitium_backup|nodered_backup)\\.prom"} > 93600
+          time() - node_textfile_mtime_seconds{file=~".*/(container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide)\\.prom"} > 93600
         for: 30m
         labels:
           severity: warning

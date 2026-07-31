@@ -739,10 +739,11 @@ let
       name = "redis-searxng.service";
       display = "Redis (SearXNG)";
     }
-    {
-      name = "redis-shlink.service";
-      display = "Redis (Shlink)";
-    }
+    # redis-shlink check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+    #     {
+    #       name = "redis-shlink.service";
+    #       display = "Redis (Shlink)";
+    #     }
     {
       name = "redis-openproject.service";
       display = "Redis (OpenProject)";
@@ -1011,16 +1012,18 @@ let
       display = "OPNsense Metrics Exporter";
       runAs = "opnsense-exporter";
     }
-    {
-      name = "shlink";
-      display = "Shlink URL Shortener API";
-      runAs = "shlink";
-    }
-    {
-      name = "shlink-web-client";
-      display = "Shlink Web Client";
-      runAs = "shlink-web-client";
-    }
+    # shlink container check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+    #     {
+    #       name = "shlink";
+    #       display = "Shlink URL Shortener API";
+    #       runAs = "shlink";
+    #     }
+    # shlink-web-client check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+    #     {
+    #       name = "shlink-web-client";
+    #       display = "Shlink Web Client";
+    #       runAs = "shlink-web-client";
+    #     }
     {
       name = "speedtest";
       display = "Open SpeedTest";
@@ -1155,1301 +1158,1323 @@ let
 
   # Nagios object configuration
   nagiosObjectDefs = pkgs.writeText "nagios-objects.cfg" ''
-    ###############################################################################
-    # NAGIOS OBJECT DEFINITIONS
-    ###############################################################################
-
-    ###############################################################################
-    # CONTACTS
-    ###############################################################################
-
-    define contact {
-      contact_name                    nagiosadmin
-      alias                           Nagios Admin
-      service_notification_period     24x7
-      host_notification_period        24x7
-      service_notification_options    u,c,r
-      host_notification_options       d,u,r
-      service_notification_commands   notify-service-by-email
-      host_notification_commands      notify-host-by-email
-      email                           johnw@vulcan.lan
-    }
-
-    define contactgroup {
-      contactgroup_name               admins
-      alias                           Nagios Administrators
-      members                         nagiosadmin
-    }
-
-    ###############################################################################
-    # TIME PERIODS
-    ###############################################################################
-
-    define timeperiod {
-      timeperiod_name 24x7
-      alias           24 Hours A Day, 7 Days A Week
-      sunday          00:00-24:00
-      monday          00:00-24:00
-      tuesday         00:00-24:00
-      wednesday       00:00-24:00
-      thursday        00:00-24:00
-      friday          00:00-24:00
-      saturday        00:00-24:00
-    }
-
-    define timeperiod {
-      timeperiod_name workhours
-      alias           Normal Work Hours
-      monday          09:00-17:00
-      tuesday         09:00-17:00
-      wednesday       09:00-17:00
-      thursday        09:00-17:00
-      friday          09:00-17:00
-    }
-
-    ###############################################################################
-    # COMMANDS
-    ###############################################################################
-
-    # Notification commands
-    define command {
-      command_name    notify-host-by-email
-      command_line    ${pkgs.mailutils}/bin/mail -s "** $NOTIFICATIONTYPE$ Host Alert: $HOSTNAME$ is $HOSTSTATE$ **" $CONTACTEMAIL$
-    }
-
-    define command {
-      command_name    notify-service-by-email
-      command_line    ${pkgs.mailutils}/bin/mail -s "** $NOTIFICATIONTYPE$ Service Alert: $HOSTALIAS$/$SERVICEDESC$ is $SERVICESTATE$ **" $CONTACTEMAIL$
-    }
-
-    # Host check commands
-    define command {
-      command_name    check-host-alive
-      command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w 3000.0,80% -c 5000.0,100% -p 5
-    }
-
-    define command {
-      command_name    check_ping
-      command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w $ARG1$ -c $ARG2$
-    }
-
-    # Service check commands
-    define command {
-      command_name    check_local_disk
-      command_line    ${pkgs.monitoring-plugins}/bin/check_disk -w $ARG1$ -c $ARG2$ -p $ARG3$
-    }
-
-    define command {
-      command_name    check_local_load
-      command_line    ${pkgs.monitoring-plugins}/bin/check_load -w $ARG1$ -c $ARG2$
-    }
-
-    define command {
-      command_name    check_local_procs
-      command_line    ${pkgs.monitoring-plugins}/bin/check_procs -w $ARG1$ -c $ARG2$ -s $ARG3$
-    }
-
-    define command {
-      command_name    check_local_users
-      command_line    ${pkgs.monitoring-plugins}/bin/check_users -w $ARG1$ -c $ARG2$
-    }
-
-    define command {
-      command_name    check_local_swap
-      command_line    ${pkgs.monitoring-plugins}/bin/check_swap -w $ARG1$ -c $ARG2$
-    }
-
-    define command {
-      command_name    check_tcp
-      command_line    ${pkgs.monitoring-plugins}/bin/check_tcp -H $HOSTADDRESS$ -p $ARG1$ $ARG2$
-    }
-
-    define command {
-      command_name    check_http
-      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ $ARG1$
-    }
-
-    define command {
-      command_name    check_https
-      # --sni added 2026-07-05: check_http does NOT send SNI without it, and
-      # the explicit default :443 server (rejectSSL, added 2026-07-03) aborts
-      # no-SNI handshakes — six HTTPS checks went "Cannot make SSL connection"
-      # at the first cycle after that switch. Callers must pass -H <vhost> in
-      # $ARG1$ (the later -H wins and supplies both Host header and SNI).
-      command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ -S --sni $ARG1$
-    }
-
-    define command {
-      command_name    check_ssh
-      command_line    ${pkgs.monitoring-plugins}/bin/check_ssh $ARG1$ $HOSTADDRESS$
-    }
-
-    define command {
-      command_name    check_imap
-      command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$
-    }
-
-    define command {
-      command_name    check_imaps
-      command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$ -S
-    }
-
-    define command {
-      command_name    check_smtp
-      command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$
-    }
-
-    define command {
-      command_name    check_smtps
-      command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$ -S
-    }
-
-    define command {
-      command_name    check_dns
-      command_line    ${pkgs.monitoring-plugins}/bin/check_dns -H $ARG1$ -s $HOSTADDRESS$
-    }
-
-    define command {
-      command_name    check_ssl_cert
-      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
-    }
-
-    define command {
-      command_name    check_ssl_cert_external
-      command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct
-    }
-
-    define command {
-      command_name    check_systemd_service
-      command_line    ${pkgs.nagiosPlugins.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
-    }
-
-    define command {
-      command_name    check_systemd_service_ondemand
-      command_line    ${pkgs.writeShellScript "check_systemd_ondemand.sh" ''
-        #!/usr/bin/env bash
-        SERVICE="$1"
-
-        # Get service state information
-        ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
-        SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
-        RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
-
-        # For on-demand services:
-        # - inactive/dead is OK (manual stop)
-        # - active/running is OK (manual start)
-        # - failed is CRITICAL (unexpected failure)
-        # - activating is OK (starting up)
-        # - deactivating is OK (shutting down)
-
-        if [ "$ACTIVE_STATE" = "failed" ]; then
-          echo "CRITICAL: $SERVICE has failed - Result: $RESULT"
-          exit 2
-        elif [ "$ACTIVE_STATE" = "active" ]; then
-          echo "OK: $SERVICE is active and running"
-          exit 0
-        elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ]; then
-          if [ "$RESULT" = "success" ]; then
-            echo "OK: $SERVICE is inactive (manual stop or not started)"
-            exit 0
-          else
-            echo "WARNING: $SERVICE is inactive but last run result was: $RESULT"
-            exit 1
-          fi
-        elif [ "$ACTIVE_STATE" = "activating" ] || [ "$ACTIVE_STATE" = "deactivating" ]; then
-          echo "OK: $SERVICE is $ACTIVE_STATE"
-          exit 0
-        else
-          echo "WARNING: $SERVICE is in unexpected state: $ACTIVE_STATE/$SUB_STATE"
-          exit 1
-        fi
-      ''} $ARG1$
-    }
-
-    define command {
-      command_name    check_systemd_service_conditional
-      command_line    ${pkgs.writeShellScript "check_systemd_conditional.sh" ''
-        #!/usr/bin/env bash
-        SERVICE="$1"
-        MOUNTPOINT="$2"
-
-        # Check if mount point is actually mounted
-        if ${pkgs.util-linux}/bin/mountpoint -q "$MOUNTPOINT"; then
-          # Mount is available - service MUST be active or have succeeded
-          ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
-          SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
-          RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
-          CONDITION_RESULT=$(${pkgs.systemd}/bin/systemctl show -p ConditionResult --value "$SERVICE")
-          CONDITION_TS=$(${pkgs.systemd}/bin/systemctl show -p ConditionTimestamp --value "$SERVICE")
-
-          # For oneshot services: inactive+dead with Result=success and ConditionResult=yes is OK
-          # For running services: active+running is OK
-          # For services currently executing: activating state is OK (backup in progress)
-          # Never started this boot: ConditionResult=no with an EMPTY
-          # ConditionTimestamp is systemd's pre-first-start default, not a
-          # condition failure (a weekly timer unit like restic-check sits in
-          # this state for days after a reboot).
-          if [ "$ACTIVE_STATE" = "active" ] && [ "$RESULT" = "success" ]; then
-            echo "OK: $SERVICE is active (mount $MOUNTPOINT available)"
-            exit 0
-          elif [ "$ACTIVE_STATE" = "activating" ]; then
-            # Service is currently starting/running - this is expected for backup jobs
-            echo "OK: $SERVICE is currently running (mount $MOUNTPOINT available)"
-            exit 0
-          elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ] && [ "$RESULT" = "success" ] && [ "$CONDITION_RESULT" = "yes" ]; then
-            echo "OK: $SERVICE completed successfully (mount $MOUNTPOINT available)"
-            exit 0
-          elif [ "$CONDITION_RESULT" = "no" ] && [ -z "$CONDITION_TS" ]; then
-            echo "OK: $SERVICE not started since boot; condition never evaluated, timer trigger pending (mount $MOUNTPOINT available)"
-            exit 0
-          elif [ "$CONDITION_RESULT" = "no" ]; then
-            echo "CRITICAL: $SERVICE condition not met but $MOUNTPOINT IS mounted - service should be running"
-            exit 2
-          else
-            echo "CRITICAL: $SERVICE is $ACTIVE_STATE/$SUB_STATE with result $RESULT (mount $MOUNTPOINT available)"
-            exit 2
-          fi
-        else
-          # Mount not available - service being inactive is expected
-          # Note: ConditionResult may still show "yes" if it was evaluated when mount was available
-          # So we only check ActiveState, not ConditionResult
-          ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
-
-          if [ "$ACTIVE_STATE" = "inactive" ]; then
-            echo "OK: $SERVICE inactive because $MOUNTPOINT not mounted (expected)"
-            exit 0
-          elif [ "$ACTIVE_STATE" = "failed" ]; then
-            echo "CRITICAL: $SERVICE is failed even though $MOUNTPOINT not mounted"
-            exit 2
-          else
-            echo "WARNING: $SERVICE is $ACTIVE_STATE but $MOUNTPOINT not mounted"
-            exit 1
-          fi
-        fi
-      ''} $ARG1$ $ARG2$
-    }
-
-    define command {
-      command_name    check_postgres
-      command_line    ${pkgs.monitoring-plugins}/bin/check_pgsql -H $HOSTADDRESS$ -d $ARG1$
-    }
-
-    define command {
-      command_name    check_podman_container
-      command_line    ${pkgs.writeShellScript "check_podman_container.sh" ''
-        #!/usr/bin/env bash
-        CONTAINER_NAME="$1"
-
-        # Check if container exists (use sudo to access root-level containers)
-        # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
-        if ! /run/wrappers/bin/sudo ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
-          echo "CRITICAL: Container $CONTAINER_NAME does not exist"
-          exit 2
-        fi
-
-        # Get container status (use sudo to access root-level containers)
-        STATUS=$(/run/wrappers/bin/sudo ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
-
-        if [ "$STATUS" = "running" ]; then
-          echo "OK: Container $CONTAINER_NAME is running"
-          exit 0
-        elif [ "$STATUS" = "exited" ]; then
-          echo "CRITICAL: Container $CONTAINER_NAME has exited"
-          exit 2
-        else
-          echo "WARNING: Container $CONTAINER_NAME is in state: $STATUS"
-          exit 1
-        fi
-      ''} $ARG1$
-    }
-
-    define command {
-      command_name    check_podman_container_rootless
-      command_line    ${pkgs.writeShellScript "check_podman_container_rootless.sh" ''
-        #!/usr/bin/env bash
-        CONTAINER_NAME="$1"
-        RUN_AS_USER="$2"
-
-        # Check if container exists (run as specific user to access user-namespaced containers)
-        # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
-        if ! /run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
-          echo "CRITICAL: Container $CONTAINER_NAME does not exist (user: $RUN_AS_USER)"
-          exit 2
-        fi
-
-        # Get container status (run as specific user)
-        STATUS=$(/run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
-
-        if [ "$STATUS" = "running" ]; then
-          echo "OK: Container $CONTAINER_NAME is running (user: $RUN_AS_USER)"
-          exit 0
-        elif [ "$STATUS" = "exited" ]; then
-          echo "CRITICAL: Container $CONTAINER_NAME has exited (user: $RUN_AS_USER)"
-          exit 2
-        else
-          echo "WARNING: Container $CONTAINER_NAME is in state: $STATUS (user: $RUN_AS_USER)"
-          exit 1
-        fi
-      ''} $ARG1$ $ARG2$
-    }
-
-    define command {
-      command_name    check_zfs_pool
-      command_line    ${pkgs.nagiosPlugins.check_zfs}/bin/check_zfs --nosudo $ARG1$
-    }
-
-    define command {
-      command_name    check_homeassistant_integrations
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$
-    }
-
-    define command {
-      command_name    check_homeassistant_specific_integration
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
-    }
-
-    define command {
-      command_name    check_homeassistant_integration_status
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -I -i $ARG2$
-    }
-
-    define command {
-      command_name    check_backup_age
-      command_line    ${checkBackupAge} $ARG1$ $ARG2$
-    }
-
-    define command {
-      command_name    check_git_workspace_sync
-      command_line    ${checkGitWorkspaceSync}
-    }
-
-    define command {
-      command_name    check_git_workspace_stale
-      command_line    ${checkGitWorkspaceStale} $ARG1$ $ARG2$ $ARG3$
-    }
-
-    define command {
-      command_name    check_openclaw_plugin
-      command_line    ${checkOpenClawPlugin} $ARG1$ $ARG2$
-    }
-
-    define command {
-      command_name    check_openclaw_ready_age
-      command_line    ${checkOpenClawReadyAge} $ARG1$
-    }
-
-    ###############################################################################
-    # HOSTS
-    ###############################################################################
-
-    define host {
-      use                     linux-server
-      host_name               vulcan
-      alias                   Vulcan NixOS Server
-      address                 127.0.0.1
-      max_check_attempts      5
-      check_period            24x7
-      notification_interval   30
-      notification_period     24x7
-      contact_groups          admins
-    }
-
-    ###############################################################################
-    # MONITORED HOSTS (from monitoredHosts list)
-    ###############################################################################
-
-    ${lib.concatMapStrings mkMonitoredHost monitoredHosts}
-
-    ###############################################################################
-    # HOST GROUPS
-    ###############################################################################
-
-    define hostgroup {
-      hostgroup_name  linux-servers
-      alias           Linux Servers
-      members         vulcan
-    }
-
-    ###############################################################################
-    # SERVICE GROUPS
-    ###############################################################################
-
-    define servicegroup {
-      servicegroup_name  critical-infrastructure
-      alias              Critical Infrastructure Services
-    }
-
-    define servicegroup {
-      servicegroup_name  tank-dependent-services
-      alias              Services Requiring /tank Mount
-    }
-
-    define servicegroup {
-      servicegroup_name  monitoring-stack
-      alias              Monitoring and Observability Services
-    }
-
-    define servicegroup {
-      servicegroup_name  home-automation
-      alias              Home Automation Services
-    }
-
-    define servicegroup {
-      servicegroup_name  application-services
-      alias              Application Services
-    }
-
-    define servicegroup {
-      servicegroup_name  backup-services
-      alias              Backup Services
-    }
-
-    define servicegroup {
-      servicegroup_name  local-backups
-      alias              Local System Backups
-    }
-
-    define servicegroup {
-      servicegroup_name  maintenance-timers
-      alias              Maintenance and Cleanup Timers
-    }
-
-    define servicegroup {
-      servicegroup_name  email-services
-      alias              Email Sync Services
-    }
-
-    define servicegroup {
-      servicegroup_name  certificate-renewal
-      alias              Certificate Renewal Timers
-    }
-
-    define servicegroup {
-      servicegroup_name  containers
-      alias              Container Services
-    }
-
-    define servicegroup {
-      servicegroup_name  system-resources
-      alias              System Resource Monitoring
-    }
-
-    define servicegroup {
-      servicegroup_name  network-connectivity
-      alias              Network Connectivity Checks
-    }
-
-    define servicegroup {
-      servicegroup_name  protocol-checks
-      alias              Protocol-Level Checks (IMAP, SMTP, DNS)
-    }
-
-    define servicegroup {
-      servicegroup_name  ssl-certificates
-      alias              SSL Certificate Monitoring
-    }
-
-    define servicegroup {
-      servicegroup_name  home-assistant-integrations
-      alias              Home Assistant Integration Monitoring
-    }
-
-    define servicegroup {
-      servicegroup_name  network-hosts
-      alias              Network Host Monitoring (PING)
-    }
-
-    ###############################################################################
-    # SERVICES - SYSTEM RESOURCES
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Root Partition
-      check_command           check_local_disk!20%!10%!/
-      service_groups          system-resources
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Tank ZFS Pool
-      check_command           check_zfs_pool!tank
-      service_groups          system-resources
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Current Load
-      check_command           check_local_load!15.0,10.0,5.0!30.0,25.0,20.0
-      service_groups          system-resources
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Total Processes
-      check_command           check_local_procs!250!400!RSZDT
-      service_groups          system-resources
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Current Users
-      check_command           check_local_users!20!50
-      service_groups          system-resources
-    }
-
-    ###############################################################################
-    # SERVICES - NETWORK CONNECTIVITY
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     SSH
-      check_command           check_ssh
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     PostgreSQL Connection
-      check_command           check_tcp!5432
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Nginx HTTP
-      check_command           check_tcp!80
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Nginx HTTPS
-      check_command           check_tcp!443
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Prometheus Port
-      check_command           check_tcp!9090
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Grafana Port
-      check_command           check_tcp!3000
-      service_groups          network-connectivity
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Home Assistant HTTP
-      check_command           check_tcp!8123
-      service_groups          network-connectivity
-    }
-
-    ###############################################################################
-    # SERVICES - APPLICATION HTTP HEALTH CHECKS
-    ###############################################################################
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Shlink API Health
-      check_command           check_http!-p 8580 -u /rest/health -s "pass"
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Shlink Web Client HTTP
-      check_command           check_http!-p 8581 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Teable HTTP
-      check_command           check_http!-p 3004 -u /
-      service_groups          application-services
-    }
-
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenSpeedTest HTTP
-      check_command           check_http!-p 3002 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     BudgetBoard HTTP
-      check_command           check_http!-p 6253 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     LiteLLM HTTP
-      check_command           check_http!-p 4000 -u /health/liveliness
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     MailArchiver HTTP
-      check_command           check_http!-p 9097 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Stock Trader HTTPS
-      check_command           check_http!-I 127.0.0.1 -p 443 -S --sni -H trader.vulcan.lan -u /api/config
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenProject HTTP
-      check_command           check_http!-I 127.0.0.1 -p 8180 -H openproject.vulcan.lan -u /health_checks/
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Wallabag HTTP
-      check_command           check_http!-p 9091 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     ChangeDetection HTTP
-      check_command           check_http!-p 5055 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Vane HTTP
-      check_command           check_http!-p 3007 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Memory-Vault Health
-      check_command           check_https!-H memory.vulcan.lan -u /api/health -s "ok"
-      service_groups          application-services
-    }
-
-    ###############################################################################
-    # SERVICES - OPENCLAW AVAILABILITY
-    ###############################################################################
-
-    # Gateway HTTP liveness via nginx (external viewpoint: what a real Discord
-    # user's bot-mesh sees if openclaw.vulcan.lan is down).
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw Gateway Health
-      check_command           check_https!-H openclaw.vulcan.lan -u /healthz -s "live"
-      service_groups          application-services
-    }
-
-    # Discord channel plugin must be in the most-recent gateway ready list.
-    # This is the load-bearing check for "Discord DMs are answered."
-    define service {
-      use                     critical-service
-      host_name               vulcan
-      service_description     OpenClaw Discord Plugin Loaded
-      check_command           check_openclaw_plugin!discord!600
-      service_groups          critical-infrastructure
-    }
-
-    # WhatsApp channel plugin must be in the most-recent ready list.  Less
-    # urgent than discord (warning vs critical).
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw WhatsApp Plugin Loaded
-      check_command           check_openclaw_plugin!whatsapp!600
-      service_groups          application-services
-    }
-
-    # acpx — removed 2026-05-05.  Through 2026.4.x acpx was a channel
-    # plugin tracked by the canary; in 2026.5.x it became an ACP backend
-    # (.acp.backend in openclaw.json) and is no longer in the gateway
-    # plugin list, so the metric permanently reads 0 and the check would
-    # alert forever.  The acpx backend's own health is covered by the
-    # [gateway] auto-enabled plugins / [acp] log lines, not by this metric.
-
-    # Memory-qdrant plugin.  Without this OpenClaw can't remember anything
-    # between sessions.
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw Memory-Qdrant Plugin Loaded
-      check_command           check_openclaw_plugin!memory-qdrant!600
-      service_groups          application-services
-    }
-
-    # Lobster plugin.
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw Lobster Plugin Loaded
-      check_command           check_openclaw_plugin!lobster!600
-      service_groups          application-services
-    }
-
-    # Gateway-ready staleness: fires if the microVM is up but the gateway
-    # never becomes ready (crash loop or wedged start).
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     OpenClaw Gateway Ready Age
-      check_command           check_openclaw_ready_age!1800
-      service_groups          application-services
-    }
-
-    ###############################################################################
-    # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     IMAP (Port 143)
-      check_command           check_imap!143
-      service_groups          protocol-checks
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     IMAPS (Port 993)
-      check_command           check_imaps!993
-      service_groups          protocol-checks
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     SMTP (Port 587)
-      check_command           check_smtp!587
-      service_groups          protocol-checks
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     DNS Resolver
-      check_command           check_dns!vulcan.lan
-      service_groups          protocol-checks
-    }
-
-    ###############################################################################
-    # SERVICES - SSL CERTIFICATE CHECKS
-    # Using daily-service template (check once per day instead of every 10 minutes)
-    ###############################################################################
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: alertmanager.vulcan.lan
-      check_command           check_ssl_cert!alertmanager.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: changes.vulcan.lan
-      check_command           check_ssl_cert!changes.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: cockpit.vulcan.lan
-      check_command           check_ssl_cert!cockpit.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: data.newartisans.com
-      check_command           check_ssl_cert_external!data.newartisans.com
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: dns.vulcan.lan
-      check_command           check_ssl_cert!dns.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: gitea.vulcan.lan
-      check_command           check_ssl_cert!gitea.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: glance.vulcan.lan
-      check_command           check_ssl_cert!glance.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: glances.vulcan.lan
-      check_command           check_ssl_cert!glances.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: grafana.vulcan.lan
-      check_command           check_ssl_cert!grafana.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: hass.vulcan.lan
-      check_command           check_ssl_cert!hass.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: immich.vulcan.lan
-      check_command           check_ssl_cert!immich.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: jellyfin.vulcan.lan
-      check_command           check_ssl_cert!jellyfin.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: loki.vulcan.lan
-      check_command           check_ssl_cert!loki.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: memory.vulcan.lan
-      check_command           check_ssl_cert!memory.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: memory-mcp.vulcan.lan
-      check_command           check_ssl_cert!memory-mcp.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: nagios.vulcan.lan
-      check_command           check_ssl_cert!nagios.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: jupyter.vulcan.lan
-      check_command           check_ssl_cert!jupyter.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: nodered.vulcan.lan
-      check_command           check_ssl_cert!nodered.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: postgres.vulcan.lan
-      check_command           check_ssl_cert!postgres.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: promtail.vulcan.lan
-      check_command           check_ssl_cert!promtail.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: prometheus.vulcan.lan
-      check_command           check_ssl_cert!prometheus.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: litellm.vulcan.lan
-      check_command           check_ssl_cert!litellm.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: llama-swap.vulcan.lan
-      check_command           check_ssl_cert!llama-swap.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: mailarchiver.vulcan.lan
-      check_command           check_ssl_cert!mailarchiver.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: speedtest.vulcan.lan
-      check_command           check_ssl_cert!speedtest.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: speedtracker.vulcan.lan
-      check_command           check_ssl_cert!speedtracker.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: vdirsyncer.vulcan.lan
-      check_command           check_ssl_cert!vdirsyncer.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: victoriametrics.vulcan.lan
-      check_command           check_ssl_cert!victoriametrics.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: vulcan.lan
-      check_command           check_ssl_cert!vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: wallabag.vulcan.lan
-      check_command           check_ssl_cert!wallabag.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: budget.vulcan.lan
-      check_command           check_ssl_cert!budget.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: zimit.vulcan.lan
-      check_command           check_ssl_cert!zimit.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: kiwix.vulcan.lan
-      check_command           check_ssl_cert!kiwix.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: shlink-api.vulcan.lan
-      check_command           check_ssl_cert!shlink-api.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: shlink.vulcan.lan
-      check_command           check_ssl_cert!shlink.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: chat.vulcan.lan
-      check_command           check_ssl_cert!chat.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: vane.vulcan.lan
-      check_command           check_ssl_cert!vane.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    ###############################################################################
-    # SERVICES - LOCAL BACKUPS
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Local Backup: /etc
-      check_command           check_backup_age!etc!28800
-      check_interval          15
-      service_groups          local-backups
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Local Backup: /home
-      check_command           check_backup_age!home!28800
-      check_interval          15
-      service_groups          local-backups
-    }
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Local Backup: /var
-      check_command           check_backup_age!var!28800
-      check_interval          15
-      service_groups          local-backups
-    }
-
-    ###############################################################################
-    # SERVICES - GIT WORKSPACE ARCHIVE
-    ###############################################################################
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Git Workspace Sync Status
-      check_command           check_git_workspace_sync
-      check_interval          10
-      service_groups          backup-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Git Workspace Stale Repositories
-      check_command           check_git_workspace_stale!3!10!25
-      check_interval          60
-      service_groups          backup-services
-    }
-
-    ###############################################################################
-    # SERVICES - HOME ASSISTANT
-    ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Home Assistant - Integration Status
-      check_command           check_homeassistant_integration_status!127.0.0.1:8123!august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws
-      check_interval          5
-      max_check_attempts      2
-      service_groups          home-assistant-integrations
-    }
-
-    ###############################################################################
-    # AUTO-GENERATED SERVICE CHECKS
-    # Services, Timers, and Containers monitored via systemd/podman
-    ###############################################################################
-
-    ${allServiceChecks}
-
-    ###############################################################################
-    # SERVICE TEMPLATES
-    ###############################################################################
-
-    define service {
-      name                    generic-service
-      active_checks_enabled   1
-      passive_checks_enabled  1
-      parallelize_check       1
-      obsess_over_service     1
-      check_freshness         0
-      notifications_enabled   1
-      event_handler_enabled   1
-      flap_detection_enabled  1
-      process_perf_data       1
-      retain_status_information       1
-      retain_nonstatus_information    1
-      is_volatile             0
-      check_period            24x7
-      max_check_attempts      3
-      check_interval          10
-      retry_interval          2
-      contact_groups          admins
-      notification_options    u,c,r
-      notification_interval   60
-      notification_period     24x7
-      register                0
-    }
-
-    # Critical services - check every 2 minutes
-    define service {
-      use                     generic-service
-      name                    critical-service
-      check_interval          2
-      retry_interval          1
-      register                0
-    }
-
-    # Standard services - check every 5 minutes
-    define service {
-      use                     generic-service
-      name                    standard-service
-      check_interval          5
-      retry_interval          2
-      register                0
-    }
-
-    # Low priority services - check every 15 minutes
-    define service {
-      use                     generic-service
-      name                    low-priority-service
-      check_interval          15
-      retry_interval          5
-      register                0
-    }
-
-    # Daily checks - SSL certificates and similar
-    define service {
-      use                     generic-service
-      name                    daily-service
-      check_interval          1440
-      retry_interval          60
-      max_check_attempts      2
-      notification_interval   1440
-      register                0
-    }
-
-    ###############################################################################
-    # HOST TEMPLATES
-    ###############################################################################
-
-    define host {
-      name                    linux-server
-      use                     generic-host
-      check_period            24x7
-      check_interval          5
-      retry_interval          1
-      max_check_attempts      10
-      check_command           check-host-alive
-      notification_period     24x7
-      notification_interval   120
-      notification_options    d,u,r
-      contact_groups          admins
-      register                0
-    }
-
-    define host {
-      name                    generic-host
-      notifications_enabled   1
-      event_handler_enabled   1
-      flap_detection_enabled  1
-      process_perf_data       1
-      retain_status_information       1
-      retain_nonstatus_information    1
-      notification_period     24x7
-      register                0
-    }
+        ###############################################################################
+        # NAGIOS OBJECT DEFINITIONS
+        ###############################################################################
+
+        ###############################################################################
+        # CONTACTS
+        ###############################################################################
+
+        define contact {
+          contact_name                    nagiosadmin
+          alias                           Nagios Admin
+          service_notification_period     24x7
+          host_notification_period        24x7
+          service_notification_options    u,c,r
+          host_notification_options       d,u,r
+          service_notification_commands   notify-service-by-email
+          host_notification_commands      notify-host-by-email
+          email                           johnw@vulcan.lan
+        }
+
+        define contactgroup {
+          contactgroup_name               admins
+          alias                           Nagios Administrators
+          members                         nagiosadmin
+        }
+
+        ###############################################################################
+        # TIME PERIODS
+        ###############################################################################
+
+        define timeperiod {
+          timeperiod_name 24x7
+          alias           24 Hours A Day, 7 Days A Week
+          sunday          00:00-24:00
+          monday          00:00-24:00
+          tuesday         00:00-24:00
+          wednesday       00:00-24:00
+          thursday        00:00-24:00
+          friday          00:00-24:00
+          saturday        00:00-24:00
+        }
+
+        define timeperiod {
+          timeperiod_name workhours
+          alias           Normal Work Hours
+          monday          09:00-17:00
+          tuesday         09:00-17:00
+          wednesday       09:00-17:00
+          thursday        09:00-17:00
+          friday          09:00-17:00
+        }
+
+        ###############################################################################
+        # COMMANDS
+        ###############################################################################
+
+        # Notification commands
+        define command {
+          command_name    notify-host-by-email
+          command_line    ${pkgs.mailutils}/bin/mail -s "** $NOTIFICATIONTYPE$ Host Alert: $HOSTNAME$ is $HOSTSTATE$ **" $CONTACTEMAIL$
+        }
+
+        define command {
+          command_name    notify-service-by-email
+          command_line    ${pkgs.mailutils}/bin/mail -s "** $NOTIFICATIONTYPE$ Service Alert: $HOSTALIAS$/$SERVICEDESC$ is $SERVICESTATE$ **" $CONTACTEMAIL$
+        }
+
+        # Host check commands
+        define command {
+          command_name    check-host-alive
+          command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w 3000.0,80% -c 5000.0,100% -p 5
+        }
+
+        define command {
+          command_name    check_ping
+          command_line    ${pkgs.monitoring-plugins}/bin/check_ping -H $HOSTADDRESS$ -w $ARG1$ -c $ARG2$
+        }
+
+        # Service check commands
+        define command {
+          command_name    check_local_disk
+          command_line    ${pkgs.monitoring-plugins}/bin/check_disk -w $ARG1$ -c $ARG2$ -p $ARG3$
+        }
+
+        define command {
+          command_name    check_local_load
+          command_line    ${pkgs.monitoring-plugins}/bin/check_load -w $ARG1$ -c $ARG2$
+        }
+
+        define command {
+          command_name    check_local_procs
+          command_line    ${pkgs.monitoring-plugins}/bin/check_procs -w $ARG1$ -c $ARG2$ -s $ARG3$
+        }
+
+        define command {
+          command_name    check_local_users
+          command_line    ${pkgs.monitoring-plugins}/bin/check_users -w $ARG1$ -c $ARG2$
+        }
+
+        define command {
+          command_name    check_local_swap
+          command_line    ${pkgs.monitoring-plugins}/bin/check_swap -w $ARG1$ -c $ARG2$
+        }
+
+        define command {
+          command_name    check_tcp
+          command_line    ${pkgs.monitoring-plugins}/bin/check_tcp -H $HOSTADDRESS$ -p $ARG1$ $ARG2$
+        }
+
+        define command {
+          command_name    check_http
+          command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ $ARG1$
+        }
+
+        define command {
+          command_name    check_https
+          # --sni added 2026-07-05: check_http does NOT send SNI without it, and
+          # the explicit default :443 server (rejectSSL, added 2026-07-03) aborts
+          # no-SNI handshakes — six HTTPS checks went "Cannot make SSL connection"
+          # at the first cycle after that switch. Callers must pass -H <vhost> in
+          # $ARG1$ (the later -H wins and supplies both Host header and SNI).
+          command_line    ${pkgs.monitoring-plugins}/bin/check_http -H $HOSTADDRESS$ -S --sni $ARG1$
+        }
+
+        define command {
+          command_name    check_ssh
+          command_line    ${pkgs.monitoring-plugins}/bin/check_ssh $ARG1$ $HOSTADDRESS$
+        }
+
+        define command {
+          command_name    check_imap
+          command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$
+        }
+
+        define command {
+          command_name    check_imaps
+          command_line    ${pkgs.monitoring-plugins}/bin/check_imap -H $HOSTADDRESS$ -p $ARG1$ -S
+        }
+
+        define command {
+          command_name    check_smtp
+          command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$
+        }
+
+        define command {
+          command_name    check_smtps
+          command_line    ${pkgs.monitoring-plugins}/bin/check_smtp -H $HOSTADDRESS$ -p $ARG1$ -S
+        }
+
+        define command {
+          command_name    check_dns
+          command_line    ${pkgs.monitoring-plugins}/bin/check_dns -H $ARG1$ -s $HOSTADDRESS$
+        }
+
+        define command {
+          command_name    check_ssl_cert
+          command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct -r /etc/ssl/certs/vulcan-ca.crt
+        }
+
+        define command {
+          command_name    check_ssl_cert_external
+          command_line    ${checkSSLCertFixed}/bin/check_ssl_cert -H $ARG1$ -p 443 --warning 30 --critical 15 --ignore-sct
+        }
+
+        define command {
+          command_name    check_systemd_service
+          command_line    ${pkgs.nagiosPlugins.check_systemd}/bin/check_systemd -u $ARG1$ -w 600 -c 900
+        }
+
+        define command {
+          command_name    check_systemd_service_ondemand
+          command_line    ${pkgs.writeShellScript "check_systemd_ondemand.sh" ''
+            #!/usr/bin/env bash
+            SERVICE="$1"
+
+            # Get service state information
+            ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+            SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
+            RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
+
+            # For on-demand services:
+            # - inactive/dead is OK (manual stop)
+            # - active/running is OK (manual start)
+            # - failed is CRITICAL (unexpected failure)
+            # - activating is OK (starting up)
+            # - deactivating is OK (shutting down)
+
+            if [ "$ACTIVE_STATE" = "failed" ]; then
+              echo "CRITICAL: $SERVICE has failed - Result: $RESULT"
+              exit 2
+            elif [ "$ACTIVE_STATE" = "active" ]; then
+              echo "OK: $SERVICE is active and running"
+              exit 0
+            elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ]; then
+              if [ "$RESULT" = "success" ]; then
+                echo "OK: $SERVICE is inactive (manual stop or not started)"
+                exit 0
+              else
+                echo "WARNING: $SERVICE is inactive but last run result was: $RESULT"
+                exit 1
+              fi
+            elif [ "$ACTIVE_STATE" = "activating" ] || [ "$ACTIVE_STATE" = "deactivating" ]; then
+              echo "OK: $SERVICE is $ACTIVE_STATE"
+              exit 0
+            else
+              echo "WARNING: $SERVICE is in unexpected state: $ACTIVE_STATE/$SUB_STATE"
+              exit 1
+            fi
+          ''} $ARG1$
+        }
+
+        define command {
+          command_name    check_systemd_service_conditional
+          command_line    ${pkgs.writeShellScript "check_systemd_conditional.sh" ''
+            #!/usr/bin/env bash
+            SERVICE="$1"
+            MOUNTPOINT="$2"
+
+            # Check if mount point is actually mounted
+            if ${pkgs.util-linux}/bin/mountpoint -q "$MOUNTPOINT"; then
+              # Mount is available - service MUST be active or have succeeded
+              ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+              SUB_STATE=$(${pkgs.systemd}/bin/systemctl show -p SubState --value "$SERVICE")
+              RESULT=$(${pkgs.systemd}/bin/systemctl show -p Result --value "$SERVICE")
+              CONDITION_RESULT=$(${pkgs.systemd}/bin/systemctl show -p ConditionResult --value "$SERVICE")
+              CONDITION_TS=$(${pkgs.systemd}/bin/systemctl show -p ConditionTimestamp --value "$SERVICE")
+
+              # For oneshot services: inactive+dead with Result=success and ConditionResult=yes is OK
+              # For running services: active+running is OK
+              # For services currently executing: activating state is OK (backup in progress)
+              # Never started this boot: ConditionResult=no with an EMPTY
+              # ConditionTimestamp is systemd's pre-first-start default, not a
+              # condition failure (a weekly timer unit like restic-check sits in
+              # this state for days after a reboot).
+              if [ "$ACTIVE_STATE" = "active" ] && [ "$RESULT" = "success" ]; then
+                echo "OK: $SERVICE is active (mount $MOUNTPOINT available)"
+                exit 0
+              elif [ "$ACTIVE_STATE" = "activating" ]; then
+                # Service is currently starting/running - this is expected for backup jobs
+                echo "OK: $SERVICE is currently running (mount $MOUNTPOINT available)"
+                exit 0
+              elif [ "$ACTIVE_STATE" = "inactive" ] && [ "$SUB_STATE" = "dead" ] && [ "$RESULT" = "success" ] && [ "$CONDITION_RESULT" = "yes" ]; then
+                echo "OK: $SERVICE completed successfully (mount $MOUNTPOINT available)"
+                exit 0
+              elif [ "$CONDITION_RESULT" = "no" ] && [ -z "$CONDITION_TS" ]; then
+                echo "OK: $SERVICE not started since boot; condition never evaluated, timer trigger pending (mount $MOUNTPOINT available)"
+                exit 0
+              elif [ "$CONDITION_RESULT" = "no" ]; then
+                echo "CRITICAL: $SERVICE condition not met but $MOUNTPOINT IS mounted - service should be running"
+                exit 2
+              else
+                echo "CRITICAL: $SERVICE is $ACTIVE_STATE/$SUB_STATE with result $RESULT (mount $MOUNTPOINT available)"
+                exit 2
+              fi
+            else
+              # Mount not available - service being inactive is expected
+              # Note: ConditionResult may still show "yes" if it was evaluated when mount was available
+              # So we only check ActiveState, not ConditionResult
+              ACTIVE_STATE=$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value "$SERVICE")
+
+              if [ "$ACTIVE_STATE" = "inactive" ]; then
+                echo "OK: $SERVICE inactive because $MOUNTPOINT not mounted (expected)"
+                exit 0
+              elif [ "$ACTIVE_STATE" = "failed" ]; then
+                echo "CRITICAL: $SERVICE is failed even though $MOUNTPOINT not mounted"
+                exit 2
+              else
+                echo "WARNING: $SERVICE is $ACTIVE_STATE but $MOUNTPOINT not mounted"
+                exit 1
+              fi
+            fi
+          ''} $ARG1$ $ARG2$
+        }
+
+        define command {
+          command_name    check_postgres
+          command_line    ${pkgs.monitoring-plugins}/bin/check_pgsql -H $HOSTADDRESS$ -d $ARG1$
+        }
+
+        define command {
+          command_name    check_podman_container
+          command_line    ${pkgs.writeShellScript "check_podman_container.sh" ''
+            #!/usr/bin/env bash
+            CONTAINER_NAME="$1"
+
+            # Check if container exists (use sudo to access root-level containers)
+            # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
+            if ! /run/wrappers/bin/sudo ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
+              echo "CRITICAL: Container $CONTAINER_NAME does not exist"
+              exit 2
+            fi
+
+            # Get container status (use sudo to access root-level containers)
+            STATUS=$(/run/wrappers/bin/sudo ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
+
+            if [ "$STATUS" = "running" ]; then
+              echo "OK: Container $CONTAINER_NAME is running"
+              exit 0
+            elif [ "$STATUS" = "exited" ]; then
+              echo "CRITICAL: Container $CONTAINER_NAME has exited"
+              exit 2
+            else
+              echo "WARNING: Container $CONTAINER_NAME is in state: $STATUS"
+              exit 1
+            fi
+          ''} $ARG1$
+        }
+
+        define command {
+          command_name    check_podman_container_rootless
+          command_line    ${pkgs.writeShellScript "check_podman_container_rootless.sh" ''
+            #!/usr/bin/env bash
+            CONTAINER_NAME="$1"
+            RUN_AS_USER="$2"
+
+            # Check if container exists (run as specific user to access user-namespaced containers)
+            # Use setuid wrapper from /run/wrappers/bin/sudo, not nix store (which lacks setuid bit)
+            if ! /run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman container exists "$CONTAINER_NAME"; then
+              echo "CRITICAL: Container $CONTAINER_NAME does not exist (user: $RUN_AS_USER)"
+              exit 2
+            fi
+
+            # Get container status (run as specific user)
+            STATUS=$(/run/wrappers/bin/sudo -u "$RUN_AS_USER" ${pkgs.podman}/bin/podman inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null)
+
+            if [ "$STATUS" = "running" ]; then
+              echo "OK: Container $CONTAINER_NAME is running (user: $RUN_AS_USER)"
+              exit 0
+            elif [ "$STATUS" = "exited" ]; then
+              echo "CRITICAL: Container $CONTAINER_NAME has exited (user: $RUN_AS_USER)"
+              exit 2
+            else
+              echo "WARNING: Container $CONTAINER_NAME is in state: $STATUS (user: $RUN_AS_USER)"
+              exit 1
+            fi
+          ''} $ARG1$ $ARG2$
+        }
+
+        define command {
+          command_name    check_zfs_pool
+          command_line    ${pkgs.nagiosPlugins.check_zfs}/bin/check_zfs --nosudo $ARG1$
+        }
+
+        define command {
+          command_name    check_homeassistant_integrations
+          command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$
+        }
+
+        define command {
+          command_name    check_homeassistant_specific_integration
+          command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
+        }
+
+        define command {
+          command_name    check_homeassistant_integration_status
+          command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -I -i $ARG2$
+        }
+
+        define command {
+          command_name    check_backup_age
+          command_line    ${checkBackupAge} $ARG1$ $ARG2$
+        }
+
+        define command {
+          command_name    check_git_workspace_sync
+          command_line    ${checkGitWorkspaceSync}
+        }
+
+        define command {
+          command_name    check_git_workspace_stale
+          command_line    ${checkGitWorkspaceStale} $ARG1$ $ARG2$ $ARG3$
+        }
+
+        define command {
+          command_name    check_openclaw_plugin
+          command_line    ${checkOpenClawPlugin} $ARG1$ $ARG2$
+        }
+
+        define command {
+          command_name    check_openclaw_ready_age
+          command_line    ${checkOpenClawReadyAge} $ARG1$
+        }
+
+        ###############################################################################
+        # HOSTS
+        ###############################################################################
+
+        define host {
+          use                     linux-server
+          host_name               vulcan
+          alias                   Vulcan NixOS Server
+          address                 127.0.0.1
+          max_check_attempts      5
+          check_period            24x7
+          notification_interval   30
+          notification_period     24x7
+          contact_groups          admins
+        }
+
+        ###############################################################################
+        # MONITORED HOSTS (from monitoredHosts list)
+        ###############################################################################
+
+        ${lib.concatMapStrings mkMonitoredHost monitoredHosts}
+
+        ###############################################################################
+        # HOST GROUPS
+        ###############################################################################
+
+        define hostgroup {
+          hostgroup_name  linux-servers
+          alias           Linux Servers
+          members         vulcan
+        }
+
+        ###############################################################################
+        # SERVICE GROUPS
+        ###############################################################################
+
+        define servicegroup {
+          servicegroup_name  critical-infrastructure
+          alias              Critical Infrastructure Services
+        }
+
+        define servicegroup {
+          servicegroup_name  tank-dependent-services
+          alias              Services Requiring /tank Mount
+        }
+
+        define servicegroup {
+          servicegroup_name  monitoring-stack
+          alias              Monitoring and Observability Services
+        }
+
+        define servicegroup {
+          servicegroup_name  home-automation
+          alias              Home Automation Services
+        }
+
+        define servicegroup {
+          servicegroup_name  application-services
+          alias              Application Services
+        }
+
+        define servicegroup {
+          servicegroup_name  backup-services
+          alias              Backup Services
+        }
+
+        define servicegroup {
+          servicegroup_name  local-backups
+          alias              Local System Backups
+        }
+
+        define servicegroup {
+          servicegroup_name  maintenance-timers
+          alias              Maintenance and Cleanup Timers
+        }
+
+        define servicegroup {
+          servicegroup_name  email-services
+          alias              Email Sync Services
+        }
+
+        define servicegroup {
+          servicegroup_name  certificate-renewal
+          alias              Certificate Renewal Timers
+        }
+
+        define servicegroup {
+          servicegroup_name  containers
+          alias              Container Services
+        }
+
+        define servicegroup {
+          servicegroup_name  system-resources
+          alias              System Resource Monitoring
+        }
+
+        define servicegroup {
+          servicegroup_name  network-connectivity
+          alias              Network Connectivity Checks
+        }
+
+        define servicegroup {
+          servicegroup_name  protocol-checks
+          alias              Protocol-Level Checks (IMAP, SMTP, DNS)
+        }
+
+        define servicegroup {
+          servicegroup_name  ssl-certificates
+          alias              SSL Certificate Monitoring
+        }
+
+        define servicegroup {
+          servicegroup_name  home-assistant-integrations
+          alias              Home Assistant Integration Monitoring
+        }
+
+        define servicegroup {
+          servicegroup_name  network-hosts
+          alias              Network Host Monitoring (PING)
+        }
+
+        ###############################################################################
+        # SERVICES - SYSTEM RESOURCES
+        ###############################################################################
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Root Partition
+          check_command           check_local_disk!20%!10%!/
+          service_groups          system-resources
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Tank ZFS Pool
+          check_command           check_zfs_pool!tank
+          service_groups          system-resources
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Current Load
+          check_command           check_local_load!15.0,10.0,5.0!30.0,25.0,20.0
+          service_groups          system-resources
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Total Processes
+          check_command           check_local_procs!250!400!RSZDT
+          service_groups          system-resources
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Current Users
+          check_command           check_local_users!20!50
+          service_groups          system-resources
+        }
+
+        ###############################################################################
+        # SERVICES - NETWORK CONNECTIVITY
+        ###############################################################################
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     SSH
+          check_command           check_ssh
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     PostgreSQL Connection
+          check_command           check_tcp!5432
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Nginx HTTP
+          check_command           check_tcp!80
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Nginx HTTPS
+          check_command           check_tcp!443
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Prometheus Port
+          check_command           check_tcp!9090
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Grafana Port
+          check_command           check_tcp!3000
+          service_groups          network-connectivity
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Home Assistant HTTP
+          check_command           check_tcp!8123
+          service_groups          network-connectivity
+        }
+
+        ###############################################################################
+        # SERVICES - APPLICATION HTTP HEALTH CHECKS
+        ###############################################################################
+
+        # Shlink API Health check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+
+    #     define service {
+    #       use                     standard-service
+    #       host_name               vulcan
+    #       service_description     Shlink API Health
+    #       check_command           check_http!-p 8580 -u /rest/health -s "pass"
+    #       service_groups          application-services
+    #     }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Shlink Web Client HTTP
+          check_command           check_http!-p 8581 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Teable HTTP
+          check_command           check_http!-p 3004 -u /
+          service_groups          application-services
+        }
+
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenSpeedTest HTTP
+          check_command           check_http!-p 3002 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     BudgetBoard HTTP
+          check_command           check_http!-p 6253 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     LiteLLM HTTP
+          check_command           check_http!-p 4000 -u /health/liveliness
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     MailArchiver HTTP
+          check_command           check_http!-p 9097 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Stock Trader HTTPS
+          check_command           check_http!-I 127.0.0.1 -p 443 -S --sni -H trader.vulcan.lan -u /api/config
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenProject HTTP
+          check_command           check_http!-I 127.0.0.1 -p 8180 -H openproject.vulcan.lan -u /health_checks/
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Wallabag HTTP
+          check_command           check_http!-p 9091 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     ChangeDetection HTTP
+          check_command           check_http!-p 5055 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Vane HTTP
+          check_command           check_http!-p 3007 -u /
+          service_groups          application-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Memory-Vault Health
+          check_command           check_https!-H memory.vulcan.lan -u /api/health -s "ok"
+          service_groups          application-services
+        }
+
+        ###############################################################################
+        # SERVICES - OPENCLAW AVAILABILITY
+        ###############################################################################
+
+        # Gateway HTTP liveness via nginx (external viewpoint: what a real Discord
+        # user's bot-mesh sees if openclaw.vulcan.lan is down).
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenClaw Gateway Health
+          check_command           check_https!-H openclaw.vulcan.lan -u /healthz -s "live"
+          service_groups          application-services
+        }
+
+        # Discord channel plugin must be in the most-recent gateway ready list.
+        # This is the load-bearing check for "Discord DMs are answered."
+        define service {
+          use                     critical-service
+          host_name               vulcan
+          service_description     OpenClaw Discord Plugin Loaded
+          check_command           check_openclaw_plugin!discord!600
+          service_groups          critical-infrastructure
+        }
+
+        # WhatsApp channel plugin must be in the most-recent ready list.  Less
+        # urgent than discord (warning vs critical).
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenClaw WhatsApp Plugin Loaded
+          check_command           check_openclaw_plugin!whatsapp!600
+          service_groups          application-services
+        }
+
+        # acpx — removed 2026-05-05.  Through 2026.4.x acpx was a channel
+        # plugin tracked by the canary; in 2026.5.x it became an ACP backend
+        # (.acp.backend in openclaw.json) and is no longer in the gateway
+        # plugin list, so the metric permanently reads 0 and the check would
+        # alert forever.  The acpx backend's own health is covered by the
+        # [gateway] auto-enabled plugins / [acp] log lines, not by this metric.
+
+        # Memory-qdrant plugin.  Without this OpenClaw can't remember anything
+        # between sessions.
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenClaw Memory-Qdrant Plugin Loaded
+          check_command           check_openclaw_plugin!memory-qdrant!600
+          service_groups          application-services
+        }
+
+        # Lobster plugin.
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenClaw Lobster Plugin Loaded
+          check_command           check_openclaw_plugin!lobster!600
+          service_groups          application-services
+        }
+
+        # Gateway-ready staleness: fires if the microVM is up but the gateway
+        # never becomes ready (crash loop or wedged start).
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     OpenClaw Gateway Ready Age
+          check_command           check_openclaw_ready_age!1800
+          service_groups          application-services
+        }
+
+        ###############################################################################
+        # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
+        ###############################################################################
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     IMAP (Port 143)
+          check_command           check_imap!143
+          service_groups          protocol-checks
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     IMAPS (Port 993)
+          check_command           check_imaps!993
+          service_groups          protocol-checks
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     SMTP (Port 587)
+          check_command           check_smtp!587
+          service_groups          protocol-checks
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     DNS Resolver
+          check_command           check_dns!vulcan.lan
+          service_groups          protocol-checks
+        }
+
+        ###############################################################################
+        # SERVICES - SSL CERTIFICATE CHECKS
+        # Using daily-service template (check once per day instead of every 10 minutes)
+        ###############################################################################
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: alertmanager.vulcan.lan
+          check_command           check_ssl_cert!alertmanager.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: changes.vulcan.lan
+          check_command           check_ssl_cert!changes.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: cockpit.vulcan.lan
+          check_command           check_ssl_cert!cockpit.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: data.newartisans.com
+          check_command           check_ssl_cert_external!data.newartisans.com
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: dns.vulcan.lan
+          check_command           check_ssl_cert!dns.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: gitea.vulcan.lan
+          check_command           check_ssl_cert!gitea.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: glance.vulcan.lan
+          check_command           check_ssl_cert!glance.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: glances.vulcan.lan
+          check_command           check_ssl_cert!glances.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: grafana.vulcan.lan
+          check_command           check_ssl_cert!grafana.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: hass.vulcan.lan
+          check_command           check_ssl_cert!hass.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: immich.vulcan.lan
+          check_command           check_ssl_cert!immich.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: jellyfin.vulcan.lan
+          check_command           check_ssl_cert!jellyfin.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: loki.vulcan.lan
+          check_command           check_ssl_cert!loki.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: memory.vulcan.lan
+          check_command           check_ssl_cert!memory.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: memory-mcp.vulcan.lan
+          check_command           check_ssl_cert!memory-mcp.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: nagios.vulcan.lan
+          check_command           check_ssl_cert!nagios.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: jupyter.vulcan.lan
+          check_command           check_ssl_cert!jupyter.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: nodered.vulcan.lan
+          check_command           check_ssl_cert!nodered.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: postgres.vulcan.lan
+          check_command           check_ssl_cert!postgres.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: promtail.vulcan.lan
+          check_command           check_ssl_cert!promtail.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: prometheus.vulcan.lan
+          check_command           check_ssl_cert!prometheus.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: litellm.vulcan.lan
+          check_command           check_ssl_cert!litellm.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: llama-swap.vulcan.lan
+          check_command           check_ssl_cert!llama-swap.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: mailarchiver.vulcan.lan
+          check_command           check_ssl_cert!mailarchiver.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: speedtest.vulcan.lan
+          check_command           check_ssl_cert!speedtest.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: speedtracker.vulcan.lan
+          check_command           check_ssl_cert!speedtracker.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: vdirsyncer.vulcan.lan
+          check_command           check_ssl_cert!vdirsyncer.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: victoriametrics.vulcan.lan
+          check_command           check_ssl_cert!victoriametrics.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: vulcan.lan
+          check_command           check_ssl_cert!vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: wallabag.vulcan.lan
+          check_command           check_ssl_cert!wallabag.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: budget.vulcan.lan
+          check_command           check_ssl_cert!budget.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: zimit.vulcan.lan
+          check_command           check_ssl_cert!zimit.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: kiwix.vulcan.lan
+          check_command           check_ssl_cert!kiwix.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        # SSL cert check for shlink-api.vulcan.lan -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+
+        # The nginx vhost is gone with shlink-quadlet.nix, so this would go CRITICAL.
+
+        # define service {
+
+        # use                     daily-service
+
+        # host_name               vulcan
+
+        # service_description     SSL Cert: shlink-api.vulcan.lan
+
+        # check_command           check_ssl_cert!shlink-api.vulcan.lan
+
+        # service_groups          ssl-certificates
+
+        # }
+
+        # SSL cert check for shlink.vulcan.lan -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+
+        # The nginx vhost is gone with shlink-quadlet.nix, so this would go CRITICAL.
+
+        # define service {
+
+        # use                     daily-service
+
+        # host_name               vulcan
+
+        # service_description     SSL Cert: shlink.vulcan.lan
+
+        # check_command           check_ssl_cert!shlink.vulcan.lan
+
+        # service_groups          ssl-certificates
+
+        # }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: chat.vulcan.lan
+          check_command           check_ssl_cert!chat.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        define service {
+          use                     daily-service
+          host_name               vulcan
+          service_description     SSL Cert: vane.vulcan.lan
+          check_command           check_ssl_cert!vane.vulcan.lan
+          service_groups          ssl-certificates
+        }
+
+        ###############################################################################
+        # SERVICES - LOCAL BACKUPS
+        ###############################################################################
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Local Backup: /etc
+          check_command           check_backup_age!etc!28800
+          check_interval          15
+          service_groups          local-backups
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Local Backup: /home
+          check_command           check_backup_age!home!28800
+          check_interval          15
+          service_groups          local-backups
+        }
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Local Backup: /var
+          check_command           check_backup_age!var!28800
+          check_interval          15
+          service_groups          local-backups
+        }
+
+        ###############################################################################
+        # SERVICES - GIT WORKSPACE ARCHIVE
+        ###############################################################################
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Git Workspace Sync Status
+          check_command           check_git_workspace_sync
+          check_interval          10
+          service_groups          backup-services
+        }
+
+        define service {
+          use                     standard-service
+          host_name               vulcan
+          service_description     Git Workspace Stale Repositories
+          check_command           check_git_workspace_stale!3!10!25
+          check_interval          60
+          service_groups          backup-services
+        }
+
+        ###############################################################################
+        # SERVICES - HOME ASSISTANT
+        ###############################################################################
+
+        define service {
+          use                     generic-service
+          host_name               vulcan
+          service_description     Home Assistant - Integration Status
+          check_command           check_homeassistant_integration_status!127.0.0.1:8123!august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws
+          check_interval          5
+          max_check_attempts      2
+          service_groups          home-assistant-integrations
+        }
+
+        ###############################################################################
+        # AUTO-GENERATED SERVICE CHECKS
+        # Services, Timers, and Containers monitored via systemd/podman
+        ###############################################################################
+
+        ${allServiceChecks}
+
+        ###############################################################################
+        # SERVICE TEMPLATES
+        ###############################################################################
+
+        define service {
+          name                    generic-service
+          active_checks_enabled   1
+          passive_checks_enabled  1
+          parallelize_check       1
+          obsess_over_service     1
+          check_freshness         0
+          notifications_enabled   1
+          event_handler_enabled   1
+          flap_detection_enabled  1
+          process_perf_data       1
+          retain_status_information       1
+          retain_nonstatus_information    1
+          is_volatile             0
+          check_period            24x7
+          max_check_attempts      3
+          check_interval          10
+          retry_interval          2
+          contact_groups          admins
+          notification_options    u,c,r
+          notification_interval   60
+          notification_period     24x7
+          register                0
+        }
+
+        # Critical services - check every 2 minutes
+        define service {
+          use                     generic-service
+          name                    critical-service
+          check_interval          2
+          retry_interval          1
+          register                0
+        }
+
+        # Standard services - check every 5 minutes
+        define service {
+          use                     generic-service
+          name                    standard-service
+          check_interval          5
+          retry_interval          2
+          register                0
+        }
+
+        # Low priority services - check every 15 minutes
+        define service {
+          use                     generic-service
+          name                    low-priority-service
+          check_interval          15
+          retry_interval          5
+          register                0
+        }
+
+        # Daily checks - SSL certificates and similar
+        define service {
+          use                     generic-service
+          name                    daily-service
+          check_interval          1440
+          retry_interval          60
+          max_check_attempts      2
+          notification_interval   1440
+          register                0
+        }
+
+        ###############################################################################
+        # HOST TEMPLATES
+        ###############################################################################
+
+        define host {
+          name                    linux-server
+          use                     generic-host
+          check_period            24x7
+          check_interval          5
+          retry_interval          1
+          max_check_attempts      10
+          check_command           check-host-alive
+          notification_period     24x7
+          notification_interval   120
+          notification_options    d,u,r
+          contact_groups          admins
+          register                0
+        }
+
+        define host {
+          name                    generic-host
+          notifications_enabled   1
+          event_handler_enabled   1
+          flap_detection_enabled  1
+          process_perf_data       1
+          retain_status_information       1
+          retain_nonstatus_information    1
+          notification_period     24x7
+          register                0
+        }
   '';
 
   # Custom CGI configuration file with full authorization for nagiosadmin

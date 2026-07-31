@@ -95,7 +95,9 @@
         {
           targets = [
             "redis://127.0.0.1:6383" # openproject (allkeys-lru, maxmemory 256mb)
-            "redis://127.0.0.1:6385" # shlink (allkeys-lru, maxmemory 128mb)
+            # DISABLED 2026-07-31: shlink has an unpatched security advisory; re-enable only after upgrading. shlink's redis stops with it, so this
+            # target would fail and trip RedisMultiTargetDown.
+            # "redis://127.0.0.1:6385" # shlink (allkeys-lru, maxmemory 128mb)
             "redis://127.0.0.1:6386" # searxng (allkeys-lru, maxmemory 64mb)
             "redis://127.0.0.1:6381" # rspamd (noeviction; Bayes/fuzzy backend, RDB-persisted)
             "redis://127.0.0.1:6387" # speedtest-tracker (allkeys-lru, maxmemory 64mb)

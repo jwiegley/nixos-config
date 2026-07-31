@@ -45,7 +45,10 @@
         ingress = {
           "data.newartisans.com" = "http://localhost:18080";
           "gitea.newartisans.com" = "http://localhost:3005";
-          "s.newartisans.com" = "http://localhost:8580";
+          # DISABLED 2026-07-31: shlink has an unpatched security advisory; re-enable only after upgrading.
+          # Route removed so the public hostname resolves to nothing rather than a dead
+          # backend. shlink was the ONLY cloudflared-ingress podman image.
+          # "s.newartisans.com" = "http://localhost:8580";
           "calendar.newartisans.com" = "http://localhost:8090";
         };
       };

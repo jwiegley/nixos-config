@@ -120,6 +120,22 @@ let
       };
     };
 
+    # TEMPORARY, 2026-07-31 -- revert with OPENCLAW_LOG_LEVEL in openclaw-vm.nix.
+    #
+    # openclaw's structured logger defaults to a rolling file under the guest's tmp dir
+    # (/tmp/openclaw/openclaw-YYYY-MM-DD.log, src/logging/logger.ts:47-58). That path is
+    # INSIDE the microVM and not visible from the host, which is why the Discord preflight
+    # drop reasons -- the whole point of raising the log level -- never appeared in
+    # gateway-vm.log. That file is the VM's stdout capture; logVerbose() writes through
+    # getLogger().debug() to the structured file instead.
+    #
+    # Point it at the shared state dir so the host can read it. There is no env override
+    # for the path (only OPENCLAW_LOG_LEVEL and OPENCLAW_LOG_PREFIX exist), so this has to
+    # be config.
+    logging = {
+      file = "/var/lib/openclaw/.openclaw/logs/openclaw-debug.log";
+    };
+
     commands = {
       native = "auto";
       nativeSkills = "auto";

@@ -17,7 +17,11 @@
     ./opnsense-api-transformer.nix
     ./opnsense-exporter-quadlet.nix
     ./openspeedtest-quadlet.nix
-    ./shlink-quadlet.nix
+    # DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
+    # Owns the nginx vhosts, redis server, sops secrets and firewall ports; the
+    # containers themselves are the two home-manager modules disabled in
+    # hosts/vulcan/default.nix. Both halves must come back together.
+    # ./shlink-quadlet.nix
     ./speedtest-tracker-quadlet.nix
     ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix

@@ -868,8 +868,9 @@ in
                   "https://changes.vulcan.lan"
                   "https://aria.vulcan.lan"
                   "https://openproject.vulcan.lan"
-                  "https://shlink.vulcan.lan"
-                  "https://shlink-api.vulcan.lan/rest/health"
+                  # DISABLED 2026-07-31: shlink has an unpatched security advisory; re-enable only after upgrading.
+                  # "https://shlink.vulcan.lan"
+                  # "https://shlink-api.vulcan.lan/rest/health"
                   "https://chat.vulcan.lan"
                   "https://searxng.vulcan.lan"
                   "https://vane.vulcan.lan"

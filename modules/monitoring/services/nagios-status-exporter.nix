@@ -86,8 +86,9 @@ let
             dropping them silently would make "in downtime" indistinguishable from
             "recovered", and an object parked in permanent downtime is worth seeing.
             """
-            return (b.get("scheduled_downtime_depth", "0") not in ("0", "", None)
-                    or b.get("problem_has_been_acknowledged") == "1")
+            depth = b.get("scheduled_downtime_depth", "0")
+            acked = b.get("problem_has_been_acknowledged")
+            return depth not in ("0", "", None) or acked == "1"
 
 
         try:

@@ -15,6 +15,70 @@
     mode = "0644";
   };
 
+  # Keep selected slow streams alive while LiteLLM waits for their first model token.
+  environment.etc."litellm/sitecustomize.py" = {
+    mode = "0644";
+    text = ''
+      import asyncio
+
+      from litellm.proxy import common_request_processing as _request_processing
+      from starlette.responses import StreamingResponse
+
+      _original_create_response = _request_processing.create_response
+      _HEADER = "x-litellm-first-token-heartbeat"
+
+
+      async def _create_response_with_first_token_heartbeat(
+          generator,
+          media_type,
+          headers,
+          default_status_code=200,
+          request=None,
+      ):
+          raw_interval = request.headers.get(_HEADER) if request is not None else None
+          if raw_interval is None:
+              return await _original_create_response(
+                  generator,
+                  media_type,
+                  headers,
+                  default_status_code,
+                  request,
+              )
+
+          interval = min(60.0, max(1.0, float(raw_interval)))
+          if asyncio.iscoroutine(generator):
+              generator = await generator
+
+          async def stream_with_heartbeat():
+              first_chunk = asyncio.ensure_future(generator.__anext__())
+              try:
+                  while not first_chunk.done():
+                      await asyncio.wait({first_chunk}, timeout=interval)
+                      if not first_chunk.done():
+                          yield ": keepalive\n\n"
+                  yield first_chunk.result()
+                  async for chunk in generator:
+                      yield chunk
+              finally:
+                  if not first_chunk.done():
+                      first_chunk.cancel()
+                  try:
+                      await generator.aclose()
+                  except BaseException:
+                      pass
+
+          return StreamingResponse(
+              stream_with_heartbeat(),
+              media_type=media_type,
+              status_code=default_status_code,
+              headers={**headers, "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+          )
+
+
+      _request_processing.create_response = _create_response_with_first_token_heartbeat
+    '';
+  };
+
   # Deploy logging config to suppress INFO-level scheduler logs
   environment.etc."litellm/logging.conf" = {
     source = ../../../files/litellm-logging.conf;
@@ -84,6 +148,7 @@
             "/etc/litellm/config.yaml:/app/config.yaml:ro"
             "/etc/litellm/harmony_filter.py:/app/harmony_filter.py:ro"
             "/etc/litellm/logging.conf:/app/logging.conf:ro"
+            "/etc/litellm/sitecustomize.py:/app/sitecustomize.py:ro"
           ];
 
           # Container exec command

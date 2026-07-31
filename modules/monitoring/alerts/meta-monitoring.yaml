@@ -330,6 +330,43 @@ groups:
           summary: "Fast-cadence textfile collector {{ $labels.file }} is stale"
           description: "{{ $labels.file }} has not been rewritten in over 30 minutes (its timer runs every 1-2 min). Every metric this collector produces is now FROZEN at its last value, so any alert reading those metrics is silently stale. Check the corresponding *-exporter oneshot/timer."
 
+      # A textfile that node_exporter cannot PARSE. Added 2026-07-31 while retiring Nagios.
+      #
+      # This is distinct from every staleness rule below. Those compare mtime, so they are
+      # satisfied by a file that is being rewritten on schedule. If the writer emits
+      # malformed content -- a truncated line from a non-atomic write, a bad label -- the
+      # mtime keeps advancing while node_exporter discards the whole file and every metric
+      # in it silently disappears. Nothing else here would notice.
+      #
+      # 3 series, all 0 today, and zero of the ~512 rules referenced this metric before now.
+      - alert: TextfileCollectorScrapeError
+        expr: node_textfile_scrape_error > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "node_exporter cannot parse a textfile collector output"
+          description: "node_textfile_scrape_error is nonzero, so node_exporter is REJECTING a .prom file in /var/lib/prometheus-node-exporter-textfiles. Every metric in that file is gone from the TSDB while its mtime keeps advancing, so the staleness rules stay green. Find it with: promtool check metrics < <file>, or look for a partially-written file from a collector that does not write atomically via .tmp + rename."
+
+      # Catastrophic loss of the textfile directory.
+      #
+      # Deliberately a floor, not a per-file check: the file count legitimately varies (53-61
+      # over 30d) as per-run collectors come and go, so a per-file absent() would be noisy.
+      # 45 is well below the 30d minimum of 53, so this only fires if a large fraction of the
+      # directory disappears at once -- a wiped state dir, a bad tmpfiles rule, a failed
+      # migration. It does NOT catch a single deleted file; that is what the per-tier
+      # staleness rules and each exporter's own freshness guard are for.
+      - alert: TextfileCollectorMassLoss
+        expr: count(node_textfile_mtime_seconds) < 45
+        for: 15m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Textfile collector directory has lost most of its files ({{ $value }} left)"
+          description: "Only {{ $value }} .prom files remain in /var/lib/prometheus-node-exporter-textfiles; the 30d range is 53-61. A large simultaneous loss means the state directory was emptied rather than individual collectors failing. NOTE the documented hazard: a systemd tmpfiles rule using the 'D' directive EMPTIES its directory on every boot/rebuild, which has caused data loss on this host twice."
+
       # Hourly-cadence collectors.
       #
       # Added 2026-07-31 while retiring Nagios. secrets-perms is SECURITY-relevant and was

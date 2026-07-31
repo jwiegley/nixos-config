@@ -223,6 +223,47 @@ groups:
           summary: "Run-queue saturation on {{ $labels.instance }}"
           description: "15-min load average per CPU has exceeded 2.0 for 15 minutes on {{ $labels.instance }} (currently {{ $value | humanize }}x cores). Baseline is ~0.18x (7d max 1.57x). Sustained run-queue saturation — often D-state IO stalls (e.g. the UAS enclosure hang) that HighCPUUsage misses, since blocked tasks raise load without raising %CPU."
 
+      # Processes stuck in uninterruptible sleep (D state).
+      #
+      # Added 2026-07-31 replacing Nagios's check_local_procs, but deliberately measuring
+      # something sharper. HostLoadHigh above already names D-state IO stalls as its target,
+      # yet load15 CONFLATES running and blocked tasks, so a pure IO stall has to push the
+      # whole load average past 2x cores before it is visible. node_procs_blocked isolates
+      # the signal: blocked tasks are, almost by definition, waiting on storage.
+      #
+      # That matters specifically here. The /tank UAS enclosure has a documented history of
+      # its USB bridge hanging under load, which presents exactly as a pile of D-state
+      # processes while %CPU stays low.
+      #
+      # Threshold from 30d of measurement, not convention: p99 = 7, p99.9 = 11, max = 17.
+      # Sustained >5 over a 10m window happened 87 times in 30 days (noise); sustained >10
+      # over a 10m window happened ZERO times, while the observed max of 17 proves the
+      # threshold is reachable. avg_over_time smooths the single-scrape spikes that make a
+      # bare instant comparison flap.
+      - alert: HostProcessesBlocked
+        expr: avg_over_time(node_procs_blocked[10m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "{{ $value | humanize }} processes stuck in uninterruptible sleep on {{ $labels.instance }}"
+          description: "Sustained D-state backlog for 10 minutes (30d p99 is 7). Processes in uninterruptible sleep are almost always blocked on storage — check the /tank UAS enclosure first, whose USB bridge is known to hang under load: `dmesg -T | tail`, `zpool status tank`. Unlike HostLoadHigh this does not require the whole load average to rise, so it should fire EARLIER in an IO stall."
+
+      # Runaway process creation. Ported from Nagios check_local_procs (250/400 on RSZDT).
+      # Those numbers do not transfer: node_procs_running counts only R-state, a strict
+      # subset. Measured instead — 30d p99 = 15, max = 69 — so 120 sits well clear of the
+      # observed peak while still catching a fork storm.
+      - alert: HostProcessesRunningHigh
+        expr: node_procs_running > 120
+        for: 15m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "{{ $value }} runnable processes on {{ $labels.instance }}"
+          description: "Runnable (R-state) process count has been above 120 for 15 minutes; the 30d maximum is 69 and p99 is 15. Suggests a fork storm or a runaway supervisor restarting a crashing unit. Check `systemctl --failed` and `ps -eo stat,comm --sort=-pcpu | head`."
+
       # File-descriptor exhaustion. node_filefd_allocated/node_filefd_maximum is
       # the system-wide open-FD utilization (fs.file-max). A descriptor leak in any
       # daemon eventually trips EMFILE/ENFILE across the whole host. Baseline here is

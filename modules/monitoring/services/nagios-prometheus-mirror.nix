@@ -47,8 +47,33 @@ let
     vm = ../vm-alerts;
   };
 
+  # Files parked out of the rule set on purpose, shared with alerting.nix so a service can be
+  # disabled in ONE place. Without this the mirror keeps emitting PROM-MIRROR services for
+  # rules Prometheus has stopped loading, and Nagios goes hard CRITICAL on a service that is
+  # intentionally not running (shlink, 2026-07-31).
+  parkedAlerts = import ../parked-alerts.nix;
+
+  parkedFor = ds: parkedAlerts.${ds} or [ ];
+
   yamlFilesIn =
-    dir: builtins.filter (n: lib.hasSuffix ".yaml" n) (builtins.attrNames (builtins.readDir dir));
+    ds: dir:
+    builtins.filter (n: lib.hasSuffix ".yaml" n && !(builtins.elem n (parkedFor ds))) (
+      builtins.attrNames (builtins.readDir dir)
+    );
+
+  # A parked name that does not exist would filter nothing and fail silently, leaving the
+  # rules live while the config claims otherwise.
+  missingParked = lib.flatten (
+    lib.mapAttrsToList (
+      ds: dir:
+      let
+        present = builtins.attrNames (builtins.readDir dir);
+      in
+      map (n: "${baseNameOf (toString dir)}/${n}") (
+        builtins.filter (n: !(builtins.elem n present)) (parkedFor ds)
+      )
+    ) ruleDirs
+  );
 
   # Flat list of { datasource, file (basename), path } for every *.yaml.
   fileEntries = lib.flatten (
@@ -63,7 +88,7 @@ let
         subdir = baseNameOf (toString dir);
         inherit name;
         path = "${dir}/${name}";
-      }) (yamlFilesIn dir)
+      }) (yamlFilesIn ds dir)
     ) ruleDirs
   );
 
@@ -455,5 +480,15 @@ let
   '';
 in
 {
+  assertions = [
+    {
+      assertion = missingParked == [ ];
+      message =
+        "nagios-prometheus-mirror.nix: modules/monitoring/parked-alerts.nix names a file that "
+        + "does not exist: ${builtins.concatStringsSep ", " missingParked}. A typo parks "
+        + "nothing and fails silently, leaving the rules mirrored.";
+    }
+  ];
+
   services.nagios.objectDefs = [ mirrorObjectDefs ];
 }

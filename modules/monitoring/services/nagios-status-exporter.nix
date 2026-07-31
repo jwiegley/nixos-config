@@ -66,9 +66,29 @@ let
         services_critical = 0
         services_warning = 0
         services_unknown = 0
+        services_suppressed = 0
         hosts_down = 0
         stale = 0
         parse_ok = 1
+
+
+        def _suppressed(b):
+            """True if Nagios would NOT notify for this object right now.
+
+            These counts exist to mirror "what Nagios would page on" (see the header).
+            Hard-state filtering alone does not achieve that: Nagios also stays silent
+            for an object in SCHEDULED DOWNTIME and for an ACKNOWLEDGED problem.
+            Counting those kept NagiosServicesCritical firing on 2026-07-30 for a
+            service deliberately placed in downtime -- the bridge disagreeing with the
+            very notification logic it documents itself as following.
+
+            Suppressed objects are NOT discarded; they are counted separately, because
+            dropping them silently would make "in downtime" indistinguishable from
+            "recovered", and an object parked in permanent downtime is worth seeing.
+            """
+            return (b.get("scheduled_downtime_depth", "0") not in ("0", "", None)
+                    or b.get("problem_has_been_acknowledged") == "1")
+
 
         try:
             with open(STATUS, "r", errors="replace") as fh:
@@ -81,7 +101,9 @@ let
                     continue
                 if b.get("state_type") == "1":  # hard state only
                     st = b.get("current_state")
-                    if st == "2":
+                    if st in ("1", "2", "3") and _suppressed(b):
+                        services_suppressed += 1
+                    elif st == "2":
                         services_critical += 1
                     elif st == "1":
                         services_warning += 1
@@ -117,6 +139,9 @@ let
             "# HELP nagios_services_unknown_total Number of Nagios services in a HARD UNKNOWN state",
             "# TYPE nagios_services_unknown_total gauge",
             "nagios_services_unknown_total %d" % services_unknown,
+            "# HELP nagios_services_suppressed_total Non-OK HARD services Nagios will not notify on (scheduled downtime or acknowledged)",
+            "# TYPE nagios_services_suppressed_total gauge",
+            "nagios_services_suppressed_total %d" % services_suppressed,
             "# HELP nagios_hosts_down_total Number of Nagios hosts in a HARD DOWN or UNREACHABLE state",
             "# TYPE nagios_hosts_down_total gauge",
             "nagios_hosts_down_total %d" % hosts_down,

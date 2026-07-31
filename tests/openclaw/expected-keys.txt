@@ -87,8 +87,6 @@ gateway.remote.transport
 gateway.remote.url
 gateway.tailscale
 gateway.tailscale.mode
-logging
-logging.file
 messages
 messages.groupChat
 messages.groupChat.visibleReplies

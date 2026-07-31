@@ -120,21 +120,24 @@ let
       };
     };
 
-    # TEMPORARY, 2026-07-31 -- revert with OPENCLAW_LOG_LEVEL in openclaw-vm.nix.
+    # Canary-triage log sink -- REVERTED 2026-07-31, kept here as the exact recipe.
     #
     # openclaw's structured logger defaults to a rolling file under the guest's tmp dir
     # (/tmp/openclaw/openclaw-YYYY-MM-DD.log, src/logging/logger.ts:47-58). That path is
     # INSIDE the microVM and not visible from the host, which is why the Discord preflight
-    # drop reasons -- the whole point of raising the log level -- never appeared in
-    # gateway-vm.log. That file is the VM's stdout capture; logVerbose() writes through
-    # getLogger().debug() to the structured file instead.
+    # drop reasons never appeared in gateway-vm.log: that file is the VM's stdout capture,
+    # while logVerbose() writes through getLogger().debug() to the structured file instead.
+    # There is no env override for the path (only OPENCLAW_LOG_LEVEL and OPENCLAW_LOG_PREFIX
+    # exist), so it has to be config -- which is why this pairs with the env var rather than
+    # replacing it.
     #
-    # Point it at the shared state dir so the host can read it. There is no env override
-    # for the path (only OPENCLAW_LOG_LEVEL and OPENCLAW_LOG_PREFIX exist), so this has to
-    # be config.
-    logging = {
-      file = "/var/lib/openclaw/.openclaw/logs/openclaw-debug.log";
-    };
+    # Uncomment together with OPENCLAW_LOG_LEVEL = "debug" in openclaw-vm.nix and restart
+    # microvm@openclaw when a canary needs triage. Left off because debug level can write
+    # outbound request bodies (i.e. tokens) to a file on the shared state dir.
+    #
+    # logging = {
+    #   file = "/var/lib/openclaw/.openclaw/logs/openclaw-debug.log";
+    # };
 
     commands = {
       native = "auto";

@@ -756,9 +756,22 @@ in
       # documented override for both file and console levels and takes precedence over
       # config (docs/help/environment.md:243).
       #
-      # Revert after: debug is verbose and these logs are already large (gateway-vm.log
-      # 27MB, gateway-vm.err.log 53MB).
-      OPENCLAW_LOG_LEVEL = "debug";
+      # REVERTED 2026-07-31 after it did its job in one run. With debug on, the guest wrote
+      # `[discord-preflight] pass: channel allowed` x16 and ZERO
+      # `[discord-preflight] drop: member not allowed`, which is what confirmed that the
+      # guilds.<id>.users fix opened the gate -- a positive/negative pair no amount of
+      # inference had produced in a day of trying.
+      #
+      # Left off by default for two reasons: debug is verbose (gateway-vm.log was already
+      # 27MB, gateway-vm.err.log 53MB), and at debug level openclaw can write outbound
+      # request bodies, which for a Discord/LLM gateway means tokens landing in a log file.
+      #
+      # To turn it back on for canary triage, set BOTH of these and restart
+      # microvm@openclaw, then read the drop reason instead of guessing at allowlists:
+      #   here:                        OPENCLAW_LOG_LEVEL = "debug";
+      #   openclaw-config.nix:         logging.file = ".../logs/openclaw-debug.log";
+      # See docs/DISCORD_CANARY_SETUP.md for the drop-reason table.
+      # OPENCLAW_LOG_LEVEL = "debug";
 
       # MCP tool-call timeout (ms). claude-code defaults to 60_000, which is
       # too short for the local-LLM Hermes bridge (`mcpServers.hermes`):

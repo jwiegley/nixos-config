@@ -1,0 +1,64 @@
+groups:
+  - name: hass_integrations
+    interval: 1m
+    rules:
+      # The one capability the Nagios retirement audit found genuinely unique: nothing else
+      # deployed can see an individual Home Assistant integration stop working.
+      #
+      # SystemdServiceFailed on home-assistant.service reads healthy through it, and the
+      # hass.vulcan.lan blackbox probe returns 200 through it, because HA itself is fine --
+      # one config entry has simply stopped loading. That is the shape of the 2025-10-27
+      # OAuth-token expiry, and of the BMW CarData and opnsense failures.
+      #
+      # for: 15m because HA drops and reloads components during a restart, and this host gets
+      # restarted by every rebuild that touches HA config. 15m clears that window without
+      # delaying a real failure meaningfully -- these are hours-to-days outages in practice.
+      - alert: HomeAssistantIntegrationDown
+        expr: hass_integration_loaded == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: home-automation
+          service: home-assistant
+        annotations:
+          summary: "Home Assistant integration {{ $labels.integration }} is not loaded"
+          description: |
+            The `{{ $labels.integration }}` integration is absent from Home
+            Assistant's loaded components for 15 minutes. Home Assistant
+            itself is running and answering HTTP, so neither
+            SystemdServiceFailed nor the blackbox probe will show this —
+            everything that integration provides is simply dead.
+
+            Most common cause is an expired OAuth token or a re-auth prompt
+            waiting in the UI. Check Settings > Devices & Services for a
+            "Reconfigure" or "Re-authenticate" banner, then:
+              journalctl -u home-assistant --since "1 hour ago" | grep -i "{{ $labels.integration }}"
+
+      # The exporter's own liveness. Without this the alert above degrades silently: if the
+      # exporter stops, hass_integration_loaded freezes at its last value (all 1s) and reads
+      # as permanently healthy -- the exact self-blinding failure this whole retirement has
+      # been finding elsewhere.
+      - alert: HomeAssistantIntegrationCheckStale
+        expr: time() - hass_integration_check_last_run_timestamp_seconds > 1800
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: home-assistant
+        annotations:
+          summary: "The Home Assistant integration exporter has stopped running"
+          description: "hass_integration_check_last_run_timestamp_seconds has not advanced in 30 minutes (the timer runs every 5). While this is firing, HomeAssistantIntegrationDown CANNOT fire: the gauges are frozen at their last values, which read as healthy. Check hass-integration-exporter.service."
+
+      # API reachable but not answering usefully. Distinct from the exporter being dead: the
+      # exporter deliberately emits check_up=0 with NO per-integration series in that case,
+      # precisely so twelve zeros are never mistaken for twelve simultaneous failures.
+      - alert: HomeAssistantIntegrationCheckDegraded
+        expr: hass_integration_check_up == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: home-assistant
+        annotations:
+          summary: "The Home Assistant integration exporter cannot read the HA API"
+          description: "The exporter ran but could not fetch or parse /api/config — HA down, the token rejected, or the API shape changed. No per-integration series are being published while this is true, so integration health is UNKNOWN rather than good."

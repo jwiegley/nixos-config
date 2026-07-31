@@ -1,0 +1,180 @@
+# Home Assistant integration health as Prometheus metrics.
+#
+# This is the ONE capability the Nagios retirement audit found to be genuinely unique: no
+# Prometheus rule anywhere watches whether an HA *integration* is loaded. Disproving queries
+# were run -- {__name__=~".*integration.*"} returns only alertmanager_integrations and
+# grafana_alerting_alertmanager_integrations, and {__name__=~"hass.*|home_assistant.*"}
+# returns only home_assistant_backup_* and hass_entity_*.
+#
+# It matters because the failure is invisible to everything else already deployed:
+# SystemdServiceFailed on home-assistant.service reads healthy, and the hass.vulcan.lan
+# blackbox probe returns 200, straight through an integration that has stopped working. That
+# is the 2025-10-27 OAuth-token failure, and the BMW CarData and opnsense ones.
+#
+# hass_entity_unavailable_by_domain was considered as a cheap proxy and REJECTED: it is a
+# live but orphaned collector (161 unavailable entities right now, referenced by zero rules),
+# yet it measures entity availability, not config-entry health. Its 30d range is 160-254 with
+# six >50-entity jumps, and an HA restart produces the same signature as an integration drop,
+# so any threshold over it is either noisy or blind. This asks the same question Nagios did,
+# of the same endpoint.
+#
+# NO NEW SECRET. It reuses sops.secrets."monitoring/home-assistant-token", already declared
+# in modules/monitoring/homeassistant-nagios-check.nix for the Nagios wrapper. The token is
+# read from its path at runtime and never enters the Nix store.
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+
+let
+  # Kept identical to the list the Nagios check has been using so retirement is a like-for-
+  # like swap rather than a silent change of scope
+  # (modules/monitoring/homeassistant-nagios-check.nix, ExecStart -i ...).
+  integrations = [
+    "august"
+    "nest"
+    "ring"
+    "enphase_envoy"
+    "flume"
+    "miele"
+    "lg_thinq"
+    "cast"
+    "withings"
+    "webostv"
+    "homekit"
+    "nws"
+  ];
+
+  textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
+  tokenPath = config.sops.secrets."monitoring/home-assistant-token".path;
+
+  exporter = pkgs.writeShellApplication {
+    name = "hass-integration-exporter";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = ''
+      set -euo pipefail
+
+      OUT="${textfileDir}/hass_integrations.prom"
+      TMP="$(mktemp "${textfileDir}/hass_integrations.XXXXXX.tmp")"
+      # Never leave a stale .tmp behind if curl or jq fails midway.
+      trap 'rm -f "$TMP"' EXIT
+
+      emit_header() {
+        {
+          echo "# HELP hass_integration_loaded 1 if the integration appears in Home Assistant's loaded components, 0 if not."
+          echo "# TYPE hass_integration_loaded gauge"
+        } >> "$TMP"
+      }
+
+      if [ ! -r "${tokenPath}" ]; then
+        # Fail VISIBLY rather than writing a file full of zeros, which would look like
+        # twelve simultaneous integration failures.
+        {
+          echo "# HELP hass_integration_check_up 1 if the exporter reached the HA API."
+          echo "# TYPE hass_integration_check_up gauge"
+          echo "hass_integration_check_up 0"
+          echo "# HELP hass_integration_check_last_run_timestamp_seconds Unix time of the last completed run."
+          echo "# TYPE hass_integration_check_last_run_timestamp_seconds gauge"
+          echo "hass_integration_check_last_run_timestamp_seconds $(date +%s)"
+        } > "$TMP"
+        mv "$TMP" "$OUT"
+        trap - EXIT
+        echo "hass-integration-exporter: token unreadable at ${tokenPath}" >&2
+        exit 0
+      fi
+
+      TOKEN="$(cat "${tokenPath}")"
+
+      # -sS so transport failures surface on stderr; the body is the only thing captured.
+      if ! BODY="$(curl -sS --max-time 20 \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            http://127.0.0.1:8123/api/config 2>/dev/null)"; then
+        BODY=""
+      fi
+
+      COMPONENTS="$(printf '%s' "$BODY" | jq -r '.components[]?' 2>/dev/null || true)"
+
+      : > "$TMP"
+      if [ -z "$COMPONENTS" ]; then
+        # API unreachable or unparseable. Emit up=0 and NO per-integration series: a zero for
+        # every integration would be indistinguishable from all twelve failing at once.
+        {
+          echo "# HELP hass_integration_check_up 1 if the exporter reached the HA API."
+          echo "# TYPE hass_integration_check_up gauge"
+          echo "hass_integration_check_up 0"
+        } >> "$TMP"
+      else
+        {
+          echo "# HELP hass_integration_check_up 1 if the exporter reached the HA API."
+          echo "# TYPE hass_integration_check_up gauge"
+          echo "hass_integration_check_up 1"
+        } >> "$TMP"
+        emit_header
+        for i in ${lib.concatStringsSep " " integrations}; do
+          if printf '%s\n' "$COMPONENTS" | grep -qx "$i"; then
+            echo "hass_integration_loaded{integration=\"$i\"} 1" >> "$TMP"
+          else
+            echo "hass_integration_loaded{integration=\"$i\"} 0" >> "$TMP"
+          fi
+        done
+      fi
+
+      {
+        echo "# HELP hass_integration_check_last_run_timestamp_seconds Unix time of the last completed run."
+        echo "# TYPE hass_integration_check_last_run_timestamp_seconds gauge"
+        echo "hass_integration_check_last_run_timestamp_seconds $(date +%s)"
+      } >> "$TMP"
+
+      chmod 0644 "$TMP"
+      mv "$TMP" "$OUT"
+      trap - EXIT
+    '';
+  };
+in
+{
+  systemd.services.hass-integration-exporter = {
+    description = "Export Home Assistant integration health to a node-exporter textfile";
+    after = [
+      "home-assistant.service"
+      "sops-nix.service"
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${exporter}/bin/hass-integration-exporter";
+      # Runs as root ONLY to read the SOPS token, which is mode 0400. It is owned by `nagios`
+      # today for the Nagios wrapper; once Nagios is gone, re-own it to a dedicated user and
+      # drop this to DynamicUser.
+      User = "root";
+      Group = "root";
+      # Above the 20s curl timeout with room for a slow HA; TimeoutStartSec is ENFORCED and a
+      # previously-ignored cap becoming enforced has bitten this host before.
+      TimeoutStartSec = "120s";
+      ReadWritePaths = [ textfileDir ];
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      NoNewPrivileges = true;
+    };
+  };
+
+  systemd.timers.hass-integration-exporter = {
+    description = "Timer for the Home Assistant integration health exporter";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # OnActiveSec rather than OnBootSec: on a long-uptime host an OnBootSec timer whose
+      # moment has already passed never fires again, which left discord-canary-hermes.timer
+      # dead for 27 days. 5 min matches the cadence the Nagios check already ran at.
+      OnActiveSec = "3min";
+      OnUnitActiveSec = "5min";
+      Unit = "hass-integration-exporter.service";
+    };
+  };
+}

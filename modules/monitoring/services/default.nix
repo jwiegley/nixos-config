@@ -29,6 +29,7 @@
     # CRITICAL on a check unique to Nagios would be invisible to Alertmanager.
     ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
     ./prometheus-rule-audit.nix # dead-rule detector; replaces the removed Nagios mirror
+    ./hass-integration-exporter.nix # HA config-entry health; the one Nagios-unique check
     # ./nagios-mirror-divergence.nix REMOVED 2026-07-31 with the tier-2 mirror it reconciled.
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
     # Deferred-spec implementations (docs/MONITORING_DEFERRED_SPECS.md)

@@ -482,6 +482,8 @@
       litellm_params = {
         model = "openai/GLM-5.2";
         litellm_credential_name = "hera_llama_swap_credential";
+        max_retries = 0;
+        request_timeout = 7200;
         stream_timeout = 7200;
         timeout = 7200;
         supports_system_message = true;

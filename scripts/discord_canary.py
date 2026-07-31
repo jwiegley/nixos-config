@@ -326,16 +326,48 @@ def run_probe() -> ProbeResult:
     # 2026-07-30 this loop deleted any message from the target that appeared after our
     # post, which destroyed a genuine @Claw reply to the operator.
     # The reply is deleted FIRST and from the channel it was actually found in, which for a
-    # Hermes thread reply is the thread (id == posted_id), not CHANNEL_ID. Order matters:
-    # deleting our parent message also destroys any thread hanging off it, after which the
-    # reply delete would 404 -- harmless, but it would stop reporting genuine 403s.
-    for chan, mid in ((reply_channel, reply_id), (CHANNEL_ID, posted_id)):
+    # Hermes thread reply is the thread (id == posted_id), not CHANNEL_ID.
+    #
+    # WHEN THE REPLY IS IN A THREAD, DELETE THE THREAD, NOT JUST THE MESSAGE.
+    #
+    # Do NOT assume deleting our own post takes the thread with it. Discord's threads doc is
+    # explicit that it does not: "Public threads must be created from an existing message, but
+    # can be 'orphaned' if that message is deleted." An orphaned thread keeps its messages, so
+    # relying on the parent delete would leave every Hermes reply in the channel forever while
+    # reporting clean.
+    #
+    # So for a reply found in a thread on our own post (reply_channel == posted_id, since a
+    # thread carries its starter message's snowflake), try `DELETE /channels/<thread_id>`
+    # first. That removes the thread and everything in it in one call and needs MANAGE_THREADS
+    # rather than MANAGE_MESSAGES -- a different grant, so it can succeed where the per-message
+    # delete 403s. Fall back to deleting the reply individually, and only count a failure when
+    # BOTH routes fail.
+    #
+    # Each failure names its target: the first version logged one sentence for both deletes,
+    # which left "2 cleanup failures" ambiguous between "the reply survived" and "our post
+    # survived" -- different problems needing different grants.
+    if reply_id and reply_channel == posted_id:
+        code, _ = _request("DELETE", f"/channels/{posted_id}")
+        if code in (200, 204, 404):
+            reply_id = ""  # thread gone, and the reply with it
+        else:
+            print(
+                f"canary cleanup: could not delete the reply thread (http {code}); "
+                "falling back to deleting the reply message. Grant the probe bot "
+                "MANAGE_THREADS in this channel to make this the cheap path",
+                file=sys.stderr,
+            )
+
+    for label, chan, mid in (
+        ("target reply", reply_channel, reply_id),
+        ("our own post", CHANNEL_ID, posted_id),
+    ):
         if mid:
             code, _ = _request("DELETE", f"/channels/{chan}/messages/{mid}")
             if code not in (204, 404):
                 result.cleanup_failed += 1
                 print(
-                    f"canary cleanup FAILED for message in channel (http {code}); "
+                    f"canary cleanup FAILED for the {label} (http {code}); "
                     "the bot likely lacks MANAGE_MESSAGES, so replies will accumulate",
                     file=sys.stderr,
                 )

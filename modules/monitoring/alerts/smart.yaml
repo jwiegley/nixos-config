@@ -75,28 +75,30 @@ groups:
           summary: "Disk temperature high on {{ $labels.device }}"
           description: "{{ $labels.device }} has been above 55C for 15m (current: {{ $value }}C). Check enclosure airflow/fans — sustained heat shortens drive life."
 
-      # NVMe media errors: integrity errors on the root device's media. Any
-      # nonzero count is a hard media-error signal (unlike SMART attributes
-      # this is a direct NVMe log-page counter). NOTE: /dev/nvme0n1 was dropped
-      # from the exporter's device list on 2026-07-03 (see
-      # modules/monitoring/services/smartctl-exporter.nix:36), so as of
-      # 2026-07-27 no smartctl_device_media_errors series is produced and this
-      # rule cannot fire. Boot-NVMe coverage is NO LONGER deferred: it was delivered
-      # 2026-07-29 by modules/monitoring/services/nvme-smart-exporter.nix, which reads
-      # /dev/nvme0n1 with `smartctl -j -H -A` (avoiding the log page that breaks
-      # smartctl_exporter) and publishes nvme_smart_* via the textfile collector, with
-      # rules in modules/monitoring/alerts/nvme-smart.yaml. The note above about THIS
-      # rule being unable to fire remains accurate and is unrelated.
-      - alert: SmartNVMeMediaErrors
-        expr: smartctl_device_media_errors > 0
-        for: 5m
-        labels:
-          severity: warning
-          category: storage
-          service: smartctl
-        annotations:
-          summary: "NVMe media errors on {{ $labels.device }}"
-          description: "{{ $labels.device }} reports {{ $value }} NVMe media/data-integrity error(s). The controller hit uncorrectable media — back up and watch for growth."
+      # SmartNVMeMediaErrors REMOVED 2026-07-31 -- unfirable, and already superseded.
+      #
+      # It selected `smartctl_device_media_errors`, a name the Prometheus __name__ index has
+      # NEVER seen. The cause is recorded in the comment this replaces: /dev/nvme0n1 was
+      # dropped from smartctl_exporter's device list on 2026-07-03, because that exporter
+      # hardcodes `--log=error`, which hits unsupported log page 0x109 on this Apple ANS NVMe
+      # -- smartctl exits 4 and the exporter DISCARDS the device entirely. Re-adding it there
+      # would reintroduce a known-broken state, so this rule cannot be repaired in place.
+      #
+      # It does not need repairing: the replacement shipped 2026-07-29.
+      # modules/monitoring/services/nvme-smart-exporter.nix reads the same device with
+      # `smartctl -j -H -A` (avoiding the failing log page) and publishes nvme_smart_*, and
+      # NVMeMediaErrors in modules/monitoring/alerts/nvme-smart.yaml already alerts on
+      # `increase(nvme_smart_media_errors[24h]) > 0` against a LIVE series.
+      #
+      # So this rule was pure residue: two alerts for one condition, of which only the other
+      # one works. Keeping it would have meant either permanent silence here or, if
+      # "repaired" by pointing it at nvme_smart_media_errors, duplicate pages for one event.
+      # Its own comment had said "this rule cannot fire" since 2026-07-27; the dead-rule
+      # detector (scripts/prometheus-rule-audit.py) is what finally forced the disposition.
+      #
+      # Verified before deletion: the surviving hardware really is all SATA -- `smartctl
+      # --scan` reports /dev/sd{a,b,c,d} as `-d sat` plus /dev/nvme0 as `-d nvme`, and every
+      # smartctl_device series carries interface="sat".
 
       # A disk vanishing from the SMART scan = the enclosure dropping a device.
       # smartctl_devices is a label-less gauge of how many devices the exporter

@@ -32,36 +32,29 @@ groups:
             Run: sudo /etc/nixos/certs/renew-certificate.sh "trader.vulcan.lan" \
               -o "/var/lib/nginx-certs" -d 365 --owner "nginx:nginx"
 
-      # Fires when the WebSocket chat handler emits errors at a
-      # non-trivial rate. Most relevant trigger today: the LiteLLM
-      # Anthropic→Responses adapter misorder bug regressing (or the
-      # SYSTEM_PROMPT no-preamble/single-tool constraints drifting)
-      # would push `kind="upstream"` past the threshold quickly. See
-      # /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md for the full
-      # write-up and stock-trader's CLAUDE.md "Known hazards" for the
-      # workaround context.
-      - alert: StockTraderChatErrorRate
-        expr: |
-          sum(rate(stock_trader_chat_errors_total[5m])) by (kind) > 0.05
-        for: 10m
-        labels:
-          severity: warning
-          component: stock-trader
-        annotations:
-          summary: "stock-trader chat errors elevated (kind={{ $labels.kind }})"
-          description: |
-            The chat WebSocket handler is emitting {{ $labels.kind }} errors at
-            {{ $value | humanize }} per second over the last 5 minutes. If
-            kind=upstream, the LiteLLM proxy/Anthropic round-trip is failing —
-            likely the misorder bug in
-            litellm/llms/anthropic/experimental_pass_through/responses_adapters/
-            transformation.py regressing (file at
-            /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md). Run:
-              tail -200 /tmp/stock-trader-chat-debug.log
-              journalctl -u stock-trader --since "10 min ago" | grep -i error
-              STOCK_TRADER_LIVE_CHAT_TESTS=1 \
-                pytest tests/test_chat_live.py -v --noconftest \
-                in /tmp/stock-trader-work to reproduce.
+      # StockTraderChatErrorRate REMOVED 2026-07-31 -- it could never fire.
+      #
+      # It selected `stock_trader_chat_errors_total`, which NOTHING produces. Not the
+      # exporter (modules/services/stock-trader.nix defines only stock_trader_data_source_up),
+      # not the application (the only stock_trader_* names the TSDB has EVER seen are
+      # data_source_up, quote_unavailable_total/_created and quote_stale_rejected_total/
+      # _created), and no other file in the tree -- confirmed by a disproving search across
+      # all file types, not just *.nix.
+      #
+      # The Prometheus __name__ index has never seen the name at all, which is what
+      # distinguishes this from the several rules here that are merely DORMANT (known metric,
+      # no current series because the condition has not occurred). Dormant rules work when
+      # the thing happens; this one could not, ever.
+      #
+      # So it was not a monitor, it was the appearance of one: a chat-error alert
+      # structurally incapable of alerting on a chat error, for its entire existence. Found
+      # by scripts/prometheus-rule-audit.py, added the same day to replace the dead-rule
+      # detection that the retired Nagios mirror used to provide.
+      #
+      # Deleted rather than repaired because its premise is gone too: it was written for
+      # "the LiteLLM Anthropic->Responses adapter misorder bug", and LiteLLM is being removed
+      # from this host entirely. If the application ever exports per-kind chat error counts,
+      # write a fresh rule against what it actually emits.
 
       # ----------------------------------------------------------------------
       # The Schwab OAuth section that used to live here is GONE, along with the source.

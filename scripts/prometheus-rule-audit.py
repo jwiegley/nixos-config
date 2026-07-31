@@ -157,17 +157,57 @@ def parse_rfc3339(value: str) -> float | None:
         return None
 
 
-def series_exists(metric: str, cache: dict[str, bool]) -> bool:
+def load_name_index() -> set[str] | None:
+    """Every metric name the TSDB has EVER seen within retention. None if unavailable."""
+    try:
+        d = get("/api/v1/label/__name__/values")
+        return set(d.get("data", []) or [])
+    except Exception:
+        return None
+
+
+def classify_metric(metric: str, index: set[str] | None, cache: dict[str, str]) -> str:
+    """'live' | 'dormant' | 'dead'.
+
+    THE DEAD/DORMANT DISTINCTION IS THE WHOLE CREDIBILITY OF THIS TOOL.
+
+    A metric with no CURRENT series is not necessarily a bug. Counters created on demand --
+    prometheus_client children, Grafana's failed-login counter, per-item gauges emitted only
+    for items in a bad state -- legitimately have no series until the thing they measure
+    first happens. Their rules are dormant, and they start working the moment the condition
+    occurs. Flagging those is crying wolf, and a detector that cries wolf gets ignored, which
+    is worse than not having one.
+
+    A metric whose name the TSDB has NEVER seen is different: nothing has ever produced it,
+    so the rule cannot fire under any circumstance. That is a real defect.
+
+    Worked examples from the first run, all verified by hand:
+      dead    smartctl_device_media_errors     -- never produced; /dev/nvme0n1 was dropped
+                                                  from that exporter, and the working
+                                                  replacement is nvme_smart_media_errors
+      dead    stock_trader_chat_errors_total   -- nothing in the tree or the app defines it
+      dormant grafana_authn_authn_failed_login_total -- no failed logins have occurred
+      dormant git_workspace_repo_age_seconds   -- emitted per STALE repo; none are stale
+      dormant api_errors_total                 -- prometheus_client child, uninitialised
+    """
     if metric in cache:
         return cache[metric]
     try:
         d = get("/api/v1/query", {"query": f"count({metric})"})
-        ok = bool(d.get("data", {}).get("result"))
+        live = bool(d.get("data", {}).get("result"))
     except Exception:
-        # Unresolvable -> treat as EXISTS. Under-report rather than invent a dead rule.
-        ok = True
-    cache[metric] = ok
-    return ok
+        # Unresolvable -> treat as live. Under-report rather than invent a dead rule.
+        cache[metric] = "live"
+        return "live"
+    if live:
+        result = "live"
+    elif index is None:
+        # No index to consult: refuse to call anything dead.
+        result = "dormant"
+    else:
+        result = "dormant" if metric in index else "dead"
+    cache[metric] = result
+    return result
 
 
 def main() -> int:
@@ -207,7 +247,9 @@ def main() -> int:
     except Exception:
         uptime = None
 
-    cache: dict[str, bool] = {}
+    index = load_name_index()
+    cache: dict[str, str] = {}
+    dormant: list[tuple[str, str, str]] = []
     total = 0
 
     for g in rules.get("data", {}).get("groups", []):
@@ -250,8 +292,11 @@ def main() -> int:
                 stale.append((name, gfile))
 
             for metric in metric_names(r.get("query", "")):
-                if not series_exists(metric, cache):
+                verdict = classify_metric(metric, index, cache)
+                if verdict == "dead":
                     dead.append((name, gfile, metric))
+                elif verdict == "dormant":
+                    dormant.append((name, gfile, metric))
 
     def esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -272,7 +317,8 @@ def main() -> int:
         )
 
     for metric_name, help_text, value in (
-        ("prometheus_rule_audit_dead_rules_total", "Alerting rules that can never fire.", len(dead)),
+        ("prometheus_rule_audit_dead_rules_total", "Alerting rules that can never fire: they select a metric the TSDB has NEVER seen.", len(dead)),
+        ("prometheus_rule_audit_dormant_rules_total", "Rules selecting a known metric that currently has no series (on-demand counters). Informational, NOT a defect.", len(dormant)),
         ("prometheus_rule_audit_stale_rules_total", "Alerting rules whose lastEvaluation has not advanced.", len(stale)),
         ("prometheus_rule_audit_error_rules_total", "Alerting rules Prometheus marks health=err.", len(errored)),
         ("prometheus_rule_audit_group_overrun_total", "Rule groups whose evaluation exceeds their interval.", len(overrun)),
@@ -292,7 +338,9 @@ def main() -> int:
     if a.stdout:
         print(body, end="")
         for name, gfile, metric in dead:
-            print(f"DEAD  {name} ({gfile}) -> missing metric: {metric}", file=sys.stderr)
+            print(f"DEAD    {name} ({gfile}) -> never-seen metric: {metric}", file=sys.stderr)
+        for name, gfile, metric in dormant:
+            print(f"dormant {name} ({gfile}) -> known but idle: {metric}", file=sys.stderr)
         for name, gfile in stale:
             print(f"STALE {name} ({gfile})", file=sys.stderr)
         return 1 if (dead or errored) else 0

@@ -63,6 +63,24 @@ api_errors_total = Counter(
     ['error_type']  # auth, network, timeout, other
 )
 
+# PRE-INITIALISE EVERY LABEL VALUE AT ZERO. This is load-bearing, not tidiness.
+#
+# prometheus_client creates NO child series for a labelled metric until .labels(...) is
+# called, so before the first error of a given type `api_errors_total` has zero series. A
+# rule like `rate(api_errors_total{error_type="network"}[5m]) > 0` then selects nothing,
+# evaluates to empty, and sits inactive FOREVER -- indistinguishable from "no errors". The
+# alert only starts working after the incident it was supposed to catch.
+#
+# Found 2026-07-31 by scripts/prometheus-rule-audit.py, which flagged
+# DnsQueryExporterHighAPIErrorRate, DnsQueryExporterNetworkErrors and
+# DnsQueryExporterTimeouts as unfirable. Confirmed by contrast with
+# authentication_failures_total, which is UNLABELLED and therefore had its 1 series all
+# along.
+#
+# The list must stay in sync with every .labels(error_type=...) call site below.
+for _error_type in ('auth', 'network', 'timeout', 'other'):
+    api_errors_total.labels(error_type=_error_type)
+
 last_successful_query_timestamp = Gauge(
     'last_successful_query_timestamp',
     'Unix timestamp of the last successful query fetch from Technitium DNS API'

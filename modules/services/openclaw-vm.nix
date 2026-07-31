@@ -739,6 +739,27 @@ in
       # "missing light-runtime-api for plugin 'whatsapp'".
       OPENCLAW_BUNDLED_PLUGINS_DIR = "${openclawPkg}/lib/openclaw/extensions";
 
+      # TEMPORARY, 2026-07-31 -- revert once the Discord canary question is settled.
+      #
+      # openclaw's Discord preflight logs the exact reason it drops an inbound message
+      # (extensions/discord/src/monitor/message-handler.preflight.ts), e.g.
+      #   "discord: drop bot message (allowBots=false)"
+      #   "discord: drop bot message (allowBots=mentions, missing mention)"
+      # but each goes through logVerbose(), gated on
+      # shouldLogVerbose() = isVerbose() || isFileLogLevelEnabled("debug")
+      # (src/globals.ts:7). At the default "info" file level they are discarded.
+      #
+      # A full day went into INFERRING why bot-authored canary probes go unanswered --
+      # allowBots, allowFrom, guild users, per-channel scoping, version skew -- each
+      # costing a deploy/restart/wait cycle, and each one wrong. The program reports the
+      # answer directly; it simply was not being written down. OPENCLAW_LOG_LEVEL is the
+      # documented override for both file and console levels and takes precedence over
+      # config (docs/help/environment.md:243).
+      #
+      # Revert after: debug is verbose and these logs are already large (gateway-vm.log
+      # 27MB, gateway-vm.err.log 53MB).
+      OPENCLAW_LOG_LEVEL = "debug";
+
       # MCP tool-call timeout (ms). claude-code defaults to 60_000, which is
       # too short for the local-LLM Hermes bridge (`mcpServers.hermes`):
       # Hermes is itself an agent that invokes its own internal tools

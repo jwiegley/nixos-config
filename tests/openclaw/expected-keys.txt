@@ -44,6 +44,7 @@ auth.profiles.vulcan:manual.mode
 auth.profiles.vulcan:manual.provider
 channels
 channels.discord
+channels.discord.allowBots
 channels.discord.allowFrom
 channels.discord.allowFrom.0
 channels.discord.allowFrom.1

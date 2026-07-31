@@ -143,6 +143,25 @@ let
         groupPolicy = "allowlist";
         streaming = { };
         dmPolicy = "allowlist";
+        # Accept bot-authored messages ONLY when they @mention @Claw. Required for the
+        # round-trip canary: openclaw drops bot authors outright by default ("none"), which
+        # is why every probe from Hermes went unanswered all of 2026-07-30 while @Claw
+        # answered the operator normally. Established from openclaw's own source rather
+        # than inferred -- DiscordAccountConfig includes ChannelBotInteractionConfig
+        # (src/config/types.discord.ts:272, types.channel-messaging-common.ts:87), and
+        # docs/channels/discord.md:1639 recommends exactly this value over `true`.
+        #
+        # "mentions" is the tight setting: general bot chatter is still dropped, and only a
+        # message that mentions @Claw is dispatched. It bypasses the human allowFrom list
+        # (bots are never in it) but NOT the guild/channel scoping, so reach is bounded by
+        # where the bot can post.
+        #
+        # Setting this also activates openclaw's shared bot-loop protection: 20 events per
+        # bot pair per 60s window, then a 60s cooldown. The canary sends 2 messages per
+        # 15 minutes, so it sits far under that budget while the guard still bounds a
+        # runaway @Claw <-> Hermes exchange -- the hazard that made a guild-wide grant
+        # unattractive earlier.
+        allowBots = "mentions";
         allowFrom = [
           "639822278535807007"
           # Hermes' bot user id — setup step 2 of docs/DISCORD_CANARY_SETUP.md.
@@ -171,6 +190,12 @@ let
         guilds = {
           "1477037634931916891" = {
             requireMention = false;
+            # Operator only. Hermes was added here 2026-07-30 to test whether guild `users`
+            # gates bot authors independently of allowBots; it does not -- the canary still
+            # failed with both set. Reverted rather than left as a widened grant that bought
+            # nothing. The drop reason is logged by openclaw itself at verbose level
+            # (extensions/discord/src/monitor/message-handler.preflight.ts), which is the
+            # right way to find the real gate instead of widening allowlists by guess.
             users = [ "639822278535807007" ];
             # channels intentionally EMPTY. A per-channel grant for #interconnect
             # (requireMention = true + a users list) was added 2026-07-30 as a

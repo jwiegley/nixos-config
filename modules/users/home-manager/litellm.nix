@@ -50,18 +50,23 @@
               generator = await generator
 
           async def stream_with_heartbeat():
-              first_chunk = asyncio.ensure_future(generator.__anext__())
+              pending_chunk = None
               try:
-                  while not first_chunk.done():
-                      await asyncio.wait({first_chunk}, timeout=interval)
-                      if not first_chunk.done():
-                          yield ": keepalive\n\n"
-                  yield first_chunk.result()
-                  async for chunk in generator:
+                  while True:
+                      pending_chunk = asyncio.ensure_future(generator.__anext__())
+                      while not pending_chunk.done():
+                          await asyncio.wait({pending_chunk}, timeout=interval)
+                          if not pending_chunk.done():
+                              yield ": keepalive\n\n"
+                      try:
+                          chunk = pending_chunk.result()
+                      except StopAsyncIteration:
+                          return
+                      pending_chunk = None
                       yield chunk
               finally:
-                  if not first_chunk.done():
-                      first_chunk.cancel()
+                  if pending_chunk is not None and not pending_chunk.done():
+                      pending_chunk.cancel()
                   try:
                       await generator.aclose()
                   except BaseException:

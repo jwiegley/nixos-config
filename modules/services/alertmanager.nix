@@ -533,12 +533,32 @@
         # IoT-down warnings regardless of which specific device, since the
         # gateway being unreachable explains every child failure. The gateway
         # instances are matched by name via source_match_re.
+        #
+        # SOURCE LIST CORRECTED 2026-07-31. It previously also listed
+        # asus-rt-ax88u.lan and asus-bq16-pro-node.lan. Neither is a gateway:
+        # checked against the host inventory, both have ZERO children and both
+        # have parent = asus-bq16-pro-ap, i.e. they are LEAVES. Combined with
+        # equal = [] making the join unconditional, either leaf going down
+        # silenced ALL 16 BlackboxICMPIoTDeviceDown warnings -- one unrelated
+        # device failure blanket-muting the entire IoT tier, and presenting as
+        # quiet rather than as breakage. That matters here because the leaves
+        # fail far more often than the real gateway: over 365d of firing
+        # samples, hera-wifi 16,249 and asus-bq16-pro-node 6,199 against
+        # asus-bq16-pro-ap's 31.
+        #
+        # asus-bq16-pro-ap is the only genuine parent of the IoT devices
+        # (18 children), so it is the only correct source. This is the whole of
+        # the topology modelling here by deliberate choice: a general
+        # parent/child scheme was designed and REJECTED as unnecessary
+        # complexity -- measured over 90d it would have suppressed ~6 extra
+        # alerts once a quarter. Keep this one rule; do not rebuild the general
+        # case.
         {
           source_match = {
             alertname = "HostUnreachable";
           };
           source_match_re = {
-            instance = "(asus-rt-ax88u\\.lan|asus-bq16-pro-ap\\.lan|asus-bq16-pro-node\\.lan)";
+            instance = "(asus-bq16-pro-ap\\.lan)";
           };
           target_match = {
             alertname = "BlackboxICMPIoTDeviceDown";
@@ -548,14 +568,15 @@
         # Same parent/child suppression, but for the case where the gateway/AP
         # itself is also (mis)classified into the IoT coverage and reported via
         # BlackboxICMPIoTDeviceDown rather than HostUnreachable. Keyed on the
-        # same gateway instance names so the child IoT warnings are still
-        # inhibited by a single upstream failure.
+        # same gateway instance name so the child IoT warnings are still
+        # inhibited by a single upstream failure. Source list corrected in the
+        # same change and for the same reason as the rule above.
         {
           source_match = {
             alertname = "BlackboxICMPIoTDeviceDown";
           };
           source_match_re = {
-            instance = "(asus-rt-ax88u\\.lan|asus-bq16-pro-ap\\.lan|asus-bq16-pro-node\\.lan)";
+            instance = "(asus-bq16-pro-ap\\.lan)";
           };
           target_match = {
             alertname = "BlackboxICMPIoTDeviceDown";

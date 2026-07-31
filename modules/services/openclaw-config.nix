@@ -173,10 +173,21 @@ let
         # where the bot can post.
         #
         # Setting this also activates openclaw's shared bot-loop protection: 20 events per
-        # bot pair per 60s window, then a 60s cooldown. The canary sends 2 messages per
-        # 15 minutes, so it sits far under that budget while the guard still bounds a
-        # runaway @Claw <-> Hermes exchange -- the hazard that made a guild-wide grant
-        # unattractive earlier.
+        # bot pair per 60s window, then a 60s cooldown (unordered pair key, so both
+        # directions share one counter; state is in-process and clears on restart).
+        # The canary sends 2 messages per 15 minutes, so it sits far under that budget.
+        #
+        # Ping-pong exposure with Hermes now in guilds.<id>.users below: a bot author must
+        # still clear preflight.ts:695, which needs a real parsed @mention or a native
+        # reply to @Claw. Other bots still die at :563. @everyone from a bot is
+        # deliberately blind (preflight.ts:447: `mentionedEveryone && (!authorIsBot ||
+        # isPluralKit)`), and plain-name matching contributes nothing (no mentionPatterns,
+        # so buildMentionRegexes returns []). The one reachable loop is a Hermes NATIVE
+        # REPLY, which sets implicitMention = "reply_to_bot" and satisfies :695; at
+        # 3-285s per turn the 20-events/60s guard would never trip. If a real bound is
+        # wanted, botLoopProtection = { maxEventsPerWindow; windowSeconds; cooldownSeconds; }
+        # is a real key in the deployed schema (src/config/types.channels.ts) -- but it is
+        # NOT verified that this NixOS module accepts it. Follow-up, not part of the fix.
         allowBots = "mentions";
         allowFrom = [
           "639822278535807007"
@@ -185,34 +196,54 @@ let
           # dmPolicy/groupPolicy = "allowlist" @Claw silently drops a sender that
           # is not listed, which is why the canary reported ok=0 on every run from
           # the moment it was enabled (post_http=200, "no reply within timeout").
-          # THIS is what unblocked the round-trip canary: it went green at 12:46 on
-          # 2026-07-30 (rt=7.4s) with only this entry in place, and has replied
-          # repeatedly since (30-88s typical).
+          # NECESSARY BUT NOT SUFFICIENT. An earlier version of this comment claimed
+          # "THIS is what unblocked the round-trip canary: it went green at 12:46 on
+          # 2026-07-30 (rt=7.4s)". That green was an artifact: until the probe was
+          # hardened (gen 2325, 21:39:35) it accepted ANY recent message from the
+          # target as a reply, so @Claw answering the operator scored as a canary
+          # success. Every green before 21:39 is suspect; only `reply+nonce` and
+          # `reply+reference` attributions after it mean anything.
           #
-          # An intermediate diagnosis claimed allowFrom was insufficient and that
-          # guild-channel messages must be gated elsewhere. That was wrong, and the
-          # way it was wrong is worth keeping: the three runs it rested on were each
-          # invalidated by their own conditions -- two ran while the VM was still
-          # warming after a restart, and the third had a reply latency of 85-88s
-          # against a 90s timeout. "No reply within timeout" meant the timeout was
-          # too short, not that the sender was rejected.
-          #
-          # Deliberately NOT added to guilds.<id>.users: that list is paired with
-          # requireMention = false, so a bot listed there is answered on EVERY
-          # message anywhere in the guild, and two agents that answer each other
-          # unprompted can ping-pong without bound.
+          # allowFrom feeds resolveDiscordTextCommandAccess (control-command
+          # authorization) and the DM path. It does NOT feed the guild member gate at
+          # message-handler.preflight.ts:563, which is the gate that was actually
+          # dropping Hermes -- see guilds.<id>.users below.
           "1503619790261194793"
         ];
         guilds = {
           "1477037634931916891" = {
             requireMention = false;
-            # Operator only. Hermes was added here 2026-07-30 to test whether guild `users`
-            # gates bot authors independently of allowBots; it does not -- the canary still
-            # failed with both set. Reverted rather than left as a widened grant that bought
-            # nothing. The drop reason is logged by openclaw itself at verbose level
-            # (extensions/discord/src/monitor/message-handler.preflight.ts), which is the
-            # right way to find the real gate instead of widening allowlists by guess.
-            users = [ "639822278535807007" ];
+            # Operator + Hermes. The second entry is LOAD-BEARING, not a widened grant.
+            #
+            # A NON-EMPTY users list sets hasAccessRestrictions = true for EVERY sender
+            # in this guild (allow-list.ts:238-240,
+            # `channelUsers = channelConfig?.users ?? guildInfo?.users`), and
+            # preflight.ts:563 then drops any sender absent from it. That drop is 132
+            # lines BEFORE the allowBots = "mentions" gate at preflight.ts:695, so for a
+            # bot missing from this list allowBots is read (:235) and never consulted --
+            # which is exactly why setting it correctly changed nothing for a day.
+            # Matching is id-only (dangerouslyAllowNameMatching is unset; leave it that
+            # way). allowFrom is a DIFFERENT list and does not open :563.
+            #
+            # A 2026-07-30 test added Hermes here and was reverted the same day on the
+            # conclusion that "guild `users` does not gate bot authors". That conclusion
+            # was WRONG. It rested on the canary run completing 23:26:16, whose 420s
+            # window began 3.5 min after the 23:15:43 VM boot -- warmup, the same
+            # invalidation documented for the allowFrom tests above. Verified at store
+            # level 2026-07-31: gen 2327 (23:15:19) shipped config template
+            # yj9ykskj... with users length 2; gens 2326/2328/2329 shipped 23ql5k6p...
+            # with length 1. All three genuine reply+nonce successes (23:51:24, 00:05:13,
+            # 00:20:59) fall inside the 23:15:43-00:29:25 window and nowhere else --
+            # 0 successes in the 18 runs on either side. The revert landed 9 min after
+            # the last success.
+            #
+            # Do NOT trust any canary result within ~20 min of a VM restart (first
+            # success was ~36 min post-boot), and do not remove either id without
+            # re-running that A/B/A.
+            users = [
+              "639822278535807007"
+              "1503619790261194793"
+            ];
             # channels intentionally EMPTY. A per-channel grant for #interconnect
             # (requireMention = true + a users list) was added 2026-07-30 as a
             # least-privilege alternative to a guild-wide users entry, then REVERTED

@@ -22,6 +22,68 @@ probe missed it because they bypass Discord (`e2e-chat` → api_server,
 `OpenClawDiscordWsDown`) which a still-ACKing zombie keeps fresh. Only an
 active message→reply round-trip proves the inbound path delivers.
 
+## Bot-to-bot: config-only, and the gates are NOT where you would guess
+
+An earlier version of this section claimed "both agents ignore bot-authored messages" and
+"there is no config knob for this in either agent — no `allowBots`-style option exists in
+openclaw's config schema or Hermes' env", and recommended retiring the canary. **All three
+claims were wrong.** Both knobs exist, both work, and no code change is needed. That section
+is preserved only as a warning about how it was reached: it generalised from probe runs that
+were each invalidated by their own conditions (VM warmup, a 90 s timeout against 85–88 s
+replies, and a probe that scored the *sibling probe's own post* as a reply).
+
+### @Claw (openclaw) — TWO gates, in this order
+
+`channels.discord.allowBots = "mentions"` is necessary and **not sufficient**. The gate that
+actually drops a bot is the guild member allowlist, and it runs **first**:
+
+| order | site (openclaw 2026.7.1) | condition |
+|---|---|---|
+| 1 | `message-handler.preflight.ts:563` | `isGuildMessage && hasAccessRestrictions && !memberAllowed` |
+| 2 | `message-handler.preflight.ts:695` | bot author, `allowBots = "mentions"`, and no mention/reply |
+
+`hasAccessRestrictions` comes from `allow-list.ts:238-240`:
+`channelUsers = channelConfig?.users ?? guildInfo?.users`, then non-empty ⇒ restricted. So a
+**non-empty `guilds.<id>.users` list restricts every sender in that guild, humans and bots
+alike**, and any id missing from it is dropped 132 lines before `allowBots` is consulted.
+The sender must therefore appear in `guilds.<id>.users`. `channels.discord.allowFrom` is a
+**different** list — it feeds `resolveDiscordTextCommandAccess` and the DM path only, and
+does not open gate 1.
+
+Two traps:
+
+- A per-channel `channels.<id>` entry **shadows** the guild entry via the `??` above, so
+  adding one silently narrows the guild grant. Keep `channels = { }`.
+- Because `requireMention = false`, mention resolution is dead code for human senders. A
+  broken mention path is therefore **invisible in operator testing** and visible only for
+  bots, which must clear gate 2.
+
+### Hermes (discord.py) — one gate, and it is ordered correctly
+
+`DISCORD_ALLOW_BOTS` in the SOPS `hermes/env` secret: `none` (default) / `mentions` / `all`.
+Deployed at `plugins/platforms/discord/adapter.py:784-792`, and it runs **before** the human
+`DISCORD_ALLOWED_USERS` allowlist deliberately (upstream #4466), so a bot admitted by
+`DISCORD_ALLOW_BOTS` is not then rejected for being absent from the user allowlist. `mentions`
+requires `self._client.user in message.mentions` — Discord's server-parsed mentions array.
+
+**The value ships via the `secrets` flake input.** Editing `secrets.yaml` is not enough: the
+input must be re-locked (`nix flake update secrets`) and `flake.lock` **committed**, or a
+later checkout silently reverts the setting. The 2026-07-30 bump was `secrets` rev 158 → 160,
+and Hermes began processing canary posts 15 minutes after it was activated.
+
+### Reading a canary result honestly
+
+- **Ignore any result within ~20 minutes of a VM restart.** In the one proven-good window,
+  runs starting +3.5 min and +18.6 min post-boot both failed; the first success was ~36 min
+  post-boot.
+- **Only `reply+nonce` and `reply+reference` mean anything.** Before the probe was hardened
+  it accepted any recent message from the target, so the two probes scored each other's posts
+  and one run deleted a genuine @Claw reply to the operator. Any green before 2026-07-30
+  21:39 PDT is an artifact.
+- A bare `no reply within timeout` does not distinguish "dropped at gate 1", "dropped at
+  gate 2", and "replied without echoing" — set `logging.file` and read the
+  `[discord-preflight] drop: …` line instead of guessing.
+
 ## ⚠️ Read this before diagnosing a red canary
 
 **`post_http=200` + `no reply within timeout` does NOT mean the target rejected the

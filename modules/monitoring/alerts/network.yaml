@@ -217,15 +217,33 @@ groups:
       # native Nagios cert checks go away with it, and blackbox_https carries exactly ONE
       # series (https://google.com) while the public edge certs live in blackbox_https_public.
       #
-      # blackbox_https_local is deliberately NOT included even though it carries 39 series.
-      # Those are LOCAL vhosts whose certs are files on disk, and the certificate exporter
-      # already watches all 56 of them by file (certificates.yaml:53 at <=30d and :63 at <=7d,
-      # plus certificate_valid and certificate_chain_valid). Adding _local here would raise a
-      # second, earlier-firing alert for every one of those 39 vhosts. The public certs are
-      # the genuine gap precisely BECAUSE they are terminated at the Cloudflare edge and
-      # therefore have no local file for the certificate exporter to inspect.
+      # WIDENED AGAIN 2026-07-31, same day, correcting the first attempt.
+      #
+      # The first pass used job=~"blackbox_https(_public)?" and deliberately EXCLUDED
+      # blackbox_https_local, reasoning that its 39 vhosts already have their certs watched
+      # on disk by the certificate exporter, so including them would just duplicate. That
+      # reasoning was wrong, and the numbers show how wrong: 46 cert series are scraped and
+      # that selector matched THREE. Forty-three on-the-wire cert-expiry series were read by
+      # no rule at all.
+      #
+      # File and wire detect DIFFERENT failures. certificate_days_until_expiry inspects
+      # /var/lib/nginx-certs/*.crt; probe_ssl_earliest_cert_expiry inspects what nginx is
+      # actually SERVING. A cert renewed on disk without an nginx reload looks perfect to the
+      # file exporter while the wire still presents the expiring one -- the file check is
+      # structurally blind to it.
+      #
+      # And this is NOT duplicate alerting, because the thresholds interlock:
+      #   file (certificates.yaml:53/:63)  warns at 30d, crits at  7d
+      #   wire (here)                      warns at  7d, crits at 24h
+      # A normal renewal trips the file rule 23 days first and clears. The wire rule can only
+      # fire if the served cert is STILL old three weeks later -- i.e. precisely the
+      # renewed-but-not-reloaded case, and nothing else.
+      #
+      # Selector is job=~"blackbox_.*" rather than an explicit job list so new probe jobs are
+      # covered by default and retired ones (blackbox_openclaw) drop out on their own. Only
+      # jobs that actually terminate TLS produce this metric, so non-TLS jobs cost nothing.
       - alert: SSLCertificateExpiringSoon
-        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_https(_public)?"} - time() < 7 * 24 * 3600
+        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_.*"} - time() < 7 * 24 * 3600
         for: 1h
         labels:
           severity: warning
@@ -237,7 +255,7 @@ groups:
 
       # SSL certificate expiry critical -- same selector widening as above, same reasoning.
       - alert: SSLCertificateExpiringCritical
-        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_https(_public)?"} - time() < 24 * 3600
+        expr: probe_ssl_earliest_cert_expiry{job=~"blackbox_.*"} - time() < 24 * 3600
         for: 15m
         labels:
           severity: critical

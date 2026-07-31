@@ -139,11 +139,25 @@ groups:
           summary: "Backup service {{ $labels.name }} has failed"
           description: "Backup service {{ $labels.name }} failed on {{ $labels.instance }}"
 
-      # Timer units not active (backup timers, etc.)
+      # Timer units not active.
+      #
+      # WIDENED 2026-07-31 from restic-backups-*.timer to ALL timers, as part of retiring
+      # Nagios. Nagios checked 34 individual timers by name; this covers all 113 the host
+      # actually has, so it is strictly better coverage than the thing it replaces AND it
+      # cannot drift the way a hand-maintained name list does -- a new timer is covered the
+      # moment it exists, with no registry to remember to update.
+      #
+      # Verified non-noisy before widening: 113 timers are scraped and
+      # count(node_systemd_unit_state{name=~".*\\.timer",state="active"} == 0) is 0, i.e.
+      # every timer on the host is currently active, so this does not light up on deploy.
+      #
+      # If a timer is ever DELIBERATELY disabled, add it to an exclusion here rather than
+      # narrowing the pattern back to a name list -- the point of the wildcard is that
+      # forgetting to add a timer is impossible.
       - alert: ImportantTimerInactive
         expr: |
           node_systemd_unit_state{
-            name=~"restic-backups-.*\\.timer",
+            name=~".*\\.timer",
             state="active"
           } == 0
         for: 5m
@@ -151,8 +165,8 @@ groups:
           severity: warning
           category: systemd
         annotations:
-          summary: "Important timer {{ $labels.name }} is not active"
-          description: "Timer {{ $labels.name }} should be active but is not on {{ $labels.instance }}"
+          summary: "Timer {{ $labels.name }} is not active"
+          description: "Timer {{ $labels.name }} is not in the active state on {{ $labels.instance }}. Its scheduled job is therefore not running. Check: systemctl status {{ $labels.name }}"
 
       # Socket units not listening
       - alert: ImportantSocketNotListening

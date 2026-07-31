@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+#
+# /etc/nixos/build -- serialized build/switch driver for vulcan.
+#
+# WHY THIS EXISTS
+#
+# The convention documented in CLAUDE.md and the `nixos` skill is that any agent about to
+# build or switch first creates /etc/nixos/.nixos-build, and removes it when done. That
+# convention is correct but unenforced, and it failed in practice: on 2026-07-31 a lock was
+# left behind by a session that had already finished, and a second session sat blocked on it
+# for 85 minutes before asking a human what to do. Two failure modes were in play -- nothing
+# guaranteed the holder released the lock, and nothing let a waiter distinguish "a build is
+# genuinely running" from "a dead session left a file behind".
+#
+# This script closes both. It acquires the lock atomically, releases it on EVERY exit path
+# (success, failure, SIGINT/SIGTERM/SIGHUP, or the build dying), and gives a waiter a bounded
+# wait with a forcible seizure at the end instead of an indefinite stall.
+#
+# It deliberately keeps the SAME lock path and the same "file exists == locked" semantics, so
+# an agent still following the manual convention interoperates with this script in both
+# directions.
+#
+# USAGE
+#
+#   /etc/nixos/build                     # nixos-rebuild switch  (the default)
+#   /etc/nixos/build switch|build|test|boot|dry-activate
+#   /etc/nixos/build switch --show-trace # extra args are passed through to nixos-rebuild
+#   /etc/nixos/build -- <command>...     # run an arbitrary command holding the lock
+#
+#   --wait-seconds N   how long to wait for a held lock before seizing it (default 14400 = 4h)
+#   --no-stale-seize   never seize early, even when the recorded holder PID is provably dead
+#   --flake REF        flake reference (default /etc/nixos#vulcan)
+#
+# EXIT STATUS is the build's own exit status. Lock-acquisition failure exits 75 (EX_TEMPFAIL).
+#
+# Re-execs itself under sudo when not run as root: the lock lives in root-owned /etc/nixos,
+# the log is root-only, and nixos-rebuild needs root anyway.
+
+set -uo pipefail
+
+LOCK=/etc/nixos/.nixos-build
+LOG=/var/log/build.log
+LOG_MAX_BYTES=$((8 * 1024 * 1024))
+LOCK_MAGIC='# nixos-build-lock v1'
+
+WAIT_SECONDS=14400 # 4 hours
+POLL_SECONDS=10
+WAITING_LOG_EVERY=300 # log a "waiting" heartbeat every 5 min, not every poll
+STALE_SEIZE=1
+FLAKE='/etc/nixos#vulcan'
+
+if [[ ${EUID} -ne 0 ]]; then
+  exec sudo -- "$0" "$@"
+fi
+
+# ---- argument parsing ----------------------------------------------------------------------
+
+declare -a CMD=()
+SUBCOMMAND=''
+declare -a PASSTHRU=()
+
+SAW_DOUBLE_DASH=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --) shift; SAW_DOUBLE_DASH=1; CMD=("$@"); break ;;
+    --wait-seconds) WAIT_SECONDS="${2:?--wait-seconds needs a value}"; shift 2 ;;
+    --no-stale-seize) STALE_SEIZE=0; shift ;;
+    --flake) FLAKE="${2:?--flake needs a value}"; shift 2 ;;
+    -h|--help) sed -n '/^# USAGE/,/^# Re-execs/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    switch|build|test|boot|dry-activate|dry-build)
+      if [[ -n ${SUBCOMMAND} ]]; then PASSTHRU+=("$1"); else SUBCOMMAND="$1"; fi; shift ;;
+    *) PASSTHRU+=("$1"); shift ;;
+  esac
+done
+
+if [[ ${SAW_DOUBLE_DASH} -eq 1 && ${#CMD[@]} -eq 0 ]]; then
+  echo "build: '--' given with no command after it; refusing to silently run the default" >&2
+  exit 64
+fi
+
+if [[ ${#CMD[@]} -eq 0 ]]; then
+  CMD=(nixos-rebuild "${SUBCOMMAND:-switch}" --flake "${FLAKE}" "${PASSTHRU[@]}")
+fi
+
+if ! [[ ${WAIT_SECONDS} =~ ^[0-9]+$ ]]; then
+  echo "build: --wait-seconds must be a non-negative integer, got '${WAIT_SECONDS}'" >&2
+  exit 64
+fi
+
+# ---- logging ------------------------------------------------------------------------------
+
+# Root-only: build output is not expected to carry secrets, but it is machine state and
+# 0600 costs nothing. Rotated by size so it cannot grow without bound.
+init_log() {
+  if [[ -f ${LOG} ]]; then
+    local size
+    size=$(stat -c %s "${LOG}" 2>/dev/null || echo 0)
+    if [[ ${size} -gt ${LOG_MAX_BYTES} ]]; then
+      mv -f "${LOG}" "${LOG}.1" 2>/dev/null || true
+    fi
+  fi
+  touch "${LOG}" 2>/dev/null || true
+  chown root:root "${LOG}" 2>/dev/null || true
+  chmod 600 "${LOG}" 2>/dev/null || true
+}
+
+# One write per line keeps concurrent appends from interleaving (O_APPEND is atomic for
+# writes this small), so two waiters logging at once stay readable.
+log() {
+  printf '%s [%d] %s\n' "$(date -Is)" "$$" "$*" >>"${LOG}"
+}
+
+# Announce on stderr as well as the log: an agent running this interactively should see why
+# it is sitting still, without having to know the log exists.
+say() {
+  log "$*"
+  printf 'build: %s\n' "$*" >&2
+}
+
+# ---- lock ---------------------------------------------------------------------------------
+
+HELD=0
+
+# Atomic create-or-fail via O_EXCL (bash's noclobber). Never a test-then-create race.
+try_acquire() {
+  local invoker="${SUDO_USER:-root}"
+  if (set -o noclobber; : >"${LOCK}") 2>/dev/null; then
+    {
+      echo "${LOCK_MAGIC}"
+      echo "pid=$$"
+      echo "user=${invoker}"
+      echo "started=$(date -Is)"
+      echo "command=${CMD[*]}"
+    } >"${LOCK}"
+    HELD=1
+    return 0
+  fi
+  return 1
+}
+
+# Only ever removes a lock this process is holding. A waiter must never delete a live
+# holder's lock -- that is what the seizure path is for, and it is logged loudly.
+release() {
+  local why="${1:-exit}"
+  if [[ ${HELD} -eq 1 ]]; then
+    HELD=0
+    rm -f "${LOCK}"
+    log "LOCK RELEASED (${why})"
+  fi
+}
+
+lock_holder_pid() {
+  [[ -s ${LOCK} ]] || return 1
+  head -1 "${LOCK}" 2>/dev/null | grep -qxF "${LOCK_MAGIC}" || return 1
+  local pid
+  pid=$(sed -n 's/^pid=\([0-9]\+\)$/\1/p' "${LOCK}" 2>/dev/null | head -1)
+  [[ -n ${pid} ]] || return 1
+  printf '%s' "${pid}"
+}
+
+# A lock is provably stale only when THIS script wrote it (magic line present) and the
+# recorded PID is gone. A bare touch()ed lock carries no PID, so it is never judged stale --
+# it just waits out the full timeout. Being wrong here means killing a real build, so the
+# test refuses to guess.
+lock_is_stale() {
+  [[ ${STALE_SEIZE} -eq 1 ]] || return 1
+  local pid
+  pid=$(lock_holder_pid) || return 1
+  kill -0 "${pid}" 2>/dev/null && return 1
+  printf '%s' "${pid}"
+}
+
+seize() {
+  local reason="$1"
+  say "FORCIBLE SEIZURE of ${LOCK}: ${reason}"
+  rm -f "${LOCK}"
+}
+
+describe_holder() {
+  local pid
+  if pid=$(lock_holder_pid); then
+    if kill -0 "${pid}" 2>/dev/null; then
+      printf 'held by pid %s (alive)' "${pid}"
+    else
+      printf 'held by pid %s (DEAD)' "${pid}"
+    fi
+  else
+    printf 'held by an unknown process (lock carries no metadata; hand-created)'
+  fi
+}
+
+acquire_or_die() {
+  log "ACQUIRE ATTEMPT: ${LOCK} for: ${CMD[*]}"
+
+  if try_acquire; then
+    log "LOCK ACQUIRED immediately"
+    return 0
+  fi
+
+  say "lock is $(describe_holder); waiting up to ${WAIT_SECONDS}s"
+
+  local waited=0 last_heartbeat=0 stale_pid
+  while [[ ${waited} -lt ${WAIT_SECONDS} ]]; do
+    if stale_pid=$(lock_is_stale); then
+      seize "recorded holder pid ${stale_pid} is dead after ${waited}s"
+      try_acquire && { log "LOCK ACQUIRED after seizing a stale lock"; return 0; }
+      # Lost the race to another waiter. Fall through to the normal sleep rather than
+      # looping straight back: `continue` here would spin without advancing `waited`.
+    fi
+
+    sleep "${POLL_SECONDS}"
+    waited=$((waited + POLL_SECONDS))
+
+    if try_acquire; then
+      log "LOCK ACQUIRED after waiting ${waited}s (previous holder released it)"
+      return 0
+    fi
+
+    if [[ $((waited - last_heartbeat)) -ge ${WAITING_LOG_EVERY} ]]; then
+      last_heartbeat=${waited}
+      log "WAITING ${waited}s/${WAIT_SECONDS}s -- $(describe_holder)"
+    fi
+  done
+
+  seize "wait timeout reached (${WAIT_SECONDS}s)"
+  if try_acquire; then
+    log "LOCK ACQUIRED after forcible seizure"
+    return 0
+  fi
+
+  # Another waiter won the race for the seized lock. Do not fight it: exiting is safer
+  # than a seize loop that could starve whoever legitimately grabbed it.
+  say "could not acquire ${LOCK} even after seizure -- another waiter took it; aborting"
+  return 1
+}
+
+# ---- run ----------------------------------------------------------------------------------
+
+init_log
+log "=== build invoked by ${SUDO_USER:-root}: ${CMD[*]}"
+
+# Every exit path releases. Signal handlers re-raise so the exit status still reflects the
+# signal rather than being silently swallowed.
+trap 'release EXIT' EXIT
+for sig in INT TERM HUP QUIT; do
+  # SC2064 is deliberate here: ${sig} MUST expand now, while the loop variable exists, not
+  # at signal-delivery time when it would be whatever the loop left behind. The re-raise
+  # keeps the process's final status a real signal death; release() is idempotent, so the
+  # EXIT trap firing afterwards is harmless.
+  # shellcheck disable=SC2064
+  trap "release SIG${sig}; trap - ${sig}; kill -${sig} \$\$" "${sig}"
+done
+
+acquire_or_die || exit 75
+
+log "BUILD STARTED: ${CMD[*]}"
+start_epoch=$(date +%s)
+
+# Output goes to the log AND to the caller's stdout, so an agent sees progress live while the
+# log keeps the full record. pipefail is off for this one pipeline on purpose: we want the
+# BUILD's status, and PIPESTATUS gives it to us regardless of tee.
+set +o pipefail
+"${CMD[@]}" 2>&1 | tee -a "${LOG}"
+status=${PIPESTATUS[0]}
+set -o pipefail
+
+elapsed=$(( $(date +%s) - start_epoch ))
+log "BUILD FINISHED after ${elapsed}s"
+if [[ ${status} -eq 0 ]]; then
+  log "BUILD RESULT: SUCCESS (exit 0)"
+else
+  log "BUILD RESULT: FAILURE (exit ${status})"
+fi
+
+release "build finished, exit ${status}"
+exit "${status}"

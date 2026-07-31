@@ -235,8 +235,8 @@ no `.age` key files in the repo tree.
 # Edit secrets
 sops /etc/nixos/secrets/secrets.yaml
 
-# Apply changes
-sudo nixos-rebuild switch --flake '.#vulcan'
+# Apply changes (see System Management -- always go through this script)
+/etc/nixos/build
 
 # Secrets deploy to
 /run/secrets/
@@ -251,12 +251,35 @@ sudo nixos-rebuild switch --flake '.#vulcan'
 ## Quick Command Reference
 
 ### System Management
+
+**Always build and switch through `/etc/nixos/build`. Do not call `nixos-rebuild` directly.**
+
 ```bash
-sudo nixos-rebuild switch --flake '.#vulcan'  # Build and switch
-sudo nixos-rebuild build --flake '.#vulcan'   # Build only
-nix flake update                              # Update inputs
-nix fmt                                        # Format Nix files
+/etc/nixos/build                 # acquire the lock, nixos-rebuild switch, release the lock
+/etc/nixos/build build           # build only
+/etc/nixos/build test            # activate without creating a generation
+/etc/nixos/build switch --show-trace   # extra args pass through to nixos-rebuild
+/etc/nixos/build -- <command>    # run any command while holding the build lock
+nix flake update                 # Update inputs
+nix fmt                          # Format Nix files
 ```
+
+The script owns the whole `/etc/nixos/.nixos-build` protocol so it cannot be forgotten:
+it acquires the lock atomically (`O_EXCL`, no test-then-create race), releases it on
+**every** exit path including SIGINT/SIGTERM/SIGHUP and a crashed build, and logs every
+event — acquire attempt, waiting, forcible seizure, acquisition, build start/finish/result,
+full build output, lock release — to `/var/log/build.log` (mode 0600, size-rotated).
+
+Waiting behaviour: a held lock is waited on for up to 4 hours (`--wait-seconds`), then
+**forcibly seized**. A lock the script itself wrote records the holder's PID, so if that
+process is provably dead the lock is seized immediately rather than after the full wait
+(`--no-stale-seize` disables this). A hand-`touch`ed lock carries no PID and is therefore
+never judged stale — it waits out the full timeout, because being wrong here means killing
+someone's real build.
+
+This replaced the manual convention after a lock left behind by a finished session blocked
+another for 85 minutes. The lock path and its "file exists == locked" meaning are unchanged,
+so a session still doing it by hand interoperates in both directions.
 
 ### Service Status
 ```bash

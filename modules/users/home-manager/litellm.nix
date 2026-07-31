@@ -15,12 +15,14 @@
     mode = "0644";
   };
 
-  # Keep selected slow streams alive while LiteLLM waits for their first model token.
+  # Keep selected slow streams alive and align OpenAI's transport with their request timeout.
   environment.etc."litellm/sitecustomize.py" = {
     mode = "0644";
     text = ''
       import asyncio
+      import httpx
 
+      from litellm.llms.openai.openai import OpenAIChatCompletion as _OpenAIChatCompletion
       from litellm.proxy import common_request_processing as _request_processing
       from starlette.responses import StreamingResponse
 
@@ -80,6 +82,19 @@
           )
 
 
+      _original_get_async_http_client = _OpenAIChatCompletion._get_async_http_client
+
+
+      def _get_async_http_client_with_long_timeout(shared_session=None):
+          client = _original_get_async_http_client(shared_session)
+          if client is not None:
+              client.timeout = httpx.Timeout(7200.0)
+          return client
+
+
+      _OpenAIChatCompletion._get_async_http_client = staticmethod(
+          _get_async_http_client_with_long_timeout
+      )
       _request_processing.create_response = _create_response_with_first_token_heartbeat
     '';
   };

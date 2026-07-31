@@ -45,12 +45,8 @@ in
       secretPath = config.sops.secrets."openproject-db-password".path;
       dependentService = "podman-openproject.service";
     })
-    (mkPostgresUserSetup {
-      user = "shlink";
-      database = "shlink";
-      secretPath = config.sops.secrets."shlink-db-password".path;
-      dependentService = "podman-shlink.service";
-    })
+    # Shlink's database and role remain intact, but its password setup requires
+    # the service-owned secret and stays disabled with the service.
     (mkPostgresUserSetup {
       user = "speedtest_tracker";
       database = "speedtest_tracker";

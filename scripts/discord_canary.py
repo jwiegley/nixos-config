@@ -210,12 +210,32 @@ def run_probe() -> ProbeResult:
 
     deadline = start + REPLY_TIMEOUT_SECONDS
     reply_id = ""
+    reply_channel = CHANNEL_ID
     while time.monotonic() < deadline:
         time.sleep(POLL_INTERVAL_SECONDS)
-        code, msgs = _request(
-            "GET", f"/channels/{CHANNEL_ID}/messages?after={posted_id}&limit=25"
-        )
-        if code == 200 and isinstance(msgs, list):
+        # POLL THE CHANNEL *AND* THE AUTO-CREATED THREAD.
+        #
+        # Hermes runs with `auto_thread = true` (modules/services/hermes-vm.nix), so it
+        # answers by opening a thread ON our probe message and posting there. A thread
+        # started from a message carries the SAME snowflake as that message, so the thread's
+        # channel id is exactly posted_id. Thread messages do NOT appear in the parent
+        # channel's message list, which is why this probe read "no reply within timeout" on
+        # nine consecutive runs while Hermes was in fact answering all nine correctly: its
+        # agent log shows finish_reason=stop and response_len=18 -- precisely
+        # len("CANARY OK ") + 8 hex nonce chars -- and gateway.platforms.base logged
+        # "Sending response (18 chars)" to a snowflake that was not CHANNEL_ID.
+        #
+        # `after` is not passed for the thread: the thread is created BY our message, so
+        # everything in it postdates the probe, and the thread's own opening entry is not a
+        # message. A 404 just means no thread was opened (the normal case for @Claw).
+        sources = [
+            (CHANNEL_ID, f"/channels/{CHANNEL_ID}/messages?after={posted_id}&limit=25"),
+            (posted_id, f"/channels/{posted_id}/messages?limit=25"),
+        ]
+        for src_channel, path in sources:
+            code, msgs = _request("GET", path)
+            if code != 200 or not isinstance(msgs, list):
+                continue
             for m in msgs:
                 author = (m.get("author") or {}).get("id", "")
                 if author != str(TARGET_USER_ID):
@@ -252,6 +272,7 @@ def run_probe() -> ProbeResult:
                     result.ok = True
                     result.roundtrip_seconds = round(time.monotonic() - start, 3)
                     reply_id = m.get("id", "")
+                    reply_channel = src_channel
                     result.detail = "reply+nonce"
                     break
                 if _is_probe_message(content):
@@ -282,7 +303,10 @@ def run_probe() -> ProbeResult:
                 result.ok = True
                 result.roundtrip_seconds = round(time.monotonic() - start, 3)
                 reply_id = m.get("id", "")
+                reply_channel = src_channel
                 result.detail = "reply+" + how
+                break
+            if result.ok:
                 break
         if result.ok:
             break
@@ -301,9 +325,13 @@ def run_probe() -> ProbeResult:
     # reply-reference), so a message we merely happened to see is never touched. Before
     # 2026-07-30 this loop deleted any message from the target that appeared after our
     # post, which destroyed a genuine @Claw reply to the operator.
-    for mid in (posted_id, reply_id):
+    # The reply is deleted FIRST and from the channel it was actually found in, which for a
+    # Hermes thread reply is the thread (id == posted_id), not CHANNEL_ID. Order matters:
+    # deleting our parent message also destroys any thread hanging off it, after which the
+    # reply delete would 404 -- harmless, but it would stop reporting genuine 403s.
+    for chan, mid in ((reply_channel, reply_id), (CHANNEL_ID, posted_id)):
         if mid:
-            code, _ = _request("DELETE", f"/channels/{CHANNEL_ID}/messages/{mid}")
+            code, _ = _request("DELETE", f"/channels/{chan}/messages/{mid}")
             if code not in (204, 404):
                 result.cleanup_failed += 1
                 print(

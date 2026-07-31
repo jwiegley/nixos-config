@@ -542,6 +542,16 @@ in
         # overrides the YAML value at runtime — so DISCORD_REQUIRE_MENTION
         # in /var/lib/hermes/env wins over `require_mention` here.
         require_mention = true;
+        # auto_thread makes Hermes answer by opening a thread ON the incoming message
+        # rather than posting in the channel. Keep it -- but note the consequence for the
+        # round-trip canary: a thread started from a message carries the SAME snowflake as
+        # that message, and thread messages do NOT appear in the parent channel's message
+        # list. scripts/discord_canary.py therefore polls BOTH /channels/<channel>/messages
+        # and /channels/<posted_message_id>/messages. Before it did, the probe read "no
+        # reply within timeout" on nine consecutive runs while Hermes was answering all
+        # nine correctly (agent.log: finish_reason=stop response_len=18, exactly
+        # len("CANARY OK ") + an 8-hex nonce). Do NOT "fix" a red canary by turning this
+        # off; check that the probe still reads the thread.
         auto_thread = true;
         reactions = true;
         allow_mentions = {

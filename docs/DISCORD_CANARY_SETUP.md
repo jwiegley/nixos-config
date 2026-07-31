@@ -71,6 +71,27 @@ input must be re-locked (`nix flake update secrets`) and `flake.lock` **committe
 later checkout silently reverts the setting. The 2026-07-30 bump was `secrets` rev 158 → 160,
 and Hermes began processing canary posts 15 minutes after it was activated.
 
+### Hermes replies in a THREAD, not the channel
+
+Hermes runs `auto_thread = true` (`modules/services/hermes-vm.nix`), so it answers by opening
+a thread on the incoming message. A thread started from a message carries the **same
+snowflake as that message**, and thread messages do **not** appear in the parent channel's
+message list. A probe that only reads `/channels/<channel>/messages` is therefore structurally
+blind to every Hermes reply.
+
+This is not hypothetical: across nine consecutive runs (2026-07-30 22:55 → 2026-07-31 00:46
+PDT) the probe reported `no reply within timeout` while Hermes answered **all nine
+correctly** — `gateway.run` logged `inbound`, the agent logged `finish_reason=stop
+response_len=18` (exactly `len("CANARY OK ") + 8` hex nonce chars), and
+`gateway.platforms.base` logged `Sending response (18 chars)` to a snowflake that was not the
+channel id. Zero send failures. The probe now polls both the channel and
+`/channels/<posted_message_id>/messages`, and deletes the reply from whichever it was found
+in.
+
+Diagnostic value of the distinction: `admission` failures leave **no** `gateway.run: inbound`
+line, whereas a **delivery/visibility** failure has the full inbound → response → Sending
+response chain. Check `/var/lib/hermes/.hermes/logs/agent.log` before touching any allowlist.
+
 ### Reading a canary result honestly
 
 - **Ignore any result within ~20 minutes of a VM restart.** In the one proven-good window,

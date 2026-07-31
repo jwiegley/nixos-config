@@ -236,14 +236,33 @@ def run_probe() -> ProbeResult:
                 # window enough for the two to start eating each other.
                 if _is_probe_message(content):
                     continue
-                # Prefer a nonce echo -- that is proof this reply answers THIS probe.
-                # A non-probe message from the target is accepted as weaker evidence,
-                # because an agent may answer conversationally without echoing, but it is
-                # labelled differently so the distinction stays visible in the metrics.
+                # POSITIVE ATTRIBUTION IS REQUIRED. Exactly two forms count, both exact:
+                #   nonce     - the agent echoed the token we asked it to echo
+                #   reference - Discord itself records this message as a reply to ours
+                # Anything else is only "a message from the target that appeared after we
+                # posted", which is a GUESS. An earlier version accepted that guess as
+                # `reply-unverified`, and on 2026-07-30 it cost real data: the operator
+                # mentioned @Claw in the shared channel, @Claw answered, and a running
+                # probe counted that answer as its own and DELETED it during cleanup. A
+                # canary must never be able to destroy conversation it did not create.
+                #
+                # The cost of requiring proof is that an agent which answers without
+                # echoing and without using Discord's reply feature reads as a failure.
+                # That is the correct trade: a false red is recoverable, a deleted message
+                # is not. Note we have never actually observed a genuine agent reply --
+                # every "success" before this was cross-detection -- so whether the agents
+                # echo is still unmeasured, not known-negative.
+                ref = (m.get("message_reference") or {}).get("message_id")
+                if nonce in content:
+                    how = "nonce"
+                elif posted_id and ref == posted_id:
+                    how = "reference"
+                else:
+                    continue
                 result.ok = True
                 result.roundtrip_seconds = round(time.monotonic() - start, 3)
                 reply_id = m.get("id", "")
-                result.detail = "reply+nonce" if nonce in content else "reply-unverified"
+                result.detail = "reply+" + how
                 break
         if result.ok:
             break
@@ -257,6 +276,11 @@ def run_probe() -> ProbeResult:
     # undetected cleanup failure turns this canary into a channel-spammer.
     # 204 = deleted, 404 = already gone (both fine). Anything else, notably 403 Forbidden
     # for a missing MANAGE_MESSAGES, is a real failure.
+    # DELETE ONLY WHAT IS PROVABLY OURS. posted_id is ours by construction. reply_id is
+    # set ONLY when the message was positively attributed above (nonce echo or Discord
+    # reply-reference), so a message we merely happened to see is never touched. Before
+    # 2026-07-30 this loop deleted any message from the target that appeared after our
+    # post, which destroyed a genuine @Claw reply to the operator.
     for mid in (posted_id, reply_id):
         if mid:
             code, _ = _request("DELETE", f"/channels/{CHANNEL_ID}/messages/{mid}")

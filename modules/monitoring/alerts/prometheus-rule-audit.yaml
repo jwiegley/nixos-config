@@ -1,0 +1,83 @@
+groups:
+  - name: prometheus_rule_audit
+    interval: 5m
+    rules:
+      # Restores the capability lost with the Nagios<->Prometheus mirror on 2026-07-31.
+      #
+      # A rule whose expression selects a metric with zero series is VALID PromQL that
+      # returns nothing, so Prometheus reports health=ok and the rule sits inactive forever.
+      # It looks exactly like "everything is fine". This is how 123 rules were silently
+      # unfirable in June 2026 (`systemd_unit_state` vs `node_systemd_unit_state`).
+      #
+      # Warning, not critical: a dead rule is a latent blind spot, not an active outage. But
+      # it must be visible, because the whole point is that nothing else can see it.
+      - alert: PrometheusRuleCannotFire
+        expr: prometheus_rule_audit_dead_rule == 1
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+          service: prometheus
+        annotations:
+          summary: "Alert rule {{ $labels.rule }} can never fire — {{ $labels.missing_metric }} has no series"
+          description: |
+            {{ $labels.rule }} (in {{ $labels.file }}) selects the metric
+            `{{ $labels.missing_metric }}`, which has ZERO series in the TSDB.
+            The rule is therefore structurally unable to fire, and whatever it
+            was meant to watch is unmonitored while appearing covered.
+
+            Either the metric name is wrong (the usual cause — check the
+            exporter's actual output), the exporter is not running, or the
+            rule is obsolete and should be deleted.
+
+            Note the detector is heuristic in ONE direction only: it can miss
+            a dead rule, it does not invent one. A firing instance here has
+            been confirmed against the live TSDB.
+
+      # The aggregate, so a sudden jump is visible even if individual alerts are grouped.
+      - alert: PrometheusManyRulesCannotFire
+        expr: prometheus_rule_audit_dead_rules_total > 15
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+          service: prometheus
+        annotations:
+          summary: "{{ $value }} Prometheus alert rules can never fire"
+          description: "A jump here usually means a renamed metric or a dead exporter took out a whole family of rules at once, which is what happened on 2026-06-09."
+
+      # A rule that has stopped being evaluated. Prometheus reports health=ok for these too.
+      # The audit already scales its threshold to each group's own interval and suppresses
+      # not-yet-run groups during warmup, so anything reaching here is a real stall.
+      - alert: PrometheusRulesNotEvaluating
+        expr: prometheus_rule_audit_stale_rules_total > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: prometheus
+        annotations:
+          summary: "{{ $value }} Prometheus rule(s) have stopped evaluating"
+          description: "Their lastEvaluation has not advanced within 3x their group interval. Usually a group wedged behind a slow query. Check evaluationTime per group in /api/v1/rules."
+
+      - alert: PrometheusRuleGroupOverrun
+        expr: prometheus_rule_audit_group_overrun_total > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: monitoring
+          service: prometheus
+        annotations:
+          summary: "{{ $value }} Prometheus rule group(s) evaluate slower than their interval"
+          description: "A group taking longer than its interval falls behind and silently skips evaluations, so alerts fire late or not at all."
+
+      - alert: PrometheusRuleAuditFailing
+        expr: prometheus_rule_audit_up == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: monitoring
+          service: prometheus
+        annotations:
+          summary: "The Prometheus rule audit could not reach Prometheus"
+          description: "While this is firing there is NO dead-rule detection at all. The mirror that used to provide it was removed 2026-07-31 and this is its only replacement."

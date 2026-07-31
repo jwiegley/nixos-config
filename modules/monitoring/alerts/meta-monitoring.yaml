@@ -340,9 +340,12 @@ groups:
       #
       # 3h, not the 30m Fast tier: secrets-perms-exporter.timer is hourly (verified live), so
       # a 30m threshold would false-positive between every run. 3h tolerates two missed runs.
+      # prometheus_rule_audit added 2026-07-31 with the dead-rule detector that replaced the
+      # Nagios mirror. A detector with no freshness guard is the exact failure class it
+      # exists to catch, so it guards itself here.
       - alert: TextfileCollectorStaleHourly
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(secrets-perms)\\.prom"} > 10800
+          time() - node_textfile_mtime_seconds{file=~".*/(secrets-perms|prometheus_rule_audit)\\.prom"} > 10800
         for: 30m
         labels:
           severity: warning

@@ -28,6 +28,7 @@
     # without it, 5 of the 7 rules in alerts/nagios.yaml lose their only input and a Nagios
     # CRITICAL on a check unique to Nagios would be invisible to Alertmanager.
     ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
+    ./prometheus-rule-audit.nix # dead-rule detector; replaces the removed Nagios mirror
     # ./nagios-mirror-divergence.nix REMOVED 2026-07-31 with the tier-2 mirror it reconciled.
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
     # Deferred-spec implementations (docs/MONITORING_DEFERRED_SPECS.md)

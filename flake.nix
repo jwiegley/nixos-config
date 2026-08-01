@@ -51,7 +51,7 @@
     };
 
     nix-config-ai = {
-      url = "git+ssh://gitea/johnw/nix-config?dir=config/ai";
+      url = "git+ssh://gitea/johnw/nix-config?dir=config/fleet";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

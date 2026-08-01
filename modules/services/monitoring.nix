@@ -125,6 +125,25 @@ in
     mode = "0400";
   };
 
+  # Bound the daily logwatch run. The upstream module (nixos-logwatch flake input) ships
+  # TimeoutStartUSec=infinity, and logwatch's ai-log-summary custom service calls an LLM
+  # through LiteLLM with its OWN 2-hour budget (scripts/log-summarizer.py:308,
+  # `self.timeout = 7200  # 2 hours (local LLM can be slow)`). Unbounded unit + 2h request
+  # means a dead model backend hangs this job for two hours, daily, with nothing stopping it.
+  #
+  # Not hypothetical: during the hera outage on 2026-08-01 logwatch sat in activating/start
+  # for 38+ minutes and was still climbing when ServiceStuckActivating caught it.
+  #
+  # 30 min is ~3.8x the worst observed real run (7m56s on 2026-07-31; 4m00s and 3m58s the two
+  # days before), so a genuinely slow summarisation still completes. Deliberately generous:
+  # TimeoutStartSec is ENFORCED, and setting a previously-ignored cap too tight has broken a
+  # working unit on this host before -- see the RuntimeMaxSec regression.
+  #
+  # This bounds the UNIT regardless of what the script does. The 7200s request timeout in
+  # log-summarizer.py is separately excessive and worth lowering, but that is a script change
+  # and this is the general safety net.
+  systemd.services.logwatch.serviceConfig.TimeoutStartSec = "30min";
+
   services = {
     logwatch = {
       enable = true;

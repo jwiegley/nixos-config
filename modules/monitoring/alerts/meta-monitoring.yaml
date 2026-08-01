@@ -318,10 +318,22 @@ groups:
   - name: meta_textfile_staleness
     interval: 1m
     rules:
-      # Fast-cadence collectors (1-2 min timers).
+      # Fast-cadence collectors (1-15 min timers).
+      #
+      # atd, imapsieve and git_workspace added 2026-07-31 while retiring Nagios. All three
+      # were tier-1 collectors whose freshness NAGIOS ALONE watched -- verified: zero hits
+      # for any of them across every staleness allowlist here before this change. If one
+      # died, its metrics would freeze at their last healthy values and nothing would say so.
+      #
+      # Cadences read from the timers, not inferred from a single mtime sample:
+      #   atd-exporter.timer                    1 min
+      #   dovecot-imapsieve-health-check.timer  5 min
+      #   git-workspace-metrics-fast.timer     15 min
+      # 30 min therefore tolerates one missed run even for the slowest of the three, which is
+      # the same tolerance the existing members get.
       - alert: TextfileCollectorStaleFast
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status)\\.prom"} > 1800
+          time() - node_textfile_mtime_seconds{file=~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status|atd|imapsieve|git_workspace)\\.prom"} > 1800
         for: 30m
         labels:
           severity: warning
@@ -401,7 +413,7 @@ groups:
       # 00:00, so the existing 26h threshold fits without adjustment.
       - alert: TextfileCollectorStaleDaily
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide)\\.prom"} > 93600
+          time() - node_textfile_mtime_seconds{file=~".*/(container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide|fts_staleness)\\.prom"} > 93600
         for: 30m
         labels:
           severity: warning

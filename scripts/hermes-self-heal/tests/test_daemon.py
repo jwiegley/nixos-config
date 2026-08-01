@@ -208,15 +208,15 @@ def test_run_action_handles_non_json_output(monkeypatch):
 
 
 def test_call_litellm_raises_unreachable_without_key(monkeypatch):
-    monkeypatch.delenv(daemon.LITELLM_KEY_ENV, raising=False)
-    with pytest.raises(daemon.LitellmUnreachable):
+    monkeypatch.delenv(daemon.LLM_GATEWAY_KEY_ENV, raising=False)
+    with pytest.raises(daemon.GatewayUnreachable):
         daemon.call_litellm([{"role": "user", "content": "test"}])
 
 
 def test_call_litellm_returns_parsed_json(monkeypatch):
     import json as _json
 
-    monkeypatch.setenv(daemon.LITELLM_KEY_ENV, "test-key")
+    monkeypatch.setenv(daemon.LLM_GATEWAY_KEY_ENV, "test-key")
 
     class FakeResp:
         def read(self):
@@ -234,7 +234,7 @@ def test_call_litellm_returns_parsed_json(monkeypatch):
 
 
 def test_call_litellm_raises_unreachable_on_non_json(monkeypatch):
-    monkeypatch.setenv(daemon.LITELLM_KEY_ENV, "test-key")
+    monkeypatch.setenv(daemon.LLM_GATEWAY_KEY_ENV, "test-key")
 
     class FakeResp:
         def read(self):
@@ -242,7 +242,7 @@ def test_call_litellm_raises_unreachable_on_non_json(monkeypatch):
             return _json.dumps({"choices": [{"message": {"content": "not json"}}]}).encode()
 
     monkeypatch.setattr(daemon, "_http_post_json", lambda *a, **kw: FakeResp())
-    with pytest.raises(daemon.LitellmUnreachable):
+    with pytest.raises(daemon.GatewayUnreachable):
         daemon.call_litellm([{"role": "user", "content": "x"}])
 
 

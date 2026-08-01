@@ -861,7 +861,6 @@ in
                   "https://glances.vulcan.lan"
                   "https://alertmanager.vulcan.lan"
                   "https://speedtest.vulcan.lan"
-                  "https://litellm.vulcan.lan"
                   "https://mailarchiver.vulcan.lan"
                   "https://teable.vulcan.lan"
                   "https://budget.vulcan.lan"
@@ -965,52 +964,10 @@ in
             scrape_timeout = "15s";
           }
 
-          # LiteLLM "fixup" proxy on 127.0.0.1:4001 — the Anthropic-compat
-          # shim that the stock-trader Anthropic path rides through. It exposes
-          # a uvicorn listener whose GET / returns 200, so the strict http_2xx
-          # module suffices. A dedicated job lets litellm.yaml alert on this
-          # instance precisely (LitellmAnthropicFixupDown); it is also
-          # backstopped by the generic HostUnreachable rule. (coverage plan
-          # P1 #4, web-blackbox)
-          {
-            job_name = "blackbox_litellm_fixup";
-            metrics_path = "/probe";
-            params = {
-              module = [ "http_2xx" ];
-            };
-            static_configs = [
-              {
-                targets = [ "http://127.0.0.1:4001/" ];
-                labels = {
-                  service = "litellm-fixup";
-                };
-              }
-            ];
-            relabel_configs = [
-              {
-                source_labels = [ "__address__" ];
-                target_label = "__param_target";
-              }
-              {
-                source_labels = [ "__param_target" ];
-                target_label = "instance";
-              }
-              {
-                target_label = "__address__";
-                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-              }
-              {
-                target_label = "probe_type";
-                replacement = "http_local";
-              }
-            ];
-            scrape_interval = "30s";
-            scrape_timeout = "10s";
-          }
-
           # Direct liveness probe of the hera-side llama-swap / MLX model router
-          # (hera.lan:8080), the terminal upstream LiteLLM's `hera/*` models route
-          # to and thus the terminal dependency of all Hermes Discord chat. GET
+          # (hera.lan:8080). This is the terminal upstream behind the host LLM
+          # gateway on 127.0.0.1:4000, and thus the terminal dependency of all
+          # Hermes Discord chat. GET
           # /v1/models returns HTTP 200 UNAUTHENTICATED (verified live through the
           # exporter: owned_by=llama-swap, 30 models, ~1ms once warm), so the
           # strict http_2xx module suffices — no auth, no secrets. This is a

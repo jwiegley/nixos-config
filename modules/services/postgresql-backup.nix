@@ -185,7 +185,7 @@ in
       # directory format dumps every table via `COPY <table> TO stdout`; any
       # table over ~100 MB trivially exceeds log_min_duration_statement=1000ms
       # (databases.nix), flooding the slow-query log nightly with benign backup
-      # COPYs (LiteLLM_SpendLogs ~5min, mailarchiver/immich ~min, msg_events ~1s)
+      # COPYs (mailarchiver/immich ~min, msg_events ~1s)
       # that the DB health report then surfaces as bogus "slow query" events.
       # PGOPTIONS passes `-c log_min_duration_statement=-1` as a libpq startup
       # option, disabling slow-query logging for THESE connections only (the

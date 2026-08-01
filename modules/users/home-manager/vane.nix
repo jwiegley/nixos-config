@@ -8,7 +8,17 @@
 let
   models = import ../../../models.nix;
   defaultModel = models.llm.primary.name;
-  litellmBaseUrl = "http://127.0.0.1:4000/v1";
+  gatewayBaseUrl = "http://127.0.0.1:4000/v1";
+
+  # SENTINEL, not a credential. Vane posts this as the provider apiKey, but the
+  # host LLM gateway on :4000 injects the real upstream Authorization header and
+  # discards whatever the client sent (modules/services/hera-llm-proxy.nix).
+  # Perplexica's openai provider requires a non-empty apiKey, so it gets a fixed
+  # placeholder. This replaced a SOPS secret whose value was already inert for
+  # the same reason, removing this module's dependency on a stale secret name.
+  # NOTE: this string is part of the provider config that gets SHA-256'd into
+  # `.hash` below, so changing it re-hashes the provider (handled automatically).
+  gatewayApiKey = "gateway-injects-real-key";
   syncVaneModel = pkgs.writeShellScript "sync-vane-model" ''
     set -euo pipefail
     config=/var/lib/vane/data/config.json
@@ -34,19 +44,24 @@ let
 
     provider_id="$(${pkgs.util-linux}/bin/uuidgen)"
     ${pkgs.jq}/bin/jq -e \
-      --rawfile api_key '${config.sops.secrets."litellm-vulcan-lan-vane".path}' \
+      --arg api_key '${gatewayApiKey}' \
       --arg model '${defaultModel}' \
-      --arg base_url '${litellmBaseUrl}' \
+      --arg base_url '${gatewayBaseUrl}' \
       --arg provider_id "$provider_id" '
       ($api_key | sub("[\\r\\n]+$"; "")) as $key |
       if $key == "" then
-        error("LiteLLM API key is empty")
+        error("gateway API key sentinel is empty")
       else
         .modelProviders = (
           (.modelProviders // []) |
-          if any(.[]; .name == "LiteLLM" and .type == "openai") then
+          # MIGRATION: drop the legacy "LiteLLM" provider. The name below is
+          # the identity this script matches on, so without this a rename
+          # would append a second provider and leave the stale one (with its
+          # dead baseURL) visible in the vane UI forever.
+          map(select((.name == "LiteLLM" and .type == "openai") | not)) |
+          if any(.[]; .name == "Hera" and .type == "openai") then
             map(
-              if .name == "LiteLLM" and .type == "openai" then
+              if .name == "Hera" and .type == "openai" then
                 .config.apiKey = $key |
                 .config.baseURL = $base_url |
                 .chatModels = [{"name": $model, "key": $model}]
@@ -55,7 +70,7 @@ let
           else
             . + [{
               id: $provider_id,
-              name: "LiteLLM",
+              name: "Hera",
               type: "openai",
               chatModels: [{"name": $model, "key": $model}],
               embeddingModels: [],
@@ -69,13 +84,13 @@ let
 
     # Vane identifies duplicate providers by the SHA-256 of the compact,
     # key-sorted provider config.  Keep that derived field coherent when the
-    # LiteLLM endpoint changes; chatModels are deliberately not part of it.
+    # gateway endpoint changes; chatModels are deliberately not part of it.
     hash="$(${pkgs.jq}/bin/jq -cS '
-      [.modelProviders[] | select(.name == "LiteLLM" and .type == "openai")][0].config
+      [.modelProviders[] | select(.name == "Hera" and .type == "openai")][0].config
     ' "$updated" | ${pkgs.coreutils}/bin/tr -d '\n' | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d' ' -f1)"
     ${pkgs.jq}/bin/jq --arg hash "$hash" '
       .modelProviders |= map(
-        if .name == "LiteLLM" and .type == "openai" then
+        if .name == "Hera" and .type == "openai" then
           .hash = $hash
         else . end
       )
@@ -90,12 +105,6 @@ let
   '';
 in
 {
-  sops.secrets."litellm-vulcan-lan-vane" = {
-    key = "litellm-vulcan-lan";
-    owner = "vane";
-    mode = "0400";
-  };
-
   home-manager.users.vane =
     {
       config,

@@ -379,13 +379,6 @@ in
     restartUnits = [ "rspamd.service" ];
   };
 
-  # SOPS secret for LiteLLM API key
-  sops.secrets."litellm-vulcan-lan" = {
-    owner = "rspamd";
-    mode = "0400";
-    restartUnits = [ "rspamd.service" ];
-  };
-
   # Enable Rspamd service using NixOS module
   services.rspamd = {
     enable = true;
@@ -599,17 +592,26 @@ in
       '';
 
       "gpt.conf".text = ''
-        # GPT/LLM integration via LiteLLM proxy
+        # GPT/LLM integration via the host LLM gateway on 127.0.0.1:4000
         # NOTE: This file is included INSIDE the gpt{} block from modules.d/gpt.conf
         # Do NOT wrap these settings in another gpt{} block - that causes nested sections
 
         enabled = true;
 
-        # LiteLLM proxy configuration (OpenAI-compatible API)
+        # Host LLM gateway (nginx -> llama-swap on hera), OpenAI-compatible.
         type = "openai";
         url = "http://127.0.0.1:4000/v1/chat/completions";
-        # Using MLX quantized model with Harmony filter for efficient inference
-        # LiteLLM harmony_filter guardrail strips analysis channel markers
+        # Using an MLX quantized model for efficient inference.
+        #
+        # REGRESSION NOTE 2026-08-01: a LiteLLM guardrail ("harmony_filter",
+        # formerly /etc/litellm/harmony_filter.py) used to strip <|channel|>
+        # analysis markers out of the completion in a post_call hook. That
+        # guardrail was a LiteLLM plugin and died with the proxy; the gateway
+        # is a plain nginx reverse proxy and post-processes nothing.
+        # JSON parsing here now rests ENTIRELY on enable_thinking = false
+        # below. If the gpt module starts failing to parse responses, check
+        # that first -- Postfix blocks on this milter, so a hang here is
+        # user-visible mail latency, not just a monitoring blip.
         model = "${models.llm.fast.name}";
 
         # Enable GPT analysis for ham messages (default is false)
@@ -641,7 +643,8 @@ in
         # Qwen3.6-27B-Instruct wraps output in Harmony channel tokens (<|channel|>final<|message|>)
         # before the JSON content. When response_format is set, the backend (llama.cpp)
         # enforces JSON grammar and rejects the output due to these tokens.
-        # The HarmonyResponseFilter guardrail strips the tokens in post_call instead.
+        # NOTE: the HarmonyResponseFilter guardrail that used to strip those
+        # tokens in post_call no longer exists (removed with LiteLLM).
         include_response_format = false;
 
         # Feed GPT results back to Bayes classifier for learning
@@ -757,7 +760,7 @@ in
     };
   };
 
-  # Systemd service override to inject the controller password and the LiteLLM
+  # Systemd service override to inject the controller password and the gateway
   # API key (GPT module) into /var/lib/rspamd/override.d at preStart
   systemd.services.rspamd = {
     preStart = ''
@@ -777,27 +780,35 @@ in
         chmod 600 /var/lib/rspamd/override.d/worker-controller.inc
       fi
 
-      # Read LiteLLM API key from SOPS secret and write to GPT module override file
-      # Use /var/lib/rspamd because /etc is read-only on NixOS
-      if [ -f "${config.sops.secrets."litellm-vulcan-lan".path}" ]; then
-        API_KEY=$(cat "${config.sops.secrets."litellm-vulcan-lan".path}")
-        {
-          echo "# Auto-generated GPT module override from SOPS"
-          echo "# This overrides the default enabled=false in modules.d/gpt.conf"
-          echo "enabled = true;"
-          echo "api_key = \"$API_KEY\";"
-        } > /var/lib/rspamd/override.d/gpt.conf
+      # Enable the GPT module. rspamd ships modules.d/gpt.conf with
+      # enabled=false, so this override is what turns it on.
+      #
+      # api_key here is a SENTINEL, not a credential. rspamd talks to the host
+      # LLM gateway on 127.0.0.1:4000, and that gateway injects the real
+      # upstream Authorization header itself, discarding whatever the client
+      # sent (modules/services/hera-llm-proxy.nix). rspamd's openai backend
+      # still wants the field present and non-empty, so it gets a placeholder.
+      # This was previously a SOPS secret whose value was already inert for the
+      # same reason; dropping it removes this module's dependency on a stale
+      # secret name. The write is now unconditional -- it used to be gated on
+      # that secret file existing, which meant a missing secret silently left
+      # the gpt module disabled.
+      # Written under /var/lib/rspamd because /etc is read-only on NixOS.
+      {
+        echo "# Auto-generated GPT module override (managed by rspamd.nix)"
+        echo "# Overrides the default enabled=false in modules.d/gpt.conf"
+        echo "enabled = true;"
+        echo "api_key = \"gateway-injects-real-key\";"
+      } > /var/lib/rspamd/override.d/gpt.conf
 
-        chown rspamd:rspamd /var/lib/rspamd/override.d/gpt.conf
-        chmod 600 /var/lib/rspamd/override.d/gpt.conf
-      fi
+      chown rspamd:rspamd /var/lib/rspamd/override.d/gpt.conf
+      chmod 600 /var/lib/rspamd/override.d/gpt.conf
     '';
 
     serviceConfig = {
       # Ensure SOPS secrets are available before starting
       LoadCredential = [
         "rspamd-password:${config.sops.secrets."rspamd-controller-password".path}"
-        "litellm-api-key:${config.sops.secrets."litellm-vulcan-lan".path}"
       ];
     };
   };

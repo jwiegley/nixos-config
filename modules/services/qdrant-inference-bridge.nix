@@ -20,11 +20,13 @@ let
 
     This bridge translates that to OpenAI-compatible:
       {"model": "${embeddingModel}", "input": ["..."]}
-    forwarded to LiteLLM with Authorization: Bearer <token>, and returns
+    forwarded to the host LLM gateway on 127.0.0.1:4000, and returns
     Qdrant's expected {"embeddings": [[...], ...]} format.
 
-    Model names without a provider prefix (e.g. "bge-m3") are resolved
-    using the configured default embedding model from models.nix.
+    Whatever model Qdrant asks for is mapped onto the single embedding model
+    the backend actually serves (models.nix embedding.primary). Callers
+    embedded historical names like "bge-m3" and "vulcan/hera/bge-m3" into
+    stored collection configs, and none of those exist upstream any more.
     """
     import json
     import logging
@@ -47,12 +49,18 @@ let
     DEFAULT_MODEL = "${embeddingModel}"
 
     def resolve_model(model: str) -> str:
-        """Resolve bare model names using the configured default embedding model."""
-        if "/" in model:
-            return model
-        # Derive prefix from configured model (e.g. "hera/bge-m3" -> "hera/")
-        prefix = DEFAULT_MODEL.rsplit("/", 1)[0] + "/"
-        return prefix + model
+        """Map any requested embedding model onto the one the backend serves.
+
+        This used to derive a provider prefix by splitting DEFAULT_MODEL on
+        "/" -- correct when the gateway did model aliasing and models were named
+        "hera/bge-m3". The backend now serves a single, unprefixed embedding
+        model, and that prefix arithmetic would turn a bare "bge-m3" into
+        "bge-m3-mlx-fp16/bge-m3", which 400s. There is exactly one embedding
+        model to choose from, so the mapping is unconditional.
+        """
+        if model and model != DEFAULT_MODEL:
+            log.debug("mapping requested embedding model %r -> %r", model, DEFAULT_MODEL)
+        return DEFAULT_MODEL
 
 
     def embed(model: str, texts: list, token: str = None) -> tuple:
@@ -152,8 +160,8 @@ in
   # Qdrant Inference Bridge
   # ============================================================================
   # Translates Qdrant's native inference protocol to OpenAI-compatible
-  # embeddings API, routing through LiteLLM like all other LLM consumers.
-  # Qdrant -> bridge (127.0.0.1:6335) -> LiteLLM (127.0.0.1:4000) -> hera
+  # embeddings API, routing through the host gateway like all other LLM consumers.
+  # Qdrant -> bridge (127.0.0.1:6335) -> LLM gateway (127.0.0.1:4000) -> hera
 
   systemd.services.qdrant-inference-bridge = {
     description = "Qdrant-to-OpenAI inference bridge";

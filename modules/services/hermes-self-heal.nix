@@ -88,15 +88,6 @@ in
       }
     ];
 
-    # Reuse the same LiteLLM master key that openclaw-self-heal uses.
-    # Different SOPS-secrets entry (owner) so the file is readable as hermes-heal.
-    sops.secrets."litellm-vulcan-lan-hermes-self-heal" = {
-      key = "litellm-vulcan-lan";
-      owner = user;
-      mode = "0400";
-      restartUnits = [ "hermes-self-heal.service" ];
-    };
-
     systemd.services.hermes-self-heal = {
       description = "Hermes self-heal webhook receiver and remediation runner";
       wantedBy = [ "multi-user.target" ];
@@ -120,7 +111,7 @@ in
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
-        LITELLM_MODEL = models.llm.agent.name;
+        LLM_MODEL = models.llm.agent.name;
       };
       serviceConfig = {
         Type = "simple";
@@ -132,9 +123,6 @@ in
         # gracefully before systemd SIGKILLs on `systemctl stop`. Default
         # TimeoutStopSec is 90s which would kill mid-action.
         TimeoutStopSec = "270s";
-        LoadCredential = [
-          "litellm-key:${config.sops.secrets."litellm-vulcan-lan-hermes-self-heal".path}"
-        ];
         # Hardening mirrors openclaw-self-heal.
         ProtectSystem = "strict";
         ProtectHome = true;
@@ -167,7 +155,13 @@ in
         ];
       };
       script = ''
-        export LITELLM_KEY="$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/litellm-key")"
+        # SENTINEL, not a credential. The daemon posts this as a bearer token to
+        # the host LLM gateway on 127.0.0.1:4000, which injects the real upstream
+        # Authorization header and discards whatever the client sent. The daemon
+        # only requires the variable to be set (it raises GatewayUnreachable
+        # otherwise), so a fixed placeholder is sufficient and removes this
+        # module's dependency on a stale SOPS secret name.
+        export LLM_GATEWAY_KEY="gateway-injects-real-key"
         exec ${pkgs.python3}/bin/python3 ${daemonScript}
       '';
     };

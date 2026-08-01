@@ -10,7 +10,6 @@
   imports = [
     ./budgetboard-quadlet.nix
     ./changedetection-quadlet.nix
-    ./litellm-quadlet.nix
     ./mailarchiver-quadlet.nix
     ./open-webui-quadlet.nix
     # Python proxy to fix opnsense-exporter gateway collector issue
@@ -37,7 +36,7 @@
   # non-loopback host IP — the microVM bridge 10.99.0.1 — freezes it into the
   # container's /etc/hosts for the container's lifetime, and every DB client
   # then hits pg_hba's reject catch-all in a retry storm (hit speedtest-tracker,
-  # memory-vault, shlink, openproject, litellm on the 2026-07-03 boot).
+  # memory-vault, shlink, openproject on the 2026-07-03 boot).
   # 10.88.0.1 is config-static (defaultNetwork below), host-owned regardless of
   # which LAN interface has carrier, PostgreSQL binds it, and pg_hba admits
   # 10.88.0.0/16. Do NOT use a LAN address here — vulcan is multi-homed
@@ -111,7 +110,6 @@
     # 1433: mssql — leftover; the MS SQL Server container was removed on
     #       2025-10-22 (commit b00880a) and nothing in the repo uses 1433 now
     # 3001: teable
-    # 4000: litellm
     # 5380: Technitium DNS
     # 5432: PostgreSQL
     # 6253: budgetboard-client
@@ -121,7 +119,6 @@
     allowedTCPPorts = [
       1433
       3001
-      4000
       5380
       5432
       6253
@@ -145,11 +142,6 @@
       "network-online.target"
     ];
     after = [ "network.target" ];
-    before = [
-      "redis-litellm.service"
-      "litellm.service"
-    ];
-
     # Ensure podman network is created and interface is up
     postStart = ''
       # Check if podman network exists, create if not

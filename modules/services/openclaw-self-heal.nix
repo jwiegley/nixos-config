@@ -96,15 +96,6 @@ in
       }
     ];
 
-    # LiteLLM master-key access for the daemon. The same key is used by
-    # other vulcan LiteLLM clients (rspamd, openclaw-microvm, etc.).
-    sops.secrets."litellm-vulcan-lan-self-heal" = {
-      key = "litellm-vulcan-lan";
-      owner = user;
-      mode = "0400";
-      restartUnits = [ "openclaw-self-heal.service" ];
-    };
-
     systemd.services.openclaw-self-heal = {
       description = "OpenClaw self-heal webhook receiver and remediation runner";
       wantedBy = [ "multi-user.target" ];
@@ -128,7 +119,7 @@ in
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
-        LITELLM_MODEL = models.llm.agent.name;
+        LLM_MODEL = models.llm.agent.name;
       };
       serviceConfig = {
         Type = "simple";
@@ -136,9 +127,6 @@ in
         Group = user;
         Restart = "always";
         RestartSec = "5s";
-        LoadCredential = [
-          "litellm-key:${config.sops.secrets."litellm-vulcan-lan-self-heal".path}"
-        ];
         # Hardening (mirrors openclaw-canary patterns)
         ProtectSystem = "strict";
         ProtectHome = true;
@@ -182,7 +170,13 @@ in
       # when using this attribute. The wrapper just sources the credential
       # into env before exec-ing the python daemon.
       script = ''
-        export LITELLM_KEY="$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/litellm-key")"
+        # SENTINEL, not a credential. The daemon posts this as a bearer token to
+        # the host LLM gateway on 127.0.0.1:4000, which injects the real upstream
+        # Authorization header and discards whatever the client sent. The daemon
+        # only requires the variable to be set (it raises GatewayUnreachable
+        # otherwise), so a fixed placeholder is sufficient and removes this
+        # module's dependency on a stale SOPS secret name.
+        export LLM_GATEWAY_KEY="gateway-injects-real-key"
         exec ${pkgs.python3}/bin/python3 ${daemonScript}
       '';
     };

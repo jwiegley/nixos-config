@@ -39,8 +39,8 @@ in
   mkQuadletService =
     {
       # Required parameters
-      name, # Service name (e.g., "litellm")
-      image, # Container image (e.g., "ghcr.io/berriai/litellm:latest")
+      name, # Service name (e.g., "wallabag")
+      image, # Container image (e.g., "ghcr.io/wallabag/wallabag:latest")
       port, # Internal container port to expose
 
       # Optional parameters
@@ -245,7 +245,7 @@ in
             # SYMPTOMS WHEN BROKEN:
             # - "socket.gaierror: [Errno -3] Temporary failure in name resolution"
             # - "ClientConnectorDNSError: Cannot connect to host *.lan"
-            # - litellm can't load models from hera.lan
+            # - a container can't reach a model backend on hera.lan
             #
             # HOW PODMAN DEFAULT DNS WORKS:
             # - Copies host's /etc/resolv.conf nameservers to container

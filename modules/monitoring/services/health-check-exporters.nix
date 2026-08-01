@@ -34,9 +34,6 @@ let
     "node-red"
     "jupyterlab"
     "technitium-dns-server"
-
-    # Critical Dependencies
-    "redis-litellm"
   ];
 
   # Script to generate backup status metrics

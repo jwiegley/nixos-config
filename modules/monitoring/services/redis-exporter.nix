@@ -7,7 +7,7 @@
 
 {
   # Redis exporter for multiple Redis instances.
-  # Primary -redis.addr target (job="redis"): redis-litellm (127.0.0.1:8085).
+  # Primary -redis.addr target (job="redis"): rspamd (127.0.0.1:6381).
   # Multi-target /scrape probes (job="redis-multi"): openproject(6383),
   # shlink(6385), searxng(6386), rspamd(6381), speedtest-tracker(6387), plus the
   # two UNIX-socket instances gitea + immich (via unix:// targets — see below).
@@ -22,10 +22,16 @@
     # Export metrics for all Redis instances
     # Format: redis://host:port or unix:///path/to/socket
     extraFlags = [
-      # litellm Redis binds 127.0.0.1:8085 (verified live: 127.0.0.1 PONGs,
-      # 10.88.0.1 refuses). The old 10.88.0.1 addr made redis_up=0 +
-      # redis_exporter_last_scrape_error=1 permanently with no alert.
-      "-redis.addr=redis://127.0.0.1:8085" # litellm
+      # Repointed 2026-08-01: this used to be the LLM proxy's Redis on
+      # 127.0.0.1:8085, removed with that proxy. The exporter always
+      # probes its -redis.addr, and dropping the flag would silently fall back
+      # to the upstream default localhost:6379 -- nothing listens there, so
+      # redis_up would read 0 and redis_exporter_last_scrape_error 1 forever.
+      # rspamd's instance is the right successor: it is always-on, RDB-persisted
+      # and noeviction. Every instance including this one is ALSO probed under
+      # job="redis-multi", so this target is about keeping job="redis" valid
+      # rather than about coverage.
+      "-redis.addr=redis://127.0.0.1:6381" # rspamd
     ];
   };
 
@@ -75,7 +81,7 @@
     }
     # Multi-target: the single redis_exporter at :9121 can probe additional Redis
     # instances via /scrape?target=. The per-app Redis servers below are not
-    # covered by the primary -redis.addr (litellm), so without this their
+    # covered by the primary -redis.addr, so without this their
     # redis_up never existed -> OpenProjectRedisDown / ShlinkRedisDown were dead.
     # This relabel job points each target at the exporter and stamps instance with
     # the redis URL, yielding redis_up{instance="redis://127.0.0.1:6383"} etc.

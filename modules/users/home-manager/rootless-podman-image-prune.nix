@@ -2,14 +2,14 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# Our rootless container services (litellm, open-webui, teable, changedetection,
-# openproject, ...) track *moving* image tags (e.g. ghcr.io/berriai/litellm-database
+# Our rootless container services (open-webui, teable, changedetection,
+# openproject, ...) track *moving* image tags (e.g. ghcr.io/open-webui/open-webui
 # :main-stable). Every time a newer image is pulled, the tag moves to the new image
 # and the previous one is orphaned as a dangling <none> image. Podman never removes
 # these on its own, so each per-user overlay store grows without bound.
 #
 # 2026-06-01 audit: /var/lib/containers had ballooned to ~194G, almost entirely
-# dangling images (litellm alone held 25 dangling copies = 46G of 48G). Pruning
+# dangling images (one service alone held 25 dangling copies = 46G of 48G). Pruning
 # reclaimed ~150G.
 #
 # WHY virtualisation.podman.autoPrune (set in modules/containers/quadlet.nix) DOESN'T

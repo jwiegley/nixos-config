@@ -115,33 +115,29 @@ in
       }
 
       # ────────────────────────────────────────────────────────────────────────
-      # LiteLLM Tests
+      # LLM gateway tests (nginx on 127.0.0.1:4000 -> llama-swap on hera)
       # ────────────────────────────────────────────────────────────────────────
 
-      echo "--- LiteLLM ---" >> "$OUT"
+      echo "--- LLM gateway ---" >> "$OUT"
 
-      # Read LiteLLM key from openclaw.json
-      LITELLM_KEY=$(jq -r '.models.providers.vulcan.apiKey // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
+      # No client key is needed or wanted: the gateway injects the upstream
+      # Authorization header itself and overwrites whatever we send. The old
+      # check read an apiKey out of openclaw.json and probed
+      # a /health/liveliness endpoint that the old proxy served and the
+      # gateway does not, so keeping it would have failed on every run
+      # forever rather than reporting anything real.
+      GATEWAY_MODELS=$(curl -s --connect-timeout 5 --max-time 20 \
+        "http://127.0.0.1:4000/v1/models" 2>&1) || true
 
-      # Test 1: LiteLLM liveliness (NOT /health which triggers full model health checks)
-      if [ -n "$LITELLM_KEY" ]; then
-        LITELLM_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 \
-          -H "Authorization: Bearer $LITELLM_KEY" \
-          "http://127.0.0.1:4000/health/liveliness" 2>&1) || true
-        if echo "$LITELLM_HEALTH" | grep -q "^200$"; then
-          pass "LiteLLM liveliness (HTTP 200)"
-        else
-          fail "LiteLLM liveliness (HTTP $LITELLM_HEALTH)"
-        fi
+      if echo "$GATEWAY_MODELS" | jq -e '.data' >/dev/null 2>&1; then
+        pass "LLM gateway reachable (/v1/models)"
       else
-        fail "LiteLLM key not available"
+        fail "LLM gateway unreachable or not returning a model list"
       fi
 
-      # Verify OpenClaw's configured agent model is available in LiteLLM
-      LITELLM_MODELS=$(curl -s --connect-timeout 5 \
-        -H "Authorization: Bearer $LITELLM_KEY" \
-        "http://127.0.0.1:4000/v1/models" 2>&1)
-      if echo "$LITELLM_MODELS" | jq -e '.data[] | select(.id == "${models.llm.agent.name}")' >/dev/null 2>&1; then
+      # Verify OpenClaw's configured agent model is actually served upstream.
+      # There is no alias layer any more, so this string must match verbatim.
+      if echo "$GATEWAY_MODELS" | jq -e '.data[] | select(.id == "${models.llm.agent.name}")' >/dev/null 2>&1; then
         pass "${models.llm.agent.name} model available"
       else
         fail "${models.llm.agent.name} model not available"
@@ -537,53 +533,48 @@ in
 
       # Read API keys from staged secrets (virtiofs from host)
       QDRANT_API_KEY=$(cat /run/openclaw-secrets/qdrant-api-key 2>/dev/null || echo "")
-      LITELLM_KEY=$(jq -r '.models.providers.vulcan.apiKey // empty' "${openclawDir}/openclaw.json" 2>/dev/null || echo "")
       PERPLEXITY_KEY=$(cat /run/openclaw-secrets/perplexity-api-key 2>/dev/null || echo "")
 
-      # Test F1: LiteLLM completion
-      echo "--- LiteLLM Completion ---" >> "$OUT"
-      if [ -n "$LITELLM_KEY" ]; then
-        LITELLM_RESPONSE=$(curl -s --connect-timeout 10 -X POST \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer $LITELLM_KEY" \
-          -d '{
-            "model": "${models.llm.agent.name}",
-            "messages": [{"role": "user", "content": "Reply PONG"}],
-            "max_tokens": 8192
-          }' \
-          "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
-        if echo "$LITELLM_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then
-          pass "LiteLLM completion test (PONG received)"
-        elif echo "$LITELLM_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-          fail "LiteLLM completion error: $(echo "$LITELLM_RESPONSE" | jq -r '.error.message')"
-        else
-          fail "LiteLLM completion failed - no PONG in response"
-        fi
+      # Test F1: gateway completion.
+      # No client key: the host gateway injects the upstream Authorization
+      # header and overwrites whatever we send, so gating this test on a key
+      # read out of openclaw.json would only ever skip it.
+      # --max-time is generous on purpose: a cold 27B model load on hera has
+      # been measured at ~95s, and a too-tight bound here reports a backend
+      # that is merely warming up as a hard failure.
+      echo "--- Gateway Completion ---" >> "$OUT"
+      GW_RESPONSE=$(curl -s --connect-timeout 10 --max-time 300 -X POST \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "${models.llm.agent.name}",
+          "messages": [{"role": "user", "content": "Reply PONG"}],
+          "max_tokens": 8192
+        }' \
+        "http://127.0.0.1:4000/v1/chat/completions" 2>&1)
+      if echo "$GW_RESPONSE" | jq -e '.choices[].message.content | contains("PONG")' >/dev/null 2>&1; then
+        pass "gateway completion test (PONG received)"
+      elif echo "$GW_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+        fail "gateway completion error: $(echo "$GW_RESPONSE" | jq -r '.error.message')"
       else
-        skip "LiteLLM key not available"
+        fail "gateway completion failed - no PONG in response"
       fi
 
-      # Test F2: LiteLLM embeddings
-      echo "--- LiteLLM Embeddings ---" >> "$OUT"
-      if [ -n "$LITELLM_KEY" ]; then
-        EMBED_RESPONSE=$(curl -s --connect-timeout 10 -X POST \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer $LITELLM_KEY" \
-          -d '{
-            "model": "${models.embedding.primary.name}",
-            "input": "test"
-          }' \
-          "http://127.0.0.1:4000/v1/embeddings" 2>&1)
-        EMBEDDING_LEN=$(echo "$EMBED_RESPONSE" | jq -r '.data[0].embedding | length' 2>/dev/null)
-        if [ "$EMBEDDING_LEN" = "1024" ]; then
-          pass "LiteLLM embeddings test (1024-dim vector)"
-        elif echo "$EMBED_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-          fail "LiteLLM embeddings error: $(echo "$EMBED_RESPONSE" | jq -r '.error.message')"
-        else
-          fail "LiteLLM embeddings failed - expected 1024-dim, got: $EMBEDDING_LEN"
-        fi
+      # Test F2: gateway embeddings (bge-m3 is 1024-dim; verified live 2026-08-01)
+      echo "--- Gateway Embeddings ---" >> "$OUT"
+      EMBED_RESPONSE=$(curl -s --connect-timeout 10 --max-time 120 -X POST \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "${models.embedding.primary.name}",
+          "input": "test"
+        }' \
+        "http://127.0.0.1:4000/v1/embeddings" 2>&1)
+      EMBEDDING_LEN=$(echo "$EMBED_RESPONSE" | jq -r '.data[0].embedding | length' 2>/dev/null)
+      if [ "$EMBEDDING_LEN" = "1024" ]; then
+        pass "gateway embeddings test (1024-dim vector)"
+      elif echo "$EMBED_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+        fail "gateway embeddings error: $(echo "$EMBED_RESPONSE" | jq -r '.error.message')"
       else
-        skip "LiteLLM key not available"
+        fail "gateway embeddings failed - expected 1024-dim, got: $EMBEDDING_LEN"
       fi
 
       # Test F3: Qdrant CRUD cycle

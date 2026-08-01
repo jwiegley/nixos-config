@@ -8,7 +8,7 @@ Tests the complete email delivery pipeline using IMAP (like a real email client)
 - Dovecot Sieve filtering
 - IMAPSieve training (TrainSpam/TrainGood)
 - IMAPSieve retraining (Retrain folder: rescan through rspamd + redeliver)
-- GPT/LLM spam classification via the LiteLLM proxy
+- GPT/LLM spam classification via the host LLM gateway
 
 SAFETY: All test messages use unique Message-IDs for safe cleanup.
 """
@@ -42,9 +42,9 @@ IMAP_HOST = "localhost"
 IMAP_PORT = 143  # STARTTLS
 IMAP_PASSWORD_FILE = "/run/secrets/email-tester-imap-password"
 
-# LiteLLM configuration
-LITELLM_HOST = "localhost"
-LITELLM_PORT = 4000
+# Host LLM gateway configuration (nginx -> llama-swap on hera)
+GATEWAY_HOST = "localhost"
+GATEWAY_PORT = 4000
 
 # Track all test Message-IDs for cleanup
 test_message_ids: List[str] = []
@@ -506,26 +506,26 @@ def check_logs_for_errors(since_time: datetime) -> Tuple[bool, List[str]]:
     return (len(errors) == 0), errors
 
 
-def check_litellm_health() -> Tuple[bool, str]:
-    """Check if LiteLLM service is available and healthy.
+def check_gateway_health() -> Tuple[bool, str]:
+    """Check if the host LLM gateway is available and healthy.
 
     Returns:
         Tuple of (is_healthy, message)
     """
     try:
-        url = f"http://{LITELLM_HOST}:{LITELLM_PORT}/health/readiness"
+        url = f"http://{GATEWAY_HOST}:{GATEWAY_PORT}/v1/models"
         req = urllib.request.Request(url, method='GET')
 
         with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
-                return True, "LiteLLM is healthy and ready"
+                return True, "LLM gateway is healthy and ready"
             else:
-                return False, f"LiteLLM returned status {response.status}"
+                return False, f"LLM gateway returned status {response.status}"
 
     except urllib.error.URLError as e:
-        return False, f"Cannot connect to LiteLLM: {e.reason}"
+        return False, f"Cannot connect to LLM gateway: {e.reason}"
     except Exception as e:
-        return False, f"LiteLLM health check failed: {str(e)}"
+        return False, f"LLM gateway health check failed: {str(e)}"
 
 
 def extract_spam_score(headers: str) -> Optional[float]:
@@ -1210,28 +1210,28 @@ def test_retrain_ham() -> bool:
         return False
 
 
-def test_litellm_connectivity() -> bool:
-    """Test 7: LiteLLM service connectivity."""
+def test_gateway_connectivity() -> bool:
+    """Test 7: LLM gateway connectivity."""
     logger.info("\n" + "=" * 70)
-    logger.info("TEST 7: LiteLLM Service Connectivity")
+    logger.info("TEST 7: LLM Gateway Connectivity")
     logger.info("=" * 70)
 
     try:
-        # Check LiteLLM health endpoint
-        is_healthy, message = check_litellm_health()
+        # Check LLM gateway health endpoint
+        is_healthy, message = check_gateway_health()
 
         if not is_healthy:
             raise TestError(message)
 
         logger.info(f"  ✓ {message}")
-        logger.info(f"  ℹ LiteLLM endpoint: http://{LITELLM_HOST}:{LITELLM_PORT}")
+        logger.info(f"  ℹ LLM gateway endpoint: http://{GATEWAY_HOST}:{GATEWAY_PORT}")
 
         logger.info("✓ PASSED")
         return True
 
     except Exception as e:
         logger.error(f"✗ FAILED: {e}")
-        logger.error(f"  ℹ Ensure LiteLLM service is running on port {LITELLM_PORT}")
+        logger.error(f"  ℹ Ensure LLM gateway service is running on port {GATEWAY_PORT}")
         return False
 
 
@@ -1242,13 +1242,13 @@ def test_gpt_spam_detection() -> bool:
     logger.info("=" * 70)
 
     try:
-        # First check if LiteLLM is available
-        is_healthy, message = check_litellm_health()
+        # First check if LLM gateway is available
+        is_healthy, message = check_gateway_health()
         if not is_healthy:
-            logger.error(f"  ✗ LiteLLM not available: {message}")
-            raise TestError("LiteLLM service not available")
+            logger.error(f"  ✗ LLM gateway not available: {message}")
+            raise TestError("LLM gateway service not available")
 
-        logger.info("  ✓ LiteLLM service is available")
+        logger.info("  ✓ LLM gateway service is available")
 
         # Create a highly spammy message for GPT to analyze
         spam_body = """
@@ -1336,13 +1336,13 @@ def test_gpt_ham_detection() -> bool:
     logger.info("=" * 70)
 
     try:
-        # First check if LiteLLM is available
-        is_healthy, message = check_litellm_health()
+        # First check if LLM gateway is available
+        is_healthy, message = check_gateway_health()
         if not is_healthy:
-            logger.error(f"  ✗ LiteLLM not available: {message}")
-            raise TestError("LiteLLM service not available")
+            logger.error(f"  ✗ LLM gateway not available: {message}")
+            raise TestError("LLM gateway service not available")
 
-        logger.info("  ✓ LiteLLM service is available")
+        logger.info("  ✓ LLM gateway service is available")
 
         # Short, plainly-conversational body. Avoid:
         #   - "Re:" subject prefix (triggers FAKE_REPLY +1.0 without an
@@ -1420,7 +1420,7 @@ def main():
         'train-spam': ('Train Spam', test_train_spam),
         'retrain-spam': ('Retrain Spam', test_retrain_spam),
         'retrain-ham': ('Retrain Ham', test_retrain_ham),
-        'litellm': ('LiteLLM Connectivity', test_litellm_connectivity),
+        'gateway': ('LLM gateway Connectivity', test_gateway_connectivity),
         'gpt-spam': ('GPT Spam Detection', test_gpt_spam_detection),
         'gpt-ham': ('GPT Ham Detection', test_gpt_ham_detection),
     }

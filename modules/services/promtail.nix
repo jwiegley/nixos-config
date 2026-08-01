@@ -108,7 +108,7 @@
             {
               source_labels = [ "__journal__systemd_unit" ];
               target_label = "service_type";
-              regex = "(glance.*|wallabag|litellm)\\.service";
+              regex = "(glance.*|wallabag)\\.service";
               replacement = "application";
             }
             {

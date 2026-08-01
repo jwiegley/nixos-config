@@ -2,22 +2,21 @@ groups:
   - name: redis_alerts
     interval: 60s
     rules:
-      # litellm Redis availability (primary -redis.addr target, job="redis").
-      # Since the 127.0.0.1:8085 addr fix (commit dc9056f, 2026-06-09) this
-      # reads 1; before that it read 0 only because the old 10.88.0.1 addr was
-      # unreachable — see redis-exporter.nix:25-28. The per-app Redis
-      # instances (openproject:6383, shlink:6385) are job="redis-multi" and
-      # are covered by OpenProjectRedisDown / ShlinkRedisDown elsewhere.
-      - alert: RedisLitellmDown
+      # Primary -redis.addr target (job="redis") — rspamd's Redis at
+      # 127.0.0.1:6381 since 2026-08-01, when the retired LLM proxy's Redis
+      # was removed with it. rspamd's Redis is the Bayes/fuzzy backend, so losing
+      # it degrades spam classification rather than an LLM cache. The per-app
+      # instances are job="redis-multi" and covered by their own rules.
+      - alert: RedisPrimaryTargetDown
         expr: redis_up{job="redis"} == 0
         for: 5m
         labels:
           severity: critical
           category: redis
-          service: redis-litellm
+          service: redis-rspamd
         annotations:
-          summary: "litellm Redis is unreachable"
-          description: "redis_up{job=redis} (litellm Redis at 127.0.0.1:8085) has been 0 for more than 5 minutes. The shared LLM gateway loses its cache/queue backend. Check: redis-cli -p 8085 ping; journalctl -u prometheus-redis-exporter."
+          summary: "Primary Redis target is unreachable"
+          description: "redis_up{job=redis} (rspamd Redis at 127.0.0.1:6381) has been 0 for more than 5 minutes. rspamd loses its Bayes/fuzzy backend, degrading spam classification. Check: redis-cli -p 6381 ping; journalctl -u prometheus-redis-exporter."
 
       # Meta-alert: catches future exporter address drift on ANY redis target.
       # redis_exporter_last_scrape_error=1 means the exporter could not connect
@@ -54,7 +53,7 @@ groups:
           description: "redis_up{job=redis-multi, instance={{ $labels.instance }}} has been 0 for more than 5 minutes — the redis_exporter at :9121 reached out but that Redis did not answer PING. Check the owning service (redis-cli -u {{ $labels.instance }} ping) and the matching redis-<app>.service unit."
 
       # Memory pressure: only meaningful where maxmemory is set (>0). Instances
-      # without maxmemory report redis_memory_max_bytes=0 (litellm, rspamd) — the
+      # without maxmemory report redis_memory_max_bytes=0 (rspamd) — the
       # `and … > 0` guard drops them so the ratio is never 0/0 or used/0=+Inf.
       # Live baseline 2026-06-10: 6383=0.5%, 6385=1.1% — far below 0.9.
       - alert: RedisMemoryPressure
@@ -87,7 +86,7 @@ groups:
       # Anomalous evictions: openproject/shlink/searxng/speedtest-tracker are
       # configured allkeys-lru, so eviction there is BY DESIGN — alerting on it
       # would be chronic noise. We scope this to instances whose maxmemory_policy
-      # is "noeviction" (litellm, rspamd today; the redis_instance_info label
+      # is "noeviction" (rspamd today; the redis_instance_info label
       # makes it auto-adapt as instances change). A noeviction instance returns
       # OOM errors instead of evicting, so ANY rise in redis_evicted_keys_total
       # there is genuinely anomalous. Live baseline 2026-06-10: evicted=0 on all
@@ -109,7 +108,7 @@ groups:
       # counter, 0 on every scraped instance at the 2026-06-10 baseline (7d max
       # 15m-increase = 0), so increase(...[15m]) > 0 is a real signal, not noise:
       # any rejection means an app failed to get a connection. Covers both the
-      # primary litellm target (job="redis") and every multi-target instance
+      # primary target (job="redis") and every multi-target instance
       # (no job filter), so future instances are covered automatically.
       - alert: RedisRejectedConnections
         expr: increase(redis_rejected_connections_total[15m]) > 0

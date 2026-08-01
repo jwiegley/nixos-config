@@ -156,10 +156,6 @@ with lib;
                           url = "https://nodered.vulcan.lan";
                         }
                         {
-                          title = "LiteLLM Proxy";
-                          url = "https://litellm.vulcan.lan/ui";
-                        }
-                        {
                           title = "Open WebUI";
                           url = "https://chat.vulcan.lan";
                         }

@@ -15,7 +15,7 @@ Provider/model selection is discovered at first call by GET-ing
 ``/api/config`` and picking the first chat+embedding model that matches
 the configured preferences. The full config response is **never logged
 or returned** — only the IDs/keys we need are extracted from it. This
-matters because that endpoint also exposes the LiteLLM apiKey.
+matters because that endpoint also exposes the provider apiKey.
 
 Environment variables:
   VANE_BASE_URL         default: https://vane.vulcan.lan
@@ -78,7 +78,7 @@ def _discover_models() -> dict[str, str]:
     """Return ``{providerId, chatKey, embedKey}`` from /api/config.
 
     Caches the result process-wide. Never logs the response body — that
-    body contains the LiteLLM apiKey for the configured provider.
+    body contains the apiKey for the configured provider.
     """
     global _provider_cache
     with _provider_lock:

@@ -31,7 +31,6 @@ DOMAINS=(
     "immich.vulcan.lan"
     "jellyfin.vulcan.lan"
     "jupyter.vulcan.lan"
-    "litellm.vulcan.lan"
     "loki.vulcan.lan"
     "memory.vulcan.lan"
     "memory-mcp.vulcan.lan"

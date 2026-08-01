@@ -10,8 +10,8 @@
 # Alert rules live in modules/monitoring/alerts/stock-trader.yaml; the
 # original load-bearing one is StockTraderChatErrorRate, which fires when
 # the chat WebSocket handler emits errors at a non-trivial rate. The
-# motivating cause is the LiteLLM Anthropic→Responses adapter
-# misorder bug documented in /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md
+# motivating cause was an Anthropic→Responses adapter misorder bug in the
+# LLM proxy that used to front this path (removed 2026-08-01)
 # — the alert catches that bug regressing (or model prompt-adherence
 # drifting and re-triggering it) without anyone having to type into
 # the chat panel. Since stock-trader v0.2.0 (2026-06-09) this scrape job

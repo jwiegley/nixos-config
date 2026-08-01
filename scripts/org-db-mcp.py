@@ -27,7 +27,7 @@ Environment variables (PostgreSQL — psycopg2 reads these via libpq):
 
 Environment variables (semantic search — org CLI):
   ORG_CONFIG          default: ${HOME}/.config/org/config.yaml
-  ORG_DB_BASE_URL     default: http://127.0.0.1:4000 (LiteLLM)
+  ORG_DB_BASE_URL     default: http://127.0.0.1:4000 (host LLM gateway)
   ORG_DB_MODEL        default: hera/bge-m3 (embedding model)
   OPENROUTER_API_KEY  no default — passed to org as --api-key
 
@@ -264,7 +264,7 @@ def org_search(query: str, n: int = 10) -> str:
     """Semantic search over the org database via embeddings.
 
     Shells out to the ``org`` CLI exactly as the ``org-db-search``
-    wrapper does: it embeds the query through LiteLLM (the ``hera/bge-m3``
+    wrapper does: it embeds the query through the LLM gateway (the embedding
     model on the local gateway) and returns the nearest org entries. Use
     this for natural-language lookup ("notes about the pool heater") where
     you don't know the exact schema or wording.

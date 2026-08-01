@@ -26,6 +26,25 @@ groups:
         # powered off / deep-asleep for long routine stretches, so those two
         # groups get NO alert — they are probed for visibility only. Matched
         # with !~ so all three groups are excluded in one matcher.
+        # ALL blackbox_http* jobs excluded 2026-08-01 (widened from the single
+        # blackbox_https_public exclusion). This rule is about HOST reachability,
+        # but "blackbox_.*" also matched every HTTP vhost probe, so 42 targets
+        # -- the 38 local vhosts plus https_auth/https/http -- tripped BOTH this
+        # critical and WebServiceDown for one condition, with this one claiming
+        # "Host X is unreachable" about an HTTP endpoint on a host that was
+        # perfectly reachable. Exactly the defect the blackbox_hera_qwen note
+        # above describes, just at 42x the scale.
+        #
+        # Nothing is lost: WebServiceDown selects `job=~"blackbox_http.*"` at the
+        # SAME severity (critical) and a SHORTER dwell (for: 1m vs 2m), so it
+        # fires sooner on the identical condition. This rule keeps the probes
+        # that genuinely test host reachability -- ICMP, plus the memory-vault /
+        # openclaw / dns_internal / iphone_relay probes, which WebServiceDown
+        # does not select.
+        #
+        # Observed live: a single nginx restart during the 2026-08-01 LiteLLM
+        # migration emitted paired WebServiceDown + HostUnreachable criticals for
+        # https://rspamd.vulcan.lan.
         # host_group backbone/dns excluded 2026-07-07: those are external
         # internet-reference probes (Google, MIT, public resolvers, …) that
         # John cannot act on individually. A brief upstream ISP wobble used to
@@ -33,7 +52,7 @@ groups:
         # DNSServerDown at once — ~20 emails for one 30-min WAN blip with no
         # real outage. They are now covered by the aggregate WANDegraded /
         # DNSResolversDown rules below, which fire only on a genuine WAN outage.
-        expr: probe_success{job=~"blackbox_.*",job!~"blackbox_hera_(mlx|qwen)|blackbox_https_public",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
+        expr: probe_success{job=~"blackbox_.*",job!~"blackbox_hera_(mlx|qwen)|blackbox_http.*",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
         for: 2m
         labels:
           severity: critical
@@ -674,7 +693,7 @@ groups:
       # pressure, GC pause).
       #
       # CLAIM CORRECTED AND THIS RULE IS DEAD (measured 2026-07-30, 201d of TSDB). The comment
-      # here used to say "every instance is well under 1.5s even at 7d-max (slowest is litellm
+      # here used to say "every instance is well under 1.5s even at 7d-max (slowest was the LLM proxy
       # at 1.478s) ... so the >10s floor is ~7x above the observed worst case". Both halves are
       # wrong. The `https_local` prober TIMEOUT IS 5s (modules/services/blackbox-monitoring.nix:
       # 110-112), so probe_duration_seconds on this job can never reach 10 -- 200d max is

@@ -52,7 +52,7 @@ groups:
       # detection that the retired Nagios mirror used to provide.
       #
       # Deleted rather than repaired because its premise is gone too: it was written for
-      # "the LiteLLM Anthropic->Responses adapter misorder bug", and LiteLLM is being removed
+      # an Anthropic->Responses adapter misorder bug in the retired LLM proxy, now removed
       # from this host entirely. If the application ever exports per-kind chat error counts,
       # write a fresh rule against what it actually emits.
 

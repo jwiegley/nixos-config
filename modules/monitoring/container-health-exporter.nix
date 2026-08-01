@@ -246,7 +246,7 @@ in
   # ---------------------------------------------------------------------------
   # Emits container_store_size_bytes{user="<user>"} for each podman store under
   # /var/lib/containers/. This is the early-warning signal for dangling-image
-  # bloat (the litellm 48G incident: moving-tag pulls leave <none> copies that
+  # bloat (the 2026 48G dangling-image incident: moving-tag pulls leave <none> copies that
   # the weekly per-user `podman image prune -af` is meant to keep down).
   #
   # `du -sb` is the only accurate measure but is expensive (~11s over all stores

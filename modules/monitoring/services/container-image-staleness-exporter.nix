@@ -25,7 +25,7 @@
 #   never equals the running container's arch sub-manifest digest — comparing
 #   the two false-positives forever. `skopeo inspect --raw docker://<ref>`
 #   returns the raw manifest LIST, from which we pick the arm64 entry's digest
-#   ourselves. Verified live 2026-06-10: litellm/wallabag/shlink remote arm64
+#   ourselves. Verified live 2026-06-10: wallabag/shlink remote arm64
 #   digest == local .Digest (MATCH), speedtest-tracker differs (a real pending
 #   update) — arch-correct, no spurious drift. (vulcan is aarch64.)
 #

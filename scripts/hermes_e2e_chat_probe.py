@@ -46,7 +46,7 @@ import urllib.request
 HERMES_URL = os.environ.get(
     "HERMES_E2E_CHAT_URL", "http://10.99.1.2:8080/v1/chat/completions"
 )
-MODEL = os.environ.get("HERMES_E2E_CHAT_MODEL", "hera/omlx/Qwen3.6-27B-oQ4e-mtp")
+MODEL = os.environ.get("HERMES_E2E_CHAT_MODEL", "Qwen3.6-27B-oQ4e-mtp")
 EXPECTED_TOKEN = os.environ.get("HERMES_E2E_CHAT_TOKEN", "ROVER")
 PROMPT = os.environ.get(
     "HERMES_E2E_CHAT_PROMPT",

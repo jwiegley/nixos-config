@@ -65,7 +65,6 @@
 6385 127.0.0.1 Redis - Shlink
 6386 127.0.0.1 Redis - SearXNG
 6387 127.0.0.1 Redis - Speedtest Tracker
-8085 127.0.0.1 Redis - LiteLLM
 
 # Web Applications (localhost only, proxied via nginx)
 1880 127.0.0.1 Node-RED
@@ -81,8 +80,7 @@
 3050 127.0.0.1 Glance
 3100 * :: Loki
 3493 127.0.0.1 NUT upsd (Network UPS Tools) - APC BR1000MS
-4000 127.0.0.1 LiteLLM
-4001 127.0.0.1 LiteLLM anthropic /v1/messages fixup proxy (litellm-anthropic-fixup.service) - workaround for adapter misorder bug; stock-trader points ANTHROPIC_BASE_URL here
+4000 127.0.0.1 LLM gateway (nginx reverse proxy -> https://hera.lan:8443, llama-swap/MLX)
 5050 127.0.0.1 pgAdmin
 5055 127.0.0.1 ChangeDetection.io web interface
 5060 127.0.0.1 Zimit Web UI (archive job management)
@@ -118,7 +116,7 @@
 18080 127.0.0.1 Static nginx container (socket-activated)
 
 # Voice Assistant (Wyoming protocol)
-10300 127.0.0.1 wyoming-openai STT bridge to LiteLLM (cohere-transcribe via hera)
+10300 127.0.0.1 wyoming-openai STT bridge -> LLM gateway :4000 (cohere-transcribe via hera)
 
 # Matter / IoT
 5540 0.0.0.0 :: Matter operational messaging (UDP - CASE sessions, cluster communication)
@@ -142,7 +140,7 @@
 443  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:443 (Nginx HTTPS: searxng/vane/trader.vulcan.lan)
 993  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:993 (Dovecot IMAPS)
 2525 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:2525 (Postfix plain-SMTP for microVMs)
-4000 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:4000 (LiteLLM; pre-existing, was the lone DNAT port)
+4000 10.99.1.1 Hermes VM bridge DNAT -> 127.0.0.1:4000 (LLM gateway; pre-existing, was the lone DNAT port)
 5232 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:5232 (Radicale CalDAV/CardDAV)
 5432 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:5432 (PostgreSQL; read-only org-db role)
 8123 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:8123 (Home Assistant)

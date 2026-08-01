@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI-Powered Log Summarization for LogWatch
-Collects logs from journalctl and uses LiteLLM for intelligent summarization.
+Collects logs from journalctl and uses the host LLM gateway for summarization.
 """
 
 import time
@@ -271,7 +271,7 @@ class LogCollector:
 
 
 class AIAnalyzer:
-    """AI-powered log analysis using LiteLLM"""
+    """AI-powered log analysis via the host LLM gateway on 127.0.0.1:4000"""
 
     DEFAULT_MODELS_CONFIG = "/etc/models.json"
 
@@ -304,7 +304,7 @@ class AIAnalyzer:
             "MODELS_CONFIG", self.DEFAULT_MODELS_CONFIG)
         self.models = self._load_models(config_path)
         self.model = model if model else self.models[0][0]
-        self.api_key = os.environ.get("LITELLM_API_KEY", "")
+        self.api_key = os.environ.get("LLM_API_KEY", "")
         self.timeout = 7200  # 2 hours (local LLM can be slow)
 
     def analyze_logs(self, grouped_logs: Dict[str, List[LogEntry]], stats: Dict,
@@ -398,7 +398,7 @@ class AIAnalyzer:
         return "\n".join(context_parts)
 
     def _call_ai_api(self, log_context: str, stats: Dict) -> Optional[str]:
-        """Call LiteLLM API for analysis"""
+        """Call the LLM gateway's OpenAI-compatible API for analysis"""
 
         system_prompt = """You are an expert system administrator analyzing server logs.
 Provide a concise, factual summary organized by:

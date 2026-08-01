@@ -136,10 +136,10 @@ in
             # Port configuration (8080 is used by llama-swap)
             PORT = "8084";
 
-            # OpenAI-compatible API configuration - point to LiteLLM
+            # OpenAI-compatible API configuration - point to the host LLM gateway
             OPENAI_API_BASE_URL = "http://127.0.0.1:4000/v1";
 
-            # Disable default Ollama integration (we're using LiteLLM)
+            # Disable default Ollama integration (we use the LLM gateway on :4000)
             OLLAMA_BASE_URL = "";
 
             # WebUI configuration
@@ -162,7 +162,7 @@ in
             # Safe mode - disable code execution in chat
             SAFE_MODE = "true";
 
-            # Default model (adjust as needed based on LiteLLM config)
+            # Default model (must be a real id served by the gateway; see models.nix)
             DEFAULT_MODELS = defaultModel;
             DEFAULT_PINNED_MODELS = defaultModel;
             TASK_MODEL = defaultModel;

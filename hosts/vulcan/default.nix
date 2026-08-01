@@ -43,7 +43,6 @@
     ../../modules/users/home-manager/container-users-dedicated.nix
 
     # Rootless container Home Manager configs
-    ../../modules/users/home-manager/litellm.nix
     ../../modules/users/home-manager/changedetection.nix
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/open-webui.nix
@@ -109,8 +108,6 @@
     ../../modules/services/rspamd-alerts.nix
     ../../modules/services/rspamd.nix
     ../../modules/services/service-reliability.nix
-    ../../modules/services/litellm-anthropic-fixup.nix
-    ../../modules/services/litellm-config.nix
     ../../modules/services/stock-trader.nix
     ../../modules/services/technitium-dns-backup.nix
     ../../modules/services/web.nix
@@ -145,6 +142,7 @@
     ../../modules/services/cockpit.nix
     ../../modules/services/nginx-default-vhost.nix
     ../../modules/services/llama-swap.nix
+    ../../modules/services/hera-llm-proxy.nix
     ../../modules/services/aria2.nix
     ../../modules/services/atd.nix
     ../../modules/services/atd-web.nix
@@ -214,7 +212,6 @@
     schedule = "*-*-* 03:00:00"; # Daily at 3 AM
   };
 
-  services.litellm-anthropic-fixup.enable = true;
   services.stock-trader.enable = true;
   services.hermes-mcp.enable = true;
   services.open-source-secretary.enable = true;

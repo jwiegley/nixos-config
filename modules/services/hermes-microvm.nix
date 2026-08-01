@@ -56,7 +56,7 @@ let
   #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan)
   #   993  Dovecot IMAPS (email-contacts)
   #   2525 Postfix SMTP (email-contacts)
-  #   4000 LiteLLM (hera/* model route + org-search embeddings)
+  #   4000 LLM gateway (chat + org-search embeddings, nginx -> hera)
   #   5232 Radicale CardDAV (contacts)
   #   5432 PostgreSQL (org-db read-only)
   #   8123 Home Assistant (mcp-proxy bridge)
@@ -174,7 +174,7 @@ in
     iptables -A hermes-isolate -d ${bridgeAddr} -p tcp --dport 53 -j RETURN
     iptables -A hermes-isolate -d ${bridgeAddr} -p udp --dport 53 -j RETURN
 
-    # DNAT'd host services (LiteLLM, etc.) — accept inbound traffic to
+    # DNAT'd host services (the LLM gateway, etc.) — accept inbound traffic to
     # bridgeAddr on these ports.  NOTE: PREROUTING DNAT rewrites the
     # destination to 127.0.0.1 BEFORE the INPUT chain (and therefore this
     # isolation chain) runs, so the post-DNAT packet has dst=127.0.0.1, not

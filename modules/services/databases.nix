@@ -136,7 +136,7 @@ in
         # changing it requires a full `systemctl restart postgresql.service`,
         # which bounces ~26 user databases and the 33 reverse-dependent units
         # (immich-server, immich-machine-learning, gitea, home-assistant,
-        # budget-board-server, nagios, pgadmin, litellm, + ~14
+        # budget-board-server, nagios, pgadmin, + ~14
         # postgresql-*-setup oneshots). A `nixos-rebuild switch` only RELOADS
         # PostgreSQL on a settings change — it does NOT restart it — so the
         # library does not actually load until an EXPLICIT restart. Fold that
@@ -168,7 +168,6 @@ in
       };
 
       ensureDatabases = [
-        "litellm"
         "open_webui"
         "wallabag"
         "teable"
@@ -185,7 +184,6 @@ in
       ensureUsers = [
         { name = "postgres"; }
         { name = "johnw"; }
-        { name = "litellm"; }
         { name = "wallabag"; }
         {
           name = "teable";
@@ -295,36 +293,6 @@ in
         proxy_redirect off;
       '';
     };
-  };
-
-  # Optimize LiteLLM database with performance indexes
-  systemd.services.postgresql-litellm-optimize = {
-    description = "Create performance indexes for LiteLLM database";
-    after = [ "postgresql.service" ];
-    wants = [ "postgresql.service" ];
-    wantedBy = [ "multi-user.target" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      User = "postgres";
-      RemainAfterExit = true;
-    };
-
-    script = ''
-      # Wait for PostgreSQL to be ready
-      until ${config.services.postgresql.package}/bin/psql -d litellm -c "SELECT 1" 2>/dev/null; do
-        sleep 1
-      done
-
-      # Create index on api_key column for faster query performance
-      # This prevents slow sequential scans on the large LiteLLM_SpendLogs table
-      ${config.services.postgresql.package}/bin/psql -d litellm -c \
-        'CREATE INDEX CONCURRENTLY IF NOT EXISTS "LiteLLM_SpendLogs_api_key_idx" ON "LiteLLM_SpendLogs" (api_key);'
-
-      # Update table statistics after index creation
-      ${config.services.postgresql.package}/bin/psql -d litellm -c \
-        'ANALYZE "LiteLLM_SpendLogs";'
-    '';
   };
 
   # Optimize mailarchiver database with performance indexes
@@ -564,7 +532,7 @@ in
   # depends on postgresql (chicken-and-egg). Treating podman0 as a hard
   # `Requires=` means postgresql fails permanently at boot if podman is slow,
   # cascading "dependency failed" to every pg-dependent unit (gitea, immich,
-  # budget-board-server, litellm container, etc. — observed 2026-05-21 boot).
+  # budget-board-server, etc. — observed 2026-05-21 boot).
   #
   # Soft ordering only: postgres is ordered AFTER podman0/end0 when they're
   # available, but does NOT require podman0. Containers reach postgres via

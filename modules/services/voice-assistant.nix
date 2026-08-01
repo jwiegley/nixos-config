@@ -1,23 +1,24 @@
-# Voice Assistant - Wyoming STT bridge to LiteLLM
+# Voice Assistant - Wyoming STT bridge to the host LLM gateway
 #
 # wyoming-openai (roryeckel) exposes a Wyoming STT server that forwards
 # complete utterances to an OpenAI-compatible /v1/audio/transcriptions
-# endpoint. We point it at the local LiteLLM proxy (127.0.0.1:4000) and
-# select the hera/cohere-transcribe-03-2026 alias (declared in
-# modules/services/litellm-settings.nix and rendered into
-# /etc/litellm/config.yaml, which routes to hera).
+# endpoint. We point it at the host LLM gateway on 127.0.0.1:4000
+# (modules/services/hera-llm-proxy.nix), a plain nginx reverse proxy onto
+# llama-swap at https://hera.lan:8443.
+#
+# There is NO alias layer any more — the gateway does not rewrite request
+# bodies, so STT_MODELS below must name a REAL upstream model id.
 #
 # Setup checklist (one-time, outside this module):
 #   1. Add a SOPS secret "wyoming-openai-env" to /etc/nixos/secrets/secrets.yaml
 #      as a multi-line env file with a single STT_OPENAI_KEY=... line.
-#      The key is a LiteLLM virtual key with permission to call the
-#      hera/cohere-transcribe-03-2026 model. Generate one in the LiteLLM
-#      admin UI at https://litellm.vulcan.lan.
-#   2. Verify modules/services/litellm-settings.nix has a model_list entry
-#      whose model_name is "hera/cohere-transcribe-03-2026" and that routes
-#      to hera (via hera_llama_swap_credential). /etc/litellm/config.yaml is
-#      a rendered sops-template symlink — do not hand-edit it; rebuild, and
-#      litellm-config.nix's restart bridge picks the new alias up.
+#      The gateway injects its own upstream Authorization header and discards
+#      whatever the client sent, so this value is INERT — it only has to be
+#      non-empty to satisfy the OpenAI client library. There is no admin UI
+#      to mint it any more.
+#   2. Verify STT_MODELS matches a live upstream id:
+#        curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
+#      Whatever is written below reaches llama-swap verbatim.
 #   3. After this module is built and switched, in HA UI:
 #      Settings -> Devices & Services -> Add Integration -> "Wyoming Protocol"
 #      Host: 127.0.0.1   Port: 10300
@@ -35,7 +36,7 @@
 {
   # SOPS-deployed env file. Contents (managed via `sops /etc/nixos/secrets/secrets.yaml`):
   #   wyoming-openai-env: |
-  #     STT_OPENAI_KEY=<litellm-virtual-key>
+  #     STT_OPENAI_KEY=<any non-empty string; the :4000 gateway overwrites it>
   sops.secrets."wyoming-openai-env" = {
     sopsFile = config.sops.defaultSopsFile;
     mode = "0400";
@@ -52,7 +53,7 @@
       # Pin to a tag (e.g. "0.4.3") if you want reproducible image pulls.
       image = "ghcr.io/roryeckel/wyoming_openai:latest";
 
-      # Host network so the container can reach LiteLLM on 127.0.0.1:4000
+      # Host network so the container can reach the LLM gateway on 127.0.0.1:4000
       # and the Wyoming server can listen on 127.0.0.1:10300 directly.
       # Same pattern as matter-server-quadlet.nix and open-webui.nix.
       networks = [ "host" ];
@@ -64,15 +65,15 @@
         WYOMING_LANGUAGES = "en";
         WYOMING_LOG_LEVEL = "INFO";
 
-        # Talk to local LiteLLM. STT_MODELS must match a model name visible
-        # to the virtual key (verify with `/v1/models`). If you add an alias
-        # to the model_list in modules/services/litellm-settings.nix,
-        # update this to match.
+        # Talk to the local LLM gateway. There is no alias layer: STT_MODELS
+        # must be a REAL id from the llama-swap backend. Verify with:
+        #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
         STT_OPENAI_URL = "http://127.0.0.1:4000/v1";
-        STT_MODELS = "hera/cohere-transcribe-03-2026";
+        STT_MODELS = "cohere-transcribe-03-2026-mlx-fp16";
       };
 
-      # STT_OPENAI_KEY=<litellm-virtual-key> comes from SOPS.
+      # STT_OPENAI_KEY comes from SOPS. The gateway overwrites Authorization,
+      # so the value is inert and only needs to be non-empty.
       environmentFiles = [ "/run/secrets/wyoming-openai-env" ];
 
       # Python installs a SIGINT handler even as container PID 1; the quadlet
@@ -82,7 +83,7 @@
     };
 
     unitConfig = {
-      Description = "wyoming-openai - Wyoming STT bridge to LiteLLM";
+      Description = "wyoming-openai - Wyoming STT bridge to the hera LLM gateway";
       After = [
         "network-online.target"
         "podman.service"

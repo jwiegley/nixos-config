@@ -716,10 +716,6 @@ let
       display = "Redis (Gitea)";
     }
     {
-      name = "redis-litellm.service";
-      display = "Redis (LiteLLM)";
-    }
-    {
       name = "changedetection.service";
       display = "ChangeDetection";
     }
@@ -992,11 +988,6 @@ let
   # isolation (memory-vault and memory-vault-mcp share the memory-vault user); the two
   # budget-board entries are still root-level Quadlet containers, hence no runAs
   containers = [
-    {
-      name = "litellm";
-      display = "LiteLLM API Proxy";
-      runAs = "litellm";
-    }
     {
       name = "mailarchiver";
       display = "Mail Archiver";
@@ -1822,8 +1813,8 @@ let
     define service {
       use                     standard-service
       host_name               vulcan
-      service_description     LiteLLM HTTP
-      check_command           check_http!-p 4000 -u /health/liveliness
+      service_description     LLM Gateway HTTP
+      check_command           check_http!-p 4000 -u /v1/models
       service_groups          application-services
     }
 
@@ -2159,14 +2150,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: prometheus.vulcan.lan
       check_command           check_ssl_cert!prometheus.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: litellm.vulcan.lan
-      check_command           check_ssl_cert!litellm.vulcan.lan
       service_groups          ssl-certificates
     }
 

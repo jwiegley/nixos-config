@@ -114,7 +114,7 @@ def test_fourth_attempt_marks_stuck(monkeypatch, tmp_path):
     assert "HermesSelfHealStuck" in stuck_names
 
 
-def test_litellm_unreachable_marks_stuck(monkeypatch, tmp_path):
+def test_gateway_unreachable_marks_stuck(monkeypatch, tmp_path):
     state_path = tmp_path / "incidents.json"
     monkeypatch.setattr(daemon, "STATE_PATH", str(state_path))
     monkeypatch.setattr(daemon, "current_metrics", lambda: {"hermes_mcp_ask_hermes_ok": 0.0})
@@ -124,7 +124,7 @@ def test_litellm_unreachable_marks_stuck(monkeypatch, tmp_path):
     monkeypatch.setattr(daemon, "run_action", lambda a, **kw: {"ok": False})
 
     def fake_ai(*a, **kw):
-        raise daemon.LitellmUnreachable("connection refused")
+        raise daemon.GatewayUnreachable("connection refused")
 
     monkeypatch.setattr(daemon, "call_litellm", fake_ai)
 
@@ -136,7 +136,7 @@ def test_litellm_unreachable_marks_stuck(monkeypatch, tmp_path):
     for _ in range(2):
         daemon.handle_alertmanager_payload(_payload("HermesAskFailing"))
 
-    assert "HermesSelfHealLitellmUnreachable" in synth
+    assert "HermesSelfHealGatewayUnreachable" in synth
 
 
 # ---- circuit breaker (recent_action_count) ----

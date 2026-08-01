@@ -33,6 +33,10 @@
 let
   cfg = config.services.stock-trader;
 
+  # Shared model registry — the single source of truth for which model the
+  # host LLM gateway on :4000 should be asked for.
+  models = import ../../models.nix;
+
   # Bridge LoadCredential files into env vars expected by the runtime.
   # Each file under $CREDENTIALS_DIRECTORY is the plaintext API key,
   # produced by sops-install-secrets and exposed read-only to the
@@ -41,7 +45,7 @@ let
   #
   # POLYGON_API_KEY and ANTHROPIC_API_KEY are loaded conditionally —
   # the service degrades gracefully if either is missing (the chat
-  # engine will fall back to the litellm proxy on :4000 when the
+  # engine will fall back to the host LLM gateway on :4000 when the
   # Anthropic key is absent, and Polygon is an optional fallback
   # source after alpha_vantage and yfinance; Schwab was retired 2026-07-29).
   startScript = pkgs.writeShellScript "stock-trader-start" ''
@@ -143,18 +147,27 @@ in
         # at the package's read-only share/ directory.
         STOCK_TRADER_STATIC_DIR = "${pkgs.stock-trader}/share/stock-trader/web/dist";
 
-        # ANTHROPIC_BASE_URL points at the litellm-anthropic-fixup
-        # proxy on :4001, NOT directly at LiteLLM's :4000. The proxy
-        # strips text blocks from assistant messages that also
-        # contain tool_use blocks, working around LiteLLM's
-        # anthropic→responses-API converter misorder bug; see
-        # /etc/nixos/modules/services/litellm-anthropic-fixup.nix
-        # and /etc/nixos/docs/LITELLM_TOOL_USE_BUG_REPORT.md. The
-        # proxy forwards untouched everything else, so ANTHROPIC_MODEL
-        # "hera/claude-opus-4-7" still routes through the same
-        # LiteLLM model group as before.
-        ANTHROPIC_BASE_URL = "http://127.0.0.1:4001";
-        ANTHROPIC_MODEL = "hera/claude-opus-4-7";
+        # CAPABILITY CHANGE 2026-08-01 -- this path used to reach a HOSTED
+        # Anthropic model. It pointed at the :4001 anthropic-fixup shim, which
+        # forwarded to the LiteLLM proxy, whose catalog routed the model group
+        # "hera/claude-opus-4-7" out to Anthropic. Removing LiteLLM removed
+        # that catalog, and with it every hosted-provider route on this host.
+        #
+        # Both the shim and the hosted model are gone. What remains is the host
+        # LLM gateway on :4000, and the llama-swap backend behind it answers
+        # /v1/messages in the Anthropic wire format natively (verified 200 on
+        # 2026-08-01) -- which is also why the fixup shim was not carried
+        # forward: it existed only to work around a LiteLLM converter bug.
+        #
+        # So the Anthropic-shaped code path still works, but it is now served
+        # by the LOCAL model. This is a deliberate downgrade in model strength,
+        # not an oversight: the alternative is pointing straight at
+        # api.anthropic.com, which changes this service from local-only to
+        # metered external egress. That is an operator decision, not a
+        # mechanical migration -- switch by clearing ANTHROPIC_BASE_URL and
+        # setting ANTHROPIC_MODEL to a real Anthropic model id.
+        ANTHROPIC_BASE_URL = "http://127.0.0.1:4000";
+        ANTHROPIC_MODEL = models.llm.primary.name;
 
         LOG_LEVEL = "INFO";
 

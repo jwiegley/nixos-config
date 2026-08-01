@@ -62,7 +62,7 @@ class Config:
             hermes_url=g("OSS_SECRETARY_HERMES_URL",
                          "http://10.99.1.2:8080/v1/chat/completions"),
             hermes_model=g("OSS_SECRETARY_HERMES_MODEL",
-                           "hera/omlx/Qwen3.6-27B-oQ4e-mtp"),
+                           "Qwen3.6-27B-oQ4e-mtp"),
             hermes_key=_parse_env_key(g("OSS_SECRETARY_HERMES_ENV_FILE"), "API_SERVER_KEY"),
             state_db=g("OSS_SECRETARY_STATE_DB", "/var/lib/open-source-secretary/state.db"),
             include_private=bool(g("OSS_SECRETARY_INCLUDE_PRIVATE")),

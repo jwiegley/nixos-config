@@ -333,7 +333,7 @@ let
     ### What you can reach
 
     These names are mapped to the bridge gateway in this VM's `/etc/hosts`:
-    `hass.vulcan.lan`, `qdrant.vulcan.lan`, `litellm.vulcan.lan`,
+    `hass.vulcan.lan`, `qdrant.vulcan.lan`,
     `imap.vulcan.lan`, `smtp.vulcan.lan`, `radicale.vulcan.lan`,
     `searxng.vulcan.lan`, `vane.vulcan.lan`, `trader.vulcan.lan`.
 
@@ -567,7 +567,6 @@ in
     ${bridgeAddr} = [
       "hass.vulcan.lan"
       "qdrant.vulcan.lan"
-      "litellm.vulcan.lan"
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.0.1:993 → 127.0.0.1:993)
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.0.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.0.1:5232 → 127.0.0.1:5232)

@@ -250,34 +250,13 @@
             toString checkScript;
         };
 
-        # `nix run .#check-litellm-models` — validate the LiteLLM model catalog
-        # against the live hera/clio model servers: (a) server models with no
-        # config entry (warn), (b) config entries the server doesn't offer (fail),
-        # and unreachable servers. On-demand ONLY — it hits the network, so it is
-        # deliberately never run at eval time (that would couple rebuilds to the
-        # servers' uptime). Pass --strict to fail on (a) too. Model ids aren't
-        # secrets; servers are queried with a dummy bearer token.
-        check-litellm-models = {
-          type = "app";
-          program =
-            let
-              runner = pkgs.writeShellApplication {
-                name = "check-litellm-models";
-                runtimeInputs = [
-                  pkgs.nix
-                  pkgs.python3
-                ];
-                # Pass the settings file explicitly: under `nix run` the script
-                # lands standalone in the store, so its repo-relative default
-                # would not resolve. A user-supplied --settings in "$@" still wins.
-                text = ''
-                  exec python3 ${./scripts/check-litellm-models.py} \
-                    --settings ${./modules/services/litellm-settings.nix} "$@"
-                '';
-              };
-            in
-            "${runner}/bin/check-litellm-models";
-        };
+        # check-litellm-models REMOVED 2026-08-01 together with the LiteLLM proxy.
+        # It validated a model *catalog* against the backends it routed to, and
+        # there is no catalog any more: the gateway on 127.0.0.1:4000 is a plain
+        # reverse proxy to llama-swap, which serves its own models under their
+        # real ids. The equivalent check is now a one-liner:
+        #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
+        # compared against models.nix.
       };
 
       nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {

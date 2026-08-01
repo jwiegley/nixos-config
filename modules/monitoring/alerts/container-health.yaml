@@ -48,7 +48,7 @@ groups:
           description: "Container {{ $labels.name }} has been in 'starting' health state for 5 minutes"
 
       # Per-user podman store disk usage (container_store_size_bytes, daily textfile).
-      # Reference incident: litellm accumulated 48G of dangling <none> images from
+      # Reference incident: one rootless service accumulated 48G of dangling <none> images from
       # moving-tag pulls; the weekly per-user `podman image prune -af` keeps stores
       # small (largest is ~7G as of 2026-06-10). A store >60G means prune is not
       # keeping up (or a runaway pull) and warrants a manual `podman image prune -af`.

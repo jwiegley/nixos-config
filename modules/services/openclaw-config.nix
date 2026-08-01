@@ -74,7 +74,7 @@ let
             baseUrl = "http://127.0.0.1:4000/v1";
             apiKey = "dummy-key";
           };
-          model = "vulcan/hera/bge-m3";
+          model = "vulcan/bge-m3-mlx-fp16";
         };
         contextPruning = {
           mode = "cache-ttl";

@@ -173,7 +173,7 @@ def test_call_litellm_returns_parsed_action(monkeypatch):
             def read(self): return json.dumps({"choices":[{"message":{"content":'{"action": "doctor_fix", "reason": "stale"}'}}]}).encode()
         return R()
     monkeypatch.setattr(daemon, "_http_post_json", fake_post)
-    monkeypatch.setenv("LITELLM_KEY", "x")
+    monkeypatch.setenv("LLM_GATEWAY_KEY", "x")
     out = daemon.call_litellm([{"role":"system","content":"x"}], model="hera/Qwen3.6-27B")
     assert out == {"action": "doctor_fix", "reason": "stale"}
 

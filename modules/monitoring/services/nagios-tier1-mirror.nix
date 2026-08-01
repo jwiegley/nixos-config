@@ -204,14 +204,6 @@ let
       template = "standard";
     }
 
-    # 20m cadence -> 3600 / 7200
-    {
-      file = "litellm.prom";
-      warn = 3600;
-      crit = 7200;
-      template = "standard";
-    }
-
     # 1h cadence -> 10800 / 21600
     {
       file = "certificates.prom";

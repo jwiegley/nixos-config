@@ -44,7 +44,7 @@ groups:
   #                               name-escaping makes the selector fragile and
   #                               a stalled CI runner is not user-facing. See
   #                               residual.
-  #   jellyfin / kiwix-serve / pgadmin / atd / aria2 / copyparty / litellm-
+  #   jellyfin / kiwix-serve / pgadmin / atd / aria2 / copyparty / gateway-
   #   anthropic-fixup / immich-server / jupyterlab / stock-trader / zimit /
   #   technitium-dns-server -- all covered by a blackbox probe (WebServiceDown,
   #                               for=1m) or a scrape target (TargetDown,
@@ -101,7 +101,7 @@ groups:
         #                            recognition silently stop. immich-server
         #                            keeps serving photos, so ImmichAPIDown and
         #                            ImmichMicroservicesDown both stay green.
-        #   qdrant-inference-bridge  127.0.0.1:6335, the Qdrant -> LiteLLM
+        #   qdrant-inference-bridge  127.0.0.1:6335, the Qdrant -> LLM gateway
         #                            embedding translator. Qdrant itself stays
         #                            up (QdrantDown green) but every collection
         #                            using native inference can no longer embed

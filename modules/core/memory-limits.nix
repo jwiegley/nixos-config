@@ -190,7 +190,7 @@
     # reads. Baseline to beat, from pg_stat_database:
     #
     #   overall buffer cache hit ratio  89.4%   (blks_read ~609M = ~4.6 TB re-read)
-    #   litellm 62.9% / mailarchiver 84.0%      <- worst two; mailarchiver is the largest
+    #   mailarchiver 84.0%                      <- worst; mailarchiver is the largest
     #
     # ~89% is poor for PostgreSQL, where >99% is the normal target. Confirmed relevant:
     # the data directory is on /dev/nvme0n1p5, ext4, so it is served by the kernel PAGE

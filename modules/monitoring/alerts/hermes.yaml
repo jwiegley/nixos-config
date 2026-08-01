@@ -31,7 +31,7 @@ groups:
       # The `hermes_vm_uptime_seconds > 600` gate excludes the ~8-min
       # post-restart warmup. hermes_api_server_ok probes /v1/capabilities
       # authenticated with a TIGHT 5s budget; that endpoint enumerates models
-      # against the LiteLLM/MLX backend, so it stays non-200 for ~8 min after
+      # against the gateway/MLX backend, so it stays non-200 for ~8 min after
       # every microvm restart while the backend warms up (the api_server itself
       # BINDS in ~8s — binding was never the problem, and the 2026-05-31 4-vCPU
       # bump didn't change the warmup; reverted). Sampled every 5 min that
@@ -225,11 +225,11 @@ groups:
             error" or no response. Check `/var/lib/hermes/.hermes/logs/
             errors.log` for the upstream HTTP status and the failing
             base_url; the most common causes are model.base_url
-            misrouting (config.yaml regression) and LiteLLM master_key
+            misrouting (config regression) and gateway auth
             mismatch.
 
       # Direct liveness of the hera-side llama-swap/MLX model router — the
-      # terminal upstream every `hera/*` LiteLLM model routes to, and thus the
+      # terminal upstream every gateway model request lands on, and thus the
       # terminal dependency of all Hermes chat. blackbox_hera_mlx GETs
       # hera.lan:8080/v1/models (HTTP 200 unauth, no secrets). When this is 0
       # the model backend itself is down — this is the CAUSE rule that isolates
@@ -279,7 +279,7 @@ groups:
             The llama-swap model router on hera
             (http://hera.lan:8080/v1/models) has not answered HTTP 200 for
             8 minutes WHILE hera itself is reachable (up{job="darwin-hera"}==1).
-            This is the terminal upstream of every `hera/*` LiteLLM model, so
+            This is the terminal upstream of every gateway model request, so
             Hermes Discord chat (and OpenClaw's hera-routed models) will fail
             until it recovers — expect HermesE2eChatFailing / HermesAskFailing /
             HermesFallbackChainTriggered to be firing alongside this as
@@ -403,19 +403,18 @@ groups:
             journal output to decide on a manual action.
 
       # Track how often the AI tier was unreachable. >3/hour suggests
-      # LiteLLM is down and the daemon is degraded to deterministic-only.
-      - alert: HermesSelfHealLitellmUnreachable
-        expr: increase(hermes_self_heal_litellm_unreachable_total[1h]) > 3
+      # the LLM gateway is down and the daemon is degraded to deterministic-only.
+      - alert: HermesSelfHealGatewayUnreachable
+        expr: increase(hermes_self_heal_gateway_unreachable_total[1h]) > 3
         for: 5m
         labels:
           severity: warning
           category: monitoring
           service: hermes-self-heal
         annotations:
-          summary: ">3 LiteLLM unreachable events in last hour for hermes self-heal"
+          summary: ">3 LLM gateway unreachable events in last hour for hermes self-heal"
           description: |
             The daemon attempted to escalate to the AI tier multiple
-            times and could not reach LiteLLM. Verify
-            `systemctl status litellm` and that the
-            litellm-vulcan-lan-hermes-self-heal SOPS secret matches
-            LiteLLM's master key.
+            times and could not reach the LLM gateway. Verify
+            `systemctl status nginx` and that the gateway answers
+            `curl -s http://127.0.0.1:4000/v1/models`.

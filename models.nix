@@ -2,13 +2,20 @@
 #
 # Single source of truth for LLM and embedding model selection.
 # All services that call an LLM or embedding model import this file.
-# Exception: LiteLLM's own model catalog (backend endpoints, API keys, routing).
 #
-# To change the primary model, edit here and run: nixos-rebuild switch
+# These are the REAL model ids as served by the llama-swap backend behind the
+# host gateway on 127.0.0.1:4000 (see modules/services/hera-llm-proxy.nix).
+# There is no aliasing layer any more -- the gateway is a plain reverse proxy
+# and does not rewrite request bodies, so whatever is written here is what the
+# backend receives. Check a candidate name against the live list first:
+#
+#   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
+#
+# To change the primary model, edit here and run: /etc/nixos/build
 {
   llm = {
     primary = {
-      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
@@ -16,7 +23,7 @@
     # Low-latency model for latency-sensitive callers (e.g. rspamd spam
     # classification, where Postfix is blocked on the milter response).
     fast = {
-      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 120;
       initialDelay = 5;
       maxDelay = 60;
@@ -30,7 +37,7 @@
     # the .models.providers.vulcan.models[] entry. Defaults match what
     # openclaw expects today; tune per-model as needed.
     agent = {
-      name = "hera/omlx/Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ4e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
@@ -79,7 +86,7 @@
 
   embedding = {
     primary = {
-      name = "hera/bge-m3";
+      name = "bge-m3-mlx-fp16";
     };
     fallbacks = [ ];
   };

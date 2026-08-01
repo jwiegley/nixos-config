@@ -95,13 +95,11 @@ let
       systemd
     ];
     text = ''
-      # Read LiteLLM API key from SOPS secret
-      if [ -f "/run/secrets/litellm-vulcan-lan-logwatch" ]; then
-        LITELLM_API_KEY=$(cat "/run/secrets/litellm-vulcan-lan-logwatch")
-        export LITELLM_API_KEY
-      else
-        echo "Warning: LiteLLM API key not found. AI analysis may fail." >&2
-      fi
+      # No API key is exported here on purpose. The host LLM gateway on
+      # 127.0.0.1:4000 injects the upstream Authorization header itself (see
+      # modules/services/hera-llm-proxy.nix), so a client-side key would be
+      # overwritten anyway. log-summarizer.py only sets the header when
+      # LLM_API_KEY is non-empty, so leaving it unset is the correct config.
 
       # Pass all arguments to the log summarizer
       exec ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py "$@"
@@ -118,16 +116,9 @@ let
   };
 in
 {
-  # SOPS secret for LiteLLM API key (accessible by logwatch service which runs as root)
-  sops.secrets."litellm-vulcan-lan-logwatch" = {
-    key = "litellm-vulcan-lan"; # Same key in secrets.yaml
-    owner = "root";
-    mode = "0400";
-  };
-
   # Bound the daily logwatch run. The upstream module (nixos-logwatch flake input) ships
   # TimeoutStartUSec=infinity, and logwatch's ai-log-summary custom service calls an LLM
-  # through LiteLLM with its OWN 2-hour budget (scripts/log-summarizer.py:308,
+  # through the host gateway with its OWN 2-hour budget (scripts/log-summarizer.py:308,
   # `self.timeout = 7200  # 2 hours (local LLM can be slow)`). Unbounded unit + 2h request
   # means a dead model backend hangs this job for two hours, daily, with nothing stopping it.
   #

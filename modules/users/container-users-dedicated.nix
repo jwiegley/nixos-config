@@ -12,7 +12,7 @@
   # Migration from previous shared-user model (container-db, container-web, etc.)
   # to per-service dedicated users for improved security isolation.
   #
-  # User naming: Matches service name (e.g., litellm service → litellm user)
+  # User naming: Matches service name (e.g., wallabag service → wallabag user)
   # Home directory: /var/lib/containers/<service-name>
 
   users = {
@@ -21,18 +21,6 @@
 
     users = {
       # Database-dependent services (formerly container-db)
-      litellm = {
-        isSystemUser = true;
-        group = "litellm";
-        home = "/var/lib/containers/litellm";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for LiteLLM proxy service";
-      };
-
       wallabag = {
         isSystemUser = true;
         group = "wallabag";
@@ -210,7 +198,6 @@
 
     # Create corresponding groups for each container user
     groups = {
-      litellm = { };
       wallabag = { };
       teable = { };
       memory-vault = { };
@@ -232,7 +219,6 @@
   # Add container users to Nix allowed-users for store access and container image operations
   nix.settings.allowed-users = [
     "changedetection"
-    "litellm"
     "mailarchiver"
     "memory-vault"
     "open-webui"
@@ -295,7 +281,6 @@
   # Do not reintroduce `L+` rules here; add a sops `path=` override instead.
   systemd.tmpfiles.rules = [
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
-    "d /run/secrets-litellm 0750 litellm litellm - -"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
     "d /run/secrets-teable 0750 teable teable - -"

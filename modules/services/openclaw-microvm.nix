@@ -105,9 +105,9 @@ let
     if [ -f "${stateDir}/.openclaw/secrets/org-db-password" ]; then
       export PGPASSWORD="$(cat ${stateDir}/.openclaw/secrets/org-db-password)"
     fi
-    LITELLM_KEY=""
+    GATEWAY_KEY=""
     if [ -f "${stateDir}/.openclaw/openclaw.json" ]; then
-      LITELLM_KEY="$(${pkgs.jq}/bin/jq -r '.models.providers.vulcan.apiKey // empty' \
+      GATEWAY_KEY="$(${pkgs.jq}/bin/jq -r '.models.providers.vulcan.apiKey // empty' \
         "${stateDir}/.openclaw/openclaw.json" 2>/dev/null || true)"
     fi
     exec ${pkgs.org-jw}/bin/org \
@@ -115,7 +115,7 @@ let
       db search \
       --base-url "http://127.0.0.1:4000" \
       -m "${models.embedding.primary.name}" \
-      --api-key "''${LITELLM_KEY:-unused}" \
+      --api-key "''${GATEWAY_KEY:-unused}" \
       "$@"
   '';
 
@@ -141,7 +141,7 @@ let
     443 # nginx (HTTPS) — needed for HA and other proxied services
     993 # Dovecot IMAPS — VM accesses host Dovecot via DNAT
     2525 # Postfix plain SMTP — VM sends mail (mynetworks, no TLS)
-    4000 # LiteLLM
+    4000 # LLM gateway
     5232 # Radicale CardDAV — VM accesses host Radicale via DNAT
     5432 # PostgreSQL — Sherlock queries the org database
     6333 # Qdrant HTTP REST API
@@ -181,7 +181,7 @@ in
   #         ├── DNAT 10.99.0.1:P -> 127.0.0.1:P  ├── nftables DNAT
   #         │   (route_localnet=1)                │   127.0.0.1:P -> 10.99.0.1:P
   #         │                                     │
-  #   Qdrant, LiteLLM, llama-swap,          virtiofs mounts:
+  #   Qdrant, LLM gateway, llama-swap,      virtiofs mounts:
   #   Dovecot on 127.0.0.1                   /nix/.ro-store (ro-store)
   #         │                                 /var/lib/openclaw (state)
   #   nginx proxy ──> 10.99.0.2:18789        /run/openclaw-secrets (secrets)
@@ -298,7 +298,11 @@ in
   # and qdrant/api-key already exist elsewhere in this file and in
   # modules/services/qdrant.nix respectively — do NOT duplicate.
 
-  sops.secrets."openclaw/litellm-virtual-key" = {
+  # The secrets.yaml entry is still literally named
+  # `openclaw/litellm-virtual-key`; renaming it needs an interactive `sops`
+  # edit, so the pointer keeps the old name while the attr does not.
+  sops.secrets."openclaw/llm-gateway-key" = {
+    key = "openclaw/litellm-virtual-key";
     owner = "openclaw";
     group = "openclaw";
     mode = "0400";
@@ -362,7 +366,7 @@ in
     }
     {
       assertion = builtins.elem 4000 dnatPorts;
-      message = "OpenClaw DNAT ports must include 4000 (LiteLLM)";
+      message = "OpenClaw DNAT ports must include 4000 (LLM gateway)";
     }
     {
       assertion = builtins.elem 5432 dnatPorts;
@@ -450,9 +454,9 @@ in
   # ============================================================================
   # Section 5: Host-side DNAT for loopback service access
   # ============================================================================
-  # The VM needs to reach host services bound to 127.0.0.1 (Qdrant, LiteLLM,
+  # The VM needs to reach host services bound to 127.0.0.1 (Qdrant, the LLM gateway,
   # PostgreSQL, Dovecot — the exact set is `dnatPorts` above; llama-swap on
-  # :8080 is NOT exposed, the VM reaches those models through LiteLLM).
+  # :8080 is NOT exposed, the VM reaches those models through the gateway).
   # We use a two-stage DNAT approach:
   #
   #   1. Guest nftables: OUTPUT DNAT 127.0.0.1:PORT -> 10.99.0.1:PORT
@@ -613,7 +617,7 @@ in
       # ownership contract before mv. Do NOT add User=openclaw here without
       # also widening the qdrant/api-key group.
       OVERLAY=$(${pkgs.jq}/bin/jq -n \
-        --rawfile vk "${config.sops.secrets."openclaw/litellm-virtual-key".path}" \
+        --rawfile vk "${config.sops.secrets."openclaw/llm-gateway-key".path}" \
         --rawfile dt "${config.sops.secrets."openclaw/discord-token".path}" \
         --rawfile gt "${config.sops.secrets."openclaw/gateway-auth-token".path}" \
         --rawfile pk "${config.sops.secrets."openclaw/perplexity-api-key".path}" \

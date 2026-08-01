@@ -363,14 +363,14 @@ def run_action(name: str, timeout_s: int = 240) -> dict:
     return parsed
 
 
-LITELLM_URL = "http://127.0.0.1:4000/v1/chat/completions"
-LITELLM_KEY_ENV = "LITELLM_KEY"
-LITELLM_MODEL = os.environ.get(
-    "LITELLM_MODEL", "hera/omlx/Qwen3.6-27B-oQ4e-mtp"
+LLM_GATEWAY_URL = "http://127.0.0.1:4000/v1/chat/completions"
+LLM_GATEWAY_KEY_ENV = "LLM_GATEWAY_KEY"
+LLM_MODEL = os.environ.get(
+    "LLM_MODEL", "Qwen3.6-27B-oQ4e-mtp"
 )
 
 
-class LitellmUnreachable(RuntimeError):
+class GatewayUnreachable(RuntimeError):
     pass
 
 
@@ -380,25 +380,25 @@ def _http_post_json(url, headers, data, timeout):
 
 
 def call_litellm(messages, model=None, timeout_s=30):
-    model = model or LITELLM_MODEL
-    key = os.environ.get(LITELLM_KEY_ENV)
+    model = model or LLM_MODEL
+    key = os.environ.get(LLM_GATEWAY_KEY_ENV)
     if not key:
-        raise LitellmUnreachable("LITELLM_KEY not set")
+        raise GatewayUnreachable("LLM_GATEWAY_KEY not set")
     headers = {"Content-Type": "application/json",
                "Authorization": f"Bearer {key}"}
     body = json.dumps({"model": model, "messages": messages,
                        "temperature": 0.0,
                        "response_format": {"type": "json_object"}})
     try:
-        resp = _http_post_json(LITELLM_URL, headers, body, timeout=timeout_s)
+        resp = _http_post_json(LLM_GATEWAY_URL, headers, body, timeout=timeout_s)
     except Exception as e:
-        raise LitellmUnreachable(str(e))
+        raise GatewayUnreachable(str(e))
     payload = json.loads(resp.read())
     content = payload["choices"][0]["message"]["content"]
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        raise LitellmUnreachable(f"non-json AI response: {content[:200]}")
+        raise GatewayUnreachable(f"non-json AI response: {content[:200]}")
 
 
 def _read_log_tail(which: str, n: int) -> str:
@@ -541,11 +541,11 @@ def handle_alertmanager_payload(payload):
         elif n in (2, 3):
             try:
                 ai_resp = call_litellm(render_prompt(inc, metrics, _err_tail(), _out_tail()))
-            except LitellmUnreachable as e:
+            except GatewayUnreachable as e:
                 inc["attempts"].append({"action": "none", "by": "ai", "ok": False,
-                                        "notes": "litellm_unreachable", "stderr": str(e)})
+                                        "notes": "gateway_unreachable", "stderr": str(e)})
                 emit_synthetic_alert(
-                    "HermesSelfHealLitellmUnreachable",
+                    "HermesSelfHealGatewayUnreachable",
                     {"alert": alert_meta["alert_name"], "err": str(e)[:200]},
                     severity="warning", duration_s=3600,
                 )
@@ -605,7 +605,7 @@ HEARTBEAT_PATH = pathlib.Path(TEXTFILE_DIR) / "hermes_self_heal.prom"
 
 
 def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
-                    litellm_unreachable=0, unknown_alerts=0):
+                    gateway_unreachable=0, unknown_alerts=0):
     action_counts = action_counts or {}
     tmp = pathlib.Path(str(out_path) + ".tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -623,9 +623,9 @@ def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
         for a in ACTION_ALLOWLIST:
             f.write(f'hermes_self_heal_attempts_total{{action="{a}"}} {action_counts.get(a, 0)}\n')
         f.write(
-            "# HELP hermes_self_heal_litellm_unreachable_total Cumulative LiteLLM unreachable events\n"
-            "# TYPE hermes_self_heal_litellm_unreachable_total counter\n"
-            f"hermes_self_heal_litellm_unreachable_total {litellm_unreachable}\n"
+            "# HELP hermes_self_heal_gateway_unreachable_total Cumulative LLM gateway unreachable events\n"
+            "# TYPE hermes_self_heal_gateway_unreachable_total counter\n"
+            f"hermes_self_heal_gateway_unreachable_total {gateway_unreachable}\n"
             "# HELP hermes_self_heal_unknown_alerts_total Cumulative unknown-alert ignore events\n"
             "# TYPE hermes_self_heal_unknown_alerts_total counter\n"
             f"hermes_self_heal_unknown_alerts_total {unknown_alerts}\n"
@@ -645,15 +645,15 @@ def heartbeat_tick():
         save_state(STATE_PATH, state)
     active = sum(1 for v in state["active"].values() if v["status"] == "in_progress")
     counts = {a: 0 for a in ACTION_ALLOWLIST}
-    litellm_unreachable = 0
+    gateway_unreachable = 0
     for inc in list(state["active"].values()) + state["history"]:
         for att in inc.get("attempts", []):
             if att.get("action") in counts:
                 counts[att["action"]] += 1
-            if att.get("notes") == "litellm_unreachable":
-                litellm_unreachable += 1
+            if att.get("notes") == "gateway_unreachable":
+                gateway_unreachable += 1
     write_heartbeat(active_count=active, action_counts=counts,
-                    litellm_unreachable=litellm_unreachable,
+                    gateway_unreachable=gateway_unreachable,
                     unknown_alerts=_UNKNOWN_ALERTS_TOTAL)
 
 

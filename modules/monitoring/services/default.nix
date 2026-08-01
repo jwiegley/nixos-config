@@ -53,7 +53,6 @@
     # Application-specific exporters
     ./home-assistant-backup-exporter.nix
     ./immich-exporter.nix
-    ./litellm-exporter.nix
     ./node-red-exporter.nix
     ./jupyterlab-alerts.nix
     ./vdirsyncer-exporter.nix
@@ -74,11 +73,6 @@
     ./zfs-pool-health-exporter.nix
     ./health-check-exporters.nix
     ./git-workspace-alerts.nix
-    # ./litellm-availability-alerts.nix removed 2026-07-29 — its three rules were
-    # duplicates of alerts/litellm.yaml at drifted thresholds/dwells; consolidated
-    # there (successors named in that file's header). It existed only to
-    # interpolate models.nix's primary model name into rule text; that is now a
-    # `model` label stamped by litellm-exporter.nix.
     ./aide-metrics.nix
     ./openclaw-canary.nix
     ./openclaw-mcporter-check.nix

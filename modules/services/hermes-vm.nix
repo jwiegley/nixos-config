@@ -88,7 +88,7 @@ let
   # talking to the host vane container via nginx HTTPS. TLS is verified
   # against the Vulcan Step-CA already trusted in the VM via
   # security.pki.certificates. The script never logs the /api/config body
-  # because it carries the LiteLLM apiKey.
+  # because it carries the gateway apiKey.
   vaneMcpScript = ../../scripts/vane-mcp.py;
   vaneMcpServer = pkgs.writeShellScript "vane-mcp" ''
     export VANE_BASE_URL="https://vane.vulcan.lan"
@@ -136,19 +136,19 @@ let
 
   # org-db MCP server: read-only org-mode access. org_sql connects to
   # PostgreSQL (org database, read-only role `openclaw`) over the 5432 DNAT
-  # via psycopg2/libpq; org_search shells `org db search` against LiteLLM
+  # via psycopg2/libpq; org_search shells `org db search` against the LLM gateway
   # embeddings. The PG password is exported from the staged secret; the
   # PG* defaults match the host's org-db-search wrapper. org_search also
-  # needs OPENROUTER_API_KEY (the LiteLLM virtual key) and ORG_CONFIG. We do
+  # needs OPENROUTER_API_KEY (the gateway key) and ORG_CONFIG. We do
   # NOT rely on inheriting OPENROUTER_API_KEY from the hermes-agent parent:
   # hermes-agent has no systemd EnvironmentFile= — it loads ${stateDir}/env
   # as an internal dotenv at Python startup, so the key is not guaranteed to
   # be in os.environ of spawned stdio MCP children (org_search would then
   # fall back to `--api-key unused` and every embedding call would 401).
-  # Instead we source the SAME LiteLLM virtual key Hermes already holds out
+  # Instead we source the SAME gateway key Hermes already holds out
   # of ${stateDir}/env (no new SOPS secret, no widened secret surface) and
   # export it ourselves — mirroring how openclaw-microvm.nix's orgDbSearch
-  # reads LITELLM_KEY from its own config rather than trusting env
+  # reads its key from its own config rather than trusting env
   # inheritance. ORG_CONFIG points at the khard-style config written by
   # hermes-tools-setup.
   orgDbMcpScript = ../../scripts/org-db-mcp.py;
@@ -165,9 +165,9 @@ let
     if [ -r "$PW_FILE" ]; then
       export PGPASSWORD="$(cat "$PW_FILE")"
     fi
-    # Source OPENROUTER_API_KEY (the LiteLLM virtual key) from the same
+    # Source OPENROUTER_API_KEY (the gateway key) from the same
     # dotenv hermes-agent itself reads, so org_search's `org db search`
-    # subprocess authenticates to LiteLLM regardless of whether the key is
+    # subprocess authenticates to the gateway regardless of whether the key is
     # present in this wrapper's inherited env. Match the first assignment
     # only; strip optional surrounding quotes with shell parameter
     # expansion (no embedded quote chars in this Nix string). Never echo
@@ -360,7 +360,7 @@ in
   # HermesApiServerDown alert, on the theory that serial init on one core
   # pushed the api_server cold-start to ~10 min. That premise was wrong: the
   # api_server BINDS in ~8s regardless of vCPU, and deploying 4 vCPU did not
-  # change the ~8-min /v1/capabilities warmup (it is gated on the LiteLLM/MLX
+  # change the ~8-min /v1/capabilities warmup (it is gated on the gateway/MLX
   # model backend, not local CPU). The real driver was a 5-min health-check
   # sample feeding a 5-min `for:` window over that warmup; fixed by widening
   # HermesApiServerDown to `for: 15m` (see monitoring/alerts/hermes.yaml). So
@@ -582,7 +582,7 @@ in
       #      os.environ["OPENROUTER_BASE_URL"] directly, but we have
       #      display.streaming = false below (sticky 30s timeout bug), so
       #      non-streaming traffic now flows through the provider profile
-      #      and hits the hardcoded openrouter.ai URL with a LiteLLM virtual
+      #      and hits the hardcoded openrouter.ai URL with a gateway
       #      key — every call 401s with "Missing Authentication header".
       #   3. Setting model.provider = "custom" + model.base_url + model.api_key
       #      triggers the credential_pool custom-provider branch
@@ -641,14 +641,14 @@ in
       # have the right group-write bits.
 
       # Route auxiliary tasks (title generation, triage, etc.) through
-      # our LiteLLM proxy.  Hermes' internal `OPENROUTER_BASE_URL`
+      # our LLM gateway.  Hermes' internal `OPENROUTER_BASE_URL`
       # constant is hardcoded to `https://openrouter.ai/api/v1`
       # (hermes_constants.py:342) and the credential pool builds its
       # default base_url from that constant, NOT from the env var.
       # That means the main streaming chat path (which reads
       # `os.environ["OPENROUTER_BASE_URL"]` directly in run_agent.py)
       # works, but auxiliary tasks fail with HTTP 401 against the real
-      # OpenRouter cloud using our LiteLLM virtual key.
+      # OpenRouter cloud using our gateway key.
       #
       # Setting both base_url+api_key here triggers the `"custom"`
       # provider branch in auxiliary_client._resolve_auxiliary_for_call
@@ -757,11 +757,11 @@ in
 
       # Read-only org-mode access: org_sql (sanitized single SELECT via
       # psycopg2 against the org database as the read-only `openclaw` role)
-      # and org_search (semantic search via `org db search` over LiteLLM
+      # and org_search (semantic search via `org db search` over the gateway
       # bge-m3 embeddings). The wrapper exports PG*/PGPASSWORD and ORG_CONFIG,
-      # and sources OPENROUTER_API_KEY (the LiteLLM virtual key) from
+      # and sources OPENROUTER_API_KEY (the gateway key) from
       # ${stateDir}/env so the semantic-search subprocess authenticates to
-      # LiteLLM without relying on parent-process env inheritance.
+      # the gateway without relying on parent-process env inheritance.
       org-db = {
         command = "${orgDbMcpServer}";
         args = [ ];

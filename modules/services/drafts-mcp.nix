@@ -175,7 +175,7 @@ in
 
       unitConfig = {
         # Bound boot crash-loops if hera is unreachable. Verified shape:
-        # litellm.nix:91-96 puts these under unitConfig (NOT serviceConfig).
+        # the rootless quadlet modules put these under unitConfig (NOT serviceConfig).
         StartLimitIntervalSec = "300";
         StartLimitBurst = "5";
       };

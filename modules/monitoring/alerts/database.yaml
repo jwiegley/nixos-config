@@ -223,7 +223,10 @@ groups:
 
       # Surprise database growth. Largest non-excluded DB is mailarchiver at
       # ~7.3 GiB; 20 GiB leaves ample headroom so this fires on UNEXPECTED growth
-      # rather than steady state. litellm is EXCLUDED: it is legitimately the
+      # rather than steady state. (An exclusion for the retired LLM-proxy
+      # database was dropped 2026-08-01: measured at 1656 MB against a 20 GiB
+      # threshold, it never needed one — the largest DB is mailarchiver at
+      # ~7.9 GiB.) It was previously claimed to be
       # largest DB and grows steadily ~3 GiB/week (request-log accumulation),
       # so a flat 20 GiB cap would chronically alarm on it — that is
       # steady-state, not a surprise. (Measured 2026-07-27: ~42 GiB, i.e. long
@@ -232,7 +235,7 @@ groups:
       # hass has its own
       # dedicated HassRecorderDBLarge rule above (5 GiB) and is also caught here.
       - alert: PostgreSQLDatabaseLarge
-        expr: pg_database_size_bytes{datname!~"litellm"} > 20 * 1024 * 1024 * 1024
+        expr: pg_database_size_bytes > 20 * 1024 * 1024 * 1024
         for: 6h
         labels:
           severity: warning
@@ -240,7 +243,7 @@ groups:
           service: postgresql
         annotations:
           summary: "PostgreSQL database unexpectedly large"
-          description: "Database {{ $labels.datname }} is {{ $value | humanize1024 }}B (warn at 20 GiB, sustained 6h; largest monitored DB is normally ~7 GiB). litellm is excluded as known-large. Investigate unexpected growth — a runaway table, missing purge/retention, or bloat."
+          description: "Database {{ $labels.datname }} is {{ $value | humanize1024 }}B (warn at 20 GiB, sustained 6h; largest monitored DB is normally ~8 GiB). Investigate unexpected growth — a runaway table, missing purge/retention, or bloat."
 
       # Exporter self-health. pg_exporter_last_scrape_error == 1 means the
       # postgres-exporter could not complete its scrape (baseline 0); the
@@ -281,7 +284,7 @@ groups:
       #     > 3 * avg_over_time(pg_stat_statements_top_mean_exec_time_ms[7d])
       #   and pg_stat_statements_top_mean_exec_time_ms > 200
       # once the 7d window exists. Known-heavy queryids (immich CLIP vector
-      # scans, mailarchiver bulk INSERTs, litellm SpendLogs aggregations) that
+      # scans, mailarchiver bulk INSERTs) that
       # legitimately average >1s should get a per-queryid `unless` exclusion
       # rather than raising the global floor (queryids are stable across
       # restarts of the same PG major). for:30m filters cold-cache outliers.

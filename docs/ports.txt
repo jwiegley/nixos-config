@@ -89,7 +89,8 @@
 5580 0.0.0.0 :: python-matter-server WebSocket API (consumed by Home Assistant)
 6253 127.0.0.1 conmon (podman container-monitor; internal, harmless)
 6800 127.0.0.1 ::1 aria2c JSON-RPC
-8080 10.99.1.2 Hermes Agent api_server platform (HTTPS, bridge-IP only)
+8080 10.99.1.2 Hermes Agent api_server platform (plain HTTP, bridge-IP only; auth via API_SERVER_KEY, 401 without it)
+443  * hermes.vulcan.lan -> Hermes api_server (nginx TLS termination; client Authorization passed through, NOT injected)
 8080 127.0.0.1 llama-swap (user johnw)
 8082 127.0.0.1 Glance metrics endpoint
 8084 127.0.0.1 Open WebUI - chat.vulcan.lan (AI chat interface, host network)

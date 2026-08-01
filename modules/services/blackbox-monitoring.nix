@@ -1041,6 +1041,66 @@ in
           # Probing /v1/models rather than /health is deliberate: /health returned 200
           # throughout the outage, because it reports the proxy's own liveness, not the
           # backend's. Probing it would have reproduced the same blind spot in a new place.
+          # Hermes API server, published to the LAN as https://hermes.vulcan.lan
+          # (vhost in modules/services/hermes-microvm.nix). That proxy is the only
+          # ingress to the agent from anywhere but vulcan itself, so it gets its own
+          # probe rather than relying on the generic vhost sweep.
+          #
+          # Module is https_2xx_or_auth so no API key lands in the Nix store:
+          # /v1/models answers 401 unauthenticated (Hermes enforces its own auth,
+          # which the proxy passes through rather than injecting), while a dead guest
+          # or broken bridge gives 502 before auth is evaluated. 401 is accepted, 502
+          # is not, so an unauthenticated probe separates "up and authenticating"
+          # from "down" exactly.
+          #
+          # Probing /v1/models rather than / is deliberate: Hermes answers / with 404,
+          # which https_2xx_or_auth also accepts, so a / probe would stay green even
+          # if routing were wrong.
+          #
+          # THE JOB NAME IS LOAD-BEARING. It must start with "blackbox_http" so alert
+          # routing lands correctly: WebServiceDown selects job=~"blackbox_http.*"
+          # (critical, for 1m) and HostUnreachable EXCLUDES that same pattern. A name
+          # outside it -- this job was briefly "blackbox_hermes_api" -- inverts both:
+          # WebServiceDown stops matching, and HostUnreachable starts claiming "Host
+          # ... is unreachable" about an HTTP endpoint on a perfectly reachable host.
+          # Third time this trap has been hit in this file (cf. the blackbox_hera_qwen
+          # note, and the 2026-08-01 widening of HostUnreachable's exclusion).
+          {
+            job_name = "blackbox_https_hermes";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_2xx_or_auth" ];
+            };
+            static_configs = [
+              {
+                targets = [ "https://hermes.vulcan.lan/v1/models" ];
+                labels = {
+                  service = "hermes-agent";
+                  probe = "hermes-api";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https_local";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s";
+          }
           {
             job_name = "blackbox_hera_qwen";
             metrics_path = "/probe";

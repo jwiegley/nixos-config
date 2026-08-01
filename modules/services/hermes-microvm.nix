@@ -3,9 +3,17 @@
 #
 # Sibling to modules/services/openclaw-microvm.nix; intentionally on
 # its own private /30 bridge so neither VM's networking can affect the
-# other. No INBOUND path from the LAN — Hermes is outbound-only. (There IS
-# outbound-direction DNAT: since 2026-05-12 a two-stage DNAT lets the guest
-# reach host loopback services; see the dnatPorts block below.)
+# other.
+#
+# INBOUND FROM THE LAN, since 2026-08-01: the api_server is published as
+# https://hermes.vulcan.lan via the nginx vhost defined below. Before that this
+# module could accurately say "no inbound path from the LAN"; it no longer can.
+# The guest itself is still only reachable over the /30 bridge — nginx on the
+# host is the sole ingress, and it forwards the client's own Authorization
+# header rather than supplying one, so Hermes still authenticates every caller.
+#
+# There is also outbound-direction DNAT: since 2026-05-12 a two-stage DNAT lets
+# the guest reach host loopback services; see the dnatPorts block below.
 {
   config,
   lib,
@@ -30,6 +38,10 @@ let
   # host's physical interface on this Asahi/aarch64 box. Update both
   # files together if it ever changes.
   externalInterface = "end0";
+
+  # Hermes api_server listen port inside the guest (hermes-vm.nix sets
+  # API_SERVER_PORT to match). Consumed by the LAN reverse proxy below.
+  apiServerPort = 8080;
 
   vmHostname = "hermes-vm";
   hermesUid = 932;
@@ -88,6 +100,47 @@ let
   hostDnatCleanupRules = lib.concatMapStringsSep "\n" (port: ''
     iptables -t nat -D PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port} 2>/dev/null || true
   '') dnatPorts;
+  # Shared proxy settings for every forwarded Hermes location. Defined once so
+  # /v1/ and /api/ cannot drift apart.
+  hermesProxyCommon = ''
+    # Audit provenance. api_server.py reads X-Forwarded-For and X-Real-IP by
+    # name into its request-audit context, logs them when a key is rejected,
+    # and PERSISTS them onto cron jobs created over HTTP. Behind a proxy its
+    # own request.remote is always the bridge, so if these are not set here the
+    # only provenance Hermes can record is whatever the caller chose to send.
+    # $remote_addr, NOT $proxy_add_x_forwarded_for: a client-supplied value
+    # must be overwritten, not appended to.
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Bound the work an unauthenticated caller can cause. nginx buffers the
+    # whole request body before proxying, so without a cap a stranger can make
+    # the host spool megabytes to disk before Hermes ever evaluates auth.
+    # 32m is ample for prompts and attachments.
+    client_max_body_size 32m;
+    client_body_buffer_size 1m;
+    limit_req zone=hermes_api burst=20 nodelay;
+    limit_conn hermes_api_conn 16;
+
+    # Agent replies stream token-by-token; buffering would hold the whole
+    # response until the turn completes.
+    proxy_buffering off;
+    proxy_cache off;
+
+    # A cold model load has been measured at 50-95s and a tool-using turn runs
+    # far longer. NOTE: an nginx RELOAD (the cert-renewal path performs one)
+    # still cuts in-flight turns at worker_shutdown_timeout, so this ceiling is
+    # not absolute.
+    proxy_connect_timeout 30s;
+    proxy_send_timeout 3600s;
+    proxy_read_timeout 3600s;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+  '';
+
 in
 {
   # ---- Host user/group ----
@@ -279,6 +332,82 @@ in
   # Auto-optimise on the host can produce stale file handles inside
   # the guest — disable. Matches openclaw-microvm.nix:736.
   nix.optimise.automatic = false;
+
+  # ---- LAN-facing reverse proxy for the Hermes API server ----
+  # hermes-br0 is a /30 host-only bridge, so the guest's api_server is
+  # reachable from vulcan and nothing else. This vhost is the only way another
+  # machine on the LAN can talk to Hermes.
+  #
+  # Upstream is PLAIN HTTP. The api_server does not do TLS (verified 2026-08-01:
+  # a TLS client gets `wrong version number`, i.e. a plaintext server). That was
+  # fine while the only reachable client was on the host bridge; it is why this
+  # vhost terminates TLS on the LAN side. docs/ports.txt used to claim the
+  # upstream was HTTPS and has been corrected.
+  #
+  # AUTHENTICATION IS DELIBERATELY PASSED THROUGH, NOT INJECTED.
+  # The gateway at :4000 (hera-llm-proxy.nix) injects its upstream key because
+  # it is loopback-only. The opposite choice is correct here: this listener is
+  # LAN-facing, and Hermes can send mail, read the calendar, query PostgreSQL
+  # and drive Home Assistant. Injecting a key would make all of that reachable
+  # by anything on the network with no credential. Clients present
+  # API_SERVER_KEY themselves and Hermes enforces its own 401.
+  #
+  # Consequently: do NOT add a `proxy_set_header Authorization` here. If a
+  # client gets 401, the fix is to give that client the key, never to make the
+  # proxy supply one.
+  # Rate/connection limiting for the LAN-facing Hermes ingress. Declared at
+  # http scope because limit_req_zone/limit_conn_zone cannot live in a server
+  # block. Sized for a handful of human clients, not a fleet.
+  services.nginx.appendHttpConfig = ''
+    limit_req_zone $binary_remote_addr zone=hermes_api:10m rate=10r/s;
+    limit_conn_zone $binary_remote_addr zone=hermes_api_conn:10m;
+  '';
+
+  services.nginx.virtualHosts."hermes.vulcan.lan" = {
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/hermes.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/hermes.vulcan.lan.key";
+
+    # WARNING: forceSSL renders a port-80 server that 301s to https. nginx has
+    # already received the request line and headers by then, so a client
+    # misconfigured with an http:// base URL puts its bearer token on the wire
+    # in cleartext, on every request, silently. Clients MUST use https://.
+    # HSTS (supplied globally by recommendedTlsSettings in web.nix, with
+    # includeSubDomains) only helps browsers; API clients are on their own, so
+    # this is a documentation control, not a technical one.
+
+    # ---- The proxied surface is an ALLOWLIST ----
+    # Hermes does NOT authenticate everything. /health, /v1/health and
+    # /health/detailed are served with no credential at all (upstream
+    # api_server.py registers them without its _check_auth call; verified live
+    # 2026-08-01 -- /health/detailed returns gateway state, the connected
+    # platform inventory, active agent count, last exit reason and the pid).
+    # Proxying the whole URI space would publish all of that to every device on
+    # the LAN. So only the auth-gated prefixes are forwarded and everything else
+    # 404s. Host-side monitoring is unaffected: it reaches the guest directly
+    # over the /30 bridge, not through this vhost.
+    locations = {
+      # Exact match beats the /v1/ prefix, so this shadows the one
+      # unauthenticated route living under an otherwise-gated prefix.
+      "= /v1/health".extraConfig = "return 404;";
+
+      "/v1/" = {
+        proxyPass = "http://${vmAddr}:${toString apiServerPort}";
+        recommendedProxySettings = false;
+        extraConfig = hermesProxyCommon;
+      };
+
+      "/api/" = {
+        proxyPass = "http://${vmAddr}:${toString apiServerPort}";
+        recommendedProxySettings = false;
+        extraConfig = hermesProxyCommon;
+      };
+
+      # Default deny — this is what keeps the unauthenticated health routes off
+      # the LAN.
+      "/".extraConfig = "return 404;";
+    };
+  };
 
   # ---- SOPS secret staged for the VM's environmentFile ----
   # Note: NO `path` option — sops-nix's `path` writes a symlink at the

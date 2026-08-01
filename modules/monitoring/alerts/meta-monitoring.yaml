@@ -392,9 +392,22 @@ groups:
       # prometheus_rule_audit added 2026-07-31 with the dead-rule detector that replaced the
       # Nagios mirror. A detector with no freshness guard is the exact failure class it
       # exists to catch, so it guards itself here.
+      # hermes_health added 2026-07-31. It is not merely another collector: it produces
+      # hermes_vm_uptime_seconds, which GATES the critical HermesApiServerDown rule
+      # (`... and ignoring(__name__) hermes_vm_uptime_seconds > 600`, the warmup suppression).
+      #
+      # So a dead collector here does not just lose a metric, it silently DISABLES a critical
+      # alert: the value freezes at whatever it last read, and if that was a post-restart
+      # sample -- 6.2 seconds, which is exactly what was observed during the 23:14 incident --
+      # the gate never opens again and HermesApiServerDown can never fire.
+      #
+      # Threshold is the 3h Hourly tier rather than the 30m Fast tier: hermes-health-check
+      # runs about every 22 min (23:07 -> 23:29 observed), so 30m would fire on a single
+      # missed run. 3h is deliberately loose -- the goal is detecting a DEAD collector, not a
+      # skipped run, and a collector silent for three hours is unambiguously dead.
       - alert: TextfileCollectorStaleHourly
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(secrets-perms|prometheus_rule_audit)\\.prom"} > 10800
+          time() - node_textfile_mtime_seconds{file=~".*/(secrets-perms|prometheus_rule_audit|hermes_health)\\.prom"} > 10800
         for: 30m
         labels:
           severity: warning

@@ -33,11 +33,37 @@ groups:
       # backup windows, and an early sign the enclosure bridge is struggling before
       # it aborts outright. Baseline-checked: current avg ~0.56, 7-day max ~0.73,
       # and ZERO 5-minute samples exceeded 0.9 in the last 7 days (nightly backups
-      # and the monthly scrub — scrub is throttled to 1 active vdev — do NOT reach
-      # it), so 0.9/20m will not chronically fire. Warning, not critical: this is a
-      # performance/early-degradation signal, not data loss.
+      # do NOT reach it), so 0.9/20m will not chronically fire. Warning, not critical: this
+      # is a performance/early-degradation signal, not data loss.
+      #
+      # CORRECTION 2026-08-01: this comment previously also claimed the monthly scrub stays
+      # under the threshold because it is "throttled to 1 active vdev". That is false. The
+      # scrub is handled by the gate on the expression below instead.
+      # SCRUB GATE ADDED 2026-08-01, because the assumption in the comment above is
+      # MEASURABLY FALSE. It asserts the monthly scrub is "throttled to 1 active vdev" and so
+      # does not reach 0.9. During the scrub that began 00:59:06 on 2026-08-01 this expression
+      # measured 0.953 and the alert fired -- 77 samples, and the only episode in 30 days.
+      # A scheduled scrub reading every block is expected to saturate the disks; paging for it
+      # monthly trains the reader to ignore the one alert that also means "the UAS bridge is
+      # struggling".
+      #
+      # SAFETY OF THE GATE, checked rather than assumed. A scrub is PEAK load and this
+      # enclosure's documented failure is hanging under load, so suppressing IO alerts during a
+      # scrub could hide exactly the failure this rule half-exists to catch. It does not,
+      # because the dangerous signatures have independent rules that this gate does not touch:
+      #   HostProcessesBlocked  (system.yaml) -- D-state pile-up, the direct hang signature
+      #   ZFSPoolDegraded / ZFSPoolSuspended / ZFSPoolDeviceErrors / ZFSPoolDataErrors
+      #   ZFSScrubErrors        -- a scrub that finds errors
+      # Verified live at the time of the change: pool ONLINE, 0 errors on all four vdevs,
+      # node_procs_blocked = 0.
+      #
+      # Verified in BOTH directions before deploying: with the scrub active the gated
+      # expression returns empty, and with the gate forced off (`> 99`) it still returns the
+      # 0.953 saturation. So this suppresses the scrub case only, not the detection.
       - alert: ZFSPoolIOSaturated
-        expr: avg(rate(node_disk_io_time_seconds_total{device=~"sd[a-d]"}[10m])) > 0.9
+        expr: |
+          avg(rate(node_disk_io_time_seconds_total{device=~"sd[a-d]"}[10m])) > 0.9
+          unless on() (max(zfs_pool_scrub_active) > 0)
         for: 20m
         labels:
           severity: warning

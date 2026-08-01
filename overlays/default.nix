@@ -16,21 +16,15 @@ let
   # Import Haskell overlay to fix broken packages
   haskellOverlay = import ./haskell-sizes.nix;
 
-  # Import check-systemd overlay to add reload-notify support
-  checkSystemdOverlay = import ./check-systemd.nix;
-
   # Apply Haskell overlay first to get patched haskellPackages
   prevWithHaskell = prev // (haskellOverlay final prev);
-
-  # Apply check-systemd overlay
-  prevWithCheckSystemd = prevWithHaskell // (checkSystemdOverlay final prevWithHaskell);
 
   # Inject `myLib` (mkScriptPackage / mkSimpleGitHubBinary helpers) from
   # nix-config's 00-lib.nix overlay so 30-data-tools, 30-misc-tools, and
   # 30-user-scripts can reference prev.myLib when imported below.
   myLibOverlay = import "${inputs.nix-config}/overlays/00-lib.nix";
   prevWithMyLib =
-    prevWithCheckSystemd // (myLibOverlay final prevWithCheckSystemd) // { inherit inputs; };
+    prevWithHaskell // (myLibOverlay final prevWithHaskell) // { inherit inputs; };
 
   # Fix script for aiopnsense Python 2-style except clauses (used in haPackageOverrides)
   aiopnsenseFixScript = prev.writeText "fix-aiopnsense-py2-except.py" ''
@@ -282,7 +276,7 @@ let
   };
 in
 {
-  inherit (import ./dirscan.nix final prevWithCheckSystemd) dirscan;
+  inherit (import ./dirscan.nix final prevWithHaskell) dirscan;
 
   # Sherlock — read-only database query tool for AI assistants
   inherit (import ./sherlock.nix final prev) sherlock-db;
@@ -359,11 +353,6 @@ in
   # Inherit the patched haskellPackages from the Haskell overlay
   inherit (prevWithHaskell) haskellPackages;
 
-  # Inherit the patched check_systemd from the check-systemd overlay.
-  # NOTE 2026-07-27: inert — nixos-25.11 renamed the top-level attribute to
-  # nagiosPlugins.check_systemd, which is what Nagios actually invokes, so the
-  # reload-notify patch is not in effect. See overlays/check-systemd.nix.
-  inherit (prevWithCheckSystemd) check_systemd;
   # Python environment for JupyterLab from nixpkgs-unstable
   # Uses unstable's Python throughout to avoid a version mismatch: as of
   # 2026-07-27 stable is on Python 3.13.12 and unstable on 3.14.6 (the two
@@ -624,21 +613,10 @@ in
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;
 
-  # Immich 3.0.1 from the dedicated nixpkgs-immich pin (see flake.nix for the
-  # full rationale). The iOS app auto-updated to 3.0.1 at a time when
-  # nixos-unstable still shipped server 2.7.5; mobile 3.x requires server 3.x,
-  # and v3's checksum-based backup sync resolves the ~4,930 phone photos
-  # byte-identical to the /tank/Photos external library that looped as
-  # "duplicate" uploads forever (v3 removed the deviceId/deviceAssetId
-  # bookkeeping that caused it).
-  # Revert to nixpkgs-unstable once it carries immich >= 3.0.1.
-  # STATUS 2026-07-27: that condition is now MET — the locked nixpkgs-unstable
-  # (241313f4, 2026-07-19) evaluates immich to 3.0.3, so this dedicated pin is
-  # currently holding immich *down* at 3.0.1. Dropping it (and the flake input)
-  # would move the server to 3.0.3.
-  # (Historical: this line previously pulled unstable for the 2.4.1 CR3
-  # thumbnail fix, immich-app/immich#24559.)
-  immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
+  # Immich follows the same nixpkgs-unstable input as Home Assistant and
+  # JupyterLab. The former dedicated 3.0.1 pin became an accidental downgrade
+  # once this input advanced to 3.0.3.
+  immich = inputs.nixpkgs-unstable.legacyPackages.${system}.immich;
 
   # Home Assistant - Update to latest from nixpkgs-unstable (2026.7.2 as of
   # 2026-07-27; this note originally anchored on 2026.4.1+)

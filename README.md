@@ -773,12 +773,11 @@ Many services follow similar patterns:
 
 ### Flake Inputs & Overlays
 
-All 23 flake inputs (as of 2026-07-27; see `flake.nix` for the pin rationales):
+Flake inputs (see `flake.nix` for current pin rationales):
 
 - `nixpkgs`: `nixos-25.11` — the system channel
 - `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for JupyterLab,
   Home Assistant and other packages needing newer versions
-- `nixpkgs-immich`: dedicated pin for the Immich server
 - `nixos-apple-silicon`: Apple hardware support (pinned for ZFS/kernel compat)
 - `home-manager`: `release-25.11`, user environment management
 - `sops-nix`: Secrets management

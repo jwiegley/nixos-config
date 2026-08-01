@@ -131,24 +131,6 @@
       url = "github:NixOS/nixpkgs/241313f4e8e508cb9b13278c2b0fa25b9ca27163";
     };
 
-    # Dedicated pin for Immich 3.0.1 (server must be >= the auto-updating
-    # mobile app, which is already 3.0.1; v3's checksum-based backup sync is
-    # what lets phone photos byte-identical to the /tank archive register as
-    # backed up instead of looping "Preparing" forever). When this pin was
-    # added nixos-unstable still carried 2.7.5 (the 3.0.1 bump f76955e3 had
-    # not reached the channel), and bumping the whole nixpkgs-unstable input
-    # would drag Home Assistant / JupyterLab along. Rev 266a3597 is the
-    # nixpkgs master commit from Hydra eval 1826899, whose
-    # immich.aarch64-linux and immich-machine-learning.aarch64-linux jobs both
-    # built successfully, so everything substitutes from cache.nixos.org. Drop
-    # this input (and point overlays/default.nix's immich back at
-    # nixpkgs-unstable) once nixos-unstable ships immich >= 3.0.1.
-    # STATUS 2026-07-27: that condition is now MET — the locked
-    # nixpkgs-unstable (241313f4, 2026-07-19) evaluates immich to 3.0.3, so
-    # this dedicated pin is currently holding immich *down* at 3.0.1.
-    nixpkgs-immich = {
-      url = "github:NixOS/nixpkgs/266a3597f538657576ca4b476bb032b68bace284";
-    };
   };
 
   outputs =

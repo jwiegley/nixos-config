@@ -144,6 +144,10 @@
         inherit system;
         overlays = [
           inputs.nix-config-ai.overlays.default
+          (_final: _prev: {
+            gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
+          })
+          inputs.nix-config-ai.overlays.tools
           (import ./overlays inputs system)
         ];
         config.allowUnfree = true;
@@ -292,30 +296,13 @@
           {
             nixpkgs.overlays = [
               inputs.nix-config-ai.overlays.default
-              (import ./overlays inputs system)
-              # nix-config's misc-tools overlay (+ its 00-lib helper dep):
-              # johnw's HM packages import nix-config/config/packages.nix
-              # against vulcan's pkgs (useGlobalPkgs), and as of nix-config
-              # a6ae5339 (2026-07-06) that list references cmdperf, defined
-              # only in nix-config's own overlays — which vulcan never
-              # applied. Same local-adaptation class as ssh-settings-compat
-              # and the git-ai stub. Deliberately NOT importing the whole
-              # overlays/ dir (the emacs overlay would force large rebuilds).
-              (import "${inputs.nix-config}/overlays/00-lib.nix")
-              # gogcli base for the misc-tools overlay below: it bumps gogcli
-              # via `prev.gogcli.overrideAttrs`, assuming the underlying
-              # nixpkgs ships a base gogcli — true on Darwin (unstable
-              # nixpkgs, 0.29.0), absent from nixos-25.11, so the overlay
-              # alone eval-fails with "attribute 'gogcli' missing" (the
-              # 2026-07-06 switch failure). Provide unstable's base here so
-              # the override has something to override; the misc-tools stage
-              # then replaces src/version with the openclaw/gogcli fork (0.34.1
-              # as of 2026-07-27). Drop once vulcan's nixpkgs ships gogcli
-              # (as of 2026-07-27 nixos-25.11 still has no `gogcli` attribute).
-              (final: prev: {
+              # nixos-25.11 has no gogcli base for the supported tools overlay
+              # to update, so retain the existing unstable base explicitly.
+              (_final: _prev: {
                 gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
               })
-              (import "${inputs.nix-config}/overlays/30-misc-tools.nix")
+              inputs.nix-config-ai.overlays.tools
+              (import ./overlays inputs system)
             ];
           }
           ./hosts/vulcan
@@ -332,60 +319,6 @@
               !(builtins.elem pkgs.npmHooks.npmConfigHook (pkgs.llama-cpp.nativeBuildInputs or [ ]))
               || pkgs.llama-cpp ? npmDeps;
             pkgs.runCommand "llama-cpp-overlay-compat-check" { } "touch $out";
-
-          # Canary for the nix-config reach-in contract.
-          #
-          # overlays/default.nix cherry-picks six packages out of nix-config's
-          # *internal* overlay files. That is not a supported API. nix-config
-          # a3cc3843 changed several of those files from two-level `final: prev:`
-          # overlays into three-level factories taking a strict argument set, and
-          # vulcan's entire system evaluation broke the moment its lock crossed
-          # that commit — `function called with unexpected argument 'system'`.
-          #
-          # The call sites are fixed, but nothing upstream stops the next
-          # signature change from re-arming them, and nix-config's own
-          # cross-consumer gate cannot see vulcan's call sites. This check forces
-          # that class of breakage to surface here, at `nix flake check`, rather
-          # than partway through a rebuild.
-          #
-          # Each package name is interpolated into the command, so an attribute
-          # that merely *exists* while throwing on use fails this too.
-          #
-          # Retire this together with the reach-in itself (jwiegley/nixos-config#4).
-          nix-config-reachin-compat =
-            let
-              vp = inputs.self.nixosConfigurations.vulcan.pkgs;
-              # All SEVEN attributes this repo cherry-picks out of nix-config's
-              # internal overlays. An earlier revision listed six, taken from an
-              # issue's acceptance criteria rather than from overlays/default.nix,
-              # and silently omitted `markless`. Derive this list from the actual
-              # cherry-picks, never from prose.
-              want = [
-                "tsvutils"
-                "filetags"
-                "nix-scripts"
-                "hammer"
-                "linkdups"
-                "lipotell"
-                "markless"
-              ];
-              missing = builtins.filter (n: !(vp ? ${n})) want;
-            in
-            if missing != [ ] then
-              throw (
-                "nix-config reach-in broke: "
-                + builtins.concatStringsSep ", " missing
-                + " absent from vulcan's package set. nix-config's internal overlay "
-                + "signatures have most likely changed again — check the calling "
-                + "convention in overlays/default.nix against the overlay files at "
-                + "the current nix-config lock. See jwiegley/nixos-config#4."
-              )
-            else
-              pkgs.runCommand "nix-config-reachin-compat-check" { } ''
-                printf '%s\n' ${
-                  pkgs.lib.escapeShellArg (builtins.concatStringsSep " " (map (n: vp.${n}.name) want))
-                } > "$out"
-              '';
 
           openclaw-config-schema = import ./tests/openclaw/check-schema.nix {
             inherit pkgs;

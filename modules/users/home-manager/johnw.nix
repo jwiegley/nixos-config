@@ -1,14 +1,9 @@
 # NixOS-specific home-manager wrapper for John Wiegley.
 #
-# This imports the shared cross-platform module from nix-config (the
-# Darwin repository, accessed via Gitea as a non-flake input) and adds
-# NixOS-specific packages and overrides.
+# This imports the shared cross-platform module from nix-config and adds the
+# small amount of policy specific to this headless server.
 
 {
-  system,
-  config,
-  lib,
-  pkgs,
   inputs,
   ...
 }:
@@ -17,7 +12,6 @@
   home-manager.users.johnw =
     {
       config,
-      lib,
       pkgs,
       hostname,
       ...
@@ -29,29 +23,7 @@
       };
     in
     {
-      imports = [
-        "${inputs.nix-config}/config/johnw.nix"
-        # TEMPORARY: nix-config's config/ssh.nix uses the newer home-manager
-        # `programs.ssh.settings` API, which only exists in HM master. vulcan
-        # pins HM release-25.11 (settings absent → eval fails), so translate
-        # settings → matchBlocks locally. Remove when HM ships settings (26.05).
-        ./ssh-settings-compat.nix
-        # Stub for `programs.git-ai = {...}` in the shared nix-config: the
-        # git-ai flake input is intentionally absent on vulcan, so the real
-        # home-manager module isn't loaded. Declare a freeform option so the
-        # unconditional assignment in nix-config/config/johnw.nix still
-        # type-checks; nothing reads these values.
-        (
-          { lib, ... }:
-          {
-            options.programs.git-ai = lib.mkOption {
-              type = lib.types.submodule { freeformType = lib.types.anything; };
-              default = { };
-              visible = false;
-            };
-          }
-        )
-      ];
+      imports = [ "${inputs.nix-config}/config/johnw.nix" ];
 
       home = {
         # NixOS-specific settings
@@ -59,7 +31,7 @@
         homeDirectory = "/home/johnw";
 
         # Override EDITOR to vim on headless NixOS hosts
-        sessionVariables.EDITOR = lib.mkForce "vim";
+        sessionVariables.EDITOR = "vim";
 
         # NixOS-specific packages: shared cross-platform list + NixOS extras
         packages =
@@ -78,19 +50,13 @@
           ]);
       };
 
-      # Override gh editor to vim on NixOS
-      programs.gh.settings.editor = lib.mkForce "vim";
-
-      # Override git core editor to vim on NixOS
-      programs.git.settings.core.editor = lib.mkForce "vim";
-
-      # Disable commit/tag GPG signing on this headless NixOS host.
-      # The shared Darwin module enables signing by default (for macOS with
-      # YubiKey), but this machine's GPG keybox is not populated and pcscd
-      # is not configured here.
-      programs.git.signing.signByDefault = lib.mkForce false;
-      programs.git.settings.commit.gpgsign = lib.mkForce false;
-      programs.git.settings.tag.gpgsign = lib.mkForce false;
+      programs = {
+        gh.settings.editor = "vim";
+        git.settings = {
+          core.editor = "vim";
+          tag.gpgsign = false;
+        };
+      };
 
       # claude-mem (Fix A + Fix B): the worker runs as a systemd *user* service,
       # which starts with a minimal env that doesn't inherit the login shell.

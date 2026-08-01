@@ -19,13 +19,6 @@ let
   # Apply Haskell overlay first to get patched haskellPackages
   prevWithHaskell = prev // (haskellOverlay final prev);
 
-  # Inject `myLib` (mkScriptPackage / mkSimpleGitHubBinary helpers) from
-  # nix-config's 00-lib.nix overlay so 30-data-tools, 30-misc-tools, and
-  # 30-user-scripts can reference prev.myLib when imported below.
-  myLibOverlay = import "${inputs.nix-config}/overlays/00-lib.nix";
-  prevWithMyLib =
-    prevWithHaskell // (myLibOverlay final prevWithHaskell) // { inherit inputs; };
-
   # Fix script for aiopnsense Python 2-style except clauses (used in haPackageOverrides)
   aiopnsenseFixScript = prev.writeText "fix-aiopnsense-py2-except.py" ''
     import re, os
@@ -286,45 +279,6 @@ in
 
   # sacramento-cluster-ics — Google Sheet → RFC 5545 .ics files
   sac-cluster-ics = inputs.sacramento-cluster-ics.packages.${system}.default;
-
-  # Import package definitions from nix-config overlays.
-  # Pass `inputs` via prev so that paths.nix (used by data-tools, text-tools)
-  # can resolve flake input sources.
-  inherit (import "${inputs.nix-config}/overlays/30-misc-tools.nix" final prevWithMyLib)
-    hammer
-    linkdups
-    lipotell
-    ;
-  inherit (import "${inputs.nix-config}/overlays/30-markless.nix" final (prev // { inherit inputs; }))
-    markless
-    ;
-  # NOTE the leading `{ }` on three of these. As of the 2026-07-27 nix-config
-  # bump, 30-data-tools, 30-text-tools and 30-user-scripts each take an
-  # attrset of optional flake sources BEFORE `final: prev:`
-  # (`{ dirscan ? null }`, `{ org2tc ? null }`, `{ scripts ? null }`). Calling
-  # them the old two-argument way passes `final` where the attrset belongs, and
-  # eval dies with "function 'anonymous lambda' called with unexpected argument
-  # 'system'" — which is what broke `nixos-rebuild` after that bump.
-  #
-  # `{ }` is correct rather than merely sufficient: each of those args only
-  # gates an EXTRA package via `optionalAttrs (x != null)` — `dirscan`,
-  # `org2tc` and `my-scripts` respectively — and vulcan inherits none of them.
-  # It takes `tsvutils`, `filetags` and `nix-scripts`, all ungated, and gets
-  # its own `dirscan` from ./dirscan.nix. Pass a real source here only if you
-  # actually want one of the gated packages.
-  #
-  # 00-lib, 30-misc-tools and 30-markless are still two-argument; do not add
-  # `{ }` to those.
-  inherit (import "${inputs.nix-config}/overlays/30-data-tools.nix" { } final prevWithMyLib)
-    tsvutils
-    ;
-  inherit
-    (import "${inputs.nix-config}/overlays/30-text-tools.nix" { } final (prev // { inherit inputs; }))
-    filetags
-    ;
-  inherit (import "${inputs.nix-config}/overlays/30-user-scripts.nix" { } final prevWithMyLib)
-    nix-scripts
-    ;
 
   # mcp-server-sequential-thinking: nix-config overrideAttrs's a base nixpkgs
   # package that this channel lacks, so take it from nixpkgs-unstable (which

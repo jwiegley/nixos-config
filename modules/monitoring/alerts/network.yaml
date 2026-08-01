@@ -3,9 +3,19 @@ groups:
     rules:
       # Host unreachable - any probe that fails completely
       - alert: HostUnreachable
-        # blackbox_hera_mlx is excluded: the gated MLXBackendDown alert in
-        # hermes.yaml owns that target (fires only when hera itself is up), so
-        # a hera reboot must not also trip this ungated critical.
+        # blackbox_hera_mlx AND blackbox_hera_qwen are excluded: the gated
+        # MLXBackendDown alert in hermes.yaml owns those targets (it fires only
+        # when hera itself is up), so a hera reboot must not also trip this
+        # ungated critical.
+        #
+        # blackbox_hera_qwen added to the exclusion 2026-08-01, same night it was
+        # created and after it caused exactly the problem this exclusion exists to
+        # prevent. The new job was added during a live hera outage without being
+        # excluded here, so this rule immediately paged CRITICAL "Host unreachable"
+        # for `https://hera.lan:8443/v1/models` -- an HTTP endpoint, not a host,
+        # on a machine that was answering ICMP in 0.25ms with 0% loss. Two alerts
+        # for one condition, one of them mislabelled and at the wrong severity.
+        # Any future blackbox_hera_* job belongs in this list too.
         # host_group iot/iot-noping/iot-quiet are excluded: the sleepy IoT
         # devices (locks, nests, rings, sprinkler, vacuum, solar, flume, etc.)
         # drop off ICMP for long stretches by design and must not page this
@@ -23,7 +33,7 @@ groups:
         # DNSServerDown at once — ~20 emails for one 30-min WAN blip with no
         # real outage. They are now covered by the aggregate WANDegraded /
         # DNSResolversDown rules below, which fire only on a genuine WAN outage.
-        expr: probe_success{job=~"blackbox_.*",job!~"blackbox_hera_mlx|blackbox_https_public",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
+        expr: probe_success{job=~"blackbox_.*",job!~"blackbox_hera_(mlx|qwen)|blackbox_https_public",host_group!~"iot|iot-noping|iot-quiet|backbone|dns"} == 0
         for: 2m
         labels:
           severity: critical

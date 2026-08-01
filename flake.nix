@@ -250,7 +250,7 @@
             toString checkScript;
         };
 
-        # check-litellm-models REMOVED 2026-08-01 together with the LiteLLM proxy.
+        # check-litellm-models REMOVED 2026-08-01 with the LLM proxy it validated.
         # It validated a model *catalog* against the backends it routed to, and
         # there is no catalog any more: the gateway on 127.0.0.1:4000 is a plain
         # reverse proxy to llama-swap, which serves its own models under their

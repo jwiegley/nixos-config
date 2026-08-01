@@ -264,10 +264,10 @@
   #     (speedtest-tracker-quadlet.nix). Those overrides remain and are unchanged.
   #   - 9 had no consumer anywhere — not in any unit, --env-file, EnvironmentFile,
   #     LoadCredential or volume mount under /etc/systemd or the rootless users'
-  #     ~/.config: litellm, mailarchiver, wallabag, teable, opnsense-exporter,
+  #     ~/.config: mailarchiver, wallabag, teable, opnsense-exporter,
   #     technitium-dns-exporter, openspeedtest, openproject, shlink. Seven of the
   #     nine dangled outright (target did not exist); each of those services reaches
-  #     its secret by a sibling sops `path=` file instead (…/litellm-secrets,
+  #     its secret by a sibling sops `path=` file instead (
   #     …/mailarchiver-env, …/wallabag-secrets, …/teable-env,
   #     …/opnsense-exporter-secrets, …/openproject-env, …/shlink-secrets), while
   #     technitium-dns-exporter reads /run/secrets/technitium-dns-exporter-env

@@ -10,6 +10,16 @@
 let
   models = import ../../models.nix;
 
+  # SENTINEL, not a credential. This lands in openclaw.json as
+  # models.providers.vulcan.apiKey, which OpenClaw sends to the host LLM
+  # gateway on 127.0.0.1:4000 (reached from the guest via the DNAT below).
+  # That gateway injects the real upstream Authorization header and discards
+  # whatever the client sent (modules/services/hera-llm-proxy.nix), so this
+  # value is inert -- it only has to be non-empty. Replaced a SOPS secret that
+  # was already inert for the same reason, removing this module's dependency
+  # on a stale secret name.
+  gatewayApiKey = "gateway-injects-real-key";
+
   # ============================================================================
   # Configuration Constants
   # ============================================================================
@@ -297,20 +307,6 @@ in
   # openclaw/memsearch-api-key entry is required. openclaw/perplexity-api-key
   # and qdrant/api-key already exist elsewhere in this file and in
   # modules/services/qdrant.nix respectively — do NOT duplicate.
-
-  # The secrets.yaml entry is still literally named
-  # `openclaw/litellm-virtual-key`; renaming it needs an interactive `sops`
-  # edit, so the pointer keeps the old name while the attr does not.
-  sops.secrets."openclaw/llm-gateway-key" = {
-    key = "openclaw/litellm-virtual-key";
-    owner = "openclaw";
-    group = "openclaw";
-    mode = "0400";
-    restartUnits = [
-      "openclaw-prepare-secrets.service"
-      "microvm@openclaw.service"
-    ];
-  };
 
   sops.secrets."openclaw/discord-token" = {
     owner = "openclaw";
@@ -617,7 +613,7 @@ in
       # ownership contract before mv. Do NOT add User=openclaw here without
       # also widening the qdrant/api-key group.
       OVERLAY=$(${pkgs.jq}/bin/jq -n \
-        --rawfile vk "${config.sops.secrets."openclaw/llm-gateway-key".path}" \
+        --arg vk "${gatewayApiKey}" \
         --rawfile dt "${config.sops.secrets."openclaw/discord-token".path}" \
         --rawfile gt "${config.sops.secrets."openclaw/gateway-auth-token".path}" \
         --rawfile pk "${config.sops.secrets."openclaw/perplexity-api-key".path}" \

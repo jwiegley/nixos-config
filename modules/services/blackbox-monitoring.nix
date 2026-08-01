@@ -1063,6 +1063,64 @@ in
             scrape_timeout = "10s";
           }
 
+          # hera :8443 — the endpoint the AGENTS' model actually lives behind.
+          #
+          # Added 2026-08-01 during a live outage that the existing blackbox_hera_mlx job
+          # above could not see. hera runs three services and they are not interchangeable:
+          #   :8000  oMLX            -- connection-refused at the time of writing
+          #   :8080  older llama-swap -- UP, serving GLM-5.2 / Meta-Llama / bge-m3 / etc.
+          #   :8443  llama-swap      -- serves Qwen3.6-27B-oQ4e-mtp, i.e. the model Hermes uses
+          # blackbox_hera_mlx targets :8080, so probe_success stayed 1 while :8443 returned
+          # 502 and hermes_e2e_chat_ok was 0. MLXBackendDown, whose whole purpose is "terminal
+          # dependency of all Hermes chat", was structurally blind to a total outage of the
+          # chat backend.
+          #
+          # Module is https_2xx_or_auth, chosen so this needs NO API KEY in the Nix store:
+          # its valid_status_codes accept 401 but not 502. A healthy hera answers /v1/models
+          # with 401 when unauthenticated (auth was enabled on it 2026-07-31); a broken
+          # backend answers 502 before auth is ever evaluated. So an unauthenticated probe
+          # distinguishes the two exactly, and the key stays in SOPS.
+          #
+          # Probing /v1/models rather than /health is deliberate: /health returned 200
+          # throughout the outage, because it reports the proxy's own liveness, not the
+          # backend's. Probing it would have reproduced the same blind spot in a new place.
+          {
+            job_name = "blackbox_hera_qwen";
+            metrics_path = "/probe";
+            params = {
+              module = [ "https_2xx_or_auth" ];
+            };
+            static_configs = [
+              {
+                targets = [ "https://hera.lan:8443/v1/models" ];
+                labels = {
+                  service = "mlx-backend";
+                  probe = "hera-qwen";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "https_remote";
+              }
+            ];
+            scrape_interval = "30s";
+            scrape_timeout = "10s";
+          }
+
           # Node-RED /alert HTTP-In endpoint on 127.0.0.1:1880 — the listener
           # the Alertmanager iphone-notifier receiver POSTs critical pages to.
           # GET /alert returns 404 (it is a POST-only HTTP-In node), which the

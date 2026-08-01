@@ -258,8 +258,16 @@ groups:
       # severity: warning (not critical) — the e2e/ask probes already page
       # critical for the user-visible symptom and self-heal cannot restart hera;
       # this rule is cause-isolation, not a new page path.
+      # SELECTOR WIDENED 2026-08-01 to job=~"blackbox_hera_(mlx|qwen)" after this rule sat
+      # green through a total outage of the chat backend. hera runs three model services and
+      # this rule only watched one of them -- :8080, which serves GLM-5.2/Meta-Llama/bge-m3.
+      # The model Hermes actually uses, Qwen3.6-27B-oQ4e-mtp, is behind :8443. During the
+      # 2026-08-01 00:49 outage :8443 returned 502 and hermes_e2e_chat_ok was 0, while
+      # probe_success{job="blackbox_hera_mlx"} stayed 1 the entire time. A rule described in
+      # its own annotation as the "terminal dependency of all Hermes chat" could not see the
+      # chat dependency fail.
       - alert: MLXBackendDown
-        expr: probe_success{job="blackbox_hera_mlx"} == 0 and on() up{job="darwin-hera"} == 1
+        expr: probe_success{job=~"blackbox_hera_(mlx|qwen)"} == 0 and on() up{job="darwin-hera"} == 1
         for: 8m
         labels:
           severity: warning

@@ -127,6 +127,29 @@ let
       # state — the strict module would flap them to probe_success=0 forever
       # and chronically fire HostUnreachable. The cert is still validated
       # against the step-ca root, so a TLS/cert failure still trips the probe.
+      # Hermes API probe. Deliberately NOT https_2xx_or_auth: that module accepts
+      # 404 and 200 for any path, so it would stay green if this vhost vanished
+      # and another server answered, or if routing broke. This one asserts BOTH
+      # the exact status Hermes gives an unauthenticated caller AND a string only
+      # Hermes emits, so a green probe means "the hermes vhost is present, reached
+      # the guest, and the guest's auth layer answered" -- not merely "something
+      # replied". api_server.py returns {"error": {... "code": "invalid_api_key"}}.
+      # Asserting this needs no credential, so no key enters the Nix store.
+      hermes_api_401:
+        prober: http
+        timeout: 10s
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+          valid_status_codes: [401]
+          method: GET
+          preferred_ip_protocol: "ip4"
+          follow_redirects: false
+          fail_if_ssl: false
+          fail_if_body_not_matches_regexp:
+            - "invalid_api_key"
+          tls_config:
+            insecure_skip_verify: false
+            ca_file: /etc/ssl/certs/step-ca/root_ca.crt
       https_2xx_or_auth:
         prober: http
         timeout: 5s
@@ -1041,66 +1064,6 @@ in
           # Probing /v1/models rather than /health is deliberate: /health returned 200
           # throughout the outage, because it reports the proxy's own liveness, not the
           # backend's. Probing it would have reproduced the same blind spot in a new place.
-          # Hermes API server, published to the LAN as https://hermes.vulcan.lan
-          # (vhost in modules/services/hermes-microvm.nix). That proxy is the only
-          # ingress to the agent from anywhere but vulcan itself, so it gets its own
-          # probe rather than relying on the generic vhost sweep.
-          #
-          # Module is https_2xx_or_auth so no API key lands in the Nix store:
-          # /v1/models answers 401 unauthenticated (Hermes enforces its own auth,
-          # which the proxy passes through rather than injecting), while a dead guest
-          # or broken bridge gives 502 before auth is evaluated. 401 is accepted, 502
-          # is not, so an unauthenticated probe separates "up and authenticating"
-          # from "down" exactly.
-          #
-          # Probing /v1/models rather than / is deliberate: Hermes answers / with 404,
-          # which https_2xx_or_auth also accepts, so a / probe would stay green even
-          # if routing were wrong.
-          #
-          # THE JOB NAME IS LOAD-BEARING. It must start with "blackbox_http" so alert
-          # routing lands correctly: WebServiceDown selects job=~"blackbox_http.*"
-          # (critical, for 1m) and HostUnreachable EXCLUDES that same pattern. A name
-          # outside it -- this job was briefly "blackbox_hermes_api" -- inverts both:
-          # WebServiceDown stops matching, and HostUnreachable starts claiming "Host
-          # ... is unreachable" about an HTTP endpoint on a perfectly reachable host.
-          # Third time this trap has been hit in this file (cf. the blackbox_hera_qwen
-          # note, and the 2026-08-01 widening of HostUnreachable's exclusion).
-          {
-            job_name = "blackbox_https_hermes";
-            metrics_path = "/probe";
-            params = {
-              module = [ "https_2xx_or_auth" ];
-            };
-            static_configs = [
-              {
-                targets = [ "https://hermes.vulcan.lan/v1/models" ];
-                labels = {
-                  service = "hermes-agent";
-                  probe = "hermes-api";
-                };
-              }
-            ];
-            relabel_configs = [
-              {
-                source_labels = [ "__address__" ];
-                target_label = "__param_target";
-              }
-              {
-                source_labels = [ "__param_target" ];
-                target_label = "instance";
-              }
-              {
-                target_label = "__address__";
-                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-              }
-              {
-                target_label = "probe_type";
-                replacement = "https_local";
-              }
-            ];
-            scrape_interval = "60s";
-            scrape_timeout = "15s";
-          }
           {
             job_name = "blackbox_hera_qwen";
             metrics_path = "/probe";
@@ -1136,6 +1099,69 @@ in
             ];
             scrape_interval = "30s";
             scrape_timeout = "10s";
+          }
+          # Hermes API server, published to the LAN as https://hermes.vulcan.lan
+          # (vhost in modules/services/hermes-microvm.nix). That proxy is the only
+          # ingress to the agent from anywhere but vulcan itself, so it gets its own
+          # probe rather than relying on the generic vhost sweep.
+          #
+          # Module is https_2xx_or_auth so no API key lands in the Nix store:
+          # /v1/models answers 401 unauthenticated (Hermes enforces its own auth,
+          # which the proxy passes through rather than injecting), while a dead guest
+          # or broken bridge gives 502 before auth is evaluated. 401 is accepted, 502
+          # is not, so an unauthenticated probe separates "up and authenticating"
+          # from "down" exactly.
+          #
+          # Probing /v1/models rather than / is deliberate, and the dedicated
+          # hermes_api_401 module is what makes it meaningful: that module
+          # requires status 401 AND the "invalid_api_key" body Hermes emits.
+          # Under the generic https_2xx_or_auth the assertion would be hollow,
+          # since that module accepts 404 for any path -- a misrouted probe, or
+          # a vhost fallthrough to another server, would both stay green.
+          #
+          # THE JOB NAME IS LOAD-BEARING. It must start with "blackbox_http" so alert
+          # routing lands correctly: WebServiceDown selects job=~"blackbox_http.*"
+          # (critical, for 1m) and HostUnreachable EXCLUDES that same pattern. A name
+          # outside it -- this job was briefly "blackbox_hermes_api" -- inverts both:
+          # WebServiceDown stops matching, and HostUnreachable starts claiming "Host
+          # ... is unreachable" about an HTTP endpoint on a perfectly reachable host.
+          # Third time this trap has been hit in this file (cf. the blackbox_hera_qwen
+          # note, and the 2026-08-01 widening of HostUnreachable's exclusion).
+          {
+            job_name = "blackbox_https_hermes";
+            metrics_path = "/probe";
+            params = {
+              module = [ "hermes_api_401" ];
+            };
+            static_configs = [
+              {
+                targets = [ "https://hermes.vulcan.lan/v1/models" ];
+                labels = {
+                  service = "hermes-agent";
+                  probe = "hermes-api";
+                };
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "hermes_api";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "15s"; # > the module's 10s, so the module timeout binds
           }
 
           # Node-RED /alert HTTP-In endpoint on 127.0.0.1:1880 — the listener

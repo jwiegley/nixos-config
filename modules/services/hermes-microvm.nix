@@ -39,8 +39,10 @@ let
   # files together if it ever changes.
   externalInterface = "end0";
 
-  # Hermes api_server listen port inside the guest (hermes-vm.nix sets
-  # API_SERVER_PORT to match). Consumed by the LAN reverse proxy below.
+  # Hermes api_server listen port. Single source of truth: it is `inherit`ed
+  # into the guest config below, so hermes-vm.nix's API_SERVER_PORT and its
+  # firewall rule derive from THIS value rather than restating it. Consumed by
+  # the LAN reverse proxy below.
   apiServerPort = 8080;
 
   vmHostname = "hermes-vm";
@@ -136,9 +138,24 @@ let
     proxy_send_timeout 3600s;
     proxy_read_timeout 3600s;
 
+    # Defence in depth against prompt injection: the guest can reach the host
+    # over the bridge, so without this a compromised agent could loop back into
+    # its own control API through the public front door -- and it is the one
+    # principal that already holds API_SERVER_KEY. Legitimate host-side callers
+    # (hermes-mcp, the e2e probe) talk to the guest directly over the bridge,
+    # not through this vhost, so nothing legitimate is denied.
+    deny ${vmAddr};
+    allow all;
+
     proxy_http_version 1.1;
+    # NOTE: this pair does NOT enable upstream keepalive -- that needs an
+    # upstream{} block with `keepalive N`, which does not exist here. Each
+    # request opens a new connection to the guest. Kept because clearing
+    # Connection is still correct for a 1.1 upstream.
     proxy_set_header Connection "";
-    proxy_set_header Host $host;
+    # Literal rather than $host: same value today, but it does not depend on
+    # this vhost never becoming a default server for some other name.
+    proxy_set_header Host hermes.vulcan.lan;
   '';
 
 in
@@ -550,6 +567,7 @@ in
       imports = [ ./hermes-vm.nix ];
       _module.args = {
         inherit
+          apiServerPort
           bridgeAddr
           vmAddr
           vmHostname

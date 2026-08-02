@@ -3,7 +3,7 @@
 # Single source of truth for LLM and embedding model selection.
 # All services that call an LLM or embedding model import this file.
 #
-# These are the REAL model ids as served by the llama-swap backend behind the
+# These are the REAL model ids as served by the oMLX backend behind the
 # host gateway on 127.0.0.1:4000 (see modules/services/hera-llm-proxy.nix).
 # There is no aliasing layer any more -- the gateway is a plain reverse proxy
 # and does not rewrite request bodies, so whatever is written here is what the

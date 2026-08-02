@@ -154,7 +154,7 @@ in
         # that catalog, and with it every hosted-provider route on this host.
         #
         # Both the shim and the hosted model are gone. What remains is the host
-        # LLM gateway on :4000, and the llama-swap backend behind it answers
+        # LLM gateway on :4000, and the oMLX backend behind it answers
         # /v1/messages in the Anthropic wire format natively (verified 200 on
         # 2026-08-01) -- which is also why the fixup shim was not carried
         # forward: it existed only to work around a LiteLLM converter bug.

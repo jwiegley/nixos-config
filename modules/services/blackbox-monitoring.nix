@@ -888,7 +888,6 @@ in
                   "https://immich.vulcan.lan"
                   "https://jupyter.vulcan.lan"
                   "https://kiwix.vulcan.lan"
-                  "https://llama-swap.vulcan.lan"
                   "https://promtail.vulcan.lan"
                   "https://qdrant.vulcan.lan"
                   "https://radicale.vulcan.lan"
@@ -964,16 +963,17 @@ in
             scrape_timeout = "15s";
           }
 
-          # Direct liveness probe of the hera-side llama-swap / MLX model router
+          # Direct liveness probe of the hera-side oMLX model server
           # (hera.lan:8080). This is the terminal upstream behind the host LLM
           # gateway on 127.0.0.1:4000, and thus the terminal dependency of all
           # Hermes Discord chat. GET
           # /v1/models returns HTTP 200 UNAUTHENTICATED (verified live through the
-          # exporter: owned_by=llama-swap, 30 models, ~1ms once warm), so the
+          # exporter: owned_by=omlx, ~1ms once warm), so the
           # strict http_2xx module suffices — no auth, no secrets. This is a
           # LIVENESS probe of the router; per-model load correctness is covered by
           # the hermes-e2e-chat-probe content check. NOTE this is the HERA
-          # instance, distinct from the vulcan-side llama-swap.vulcan.lan already
+          # instance. The vulcan-side llama-swap.vulcan.lan that used to sit alongside
+          # it was removed 2026-08-02 and is
           # in blackbox_https_local. host_group is intentionally NOT set so the
           # ICMP host_group-based rules in network.yaml never match it. The
           # MLXBackendDown alert in hermes.yaml owns this target (gated by
@@ -1025,8 +1025,8 @@ in
           # Added 2026-08-01 during a live outage that the existing blackbox_hera_mlx job
           # above could not see. hera runs three services and they are not interchangeable:
           #   :8000  oMLX            -- connection-refused at the time of writing
-          #   :8080  older llama-swap -- UP, serving GLM-5.2 / Meta-Llama / bge-m3 / etc.
-          #   :8443  llama-swap      -- serves Qwen3.6-27B-oQ4e-mtp, i.e. the model Hermes uses
+          #   :8080  an older hera endpoint -- UP at the time, serving other models
+          #   :8443  oMLX            -- serves Qwen3.6-27B-oQ4e-mtp, i.e. the model Hermes uses
           # blackbox_hera_mlx targets :8080, so probe_success stayed 1 while :8443 returned
           # 502 and hermes_e2e_chat_ok was 0. MLXBackendDown, whose whole purpose is "terminal
           # dependency of all Hermes chat", was structurally blind to a total outage of the

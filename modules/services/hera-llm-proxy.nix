@@ -8,10 +8,14 @@
 #
 # What changed underneath: instead of a routing proxy with its own model
 # catalog and a dozen hosted-provider API keys, this is a plain nginx reverse
-# proxy onto the single llama-swap backend at https://hera.lan:8443/v1.
+# proxy onto the single oMLX backend at https://hera.lan:8443/v1.
+#
+# hera is the ONLY machine on this network that serves models. vulcan must
+# never run llama-swap, llama.cpp or any other model server -- it lacks the
+# memory and capacity. Both were removed from this host on 2026-08-02.
 #
 # Consequences that are deliberate, not oversights:
-#   * Model ALIASING is gone. llama-swap serves its models under their real
+#   * Model ALIASING is gone. oMLX serves its models under their real
 #     names, so callers must ask for `Qwen3.6-27B-oQ4e-mtp`, not the old
 #     `hera/omlx/Qwen3.6-27B-oQ4e-mtp` alias. models.nix carries the real
 #     names now and is still the single source of truth.
@@ -22,7 +26,7 @@
 #
 # Verified against the live backend on 2026-08-01: /v1/models, /v1/chat/completions,
 # /v1/embeddings (bge-m3-mlx-fp16, dim 1024), /v1/audio/transcriptions and
-# /v1/messages (llama-swap speaks the Anthropic shape natively, which is why the
+# /v1/messages (oMLX speaks the Anthropic shape natively, which is why the
 # old litellm-anthropic-fixup translation proxy is not carried forward) all answer.
 {
   config,

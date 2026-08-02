@@ -121,8 +121,6 @@ in
       traceroute
       tree
       zfs-prune-snapshots
-      llama-swap
-      llama-cpp
     ])
     ++ [
       pkgs.dovecot-fts-flatcurve

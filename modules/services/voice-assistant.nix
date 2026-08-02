@@ -4,7 +4,7 @@
 # complete utterances to an OpenAI-compatible /v1/audio/transcriptions
 # endpoint. We point it at the host LLM gateway on 127.0.0.1:4000
 # (modules/services/hera-llm-proxy.nix), a plain nginx reverse proxy onto
-# llama-swap at https://hera.lan:8443.
+# oMLX at https://hera.lan:8443.
 #
 # There is NO alias layer any more — the gateway does not rewrite request
 # bodies, so STT_MODELS below must name a REAL upstream model id.
@@ -18,7 +18,7 @@
 #      to mint it any more.
 #   2. Verify STT_MODELS matches a live upstream id:
 #        curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
-#      Whatever is written below reaches llama-swap verbatim.
+#      Whatever is written below reaches oMLX verbatim.
 #   3. After this module is built and switched, in HA UI:
 #      Settings -> Devices & Services -> Add Integration -> "Wyoming Protocol"
 #      Host: 127.0.0.1   Port: 10300
@@ -66,7 +66,7 @@
         WYOMING_LOG_LEVEL = "INFO";
 
         # Talk to the local LLM gateway. There is no alias layer: STT_MODELS
-        # must be a REAL id from the llama-swap backend. Verify with:
+        # must be a REAL id from the oMLX backend. Verify with:
         #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
         STT_OPENAI_URL = "http://127.0.0.1:4000/v1";
         STT_MODELS = "cohere-transcribe-03-2026-mlx-fp16";

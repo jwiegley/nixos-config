@@ -506,7 +506,6 @@ let
     { vhost = "immich.vulcan.lan"; }
     { vhost = "jupyter.vulcan.lan"; }
     { vhost = "kiwix.vulcan.lan"; }
-    { vhost = "llama-swap.vulcan.lan"; }
     { vhost = "promtail.vulcan.lan"; }
     { vhost = "radicale.vulcan.lan"; }
     { vhost = "rspamd.vulcan.lan"; }

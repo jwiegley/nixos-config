@@ -191,7 +191,7 @@ in
   #         ├── DNAT 10.99.0.1:P -> 127.0.0.1:P  ├── nftables DNAT
   #         │   (route_localnet=1)                │   127.0.0.1:P -> 10.99.0.1:P
   #         │                                     │
-  #   Qdrant, LLM gateway, llama-swap,      virtiofs mounts:
+  #   Qdrant, LLM gateway,                  virtiofs mounts:
   #   Dovecot on 127.0.0.1                   /nix/.ro-store (ro-store)
   #         │                                 /var/lib/openclaw (state)
   #   nginx proxy ──> 10.99.0.2:18789        /run/openclaw-secrets (secrets)
@@ -451,7 +451,7 @@ in
   # Section 5: Host-side DNAT for loopback service access
   # ============================================================================
   # The VM needs to reach host services bound to 127.0.0.1 (Qdrant, the LLM gateway,
-  # PostgreSQL, Dovecot — the exact set is `dnatPorts` above; llama-swap on
+  # PostgreSQL, Dovecot — the exact set is `dnatPorts` above; nothing on
   # :8080 is NOT exposed, the VM reaches those models through the gateway).
   # We use a two-stage DNAT approach:
   #

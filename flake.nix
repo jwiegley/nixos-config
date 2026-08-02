@@ -253,7 +253,7 @@
         # check-litellm-models REMOVED 2026-08-01 with the LLM proxy it validated.
         # It validated a model *catalog* against the backends it routed to, and
         # there is no catalog any more: the gateway on 127.0.0.1:4000 is a plain
-        # reverse proxy to llama-swap, which serves its own models under their
+        # reverse proxy to oMLX on hera, which serves its models under their
         # real ids. The equivalent check is now a one-liner:
         #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
         # compared against models.nix.

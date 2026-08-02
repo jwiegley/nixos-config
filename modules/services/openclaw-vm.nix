@@ -377,7 +377,8 @@ let
       `memory-vault` *is* a real MCP server — do not confuse the two names and
       conclude that memory is half-registered.
     - **`http://localhost:8080/v1/embeddings`.** Nothing in this deployment
-      uses :8080. llama-swap listens there on the host and is deliberately
+      uses :8080. Nothing listens there on the host (llama-swap was removed
+      2026-08-02; vulcan must never serve models) and it is deliberately
       excluded from the allow-list, because this VM reaches those models
       through LiteLLM on :4000. The `network-diag` unit records
       `PASS: 127.0.0.1:8080 not reachable (correct)`: a refused or timed-out
@@ -1494,7 +1495,7 @@ in
       fi
 
       # MUST NOT WORK: localhost:8080 (old embedding server)
-      # llama-swap binds 127.0.0.1:8080 on the host and is deliberately absent
+      # nothing binds 127.0.0.1:8080 on the host any more, and it is deliberately absent
       # from dnatPorts; the VM reaches those models through LiteLLM on :4000,
       # which is what the memory-qdrant plugin actually calls. A refused
       # connection here is the designed steady state, so any health check

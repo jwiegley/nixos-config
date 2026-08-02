@@ -598,7 +598,7 @@ in
 
         enabled = true;
 
-        # Host LLM gateway (nginx -> llama-swap on hera), OpenAI-compatible.
+        # Host LLM gateway (nginx -> oMLX on hera), OpenAI-compatible.
         type = "openai";
         url = "http://127.0.0.1:4000/v1/chat/completions";
         # Using an MLX quantized model for efficient inference.

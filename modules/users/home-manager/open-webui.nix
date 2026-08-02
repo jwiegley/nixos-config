@@ -124,7 +124,8 @@ in
         containerConfig = {
           image = "ghcr.io/open-webui/open-webui:main";
           # With host network mode, no port mapping needed - app listens on 8084 directly
-          # (PORT=8084 below; 8080 is open-webui's default but belongs to llama-swap here)
+          # (PORT=8084 below; 8080 was taken by llama-swap until it was removed from
+          # this host on 2026-08-02 -- the port stays 8084 to avoid a needless move)
           # publishPorts is not used with host networking
 
           # Use host network mode to access host services directly
@@ -133,7 +134,7 @@ in
           # Environment configuration
           # Note: DATABASE_URL with password is in the secrets file
           environments = {
-            # Port configuration (8080 is used by llama-swap)
+            # Port configuration (8080 was llama-swap; see the note above)
             PORT = "8084";
 
             # OpenAI-compatible API configuration - point to the host LLM gateway
@@ -142,7 +143,7 @@ in
             # environmentFile below (it holds Hermes' key, so it cannot live here).
             # IF YOU REORDER THIS LIST, REORDER THAT ONE TOO.
             #
-            #   1. the host LLM gateway -> hera's llama-swap. The raw model. nginx
+            #   1. the host LLM gateway -> hera's oMLX. The raw model. nginx
             #      injects the upstream key, so the client-side key is a placeholder.
             #   2. the Hermes AGENT (Discord-connected, with mail/calendar/Postgres/HA
             #      tools) -- a different thing from the model above. It lives inside the
@@ -151,7 +152,9 @@ in
             #      restated here. The port must match apiServerPort in that same file.
             #
             # NOTE 8080 below is the guest's port. Do NOT change it to 127.0.0.1:8080 --
-            # that is vulcan's OWN local llama-swap, an entirely different service (and
+            # nothing listens there since llama-swap was removed from vulcan on
+            # 2026-08-02 (this host must never serve models). Historically it was
+            # vulcan's own llama-swap, which is why this container uses 8084 (and
             # the reason this container runs on PORT 8084).
             OPENAI_API_BASE_URLS = "http://127.0.0.1:4000/v1;http://hermes-vm:8080/v1";
 

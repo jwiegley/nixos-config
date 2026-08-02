@@ -5,12 +5,12 @@
 # its own private /30 bridge so neither VM's networking can affect the
 # other.
 #
-# INBOUND FROM THE LAN: http://hermes.vulcan.lan, for the Conduit iOS client.
+# INBOUND FROM THE LAN: https://hermes.vulcan.lan, for the Conduit iOS client.
 # nginx on the host is the sole ingress; the guest itself remains reachable only
-# over the /30 bridge. Plain HTTP on purpose — Conduit cannot validate our
-# private CA — and an ALLOWLIST, because several Hermes routes need no
-# credential. Both constraints are explained at the vhost below; read them
-# before changing either.
+# over the /30 bridge. HTTPS ONLY — this endpoint carries API_SERVER_KEY, and
+# nothing on this host may offer a LAN service unencrypted. Also an ALLOWLIST,
+# because several Hermes routes need no credential. Both constraints are
+# explained at the vhost below; read them before changing either.
 #
 # There IS outbound-direction DNAT: since 2026-05-12 a two-stage DNAT lets the
 # guest reach host loopback services; see the dnatPorts block below.
@@ -191,31 +191,27 @@ in
   # hermes-br0 is a /30 host-only bridge, so the guest is unreachable from the
   # LAN. This vhost is the only way a phone can talk to Hermes.
   #
-  # PLAIN HTTP, AND DELIBERATELY SO. Conduit's Hermes code path builds a bare
-  # Dio client with no badCertificateCallback and no custom SecurityContext, so
-  # it validates against Dart's built-in roots and does NOT consult the iOS
-  # system trust store. A step-ca cert for *.vulcan.lan therefore fails there
-  # even though the iPhone trusts the Vulcan CA, and the app exposes no
-  # allow-self-signed toggle on this path. Its own documented example is
-  # http://<lan-ip>:<port>. iOS ATS permits this: Conduit ships
-  # NSAllowsArbitraryLoads and NSAllowsLocalNetworking.
+  # HTTPS ONLY. This endpoint carries API_SERVER_KEY on every request, and no
+  # LAN-facing service on this host may be offered unencrypted.
   #
-  # CONSEQUENCE, ACCEPTED: API_SERVER_KEY crosses the LAN in cleartext on every
-  # request. That is the cost of this client working at all. Do not "fix" it by
-  # adding forceSSL -- see below.
+  # KNOWN RISK TO THE CLIENT: Conduit's Hermes code path builds a bare Dio
+  # client with no badCertificateCallback and no custom SecurityContext, so it
+  # validates against Dart's built-in roots and does NOT consult the iOS system
+  # trust store. A step-ca cert therefore may be rejected even though the phone
+  # trusts the Vulcan CA, and the app has no allow-self-signed toggle on that
+  # path. If its "Test connection" fails against https://, that is why -- and
+  # the answer is a publicly-trusted certificate, NOT reverting to plaintext.
   #
-  # NO forceSSL / NO REDIRECT. Conduit sets followRedirects: false, so a 301
-  # from http to https does not get followed: it fails the connection test
-  # outright, with the same generic error as every other failure. An explicit
-  # port-80 listen keeps the global redirect-http catch-all in web.nix from
-  # claiming this name.
+  # forceSSL (rather than a bare 443 listener) keeps the port-80 behaviour
+  # explicit: a client misconfigured with http:// gets a 301 and, because
+  # Conduit sets followRedirects: false, fails loudly on the FIRST request
+  # instead of silently shipping the key in clear on every one. One header
+  # reaches port 80 in that case; there is no way to prevent that server-side,
+  # since any listener reads the request before it can answer.
   services.nginx.virtualHosts."hermes.vulcan.lan" = {
-    listen = [
-      {
-        addr = "0.0.0.0";
-        port = 80;
-      }
-    ];
+    forceSSL = true;
+    sslCertificate = "/var/lib/nginx-certs/hermes.vulcan.lan.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/hermes.vulcan.lan.key";
 
     # ---- Proxied surface is an ALLOWLIST ----
     # Hermes does not authenticate everything. Verified live 2026-08-02 against

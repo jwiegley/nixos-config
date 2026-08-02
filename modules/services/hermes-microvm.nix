@@ -194,13 +194,14 @@ in
   # HTTPS ONLY. This endpoint carries API_SERVER_KEY on every request, and no
   # LAN-facing service on this host may be offered unencrypted.
   #
-  # KNOWN RISK TO THE CLIENT: Conduit's Hermes code path builds a bare Dio
-  # client with no badCertificateCallback and no custom SecurityContext, so it
-  # validates against Dart's built-in roots and does NOT consult the iOS system
-  # trust store. A step-ca cert therefore may be rejected even though the phone
-  # trusts the Vulcan CA, and the app has no allow-self-signed toggle on that
-  # path. If its "Test connection" fails against https://, that is why -- and
-  # the answer is a publicly-trusted certificate, NOT reverting to plaintext.
+  # CLIENT COMPATIBILITY, CONFIRMED WORKING 2026-08-02: Conduit connects to this
+  # endpoint over HTTPS with the step-ca certificate. Worth recording because a
+  # source reading of the app predicted otherwise -- its Hermes path builds a
+  # bare Dio client with no badCertificateCallback and no custom
+  # SecurityContext, which was expected to mean Dart's built-in roots and no
+  # regard for the iOS trust store. In practice the CA installed on the phone is
+  # honoured. Do not "fix" a future connection failure by reverting to
+  # plaintext: this endpoint carries API_SERVER_KEY.
   #
   # forceSSL (rather than a bare 443 listener) keeps the port-80 behaviour
   # explicit: a client misconfigured with http:// gets a 301 and, because

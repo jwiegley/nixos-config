@@ -89,28 +89,79 @@ in
       UMask = "0077";
     };
     script = ''
-      set -euo pipefail
-      src=${config.sops.secrets."hermes/env".path}
-      out=/run/secrets-open-webui/hermes-openai-keys
+            set -euo pipefail
+            src=${config.sops.secrets."hermes/env".path}
+            out=/run/secrets-open-webui/hermes-openai-keys
 
-      # ALWAYS write the file, even on failure: open-webui lists it in
-      # environmentFiles, and podman refuses to start if the path is missing.
-      # An empty second key degrades to "Hermes backend present but
-      # unauthenticated" (it will 401), which is visible and recoverable --
-      # unlike a container that will not boot.
-      key=""
-      if [ -r "$src" ]; then
-        key="$(${pkgs.gnugrep}/bin/grep -m1 '^API_SERVER_KEY=' "$src" | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
-      fi
-      if [ -z "$key" ]; then
-        echo "API_SERVER_KEY unavailable; the Hermes backend will 401 until this is fixed" >&2
-      fi
+            # ALWAYS write the file, even on failure: open-webui lists it in
+            # environmentFiles, and podman refuses to start if the path is missing.
+            # An empty second key degrades to "Hermes backend present but
+            # unauthenticated" (it will 401), which is visible and recoverable --
+            # unlike a container that will not boot.
+            key=""
+            if [ -r "$src" ]; then
+              key="$(${pkgs.gnugrep}/bin/grep -m1 '^API_SERVER_KEY=' "$src" | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
+            fi
+            if [ -z "$key" ]; then
+              echo "API_SERVER_KEY unavailable; the Hermes backend will 401 until this is fixed" >&2
+            fi
 
-      ${pkgs.coreutils}/bin/install -d -m 0750 -o open-webui -g open-webui /run/secrets-open-webui
-      umask 0077
-      printf 'OPENAI_API_KEYS=%s;%s\n' 'gateway-injects-real-key' "$key" > "$out"
-      ${pkgs.coreutils}/bin/chown open-webui:open-webui "$out"
-      ${pkgs.coreutils}/bin/chmod 0400 "$out"
+            ${pkgs.coreutils}/bin/install -d -m 0750 -o open-webui -g open-webui /run/secrets-open-webui
+            umask 0077
+            printf 'OPENAI_API_KEYS=%s;%s\n' 'gateway-injects-real-key' "$key" > "$out"
+            ${pkgs.coreutils}/bin/chown open-webui:open-webui "$out"
+            ${pkgs.coreutils}/bin/chmod 0400 "$out"
+
+            # ---- Reconcile the backend list in Open WebUI's DATABASE ----
+            # Setting OPENAI_API_BASE_URLS / OPENAI_API_KEYS in the container
+            # environment is NOT sufficient. Open WebUI marks both as PersistentConfig:
+            # the values live in its `config` table, the env var seeds them only on the
+            # very first start, and thereafter the database wins and the env is
+            # ignored. An earlier attempt set only the env vars and had no effect --
+            # the second backend never appeared and the model picker showed nothing but
+            # the built-in "Arena Model".
+            #
+            # So the list is written here instead. The URLs are not secret, but the
+            # keys array contains Hermes' API_SERVER_KEY, which is why this cannot live
+            # in the SQL reconciler in open-webui.nix: that renders into a unit script
+            # and therefore into the world-readable Nix store. Here the key is read
+            # from SOPS at activation and passed to psql on STDIN -- never in argv,
+            # where `ps` would expose it.
+            #
+            # Index 0 is the LLM gateway (nginx injects its own upstream key, so the
+            # placeholder is correct); index 1 is the Hermes agent.
+            if ${pkgs.util-linux}/bin/runuser -u postgres -- \
+                 ${pkgs.postgresql}/bin/psql -Atq -d open_webui -c \
+                 "SELECT 1 FROM information_schema.tables WHERE table_name='config'" >/dev/null 2>&1; then
+              ${pkgs.util-linux}/bin/runuser -u postgres -- \
+                ${pkgs.postgresql}/bin/psql -q -v ON_ERROR_STOP=1 -d open_webui <<SQL || \
+                  echo "open_webui backend reconcile failed (non-fatal)" >&2
+              INSERT INTO config (key, value, updated_at) VALUES
+                ('openai.api_base_urls',
+                 -- hermes-vm is an /etc/hosts name published by hermes-microvm.nix
+                 -- from its vmAddr binding; 8080 must match apiServerPort in that
+                 -- same file. NOT 127.0.0.1:8080 -- nothing listens there.
+                 '["http://127.0.0.1:4000/v1","http://hermes-vm:8080/v1"]'::json,
+                 extract(epoch FROM now())::bigint),
+                ('openai.api_keys',
+                 json_build_array('gateway-injects-real-key', \$hermes\$$key\$hermes\$),
+                 extract(epoch FROM now())::bigint),
+                ('openai.api_configs',
+                 '{"0":{"enable":true},"1":{"enable":true}}'::json,
+                 extract(epoch FROM now())::bigint),
+                ('openai.enable', 'true'::json, extract(epoch FROM now())::bigint),
+                -- Stale ordering from the LiteLLM era listed models that no longer
+                -- exist (hera/gpt-oss-*, positron/*), which is why the picker looked
+                -- empty. Emptying it lets Open WebUI fall back to natural ordering.
+                ('ui.model_order_list', '[]'::json, extract(epoch FROM now())::bigint)
+              ON CONFLICT (key) DO UPDATE SET
+                value = EXCLUDED.value,
+                updated_at = EXCLUDED.updated_at
+              WHERE config.value::jsonb IS DISTINCT FROM EXCLUDED.value::jsonb;
+      SQL
+            else
+              echo "open_webui config table not ready; backends will reconcile on the next run" >&2
+            fi
     '';
   };
   sops.secrets."open-webui-db-password" = {

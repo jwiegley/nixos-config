@@ -634,13 +634,33 @@ groups:
       # gauge == 0 iff some scrape failed in the window; if the target has been absent for the
       # whole day the conjunct is NO_DATA and the join drops it, which is correct (a wholly
       # absent target is TargetDown's job, not this rule's).
+      # LABEL-CHURN HARDENING 2026-08-02. Both rules join three terms with
+      # on(job,instance). The right-hand terms were previously bare
+      # count_over_time/min_over_time, which emit ONE SERIES PER LABEL SET --
+      # so the moment any other label changes value, the lookback window holds
+      # two series for the same (job,instance) and the join dies with "found
+      # duplicate series for the match group ... many-to-many matching not
+      # allowed". That is not hypothetical: renaming a probe_type label value
+      # broke both rules for what would have been a full week, until the old
+      # series aged out of the [7d] window. Aggregating each right-hand term to
+      # (job,instance) makes them unique by construction and immune to any
+      # future label addition, removal or rename.
+      #
+      # max by() for the counts (sample counts are equal across duplicate
+      # series, so max is exact and avoids sum's double-counting) and min by()
+      # for the failure test (the rule asks "did it fail at least once", so the
+      # minimum across duplicates is the right reduction).
       - alert: ServiceChronicallyUnavailable
         expr: |
           avg_over_time(up[7d]) < 0.98
           and on(job,instance)
-          (count_over_time(up[7d]) / on(job,instance) count_over_time(up[1d])) > 5.6
+          (
+            max by(job,instance) (count_over_time(up[7d]))
+            / on(job,instance)
+            max by(job,instance) (count_over_time(up[1d]))
+          ) > 5.6
           and on(job,instance)
-          (min_over_time(up[1d]) == 0)
+          (min by(job,instance) (min_over_time(up[1d])) == 0)
         for: 1h
         labels:
           severity: warning
@@ -674,9 +694,13 @@ groups:
         expr: |
           avg_over_time(probe_success{host_group!~"iot|iot-noping|iot-quiet"}[7d]) < 0.98
           and on(job,instance)
-          (count_over_time(probe_success[7d]) / on(job,instance) count_over_time(probe_success[1d])) > 5.6
+          (
+            max by(job,instance) (count_over_time(probe_success[7d]))
+            / on(job,instance)
+            max by(job,instance) (count_over_time(probe_success[1d]))
+          ) > 5.6
           and on(job,instance)
-          (min_over_time(probe_success[1d]) == 0)
+          (min by(job,instance) (min_over_time(probe_success[1d])) == 0)
         for: 1h
         labels:
           severity: warning

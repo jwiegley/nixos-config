@@ -5,13 +5,12 @@
 # its own private /30 bridge so neither VM's networking can affect the
 # other.
 #
-# No INBOUND path from the LAN — Hermes is outbound-only, and the api_server is
-# reachable only over the /30 bridge. A LAN-facing nginx vhost
-# (https://hermes.vulcan.lan) existed briefly on 2026-08-01 and was removed the
-# same day: Hermes has no WebUI to serve, and its only interactive consumer is
-# Open WebUI, which runs with host networking and reaches the guest over the
-# bridge directly. Re-adding LAN ingress means re-adding the allowlist too —
-# /health, /v1/health and /health/detailed are served with NO credential.
+# INBOUND FROM THE LAN: http://hermes.vulcan.lan, for the Conduit iOS client.
+# nginx on the host is the sole ingress; the guest itself remains reachable only
+# over the /30 bridge. Plain HTTP on purpose — Conduit cannot validate our
+# private CA — and an ALLOWLIST, because several Hermes routes need no
+# credential. Both constraints are explained at the vhost below; read them
+# before changing either.
 #
 # There IS outbound-direction DNAT: since 2026-05-12 a two-stage DNAT lets the
 # guest reach host loopback services; see the dnatPorts block below.
@@ -103,6 +102,56 @@ let
   hostDnatCleanupRules = lib.concatMapStringsSep "\n" (port: ''
     iptables -t nat -D PREROUTING -i ${bridgeName} -d ${bridgeAddr} -p tcp --dport ${toString port} -j DNAT --to-destination 127.0.0.1:${toString port} 2>/dev/null || true
   '') dnatPorts;
+  # Shared proxy body for every forwarded Hermes location. Written as raw
+  # extraConfig rather than proxyPass= so the same text can back an exact-match
+  # location (`= /health`), which the NixOS locations option renders verbatim.
+  hermesProxyPass = ''
+    proxy_pass http://${vmAddr}:${toString apiServerPort};
+
+    # Audit provenance. api_server.py reads X-Forwarded-For and X-Real-IP by
+    # name into its request-audit context and persists them onto cron jobs
+    # created over HTTP. Behind a proxy its own request.remote is always the
+    # bridge, so without these the only provenance it can record is whatever
+    # the caller chose to send. $remote_addr, not $proxy_add_x_forwarded_for,
+    # so a client-supplied value is overwritten rather than appended to.
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Host hermes.vulcan.lan;
+
+    # Hermes streams over SSE (not WebSockets -- Conduit uses
+    # Accept: text/event-stream on this path). Buffering would hold a whole
+    # agent turn until it completed.
+    proxy_buffering off;
+    proxy_cache off;
+
+    # Conduit allows a 5-minute idle and 30-minute maximum on a stream, so the
+    # proxy must outlast that rather than cutting turns short. NOTE an nginx
+    # RELOAD still terminates in-flight requests at worker_shutdown_timeout,
+    # which web.nix:30 sets to 300s.
+    proxy_connect_timeout 30s;
+    proxy_send_timeout 3600s;
+    proxy_read_timeout 3600s;
+
+    # Bound what an unauthenticated caller can make the host absorb: nginx
+    # buffers the whole body before proxying, and /health needs no key.
+    client_max_body_size 32m;
+    client_body_buffer_size 1m;
+    limit_req zone=hermes_api burst=20 nodelay;
+    limit_conn hermes_api_conn 16;
+
+    # Defence in depth against prompt injection: the guest can reach the host,
+    # so without this a compromised agent could re-enter its own control API
+    # through the front door -- and it is the one principal already holding
+    # API_SERVER_KEY. Host-side callers (hermes-mcp, the e2e probe, Open WebUI)
+    # go direct over the bridge, so nothing legitimate is denied.
+    deny ${vmAddr};
+    allow all;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+  '';
+
 in
 {
   # ---- Host user/group ----
@@ -130,6 +179,70 @@ in
   # vmAddr stays the single source of truth. Host-only: this is /etc/hosts on
   # vulcan, not a DNS record, so the name is not resolvable from the LAN.
   networking.hosts."${vmAddr}" = [ "hermes-vm" ];
+
+  # Per-client limits for the LAN-facing Hermes ingress. Must be at http
+  # scope; limit_req_zone/limit_conn_zone cannot live in a server block.
+  services.nginx.appendHttpConfig = ''
+    limit_req_zone $binary_remote_addr zone=hermes_api:10m rate=10r/s;
+    limit_conn_zone $binary_remote_addr zone=hermes_api_conn:10m;
+  '';
+
+  # ---- LAN ingress for the Conduit iOS client ----
+  # hermes-br0 is a /30 host-only bridge, so the guest is unreachable from the
+  # LAN. This vhost is the only way a phone can talk to Hermes.
+  #
+  # PLAIN HTTP, AND DELIBERATELY SO. Conduit's Hermes code path builds a bare
+  # Dio client with no badCertificateCallback and no custom SecurityContext, so
+  # it validates against Dart's built-in roots and does NOT consult the iOS
+  # system trust store. A step-ca cert for *.vulcan.lan therefore fails there
+  # even though the iPhone trusts the Vulcan CA, and the app exposes no
+  # allow-self-signed toggle on this path. Its own documented example is
+  # http://<lan-ip>:<port>. iOS ATS permits this: Conduit ships
+  # NSAllowsArbitraryLoads and NSAllowsLocalNetworking.
+  #
+  # CONSEQUENCE, ACCEPTED: API_SERVER_KEY crosses the LAN in cleartext on every
+  # request. That is the cost of this client working at all. Do not "fix" it by
+  # adding forceSSL -- see below.
+  #
+  # NO forceSSL / NO REDIRECT. Conduit sets followRedirects: false, so a 301
+  # from http to https does not get followed: it fails the connection test
+  # outright, with the same generic error as every other failure. An explicit
+  # port-80 listen keeps the global redirect-http catch-all in web.nix from
+  # claiming this name.
+  services.nginx.virtualHosts."hermes.vulcan.lan" = {
+    listen = [
+      {
+        addr = "0.0.0.0";
+        port = 80;
+      }
+    ];
+
+    # ---- Proxied surface is an ALLOWLIST ----
+    # Hermes does not authenticate everything. Verified live 2026-08-02 against
+    # the guest: /health and /health/detailed both answer 200 with no
+    # credential (upstream docs claim /health/detailed is authenticated; this
+    # build disagrees, so do not rely on the doc).
+    #
+    #   /health          ALLOWED. Conduit's "Test connection" button hits
+    #                    exactly this and nothing else, so the endpoint is
+    #                    load-bearing. Its body is only {"status","platform"} --
+    #                    no state worth withholding.
+    #   /health/detailed BLOCKED. Returns gateway state, connected-platform
+    #                    inventory, active agent count, last exit reason and the
+    #                    pid, to any device on the LAN with no key. Conduit can
+    #                    call it, so some status display may degrade; that is
+    #                    preferred to publishing it. Flip to a proxied location
+    #                    if a feature actually needs it.
+    #   /v1/ /api/       ALLOWED. The real API surface, all key-gated.
+    #   everything else  404.
+    locations = {
+      "= /health".extraConfig = hermesProxyPass;
+      "= /health/detailed".extraConfig = "return 404;";
+      "/v1/".extraConfig = hermesProxyPass;
+      "/api/".extraConfig = hermesProxyPass;
+      "/".extraConfig = "return 404;";
+    };
+  };
 
   # ---- NetworkManager coexistence ----
   networking.networkmanager.unmanaged = [

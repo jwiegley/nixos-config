@@ -24,6 +24,7 @@
 
 # Web Services (HTTP/HTTPS)
 80 0.0.0.0 :: Nginx HTTP
+     hermes.vulcan.lan -> Hermes api_server (PLAIN HTTP on purpose: the Conduit iOS client cannot validate the Vulcan CA; allowlist /health + /v1/ + /api/, no redirect)
 443 0.0.0.0 :: Nginx HTTPS
 
 # Mail Services (SMTP/IMAP)

@@ -81,9 +81,18 @@ run sudo rm -f /var/lib/nginx-certs/litellm.vulcan.lan.crt
 run sudo rm -f /var/lib/nginx-certs/litellm.vulcan.lan.key
 
 note "5. Stale textfile-collector metrics"
-# Otherwise node_exporter keeps serving the last-written litellm_* samples
-# forever and they look like a live service.
-run sudo rm -f /var/lib/prometheus-node-exporter-text-files/litellm.prom
+# ALREADY DONE 2026-08-02 -- kept here so the script stays a complete record.
+#
+# node_exporter serves whatever .prom files sit in this directory, forever, with
+# no writer required. After the exporter was deleted, litellm.prom kept
+# publishing litellm_availability=0 -- a metric asserting the service was DOWN,
+# for a service that no longer existed. It was removed by hand along with the
+# equally orphaned nagios_mirror_divergence.prom.
+#
+# NOTE THE PATH. This line previously read "…-text-files" (hyphenated), which
+# does not exist, so it would have silently removed nothing while reporting
+# success. Every other reference in the repo uses the unhyphenated form below.
+run sudo rm -f /var/lib/prometheus-node-exporter-textfiles/litellm.prom
 
 note "6. PostgreSQL database and role"
 echo "  The 'litellm' database holds LiteLLM_SpendLogs (request/token history)."

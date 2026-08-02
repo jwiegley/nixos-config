@@ -855,15 +855,12 @@ in
     # already enables. No API key, no extra deps (uses core httpx).
     SEARXNG_URL = "https://searxng.vulcan.lan";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions.
-    # Consumers: the OpenClaw↔Hermes MCP bridge (host's hermes-mcp.service)
-    # and, since 2026-08-01, LAN clients via the nginx reverse proxy in
-    # hermes-microvm.nix (https://hermes.vulcan.lan). The guest firewall still
-    # scopes inbound traffic to the host bridge only, so that proxy is the sole
-    # ingress — it forwards the caller's Authorization rather than supplying
-    # one, and proxies only /v1/ and /api/ because several /health routes are
-    # served WITHOUT auth.
+    # Consumers are host-side only: the OpenClaw↔Hermes MCP bridge
+    # (hermes-mcp.service), the e2e chat probe, and Open WebUI, all of which
+    # reach the guest over the /30 bridge. There is deliberately no LAN ingress
+    # — see the note at the top of hermes-microvm.nix.
     # `API_SERVER_KEY` is supplied via environmentFiles=…/env (sops);
-    # requests must present that key.
+    # requests must present that key as `Authorization: Bearer …`.
     API_SERVER_ENABLED = "true";
     API_SERVER_HOST = "0.0.0.0";
     API_SERVER_PORT = toString apiServerPort;
@@ -1135,7 +1132,7 @@ in
     enable = true;
     extraInputRules = ''
       ip saddr ${bridgeAddr} tcp dport 22 accept comment "claude debug ssh from host bridge"
-      ip saddr ${bridgeAddr} tcp dport ${toString apiServerPort} accept comment "hermes api_server from host bridge (host hermes-mcp.service, and the LAN reverse proxy in hermes-microvm.nix)"
+      ip saddr ${bridgeAddr} tcp dport ${toString apiServerPort} accept comment "hermes api_server from host bridge (hermes-mcp.service, the e2e probe, Open WebUI)"
     '';
   };
 }

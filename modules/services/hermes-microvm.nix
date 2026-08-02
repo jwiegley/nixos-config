@@ -124,6 +124,13 @@ in
     "d ${stateDir} 0750 hermes hermes -"
   ];
 
+  # Resolvable name for the guest, so host-side consumers can address the
+  # api_server without restating its bridge address. Open WebUI uses this in
+  # modules/users/home-manager/open-webui.nix; keeping the mapping here means
+  # vmAddr stays the single source of truth. Host-only: this is /etc/hosts on
+  # vulcan, not a DNS record, so the name is not resolvable from the LAN.
+  networking.hosts."${vmAddr}" = [ "hermes-vm" ];
+
   # ---- NetworkManager coexistence ----
   networking.networkmanager.unmanaged = [
     "interface-name:${bridgeName}"

@@ -137,7 +137,23 @@ in
             PORT = "8084";
 
             # OpenAI-compatible API configuration - point to the host LLM gateway
-            OPENAI_API_BASE_URL = "http://127.0.0.1:4000/v1";
+            # TWO OpenAI-compatible backends, semicolon-joined. Open WebUI matches this
+            # list positionally against OPENAI_API_KEYS, which is supplied by the
+            # environmentFile below (it holds Hermes' key, so it cannot live here).
+            # IF YOU REORDER THIS LIST, REORDER THAT ONE TOO.
+            #
+            #   1. the host LLM gateway -> hera's llama-swap. The raw model. nginx
+            #      injects the upstream key, so the client-side key is a placeholder.
+            #   2. the Hermes AGENT (Discord-connected, with mail/calendar/Postgres/HA
+            #      tools) -- a different thing from the model above. It lives inside the
+            #      microVM; `hermes-vm` is an /etc/hosts name published by
+            #      modules/services/hermes-microvm.nix so its bridge address is not
+            #      restated here. The port must match apiServerPort in that same file.
+            #
+            # NOTE 8080 below is the guest's port. Do NOT change it to 127.0.0.1:8080 --
+            # that is vulcan's OWN local llama-swap, an entirely different service (and
+            # the reason this container runs on PORT 8084).
+            OPENAI_API_BASE_URLS = "http://127.0.0.1:4000/v1;http://hermes-vm:8080/v1";
 
             # Disable default Ollama integration (we use the LLM gateway on :4000)
             OLLAMA_BASE_URL = "";
@@ -170,7 +186,13 @@ in
           };
 
           # Secrets via environment file
-          environmentFiles = [ "/run/secrets-open-webui/open-webui-secrets" ];
+          # Second file carries OPENAI_API_KEYS, built at activation by
+          # open-webui-compose-keys (modules/containers/open-webui-quadlet.nix)
+          # so Hermes' key never enters the Nix store.
+          environmentFiles = [
+            "/run/secrets-open-webui/open-webui-secrets"
+            "/run/secrets-open-webui/hermes-openai-keys"
+          ];
 
           # Volume mounts for persistent data
           volumes = [
@@ -196,8 +218,15 @@ in
         };
 
         serviceConfig = {
-          # Wait for PostgreSQL to be ready
-          ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
+          ExecStartPre = [
+            # Wait for PostgreSQL to be ready
+            "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h 127.0.0.1 -p 5432 -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'"
+            # Wait for open-webui-compose-keys to write the OPENAI_API_KEYS file that
+            # environmentFiles references. That is a SYSTEM unit, so this rootless
+            # user unit cannot order itself After= it; polling is the available
+            # mechanism, and matches the pg_isready wait above.
+            "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do [ -r /run/secrets-open-webui/hermes-openai-keys ] && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; echo \"hermes keys file never appeared\" >&2; exit 1'"
+          ];
 
           # Restart policies
           Restart = "always";

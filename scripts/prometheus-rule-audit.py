@@ -254,6 +254,14 @@ def main() -> int:
 
     for g in rules.get("data", {}).get("groups", []):
         gname = g.get("name", "?")
+        # NOTE: gfile is deliberately NOT used to label the per-rule metrics.
+        # nixpkgs' prometheus module runs every ruleFile through a single
+        # checkedRules derivation, so they all emerge named
+        # "<hash>-rules-checkrules-checked" -- the basename is identical for all
+        # ~500 rules and identifies nothing. The GROUP name is what actually
+        # locates a rule, so that is what the dead/dormant metrics carry. gfile
+        # is kept only for the overrun message, where the group name alone would
+        # be ambiguous.
         gfile = re.sub(r"^[a-z0-9]{32}-", "", os.path.basename(g.get("file", "?")))
         interval = float(g.get("interval", 0) or 0)
         duration = float(g.get("evaluationTime", 0) or 0)
@@ -294,9 +302,9 @@ def main() -> int:
             for metric in metric_names(r.get("query", "")):
                 verdict = classify_metric(metric, index, cache)
                 if verdict == "dead":
-                    dead.append((name, gfile, metric))
+                    dead.append((name, gname, metric))
                 elif verdict == "dormant":
-                    dormant.append((name, gfile, metric))
+                    dormant.append((name, gname, metric))
 
     def esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -311,9 +319,26 @@ def main() -> int:
         "with zero series; it can never fire."
     )
     lines.append("# TYPE prometheus_rule_audit_dead_rule gauge")
-    for name, gfile, metric in dead:
+    for name, gname, metric in dead:
         lines.append(
-            f'prometheus_rule_audit_dead_rule{{rule="{esc(name)}",file="{esc(gfile)}",missing_metric="{esc(metric)}"}} 1'
+            f'prometheus_rule_audit_dead_rule{{rule="{esc(name)}",group="{esc(gname)}",missing_metric="{esc(metric)}"}} 1'
+        )
+
+    # Dormant rules are named too, not just counted. A bare count is not
+    # actionable: "4 dormant" cannot be triaged without re-deriving which four,
+    # which defeats the point of having a detector. Dormant is still
+    # informational rather than a defect -- the metric is known to the TSDB but
+    # has no series right now, which is normal for counters that only appear
+    # once their condition first occurs -- but naming them lets a reviewer
+    # confirm that in seconds instead of reconstructing the analysis by hand.
+    lines.append(
+        "# HELP prometheus_rule_audit_dormant_rule An alerting rule whose metric is known "
+        "to the TSDB but currently has no series. Informational, not a defect."
+    )
+    lines.append("# TYPE prometheus_rule_audit_dormant_rule gauge")
+    for name, gname, metric in dormant:
+        lines.append(
+            f'prometheus_rule_audit_dormant_rule{{rule="{esc(name)}",group="{esc(gname)}",idle_metric="{esc(metric)}"}} 1'
         )
 
     for metric_name, help_text, value in (

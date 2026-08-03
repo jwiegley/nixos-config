@@ -2,11 +2,18 @@ groups:
   - name: systemd_journal_errors
     interval: 5m
     rules:
+      # NOTE 2026-08-02: both rules below previously excluded
+      # unit="user@948.service" -- the LiteLLM rootless user's systemd manager,
+      # suppressed because that proxy was a heavy error source. uid 948 no longer
+      # exists (LiteLLM removed 2026-08-01), so the filters matched nothing and
+      # only obscured what these rules actually cover. Removed. If a future
+      # rootless service needs suppressing, exclude it by NAME with a reason --
+      # not by a bare uid that outlives the service.
       # Alert on high error rate in systemd journal
       # Triggers if more than 10 errors in 10 minutes (excluding known transient issues)
       - alert: SystemdJournalHighErrorRate
         expr: |
-          sum(rate({job="systemd-journal", unit!="user@948.service"} |~ "level=error|ERROR|failed"
+          sum(rate({job="systemd-journal"} |~ "level=error|ERROR|failed"
             != "connection refused"
             != "max retries"
             != "Temporary failure in name resolution"
@@ -70,7 +77,6 @@ groups:
             != "forbidden to download"
             | json
             | unit != ""
-            | unit != "user@948.service"
             [10m])) > 10
         for: 5m
         labels:

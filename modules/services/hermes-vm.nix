@@ -751,6 +751,20 @@ in
       vane = {
         command = "${vaneMcpServer}";
         args = [ ];
+
+        # Hermes' per-tool-call MCP timeout defaults to 120s, which is SHORTER
+        # than the work this tool does: a measured /api/search for a trivial
+        # query ("What is NixOS?") took 73s end-to-end on 2026-08-02, so any
+        # non-trivial query overruns 120s and the caller sees a bare timeout
+        # with no answer — reported from Discord that day. Vane itself was
+        # healthy throughout; only the caller gave up.
+        #
+        # Raised to match VANE_TIMEOUT_S below, so the MCP layer and the
+        # script's own HTTP timeout expire together instead of the outer one
+        # firing first and orphaning an in-flight synthesis. Keep the two
+        # numbers equal if either changes.
+        timeout = 600;
+
         env = {
           VANE_BASE_URL = "https://vane.vulcan.lan";
           VANE_TIMEOUT_S = "600";

@@ -837,7 +837,7 @@ let
       # regardless of whether that poll actually created an archive (its
       # comment claims "when ZIM files change", but nothing checked).
       # Measured 2026-08-02: 251 runs in one day at ~54s CPU each -- about
-      # 3.8 CPU-hours -- and 504 nginx reloads.
+      # 3.8 CPU-hours -- and 252 nginx reloads (one per run; nginx itself never restarted).
       #
       # The CPU is the least of it. The scan zimdumps every ZIM off the USB
       # `tank` enclosure, whose bridge is known to hang under sustained load,
@@ -918,7 +918,7 @@ let
 
       # Reload nginx HERE rather than from ExecStartPost, so it happens only
       # when the map actually changed. ExecStartPost ran unconditionally on
-      # every successful invocation, which is where the 504 reloads/day came
+      # every successful invocation, which is where the 252 reloads/day came
       # from. --no-block: this unit is ordered after nginx.service so nginx is
       # up, but a oneshot has no reason to wait on the reload job.
       systemctl reload --no-block nginx.service \
@@ -1201,7 +1201,7 @@ in
       ExecStart = lib.getExe kiwixUrlMapGenerator;
       # No ExecStartPost reload here. It fired on EVERY successful run,
       # including the ~251 no-op runs/day driven by zimit-job-runner's
-      # 5-minute poll -- 504 nginx reloads on 2026-08-02. The generator now
+      # 5-minute poll -- 252 nginx reloads on 2026-08-02. The generator now
       # issues the reload itself, only when it actually rewrites the map.
       User = "root";
       Group = "root";

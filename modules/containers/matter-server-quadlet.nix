@@ -45,6 +45,18 @@
       podmanArgs = [
         "--cap-add=NET_ADMIN"
       ];
+
+      # Quiet the INFO chatter. python-matter-server logs device_controller and
+      # vendor_info INFO lines to STDERR, which journald then tags priority=err
+      # -- so ~110 lines/hour of routine operation showed up in every
+      # `journalctl -p err` review and in logwatch's digest as if they were
+      # faults. warning+ keeps anything actionable.
+      #
+      # Does NOT silence the `CHIP_ERROR ... Subscription Liveness timeout`
+      # lines (~23/hour, chronic): those come from the CHIP SDK's own native
+      # logger at ERROR level and are a real, if benign, signal about Thread
+      # device subscriptions. Deliberately left visible.
+      exec = "--log-level warning";
     };
 
     unitConfig = {

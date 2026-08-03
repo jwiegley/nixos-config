@@ -133,7 +133,20 @@ in
   # This bounds the UNIT regardless of what the script does. The 7200s request timeout in
   # log-summarizer.py is separately excessive and worth lowering, but that is a script change
   # and this is the general safety net.
-  systemd.services.logwatch.serviceConfig.TimeoutStartSec = "30min";
+  # Raised 30min -> 45min on 2026-08-03 at the operator's request, after the cap
+  # was actually hit twice in four days (timed out 04:30 on Aug 1 and Aug 3;
+  # completed in 3m45s on Aug 2 and 7m56s on Jul 31). The comment above still
+  # holds -- 30 min WAS ~3.8x the worst observed run -- but the worst observed
+  # run has since grown past it, because logwatch digests `range = "since 24
+  # hours ago"` and journal volume is now ~800k entries/day.
+  #
+  # This is the safety net, not the fix. The volume itself is dominated by
+  # container-user session churn (systemd + systemd-logind + sd-pam + o-bridge
+  # ~= 17.3k entries/hour, 56% of the journal), created by
+  # container-health-exporter.timer running systemd-run per rootless container
+  # user every 120s. Lowering that cadence is the actual lever; see the note in
+  # modules/monitoring/services/container-health-exporter.nix.
+  systemd.services.logwatch.serviceConfig.TimeoutStartSec = "45min";
 
   services = {
     logwatch = {

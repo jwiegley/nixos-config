@@ -1,0 +1,56 @@
+--- /var/lib/hass/custom_components/versatile_thermostat/underlyings.py.pre-vulcan-single-setpoint.bak	2026-06-07 22:32:56.371180801 -0700
++++ /var/lib/hass/custom_components/versatile_thermostat/underlyings.py	2026-08-03 12:24:31.019579601 -0700
+@@ -861,16 +861,50 @@
+         _LOGGER.info("%s - Set setpoint temperature to: %s", self, target_temp)
+ 
+         # Issue 807 add TARGET_TEMPERATURE only if in the features
+-        if ClimateEntityFeature.TARGET_TEMPERATURE_RANGE in self.supported_features:
++        #
++        # LOCAL PATCH (vulcan, 2026-08-03) -- gate the RANGE branch on the
++        # underlying's CURRENT hvac_mode, not merely its advertised features.
++        #
++        # Upstream sends target_temp_high/low whenever the underlying ADVERTISES
++        # TARGET_TEMPERATURE_RANGE. A Nest advertises it because it *can* do
++        # heat_cool, but while it sits in `cool` its range setpoints are None, so
++        # homeassistant/components/nest/climate.py raises
++        #   TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'
++        # and the requested temperature is NEVER APPLIED -- silently, with
++        # nothing else reporting a failure. Observed 12x/24h on climate.upstairs.
++        #
++        # Sending both keys at once is what triggers it: the Nest takes the range
++        # path and ignores `temperature`. So send exactly one -- the range only
++        # when a range is actually active, otherwise the single setpoint.
++        supports_range = (
++            ClimateEntityFeature.TARGET_TEMPERATURE_RANGE in self.supported_features
++        )
++        supports_single = (
++            ClimateEntityFeature.TARGET_TEMPERATURE in self.supported_features
++        )
++        underlying_state: State | None = self._hass.states.get(self._entity_id)
++        range_is_active = (
++            underlying_state is not None
++            and underlying_state.state == HVACMode.HEAT_COOL
++        )
++
++        if supports_range and range_is_active:
+             data.update(
+                 {
+                     "target_temp_high": target_temp,
+                     "target_temp_low": target_temp,
+                 }
+             )
+-
+-        if ClimateEntityFeature.TARGET_TEMPERATURE in self.supported_features:
++        elif supports_single:
+             data["temperature"] = target_temp
++        elif supports_range:
++            # Range-only device (no single-setpoint support): nothing else to send.
++            data.update(
++                {
++                    "target_temp_high": target_temp,
++                    "target_temp_low": target_temp,
++                }
++            )
+ 
+         try:
+             await self.hass_services_async_call(

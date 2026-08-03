@@ -67,7 +67,22 @@ in
           targets = [ "127.0.0.1:9394" ];
         }
       ];
-      scrape_interval = "30s";
+      # 30s -> 60s on 2026-08-03. OpenProject logs an Apache-style access line
+      # for every inbound request, including this scrape, and journald tags that
+      # stderr output priority=err -- so a 30s interval put 120 lines/hour of
+      # routine scraping into every `journalctl -p err` review and into
+      # logwatch's digest. Halving the interval halves that at the source; there
+      # is no app-side knob to exclude /metrics from the access log.
+      #
+      # 60s is the FLOOR, not a free parameter: alerts/openproject.yaml has
+      # OpenProjectNoWorkers at `for: 2m`, so 60s still gives two samples inside
+      # that window. Going to 120s would leave one sample and make the rule
+      # dependent on a single scrape landing.
+      #
+      # NOTE this is a ~1% dent in total journal volume. The dominant source is
+      # container-user session churn from container-health-exporter.timer; see
+      # the note on logwatch's TimeoutStartSec in services/monitoring.nix.
+      scrape_interval = "60s";
       scrape_timeout = "10s";
     }
   ];

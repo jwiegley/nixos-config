@@ -73,7 +73,7 @@
     # trigger hash and a differing shape would be a silent trap for whoever
     # points openclaw-config.nix-style rendering at this later.
     reasoning = {
-      name = "DeepSeek-V4-Flash-0731-oQ8-mtp";
+      name = "DeepSeek-V4-Flash-0731-oQ8e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

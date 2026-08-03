@@ -1,14 +1,95 @@
 #!/run/current-system/sw/bin/bash
 # hermes-self-heal action: restart microvm@hermes.service.
 # Output: one line of JSON to stdout describing the result.
+#
+# UPSTREAM PREFLIGHT (added 2026-08-03)
+#
+# Restarting Hermes cannot fix a dead upstream MODEL, and actively makes things
+# worse: every restart resets the ~8 minute /v1/capabilities warmup, so the VM
+# looks unhealthy for LONGER, which invites another restart. Observed that day --
+# DeepSeek stopped answering on hera at 14:57, self-heal restarted the VM at
+# 15:06 and again at 15:12, and by then there had been 11 VM starts in one day.
+# Neither restart could have helped: the gateway itself could not serve the model
+# (HTTP 000 after 90s) while Qwen answered in 4.6s on the same endpoint, proving
+# the fault was one model on hera and not anything inside the VM.
+#
+# So: before restarting, check that the gateway can actually complete a tiny chat
+# with the model Hermes is configured to use. If it cannot, SKIP the restart and
+# say why. The incident stays open and the operator is still paged by
+# HermesApiServerDown / HermesE2eChatFailing -- this suppresses a futile ACTION,
+# never the alerting.
+#
+# Skipping is correct even when the model is merely COLD rather than dead: a cold
+# model needs waiting, and restarting Hermes does not make it load faster.
+#
+# FAILS OPEN. If the preflight cannot reach a verdict -- no model registry, no
+# curl or jq, malformed json -- the restart proceeds, preserving the previous
+# behaviour. A broken preflight must never silently disable self-heal.
 set -euo pipefail
+
+CURL=/run/current-system/sw/bin/curl
+JQ=/run/current-system/sw/bin/jq
+MODELS_JSON=/etc/models.json
+GATEWAY=http://127.0.0.1:4000/v1/chat/completions
+
+# MUST exceed a COLD model load, or this check inverts its own purpose.
+#
+# Measured on hera: the first request to an unloaded DeepSeek returned 200 after
+# 57.6s, and the two immediately after it returned in 0.5s. An earlier draft used
+# 45s, which sits BELOW that cold load -- so a perfectly healthy but unloaded
+# model would have read as "not serving" and this action would have skipped a
+# restart Hermes genuinely needed. That is a worse failure than the futile
+# restarts this preflight exists to prevent, because it is silent.
+#
+# 120s is the resulting semantics, and they are the right ones: answering at all,
+# even slowly, proves the UPSTREAM is fine, so any remaining fault is Hermes' and
+# the restart should go ahead. Only a model that cannot answer within two minutes
+# is treated as not serving.
+#
+# Fits the budget: daemon.py runs actions with timeout_s=240 and the restart
+# itself takes ~7s, so 120 + 7 leaves better than 100s of headroom.
+PREFLIGHT_TIMEOUT=120
+
+preflight_skip_reason=""
+
+if [ -r "$MODELS_JSON" ] && [ -x "$JQ" ] && [ -x "$CURL" ]; then
+  # Hermes runs on the reasoning tier; fall back to primary if that key ever goes
+  # away, so a models.nix reshuffle degrades to a weaker check rather than none.
+  model="$("$JQ" -r '.llm.reasoning.name // .llm.primary.name // empty' "$MODELS_JSON" 2>/dev/null || true)"
+  if [ -n "$model" ]; then
+    body="$("$JQ" -nc --arg m "$model" \
+      '{model:$m, max_tokens:1, messages:[{role:"user", content:"ping"}]}' 2>/dev/null || true)"
+    if [ -n "$body" ]; then
+      # NOT `curl ... || echo 000`: on a timeout curl ALREADY writes "000" via
+      # -w and then exits non-zero, so the || would append a second "000" and
+      # yield "000000". Harmless when comparing against "200", but if curl ever
+      # printed 200 and still exited non-zero the value would become "200000"
+      # and this would skip a restart it should have performed. Capture first,
+      # then substitute only when the output is genuinely empty.
+      code="$("$CURL" -s -o /dev/null -w '%{http_code}' --max-time "$PREFLIGHT_TIMEOUT" \
+        -H 'Content-Type: application/json' -d "$body" "$GATEWAY" 2>/dev/null)" || true
+      [ -n "$code" ] || code=000
+      if [ "$code" != "200" ]; then
+        preflight_skip_reason="upstream model '$model' not serving (gateway HTTP $code); restarting the VM cannot fix an upstream fault"
+      fi
+    fi
+  fi
+fi
+
+if [ -n "$preflight_skip_reason" ]; then
+  # ok:false so the daemon records that nothing was remediated, rather than
+  # reporting a success that changed nothing.
+  printf '{"ok": false, "skipped": true, "duration_s": 0, "notes": "%s"}\n' "$preflight_skip_reason"
+  exit 0
+fi
+
 start_ts=$(date +%s)
 rc=0
 /run/current-system/sw/bin/systemctl restart microvm@hermes.service || rc=$?
 end_ts=$(date +%s)
 duration=$((end_ts - start_ts))
 if [ "$rc" -eq 0 ]; then
-  printf '{"ok": true, "duration_s": %d, "notes": "microvm@hermes restarted"}\n' "$duration"
+  printf '{"ok": true, "duration_s": %d, "notes": "microvm@hermes restarted (upstream model preflight passed)"}\n' "$duration"
 else
   printf '{"ok": false, "duration_s": %d, "notes": "systemctl restart returned %d"}\n' "$duration" "$rc"
 fi

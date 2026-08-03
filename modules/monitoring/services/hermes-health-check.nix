@@ -287,15 +287,21 @@ let
     VM_UNIT = "microvm@hermes.service"
 
 
-    def vm_uptime_seconds() -> float:
+    def vm_uptime_seconds() -> "float | None":
         """Seconds since microvm@hermes last became active — a VM-boot proxy.
 
         Gates HermesApiServerDown so the ~8-min post-restart /v1/capabilities
         warmup (model-backend-bound; see hermes.yaml) is not read as an outage.
         Uses systemd's CLOCK_MONOTONIC activation timestamp, compared against
-        time.monotonic() (same clock). On ANY failure returns a large value so
-        the alert gate stays OPEN — a probe failure must never mask a real
-        outage by making the VM look freshly booted forever.
+        time.monotonic() (same clock).
+
+        Returns None on ANY failure. The CALLER decides the fail-open value, and
+        must do so distinctly per metric: the uptime gauge fails open with a
+        large number, but the start-time gauge fails open with a CONSTANT. A
+        failure sentinel derived from the current clock (`now - 86400`) would be
+        a different value on every run, which `changes()` reads as a fresh VM
+        boot each time — turning a stuck uptime probe into a phantom crash loop
+        in HermesVmRestartLooping.
         """
         try:
             out = subprocess.run(
@@ -312,11 +318,11 @@ let
             ).stdout.strip()
             active_us = int(out)
             if active_us <= 0:
-                return 86400.0  # never active / unknown → don't suppress
+                return None  # never active / unknown → don't suppress
             up = time.monotonic() - active_us / 1e6
-            return up if up >= 0 else 86400.0
+            return up if up >= 0 else None
         except Exception:
-            return 86400.0
+            return None
 
 
     def write_metrics(metrics: dict[str, float | int]) -> None:
@@ -345,7 +351,8 @@ let
         "hermes_discord_last_event_age_seconds": "Wall-clock seconds since the most recent proof of Discord liveness (min of heartbeat-ACK age and gateway.log event age)",
         "hermes_health_check_last_run_timestamp_seconds": "When the health check last ran",
         "hermes_api_key_present": "1 if API_SERVER_KEY was readable from /run/secrets/hermes/env",
-        "hermes_vm_uptime_seconds": "Seconds since microvm@hermes last became active (VM-boot proxy; gates HermesApiServerDown past the post-restart warmup)",
+        "hermes_vm_uptime_seconds": "Seconds since microvm@hermes last became active, AS SAMPLED at the last check run (see hermes_vm_start_time_seconds — prefer that for any gate)",
+        "hermes_vm_start_time_seconds": "Unix time at which microvm@hermes last became active. Constant between VM restarts, so `time() - this` is the TRUE uptime at query time; hermes_vm_uptime_seconds is only correct at the instant it was written",
     }
     METRIC_TYPE = {
         "hermes_health_check_last_run_timestamp_seconds": "gauge",
@@ -395,13 +402,29 @@ let
         # healthy WS acks ~every 41s, keeping this tiny; it only climbs when
         # acks AND log events both go silent = a real zombie.
         live_age = min(disco_age, hb_age) if hb_present else disco_age
-        vm_up = vm_uptime_seconds()
+        # Fail open, but with a DIFFERENT sentinel per metric — see the
+        # docstring. 86400 keeps any `uptime > N` reader unsuppressed; 0.0 keeps
+        # `time() - start` enormous (also unsuppressed) while staying CONSTANT
+        # across runs so changes() cannot mistake it for repeated reboots.
+        vm_up_raw = vm_uptime_seconds()
+        vm_up = 86400.0 if vm_up_raw is None else vm_up_raw
+        vm_start = 0.0 if vm_up_raw is None else time.time() - vm_up_raw
 
         write_metrics(
             {
                 "hermes_api_server_ok": api_ok,
                 "hermes_api_server_probe_seconds": round(api_seconds, 3),
                 "hermes_vm_uptime_seconds": round(vm_up, 1),
+                # Published because vm_uptime is a snapshot and this check only
+                # runs every 900s: between runs the uptime gauge is frozen at
+                # whatever it was when written. That is not merely stale, it is
+                # a monitoring false-NEGATIVE — HermesApiServerDown gates on
+                # `uptime > 600`, so a VM crash-looping faster than 600s would
+                # be sampled inside its warmup window every single time and the
+                # gate would never open, blinding the alert in precisely the
+                # case it exists to catch. `time() - start_time` is computed at
+                # QUERY time and cannot be fooled that way.
+                "hermes_vm_start_time_seconds": round(vm_start, 1),
                 "hermes_mcp_sse_open_ok": sse_ok,
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),

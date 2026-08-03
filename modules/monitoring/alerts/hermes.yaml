@@ -41,12 +41,25 @@ groups:
       # Gating on VM uptime > 10 min ignores the warmup while a genuine outage
       # on an already-up VM still pages fast at `for: 5m`. `ignoring(__name__)`
       # is required: the two series differ only by __name__ (identical node
-      # textfile labels otherwise). hermes_vm_uptime_seconds fails OPEN (large
-      # value on probe error) so a uptime-probe failure never masks an outage.
-      # The e2e probes (HermesAskFailing / HermesE2eChatFailing, 60s budgets)
-      # tolerate warmup and stay green — independent fast real-breakage detectors.
+      # textfile labels otherwise). The gate fails OPEN (probe error puts the
+      # start time a day in the past) so a uptime-probe failure never masks an
+      # outage. The e2e probes (HermesAskFailing / HermesE2eChatFailing, 60s
+      # budgets) tolerate warmup and stay green — independent fast detectors.
+      #
+      # Gate on `time() - hermes_vm_start_time_seconds`, NOT on the
+      # hermes_vm_uptime_seconds gauge it replaced (2026-08-02). That gauge is a
+      # SNAPSHOT written by a check that runs every 900s, so between runs it is
+      # frozen at whatever it read — observed reporting 4.1s while the VM had
+      # genuinely been up 13 minutes. Gating on a frozen value is a false-
+      # NEGATIVE generator: a VM crash-looping faster than the 600s warmup would
+      # be sampled inside its warmup window on every single run, so `> 600` would
+      # never be true and this critical alert would be permanently blind in
+      # exactly the scenario it exists to catch. The start timestamp is constant
+      # between restarts, so the subtraction happens at QUERY time and is always
+      # the true uptime. HermesVmRestartLooping below covers the crash-loop case
+      # that this gate correctly (and necessarily) still suppresses.
       - alert: HermesApiServerDown
-        expr: hermes_api_server_ok == 0 and ignoring(__name__) hermes_vm_uptime_seconds > 600
+        expr: hermes_api_server_ok == 0 and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 600
         for: 5m
         labels:
           severity: critical
@@ -64,6 +77,41 @@ groups:
             platform (see /var/lib/hermes/.hermes/logs/errors.log
             for "Refusing to start: binding to 0.0.0.0 requires
             API_SERVER_KEY").
+
+      # The complement to HermesApiServerDown's warmup gate. That gate suppresses
+      # while the VM is young, which is correct for a single restart but means a
+      # VM that never STAYS up is never covered by it. Nothing else watched for
+      # that, so a crash loop was a monitoring blind spot (found 2026-08-02).
+      #
+      # changes() over the start timestamp, not a restart counter: the health
+      # check only samples every 900s, so a counter would undercount anyway, and
+      # a changing start time is exactly the definition of "it rebooted". This
+      # can only resolve ~4 restarts/hour — enough to distinguish a loop from a
+      # deploy, which is all that is being asked of it.
+      #
+      # Threshold >3 over 2h (not >1) because deploys legitimately restart the
+      # VM, sometimes two or three times in a working session — /etc/nixos/build
+      # runs during a model-registry change did exactly that. Anything above
+      # that is not a deploy pattern. The fail-open sentinel is a CONSTANT 0.0
+      # precisely so a broken uptime probe cannot masquerade as churn here.
+      - alert: HermesVmRestartLooping
+        expr: changes(hermes_vm_start_time_seconds[2h]) > 3
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "microvm@hermes has restarted repeatedly in the last 2 hours"
+          description: |
+            The Hermes VM's boot timestamp changed more than 3 times in 2
+            hours, which is a restart loop rather than a deploy. While the VM
+            keeps restarting, HermesApiServerDown stays suppressed by its
+            warmup gate, so this is the alert that will fire instead — treat it
+            as the agent being effectively unavailable.
+            Check: systemctl status microvm@hermes, journalctl -u
+            microvm@hermes, and the guest's own logs under
+            /var/lib/hermes/.hermes/logs/.
 
       # The host-side bridge that OpenClaw talks to. If this fails
       # the openclaw-side mcporter cannot reach hermes regardless of

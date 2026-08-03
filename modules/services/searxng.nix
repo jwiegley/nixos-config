@@ -54,8 +54,20 @@ in
         port = searxngPort;
         bind_address = "127.0.0.1";
         base_url = "https://searxng.vulcan.lan/";
-        # Secret key loaded from environment file via $SEARXNG_SECRET
-        secret_key = "@SEARXNG_SECRET@";
+        # Secret key loaded from the SOPS environment file (services.searx.
+        # environmentFile above).
+        #
+        # MUST be $VAR, not @VAR@. searx-init renders settings.yml with
+        # `envsubst`, which only understands shell-style $VAR / ${VAR}. The
+        # previous value was "@SEARXNG_SECRET@", which envsubst leaves ALONE --
+        # verified 2026-08-03 that the rendered /run/searx/settings.yml contained
+        # that placeholder LITERALLY, so this instance had been running with a
+        # publicly-guessable secret_key and the SOPS secret was inert. secret_key
+        # signs preference URLs/cookies, so a predictable value lets those be
+        # forged; low impact on a LAN-only instance, but the fix is free.
+        #
+        # Changing it invalidates any saved preference links, which is expected.
+        secret_key = "$SEARXNG_SECRET";
         # limiter requires Redis/Valkey (disabled for now due to configuration issues)
         limiter = false;
         # Image proxy for privacy
@@ -149,6 +161,53 @@ in
           engine = "brave";
           shortcut = "br";
           # Disabled: Brave's anti-bot measures cause brotli decompression failures
+          disabled = true;
+        }
+        # Added 2026-08-03 for REDUNDANCY, after this instance was reduced to a
+        # single working general engine.
+        #
+        # Measured that day: google returns HTTP 403 (suspended 180s), and BOTH
+        # startpage and duckduckgo now serve CAPTCHAs -- 65 CAPTCHA events in 30
+        # minutes. bing was the only general engine still answering, so any query
+        # bing happened to miss returned ZERO results, and Vane (Perplexica)
+        # replied "I could not find any relevant information" with 0 sources.
+        # That is the user-visible symptom of a search backend with no depth left.
+        #
+        # Mojeek is the right addition because it operates its OWN crawler and
+        # index rather than proxying Google/Bing, so it does not share their
+        # bot-detection posture toward self-hosted instances. Brave above is a
+        # separate matter -- disabled for a concrete technical failure (brotli),
+        # not for blocking -- so it is deliberately left alone.
+        #
+        # TRIED AND IT DOES NOT WORK -- left here disabled so nobody spends the
+        # same afternoon on it again. Enabled 2026-08-03, and mojeek returned
+        # HTTP 403 (suspended_time=180) on the very first query, exactly like
+        # google.
+        #
+        # What the 403 is NOT:
+        #   - not this host's IP. Plain curl from vulcan with a browser
+        #     User-Agent gets 200 from mojeek, duckduckgo AND bing.
+        #   - not a stale User-Agent. This build's useragents.json templates
+        #     Firefox/147.0 (current), and a manual curl with Firefox/147 gets
+        #     200 from mojeek. Firefox/135 also gets 200.
+        #   - not the engine being unsupported: it is a first-class searxng
+        #     engine and it initialised fine.
+        # curl's DEFAULT UA gets 403 from mojeek and a 202 challenge from
+        # duckduckgo, so the engines are fingerprinting the CLIENT, and since UA
+        # and IP are both exonerated the remaining candidate is the TLS/HTTP2
+        # fingerprint of searxng's httpx stack. Nothing in settings.yml changes
+        # that.
+        #
+        # Net effect of enabling it was one extra guaranteed-failing request per
+        # search, so it is off. bing remains the only general engine that answers
+        # this instance; when a query misses on bing, Vane returns 0 sources and
+        # says it could not find anything. Fixing that needs an engine with an
+        # API key (brave/google CSE) or an egress that is not fingerprinted --
+        # both operator decisions, not config tweaks.
+        {
+          name = "mojeek";
+          engine = "mojeek";
+          shortcut = "mjk";
           disabled = true;
         }
         # Wikipedia

@@ -134,6 +134,7 @@
     ../../modules/services/glances.nix
     ../../modules/services/searxng.nix
     ../../modules/services/vane.nix
+    ../../modules/services/vane-llm-shim.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
     ../../modules/monitoring/services/openclaw-hermes-smoke.nix
     ../../modules/monitoring/services/hermes-e2e-chat-probe.nix

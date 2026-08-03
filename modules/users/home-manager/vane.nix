@@ -12,7 +12,28 @@ let
   # primary 2026-08-02 -- primary is shared with stock-trader and Open WebUI,
   # which stay on Qwen.
   defaultModel = models.llm.reasoning.name;
-  gatewayBaseUrl = "http://127.0.0.1:4000/v1";
+  # :4001, the Vane LLM shim -- NOT :4000, the gateway itself. Load bearing, not a
+  # preference.
+  #
+  # DeepSeek emits its chain of thought as ordinary content (no <think> tags, no
+  # reasoning_content field). Perplexica asks the model to rephrase the question into
+  # a standalone search query, receives "1. The user asks to rephrase ... 2. The
+  # instruction says ..." instead, cannot parse a query out of it, and then NEVER
+  # CALLS SEARXNG AT ALL -- confirmed 2026-08-03 by uwsgi logging 16 lines for a
+  # hand-issued searxng query and ZERO for a Vane query in the same window. The
+  # symptom is Vane replying "I could not find any relevant information" with 0
+  # sources, which reads as an outage rather than a parsing failure.
+  #
+  # The shim injects chat_template_kwargs.enable_thinking=false, which suppresses it
+  # (verified A/B: through :4001 the same prompt returns "NixOS definition"; through
+  # :4000 it returns the monologue). It cannot be set here instead -- Perplexica's
+  # openai provider config accepts only name/apiKey/baseURL -- and must not be done
+  # globally at :4000, because Hermes shares that gateway and WANTS thinking.
+  # See modules/services/vane-llm-shim.nix.
+  #
+  # The shim forwards to :4000, so the gateway still owns auth and TLS and the
+  # sentinel apiKey below is unchanged.
+  gatewayBaseUrl = "http://127.0.0.1:4001/v1";
 
   # SENTINEL, not a credential. Vane posts this as the provider apiKey, but the
   # host LLM gateway on :4000 injects the real upstream Authorization header and
@@ -63,6 +84,16 @@ let
           # would append a second provider and leave the stale one (with its
           # dead baseURL) visible in the vane UI forever.
           map(select((.name == "LiteLLM" and .type == "openai") | not)) |
+          # MIGRATION 2026-08-03: drop the legacy "Hera (oMLX)" provider, for the
+          # same reason as LiteLLM above. This script only ever matched
+          # .name == "Hera", so a provider created under the older label was never
+          # updated -- it sat there with a stale baseURL while the script appended
+          # a SECOND, correct "Hera" beside it. Not cosmetic: both vane-mcp.py and
+          # Vane take the FIRST provider that has chatModels, and "Hera (oMLX)"
+          # sorted first, so every request went to the stale endpoint. Exposed
+          # while pointing Vane at the :4001 no-thinking shim -- config.json kept
+          # reporting baseURL :4000 after a SUCCESSFUL reconcile.
+          map(select((.name == "Hera (oMLX)" and .type == "openai") | not)) |
           if any(.[]; .name == "Hera" and .type == "openai") then
             map(
               if .name == "Hera" and .type == "openai" then

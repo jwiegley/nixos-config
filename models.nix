@@ -37,14 +37,14 @@
     # the .models.providers.vulcan.models[] entry. Defaults match what
     # openclaw expects today; tune per-model as needed.
     agent = {
-      name = "Qwen3.6-27B-oQ4e-mtp";
+      name = "DeepSeek-V4-Flash-0731-oQ8-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
-      contextWindow = 262144;
+      contextWindow = 1048576;
       maxTokens = 81920;
       api = "openai-completions";
-      reasoning = false;
+      reasoning = true;
       input = [ "text" ];
       cost = {
         input = 0;

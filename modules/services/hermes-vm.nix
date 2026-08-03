@@ -40,6 +40,32 @@ let
   # because mcporter spawns its children with the full VM env inherited.
   vulcanCaBundle = "/etc/ssl/certs/ca-certificates.crt";
 
+  # ── Jina Reader extract provider (user plugin) ─────────────────────────
+  # Hermes splits the web capability in two: `web.search_backend` and
+  # `web.extract_backend`, with providers declaring supports_search() /
+  # supports_extract() independently. SearXNG (configured below) is
+  # search-ONLY — its bundled provider returns supports_extract() = False and
+  # its docstring says to "pair with an extract provider for web_extract
+  # calls". Every extract-capable backend Hermes ships (exa, firecrawl,
+  # parallel, tavily) requires a PAID api key, so without this the agent can
+  # find pages but never read them.
+  #
+  # r.jina.ai is the only free extract path: keyless at ~20 req/min, and it
+  # renders JS on Jina's infrastructure, so vulcan does not have to run a
+  # headless Chromium per extraction (self-hosting Jina Reader or Crawl4AI
+  # would, and this is a memory-constrained aarch64 host).
+  #
+  # Installed as a USER plugin rather than patched into the bundled tree so a
+  # hermes-agent version bump cannot silently drop it. Bundled `kind: backend`
+  # plugins auto-load, but user plugins are opt-in — hence `plugins.enabled`
+  # in settings below. Both are required; either alone is a no-op.
+  jinaPlugin = pkgs.runCommand "hermes-jina-plugin" { } ''
+    mkdir -p "$out"
+    cp ${../../pkgs/hermes-jina-plugin/plugin.yaml} "$out/plugin.yaml"
+    cp ${../../pkgs/hermes-jina-plugin/__init__.py} "$out/__init__.py"
+    cp ${../../pkgs/hermes-jina-plugin/provider.py} "$out/provider.py"
+  '';
+
   # ── Python environments for the stdio MCP servers ──────────────────────
   # Hermes spawns each MCP server as a child process running one of these
   # interpreters on an absolute store path. `lightPython` covers the simple
@@ -490,6 +516,23 @@ in
     (builtins.readFile ../../certs/vulcan-root-ca.crt)
   ];
 
+  # ---- Jina Reader extract plugin ----
+  # Hermes scans ~/.hermes/plugins/<name>/ for user plugins, which for this
+  # guest is ${stateDir}/.hermes/plugins (the virtiofs state share).
+  #
+  # `L+` not `C`: it replaces the target, so a rebuild that changes the store
+  # path re-points the symlink. A `C` (copy-once) entry would leave the
+  # first-ever copy in place forever and make plugin edits invisible until
+  # someone deleted the stale copy by hand.
+  #
+  # No `d` rule for the parent: the upstream hermes-agent module already
+  # tmpfiles ${stateDir}/.hermes/plugins into existence, and declaring it twice
+  # logs a duplicate-line warning. tmpfiles applies rules in path order, so the
+  # parent exists before this entry is processed in the same run.
+  systemd.tmpfiles.rules = [
+    "L+ ${stateDir}/.hermes/plugins/web-jina - - - - ${jinaPlugin}"
+  ];
+
   # ---- Hermes Agent service ----
   services.hermes-agent = {
     enable = true;
@@ -527,6 +570,20 @@ in
       # host SearXNG over 443 via the bridge DNAT; TLS verifies against the
       # Vulcan root CA already trusted in the VM.
       web.search_backend = "searxng";
+
+      # The EXTRACT half. SearXNG cannot fetch arbitrary URLs, so without this
+      # `web_extract` has no provider and the agent can find pages but never
+      # read them. See the jinaPlugin comment near the top of this file for
+      # why Jina rather than one of the bundled (uniformly paid) backends.
+      web.extract_backend = "jina";
+
+      # User plugins are OPT-IN. hermes_cli/plugins.py auto-loads bundled
+      # `kind: backend` plugins but gates every other source on this
+      # allow-list, and treats a missing OR malformed key as "nothing
+      # enabled" — so omitting this silently disables the provider instead of
+      # failing loudly. Must stay in sync with plugin.yaml's `name:`.
+      plugins.enabled = [ "web-jina" ];
+
       gateway = {
         enabled = true;
         platforms = [

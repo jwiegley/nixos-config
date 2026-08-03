@@ -1,0 +1,7 @@
+name: web-jina
+version: 1.0.0
+description: "Jina Reader extract — free URL→Markdown with no API key required. Pairs with SearXNG (search-only) to complete the web capability without a paid extract backend."
+author: vulcan
+kind: backend
+provides_web_providers:
+  - jina

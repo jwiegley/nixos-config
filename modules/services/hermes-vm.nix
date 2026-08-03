@@ -40,7 +40,7 @@ let
   # because mcporter spawns its children with the full VM env inherited.
   vulcanCaBundle = "/etc/ssl/certs/ca-certificates.crt";
 
-  # ── Jina Reader extract provider (user plugin) ─────────────────────────
+  # ── Local extract provider (user plugin) ───────────────────────────────
   # Hermes splits the web capability in two: `web.search_backend` and
   # `web.extract_backend`, with providers declaring supports_search() /
   # supports_extract() independently. SearXNG (configured below) is
@@ -50,20 +50,51 @@ let
   # parallel, tavily) requires a PAID api key, so without this the agent can
   # find pages but never read them.
   #
-  # r.jina.ai is the only free extract path: keyless at ~20 req/min, and it
-  # renders JS on Jina's infrastructure, so vulcan does not have to run a
-  # headless Chromium per extraction (self-hosting Jina Reader or Crawl4AI
-  # would, and this is a memory-constrained aarch64 host).
+  # FULLY LOCAL, by operator requirement (2026-08-02). This briefly used hosted
+  # r.jina.ai, which worked but disclosed every extracted URL and its content
+  # to a third party. trafilatura keeps the whole web path on this network —
+  # SearXNG is self-hosted, and now so is extraction.
   #
-  # Installed as a USER plugin rather than patched into the bundled tree so a
+  # trafilatura over the alternatives: no browser (Crawl4AI and self-hosted
+  # Jina Reader each want a headless Chromium per extraction, which this
+  # memory-constrained aarch64 host cannot afford), native markdown output, and
+  # the best boilerplate rejection of the non-browser extractors — F1 0.945 on
+  # the ScrapingHub article benchmark vs readability-lxml's 0.922, and well
+  # ahead of the hosted Jina Reader it replaces (~0.86 vs ~0.64 published, at
+  # roughly half the character count, which is context-window budget).
+  # Verified built and RUN on this aarch64 host: 2.0.0, substituted from
+  # cache.nixos.org with no lxml compile.
+  #
+  # The worker is a SUBPROCESS in its own python env, not an import. Adding
+  # trafilatura to services.hermes-agent.extraPythonPackages does not merely
+  # bloat the agent — it FAILS THE BUILD. hermes-agent seals its venv and
+  # hermes-agent.nix aborts when an extra package collides by name with a
+  # sealed one; trafilatura's closure carries certifi, urllib3 and
+  # charset-normalizer, and all three are already sealed in. Same reasoning as
+  # the lightPython/financialPython MCP environments below.
+  extractPython = pkgs.python3.withPackages (ps: [ ps.trafilatura ]);
+
+  localExtractWorker = pkgs.runCommand "hermes-local-extract-worker" { } ''
+    mkdir -p "$out/bin"
+    # tail -n +2 drops the source file's `#!/usr/bin/env python3`, replacing it
+    # with the exact interpreter so the worker never resolves python from PATH.
+    {
+      printf '#!%s\n' "${extractPython}/bin/python3"
+      tail -n +2 ${../../pkgs/hermes-local-extract/extract_worker.py}
+    } > "$out/bin/hermes-local-extract-worker"
+    chmod +x "$out/bin/hermes-local-extract-worker"
+  '';
+
+  # Installed as a USER plugin rather than patched into the bundled tree, so a
   # hermes-agent version bump cannot silently drop it. Bundled `kind: backend`
-  # plugins auto-load, but user plugins are opt-in — hence `plugins.enabled`
-  # in settings below. Both are required; either alone is a no-op.
-  jinaPlugin = pkgs.runCommand "hermes-jina-plugin" { } ''
+  # plugins auto-load, but user plugins are opt-in — hence `plugins.enabled` in
+  # settings below. Both are required; either alone is a no-op.
+  localExtractPlugin = pkgs.runCommand "hermes-local-extract-plugin" { } ''
     mkdir -p "$out"
-    cp ${../../pkgs/hermes-jina-plugin/plugin.yaml} "$out/plugin.yaml"
-    cp ${../../pkgs/hermes-jina-plugin/__init__.py} "$out/__init__.py"
-    cp ${../../pkgs/hermes-jina-plugin/provider.py} "$out/provider.py"
+    cp ${../../pkgs/hermes-local-extract/plugin.yaml} "$out/plugin.yaml"
+    cp ${../../pkgs/hermes-local-extract/__init__.py} "$out/__init__.py"
+    substitute ${../../pkgs/hermes-local-extract/provider.py} "$out/provider.py" \
+      --replace-fail '@worker@' '${localExtractWorker}/bin/hermes-local-extract-worker'
   '';
 
   # ── Python environments for the stdio MCP servers ──────────────────────
@@ -516,22 +547,11 @@ in
     (builtins.readFile ../../certs/vulcan-root-ca.crt)
   ];
 
-  # ---- Jina Reader extract plugin ----
-  # Hermes scans ~/.hermes/plugins/<name>/ for user plugins, which for this
-  # guest is ${stateDir}/.hermes/plugins (the virtiofs state share).
-  #
-  # `L+` not `C`: it replaces the target, so a rebuild that changes the store
-  # path re-points the symlink. A `C` (copy-once) entry would leave the
-  # first-ever copy in place forever and make plugin edits invisible until
-  # someone deleted the stale copy by hand.
-  #
-  # No `d` rule for the parent: the upstream hermes-agent module already
-  # tmpfiles ${stateDir}/.hermes/plugins into existence, and declaring it twice
-  # logs a duplicate-line warning. tmpfiles applies rules in path order, so the
-  # parent exists before this entry is processed in the same run.
-  systemd.tmpfiles.rules = [
-    "L+ ${stateDir}/.hermes/plugins/web-jina - - - - ${jinaPlugin}"
-  ];
+  # NOTE: the extract plugin is installed via services.hermes-agent.extraPlugins
+  # (below), not a tmpfiles rule. An earlier revision hand-rolled an `L+` symlink
+  # into ${stateDir}/.hermes/plugins; the upstream module has a first-class
+  # option that does the same symlink (as nix-managed-<name>) with duplicate-name
+  # assertions and correct ownership, so the hand-rolled entry was redundant.
 
   # ---- Hermes Agent service ----
   services.hermes-agent = {
@@ -554,6 +574,18 @@ in
       "mcp"
     ];
 
+    # Directory-based plugin: the module symlinks this into
+    # ${stateDir}/.hermes/plugins/nix-managed-<name> and asserts on duplicate
+    # names. Still requires settings.plugins.enabled below — extraPlugins
+    # installs the plugin, it does not activate it.
+    #
+    # Deliberately NOT extraPythonPackages: that option appends to PYTHONPATH,
+    # and hermes-agent.nix FAILS THE BUILD when an extra package collides by
+    # name with its sealed venv. trafilatura pulls certifi, urllib3 and
+    # charset-normalizer, all three already sealed. The extractor therefore
+    # ships as a subprocess with its own interpreter (localExtractWorker).
+    extraPlugins = [ localExtractPlugin ];
+
     environmentFiles = [ "${stateDir}/env" ];
 
     settings = {
@@ -573,16 +605,23 @@ in
 
       # The EXTRACT half. SearXNG cannot fetch arbitrary URLs, so without this
       # `web_extract` has no provider and the agent can find pages but never
-      # read them. See the jinaPlugin comment near the top of this file for
-      # why Jina rather than one of the bundled (uniformly paid) backends.
-      web.extract_backend = "jina";
+      # read them. "local" is the trafilatura provider — see the
+      # localExtractPlugin comment near the top of this file for why local
+      # rather than a hosted reader or one of the bundled (uniformly paid)
+      # backends.
+      web.extract_backend = "local";
 
       # User plugins are OPT-IN. hermes_cli/plugins.py auto-loads bundled
       # `kind: backend` plugins but gates every other source on this
       # allow-list, and treats a missing OR malformed key as "nothing
       # enabled" — so omitting this silently disables the provider instead of
-      # failing loudly. Must stay in sync with plugin.yaml's `name:`.
-      plugins.enabled = [ "web-jina" ];
+      # failing loudly.
+      #
+      # This is plugin.yaml's `name:`, NOT the directory name. extraPlugins
+      # symlinks the plugin as nix-managed-<derivation-name>, so the
+      # path-derived key differs; the loader accepts either, and the manifest
+      # name is the stable one.
+      plugins.enabled = [ "web-local-extract" ];
 
       gateway = {
         enabled = true;

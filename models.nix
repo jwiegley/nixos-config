@@ -15,7 +15,7 @@
 {
   llm = {
     primary = {
-      name = "Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ6e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;
@@ -23,7 +23,7 @@
     # Low-latency model for latency-sensitive callers (e.g. rspamd spam
     # classification, where Postfix is blocked on the milter response).
     fast = {
-      name = "Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ6e-mtp";
       maxSeconds = 120;
       initialDelay = 5;
       maxDelay = 60;
@@ -37,7 +37,7 @@
     # the .models.providers.vulcan.models[] entry. Defaults match what
     # openclaw expects today; tune per-model as needed.
     agent = {
-      name = "Qwen3.6-27B-oQ4e-mtp";
+      name = "Qwen3.6-27B-oQ6e-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

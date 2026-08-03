@@ -113,6 +113,133 @@ groups:
             microvm@hermes, and the guest's own logs under
             /var/lib/hermes/.hermes/logs/.
 
+      # ---- Qdrant-backed persistent memory (2026-08-03) ----
+      # Every rule below is gated on the VM being up long enough to have had a
+      # chance, using `time() - hermes_vm_start_time_seconds` rather than the
+      # snapshot gauge -- same reasoning as HermesApiServerDown above.
+      #
+      # The staleness of these metrics is already covered by
+      # HermesHealthCheckStale (they ride the same textfile), so there is no
+      # per-metric staleness rule here; adding one would double-notify.
+
+      # Qdrant itself down, unreachable over the guest DNAT, or rejecting the
+      # staged key. Critical: the agent silently loses persistent memory, and
+      # the provider's own failure detail is DEBUG-only.
+      - alert: HermesMemoryQdrantUnreachable
+        expr: hermes_memory_qdrant_reachable == 0 and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 300
+        for: 10m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes memory backend (Qdrant) is unreachable"
+          description: |
+            The Hermes health check could not read the Hermes memory collection
+            from Qdrant on 127.0.0.1:6333. This covers three distinct faults
+            that are one outage from the agent's side: qdrant.service down, the
+            6333 guest DNAT broken, or the staged API key missing/rejected.
+            Check: systemctl status qdrant, then
+            /var/lib/microvms/hermes/secrets/qdrant-api-key (0400 hermes:hermes,
+            staged by hermes-prepare-secrets).
+
+      # Reachable Qdrant, absent collection. Distinct from the above on purpose:
+      # this is "the provider never initialised" (or someone deleted the
+      # collection), not "the store is gone".
+      - alert: HermesMemoryCollectionMissing
+        expr: hermes_memory_collection_present == 0 and hermes_memory_qdrant_reachable == 1 and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 900
+        for: 15m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes memory collection is missing from Qdrant"
+          description: |
+            Qdrant is reachable but the Hermes memory collection does not exist.
+            The provider creates it lazily on first use, so this is expected
+            only until the agent's first session after a fresh deploy. If it
+            persists, the provider is loading but failing before its first
+            write -- check the agent log for
+            "loaded but no provider instance found".
+
+      # The upstream loader reports WHY a memory plugin failed to load only at
+      # DEBUG; the single INFO line names no cause. This turns that near-silent
+      # failure into a page. Fires on a RECENT failure rather than any historical
+      # one so a fixed problem stops alerting on its own.
+      # The second clause is load-bearing, not belt-and-braces: a failure age
+      # alone says only "a failure happened recently", which stays true after
+      # the problem is FIXED until the hour rolls past. Caught exactly that on
+      # 2026-08-03 -- failure_age was 1551s from a load bug fixed minutes
+      # earlier, while activation_age was 2.3s. Requiring the failure to be
+      # NEWER than the last success makes the rule mean "the most recent
+      # outcome was a failure", which is what it should have said, and lets a
+      # fix clear the alert immediately instead of an hour later.
+      - alert: HermesMemoryProviderLoadFailing
+        expr: |
+          hermes_memory_last_failure_timestamp_seconds > 0
+          and (time() - hermes_memory_last_failure_timestamp_seconds) < 3600
+          and ignoring(__name__) hermes_memory_last_failure_timestamp_seconds > hermes_memory_last_activation_timestamp_seconds
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes memory provider failed to load"
+          description: |
+            The agent logged a memory-provider load failure within the last
+            hour, so Hermes is running WITHOUT persistent memory. The upstream
+            loader logs the actual cause at DEBUG only -- known causes are a
+            memory.provider value that does not match the plugin's directory
+            name under ~/.hermes/plugins, and relative-import failure inside the
+            plugin. See pkgs/hermes-qdrant-memory/__init__.py for the second one.
+
+      # Guards against the failure this whole design is most exposed to: the
+      # provider quietly not being used at all. If sessions are happening (the
+      # e2e probe alone drives one every 15 min) but none of them activated a
+      # memory provider for 6h, memory is effectively off.
+      - alert: HermesMemoryProviderNotActivating
+        expr: |
+          (time() - hermes_memory_last_activation_timestamp_seconds) > 21600
+          and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 21600
+        for: 30m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes has not activated its memory provider in 6 hours"
+          description: |
+            No "Memory provider ... activated" line in the agent log for 6
+            hours, on a VM that has been up at least that long. Sessions do
+            occur at least every 15 minutes (the e2e chat probe), so this means
+            the provider is no longer being selected -- most likely
+            settings.memory.provider no longer matches the installed plugin
+            directory. NOTE a 0 timestamp means "never seen in the retained
+            log tail", which also trips this.
+
+      # A large drop in stored points means memories were deleted -- a wiped
+      # collection, an errant forget, or a restore over the top. `< -5` rather
+      # than `< 0` because transparent-forget legitimately removes a few.
+      # Guarded on points >= 0 so the -1 "could not determine" sentinel can
+      # never be read as a catastrophic loss.
+      - alert: HermesMemoryPointsDropped
+        expr: hermes_memory_points >= 0 and delta(hermes_memory_points[1h]) < -5
+        for: 5m
+        labels:
+          severity: warning
+          category: data-integrity
+          service: hermes-agent
+        annotations:
+          summary: "Hermes memory lost points in the last hour"
+          description: |
+            The Hermes memory collection shrank by more than 5 points in an
+            hour. Expected after an intentional bulk forget or a collection
+            recreate; otherwise investigate before the next Qdrant snapshot
+            rotates, since ZFS snapshots of /var/lib/qdrant are the only way
+            back.
+
       # The host-side bridge that OpenClaw talks to. If this fails
       # the openclaw-side mcporter cannot reach hermes regardless of
       # whether the upstream Hermes Agent is healthy.

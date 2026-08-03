@@ -53,6 +53,7 @@ let
     from __future__ import annotations
 
     import asyncio
+    import datetime
     import json
     import os
     import pathlib
@@ -284,6 +285,145 @@ let
         return None
 
 
+    # ---- Qdrant-backed memory -------------------------------------------
+    # Probes the SAME things the guest's provider depends on, so a break here
+    # means the agent has genuinely lost persistent memory.
+    #
+    # Reads the STAGED key (/var/lib/microvms/hermes/secrets/qdrant-api-key,
+    # 0400 hermes:hermes) rather than /run/secrets/qdrant/api-key, which is
+    # root:prometheus 0440 and unreadable by this unit's `hermes` user. That is
+    # the better target anyway: it is the exact file the guest consumes, so if
+    # hermes-prepare-secrets stops staging it, this probe fails instead of
+    # silently passing against a copy nobody uses.
+    QDRANT_URL = "http://127.0.0.1:6333"
+    QDRANT_KEY_FILE = "/var/lib/microvms/hermes/secrets/qdrant-api-key"
+    # Must match pkgs/hermes-qdrant-memory/src/store.py's COLLECTION.
+    QDRANT_COLLECTION = "memories"
+
+
+    def qdrant_memory_probe() -> "tuple[int, int, float, float]":
+        """Return (reachable, collection_present, points, seconds).
+
+        points is -1 when unknown, so a scrape failure is distinguishable from a
+        genuinely empty collection. Alerting on "points dropped" must never be
+        able to confuse "I could not ask" with "the data is gone".
+        """
+        start = time.monotonic()
+        try:
+            key = pathlib.Path(QDRANT_KEY_FILE).read_text().strip()
+        except OSError:
+            # Staging broke. Reported as unreachable rather than as a separate
+            # metric: from the agent's point of view an unusable key and a dead
+            # Qdrant are the same outage, and one alert is better than two that
+            # always fire together.
+            return (0, 0, -1.0, time.monotonic() - start)
+
+        try:
+            resp = httpx.get(
+                f"{QDRANT_URL}/collections/{QDRANT_COLLECTION}",
+                headers={"api-key": key, "Accept": "application/json"},
+                timeout=10,
+            )
+        except Exception:  # noqa: BLE001
+            return (0, 0, -1.0, time.monotonic() - start)
+
+        # 404 is a REACHABLE Qdrant with no such collection -- a different fault
+        # from Qdrant being down, and worth separating: the first means the
+        # provider never initialised, the second means the whole store is gone.
+        if resp.status_code == 404:
+            return (1, 0, -1.0, time.monotonic() - start)
+        if resp.status_code >= 400:
+            # 401/403 lands here: reachable but rejecting our key. Still an
+            # outage for the agent, so it is not reported as reachable.
+            return (0, 0, -1.0, time.monotonic() - start)
+
+        try:
+            body = resp.json()
+        except Exception:  # noqa: BLE001
+            return (1, 0, -1.0, time.monotonic() - start)
+
+        result = body.get("result") or {}
+        points = result.get("points_count")
+        if points is None:
+            points = result.get("vectors_count")
+        try:
+            points = float(points)
+        except (TypeError, ValueError):
+            points = -1.0
+        return (1, 1, points, time.monotonic() - start)
+
+
+    # The guest's provider only logs at session start, so "was it activated"
+    # cannot be probed synchronously -- there may be no session for hours. Read
+    # the agent log instead and report the age of the last successful
+    # activation, letting the ALERT decide what is too old. Publishing an age
+    # rather than a boolean is the same lesson as hermes_vm_start_time_seconds:
+    # a snapshot boolean cannot express "no evidence either way".
+    AGENT_LOG = pathlib.Path("/var/lib/hermes/.hermes/logs/agent.log")
+    MEM_OK_RE = re.compile(r"Memory provider '[^']*' activated")
+    MEM_FAIL_RE = re.compile(
+        r"loaded but no provider instance found|Failed to load memory provider"
+    )
+
+
+    def memory_activation_stamps() -> "tuple[float, float]":
+        """Return (last_activation_unixtime, last_failure_unixtime); 0 = never.
+
+        TIMESTAMPS, not ages. An age is a continuously-growing quantity, and
+        this check only runs every 900s, so an age gauge sits frozen between
+        runs and understates the truth by up to a full interval. That is exactly
+        the defect fixed in hermes_vm_start_time_seconds earlier the same day --
+        publish the fixed point and let the alert subtract at query time.
+
+        0 rather than a large sentinel for "never seen", because `time() - 0` is
+        enormous, which reads correctly as "very stale" for the not-activating
+        rule while keeping the recent-failure rule false.
+
+        Only the tail is read: this log grows without bound and the health check
+        must not become the reason the host is busy.
+        """
+        ok_ts = 0.0
+        fail_ts = 0.0
+        try:
+            size = AGENT_LOG.stat().st_size
+            with AGENT_LOG.open("rb") as fh:
+                if size > 2_000_000:
+                    fh.seek(size - 2_000_000)
+                    fh.readline()  # discard the partial line
+                tail = fh.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            return (ok_ts, fail_ts)
+
+        for line in reversed(tail):
+            if ok_ts == 0.0 and MEM_OK_RE.search(line):
+                ts = parse_log_timestamp(line)
+                if ts is not None:
+                    ok_ts = ts
+            if fail_ts == 0.0 and MEM_FAIL_RE.search(line):
+                ts = parse_log_timestamp(line)
+                if ts is not None:
+                    fail_ts = ts
+            if ok_ts and fail_ts:
+                break
+        return (ok_ts, fail_ts)
+
+
+    def parse_log_timestamp(line: str) -> "float | None":
+        """Parse hermes' log prefix 'YYYY-MM-DD HH:MM:SS,mmm'.
+
+        The agent logs in UTC while this host is on local time, so the parsed
+        value is treated as UTC explicitly. Getting this wrong would skew every
+        age by the UTC offset -- 7 hours here, which is more than any threshold
+        below and would make a stale activation look fresh.
+        """
+        try:
+            stamp = line[:19]
+            parsed = datetime.datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S")
+            return parsed.replace(tzinfo=datetime.timezone.utc).timestamp()
+        except Exception:  # noqa: BLE001
+            return None
+
+
     VM_UNIT = "microvm@hermes.service"
 
 
@@ -353,6 +493,12 @@ let
         "hermes_api_key_present": "1 if API_SERVER_KEY was readable from /run/secrets/hermes/env",
         "hermes_vm_uptime_seconds": "Seconds since microvm@hermes last became active, AS SAMPLED at the last check run (see hermes_vm_start_time_seconds — prefer that for any gate)",
         "hermes_vm_start_time_seconds": "Unix time at which microvm@hermes last became active. Constant between VM restarts, so `time() - this` is the TRUE uptime at query time; hermes_vm_uptime_seconds is only correct at the instant it was written",
+        "hermes_memory_qdrant_reachable": "1 if the Qdrant memory backend answered on 127.0.0.1:6333 with the staged API key accepted (0 also covers an unreadable staged key or a 401)",
+        "hermes_memory_collection_present": "1 if the Qdrant collection backing Hermes memory exists (0 with reachable=1 means Qdrant is up but the provider never created it)",
+        "hermes_memory_points": "Points stored in the Hermes memory collection; -1 when it could not be determined, so 'could not ask' is distinguishable from 'empty'",
+        "hermes_memory_probe_seconds": "Wall-clock seconds for the Qdrant memory probe",
+        "hermes_memory_last_activation_timestamp_seconds": "Unix time the agent last logged a successful memory-provider activation; 0 = never seen in the retained log tail. A TIMESTAMP not an age, so `time() - this` is correct at query time rather than only when written",
+        "hermes_memory_last_failure_timestamp_seconds": "Unix time the agent last logged a memory-provider LOAD FAILURE; 0 = none seen. The upstream loader reports the cause only at DEBUG, so this is the sole INFO-level signal that a load failed",
     }
     METRIC_TYPE = {
         "hermes_health_check_last_run_timestamp_seconds": "gauge",
@@ -410,6 +556,9 @@ let
         vm_up = 86400.0 if vm_up_raw is None else vm_up_raw
         vm_start = 0.0 if vm_up_raw is None else time.time() - vm_up_raw
 
+        mem_reachable, mem_collection, mem_points, mem_seconds = qdrant_memory_probe()
+        mem_ok_ts, mem_fail_ts = memory_activation_stamps()
+
         write_metrics(
             {
                 "hermes_api_server_ok": api_ok,
@@ -425,6 +574,12 @@ let
                 # case it exists to catch. `time() - start_time` is computed at
                 # QUERY time and cannot be fooled that way.
                 "hermes_vm_start_time_seconds": round(vm_start, 1),
+                "hermes_memory_qdrant_reachable": mem_reachable,
+                "hermes_memory_collection_present": mem_collection,
+                "hermes_memory_points": mem_points,
+                "hermes_memory_probe_seconds": round(mem_seconds, 3),
+                "hermes_memory_last_activation_timestamp_seconds": round(mem_ok_ts, 1),
+                "hermes_memory_last_failure_timestamp_seconds": round(mem_fail_ts, 1),
                 "hermes_mcp_sse_open_ok": sse_ok,
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),
@@ -497,6 +652,11 @@ in
         ReadOnlyPaths = [
           "/run/secrets"
           "/var/lib/hermes"
+          # Staged Qdrant API key for the memory probe. /run/secrets/qdrant/api-key
+          # is root:prometheus 0440 and unreadable by this unit's `hermes` user;
+          # the staged copy is 0400 hermes:hermes AND is the exact file the guest
+          # consumes, so probing it also proves staging still works.
+          "/var/lib/microvms/hermes/secrets"
         ];
         ProtectSystem = "strict";
         ProtectHome = true;

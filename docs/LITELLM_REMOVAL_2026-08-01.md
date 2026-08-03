@@ -230,17 +230,39 @@ one-line change. Verify with
 `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/v1/models`
 (200 = correct, 401 = wrong value) *before* deleting the old entry.
 
-**2. On-disk remnants.** Nothing outside `/etc/nixos` was touched.
-`scripts/cleanup-litellm-remnants.sh` is dry-run by default and refuses to run
-unless the gateway is answering. It covers:
+**2. On-disk remnants — DONE 2026-08-03.** Originally left in place at the
+operator's request ("leave any files related to it outside of /etc/nixos alone
+until I have time to review"). Archived and destroyed on 2026-08-03;
+`scripts/cleanup-litellm-remnants.sh` was retired with them.
 
-- `/var/lib/litellm` (183 MB, 7309 files)
-- `/etc/litellm`
-- ~3.4 GB of podman images
-- `/var/lib/nginx-certs/litellm.vulcan.lan.{crt,key}`
-- the `litellm` PostgreSQL database (1656 MB) and role — **dump first** if the
-  `LiteLLM_SpendLogs` history is wanted
-- the stale systemd linger file
+Everything is archived under **`/tank/Backups/Machines/Vulcan/litellm`**
+(root:root 0700, files 0600 — the role dump and the cert tarball carry a
+password hash and a private key respectively):
+
+| Archive | Was |
+|---|---|
+| `litellm.dump` (52 MB, pg custom format) | `litellm` database, 1656 MB |
+| `litellm-role.sql` | the `litellm` role definition |
+| `var-lib-litellm.tar.gz` (54 MB) | `/var/lib/litellm`, 183 MB / 9068 files |
+| `etc-litellm.tar.gz` | `/etc/litellm` (config.yaml was 0 bytes) |
+| `nginx-certs-litellm.tar.gz` | `litellm.vulcan.lan.{crt,key}` |
+
+The dump was verified before anything was dropped: `pg_restore --list` clean,
+all 68 tables present, then restored into a scratch database with 0 errors and
+row counts matching live on every table checked (164882 / 2956772 / 7987 / 518).
+
+Removed from the active system: the database, the role (its grants on `db` had
+to be revoked with `DROP OWNED BY` first — it owned nothing), `/var/lib/litellm`,
+`/etc/litellm`, the two nginx certs, and the stale
+`/tank/Backups/PostgreSQL/db/litellm` mirror directory. The unix user, systemd
+linger file and podman images were already gone. Verified after: 0 databases,
+0 roles, 0 units, 0 live `litellm_*` Prometheus series.
+
+**Expect `PgDumpSizeShrunk` to persist a little longer as a result.** Dropping
+the database removes a further ~1.1 GB from the nightly dump, which lowers the
+current value while the 14-day average is still inflated by the 07-25..07-30
+SpendLogs balloon. The alert is arithmetic, not a fault — see the analysis in
+this file's sibling notes. It clears once the balloon ages out (~08-13).
 
 **3. stock-trader's model.** Currently the local Qwen. Decide whether that path
 should return to hosted Anthropic.

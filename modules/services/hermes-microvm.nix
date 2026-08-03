@@ -76,8 +76,23 @@ let
   #   8123 Home Assistant (mcp-proxy bridge)
   #   9082 drafts-mcp (Drafts(hera) MCP SSE bridge)
   # (8236 memory-vault-mcp is annotated inline in the list itself.)
-  # Deliberately EXCLUDED: 6333/6334/6335 (Qdrant — OpenClaw-memory-specific)
-  # and 9081 (the OpenClaw↔Hermes bridge — Hermes *is* Hermes).
+  # Deliberately EXCLUDED: 6334/6335 and 9081.
+  #   6334 Qdrant gRPC — the memory provider is REST-only by construction
+  #        (pkgs/hermes-qdrant-memory/src/qdrant_rest.py), so gRPC is pure
+  #        attack surface with no consumer.
+  #   6335 Qdrant inference bridge — called BY qdrant on the host to reach the
+  #        LLM gateway for server-side embeddings. It is never a client-side
+  #        callee, so the guest has no use for it.
+  #   9081 the OpenClaw↔Hermes bridge — Hermes *is* Hermes.
+  #
+  # 6333 WAS excluded here as "OpenClaw-memory-specific" (and in
+  # docs/superpowers/specs/2026-05-28-hermes-service-parity-design.md:111-112).
+  # That premise expired on 2026-08-03 when Hermes got its own Qdrant-backed
+  # memory, with its own collection (hermes_memories, separate from
+  # openclaw_memories). Honest note on what this does and does not change:
+  # 443 is already forwarded and nginx already fronts qdrant.vulcan.lan, so the
+  # guest could reach Qdrant before this. Adding 6333 buys explicitness and a
+  # clean failure mode, NOT new privilege.
   dnatPorts = [
     443
     993
@@ -85,6 +100,7 @@ let
     4000
     5232
     5432
+    6333 # Qdrant HTTP REST — Hermes memory provider (REST only; NOT 6334/gRPC)
     8123
     9082
     8236 # memory-vault-mcp — Hermes→Memory Vault MCP (streamable-http, native url)
@@ -523,6 +539,19 @@ in
         install -m 0400 -o hermes -g hermes \
           "$IMAP_PASS_SRC" "${secretsStagingDir}/imap-password"
         echo "IMAP credentials staged"
+      fi
+
+      # Qdrant API key for the memory provider. Reuses the EXISTING
+      # `qdrant/api-key` secret that qdrant.nix and OpenClaw already share, so
+      # there is exactly one copy of this key in SOPS. The alternative -- adding
+      # QDRANT_API_KEY to the hermes/env blob -- would create a second copy that
+      # silently desyncs on the next rotation, and would need an interactive sops
+      # session to establish.
+      QDRANT_KEY_SRC="${config.sops.secrets."qdrant/api-key".path}"
+      if [ -f "$QDRANT_KEY_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$QDRANT_KEY_SRC" "${secretsStagingDir}/qdrant-api-key"
+        echo "Qdrant API key staged"
       fi
 
       # Radicale CardDAV password (reuse vdirsyncer-johnw radicale credentials)

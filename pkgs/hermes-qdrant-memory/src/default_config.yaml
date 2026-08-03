@@ -1,0 +1,86 @@
+# Qdrant memory plugin: default configuration.
+#
+# VENDORED for vulcan. Defaults below are flipped from upstream to match this
+# host; the AUTHORITATIVE values are rendered by
+# modules/services/hermes-vm.nix into ~/.hermes/config.yaml, which deep-merges
+# over this file. Editing this file alone will not change a running agent.
+
+# Activation is this Hermes-level setting, and ONLY this setting.
+#
+# TWO TRAPS, both of which fail silently:
+#
+# 1. The value must be the plugin's DIRECTORY NAME under ~/.hermes/plugins/,
+#    not the `name:` in plugin.yaml. plugins/memory/__init__.py:find_provider_dir
+#    does a literal `user_dir / name` filesystem lookup and never parses
+#    plugin.yaml. Because hermes-vm.nix installs this via
+#    services.hermes-agent.extraPlugins, which symlinks as
+#    nix-managed-<derivation-name>, the real value is
+#    "nix-managed-hermes-qdrant-memory" -- computed in Nix from the derivation
+#    itself so the two cannot desync. It is deliberately NOT hardcoded here.
+# 2. Adding this plugin to settings.plugins.enabled is a NO-OP. Memory plugins
+#    are auto-coerced to kind "exclusive" (a source-text scan for
+#    "MemoryProvider" in __init__.py), and that short-circuits BEFORE the
+#    plugins.enabled gate. `hermes plugins list` reporting
+#    "exclusive - activate via <category>.provider config" is the correct steady
+#    state, not a fault.
+#
+# memory:
+#   provider: nix-managed-hermes-qdrant-memory
+
+plugins:
+  qdrant:
+    connection:
+      # REMOTE ONLY on this host. The embedded/local mode is refused outright by
+      # qdrant_rest.QdrantClient: it would put the vector store inside the
+      # guest's own state instead of the host's managed, snapshotted Qdrant.
+      #
+      # 127.0.0.1:6333 works from inside the guest because of the two-stage
+      # DNAT (hermes-microvm.nix) -- the same mechanism that makes the LLM
+      # gateway reachable at 127.0.0.1:4000. Only 6333 (HTTP REST) is
+      # forwarded; 6334 (gRPC) is not, which is why this build is REST-only.
+      mode: remote
+      path: null
+      url: http://127.0.0.1:6333
+      # api_key_env is deliberately NULL, not "QDRANT_API_KEY". Upstream's
+      # default names that variable, and because nothing sets it in this guest
+      # store.py logged, on every single session:
+      #   WARNING qdrant api_key_env 'QDRANT_API_KEY' is set but the env var is
+      #           empty. Connecting without auth
+      # immediately followed by "qdrant api key loaded from file". The warning
+      # was self-falsifying -- auth DID happen -- so it was pure noise that
+      # would have trained a reader to ignore a real auth failure.
+      api_key_env: null
+      # The real credential source. See hermes-vm.nix.
+      api_key_file: /run/hermes-secrets/qdrant-api-key
+
+    embedding:
+      # Dense vectors come from the LLM gateway's OpenAI-compatible
+      # /v1/embeddings (hera serves the model; this host runs no inference).
+      # Sparse vectors are stateless local BM25 arithmetic. See embeddings.py --
+      # upstream's fastembed path is unusable on aarch64 and would violate the
+      # no-local-inference rule anyway.
+      #
+      # Changing the dense model changes the vector dimension, which requires
+      # recreating the collection. The gateway's inference bridge maps every
+      # requested model onto models.nix embedding.primary regardless, so this
+      # value is descriptive rather than load-bearing.
+      provider: gateway
+      model: bge-m3-mlx-fp16
+      sparse_model: bm25-local
+
+    retrieval:
+      # hybrid = dense ANN + BM25 sparse, fused by Qdrant's built-in RRF.
+      # Safe to default on: retrieval.py wraps the hybrid path in try/except and
+      # falls back to dense-only on any error, so a sparse problem degrades
+      # recall quality rather than breaking it.
+      mode: hybrid
+      top_k: 10
+      search_kinds: [fact]
+
+    extraction:
+      # Deliberately OFF for the initial deployment. Extraction calls the LLM at
+      # session boundaries to distil facts; leaving it off makes the first
+      # end-to-end verification deterministic (memories appear only when
+      # explicitly written). Turn on once the store/recall path is confirmed.
+      enabled: false
+      min_turns: 3

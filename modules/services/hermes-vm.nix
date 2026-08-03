@@ -89,6 +89,53 @@ let
   # hermes-agent version bump cannot silently drop it. Bundled `kind: backend`
   # plugins auto-load, but user plugins are opt-in — hence `plugins.enabled` in
   # settings below. Both are required; either alone is a no-op.
+  # ── Qdrant memory provider (user plugin) ───────────────────────────────
+  # VENDORED from github.com/qdrant-labs/hermes-agent-memory-qdrant at rev
+  # c350be1e843de820966f5a1db52b29b22b7775b9 (main HEAD, 2026-06-30), with three
+  # files changed. Vendored rather than fetchFromGitHub + patches because that
+  # repo is five weeks old with two commits, no tags and no releases: a patch
+  # stack would rot on its first push, and we rewrite enough that a fork is the
+  # honest representation. Licence: pyproject.toml declares Apache-2.0, but the
+  # repo ships no LICENSE file and the GitHub API reports license:null.
+  #
+  # What changed and why (all three are forced, not preference):
+  #   embeddings.py  REWRITTEN. Upstream embeds locally with fastembed, whose
+  #                  nixpkgs package is badPlatforms=[aarch64-linux] in BOTH the
+  #                  pinned tree and unstable HEAD, and which would run ONNX
+  #                  inference inside this guest -- something this host must
+  #                  never do. Dense vectors now come from the LLM gateway's
+  #                  /v1/embeddings (hera serves the model); sparse vectors are
+  #                  stateless local BM25 arithmetic with Qdrant applying IDF.
+  #   qdrant_rest.py NEW. Upstream uses qdrant-client, which cannot be delivered
+  #                  here: hermes-agent.nix fails the build when an
+  #                  extraPythonPackages entry collides by name with its sealed
+  #                  venv, and qdrant-client's closure collides on fifteen. This
+  #                  is an httpx-backed shim over Qdrant's REST API covering
+  #                  exactly the 8 methods and 14 model classes used.
+  #   store.py /     Import lines only, redirected at the shim, plus an
+  #   retrieval.py   api_key_file addition so the existing SOPS `qdrant/api-key`
+  #                  can be reused instead of copying it into hermes/env.
+  #
+  # Net effect: ZERO new Python dependencies (httpx and pyyaml are already in
+  # the sealed venv) and no local inference.
+  qdrantMemoryPlugin = pkgs.runCommand "hermes-qdrant-memory" { } ''
+    mkdir -p "$out/src"
+    cp ${../../pkgs/hermes-qdrant-memory/plugin.yaml} "$out/plugin.yaml"
+    cp ${../../pkgs/hermes-qdrant-memory/__init__.py} "$out/__init__.py"
+    for f in __init__.py config.py default_config.yaml embeddings.py extraction.py \
+             qdrant.py qdrant_rest.py retrieval.py store.py tools.py; do
+      cp ${../../pkgs/hermes-qdrant-memory/src}/$f "$out/src/$f"
+    done
+  '';
+
+  # services.hermes-agent.extraPlugins symlinks each plugin as
+  # nix-managed-<derivation-name>, and memory.provider is resolved by
+  # find_provider_dir() as a LITERAL DIRECTORY LOOKUP (`user_dir / name`) --
+  # plugin.yaml's `name:` is never parsed for this. Deriving the value from the
+  # derivation itself is what stops the two from silently desyncing; a mismatch
+  # produces a debug-level log line and no memory, with nothing else to see.
+  qdrantMemoryProvider = "nix-managed-${lib.getName qdrantMemoryPlugin}";
+
   localExtractPlugin = pkgs.runCommand "hermes-local-extract-plugin" { } ''
     mkdir -p "$out"
     cp ${../../pkgs/hermes-local-extract/plugin.yaml} "$out/plugin.yaml"
@@ -584,7 +631,10 @@ in
     # name with its sealed venv. trafilatura pulls certifi, urllib3 and
     # charset-normalizer, all three already sealed. The extractor therefore
     # ships as a subprocess with its own interpreter (localExtractWorker).
-    extraPlugins = [ localExtractPlugin ];
+    extraPlugins = [
+      localExtractPlugin
+      qdrantMemoryPlugin
+    ];
 
     environmentFiles = [ "${stateDir}/env" ];
 
@@ -622,6 +672,56 @@ in
       # path-derived key differs; the loader accepts either, and the manifest
       # name is the stable one.
       plugins.enabled = [ "web-local-extract" ];
+
+      # ---- Persistent memory: Qdrant on the host ----
+      # This single key is what activates the provider. Deliberately NOT also
+      # listed in plugins.enabled above: memory plugins are auto-coerced to
+      # kind "exclusive" by a source-text scan for "MemoryProvider" in
+      # __init__.py, and that short-circuits BEFORE the plugins.enabled gate, so
+      # adding it there would be a no-op that implied it mattered. Expect
+      # `hermes plugins list` to say "exclusive - activate via
+      # <category>.provider config"; that is correct, not a fault.
+      memory.provider = qdrantMemoryProvider;
+
+      # The plugin reads its own config from the FIXED literal key
+      # `plugins.qdrant` (src/config.py hardcodes it) -- unrelated to the
+      # directory name above, which is why these two differ.
+      plugins.qdrant = {
+        connection = {
+          # Reachable from the guest only because 6333 is in dnatPorts
+          # (hermes-microvm.nix). REST only; 6334/gRPC is deliberately not
+          # forwarded, matching qdrant_rest.py's REST-only implementation.
+          mode = "remote";
+          url = "http://127.0.0.1:6333";
+          # Staged 0400 hermes:hermes by hermes-prepare-secrets from the
+          # EXISTING SOPS secret `qdrant/api-key` -- the same one qdrant.nix and
+          # OpenClaw use. Reading the file keeps exactly one copy of the key;
+          # putting it in hermes/env would create a second that desyncs on
+          # rotation.
+          api_key_file = "/run/hermes-secrets/qdrant-api-key";
+        };
+        embedding = {
+          provider = "gateway";
+          # models.nix is the single source of truth. The gateway's inference
+          # bridge remaps whatever is asked for onto embedding.primary anyway,
+          # but keeping them equal means the logs do not lie about what ran.
+          model = models.embedding.primary.name;
+          sparse_model = "bm25-local";
+        };
+        retrieval = {
+          mode = "hybrid";
+          top_k = 10;
+          search_kinds = [ "fact" ];
+        };
+        extraction = {
+          # OFF for the initial deployment so the first end-to-end check is
+          # deterministic: memories appear only when explicitly written, not as a
+          # side effect of the LLM distilling a session. Turn on once store and
+          # recall are confirmed working.
+          enabled = false;
+          min_turns = 3;
+        };
+      };
 
       gateway = {
         enabled = true;

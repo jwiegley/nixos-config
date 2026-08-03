@@ -156,12 +156,66 @@ in
           shortcut = "b";
           disabled = false;
         }
+        # Brave, via the PAID API -- NOT searxng's built-in `brave` engine.
+        #
+        # The built-in engine is deliberately NOT used and is not present here.
+        # Reading its module in the installed build (searxng 0-unstable-2026-02-22):
+        # it declares use_official_api = False, require_api_key = False,
+        # results = "HTML", and scrapes https://search.brave.com/ -- the consumer
+        # website. It has no way to accept a subscription token, so an API key
+        # cannot be attached to it, and it was already disabled here anyway for
+        # brotli decompression failures caused by Brave's anti-bot measures.
+        #
+        # The API is reached through the generic json_engine instead. Verified
+        # against that module's source rather than docs: request() applies
+        # per-engine `headers` to the outgoing request, substitutes {query}
+        # url-encoded into search_url, and resolves the *_query fields as
+        # slash-separated JSON paths.
+        #
+        # $BRAVE_SEARCH_API_KEY comes from the SOPS environment file
+        # (services.searx.environmentFile) and is substituted by searx-init's
+        # envsubst at startup, so the key never enters the Nix store. It MUST be
+        # written $VAR -- envsubst understands only shell-style $VAR/${VAR}, and
+        # an @VAR@ placeholder is copied through verbatim (that exact mistake left
+        # secret_key unsubstituted on this host until 2026-08-03).
+        #
+        # COST: Brave bills per request and searxng spends one request per engine
+        # per query. $5/month of included credit at $5/1000 requests is ~1000
+        # searches, and Vane and Hermes both search through this instance. If that
+        # ceiling starts binding, narrow `categories` rather than raising spend.
+        #
+        # FAILURE MODE: json_engine sets raise_for_httperror = False, so a rejected
+        # key yields ZERO RESULTS AND NO ERROR -- the engine looks idle, not broken.
+        # Verify by counting brave-tagged results, never by absence of complaints.
         {
           name = "brave";
-          engine = "brave";
+          engine = "json_engine";
           shortcut = "br";
-          # Disabled: Brave's anti-bot measures cause brotli decompression failures
-          disabled = true;
+          categories = [
+            "general"
+            "web"
+          ];
+
+          search_url = "https://api.search.brave.com/res/v1/web/search?q={query}&count=20";
+          headers = {
+            "X-Subscription-Token" = "$BRAVE_SEARCH_API_KEY";
+            "Accept" = "application/json";
+          };
+
+          # Brave replies {"web": {"results": [{title, url, description}]}}
+          results_query = "web/results";
+          url_query = "url";
+          title_query = "title";
+          content_query = "description";
+
+          content_html_to_text = true;
+          title_html_to_text = true;
+
+          # Under the 6.0s default; Brave is an API and answers fast, and a slow
+          # engine must not hold up the merge for the ones that do answer.
+          timeout = 5.0;
+          paging = false;
+          disabled = false;
         }
         # Added 2026-08-03 for REDUNDANCY, after this instance was reduced to a
         # single working general engine.

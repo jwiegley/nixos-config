@@ -28,7 +28,7 @@ Environment variables (PostgreSQL — psycopg2 reads these via libpq):
 Environment variables (semantic search — org CLI):
   ORG_CONFIG          default: ${HOME}/.config/org/config.yaml
   ORG_DB_BASE_URL     default: http://127.0.0.1:4000 (host LLM gateway)
-  ORG_DB_MODEL        default: hera/bge-m3 (embedding model)
+  ORG_DB_MODEL        default: bge-m3-mlx-fp16 (embedding model)
   OPENROUTER_API_KEY  no default — passed to org as --api-key
 
 The ``org`` binary (pkgs.org-jw) is expected on PATH via its wrapper.
@@ -61,7 +61,12 @@ ORG_CONFIG = os.getenv(
     "ORG_CONFIG", os.path.expanduser("~/.config/org/config.yaml")
 )
 ORG_DB_BASE_URL = os.getenv("ORG_DB_BASE_URL", "http://127.0.0.1:4000")
-ORG_DB_MODEL = os.getenv("ORG_DB_MODEL", "hera/bge-m3")
+# bge-m3-mlx-fp16, NOT the old "hera/bge-m3". The latter was a LiteLLM alias and
+# LiteLLM was retired 2026-08-01; the oMLX relay on :4000 serves exactly one
+# embedding model under its bare name (verified against /v1/models). Nothing in
+# the tree sets ORG_DB_MODEL, so this default is what actually gets used -- it had
+# been naming a model that no longer exists, which 400s every semantic search.
+ORG_DB_MODEL = os.getenv("ORG_DB_MODEL", "bge-m3-mlx-fp16")
 SEARCH_TIMEOUT_S = float(os.getenv("ORG_DB_TIMEOUT_S", "60"))
 
 # Statement-level keywords that mutate state or escape the single-SELECT
@@ -289,7 +294,7 @@ def org_search(query: str, n: int = 10) -> str:
 
     # Mirror orgDbSearch in openclaw-microvm.nix:
     #   org -c <config> db search --base-url http://127.0.0.1:4000 \
-    #       -m hera/bge-m3 --api-key "$KEY" "<query>" -n <n>
+    #       -m bge-m3-mlx-fp16 --api-key "$KEY" "<query>" -n <n>
     cmd = [
         "org",
         "-c",

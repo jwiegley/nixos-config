@@ -7,7 +7,11 @@
 }:
 let
   models = import ../../../models.nix;
-  defaultModel = models.llm.primary.name;
+  # Vane runs multi-step search-and-synthesis, so it uses the reasoning tier
+  # (DeepSeek, 1M context) rather than the general `primary` model. Moved off
+  # primary 2026-08-02 -- primary is shared with stock-trader and Open WebUI,
+  # which stay on Qwen.
+  defaultModel = models.llm.reasoning.name;
   gatewayBaseUrl = "http://127.0.0.1:4000/v1";
 
   # SENTINEL, not a credential. Vane posts this as the provider apiKey, but the

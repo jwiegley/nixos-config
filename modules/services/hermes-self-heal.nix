@@ -111,7 +111,7 @@ in
       ];
       environment = {
         PYTHONUNBUFFERED = "1";
-        LLM_MODEL = models.llm.agent.name;
+        LLM_MODEL = models.llm.reasoning.name;
       };
       serviceConfig = {
         Type = "simple";

@@ -55,7 +55,7 @@ in
 
     model = lib.mkOption {
       type = lib.types.str;
-      default = models.llm.agent.name;
+      default = models.llm.reasoning.name;
       description = ''
         Model identifier to use for the probe. Should match
         config.settings.model.default in hermes-vm.nix so the probe

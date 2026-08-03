@@ -287,7 +287,13 @@ class AIAnalyzer:
                   file=sys.stderr)
             sys.exit(1)
         llm = data["llm"]
-        primary = llm["primary"]
+        # The reasoning tier (DeepSeek, 1M context) rather than `primary`.
+        # Summarising 24h of journal is a long-context, analysis-heavy job, and
+        # `primary` is shared with stock-trader and Open WebUI, which stay on
+        # Qwen -- so this reads its own role rather than moving theirs.
+        # Falls back to primary if an older /etc/models.json predates the
+        # reasoning tier, so a stale generation degrades instead of crashing.
+        primary = llm.get("reasoning") or llm["primary"]
         cascade = [primary] + llm.get("fallbacks", [])
         return [
             (m["name"], m.get("maxSeconds", 3600),

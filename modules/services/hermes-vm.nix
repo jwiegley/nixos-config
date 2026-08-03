@@ -23,7 +23,7 @@ let
   # so Hermes and OpenClaw stay on the same `agent` model unless one is
   # intentionally pinned. Edit /etc/nixos/models.nix to change.
   models = import ../../models.nix;
-  agentModel = models.llm.agent.name;
+  agentModel = models.llm.reasoning.name;
 
   # System CA bundle inside the VM. security.pki.certificates (below) bakes
   # the Vulcan Step-CA root into this file at build time. The stdio MCP

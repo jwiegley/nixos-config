@@ -28,15 +28,51 @@
       initialDelay = 5;
       maxDelay = 60;
     };
-    # Agent-grade model for long-running, tool-using sessions (OpenClaw
-    # memory-qdrant, Discord/WhatsApp channels, ACP backend).  Kept separate
-    # from `primary` so summarizers / alert probes can move independently.
+    # Agent-grade model for long-running, tool-using sessions. OpenClaw only
+    # as of 2026-08-02 -- Hermes moved to `reasoning` below. Kept separate from
+    # `primary` so summarizers / alert probes can move independently.
     #
     # Optional fields below (contextWindow, maxTokens, api, reasoning, input,
     # cost) are consumed by modules/services/openclaw-config.nix to render
     # the .models.providers.vulcan.models[] entry. Defaults match what
     # openclaw expects today; tune per-model as needed.
     agent = {
+      name = "Qwen3.6-27B-oQ4e-mtp";
+      maxSeconds = 3600;
+      initialDelay = 5;
+      maxDelay = 60;
+      contextWindow = 262144;
+      maxTokens = 81920;
+      api = "openai-completions";
+      reasoning = false;
+      input = [ "text" ];
+      cost = {
+        input = 0;
+        output = 0;
+        # cacheRead/cacheWrite are required by openclaw's model-catalog schema
+        # (agents/model-registry "Invalid models.json schema" doctor warning
+        # when omitted). Zero because this is a local, cost-free MLX backend.
+        cacheRead = 0;
+        cacheWrite = 0;
+      };
+    };
+
+    # Reasoning tier: long context + reasoning enabled. Added 2026-08-02 for
+    # the two consumers that want it -- the HERMES agent and VANE (Perplexica).
+    # Everything else on this host stays on Qwen via `primary`/`fast`/`agent`.
+    #
+    # Why a THIRD role rather than editing an existing one: `agent` is shared by
+    # Hermes AND OpenClaw (7 references), and `primary` is shared by Vane AND
+    # stock-trader AND Open WebUI. Changing either would have moved services the
+    # operator wanted left alone -- setting agent=DeepSeek silently put OpenClaw
+    # on it too. Roles here describe a TIER, not a service, so the correct fix
+    # for "these two and no others" is a new tier.
+    #
+    # Same field shape as `agent` on purpose: hermes-microvm.nix serialises the
+    # whole attrset into restartTriggers, so a missing key would change the
+    # trigger hash and a differing shape would be a silent trap for whoever
+    # points openclaw-config.nix-style rendering at this later.
+    reasoning = {
       name = "DeepSeek-V4-Flash-0731-oQ8-mtp";
       maxSeconds = 3600;
       initialDelay = 5;
@@ -49,9 +85,6 @@
       cost = {
         input = 0;
         output = 0;
-        # cacheRead/cacheWrite are required by openclaw's model-catalog schema
-        # (agents/model-registry "Invalid models.json schema" doctor warning
-        # when omitted). Zero because this is a local, cost-free MLX backend.
         cacheRead = 0;
         cacheWrite = 0;
       };

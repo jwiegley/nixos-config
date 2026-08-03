@@ -491,7 +491,7 @@ in
     # Force re-stage when the model catalog changes — Type=oneshot + RemainAfterExit
     # means switch-to-configuration would otherwise skip restarting this unit
     # on closure changes, leaving the staged config out of sync.
-    restartTriggers = [ (builtins.toJSON { agent = models.llm.agent; }) ];
+    restartTriggers = [ (builtins.toJSON { agent = models.llm.reasoning; }) ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -565,7 +565,7 @@ in
   # so a `nixos-rebuild switch` propagates new model selections into the
   # running VM without manual intervention.
   systemd.services."microvm@hermes".restartTriggers = [
-    (builtins.toJSON { agent = models.llm.agent; })
+    (builtins.toJSON { agent = models.llm.reasoning; })
   ];
 
   # ---- microvm.nix declaration ----

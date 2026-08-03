@@ -73,7 +73,7 @@ in
 
     model = lib.mkOption {
       type = lib.types.str;
-      default = models.llm.agent.name;
+      default = models.llm.reasoning.name;
       description = ''
         Default model identifier passed to Hermes' /v1/chat/completions
         when the MCP caller does not override it. The string must be

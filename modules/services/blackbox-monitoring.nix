@@ -502,6 +502,7 @@ in
                   "pentair-intellicenter.lan" # 192.168.3.115
                   "pentair-intelliflo.lan" # 192.168.3.23
                   "ring-chime-kitchen.lan" # 192.168.3.163
+                  "ring-chime-office.lan" # 192.168.3.88
                   "tesla-wall-connector.lan" # 192.168.3.119
                 ];
                 labels = {
@@ -526,14 +527,20 @@ in
               # ring-chime-office.lan answered ~99.6% of probes over the
               # preceding 30 days, so it no longer fits "never answers ICMP"
               # and, by the rule above, belongs in the "iot" group.
+              # MOVED 2026-08-03. The 07-27 note recorded the decision but the
+              # target was left in this list, so for a week a device answering
+              # 99.9% (7d) / 99.7% (30d) of probes had NO down-coverage at all:
+              # excluded here by design, and absent from "iot" where the warning
+              # lives. It now sits beside ring-chime-kitchen.lan in "iot".
+              # Writing the conclusion in a comment is not the same as applying
+              # it — the group a target is IN is the only thing that alerts.
               # (nest-upstairs.lan answers ~2% of the time; the other two nests
-              # are still flat 0%.)
+              # are still flat 0% over 30 days, so all three stay here.)
               {
                 targets = [
                   "nest-downstairs.lan" # 192.168.3.57
                   "nest-family-room.lan" # 192.168.3.83
                   "nest-upstairs.lan" # 192.168.3.161
-                  "ring-chime-office.lan" # 192.168.3.88
                 ];
                 labels = {
                   host_group = "iot-noping";

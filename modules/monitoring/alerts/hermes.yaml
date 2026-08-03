@@ -240,6 +240,63 @@ groups:
             rotates, since ZFS snapshots of /var/lib/qdrant are the only way
             back.
 
+      # ---- Local web extraction (2026-08-03) ----
+      # Staleness of these rides HermesHealthCheckStale like the memory metrics,
+      # so there is no per-metric staleness rule here.
+
+      # The worker could not be invoked at all: store path collected, python env
+      # broken, trafilatura import failing, or the JSON protocol changed. This is
+      # a total loss of the agent's ability to read any web page, and unlike the
+      # provider's own errors it is detectable without waiting for traffic.
+      #
+      # NOT gated on VM uptime, unlike the memory rules: the worker is a HOST
+      # binary and its health has nothing to do with whether the guest is up.
+      - alert: HermesExtractWorkerBroken
+        expr: hermes_extract_worker_ok == 0
+        for: 15m
+        labels:
+          severity: critical
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes local extraction worker is not runnable"
+          description: |
+            The health check could not get a valid empty-batch response from the
+            local extraction worker, so web_extract cannot work at all. The
+            probe performs no network fetch, so this is the worker itself:
+            check that the store path referenced by
+            /var/lib/hermes/.hermes/plugins/nix-managed-hermes-local-extract-plugin/provider.py
+            still exists (nix-collect-garbage after a generation was removed is
+            the likely cause) and that it is executable.
+
+      # Real traffic is failing even though the worker runs. Distinguishes
+      # "extraction is broken" from "the worker is broken": this fires on network
+      # egress loss, DNS failure, or every fetched page being JS-only.
+      #
+      # Requires the failure to be NEWER than the last success, for the same
+      # reason as HermesMemoryProviderLoadFailing -- a recency-only test stays
+      # true after the fault clears until the window rolls past.
+      - alert: HermesExtractFailing
+        expr: |
+          hermes_extract_last_failure_timestamp_seconds > 0
+          and (time() - hermes_extract_last_failure_timestamp_seconds) < 3600
+          and ignoring(__name__) hermes_extract_last_failure_timestamp_seconds > hermes_extract_last_success_timestamp_seconds
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-agent
+        annotations:
+          summary: "Hermes web extraction is failing on real requests"
+          description: |
+            The agent's most recent extraction outcome was a batch in which ZERO
+            urls succeeded, or a worker-level error, within the last hour --
+            while the worker itself is runnable. Partial failures are ignored on
+            purpose, so this is not one dead link. Likely causes: the guest lost
+            outbound network, DNS is failing, or the pages being requested are
+            JavaScript-only (which this extractor cannot render by design --
+            see pkgs/hermes-local-extract/src/extract_worker.py).
+
       # The host-side bridge that OpenClaw talks to. If this fails
       # the openclaw-side mcporter cannot reach hermes regardless of
       # whether the upstream Hermes Agent is healthy.

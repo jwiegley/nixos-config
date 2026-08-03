@@ -360,6 +360,33 @@ let
     # rather than a boolean is the same lesson as hermes_vm_start_time_seconds:
     # a snapshot boolean cannot express "no evidence either way".
     AGENT_LOG = pathlib.Path("/var/lib/hermes/.hermes/logs/agent.log")
+    # Only the tail is read: this log grows without bound and the health check
+    # must not become the reason the host is busy. 2 MB covers hours of agent
+    # activity, and both callers walk it in reverse so the newest event wins.
+    AGENT_LOG_TAIL_BYTES = 2_000_000
+    _agent_log_cache: "list[str] | None" = None
+
+
+    def read_agent_log_tail() -> "list[str]":
+        """Read the agent log tail ONCE per run, shared by every log-derived probe.
+
+        Cached because two independent probes scan it and re-reading 2 MB per
+        probe would double the I/O for no benefit -- and, worse, could give the
+        two probes views from different instants.
+        """
+        global _agent_log_cache
+        if _agent_log_cache is not None:
+            return _agent_log_cache
+        try:
+            size = AGENT_LOG.stat().st_size
+            with AGENT_LOG.open("rb") as fh:
+                if size > AGENT_LOG_TAIL_BYTES:
+                    fh.seek(size - AGENT_LOG_TAIL_BYTES)
+                    fh.readline()  # discard the partial first line
+                _agent_log_cache = fh.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            _agent_log_cache = []
+        return _agent_log_cache
     MEM_OK_RE = re.compile(r"Memory provider '[^']*' activated")
     MEM_FAIL_RE = re.compile(
         r"loaded but no provider instance found|Failed to load memory provider"
@@ -384,17 +411,7 @@ let
         """
         ok_ts = 0.0
         fail_ts = 0.0
-        try:
-            size = AGENT_LOG.stat().st_size
-            with AGENT_LOG.open("rb") as fh:
-                if size > 2_000_000:
-                    fh.seek(size - 2_000_000)
-                    fh.readline()  # discard the partial line
-                tail = fh.read().decode("utf-8", "replace").splitlines()
-        except OSError:
-            return (ok_ts, fail_ts)
-
-        for line in reversed(tail):
+        for line in reversed(read_agent_log_tail()):
             if ok_ts == 0.0 and MEM_OK_RE.search(line):
                 ts = parse_log_timestamp(line)
                 if ts is not None:
@@ -422,6 +439,116 @@ let
             return parsed.replace(tzinfo=datetime.timezone.utc).timestamp()
         except Exception:  # noqa: BLE001
             return None
+
+
+    # ---- Local web extraction (trafilatura) ------------------------------
+    # The extractor is a host-side worker binary in its own python env, spawned
+    # as a subprocess by the guest's plugin (pkgs/hermes-local-extract). Because
+    # it lives on the host, this check can invoke it DIRECTLY -- a true test of
+    # the machinery rather than a proxy for it.
+    #
+    # Probed with an EMPTY url list, deliberately. That still proves everything
+    # that can rot: the store path survives GC, the file is executable, its
+    # python env is intact, the module-level `import trafilatura` succeeds, and
+    # the JSON protocol still round-trips. What it does NOT do is fetch anything
+    # -- a probe that hit a live external site every 900s would add an external
+    # dependency to this host's health signal and put ~100 requests/day onto
+    # somebody else's server for no diagnostic gain.
+    #
+    # Probing against a LOCAL page instead is not an option: the worker's own
+    # SSRF guard refuses loopback and private addresses, which is correct and
+    # deliberate. Real fetch health is covered by the log-derived timestamps
+    # below, which observe actual agent traffic.
+    EXTRACT_PLUGIN_LINK = pathlib.Path(
+        "/var/lib/hermes/.hermes/plugins/nix-managed-hermes-local-extract-plugin"
+    )
+    WORKER_PATH_RE = re.compile(
+        r"/nix/store/[a-z0-9]{32}-hermes-local-extract-worker/bin/[a-z-]+"
+    )
+
+
+    def extract_worker_path() -> Optional[str]:
+        """Resolve the worker the LIVE plugin actually points at.
+
+        Read out of the deployed provider.py rather than passed in from Nix: the
+        path is substituted into that file at build time, so reading it back is
+        self-correcting across rebuilds and keeps this module from having to
+        import hermes-vm.nix's private let-bindings. Globbing the store instead
+        would be wrong -- it would happily find a stale worker from an older
+        generation that nothing uses.
+        """
+        try:
+            src = (EXTRACT_PLUGIN_LINK.resolve() / "provider.py").read_text()
+        except OSError:
+            return None
+        found = WORKER_PATH_RE.search(src)
+        return found.group(0) if found else None
+
+
+    def extract_worker_probe() -> "tuple[int, float]":
+        """Return (ok, seconds). ok=1 means the worker ran and spoke JSON."""
+        start = time.monotonic()
+        path = extract_worker_path()
+        if not path or not os.access(path, os.X_OK):
+            return (0, time.monotonic() - start)
+        try:
+            proc = subprocess.run(
+                [path],
+                input=json.dumps({"urls": []}),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/tmp"},
+            )
+        except Exception:  # noqa: BLE001
+            return (0, time.monotonic() - start)
+        if proc.returncode != 0:
+            return (0, time.monotonic() - start)
+        try:
+            # An empty batch must yield exactly []. Anything else means the
+            # protocol changed under us.
+            ok = 1 if json.loads(proc.stdout) == [] else 0
+        except Exception:  # noqa: BLE001
+            ok = 0
+        return (ok, time.monotonic() - start)
+
+
+    # Real-traffic outcome, from the agent's own log. Timestamps not ages, for
+    # the reason spelled out on the memory probe below.
+    EXTRACT_RESULT_RE = re.compile(r"Local extract: (\d+)/(\d+) URL\(s\) succeeded")
+    EXTRACT_ERROR_RE = re.compile(
+        r"local-extract: worker |local extraction timed out|"
+        r"could not parse local extractor output|local extractor error"
+    )
+
+
+    def extract_traffic_stamps() -> "tuple[float, float]":
+        """Return (last_success_unixtime, last_failure_unixtime); 0 = never.
+
+        A batch where ZERO urls succeeded counts as a failure; a partial success
+        does not. One dead link among five is the caller's problem, not the
+        extractor's, and alerting on it would train the reader to ignore this.
+        """
+        ok_ts = 0.0
+        fail_ts = 0.0
+        for line in reversed(read_agent_log_tail()):
+            if ok_ts == 0.0 or fail_ts == 0.0:
+                hit = EXTRACT_RESULT_RE.search(line)
+                if hit:
+                    ts = parse_log_timestamp(line)
+                    if ts is not None:
+                        if int(hit.group(1)) > 0:
+                            if ok_ts == 0.0:
+                                ok_ts = ts
+                        elif fail_ts == 0.0:
+                            fail_ts = ts
+                elif fail_ts == 0.0 and EXTRACT_ERROR_RE.search(line):
+                    ts = parse_log_timestamp(line)
+                    if ts is not None:
+                        fail_ts = ts
+            if ok_ts and fail_ts:
+                break
+        return (ok_ts, fail_ts)
 
 
     VM_UNIT = "microvm@hermes.service"
@@ -499,6 +626,10 @@ let
         "hermes_memory_probe_seconds": "Wall-clock seconds for the Qdrant memory probe",
         "hermes_memory_last_activation_timestamp_seconds": "Unix time the agent last logged a successful memory-provider activation; 0 = never seen in the retained log tail. A TIMESTAMP not an age, so `time() - this` is correct at query time rather than only when written",
         "hermes_memory_last_failure_timestamp_seconds": "Unix time the agent last logged a memory-provider LOAD FAILURE; 0 = none seen. The upstream loader reports the cause only at DEBUG, so this is the sole INFO-level signal that a load failed",
+        "hermes_extract_worker_ok": "1 if the local extraction worker ran and returned valid JSON for an empty batch (proves the store path, its python env and the trafilatura import are all intact; performs no network fetch)",
+        "hermes_extract_worker_probe_seconds": "Wall-clock seconds to invoke the extraction worker",
+        "hermes_extract_last_success_timestamp_seconds": "Unix time the agent last extracted at least one URL successfully; 0 = never seen in the retained log tail",
+        "hermes_extract_last_failure_timestamp_seconds": "Unix time of the last extraction batch where ZERO urls succeeded, or a worker-level error; 0 = none seen",
     }
     METRIC_TYPE = {
         "hermes_health_check_last_run_timestamp_seconds": "gauge",
@@ -558,6 +689,8 @@ let
 
         mem_reachable, mem_collection, mem_points, mem_seconds = qdrant_memory_probe()
         mem_ok_ts, mem_fail_ts = memory_activation_stamps()
+        ext_ok, ext_seconds = extract_worker_probe()
+        ext_ok_ts, ext_fail_ts = extract_traffic_stamps()
 
         write_metrics(
             {
@@ -580,6 +713,10 @@ let
                 "hermes_memory_probe_seconds": round(mem_seconds, 3),
                 "hermes_memory_last_activation_timestamp_seconds": round(mem_ok_ts, 1),
                 "hermes_memory_last_failure_timestamp_seconds": round(mem_fail_ts, 1),
+                "hermes_extract_worker_ok": ext_ok,
+                "hermes_extract_worker_probe_seconds": round(ext_seconds, 3),
+                "hermes_extract_last_success_timestamp_seconds": round(ext_ok_ts, 1),
+                "hermes_extract_last_failure_timestamp_seconds": round(ext_fail_ts, 1),
                 "hermes_mcp_sse_open_ok": sse_ok,
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),

@@ -815,6 +815,9 @@ let
       gnused
       gnugrep
       gawk
+      findutils # find, for the newer-than-map fast path
+      diffutils # cmp, to detect a byte-identical regeneration
+      systemd # systemctl, for the now-conditional nginx reload
     ];
     text = ''
       set -euo pipefail
@@ -827,6 +830,32 @@ let
       log() {
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
       }
+
+      # ---- Fast path: skip everything when no ZIM has changed ------------
+      # This generator is pulled in on every nginx start AND from
+      # zimit-job-runner's ExecStopPost, which fires on EVERY 5-minute poll
+      # regardless of whether that poll actually created an archive (its
+      # comment claims "when ZIM files change", but nothing checked).
+      # Measured 2026-08-02: 251 runs in one day at ~54s CPU each -- about
+      # 3.8 CPU-hours -- and 504 nginx reloads.
+      #
+      # The CPU is the least of it. The scan zimdumps every ZIM off the USB
+      # `tank` enclosure, whose bridge is known to hang under sustained load,
+      # and nginx's worker_shutdown_timeout is 300s (web.nix), so reloading
+      # every ~5 minutes keeps worker generations permanently overlapping and
+      # terminates in-flight requests each time.
+      #
+      # The map is a pure function of the .zim set, so it only needs
+      # recomputing when that set changes. Test the DIRECTORY mtime as well as
+      # the files: a deleted ZIM leaves no newer file behind, so a file-only
+      # test would serve stale entries forever.
+      if [ -f "$MAP_FILE" ] \
+         && [ ! "$ZIM_DIR" -nt "$MAP_FILE" ] \
+         && [ -z "$(find "$ZIM_DIR" -maxdepth 1 -name '*.zim' -newer "$MAP_FILE" -print -quit 2>/dev/null)" ]; then
+        log "No ZIM added, removed or changed since $MAP_FILE was written; nothing to do"
+        rm -f "$TEMP_MAP" "$TEMP_ENTRIES"
+        exit 0
+      fi
 
       log "Generating Kiwix URL mapping file..."
 
@@ -867,11 +896,33 @@ let
       count=$(grep -c ';$' "$TEMP_MAP" || echo 0)
       log "Generated $count URL mappings"
 
+      # A ZIM's mtime can change without changing any URL it exposes (a touch,
+      # an rsync re-copy, a restored snapshot), so the fast path above can let
+      # us through and still produce a byte-identical map. Compare before
+      # replacing, and reload nginx ONLY on a real change.
+      if [ -f "$MAP_FILE" ] && cmp -s "$TEMP_MAP" "$MAP_FILE"; then
+        log "Map unchanged ($count mappings); keeping $MAP_FILE, no nginx reload"
+        rm -f "$TEMP_MAP"
+        # Re-stamp so the fast path sees a map at least as new as every ZIM.
+        # Without this a single touched ZIM would force a full rescan on every
+        # trigger from here on -- exactly the loop this change exists to break.
+        touch "$MAP_FILE"
+        exit 0
+      fi
+
       # Move to final location
       mv "$TEMP_MAP" "$MAP_FILE"
       chmod 644 "$MAP_FILE"
 
       log "URL mapping file written to $MAP_FILE"
+
+      # Reload nginx HERE rather than from ExecStartPost, so it happens only
+      # when the map actually changed. ExecStartPost ran unconditionally on
+      # every successful invocation, which is where the 504 reloads/day came
+      # from. --no-block: this unit is ordered after nginx.service so nginx is
+      # up, but a oneshot has no reason to wait on the reload job.
+      systemctl reload --no-block nginx.service \
+        || log "WARNING: nginx reload failed; $MAP_FILE is still updated"
     '';
   };
 
@@ -1148,9 +1199,10 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe kiwixUrlMapGenerator;
-      # Reload nginx after updating the map file (the leading "-" tells systemd
-      # to ignore the failure if nginx isn't running)
-      ExecStartPost = "-${pkgs.systemd}/bin/systemctl reload nginx.service";
+      # No ExecStartPost reload here. It fired on EVERY successful run,
+      # including the ~251 no-op runs/day driven by zimit-job-runner's
+      # 5-minute poll -- 504 nginx reloads on 2026-08-02. The generator now
+      # issues the reload itself, only when it actually rewrites the map.
       User = "root";
       Group = "root";
       ReadOnlyPaths = [ zimDir ];

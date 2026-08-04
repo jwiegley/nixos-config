@@ -460,23 +460,24 @@ groups:
             misrouting (config regression) and gateway auth
             mismatch.
 
-      # Direct liveness of the hera-side llama-swap/MLX model router — the
-      # terminal upstream every gateway model request lands on, and thus the
-      # terminal dependency of all Hermes chat. blackbox_hera_mlx GETs
-      # hera.lan:8080/v1/models (HTTP 200 unauth, no secrets). When this is 0
-      # the model backend itself is down — this is the CAUSE rule that isolates
-      # an MLX outage from the generic downstream HermesAskFailing /
-      # HermesE2eChatFailing symptoms (which surface 2-3 hops later and cannot
-      # name the layer). It is a LIVENESS signal only: /v1/models answers 200 as
-      # long as the router is alive; "router up but a model won't load" is caught
-      # by HermesE2eChatFailing's content check, not here — a green
-      # MLXBackendDown does NOT prove chat works.
+      # Direct liveness of the hera-side oMLX model backend — the terminal
+      # upstream every gateway model request lands on, and thus the terminal
+      # dependency of all Hermes chat. blackbox_hera_qwen GETs
+      # https://hera.lan:8443/v1/models unauthenticated via the
+      # https_2xx_or_auth module, so a healthy hera's 401 counts as success and
+      # no key is needed. When this is 0 the model backend itself is down — this
+      # is the CAUSE rule that isolates an oMLX outage from the generic
+      # downstream HermesAskFailing / HermesE2eChatFailing symptoms (which
+      # surface 2-3 hops later and cannot name the layer). It is a LIVENESS
+      # signal only: "backend up but a model won't load" is caught by
+      # HermesE2eChatFailing's content check, not here — a green MLXBackendDown
+      # does NOT prove chat works.
       #
       # `and on() up{job="darwin-hera"} == 1` gates on hera being reachable at
       # all (probe_success and up share no labels, so on() does the intended
       # scalar conjunction — both are single series):
       #   - probe down + hera up   -> THIS fires: hera alive but llama-swap dead
-      #                               (actionable — restart llama-swap on hera).
+      #                               (actionable — restart oMLX on hera).
       #   - probe down + hera down -> THIS stays silent; DNSServerDown /
       #                               LocalNetworkIssue / the darwin-hera host
       #                               rules own "hera unreachable".
@@ -485,48 +486,52 @@ groups:
       # 7d was a single ~11-min hera-DOWN block (2026-06-08 boot-work) — but the
       # gate suppresses MLXBackendDown for the entire hera-down window, so 8m only
       # has to outlast the brief recovery edge where node-exporter (:9100) returns
-      # before llama-swap (:8080) finishes warming. 8m clears that comfortably
-      # while still surfacing a genuine MLX outage well before Discord users do.
+      # before oMLX (:8443) finishes warming. 8m clears that comfortably while
+      # still surfacing a genuine oMLX outage well before Discord users do.
       # severity: warning (not critical) — the e2e/ask probes already page
       # critical for the user-visible symptom and self-heal cannot restart hera;
       # this rule is cause-isolation, not a new page path.
-      # SELECTOR WIDENED 2026-08-01 to job=~"blackbox_hera_(mlx|qwen)" after this rule sat
-      # green through a total outage of the chat backend. hera runs three model services and
-      # this rule only watched one of them -- :8080, which serves GLM-5.2/Meta-Llama/bge-m3.
-      # The model Hermes actually uses, Qwen3.6-27B-oQ4e-mtp, is behind :8443. During the
-      # 2026-08-01 00:49 outage :8443 returned 502 and hermes_e2e_chat_ok was 0, while
-      # probe_success{job="blackbox_hera_mlx"} stayed 1 the entire time. A rule described in
-      # its own annotation as the "terminal dependency of all Hermes chat" could not see the
-      # chat dependency fail.
+      # SELECTOR HISTORY. Widened 2026-08-01 to job=~"blackbox_hera_(mlx|qwen)" after this
+      # rule sat green through a total outage of the chat backend: it watched only :8080
+      # while the model Hermes uses lives behind :8443, so probe_success stayed 1 while
+      # hermes_e2e_chat_ok was 0. NARROWED again 2026-08-03 to blackbox_hera_qwen alone,
+      # because hera stopped running the :8080 llama-swap endpoint entirely -- that job then
+      # probed a port nothing listens on and reported probe_success=0 forever, firing this
+      # warning against a perfectly healthy backend. The :8080 job is deleted; :8443 is the
+      # only endpoint the gateway proxies to (modules/services/hera-llm-proxy.nix).
       - alert: MLXBackendDown
-        expr: probe_success{job=~"blackbox_hera_(mlx|qwen)"} == 0 and on() up{job="darwin-hera"} == 1
+        expr: probe_success{job="blackbox_hera_qwen"} == 0 and on() up{job="darwin-hera"} == 1
         for: 8m
         labels:
           severity: warning
           category: availability
           service: mlx-backend
         annotations:
-          summary: "hera MLX/llama-swap model router down (Hermes chat terminal dependency)"
+          summary: "hera oMLX model backend down (Hermes chat terminal dependency)"
           description: |
-            The llama-swap model router on hera
-            (http://hera.lan:8080/v1/models) has not answered HTTP 200 for
-            8 minutes WHILE hera itself is reachable (up{job="darwin-hera"}==1).
-            This is the terminal upstream of every gateway model request, so
-            Hermes Discord chat (and OpenClaw's hera-routed models) will fail
-            until it recovers — expect HermesE2eChatFailing / HermesAskFailing /
+            The oMLX model backend on hera (https://hera.lan:8443/v1/models)
+            has not answered for 8 minutes WHILE hera itself is reachable
+            (up{job="darwin-hera"}==1). This is the terminal upstream of every
+            gateway model request, so Hermes Discord chat will fail until it
+            recovers — expect HermesE2eChatFailing / HermesAskFailing /
             HermesFallbackChainTriggered to be firing alongside this as
             DOWNSTREAM symptoms; THIS rule names the root cause.
 
-            This is a LIVENESS probe of the router only — a clear MLXBackendDown
-            does not guarantee a specific model can load (that is
-            HermesE2eChatFailing's job).
+            The probe is UNAUTHENTICATED and uses the https_2xx_or_auth module,
+            so a healthy hera answers 401 and that counts as success; a broken
+            backend answers 502 before auth is evaluated. No API key is needed.
+
+            This is a LIVENESS probe only — a clear MLXBackendDown does not
+            guarantee a specific model can load (that is HermesE2eChatFailing's
+            job). Note a COLD model can take ~60s to first token while the
+            backend is perfectly healthy.
 
             Runbook (hera-side, manual — vulcan cannot ssh hera):
-              1. On hera: confirm the llama-swap process / launchd job is alive
-                 and re-listening on :8080 (`curl -s localhost:8080/v1/models`).
-              2. Restart llama-swap on hera; once /v1/models returns 200 this
-                 clears within one scrape interval (~30s + the 8m for-window
-                 only delays the initial fire, not the resolve).
+              1. On hera: confirm oMLX is alive and listening on :8443
+                 (`curl -sk https://localhost:8443/v1/models` — 401 is healthy).
+              2. Restart oMLX on hera; once it answers, this clears within one
+                 scrape interval (the 8m for-window only delays the initial
+                 fire, not the resolve).
               3. If hera itself is wedged (also see DNSServerDown /
                  LocalNetworkIssue for hera.lan), recover hera first — this rule
                  self-suppresses while hera is unreachable.

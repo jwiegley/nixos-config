@@ -968,63 +968,6 @@ in
             scrape_timeout = "15s";
           }
 
-          # Direct liveness probe of the hera-side oMLX model server
-          # (hera.lan:8080). This is the terminal upstream behind the host LLM
-          # gateway on 127.0.0.1:4000, and thus the terminal dependency of all
-          # Hermes Discord chat. GET
-          # /v1/models returns HTTP 200 UNAUTHENTICATED (verified live through the
-          # exporter: owned_by=omlx, ~1ms once warm), so the
-          # strict http_2xx module suffices — no auth, no secrets. This is a
-          # LIVENESS probe of the router; per-model load correctness is covered by
-          # the hermes-e2e-chat-probe content check. NOTE this is the HERA
-          # instance. The vulcan-side llama-swap.vulcan.lan that used to sit alongside
-          # it was removed 2026-08-02 and is
-          # in blackbox_https_local. host_group is intentionally NOT set so the
-          # ICMP host_group-based rules in network.yaml never match it. The
-          # MLXBackendDown alert in hermes.yaml owns this target (gated by
-          # `and on() up{job="darwin-hera"}==1`); the generic HostUnreachable rule
-          # (network.yaml, job=~"blackbox_.*") must exclude blackbox_hera_mlx so
-          # a hera reboot does not double-fire an ungated critical — that
-          # exclusion has since landed (HostUnreachable now carries
-          # job!="blackbox_hera_mlx"; verified 2026-07-27).
-          # (coverage plan deferred: mlx-hera-probe)
-          {
-            job_name = "blackbox_hera_mlx";
-            metrics_path = "/probe";
-            params = {
-              module = [ "http_2xx" ];
-            };
-            static_configs = [
-              {
-                targets = [ "http://hera.lan:8080/v1/models" ];
-                labels = {
-                  service = "mlx-backend";
-                  probe = "hera-mlx";
-                };
-              }
-            ];
-            relabel_configs = [
-              {
-                source_labels = [ "__address__" ];
-                target_label = "__param_target";
-              }
-              {
-                source_labels = [ "__param_target" ];
-                target_label = "instance";
-              }
-              {
-                target_label = "__address__";
-                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-              }
-              {
-                target_label = "probe_type";
-                replacement = "http_remote";
-              }
-            ];
-            scrape_interval = "30s";
-            scrape_timeout = "10s";
-          }
-
           # hera :8443 — the endpoint the AGENTS' model actually lives behind.
           #
           # Added 2026-08-01 during a live outage that the existing blackbox_hera_mlx job

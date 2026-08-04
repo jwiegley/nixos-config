@@ -98,7 +98,6 @@ in
       dirscan
       ethtool
       gh
-      gnupg
       haskellPackages.sizes
       httm
       iperf3

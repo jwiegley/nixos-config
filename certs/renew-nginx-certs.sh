@@ -43,7 +43,6 @@ DOMAINS=(
     "promtail.vulcan.lan"
     "radicale.vulcan.lan"
     "rspamd.vulcan.lan"
-    "speedtest.vulcan.lan"
     "speedtracker.vulcan.lan"
     "teable.vulcan.lan"
     "trader.vulcan.lan"

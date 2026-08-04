@@ -71,7 +71,6 @@
 1880 127.0.0.1 Node-RED
 2283 127.0.0.1 Immich photo management
 3000 127.0.0.1 Grafana
-3002 127.0.0.1 OpenSpeedTest (rootless container)
 3003 127.0.0.1 Immich gunicorn (machine-learning / API auxiliary)
 3005 127.0.0.1 :: Gitea
 # 3006 - removed, Open WebUI uses host networking on port 8080

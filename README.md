@@ -227,7 +227,6 @@ external-facing services tunnel out via Cloudflare.
 - **Immich** (native): photo / video library at `immich.vulcan.lan`.
 - **Aria2** (native): download manager with the AriaNG UI at `aria.vulcan.lan`.
 - **Jellyfin** (native, via `media.nix`): media server at `jellyfin.vulcan.lan`.
-- **OpenSpeedTest** (Quadlet): self-hosted speed-test at `speedtest.vulcan.lan`.
 - **Speedtest Tracker** (Quadlet): historical speed-test tracking at
   `speedtracker.vulcan.lan` with Redis.
 - **Zimit** (native): web-archive (ZIM) job-manager Flask UI.

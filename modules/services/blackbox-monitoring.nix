@@ -867,7 +867,6 @@ in
                   "https://grafana.vulcan.lan"
                   "https://glances.vulcan.lan"
                   "https://alertmanager.vulcan.lan"
-                  "https://speedtest.vulcan.lan"
                   "https://mailarchiver.vulcan.lan"
                   "https://budget.vulcan.lan"
                   "https://changes.vulcan.lan"

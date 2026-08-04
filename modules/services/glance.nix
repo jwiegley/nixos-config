@@ -179,13 +179,6 @@ with lib;
                           title = "Kiwix";
                           url = "https://kiwix.vulcan.lan";
                         }
-                        # Shlink tile removed 2026-08-03: the service was DISABLED
-                        # on 2026-07-31 (unpatched security advisory -- see the
-                        # commented imports in hosts/vulcan/default.nix), so this
-                        # was the dashboard's only genuinely dead link, answering
-                        # nothing at all rather than 401/403. Its module files are
-                        # still present but unimported; re-add this tile if shlink
-                        # is ever re-enabled after an upgrade.
                         {
                           title = "SearXNG";
                           url = "https://searxng.vulcan.lan";
@@ -277,10 +270,6 @@ with lib;
                         {
                           title = "Rspamd";
                           url = "https://rspamd.vulcan.lan";
-                        }
-                        {
-                          title = "OpenSpeedTest";
-                          url = "https://speedtest.vulcan.lan";
                         }
                         {
                           title = "Speedtest Tracker";

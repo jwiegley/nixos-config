@@ -74,18 +74,6 @@
       };
 
       # Miscellaneous services (formerly container-misc)
-      openspeedtest = {
-        isSystemUser = true;
-        group = "openspeedtest";
-        home = "/var/lib/containers/openspeedtest";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for OpenSpeedTest service";
-      };
-
       changedetection = {
         isSystemUser = true;
         group = "changedetection";
@@ -190,7 +178,6 @@
       memory-vault = { };
       opnsense-exporter = { };
       technitium-dns-exporter = { };
-      openspeedtest = { };
       changedetection = { };
       mailarchiver = { };
       openproject = { };
@@ -216,7 +203,6 @@
     "wallabag"
     "opnsense-exporter"
     "technitium-dns-exporter"
-    "openspeedtest"
     "speedtest-tracker"
   ];
 
@@ -277,7 +263,6 @@
     # /run/secrets-<user> at all; the dirs are kept only so the convention holds if
     # one is added later.
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"
-    "d /run/secrets-openspeedtest 0750 openspeedtest openspeedtest - -"
     "d /run/secrets-openproject 0750 openproject openproject - -"
     "d /run/secrets-shlink 0750 shlink shlink - -"
     "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"

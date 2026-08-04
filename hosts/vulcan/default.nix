@@ -58,7 +58,6 @@
     ../../modules/users/home-manager/memory-vault.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
-    ../../modules/users/home-manager/openspeedtest.nix
     ../../modules/users/home-manager/vane.nix
     ../../modules/users/home-manager/speedtest-tracker.nix
 

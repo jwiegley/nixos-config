@@ -1012,11 +1012,6 @@ let
     #       runAs = "shlink-web-client";
     #     }
     {
-      name = "speedtest";
-      display = "Open SpeedTest";
-      runAs = "openspeedtest";
-    }
-    {
       name = "speedtest-tracker";
       display = "Speedtest Tracker";
       runAs = "speedtest-tracker";
@@ -1780,14 +1775,6 @@ let
     define service {
       use                     standard-service
       host_name               vulcan
-      service_description     OpenSpeedTest HTTP
-      check_command           check_http!-p 3002 -u /
-      service_groups          application-services
-    }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
       service_description     BudgetBoard HTTP
       check_command           check_http!-p 6253 -u /
       service_groups          application-services
@@ -2141,14 +2128,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: mailarchiver.vulcan.lan
       check_command           check_ssl_cert!mailarchiver.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: speedtest.vulcan.lan
-      check_command           check_ssl_cert!speedtest.vulcan.lan
       service_groups          ssl-certificates
     }
 

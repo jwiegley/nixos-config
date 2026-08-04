@@ -2283,11 +2283,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1785874083,
-        "narHash": "sha256-gg+kNBHmgVHrTQhdopuuBaEL8g38Ad1kE6GZwNDut1c=",
+        "lastModified": 1785875477,
+        "narHash": "sha256-NqvfCpGQbKATlUPGZCEOY1XICr8xn8EHcM66tlgqzyQ=",
         "ref": "refs/heads/main",
-        "rev": "ffeb9135ad3826f46eca5b6bb08a03dad27a9545",
-        "revCount": 2904,
+        "rev": "0e84ad607660fdc63324fae2a38b9424f6b82af1",
+        "revCount": 2905,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

@@ -32,7 +32,6 @@ let
     # Critical Application Services
     "home-assistant"
     "node-red"
-    "jupyterlab"
     "technitium-dns-server"
   ];
 

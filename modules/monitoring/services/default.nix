@@ -54,7 +54,6 @@
     ./home-assistant-backup-exporter.nix
     ./immich-exporter.nix
     ./node-red-exporter.nix
-    ./jupyterlab-alerts.nix
     ./vdirsyncer-exporter.nix
     ./gitea-exporter.nix
     ./gitea-push-mirror-exporter.nix

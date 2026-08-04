@@ -103,7 +103,6 @@
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
 8765 127.0.0.1 Speedtest Tracker web interface
-8888 127.0.0.1 JupyterLab
 8890 127.0.0.1 SearXNG metasearch engine
 9091 127.0.0.1 Wallabag (rootless container)
 9097 127.0.0.1 MailArchiver (rootless container)

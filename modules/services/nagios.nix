@@ -749,10 +749,6 @@ let
       display = "Glances System Monitor";
     }
     {
-      name = "jupyterlab.service";
-      display = "JupyterLab";
-    }
-    {
       name = "pgadmin.service";
       display = "pgAdmin";
     }
@@ -2033,14 +2029,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: nagios.vulcan.lan
       check_command           check_ssl_cert!nagios.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: jupyter.vulcan.lan
-      check_command           check_ssl_cert!jupyter.vulcan.lan
       service_groups          ssl-certificates
     }
 

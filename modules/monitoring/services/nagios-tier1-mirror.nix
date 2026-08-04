@@ -503,7 +503,6 @@ let
     { vhost = "speedtracker.vulcan.lan"; }
     { vhost = "gitea.vulcan.lan"; }
     { vhost = "immich.vulcan.lan"; }
-    { vhost = "jupyter.vulcan.lan"; }
     { vhost = "kiwix.vulcan.lan"; }
     { vhost = "promtail.vulcan.lan"; }
     { vhost = "radicale.vulcan.lan"; }

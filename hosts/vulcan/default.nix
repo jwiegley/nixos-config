@@ -78,7 +78,6 @@
     ../../modules/services/home-assistant.nix
     ../../modules/services/home-assistant-water-attribution.nix
     ../../modules/services/immich.nix
-    ../../modules/services/jupyterlab.nix
     ../../modules/services/local-backup.nix
     ../../modules/services/loki.nix
     ../../modules/services/media.nix

@@ -882,12 +882,10 @@ in
                   # https_2xx_local module (step-ca CA) before being added here,
                   # so each currently reports probe_success=1. Auth-gated (401)
                   # and no-root-handler (404) vhosts go to blackbox_https_auth
-                  # below instead. notebook.vulcan.lan is a serverAlias of
-                  # jupyter (covered) and is intentionally omitted.
+                  # below instead.
                   "https://atd.vulcan.lan"
                   "https://gitea.vulcan.lan"
                   "https://immich.vulcan.lan"
-                  "https://jupyter.vulcan.lan"
                   "https://kiwix.vulcan.lan"
                   "https://promtail.vulcan.lan"
                   "https://qdrant.vulcan.lan"

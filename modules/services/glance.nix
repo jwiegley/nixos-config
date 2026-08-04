@@ -156,10 +156,6 @@ with lib;
                           url = "https://chat.vulcan.lan";
                         }
                         {
-                          title = "JupyterLab";
-                          url = "https://jupyter.vulcan.lan";
-                        }
-                        {
                           title = "Stock Trader";
                           url = "https://trader.vulcan.lan";
                         }

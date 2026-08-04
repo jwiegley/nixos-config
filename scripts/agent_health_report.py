@@ -28,8 +28,7 @@ Sections (fixed order):
   8. Errors digest           — redacted
   9. Self-heal incidents     — incidents.json + *_self_heal_* metrics
  10. In-VM corroboration     — one SSH round-trip (trader curl + requests-TLS,
-                               memory-vault MCP recall, plus api/gateway
-                               reachability)
+                               plus api/gateway reachability)
 
 Environment overrides (read under the profile's <PREFIX>, e.g. HERMES_REPORT):
   <PREFIX>_TO              recipient (default: johnw@vulcan.lan)
@@ -497,38 +496,6 @@ def _tls_frag(cid: str, url: str) -> str:
     )
 
 
-def _mcp_recall_frag(cid: str, url: str) -> str:
-    """Functional memory-vault retrieval probe over the agent's OWN loopback MCP
-    endpoint (the exact path the agent uses): MCP initialize -> notifications/
-    initialized -> tools/call recall. Emits OK only when recall returns a
-    well-formed result (proves the VM can reach AND retrieve from memory-vault),
-    FAIL otherwise. Never prints response bodies — only the OK/FAIL token."""
-    ct = "Content-Type: application/json"
-    ac = "Accept: application/json, text/event-stream"
-    init = (
-        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
-        '{"protocolVersion":"2025-06-18","capabilities":{},'
-        '"clientInfo":{"name":"health-probe","version":"1"}}}'
-    )
-    inited = '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-    recall = (
-        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":'
-        '{"name":"recall","arguments":{"query":"health probe","limit":1}}}'
-    )
-    return (
-        f"{cid}=FAIL\n"
-        f'__u="{url}"\n'
-        f"__hdr=$(curl -s -m 8 -D - -o /dev/null -H '{ct}' -H '{ac}' \"$__u\" -d '{init}' 2>/dev/null)\n"
-        '__sid=$(printf "%s" "$__hdr" | grep -i "^mcp-session-id:" | tr -d "\\r" | sed "s/.*: *//")\n'
-        'if [ -n "$__sid" ]; then\n'
-        f"  curl -s -m 8 -o /dev/null -H '{ct}' -H '{ac}' -H \"mcp-session-id: $__sid\" \"$__u\" -d '{inited}' 2>/dev/null\n"
-        f"  __r=$(curl -s -m 8 -H '{ct}' -H '{ac}' -H \"mcp-session-id: $__sid\" \"$__u\" -d '{recall}' 2>/dev/null)\n"
-        f'  printf "%s" "$__r" | grep -q total_results && {cid}=OK\n'
-        "fi\n"
-        f'printf "{cid}=%s\\n" "${cid}"'
-    )
-
-
 def ssh_probe(key: Optional[str], target: Optional[str], checks: list[dict]) -> dict:
     """Run the profile's in-VM checks in one SSH round-trip.
 
@@ -545,8 +512,6 @@ def ssh_probe(key: Optional[str], target: Optional[str], checks: list[dict]) -> 
             frags.append(_curl_frag(cid, chk["url"]))
         elif chk["kind"] == "requests_tls":
             frags.append(_tls_frag(cid, chk["url"]))
-        elif chk["kind"] == "mcp_recall":
-            frags.append(_mcp_recall_frag(cid, chk["url"]))
     remote = "\n".join(frags)
     ssh_cmd = [
         "ssh", "-i", key,
@@ -671,9 +636,7 @@ PROFILES: dict[str, dict] = {
             {"label": "trader /api/schwab/status", "kind": "curl",
              "url": "https://trader.vulcan.lan/api/schwab/status"},
             {"label": "trader requests-TLS", "kind": "requests_tls",
-             "url": "https://trader.vulcan.lan/api/schwab/status"},
-            {"label": "memory-vault recall", "kind": "mcp_recall",
-             "url": "http://127.0.0.1:8236/mcp"}],
+             "url": "https://trader.vulcan.lan/api/schwab/status"}],
         "verdict_fail_if_zero": [("hermes_api_server_ok", "api_server down"),
                                  ("hermes_mcp_sse_open_ok", "hermes-mcp SSE down"),
                                  ("hermes_mcp_ask_hermes_ok", "ask_hermes round-trip failing")],
@@ -779,20 +742,6 @@ def _trader_state(invm: dict) -> tuple[bool, bool]:
     return (probed, failed)
 
 
-def _memory_vault_state(invm: dict) -> tuple[bool, bool]:
-    """Return (probed, failed) for the memory-vault recall check within §10.
-
-    OK = the agent's VM reached memory-vault and recall returned results;
-    FAIL = reachable-but-broken or unreachable; None/absent = unavailable (e.g.
-    no SSH key), which is not counted as a failure.
-    """
-    if invm.get("skipped", True):
-        return (False, False)
-    results = invm.get("results", {})
-    val = next((v for k, v in results.items() if "memory-vault" in k.lower()), None)
-    return (val is not None, val == "FAIL")
-
-
 def _compute_issues(profile: dict, data: dict) -> list[str]:
     issues: list[str] = []
     live = data["live"]
@@ -816,10 +765,6 @@ def _compute_issues(profile: dict, data: dict) -> list[str]:
     _, trader_failed = _trader_state(data["invm"])
     if trader_failed:
         issues.append("stock-trader unreachable from VM")
-    # memory-vault not retrievable from VM
-    _, mv_failed = _memory_vault_state(data["invm"])
-    if mv_failed:
-        issues.append("memory-vault recall failing from VM")
     # stuck self-heal incidents
     if data["incidents"]["stuck_alerts"]:
         issues.append(f"{len(data['incidents']['stuck_alerts'])} stuck incidents")

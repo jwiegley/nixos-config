@@ -838,7 +838,7 @@ let
   # rootless containers (runAs set) run in user namespaces and require special checks
   # root containers (no runAs) run in the root namespace via system services
   # Updated 2025-11-09: rootless containers each run under a dedicated user for security
-  # isolation (memory-vault and memory-vault-mcp share the memory-vault user); the two
+  # isolation; the two
   # budget-board entries are still root-level Quadlet containers, hence no runAs
   containers = [
     {
@@ -861,16 +861,6 @@ let
       name = "speedtest-tracker";
       display = "Speedtest Tracker";
       runAs = "speedtest-tracker";
-    }
-    {
-      name = "memory-vault";
-      display = "Memory Vault App";
-      runAs = "memory-vault";
-    }
-    {
-      name = "memory-vault-mcp";
-      display = "Memory Vault MCP";
-      runAs = "memory-vault";
     }
     {
       name = "wallabag";
@@ -1652,14 +1642,6 @@ let
       service_groups          application-services
     }
 
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Memory-Vault Health
-      check_command           check_https!-H memory.vulcan.lan -u /api/health -s "ok"
-      service_groups          application-services
-    }
-
     ###############################################################################
     # SERVICES - PROTOCOL CHECKS (IMAP, SMTP, DNS)
     ###############################################################################
@@ -1794,22 +1776,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: loki.vulcan.lan
       check_command           check_ssl_cert!loki.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: memory.vulcan.lan
-      check_command           check_ssl_cert!memory.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: memory-mcp.vulcan.lan
-      check_command           check_ssl_cert!memory-mcp.vulcan.lan
       service_groups          ssl-certificates
     }
 

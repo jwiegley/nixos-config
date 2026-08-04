@@ -690,40 +690,6 @@ in
             scrape_timeout = "15s";
           }
 
-          # Memory Vault REST API health (unauthenticated GET /api/health → 200).
-          {
-            job_name = "blackbox_memory_vault";
-            metrics_path = "/probe";
-            params = {
-              module = [ "https_2xx_local" ];
-            };
-            static_configs = [
-              {
-                targets = [ "https://memory.vulcan.lan/api/health" ];
-                labels = {
-                  service = "memory-vault";
-                  probe = "memory-vault-health";
-                };
-              }
-            ];
-            relabel_configs = [
-              {
-                source_labels = [ "__address__" ];
-                target_label = "__param_target";
-              }
-              {
-                source_labels = [ "__param_target" ];
-                target_label = "instance";
-              }
-              {
-                target_label = "__address__";
-                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-              }
-            ];
-            scrape_interval = "30s";
-            scrape_timeout = "10s";
-          }
-
           # HTTPS monitoring for public web services
           {
             job_name = "blackbox_https";

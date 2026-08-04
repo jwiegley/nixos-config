@@ -431,10 +431,7 @@ let
   # .nix: blackbox_https_local + blackbox_https_auth) that have NO independent
   # Nagios check_http/check_https service today (nagios.nix carries 14 such
   # checks as of 2026-07-27 — 12 check_http! + 2 check_https! — plus the
-  # atd/qdrant satellite checks). memory.vulcan.lan is deliberately absent
-  # from the list below even though it IS blackbox-probed locally (job
-  # blackbox_memory_vault, blackbox-monitoring.nix): nagios.nix already has
-  # its own Memory-Vault Health check_https for that vhost, so it is not a
+  # atd/qdrant satellite checks). New local command
   # gap. New local command
   # `check_https_vhost` mirrors the blackbox local probe:
   #   check_http -H <vhost> -S --sni -I 127.0.0.1 -w 5 -c 10

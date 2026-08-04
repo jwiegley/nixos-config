@@ -49,12 +49,6 @@ in
       database = "org";
       secretPath = config.sops.secrets."openclaw/org-db-password".path;
     })
-    (mkPostgresUserSetup {
-      user = "memory_vault";
-      database = "memory_vault";
-      secretPath = config.sops.secrets."memory-vault/db-password".path;
-      dependentService = "podman-memory-vault.service";
-    })
   ];
 
   services = {
@@ -168,7 +162,6 @@ in
         "speedtest_tracker"
         "nodered_events"
         "flume-data"
-        "memory_vault"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -202,10 +195,6 @@ in
         { name = "grafana"; }
         {
           name = "flume-data";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "memory_vault";
           ensureDBOwnership = true;
         }
       ];
@@ -465,44 +454,6 @@ in
 
       ${config.services.postgresql.package}/bin/psql -d postgres -c \
         'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;'
-    '';
-  };
-
-  # Create the pgvector `vector` extension in the memory_vault database.
-  #
-  # Memory Vault's migrations issue `CREATE EXTENSION IF NOT EXISTS vector`, but
-  # the app connects as the non-superuser `memory_vault` role over TCP and lacks
-  # privilege to create an extension. We pre-create it here as the postgres
-  # superuser; the app migration then no-ops. Unlike pg_stat_statements,
-  # pgvector needs no shared_preload_libraries, so this succeeds without a
-  # restart. `before podman-memory-vault.service` is best-effort (cross-manager
-  # to a rootless user unit); the app gate + Restart=always covers any race.
-  systemd.services.postgresql-memory-vault-vector-setup = {
-    description = "Create pgvector extension in the memory_vault DB";
-    after = [
-      "postgresql.service"
-      "postgresql-memory_vault-setup.service"
-    ];
-    wants = [ "postgresql.service" ];
-    wantedBy = [ "multi-user.target" ];
-    before = [ "podman-memory-vault.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      User = "postgres";
-      RemainAfterExit = true;
-      TimeoutStartSec = "120";
-    };
-
-    script = ''
-      # Wait (bounded) until the memory_vault database exists and accepts queries.
-      for i in $(seq 1 60); do
-        ${config.services.postgresql.package}/bin/psql -d memory_vault -c "SELECT 1" >/dev/null 2>&1 && break
-        sleep 1
-      done
-
-      ${config.services.postgresql.package}/bin/psql -d memory_vault -c \
-        'CREATE EXTENSION IF NOT EXISTS vector;'
     '';
   };
 

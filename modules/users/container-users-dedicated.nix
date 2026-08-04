@@ -33,18 +33,6 @@
         description = "Container user for Wallabag read-it-later service";
       };
 
-      memory-vault = {
-        isSystemUser = true;
-        group = "memory-vault";
-        home = "/var/lib/containers/memory-vault";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Memory Vault AI memory service";
-      };
-
       # Monitoring services (formerly container-monitor)
       opnsense-exporter = {
         isSystemUser = true;
@@ -151,7 +139,6 @@
     # Create corresponding groups for each container user
     groups = {
       wallabag = { };
-      memory-vault = { };
       opnsense-exporter = { };
       technitium-dns-exporter = { };
       changedetection = { };
@@ -168,7 +155,6 @@
   nix.settings.allowed-users = [
     "changedetection"
     "mailarchiver"
-    "memory-vault"
     "open-webui"
     "openproject"
     "vane"
@@ -227,9 +213,6 @@
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
-    # memory-vault: sops.templates renders /run/secrets-memory-vault/env directly,
-    # so only the dir is required here.
-    "d /run/secrets-memory-vault 0750 memory-vault memory-vault - -"
     "d /run/secrets-opnsense-exporter 0750 opnsense-exporter opnsense-exporter - -"
     # technitium-dns-exporter and openspeedtest have no secrets under
     # /run/secrets-<user> at all; the dirs are kept only so the convention holds if

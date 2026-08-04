@@ -31,14 +31,6 @@ let
     u: lib.hasPrefix "/var/lib/containers/" config.home-manager.users.${u}.home.homeDirectory
   ) (lib.attrNames config.home-manager.users);
 
-  # The ONE intentional difference between this list and the exporters': this
-  # script auto-PULLS, so it must cover only users running MOVING image tags
-  # (:latest, :slim-latest). memory-vault runs pinned tags
-  # (ghcr.io/.../memory-vault*:1.0.6), so auto-pulling would defeat the pin — and
-  # a pinned tag never trips ContainerImageOutdated, so nothing is lost by
-  # skipping it here. It is still monitored by the three exporters.
-  updatableContainerUsers = lib.subtractLists [ "memory-vault" ] rootlessContainerUsers;
-
   updateContainersScript = pkgs.writeShellScript "update-containers" ''
     set -euo pipefail
 
@@ -148,11 +140,10 @@ let
 
     # --- Rootless containers (dedicated users) ---
     # Each user has linger enabled so their XDG_RUNTIME_DIR exists at /run/user/<uid>
-    # Rootless container users with MOVING image tags (:latest, :slim-latest) that
-    # should track upstream. Derived at eval time from home-manager.users, minus
-    # memory-vault (pinned tags) — see the updatableContainerUsers let-binding at
-    # the top of this file for the predicate and the pin rationale.
-    CONTAINER_USERS=(${lib.concatStringsSep " " updatableContainerUsers})
+    # Rootless container users, derived at eval time from home-manager.users.
+    # Every remaining one runs MOVING image tags (:latest, :slim-latest) and so
+    # should track upstream.
+    CONTAINER_USERS=(${lib.concatStringsSep " " rootlessContainerUsers})
 
     for user in "''${CONTAINER_USERS[@]}"; do
       uid=$(id -u "$user" 2>/dev/null || echo "")

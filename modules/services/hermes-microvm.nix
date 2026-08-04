@@ -75,7 +75,6 @@ let
   #   5432 PostgreSQL (org-db read-only)
   #   8123 Home Assistant (mcp-proxy bridge)
   #   9082 drafts-mcp (Drafts(hera) MCP SSE bridge)
-  # (8236 memory-vault-mcp is annotated inline in the list itself.)
   # Deliberately EXCLUDED: 6334/6335 and 9081.
   #   6334 Qdrant gRPC — the memory provider is REST-only by construction
   #        (pkgs/hermes-qdrant-memory/src/qdrant_rest.py), so gRPC is pure
@@ -103,7 +102,6 @@ let
     6333 # Qdrant HTTP REST — Hermes memory provider (REST only; NOT 6334/gRPC)
     8123
     9082
-    8236 # memory-vault-mcp — Hermes→Memory Vault MCP (streamable-http, native url)
   ];
   # NO-SPACE comma join: this string feeds both `iptables -m multiport
   # --dports` (host isolate chain below) and the guest's nftables

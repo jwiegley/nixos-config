@@ -43,7 +43,6 @@
 
     # Service-specific exporters
     ./postgres-exporter.nix
-    ./memory-vault-stats-exporter.nix # memory_vault DB store stats -> textfile
     ./postfix-exporter.nix
     ./prometheus-nginx.nix
     ./nginx-exporter.nix

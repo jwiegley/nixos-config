@@ -48,7 +48,6 @@
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
     ../../modules/users/home-manager/wallabag.nix
-    ../../modules/users/home-manager/memory-vault.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
     ../../modules/users/home-manager/vane.nix
@@ -167,7 +166,6 @@
     ../../modules/containers/default.nix
     ../../modules/containers/matter-server-quadlet.nix
     ../../modules/containers/openproject-quadlet.nix
-    ../../modules/containers/memory-vault-quadlet.nix
 
     # Maintenance
     ../../modules/maintenance/timers.nix

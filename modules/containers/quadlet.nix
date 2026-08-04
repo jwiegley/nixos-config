@@ -29,7 +29,7 @@
   # non-loopback host IP — the microVM bridge 10.99.0.1 — freezes it into the
   # container's /etc/hosts for the container's lifetime, and every DB client
   # then hits pg_hba's reject catch-all in a retry storm (hit speedtest-tracker,
-  # memory-vault, shlink, openproject on the 2026-07-03 boot).
+  # shlink, openproject on the 2026-07-03 boot).
   # 10.88.0.1 is config-static (defaultNetwork below), host-owned regardless of
   # which LAN interface has carrier, PostgreSQL binds it, and pg_hba admits
   # 10.88.0.0/16. Do NOT use a LAN address here — vulcan is multi-homed

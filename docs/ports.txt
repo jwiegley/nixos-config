@@ -98,8 +98,6 @@
 8123 127.0.0.1 Home Assistant
 8180 127.0.0.1 OpenProject web interface
 8234 127.0.0.1 Stock Trader web service - trader.vulcan.lan (uvicorn FastAPI)
-8235 127.0.0.1 Memory Vault REST API + dashboard - memory.vulcan.lan (rootless quadlet -> host PostgreSQL/pgvector)
-8236 127.0.0.1 Memory Vault MCP Streamable HTTP - memory-mcp.vulcan.lan (rootless quadlet; FastMCP)
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
 8765 127.0.0.1 Speedtest Tracker web interface

@@ -484,18 +484,47 @@ in
     "hermes-prepare-secrets.service"
     "microvm@hermes.service"
   ];
-  sops.secrets."openclaw/home-assistant-token".restartUnits = [
-    "hermes-prepare-secrets.service"
-    "microvm@hermes.service"
-  ];
-  sops.secrets."openclaw/org-db-password".restartUnits = [
-    "hermes-prepare-secrets.service"
-    "microvm@hermes.service"
-  ];
-  sops.secrets."openclaw/perplexity-api-key".restartUnits = [
-    "hermes-prepare-secrets.service"
-    "microvm@hermes.service"
-  ];
+  # These three keep their legacy `openclaw/` NAMES because that is what they are
+  # called in secrets.yaml, but Hermes is now their only consumer. Their full
+  # declarations lived in modules/services/openclaw-microvm.nix until OpenClaw was
+  # removed 2026-08-03; they are re-homed here rather than deleted, because
+  # deleting them breaks hermes-prepare-secrets and with it the HA MCP bridge,
+  # org-db MCP and the Perplexity tool.
+  #
+  # owner root, NOT openclaw: the openclaw user no longer exists, and
+  # hermes-prepare-secrets is a Type=oneshot with no User=, i.e. it runs as root
+  # and `install -m 0400 -o hermes -g hermes` copies each one into
+  # /run/hermes-secrets itself. Root-owned sources are exactly what it needs.
+  sops.secrets."openclaw/home-assistant-token" = {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+    restartUnits = [
+      "hermes-prepare-secrets.service"
+      "microvm@hermes.service"
+    ];
+  };
+  sops.secrets."openclaw/org-db-password" = {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+    restartUnits = [
+      "hermes-prepare-secrets.service"
+      "microvm@hermes.service"
+      # postgresql-openclaw-setup still uses this password to provision the
+      # read-only `openclaw` role that Hermes' org-db MCP connects as.
+      "postgresql-openclaw-setup.service"
+    ];
+  };
+  sops.secrets."openclaw/perplexity-api-key" = {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+    restartUnits = [
+      "hermes-prepare-secrets.service"
+      "microvm@hermes.service"
+    ];
+  };
 
   # ---- Stage SOPS secret content into the VM's virtio-fs state share ----
   systemd.services.hermes-prepare-secrets = {

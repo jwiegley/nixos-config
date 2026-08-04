@@ -617,10 +617,11 @@ in
           "192.168.3.16" # vulcan's WiFi IP
         ];
 
-        # Bind to loopback (nginx proxy) and OpenClaw VM bridge
+        # Loopback only. The Hermes VM reaches :8123 through its own two-stage
+        # DNAT, which rewrites the destination to the HOST's 127.0.0.1:8123
+        # (hermes-microvm.nix dnatPorts), so no bridge address needs binding.
         server_host = [
           "127.0.0.1"
-          "10.99.0.1" # OpenClaw microVM bridge gateway
         ];
         server_port = 8123;
       };

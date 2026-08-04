@@ -88,12 +88,6 @@ let
       crit = 600;
       template = "standard";
     }
-    {
-      file = "openclaw_canary.prom";
-      warn = 600;
-      crit = 600;
-      template = "standard";
-    }
 
     # 2m cadence -> 3x = 360 / 6x = 720
     {
@@ -153,12 +147,6 @@ let
       template = "standard";
     }
     {
-      file = "openclaw_mcporter.prom";
-      warn = 900;
-      crit = 1800;
-      template = "standard";
-    }
-    {
       file = "port_drift.prom";
       warn = 900;
       crit = 1800;
@@ -187,12 +175,6 @@ let
     }
     {
       file = "mbsync_johnw.prom";
-      warn = 2700;
-      crit = 5400;
-      template = "standard";
-    }
-    {
-      file = "openclaw_hermes_smoke.prom";
       warn = 2700;
       crit = 5400;
       template = "standard";
@@ -295,12 +277,6 @@ let
       template = "low";
     }
     {
-      file = "openclaw_config_drift.prom";
-      warn = 93600;
-      crit = 180000;
-      template = "low";
-    }
-    {
       file = "system_age.prom";
       warn = 93600;
       crit = 180000;
@@ -343,12 +319,6 @@ let
     # self-heal daemons (no fixed cadence) -> generous warn 2h / crit 6h
     {
       file = "hermes_self_heal.prom";
-      warn = 7200;
-      crit = 21600;
-      template = "low";
-    }
-    {
-      file = "openclaw_self_heal.prom";
       warn = 7200;
       crit = 21600;
       template = "low";

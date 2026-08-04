@@ -126,10 +126,8 @@
     ../../modules/services/vane.nix
     ../../modules/services/vane-llm-shim.nix
     ../../modules/monitoring/services/copyparty-exporter.nix
-    ../../modules/monitoring/services/openclaw-hermes-smoke.nix
     ../../modules/monitoring/services/hermes-e2e-chat-probe.nix
     ../../modules/monitoring/services/hermes-fallback-counter.nix
-    ../../modules/monitoring/services/openclaw-config-drift-check.nix
     ../../modules/services/nginx-default-vhost.nix
     ../../modules/services/hera-llm-proxy.nix
     ../../modules/services/aria2.nix
@@ -140,10 +138,6 @@
     ../../modules/monitoring/services/atd-alerts.nix
     ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
-    ../../modules/services/openclaw-config.nix
-    ../../modules/services/openclaw-microvm.nix
-    ../../modules/services/openclaw-self-heal.nix
-    ../../modules/services/openclaw-nightly-report.nix
     ../../modules/services/hermes-nightly-report.nix
     ../../modules/services/open-source-secretary.nix
     ../../modules/services/hermes-microvm.nix
@@ -214,8 +208,6 @@
     intervalSeconds = 900;
   };
   services.hermesSelfHeal.enable = true;
-  services.openclawSelfHeal.enable = true;
-  services.openclawHermesSmoke.enable = true;
   services.hermesE2eChatProbe = {
     enable = true;
     # 900s = 15 min. Detection latency ~20 min when paired with the
@@ -238,7 +230,6 @@
   # Hermes' OWN monitoring is untouched and remains: the e2e chat probe, WS-zombie
   # detection, the fallback counter and its freshness guard, and the nightly health report.
   services.hermesFallbackCounter.enable = true;
-  services.openclawConfigDriftCheck.enable = true;
 
   services.home-assistant-water-attribution = {
     enable = true;

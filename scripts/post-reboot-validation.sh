@@ -343,42 +343,35 @@ fi
 # ===========================================================================
 # (j) microVMs active + uptime gauges present.
 # ===========================================================================
-check "microvm@openclaw / @hermes active"
-oc_active=$(active_state microvm@openclaw)
+check "microvm@hermes active"
 he_active=$(active_state microvm@hermes)
-vm_detail="openclaw=$oc_active hermes=$he_active"
-if [ "$oc_active" = "active" ] && [ "$he_active" = "active" ]; then
+vm_detail="hermes=$he_active"
+if [ "$he_active" = "active" ]; then
   pass "$vm_detail"
 elif in_boot_window; then
-  warn "$vm_detail (microVMs warm ~10min; within boot window)"
+  warn "$vm_detail (microVM warms ~10min; within boot window)"
 else
   fail "$vm_detail"
 fi
 
-check "microVM uptime gauges present"
+check "microVM uptime gauge present"
 gauge_src=""
-oc_gauge=""; he_gauge=""
-if [ -f "$TEXTFILE_DIR/openclaw_self_heal.prom" ] || [ -f "$TEXTFILE_DIR/openclaw_canary.prom" ]; then :; fi
+he_gauge=""
 # Prefer textfiles, fall back to scraping node-exporter.
-oc_gauge=$(grep -rhE '^openclaw_microvm_active_enter_timestamp_seconds ' "$TEXTFILE_DIR"/*.prom 2>/dev/null | head -1)
 he_gauge=$(grep -rhE '^hermes_vm_uptime_seconds ' "$TEXTFILE_DIR"/*.prom 2>/dev/null | head -1)
-if [ -n "$oc_gauge" ] || [ -n "$he_gauge" ]; then
+if [ -n "$he_gauge" ]; then
   gauge_src="textfiles"
 elif have curl; then
   body=$(curl -s --max-time 5 "$NODE_EXPORTER_URL" 2>/dev/null || true)
-  oc_gauge=$(printf "%s\n" "$body" | grep -E '^openclaw_microvm_active_enter_timestamp_seconds ' | head -1)
   he_gauge=$(printf "%s\n" "$body" | grep -E '^hermes_vm_uptime_seconds ' | head -1)
   gauge_src="node-exporter:9100"
 fi
 present=""
-[ -n "$oc_gauge" ] && present+="openclaw "
 [ -n "$he_gauge" ] && present+="hermes "
-if [ -n "$oc_gauge" ] && [ -n "$he_gauge" ]; then
-  pass "both gauges present (via ${gauge_src:-?})"
-elif [ -n "$present" ]; then
-  if in_boot_window; then warn "only: ${present}(${gauge_src:-?}; warming)"; else warn "only: ${present}(${gauge_src:-?})"; fi
+if [ -n "$he_gauge" ]; then
+  pass "hermes gauge present (via ${gauge_src:-?})"
 else
-  if in_boot_window; then warn "no microVM uptime gauges yet (boot window)"; else fail "no microVM uptime gauges found"; fi
+  if in_boot_window; then warn "no microVM uptime gauge yet (boot window)"; else fail "no microVM uptime gauge found"; fi
 fi
 
 # ===========================================================================

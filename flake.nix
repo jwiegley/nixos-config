@@ -299,29 +299,10 @@
               || pkgs.llama-cpp ? npmDeps;
             pkgs.runCommand "llama-cpp-overlay-compat-check" { } "touch $out";
 
-          openclaw-config-schema = import ./tests/openclaw/check-schema.nix {
-            inherit pkgs;
-            inherit (inputs.self.nixosConfigurations.vulcan.pkgs)
-              openclaw-config-template
-              ;
-          };
-
-          openclaw-self-heal-tests = helpers.mkPytestCheck {
-            name = "openclaw-self-heal-tests";
-            src = ./scripts/openclaw-self-heal;
-            suiteDir = "tests";
-          };
-
           hermes-self-heal-tests = helpers.mkPytestCheck {
             name = "hermes-self-heal-tests";
             src = ./scripts/hermes-self-heal;
             suiteDir = "tests";
-          };
-
-          openclaw-hermes-smoke-tests = helpers.mkPytestCheck {
-            name = "openclaw-hermes-smoke-tests";
-            src = ./scripts;
-            suiteDir = "openclaw-hermes-smoke-tests";
           };
 
           agent-health-report-tests = helpers.mkPytestCheck {

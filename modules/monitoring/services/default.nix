@@ -73,8 +73,6 @@
     ./health-check-exporters.nix
     ./git-workspace-alerts.nix
     ./aide-metrics.nix
-    ./openclaw-canary.nix
-    ./openclaw-mcporter-check.nix
     ./hermes-health-check.nix
     ./drafts-mcp-check.nix
 

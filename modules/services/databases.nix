@@ -48,7 +48,6 @@ in
       user = "openclaw";
       database = "org";
       secretPath = config.sops.secrets."openclaw/org-db-password".path;
-      dependentService = "microvm@openclaw.service";
     })
     (mkPostgresUserSetup {
       user = "memory_vault";
@@ -240,7 +239,6 @@ in
         host    all       all        10.88.0.0/16    scram-sha-256
 
         # OpenClaw microVM bridge network — Sherlock queries org database
-        host    org       openclaw   10.99.0.0/30    scram-sha-256
 
         # Hermes microVM bridge network — org-db MCP server (org_sql) queries
         # the org database as the same read-only `openclaw` role. Hermes reaches

@@ -11,7 +11,7 @@ let
   # "microVM Guest Visibility").
   # ============================================================================
   #
-  # The two AI microVMs (openclaw on 10.99.0.2, hermes on 10.99.1.2) expose ZERO
+  # The hermes AI microVM (10.99.1.2) exposes ZERO
   # in-guest system metrics to Prometheus: there is no node_exporter inside
   # either guest, and node-exporter's host-side systemd collector was verified
   # live to NOT export per-unit MemoryCurrent / CPUUsageNSec for the microvm@*
@@ -39,7 +39,6 @@ let
   # (modules/monitoring/loki-rules/microvm-oom.yaml).
   #
   # Static facts (verified live 2026-06-10):
-  #   openclaw  microvm.mem = 4096 MiB, microvm.vcpu = 4  (openclaw-microvm.nix:28-29)
   #   hermes    microvm.mem = 3072 MiB, microvm.vcpu = 1  (hermes-vm.nix:355,357
   #             — vcpu is not assigned; 357 is the comment recording that it is
   #             deliberately left at the microvm.nix default of 1)
@@ -50,11 +49,6 @@ let
   # Per-VM static parameters: memory ceiling (MiB → bytes), vCPU count (used by
   # the CPU-saturation alert), and the host-side persistent state-share dir.
   vms = {
-    openclaw = {
-      ceilingMiB = 4096;
-      vcpu = 4;
-      stateShare = "/var/lib/openclaw";
-    };
     hermes = {
       ceilingMiB = 3072;
       vcpu = 1;
@@ -160,7 +154,7 @@ let
     '';
   };
 
-  # ---- Slow collector: state-share size (hourly; walks the 14.5G openclaw
+  # ---- Slow collector: state-share size (hourly; walks the hermes
   # share — too heavy for the 60s cadence, per the spec noise analysis §5) -----
   microvm-state-share-exporter = pkgs.writeShellApplication {
     name = "microvm-state-share-exporter";
@@ -195,7 +189,7 @@ let
 
   # Hardening shared by both oneshots (mirrors system-age-exporter.nix). Root is
   # required to `systemctl show` foreign-user units and `du` the 0700
-  # openclaw-owned share; NOT DynamicUser for the same reason.
+  # hermes-owned share; NOT DynamicUser for the same reason.
   hardenedService = exec: {
     Type = "oneshot";
     ExecStart = exec;
@@ -226,7 +220,7 @@ in
     serviceConfig = hardenedService "${lib.getExe microvm-resource-exporter}";
   };
 
-  # ---- Slow state-share du timer: hourly (the 14.5G openclaw share is too
+  # ---- Slow state-share du timer: hourly (the hermes share is too
   # heavy to walk every minute — split per spec §5 noise analysis) -----------
   systemd.timers."microvm-state-share-exporter" = {
     description = "microVM state-share size exporter timer (hourly du of the virtiofs shares)";
@@ -240,7 +234,7 @@ in
   };
 
   systemd.services."microvm-state-share-exporter" = {
-    description = "microVM state-share size exporter (du -sb of /var/lib/{openclaw,hermes})";
+    description = "microVM state-share size exporter (du -sb of /var/lib/hermes)";
     after = [ "prometheus-node-exporter.service" ];
     serviceConfig = hardenedService "${lib.getExe microvm-state-share-exporter}";
   };

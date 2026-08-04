@@ -1,5 +1,0 @@
-#!/run/current-system/sw/bin/bash
-# openclaw-self-heal aux helper: kick the canary so its *.prom textfile
-# reflects post-action state.  No arguments, no shell expansion.
-set -euo pipefail
-exec /run/current-system/sw/bin/systemctl start --no-block openclaw-canary.service

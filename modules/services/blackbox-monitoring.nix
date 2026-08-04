@@ -690,41 +690,6 @@ in
             scrape_timeout = "15s";
           }
 
-          # OpenClaw /health probe — independent of canary, drives
-          # OpenClawHttpHealthDown alert + B-floor signal for self-heal.
-          {
-            job_name = "blackbox_openclaw";
-            metrics_path = "/probe";
-            params = {
-              module = [ "https_2xx_local" ];
-            };
-            static_configs = [
-              {
-                targets = [ "https://openclaw.vulcan.lan/health" ];
-                labels = {
-                  service = "openclaw";
-                  probe = "openclaw-health";
-                };
-              }
-            ];
-            relabel_configs = [
-              {
-                source_labels = [ "__address__" ];
-                target_label = "__param_target";
-              }
-              {
-                source_labels = [ "__param_target" ];
-                target_label = "instance";
-              }
-              {
-                target_label = "__address__";
-                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
-              }
-            ];
-            scrape_interval = "30s";
-            scrape_timeout = "10s";
-          }
-
           # Memory Vault REST API health (unauthenticated GET /api/health → 200).
           {
             job_name = "blackbox_memory_vault";

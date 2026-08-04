@@ -33,18 +33,6 @@
         description = "Container user for Wallabag read-it-later service";
       };
 
-      teable = {
-        isSystemUser = true;
-        group = "teable";
-        home = "/var/lib/containers/teable";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Teable database service";
-      };
-
       memory-vault = {
         isSystemUser = true;
         group = "memory-vault";
@@ -199,7 +187,6 @@
     # Create corresponding groups for each container user
     groups = {
       wallabag = { };
-      teable = { };
       memory-vault = { };
       opnsense-exporter = { };
       technitium-dns-exporter = { };
@@ -227,7 +214,6 @@
     "shlink"
     "shlink-web-client"
     "wallabag"
-    "teable"
     "opnsense-exporter"
     "technitium-dns-exporter"
     "openspeedtest"
@@ -264,11 +250,11 @@
   #     (speedtest-tracker-quadlet.nix). Those overrides remain and are unchanged.
   #   - 9 had no consumer anywhere — not in any unit, --env-file, EnvironmentFile,
   #     LoadCredential or volume mount under /etc/systemd or the rootless users'
-  #     ~/.config: mailarchiver, wallabag, teable, opnsense-exporter,
+  #     ~/.config: mailarchiver, wallabag, opnsense-exporter,
   #     technitium-dns-exporter, openspeedtest, openproject, shlink. Seven of the
   #     nine dangled outright (target did not exist); each of those services reaches
   #     its secret by a sibling sops `path=` file instead (
-  #     …/mailarchiver-env, …/wallabag-secrets, …/teable-env,
+  #     …/mailarchiver-env, …/wallabag-secrets,
   #     …/opnsense-exporter-secrets, …/openproject-env, …/shlink-secrets), while
   #     technitium-dns-exporter reads /run/secrets/technitium-dns-exporter-env
   #     directly and openspeedtest has no secrets at all.
@@ -283,7 +269,6 @@
     "d /run/secrets-changedetection 0750 changedetection changedetection - -"
     "d /run/secrets-mailarchiver 0750 mailarchiver mailarchiver - -"
     "d /run/secrets-wallabag 0750 wallabag wallabag - -"
-    "d /run/secrets-teable 0750 teable teable - -"
     # memory-vault: sops.templates renders /run/secrets-memory-vault/env directly,
     # so only the dir is required here.
     "d /run/secrets-memory-vault 0750 memory-vault memory-vault - -"

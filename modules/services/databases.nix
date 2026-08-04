@@ -16,12 +16,6 @@ in
   imports = [
     # Set up PostgreSQL passwords for database users
     (mkPostgresUserSetup {
-      user = "teable";
-      database = "teable";
-      secretPath = config.sops.secrets."teable-postgres-password".path;
-      dependentService = "podman-teable.service";
-    })
-    (mkPostgresUserSetup {
       user = "budgetboard";
       database = "budgetboard";
       secretPath = config.sops.secrets."budgetboard/database-password".path;
@@ -170,7 +164,6 @@ in
       ensureDatabases = [
         "open_webui"
         "wallabag"
-        "teable"
         "budgetboard"
         "gitea"
         "mailarchiver"
@@ -185,10 +178,6 @@ in
         { name = "postgres"; }
         { name = "johnw"; }
         { name = "wallabag"; }
-        {
-          name = "teable";
-          ensureDBOwnership = true;
-        }
         {
           name = "budgetboard";
           ensureDBOwnership = true;

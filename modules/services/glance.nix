@@ -301,10 +301,6 @@ with lib;
                           url = "https://openproject.vulcan.lan";
                         }
                         {
-                          title = "Teable";
-                          url = "https://teable.vulcan.lan";
-                        }
-                        {
                           title = "BudgetBoard";
                           url = "https://budget.vulcan.lan";
                         }

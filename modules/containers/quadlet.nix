@@ -22,7 +22,6 @@
     # hosts/vulcan/default.nix. Both halves must come back together.
     # ./shlink-quadlet.nix
     ./speedtest-tracker-quadlet.nix
-    ./teable-quadlet.nix
     ./technitium-dns-exporter-quadlet.nix
     ./wallabag-quadlet.nix
   ];
@@ -107,23 +106,15 @@
 
   # Configure firewall to allow container traffic on podman0 interface
   networking.firewall.interfaces.podman0 = {
-    # 1433: mssql — leftover; the MS SQL Server container was removed on
-    #       2025-10-22 (commit b00880a) and nothing in the repo uses 1433 now
-    # 3001: teable
     # 5380: Technitium DNS
     # 5432: PostgreSQL
     # 6253: budgetboard-client
     # 8085: Redis
-    # 9182: mssql-exporter — leftover; removed together with the MS SQL Server
-    #       container (2025-10-22, commit b00880a)
     allowedTCPPorts = [
-      1433
-      3001
       5380
       5432
       6253
       8085
-      9182
     ];
     allowedUDPPorts = [ 53 ];
   };

@@ -2,7 +2,7 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# Our rootless container services (open-webui, teable, changedetection,
+# Our rootless container services (open-webui, changedetection,
 # openproject, ...) track *moving* image tags (e.g. ghcr.io/open-webui/open-webui
 # :main-stable). Every time a newer image is pulled, the tag moves to the new image
 # and the previous one is orphaned as a dangling <none> image. Podman never removes

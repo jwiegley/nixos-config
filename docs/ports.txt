@@ -73,7 +73,6 @@
 3000 127.0.0.1 Grafana
 3002 127.0.0.1 OpenSpeedTest (rootless container)
 3003 127.0.0.1 Immich gunicorn (machine-learning / API auxiliary)
-3004 127.0.0.1 Teable (rootless container; internal port 3001)
 3005 127.0.0.1 :: Gitea
 # 3006 - removed, Open WebUI uses host networking on port 8080
 3007 127.0.0.1 Vane AI answering engine (host network)
@@ -194,7 +193,6 @@
 20241 127.0.0.1 (reserved - cloudflared default metrics port; see note above)
 
 # Container Services (internal ports — host-facing variant listed above)
-3001 container Teable (internal; host-facing on 3004)
 5000 container ChangeDetection.io (internal; host-facing on 5055)
 5380 0.0.0.0 Technitium DNS container
 

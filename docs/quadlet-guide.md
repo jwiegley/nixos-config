@@ -8,7 +8,7 @@
 > Use one of these instead:
 >
 > ```bash
-> # rootless container units (litellm, wallabag, teable, shlink, open-webui, ...)
+> # rootless container units (wallabag, open-webui, vane, ...)
 > sudo systemctl status home-manager-litellm.service   # the HM activation unit
 > sudo -u litellm env XDG_RUNTIME_DIR=/run/user/$(id -u litellm) \
 >   systemctl --user status litellm.service

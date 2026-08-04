@@ -1022,11 +1022,6 @@ let
       runAs = "speedtest-tracker";
     }
     {
-      name = "teable";
-      display = "Teable Database Platform";
-      runAs = "teable";
-    }
-    {
       name = "memory-vault";
       display = "Memory Vault App";
       runAs = "memory-vault";
@@ -1780,14 +1775,6 @@ let
     #     check_command           check_http!-p 8581 -u /
     #     service_groups          application-services
     #   }
-
-    define service {
-      use                     standard-service
-      host_name               vulcan
-      service_description     Teable HTTP
-      check_command           check_http!-p 3004 -u /
-      service_groups          application-services
-    }
 
 
     define service {

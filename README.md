@@ -122,7 +122,6 @@ external-facing services tunnel out via Cloudflare.
   `qdrant-inference-bridge` (translates Qdrant inference to OpenAI-compatible
   endpoints) and a Nagios health check.
 - **Mosquitto** (native): MQTT broker for Home Assistant and HASS.Agent.
-- **Teable** (Quadlet): no-code Airtable-style database UI at `teable.vulcan.lan`.
 
 ### Monitoring, Logging & Alerting
 
@@ -482,7 +481,7 @@ journalctl -u matter-server -f
 sudo systemctl restart matter-server
 
 # Rootless Home-Manager containers (litellm, open-webui, wallabag, shlink,
-# teable, vane, …) run as *user* units under a lingering service user:
+# wallabag, vane, …) run as *user* units under a lingering service user:
 journalctl _SYSTEMD_USER_UNIT=litellm.service -f
 sudo -u litellm XDG_RUNTIME_DIR=/run/user/$(id -u litellm) \
   systemctl --user restart litellm

@@ -47,13 +47,6 @@
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
-    # DISABLED 2026-07-31: shlink has an unpatched security advisory; re-enable only after upgrading.
-    # Containers stopped 2026-07-31 00:52; :8580 and :6385 confirmed not listening.
-    # Re-enabling means restoring these two imports AND the entries marked with the
-    # same date in cloudflare-tunnels.nix, blackbox-monitoring.nix, nagios.nix,
-    # redis-exporter.nix, container-cve-exporter.nix and databases.nix.
-    # ../../modules/users/home-manager/shlink.nix
-    # ../../modules/users/home-manager/shlink-web-client.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/memory-vault.nix
     ../../modules/users/home-manager/opnsense-exporter.nix

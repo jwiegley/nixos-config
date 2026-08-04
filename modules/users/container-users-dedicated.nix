@@ -110,30 +110,6 @@
         description = "Container user for OpenProject project management";
       };
 
-      shlink = {
-        isSystemUser = true;
-        group = "shlink";
-        home = "/var/lib/containers/shlink";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Shlink URL shortener";
-      };
-
-      shlink-web-client = {
-        isSystemUser = true;
-        group = "shlink-web-client";
-        home = "/var/lib/containers/shlink-web-client";
-        createHome = true;
-        shell = pkgs.bash;
-        autoSubUidGidRange = true;
-        linger = true;
-        extraGroups = [ "podman" ];
-        description = "Container user for Shlink Web Client";
-      };
-
       open-webui = {
         isSystemUser = true;
         group = "open-webui";
@@ -181,8 +157,6 @@
       changedetection = { };
       mailarchiver = { };
       openproject = { };
-      shlink = { };
-      shlink-web-client = { };
       open-webui = { };
       vane = { };
       speedtest-tracker = { };
@@ -198,8 +172,6 @@
     "open-webui"
     "openproject"
     "vane"
-    "shlink"
-    "shlink-web-client"
     "wallabag"
     "opnsense-exporter"
     "technitium-dns-exporter"
@@ -264,8 +236,6 @@
     # one is added later.
     "d /run/secrets-technitium-dns-exporter 0750 technitium-dns-exporter technitium-dns-exporter - -"
     "d /run/secrets-openproject 0750 openproject openproject - -"
-    "d /run/secrets-shlink 0750 shlink shlink - -"
-    "d /run/secrets-shlink-web-client 0750 shlink-web-client shlink-web-client - -"
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
     "d /run/secrets-speedtest-tracker 0750 speedtest-tracker speedtest-tracker - -"
   ];

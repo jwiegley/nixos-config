@@ -6,7 +6,6 @@
 #   that also claims 18080 is imported by nothing, and the live copyparty
 #   container listens on 127.0.0.1:13923 instead.)
 # - gitea.newartisans.com → localhost:3005 (Gitea)
-# - s.newartisans.com → localhost:8580 (Shlink)
 # - calendar.newartisans.com → localhost:8090 (Sacramento Cluster .ics)
 
 {
@@ -45,10 +44,6 @@
         ingress = {
           "data.newartisans.com" = "http://localhost:18080";
           "gitea.newartisans.com" = "http://localhost:3005";
-          # DISABLED 2026-07-31: shlink has an unpatched security advisory; re-enable only after upgrading.
-          # Route removed so the public hostname resolves to nothing rather than a dead
-          # backend. shlink was the ONLY cloudflared-ingress podman image.
-          # "s.newartisans.com" = "http://localhost:8580";
           "calendar.newartisans.com" = "http://localhost:8090";
         };
       };

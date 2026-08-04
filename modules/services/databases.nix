@@ -39,8 +39,6 @@ in
       secretPath = config.sops.secrets."openproject-db-password".path;
       dependentService = "podman-openproject.service";
     })
-    # Shlink's database and role remain intact, but its password setup requires
-    # the service-owned secret and stays disabled with the service.
     (mkPostgresUserSetup {
       user = "speedtest_tracker";
       database = "speedtest_tracker";
@@ -168,7 +166,6 @@ in
         "gitea"
         "mailarchiver"
         "openproject"
-        "shlink"
         "speedtest_tracker"
         "nodered_events"
         "flume-data"
@@ -188,10 +185,6 @@ in
         }
         {
           name = "openproject";
-          ensureDBOwnership = true;
-        }
-        {
-          name = "shlink";
           ensureDBOwnership = true;
         }
         {

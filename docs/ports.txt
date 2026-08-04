@@ -63,7 +63,6 @@
 # Redis Instances
 6381 127.0.0.1 Redis - rspamd
 6383 127.0.0.1 Redis - OpenProject
-6385 127.0.0.1 Redis - Shlink
 6386 127.0.0.1 Redis - SearXNG
 6387 127.0.0.1 Redis - Speedtest Tracker
 
@@ -103,8 +102,6 @@
 8236 127.0.0.1 Memory Vault MCP Streamable HTTP - memory-mcp.vulcan.lan (rootless quadlet; FastMCP)
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
-8580 127.0.0.1 Shlink API (URL shortener backend)
-8581 127.0.0.1 Shlink Web Client (management UI)
 8765 127.0.0.1 Speedtest Tracker web interface
 8888 127.0.0.1 JupyterLab
 8890 127.0.0.1 SearXNG metasearch engine

@@ -735,10 +735,6 @@ let
       name = "redis-searxng.service";
       display = "Redis (SearXNG)";
     }
-    # redis-shlink check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
-    #     {
-    #       name = "redis-shlink.service";
-    #       display = "Redis (Shlink)";
     #     }
     {
       name = "redis-openproject.service";
@@ -999,17 +995,6 @@ let
       display = "OPNsense Metrics Exporter";
       runAs = "opnsense-exporter";
     }
-    # shlink container check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
-    #     {
-    #       name = "shlink";
-    #       display = "Shlink URL Shortener API";
-    #       runAs = "shlink";
-    #     }
-    # shlink-web-client check -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
-    #     {
-    #       name = "shlink-web-client";
-    #       display = "Shlink Web Client";
-    #       runAs = "shlink-web-client";
     #     }
     {
       name = "speedtest-tracker";
@@ -1747,26 +1732,6 @@ let
     # SERVICES - APPLICATION HTTP HEALTH CHECKS
     ###############################################################################
 
-    # Shlink API Health (:8580) and Shlink Web Client HTTP (:8581) -- BOTH DISABLED
-    # 2026-07-31: shlink is stopped entirely pending a release that fixes the 2026-07
-    # security advisory. The API check was commented out first and the Web Client one
-    # was missed, so it went hard CRITICAL against a container that no longer exists.
-    # Its Prometheus rules are parked in modules/monitoring/parked-alerts.nix, which is what
-    # stops both the rule loading and the 8 PROM-MIRROR Shlink services (508 -> 500).
-    # Re-enable all three layers together with the container.
-    #
-    #   define service {
-    #     use                     standard-service
-    #     host_name               vulcan
-    #     service_description     Shlink API Health
-    #     check_command           check_http!-p 8580 -u /rest/health -s "pass"
-    #     service_groups          application-services
-    #   }
-    #
-    #   define service {
-    #     use                     standard-service
-    #     host_name               vulcan
-    #     service_description     Shlink Web Client HTTP
     #     check_command           check_http!-p 8581 -u /
     #     service_groups          application-services
     #   }
@@ -2194,42 +2159,6 @@ let
       check_command           check_ssl_cert!kiwix.vulcan.lan
       service_groups          ssl-certificates
     }
-
-    # SSL cert check for shlink-api.vulcan.lan -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
-
-    # The nginx vhost is gone with shlink-quadlet.nix, so this would go CRITICAL.
-
-    # define service {
-
-    # use                     daily-service
-
-    # host_name               vulcan
-
-    # service_description     SSL Cert: shlink-api.vulcan.lan
-
-    # check_command           check_ssl_cert!shlink-api.vulcan.lan
-
-    # service_groups          ssl-certificates
-
-    # }
-
-    # SSL cert check for shlink.vulcan.lan -- DISABLED 2026-07-31: unpatched shlink security advisory; re-enable only after upgrading.
-
-    # The nginx vhost is gone with shlink-quadlet.nix, so this would go CRITICAL.
-
-    # define service {
-
-    # use                     daily-service
-
-    # host_name               vulcan
-
-    # service_description     SSL Cert: shlink.vulcan.lan
-
-    # check_command           check_ssl_cert!shlink.vulcan.lan
-
-    # service_groups          ssl-certificates
-
-    # }
 
     define service {
       use                     daily-service

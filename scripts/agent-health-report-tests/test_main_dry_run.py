@@ -38,14 +38,6 @@ def _run(monkeypatch, capsys, agent):
     return out
 
 
-def test_main_dry_run_openclaw(monkeypatch, capsys):
-    out = _run(monkeypatch, capsys, "openclaw")
-    assert "Subject: [openclaw-nightly]" in out
-    assert "OpenClaw health report" in out
-    assert "Headline" in out
-    for h in ("Live metrics", "MCP servers", "In-VM corroboration"):
-        assert h in out
-
 
 def test_main_dry_run_hermes(monkeypatch, capsys):
     out = _run(monkeypatch, capsys, "hermes")

@@ -62,42 +62,6 @@
             repeat_interval = "4m";
             continue = false;
           }
-          # OpenClawConfigDrift is an informational warning-severity
-          # alert (for: 24h) about live-config vs. Nix-template schema
-          # drift.  It must NOT trigger restart_microvm — restarting
-          # the VM doesn't reconcile the JSON, so before this carve-out
-          # the daemon's default-action fallback bounced the VM on
-          # Alertmanager's repeat_interval (every 4h) indefinitely.
-          # Route to email-only so a human sees it and can fix the
-          # drift, but the self-heal daemon never gets the webhook.
-          # continue=false: do not fall through to openclaw-self-heal.
-          {
-            match = {
-              alertname = "OpenClawConfigDrift";
-            };
-            receiver = "default-receiver";
-            group_wait = "30s";
-            group_interval = "1h";
-            repeat_interval = "24h";
-            continue = false;
-          }
-          # Self-heal pipeline — service=openclaw alerts go to the
-          # openclaw-self-heal daemon's webhook receiver.  continue=true
-          # keeps the email/critical paths firing too so a human still
-          # sees the alert, even when the daemon takes the action.
-          # NOTE: alerts with service=openclaw-self-heal (the daemon's
-          # own watchdog) intentionally do NOT match here, so they never
-          # loop back to the daemon that may already be dead.
-          {
-            match = {
-              service = "openclaw";
-            };
-            receiver = "openclaw-self-heal";
-            group_wait = "10s";
-            group_interval = "5m";
-            repeat_interval = "4h";
-            continue = true;
-          }
           # Hermes self-heal pipeline — service=hermes-mcp and
           # service=hermes-agent alerts both go to the hermes-self-heal
           # daemon's webhook receiver. continue=true preserves the email
@@ -122,7 +86,7 @@
           # email/critical/iPhone paths firing so a human still sees it.
           # NOTE: any future drafts-self-heal watchdog alert MUST carry a
           # distinct service label (e.g. service=drafts-mcp-self-heal) so it
-          # never loops back to the possibly-dead daemon, mirroring the openclaw
+          # never loops back to the possibly-dead daemon, mirroring the
           # / hermes self-watchdog exclusions above.
           {
             match = {
@@ -339,15 +303,6 @@
                 View in Prometheus: {{ .GeneratorURL }}
                 {{ end }}
               '';
-            }
-          ];
-        }
-        {
-          name = "openclaw-self-heal";
-          webhook_configs = [
-            {
-              url = "http://127.0.0.1:9092/alert";
-              send_resolved = true;
             }
           ];
         }

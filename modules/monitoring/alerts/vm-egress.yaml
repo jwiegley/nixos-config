@@ -12,7 +12,7 @@ groups:
       # bypass-scrape (below) ever goes quiet.
       - alert: VMAgentEgressVolumeHigh
         expr: |
-          rate(node_network_transmit_bytes_total{device=~"vm-openclaw|vm-hermes"}[10m]) > 1.0e6
+          rate(node_network_transmit_bytes_total{device="vm-hermes"}[10m]) > 1.0e6
         for: 15m
         labels:
           severity: warning
@@ -21,7 +21,7 @@ groups:
         annotations:
           summary: "{{ $labels.device }} sustained egress > 1 MB/s for 15m"
           description: |
-            Agent microVM {{ $labels.device }} (vm-openclaw=openclaw,
+            Agent microVM {{ $labels.device }} (
             vm-hermes=hermes) transmitted >1 MB/s out the bridge for 15m
             (baseline <= ~0.5 kB/s). Possible bulk exfiltration, a runaway
             fetch loop, or a legitimately large transfer. Check the DNS log for

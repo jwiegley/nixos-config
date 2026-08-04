@@ -59,10 +59,10 @@ groups:
           description: |
             The host kernel OOM killer logged an out-of-memory kill involving a
             microVM QEMU process or the system-microvm.slice cgroup in the last
-            5 minutes. One of the agent VMs (openclaw 10.99.0.2 / hermes
+            5 minutes. The agent VM (hermes
             10.99.1.2) was likely terminated by the host — its tmpfs root has no
             swap, so a runaway allocation kills the whole VM. Check
             `journalctl -k | grep -iE 'oom|killed process'` for the victim PID
             and cgroup, then confirm the VM came back
-            (`systemctl status microvm@openclaw microvm@hermes`). The companion
+            (`systemctl status microvm@hermes`). The companion
             MicroVMMemoryHigh Prometheus alert should have warned ahead of this.

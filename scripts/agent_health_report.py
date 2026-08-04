@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Unified nightly agent health report → email to johnw@vulcan.lan.
 
-ONE engine, two agents. Invoked `agent-health-report --agent {openclaw|hermes}`.
-Both the OpenClaw (06:00) and Hermes (06:15) nightly emails render the same
-fixed 11-section layout from a per-agent profile, so the two reports show the
-*union* of all section types and can never drift apart again.
+Profile-driven engine. Invoked `agent-health-report --agent hermes`. The 06:15
+Hermes email renders a fixed 11-section layout from a per-agent profile.
+
+Built as a two-agent engine; OpenClaw was decommissioned 2026-08-03 and its
+profile removed, leaving hermes as the only one. The profile indirection is kept
+deliberately -- it is what forced both reports to share one renderer, and it is
+how a future agent gets added without forking this file.
 
 See docs/superpowers/specs/2026-06-01-unified-agent-health-report-design.md.
 
@@ -792,52 +795,6 @@ def _age_str(age_seconds: float) -> str:
 # ---------------------------------------------------------------------------
 
 PROFILES: dict[str, dict] = {
-    "openclaw": {
-        "agent": "openclaw", "display_name": "OpenClaw",
-        "env_prefix": "OPENCLAW_REPORT", "report_header": "X-Openclaw-Report",
-        "default_from": "openclaw-health@vulcan.lan",
-        "live_textfiles": [f"{TF}/openclaw_mcporter.prom", f"{TF}/openclaw_canary.prom"],
-        "expected_servers": (
-            "email-contacts", "google-calendar-personal", "google-calendar-work",
-            "home-assistant", "searxng", "stock-trader", "vane"),
-        "mcp_servers_mode": "mcporter",
-        "server_ok_metric": "openclaw_mcporter_server_ok",
-        "mcporter_home": "/var/lib/openclaw",
-        "host_blind_servers": frozenset(
-            {"google-calendar-personal", "google-calendar-work", "home-assistant"}),
-        "gateway": {
-            "mode": "metrics",
-            "ready_age": "openclaw_gateway_ready_age_seconds",
-            "plugins_total": "openclaw_gateway_ready_plugins_total",
-            "channels": "openclaw_channel_plugin_loaded",
-            "init_fails": "openclaw_plugin_init_failures_recent_total"},
-        "units": ["microvm@openclaw.service", "openclaw-self-heal.service"],
-        "probe_families": [{"label": "OpenClaw→Hermes bridge smoke",
-                            "ok": "openclaw_hermes_smoke_ok",
-                            "dur": "openclaw_hermes_smoke_duration_seconds"}],
-        "discord": {"mode": "metrics",
-                    "connected": "openclaw_discord_ws_connected",
-                    "last_ready_age": "openclaw_discord_ws_last_ready_age_seconds"},
-        "ha_mcp": {"mode": "textfile",
-                   "token": "openclaw_mcporter_ha_token_present",
-                   "reachable": "openclaw_mcporter_ha_endpoint_reachable",
-                   "auth": "openclaw_mcporter_ha_auth_ok",
-                   "last_run": "openclaw_mcporter_check_last_run_timestamp_seconds"},
-        "errors_log": "/var/lib/openclaw/.openclaw/logs/gateway-vm.err.log",
-        "errors_grammar": "openclaw",
-        "incidents_json": "/var/lib/openclaw-self-heal/incidents.json",
-        "selfheal_textfile": f"{TF}/openclaw_self_heal.prom",
-        "selfheal_metric_prefix": "openclaw_self_heal",
-        "invm_checks": [
-            {"label": "trader /api/schwab/status", "kind": "curl",
-             "url": "https://trader.vulcan.lan/api/schwab/status"},
-            {"label": "trader requests-TLS", "kind": "requests_tls",
-             "url": "https://trader.vulcan.lan/api/schwab/status"},
-            {"label": "memory-vault recall", "kind": "mcp_recall",
-             "url": "http://127.0.0.1:8236/mcp"}],
-        "verdict_fail_if_zero": [("openclaw_mcporter_ha_auth_ok", "HA auth failing")],
-        "errors_fail_threshold": 20,
-    },
     "hermes": {
         "agent": "hermes", "display_name": "Hermes",
         "env_prefix": "HERMES_REPORT", "report_header": "X-Hermes-Report",
@@ -871,10 +828,7 @@ PROFILES: dict[str, dict] = {
                   "hermes-self-heal.service"],
         "probe_families": [{"label": "Hermes e2e chat",
                             "ok": "hermes_e2e_chat_ok",
-                            "dur": "hermes_e2e_chat_duration_seconds"},
-                           {"label": "OpenClaw→Hermes bridge smoke",
-                            "ok": "openclaw_hermes_smoke_ok",
-                            "dur": "openclaw_hermes_smoke_duration_seconds"}],
+                            "dur": "hermes_e2e_chat_duration_seconds"}],
         "discord": {"mode": "log",
                     "log": "/var/lib/hermes/.hermes/logs/gateway.log",
                     "heartbeat_age_metric": "hermes_discord_heartbeat_age_seconds"},

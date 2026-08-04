@@ -53,15 +53,6 @@ def _assert_headers_in_order(body):
     assert idxs == sorted(idxs), "section headers out of order"
 
 
-def test_render_openclaw_all_headers_in_order():
-    p = m.PROFILES["openclaw"]
-    data = _base(p)
-    data["live"]["openclaw_mcporter_ha_auth_ok"] = 1.0
-    subject, body = m.render(p, data)
-    _assert_headers_in_order(body)
-    assert subject.startswith("[openclaw-nightly] vulcan 2026-06-01")
-    assert "PASS" in body
-
 
 def test_render_hermes_all_headers_in_order():
     p = m.PROFILES["hermes"]
@@ -125,9 +116,8 @@ def test_render_headline_fail_lists_issue():
 
 def test_render_active_incident_in_summary_not_fail():
     # An active (in-progress, not stuck) incident → still PASS, but surfaced.
-    p = m.PROFILES["openclaw"]
+    p = m.PROFILES["hermes"]
     data = _base(p)
-    data["live"]["openclaw_mcporter_ha_auth_ok"] = 1.0
     data["incidents"]["active"] = 1
     subject, body = m.render(p, data)
     assert "PASS" in body
@@ -145,21 +135,6 @@ def test_render_flags_stuck_incidents():
     assert "HermesAskFailing" in body
     assert "FAIL" in body  # stuck → issue → FAIL
 
-
-def test_render_openclaw_mcp_table_and_blind():
-    p = m.PROFILES["openclaw"]
-    data = _base(p)
-    data["live"].update({
-        "openclaw_mcporter_ha_auth_ok": 1.0,
-        'openclaw_mcporter_server_ok{name="vane"}': 1.0,
-        'openclaw_mcporter_server_ok{name="home-assistant"}': 1.0,
-    })
-    data["servers"] = {"vane": {"tool_count": 1, "status": "1 tool, 0.6s", "raw": "-"}}
-    # home-assistant is host-blind and absent from servers → "skipped from host context"
-    lines = m.render_mcp_servers(p, data)
-    joined = "\n".join(lines)
-    assert "vane" in joined and "1" in joined
-    assert "skipped from host context" in joined
 
 
 def test_render_hermes_mcp_real_per_server_counts():
@@ -184,20 +159,12 @@ def test_render_hermes_mcp_real_per_server_counts():
     assert "MCP layer: sse_open=OK  ask_hermes=OK" in joined
 
 
-def test_render_gateway_survives_multilabel_channel_key():
-    # H1 regression: a channel series with an extra label must not crash render.
-    p = m.PROFILES["openclaw"]
-    data = _base(p)
-    data["live"]['openclaw_channel_plugin_loaded{instance="i",channel="discord"}'] = 1.0
-    lines = m.render_gateway(p, data)
-    assert "discord" in "\n".join(lines)
-
 
 def test_render_selfheal_survives_multilabel_action_key():
     # H1 regression: an attempts series with an extra label must not crash.
-    p = m.PROFILES["openclaw"]
+    p = m.PROFILES["hermes"]
     data = _base(p)
-    data["live_selfheal"]['openclaw_self_heal_attempts_total{instance="i",action="restart_microvm"}'] = 3.0
+    data["live_selfheal"]['hermes_self_heal_attempts_total{instance="i",action="restart_microvm"}'] = 3.0
     lines = m.render_selfheal(p, data)
     assert "restart_microvm=3" in "\n".join(lines)
 

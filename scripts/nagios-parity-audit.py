@@ -49,8 +49,12 @@ PROM = "http://127.0.0.1:9090"
 # of these needs no Prometheus equivalent -- the thing it watches is going away. Keeping
 # this list explicit (rather than silently ignoring unmatched checks) is the difference
 # between "deliberately obsolete" and "accidentally forgotten".
+# All removed as of 2026-08-03. Nagios is deliberately NOT here: it is being
+# KEPT for the checks only it performs (notably timed-out oneshot units, which
+# end inactive/dead rather than failed and so are invisible to
+# node_systemd_unit_state{state="failed"}).
 DOOMED = (
-    "litellm", "nagios", "openclaw", "teable", "cockpit",
+    "litellm", "openclaw", "teable", "cockpit",
     "shlink", "jupyter", "openspeedtest",
 )
 

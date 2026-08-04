@@ -13,8 +13,9 @@ REQUIRED = {
 }
 
 
-def test_both_profiles_present():
-    assert set(m.PROFILES) == {"openclaw", "hermes"}
+def test_only_hermes_profile_present():
+    # OpenClaw was decommissioned 2026-08-03; hermes is the sole agent.
+    assert set(m.PROFILES) == {"hermes"}
 
 
 def test_profiles_have_required_keys():
@@ -28,7 +29,6 @@ def test_get_profile_rejects_unknown():
 
 
 def test_get_profile_returns_dict():
-    assert m.get_profile("openclaw")["agent"] == "openclaw"
     assert m.get_profile("hermes")["agent"] == "hermes"
 
 

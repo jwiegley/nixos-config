@@ -123,7 +123,6 @@
     "d /var/lib/loki/rules/fake 0755 loki loki -"
     "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
     "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
-    "L+ /var/lib/loki/rules/fake/openclaw-plugin-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/openclaw-plugin-errors.yaml"
     # Added 2026-07-29 alongside the dedicated ha-nodered promtail scrape; without that
     # scrape these rules could never match, since HA/node-red log at priority 6 and the
     # consolidated journal scrape drops 5-7.
@@ -133,7 +132,6 @@
     "L+ /var/lib/loki/rules/fake/nginx-web.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/nginx-web.yaml"
     "L+ /var/lib/loki/rules/fake/auth-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/auth-security.yaml"
     "L+ /var/lib/loki/rules/fake/microvm-oom.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/microvm-oom.yaml"
-    "L+ /var/lib/loki/rules/fake/vm-egress-dns.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/vm-egress-dns.yaml"
     "L+ /var/lib/loki/rules/fake/vm-egress-tripwires.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/vm-egress-tripwires.yaml"
   ];
 
@@ -210,5 +208,26 @@
   systemd.services.loki = {
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
+
+    # Reap broken rule symlinks before Loki starts.
+    #
+    # WHY THIS EXISTS: the `L+` tmpfiles rules above CREATE symlinks but never
+    # remove them. Delete a rule file and its `L+` line together and the switch
+    # leaves the old symlink behind pointing at nothing -- and Loki's ruler then
+    # fails to enumerate ANY rules, not just the missing one:
+    #
+    #   caller=ruler.go:579 msg="unable to list rules" err="failed to list ..."
+    #
+    # so /loki/api/v1/rules returns an error and EVERY log-based alert silently
+    # stops being evaluated. That happened twice on 2026-08-03/04 while removing
+    # OpenClaw (openclaw-plugin-errors.yaml, then vm-egress-dns.yaml), and each
+    # time the only symptom was rule groups quietly dropping to zero -- nothing
+    # failed and nothing paged, because a ruler that cannot list rules also
+    # cannot evaluate the rule that would have caught it.
+    #
+    # Cheap, idempotent, and makes the failure self-correcting on next start.
+    serviceConfig.ExecStartPre = [
+      "${pkgs.findutils}/bin/find /var/lib/loki/rules -xtype l -delete"
+    ];
   };
 }

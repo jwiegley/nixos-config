@@ -15,28 +15,6 @@
 groups:
   - name: vm_egress_tripwires
     rules:
-      # New-outbound-connection storm from the bypass-scraped egress log.
-      # OpenClaw's firewall LOGs every NEW public connection at info priority;
-      # the dedicated job="vm-egress" promtail scrape preserves those lines
-      # (the main journal scrape drops priority 5-7). Baseline ~163 lines/24h
-      # (verified 2026-06-10) = ~7/hr; >120 new conns in 10m (~12/min) is a
-      # connection storm well above any normal agent activity.
-      - alert: VMAgentEgressConnectionStorm
-        expr: |
-          sum by (egress_kind) (count_over_time({job="vm-egress", egress_kind="openclaw-egress"} [10m])) > 120
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-          service: agent-vm-egress
-        annotations:
-          summary: "OpenClaw VM opened >120 new outbound connections in 10m"
-          description: |
-            Burst of new outbound connections from the OpenClaw microVM, far
-            above the ~7/hr baseline. Correlate with VMAgentDNSNewDestination
-            and VMAgentEgressVolumeHigh. Inspect destinations in the egress log:
-            {job="vm-egress", egress_kind="openclaw-egress"}. (Source/dest IPs
-            live only in the log body, never in alert labels.)
 
       # Hermes should NEVER hit its reject log: it lives inside a 443/53
       # port-allowlist with a final DROP, and the reject-LOG counter has been 0

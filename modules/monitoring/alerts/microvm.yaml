@@ -77,7 +77,7 @@ groups:
             allocated vCPU count, sustained for 30 minutes. This is a capacity
             signal (the VM is CPU-bound), not a liveness signal — agent "stuck"
             detection is owned by the hang-capture and api_server probes.
-            Consider whether the workload warrants more vCPUs (openclaw=4,
+            Consider whether the workload warrants more vCPUs (
             hermes=1; a 4-vCPU hermes bump was tried and reverted 2026-05-31 —
             see hermes-vm.nix:353).
 

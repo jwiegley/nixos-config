@@ -399,7 +399,7 @@
             # cannot match the MESSAGE body, so this prefix filter lives here.
             {
               match = {
-                selector = ''{job="vm-egress"} !~ "openclaw-egress:|hermes-egress-rejected:"'';
+                selector = ''{job="vm-egress"} !~ "hermes-egress-rejected:"'';
                 action = "drop";
               };
             }
@@ -407,7 +407,7 @@
             # parsing SRC/DST IPs into Loki labels.
             {
               regex = {
-                expression = "(?P<egress_kind>openclaw-egress|hermes-egress-rejected)";
+                expression = "(?P<egress_kind>hermes-egress-rejected)";
               };
             }
             {

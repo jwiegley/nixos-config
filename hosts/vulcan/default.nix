@@ -156,9 +156,9 @@
     # so it is the first thing to go.
     #
     # nagios-tier1-mirror.nix DELIBERATELY KEPT despite the name: it is NOT generated
-    # mirror machinery. Of its 84 hand-curated services, 6 textfile collectors have no
-    # Prometheus equivalent at all (atd, imapsieve, git_workspace, openclaw_hermes_smoke,
-    # fts_staleness, openclaw_config_drift). Deleting it would drop real coverage, and would
+    # mirror machinery. Of its hand-curated services, several textfile collectors have no
+    # Prometheus equivalent at all (atd, imapsieve, git_workspace, fts_staleness); the two
+    # openclaw_* ones went with OpenClaw on 2026-08-03. Deleting it would drop real coverage, and would
     # also move the native check count 339 -> 255, breaking the acceptance invariant that
     # this change leaves native checks untouched.
     ../../modules/monitoring/services/nagios-tier1-mirror.nix

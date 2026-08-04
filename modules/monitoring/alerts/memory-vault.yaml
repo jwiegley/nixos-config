@@ -49,7 +49,7 @@ groups:
         annotations:
           summary: "Memory Vault MCP container is not running"
           description: |
-            The memory-vault-mcp (Streamable HTTP) container is down — OpenClaw,
+            The memory-vault-mcp (Streamable HTTP) container is down — Hermes,
             Hermes, and LAN MCP clients cannot reach the recall/remember tools.
 
             Check service: systemctl --user -M memory-vault@ status podman-memory-vault-mcp.service

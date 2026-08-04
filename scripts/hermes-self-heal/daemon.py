@@ -455,8 +455,8 @@ def emit_synthetic_alert(name, annotations, severity="info", duration_s=300):
 
 SYSTEM_PROMPT = """You are an SRE for Hermes Agent, a NousResearch LLM bot running as a microVM
 on host vulcan. Hermes exposes a Discord bot (Hermes#2985) and an
-OpenAI-compatible api_server consumed by hermes-mcp on the host (which
-OpenClaw uses as an MCP tool). Your goal is to restore service. You may take
+OpenAI-compatible api_server consumed by hermes-mcp on the host (which the
+hermes-health-check probe uses). Your goal is to restore service. You may take
 exactly ONE of:
   1. restart_microvm
   2. restart_mcp

@@ -711,14 +711,37 @@ in
         retrieval = {
           mode = "hybrid";
           top_k = 10;
-          search_kinds = [ "fact" ];
+          # BOTH kinds, 2026-08-04. `fact` alone excluded every stored `turn` from
+          # search: the collection held 30 turns and 3 facts, so turns were
+          # embedded and indexed and then filtered out of every query -- the
+          # messages WERE remembered but unreachable, which is what the operator
+          # observed. Adding "turn" costs no inference; it only widens the filter
+          # over points already written.
+          search_kinds = [
+            "fact"
+            "turn"
+          ];
         };
         extraction = {
           # OFF for the initial deployment so the first end-to-end check is
           # deterministic: memories appear only when explicitly written, not as a
           # side effect of the LLM distilling a session. Turn on once store and
           # recall are confirmed working.
-          enabled = false;
+          # ENABLED 2026-08-04, completing the staged rollout. The plugin's own
+          # default_config.yaml says extraction is "Deliberately OFF for the
+          # initial deployment ... Turn on once the store/recall path is
+          # confirmed" -- that confirmation happened (cross-session canary recall
+          # verified, hermes_memory_qdrant_reachable=1, points growing), but the
+          # switch-back was never made, so Hermes correctly told the operator she
+          # would not transparently remember anything.
+          #
+          # COST, deliberately accepted: extraction calls the LLM at session
+          # boundaries to distil facts, so every session end adds one inference on
+          # the shared oMLX gateway. That gateway serves serially, and interactive
+          # use has already pushed the ask_hermes probe past its 60s budget
+          # (HermesAskFailing, 2026-08-04) -- so expect a little more of that
+          # during heavy sessions. min_turns=3 spares trivial sessions entirely.
+          enabled = true;
           min_turns = 3;
         };
       };

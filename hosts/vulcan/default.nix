@@ -131,7 +131,6 @@
     ../../modules/monitoring/services/hermes-e2e-chat-probe.nix
     ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/monitoring/services/openclaw-config-drift-check.nix
-    ../../modules/services/cockpit.nix
     ../../modules/services/nginx-default-vhost.nix
     ../../modules/services/hera-llm-proxy.nix
     ../../modules/services/aria2.nix

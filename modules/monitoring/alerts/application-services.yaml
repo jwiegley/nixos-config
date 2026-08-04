@@ -224,17 +224,3 @@ groups:
           description: "Glances service is not active. Real-time system monitoring unavailable."
 
       # Cockpit Web Console Alerts
-      - alert: CockpitServiceDown
-        expr: |
-          node_systemd_unit_state{
-            name="cockpit.service",
-            state="active"
-          } == 0
-        for: 5m
-        labels:
-          severity: warning
-          category: admin
-          service: cockpit
-        annotations:
-          summary: "Cockpit web console is down"
-          description: "Cockpit service is not active. Web-based system administration is unavailable."

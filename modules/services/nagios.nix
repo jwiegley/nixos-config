@@ -688,10 +688,6 @@ let
       display = "Glance GitHub Extension";
     }
     {
-      name = "cockpit.service";
-      display = "Cockpit Web Console";
-    }
-    {
       name = "copyparty.service";
       display = "Copyparty File Server";
     }
@@ -1933,14 +1929,6 @@ let
       host_name               vulcan
       service_description     SSL Cert: changes.vulcan.lan
       check_command           check_ssl_cert!changes.vulcan.lan
-      service_groups          ssl-certificates
-    }
-
-    define service {
-      use                     daily-service
-      host_name               vulcan
-      service_description     SSL Cert: cockpit.vulcan.lan
-      check_command           check_ssl_cert!cockpit.vulcan.lan
       service_groups          ssl-certificates
     }
 

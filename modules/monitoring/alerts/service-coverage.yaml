@@ -16,7 +16,7 @@ groups:
   #   - CriticalServiceActive (health-checks.yaml) via the
   #     critical-services-exporter's 16-service list on :9221
   #   - assorted per-service `state="active" == 0` rules (mosquitto, samba
-  #     smbd/nmbd/winbindd, radicale, glance, glances, cockpit, fetchmail-good,
+  #     smbd/nmbd/winbindd, radicale, glance, glances, fetchmail-good,
   #     redis-gitea/immich, ...)
   #
   # `inactive` is the state a unit lands in when it is stopped cleanly and NOT

@@ -21,7 +21,6 @@ VALIDITY_DAYS=365
 DOMAINS=(
     "alertmanager.vulcan.lan"
     "aria.vulcan.lan"
-    "cockpit.vulcan.lan"
     "dns.vulcan.lan"
     "gitea.vulcan.lan"
     "glance.vulcan.lan"

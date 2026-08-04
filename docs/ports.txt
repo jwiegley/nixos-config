@@ -107,7 +107,6 @@
 8890 127.0.0.1 SearXNG metasearch engine
 9091 127.0.0.1 Wallabag (rootless container)
 9097 127.0.0.1 MailArchiver (rootless container)
-9099 127.0.0.1 Cockpit
 13923 127.0.0.1 Copyparty container (socket-activated)
 18080 127.0.0.1 Static nginx container (socket-activated)
 

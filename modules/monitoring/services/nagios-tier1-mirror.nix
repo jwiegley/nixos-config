@@ -487,7 +487,6 @@ let
   # --------------------------------------------------------------------------
   vhostGapChecks = [
     { vhost = "glance.vulcan.lan"; }
-    { vhost = "cockpit.vulcan.lan"; }
     { vhost = "dns.vulcan.lan"; }
     { vhost = "postgres.vulcan.lan"; }
     { vhost = "hass.vulcan.lan"; }

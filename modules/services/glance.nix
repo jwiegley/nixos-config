@@ -124,10 +124,6 @@ with lib;
                       color = "10 70 50";
                       links = [
                         {
-                          title = "Cockpit";
-                          url = "https://cockpit.vulcan.lan";
-                        }
-                        {
                           title = "OPNsense";
                           url = "https://192.168.1.1";
                         }

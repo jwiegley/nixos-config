@@ -854,7 +854,6 @@ in
               {
                 targets = [
                   "https://glance.vulcan.lan"
-                  "https://cockpit.vulcan.lan"
                   "https://192.168.1.1"
                   "https://dns.vulcan.lan"
                   "https://postgres.vulcan.lan"

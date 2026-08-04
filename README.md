@@ -137,7 +137,6 @@ external-facing services tunnel out via Cloudflare.
   and `promtail.vulcan.lan`.
 - **Nagios** (native): classic host/service monitor at `nagios.vulcan.lan` with
   daily HTML reports and discovery scripts for HA, AIDE, Qdrant, and atd.
-- **Cockpit** (native): web admin console at `cockpit.vulcan.lan`.
 - **Glances** (native): live system view at `glances.vulcan.lan`.
 - **Blackbox monitoring** (native): HTTP / ICMP probes for local, DNS, and
   external host groups.

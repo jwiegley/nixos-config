@@ -55,6 +55,65 @@ groups:
             Last backup: {{ $value | humanizeDuration }} ago.
             Normal interval is 4x daily (every 6 hours). Check if the backup timer is functioning correctly.
 
+      # rsync exit 23 = "partial transfer due to error": some files were NOT
+      # transferred, and (reproduced on this host 2026-08-04) an unreadable
+      # DIRECTORY also suppresses --delete for the whole run, so the mirror can
+      # silently hold stale AND deleted-at-source files. The run still exits 0
+      # and still touches .latest (operator decision, option B: freezing .latest
+      # would page the three Nagios "Local Backup:" checks hourly after 8h and
+      # LocalBackupStale above, all off one unreadable file). This rule is the
+      # partial's OWN signal. It self-resolves on the next clean run (<= 6h)
+      # because the gauge is overwritten every run.
+      #
+      # Backtested before shipping: 0 of 51 source-runs over the observed window
+      # ended 23, so this cannot chronically fire on today's behaviour.
+      - alert: LocalBackupPartialTransfer
+        expr: local_backup_last_rsync_exit_code == 23
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: local-backup
+        annotations:
+          summary: "Local backup {{ $labels.backup }} was a PARTIAL transfer (rsync 23)"
+          description: |
+            The most recent rsync for {{ $labels.backup }} exited 23: some files
+            were not transferred, and if a directory was unreadable, --delete was
+            suppressed for the whole run -- the mirror may hold stale copies AND
+            files deleted at the source. The run is still recorded in .latest so
+            the cadence alerts stay quiet; THIS alert is the outcome signal.
+            The per-file errors are in `journalctl -u local-backup` on vulcan,
+            and a summary line is logged at priority err (visible in Loki,
+            query: {job="systemd-journal"} |= "PARTIAL transfer").
+            Typical causes: an unreadable file/directory (permissions), or read
+            errors from the source filesystem. Fix the cause or add an --exclude;
+            the alert clears on the next clean run.
+
+      # "Did the backup WORK" as opposed to "did it RUN" (LocalBackupStale
+      # covers running). .lastclean is touched only on rsync 0/24, so persistent
+      # partials -- every run for >26h ending 23 -- escalate here even while
+      # .latest keeps advancing. 26h = 4+ missed clean passes; the observed
+      # 30-day maximum age of the success marker is 6h41m, so this cannot fire
+      # on normal cadence. No absent() guard by design (ResticReadData
+      # precedent): the metric does not exist until the first post-deploy run,
+      # and a fresh deploy must not alarm.
+      - alert: LocalBackupNoCleanSuccess
+        expr: (time() - local_backup_last_clean_success_timestamp) > 93600
+        for: 15m
+        labels:
+          severity: critical
+          category: storage
+          service: local-backup
+        annotations:
+          summary: "No CLEAN local backup of {{ $labels.backup }} in over 26h"
+          description: |
+            Every local-backup run of {{ $labels.backup }} for more than 26 hours
+            has ended in rsync 23 (partial transfer) -- the mirror has not had a
+            clean pass in over a day, even though runs are happening on schedule.
+            LocalBackupPartialTransfer (warning) has been naming the cause since
+            the first partial; this is the escalation. See
+            `journalctl -u local-backup` on vulcan for the per-file errors.
+
       # The weekly `restic check` is the only repo-integrity / bit-rot detector.
       # It used to fail silently (empty OnFailure, exit status never exported).
       # restic_integrity_check_success/_timestamp_seconds are emitted by the

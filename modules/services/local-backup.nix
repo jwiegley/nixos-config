@@ -183,6 +183,23 @@ let
             echo "local_backup_last_success_timestamp{backup=\"${backup.name}\",host=\"vulcan\",source=\"${backup.source}\",destination=\"${backupBaseDir}/${backup.name}\"} $timestamp"
           fi
         '') backupSources}
+
+        echo "# HELP local_backup_last_clean_success_timestamp Unix timestamp of the last CLEAN mirror pass (rsync 0/24; 23 = partial does not count)"
+        echo "# TYPE local_backup_last_clean_success_timestamp gauge"
+        ${lib.concatMapStringsSep "\n" (backup: ''
+          if [ -f "${backupBaseDir}/.${backup.name}.lastclean" ]; then
+            clean_ts=$(${pkgs.coreutils}/bin/stat -c %Y "${backupBaseDir}/.${backup.name}.lastclean")
+            echo "local_backup_last_clean_success_timestamp{backup=\"${backup.name}\",host=\"vulcan\"} $clean_ts"
+          fi
+        '') backupSources}
+
+        echo "# HELP local_backup_last_rsync_exit_code rsync exit code of the most recent run (0 ok, 23 partial, 24 vanished-files)"
+        echo "# TYPE local_backup_last_rsync_exit_code gauge"
+        ${lib.concatMapStringsSep "\n" (backup: ''
+          if [ -n "''${rc_${backup.name}:-}" ]; then
+            echo "local_backup_last_rsync_exit_code{backup=\"${backup.name}\",host=\"vulcan\"} ''${rc_${backup.name}}"
+          fi
+        '') backupSources}
       } > "$tmp_file"
 
       # Atomic move to final location
@@ -240,18 +257,53 @@ let
       rc=$?
       set -e
 
-      # Exit codes: 0=success, 23=partial transfer, 24=vanished files (all acceptable)
+      # Record the exit code for write_metrics (all sources run before it does).
+      rc_${backup.name}=$rc
+
+      # Exit codes: 0 = success; 24 = vanished source files, genuinely benign on a
+      # live filesystem (14/17 of /var's runs); 23 = PARTIAL TRANSFER DUE TO ERROR.
+      #
+      # 23 is deliberately NOT treated as clean. Reproduced on this host with these
+      # exact flags (2026-08-04): an unreadable source file leaves the mirror
+      # silently holding the PREVIOUS run's copy, and an unreadable source
+      # DIRECTORY additionally prints "IO error encountered -- skipping file
+      # deletion", which suppresses --delete for the WHOLE run -- so deletions
+      # also stop propagating and the mirror diverges in both directions.
+      # --inplace makes it worse: a failed update can leave a hybrid file that
+      # looks present and restorable.
+      #
+      # Handling (operator decision 2026-08-04, option B): the run still exits 0
+      # and .latest is still touched -- rc 23 must not page SystemdServiceFailed,
+      # and the three Nagios "Local Backup:" checks read .latest directly with an
+      # 8h CRITICAL + hourly re-notify, so freezing it would turn one unreadable
+      # file into a recurring page. Instead the partial gets its OWN signal:
+      #   * .lastclean is touched only on rc 0/24 -> feeds
+      #     local_backup_last_clean_success_timestamp and the 26h
+      #     LocalBackupNoCleanSuccess critical;
+      #   * the exit code is exported as local_backup_last_rsync_exit_code ->
+      #     LocalBackupPartialTransfer warns on == 23;
+      #   * one summary line is written at priority err via systemd-cat, because
+      #     this script's stdout is priority 6 and promtail drops 5-7 -- an
+      #     rc-23 line logged via log() would never reach Loki.
       if [[ $rc -eq 0 || $rc -eq 23 || $rc -eq 24 ]]; then
         if [[ $rc -eq 24 ]]; then
           log "Successfully backed up ${backup.name} (some files vanished during transfer)"
         elif [[ $rc -eq 23 ]]; then
-          log "Successfully backed up ${backup.name} (partial transfer with non-critical errors)"
+          log "PARTIAL transfer for ${backup.name} (rsync exit 23): some files were NOT transferred; mirror may be stale or hold undeleted files"
+          echo "local-backup: PARTIAL transfer for ${backup.name} (rsync exit 23): some files were NOT transferred -- see journalctl -u local-backup for the per-file errors"             | ${pkgs.systemd}/bin/systemd-cat -t local-backup -p err
         else
           log "Successfully backed up ${backup.name}"
         fi
 
-        # Touch timestamp file to indicate successful backup
+        # Touch timestamp file to indicate the backup RAN (0/23/24). Nagios and
+        # the cadence alerts read this; outcome is tracked separately below.
         ${pkgs.coreutils}/bin/touch "${backupBaseDir}/.${backup.name}.latest"
+
+        if [[ $rc -ne 23 ]]; then
+          # A CLEAN mirror pass (0/24): every readable file transferred and
+          # --delete ran. This marker is what "the backup WORKED" means.
+          ${pkgs.coreutils}/bin/touch "${backupBaseDir}/.${backup.name}.lastclean"
+        fi
 
         # Skip size calculation for now (du is too slow on large directories)
         # TODO: Consider using a faster method or caching size info

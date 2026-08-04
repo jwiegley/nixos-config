@@ -97,14 +97,27 @@ def recent_action_count(state, now=None, window_s=CIRCUIT_WINDOW_S) -> int:
     """Count real remediation actions taken across active+history within window_s.
 
     Excludes attempts whose action is None/"none" — the placeholder recorded
-    when LiteLLM is unreachable took no remediation, so a flapping LiteLLM
+    when the gateway is unreachable took no remediation, so a flapping gateway
     outage cannot trip the breaker on phantom actions.
+
+    Excludes skipped attempts for the SAME reason. restart_microvm gained an
+    upstream-model preflight on 2026-08-03: when the gateway cannot serve the
+    model it declines the restart and records
+    {action: "restart_microvm", ok: false, skipped: true}. No remediation
+    happened, so counting it burns the budget on declined work — and because
+    tripping the breaker marks the incident stuck (stuck_reason=circuit_breaker)
+    and emits a 4h synthetic critical, an upstream outage would page on the
+    daemon CORRECTLY refusing to act. Observed live 2026-08-04 01:03: the
+    preflight skipped a futile restart and the incident still counted toward the
+    breaker. `action` alone is not evidence that anything was done.
     """
     now = int(time.time()) if now is None else int(now)
     count = 0
     for inc in list(state["active"].values()) + state["history"]:
         for att in inc.get("attempts", []):
             if att.get("action") in (None, "none"):
+                continue
+            if att.get("skipped"):
                 continue
             if now - int(att.get("ts") or 0) < window_s:
                 count += 1

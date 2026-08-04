@@ -591,3 +591,55 @@ def test_heartbeat_tick_persists_reconciliation(tmp_path, monkeypatch):
     assert persisted["active"]["k"]["status"] == "resolved"
     assert persisted["active"]["k"]["resolved_by"] == "orphan_reconcile"
     assert heartbeats and heartbeats[0]["active_count"] == 0
+
+
+def test_recent_action_count_ignores_skipped_preflight():
+    """A declined restart must not burn the circuit-breaker budget.
+
+    restart_microvm's upstream-model preflight records
+    {action: "restart_microvm", ok: false, skipped: true} when the gateway
+    cannot serve the model. No remediation happened. Counting those would let
+    an upstream outage trip the breaker on the daemon correctly refusing to
+    act, which marks the incident stuck and emits a 4h synthetic critical.
+    """
+    now = 1_000_000
+    state = {
+        "active": {
+            "k": {
+                "status": "in_progress",
+                "attempts": [
+                    {"ts": now - 10, "action": "restart_microvm",
+                     "ok": False, "skipped": True},
+                    {"ts": now - 20, "action": "restart_microvm",
+                     "ok": False, "skipped": True},
+                    {"ts": now - 30, "action": "restart_microvm",
+                     "ok": False, "skipped": True},
+                    {"ts": now - 40, "action": "restart_microvm", "ok": True},
+                ],
+            }
+        },
+        "history": [],
+    }
+    # Only the one real restart counts, so the breaker stays clear.
+    assert daemon.recent_action_count(state, now=now) == 1
+    assert daemon.recent_action_count(state, now=now) < daemon.CIRCUIT_MAX_ATTEMPTS
+
+
+def test_recent_action_count_still_counts_real_actions():
+    """Guard the other direction: real actions must still trip the breaker."""
+    now = 1_000_000
+    state = {
+        "active": {
+            "k": {
+                "status": "in_progress",
+                "attempts": [
+                    {"ts": now - 10, "action": "restart_microvm", "ok": True},
+                    {"ts": now - 20, "action": "restart_mcp", "ok": True},
+                    {"ts": now - 30, "action": "restage_secrets", "ok": True},
+                ],
+            }
+        },
+        "history": [],
+    }
+    assert daemon.recent_action_count(state, now=now) == 3
+    assert daemon.recent_action_count(state, now=now) >= daemon.CIRCUIT_MAX_ATTEMPTS

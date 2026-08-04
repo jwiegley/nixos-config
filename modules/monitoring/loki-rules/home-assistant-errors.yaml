@@ -54,7 +54,7 @@ groups:
           service: home-assistant
         annotations:
           summary: "Home Assistant climate setpoints are failing silently ({{ $value }} in the last 24 hours)"
-          description: "climate.set_temperature is raising TypeError in the Nest component, so the requested temperature is NEVER APPLIED and nothing else reports a failure. Root cause is a range-vs-single setpoint mismatch: versatile_thermostat sends target_temp_high/low to a Nest that is not in a heat_cool mode. Check `journalctl -u home-assistant | grep climate.py`."
+          description: "climate.set_temperature is raising TypeError in the Nest component, so the requested temperature is NEVER APPLIED and nothing else reports a failure. Root cause (corrected 2026-08-04, recorder-verified: all 15 historical failures fell inside eco windows, zero outside): the Nest is in its ECO PRESET while in cool mode. nest/climate.py enters its range branch on `preset==eco OR heat_cool` and then subtracts target_temperature_high, which is None outside heat_cool. The fix is to never set the Nest's own eco preset — send eco to climate.upstairs_vtherm instead and leave the Nest at cool+none, where set_cool(temp) works. If this fires, find which path set the Nest to eco: the two HA automations or the Node-RED Away-tab 'Set HVAC to Eco' node. Check `journalctl -u home-assistant | grep climate.py` for the traceback."
 
       # Generic unhandled-exception detector. The specific rule above exists because that
       # bug is known and quantified; this one catches the NEXT one. Deliberately broad --

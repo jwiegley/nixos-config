@@ -11,38 +11,34 @@ how a future agent gets added without forking this file.
 
 See docs/superpowers/specs/2026-06-01-unified-agent-health-report-design.md.
 
-Sections (fixed order, identical for both agents):
+Sections (fixed order):
   0. Header + headline verdict (PASS/FAIL + issues)
   1. Live metrics            — dump the agent's Prometheus textfile gauges
-  2. MCP servers             — OpenClaw: struct+live tool counts (mcporter,
-                               host+in-VM SSH); Hermes: per-server live tool
-                               counts parsed from agent.log (parse_hermes_mcp_log)
-                               + aggregate MCP-liveness from metrics
-  3. Gateway + plugins       — OpenClaw: canary metrics; Hermes: agent.log
-                               platform/MCP-readiness analog (loaded servers,
-                               tool total, reconnects, discord heartbeat) —
-                               there is no OpenClaw-style plugin gateway
+  2. MCP servers             — per-server live tool counts parsed from agent.log
+                               (parse_hermes_mcp_log) + aggregate MCP-liveness
+                               from metrics
+  3. Gateway + plugins       — agent.log platform/MCP-readiness analog (loaded
+                               servers, tool total, reconnects, discord
+                               heartbeat)
   4. microVM + sidecars      — systemctl show over the profile's units
   5. 24h probe summary       — Prometheus success ratio + p50/p95 per family
-  6. Discord activity        — OpenClaw: ws metrics; Hermes: gateway-log events
-  7. Home Assistant MCP      — OpenClaw: dedicated probe gauges; Hermes: derived
-                               from the home-assistant server's tool
+  6. Discord activity        — gateway-log events
+  7. Home Assistant MCP      — derived from the home-assistant server's tool
                                registration in agent.log
-  8. Errors digest           — redacted + benign-filtered, both agents
+  8. Errors digest           — redacted
   9. Self-heal incidents     — incidents.json + *_self_heal_* metrics
  10. In-VM corroboration     — one SSH round-trip (trader curl + requests-TLS,
                                memory-vault MCP recall, plus api/gateway
                                reachability)
 
-Environment overrides (read under the profile's <PREFIX>, e.g. OPENCLAW_REPORT):
+Environment overrides (read under the profile's <PREFIX>, e.g. HERMES_REPORT):
   <PREFIX>_TO              recipient (default: johnw@vulcan.lan)
   <PREFIX>_FROM            sender    (default: <agent>-health@vulcan.lan)
   <PREFIX>_SENDMAIL        sendmail path (default: /run/wrappers/bin/sendmail)
   <PREFIX>_DRY_RUN         if non-empty, print to stdout instead of mailing
   <PREFIX>_PROMETHEUS_URL  default http://127.0.0.1:9090
   <PREFIX>_SSH_KEY         path to ssh key for the in-VM probe
-  <PREFIX>_SSH_TARGET      e.g. openclaw@10.99.0.2 / hermes@10.99.1.2
-  <PREFIX>_MCPORTER        mcporter binary (OpenClaw only)
+  <PREFIX>_SSH_TARGET      e.g. hermes@10.99.1.2
 """
 from __future__ import annotations
 
@@ -74,7 +70,7 @@ SECTION_RULE = "-" * 76
 
 
 # ---------------------------------------------------------------------------
-# Redaction (shared by both error grammars — same secret shapes as self-heal)
+# Redaction (same secret shapes as self-heal)
 # ---------------------------------------------------------------------------
 
 REDACT_PATTERNS = [
@@ -254,50 +250,25 @@ def parse_incidents(path, now=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Errors digest — one parser, two grammars, always redacted + benign-filtered
+# Errors digest — always redacted. `grammar` is retained as a profile field so a
+# future agent with a different log format plugs in without forking the parser.
 # ---------------------------------------------------------------------------
 
-# OpenClaw: freeform line beginning with an RFC3339 timestamp.
-_OC_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.+-]+)")
 # Hermes: "<iso> ERROR|WARN <msg>".
 _HERMES_TS_RE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\s+(?:ERROR|WARN)\s+(?P<msg>.*)$"
 )
 
-# Known-benign stderr noise systemd captures into err.log. Filtering these out
-# of the headline error count lets a real regression stand out.
-_BENIGN_WARNING_PATTERNS = [
-    re.compile(r"must declare contracts\.tools before registering"),
-    re.compile(r"Gateway is binding to a non-loopback address"),
-    re.compile(r"controlUi\.dangerouslyAllowHostHeaderOriginFallback"),
-    re.compile(r"security warning: dangerous config flags enabled"),
-    re.compile(r"Api key is used with unsecure connection"),
-    re.compile(r"\[diagnostic\] long-running session\b"),
-    re.compile(r"\[diagnostic\] stalled session\b"),
-    re.compile(r"\[diagnostic\] liveness warning\b"),
-    re.compile(r"\[whatsapp\] watchdog timeout\b"),
-    re.compile(r"\[whatsapp\] Web connection closed\b"),
-]
 
-_BENIGN_BY_GRAMMAR = {
-    "openclaw": _BENIGN_WARNING_PATTERNS,
-    "hermes": [],  # Hermes errors.log is already curated; profile-overridable.
-}
-
-
-def _is_benign(line: str, grammar: str) -> bool:
-    return any(p.search(line) for p in _BENIGN_BY_GRAMMAR.get(grammar, []))
-
-
-def parse_errors_log(path, grammar: str = "openclaw",
+def parse_errors_log(path, grammar: str = "hermes",
                      window_hours: int = 24, now=None) -> dict:
     """Count + bucket error-log lines in the window, redacting every line.
 
-    Returns a superset dict usable by the renderer for either grammar:
+    Returns a dict usable by the renderer:
       {available, total, errors_total, warnings_total,
        patterns:[{pattern,count}], warnings:[{pattern,count}], window_hours}
     `patterns` are the real (non-benign) error buckets; `warnings` are the
-    benign ones (openclaw only). `total` counts in-window lines (errors+warnings).
+    `total` counts in-window lines.
     """
     p = pathlib.Path(path)
     if not p.is_file():
@@ -331,49 +302,6 @@ def parse_errors_log(path, grammar: str = "openclaw",
         out["patterns"] = [{"pattern": k, "count": c} for k, c in errors.most_common(10)]
         return out
 
-    # openclaw grammar — normalize everything to UTC-aware so a `Z`-suffixed
-    # line (regex stops before `Z` → naive) or a naive caller `now` can't trip
-    # the "can't compare offset-naive and offset-aware" TypeError.
-    now = now or dt.datetime.now(dt.timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=dt.timezone.utc)
-    cutoff = now - dt.timedelta(hours=window_hours)
-    err_counts: collections.Counter = collections.Counter()
-    warn_counts: collections.Counter = collections.Counter()
-    for line in _safe_read_lines(p):
-        if not line.strip():
-            continue
-        m = _OC_TS_RE.match(line)
-        if not m:
-            continue  # skip undated noise rather than count forever-old lines
-        try:
-            ts = dt.datetime.fromisoformat(m.group(1).replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=dt.timezone.utc)
-        if ts < cutoff:
-            continue
-        out["total"] += 1
-        body = line[m.end():].strip()
-        body = re.sub(r"\s*\(status=[^)]*\)\s*$", "", body)
-        body = re.sub(r"\d+(?:\.\d+)?ms\b", "Nms", body)
-        body = re.sub(r"\b\d{2,}\b", "N", body)
-        pattern = redact(body[:120])
-        if _is_benign(line, grammar):
-            warn_counts[pattern] += 1
-            out["warnings_total"] += 1
-        else:
-            err_counts[pattern] += 1
-            out["errors_total"] += 1
-    out["patterns"] = [{"pattern": k, "count": c} for k, c in err_counts.most_common(5)]
-    out["warnings"] = [{"pattern": k, "count": c} for k, c in warn_counts.most_common(3)]
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Discord gateway-log parsing (Hermes "log" mode)
-# ---------------------------------------------------------------------------
 
 GATEWAY_TS_RE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}).*?"
@@ -433,7 +361,6 @@ def most_recent_per_type(path, now=None) -> dict[str, dt.datetime]:
 #   tools.mcp_tool: MCP server 'home-assistant' (stdio): registered 28 tool(s): …
 #   tools.mcp_tool: MCP: registered 67 tool(s) from 6 server(s)
 # plus keepalive/reconnect warnings. This gives real per-server live counts —
-# the parity analog to OpenClaw's `mcporter list`.
 # ---------------------------------------------------------------------------
 
 _HMCP_REG_RE = re.compile(
@@ -491,28 +418,11 @@ def parse_hermes_mcp_log(path, window_hours: int = 24, now=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# mcporter (OpenClaw only) — structural + live tool counts
 # ---------------------------------------------------------------------------
 
 _MCPORTER_LIST_RE = re.compile(
     r"^- (?P<name>\S+) — (?P<desc>.*?) \((?P<status>[^)]+)\)$"
 )
-
-
-def _parse_mcporter_output(stdout: str) -> dict[str, dict[str, Any]]:
-    out: dict[str, dict[str, Any]] = {}
-    for line in stdout.splitlines():
-        m = _MCPORTER_LIST_RE.match(line)
-        if not m:
-            continue
-        name = m.group("name")
-        status = m.group("status")
-        tool_count: Optional[int] = None
-        tm = re.match(r"(\d+)\s+tools?", status)
-        if tm:
-            tool_count = int(tm.group(1))
-        out[name] = {"status": status, "tool_count": tool_count, "raw": line}
-    return out
 
 
 def _build_ca_bundle() -> Optional[str]:
@@ -556,88 +466,6 @@ def _find_mcporter(env_prefix: str) -> Optional[str]:
     candidates.sort(reverse=True)
     return candidates[0][1]
 
-
-def run_mcporter_list(env_prefix: str = "OPENCLAW_REPORT",
-                      home: str = "/var/lib/openclaw") -> dict[str, dict[str, Any]]:
-    out: dict[str, dict[str, Any]] = {}
-    binary = _find_mcporter(env_prefix)
-    if not binary:
-        sys.stderr.write("run_mcporter_list: could not locate mcporter\n")
-        return out
-    mcporter_json = pathlib.Path(home) / ".openclaw/.mcporter/mcporter.json"
-    if not mcporter_json.is_file():
-        sys.stderr.write(f"run_mcporter_list: mcporter.json missing at {mcporter_json}\n")
-        return out
-
-    ca_bundle = _build_ca_bundle()
-    env = os.environ.copy()
-    env["HOME"] = home
-    if ca_bundle:
-        env["REQUESTS_CA_BUNDLE"] = ca_bundle
-        env["NODE_EXTRA_CA_CERTS"] = ca_bundle
-    env.setdefault("MCPORTER_LIST_TIMEOUT", "30000")
-    try:
-        proc = subprocess.run(
-            [binary, "list"], cwd=home, env=env,
-            capture_output=True, text=True, timeout=180,
-        )
-    except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
-        sys.stderr.write(f"run_mcporter_list: {type(exc).__name__}: {exc}\n")
-        return out
-    finally:
-        if ca_bundle:
-            try:
-                os.unlink(ca_bundle)
-            except OSError:
-                pass
-    if proc.returncode != 0:
-        sys.stderr.write(
-            f"run_mcporter_list: exited {proc.returncode}: {proc.stderr[:300]}\n"
-        )
-    out = _parse_mcporter_output(proc.stdout)
-    if not out:
-        sys.stderr.write(
-            f"run_mcporter_list: parsed 0 servers. head: {proc.stdout[:400]!r}\n"
-        )
-    return out
-
-
-def run_mcporter_list_via_ssh(key: Optional[str] = None,
-                              target: Optional[str] = None,
-                              env_prefix: str = "OPENCLAW_REPORT"
-                              ) -> dict[str, dict[str, Any]]:
-    key = key or os.getenv(f"{env_prefix}_SSH_KEY")
-    target = target or os.getenv(f"{env_prefix}_SSH_TARGET")
-    if not key or not target:
-        sys.stderr.write("run_mcporter_list_via_ssh: SSH env not configured\n")
-        return {}
-    ssh_cmd = [
-        "ssh", "-i", key,
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "GlobalKnownHostsFile=/dev/null",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10",
-        "-o", "LogLevel=ERROR",
-        "-o", "IdentitiesOnly=yes",
-        target, "mcporter list",
-    ]
-    try:
-        proc = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=60)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        sys.stderr.write(f"run_mcporter_list_via_ssh: {type(exc).__name__}\n")
-        return {}
-    if proc.returncode != 0:
-        sys.stderr.write(
-            f"run_mcporter_list_via_ssh: exited {proc.returncode}: {proc.stderr[:300]}\n"
-        )
-        return {}
-    return _parse_mcporter_output(proc.stdout)
-
-
-# ---------------------------------------------------------------------------
-# Generic in-VM SSH probe (section 10) — one round-trip, results-only output
-# ---------------------------------------------------------------------------
 
 def _curl_frag(cid: str, url: str) -> str:
     return (
@@ -808,15 +636,14 @@ PROFILES: dict[str, dict] = {
             "perplexity", "org-db"),
         # Hermes VM has no mcporter CLI; the NousResearch agent logs per-server
         # tool counts to agent.log at startup, so §2 gets REAL live counts from
-        # there (parity with OpenClaw's mcporter table) — see parse_hermes_mcp_log.
+        # there — see parse_hermes_mcp_log.
         "mcp_servers_mode": "agent_log",
         "agent_log": "/var/lib/hermes/.hermes/logs/agent.log",
         "server_ok_metric": None,
         "mcp_aggregate": {"sse": "hermes_mcp_sse_open_ok",
                           "ask": "hermes_mcp_ask_hermes_ok",
                           "ask_s": "hermes_mcp_ask_hermes_seconds"},
-        "host_blind_servers": frozenset(),
-        # No OpenClaw-style plugin gateway, but agent.log + the discord
+        # There is no separate plugin gateway, but agent.log + the discord
         # heartbeat give a real platform/MCP-readiness analog (loaded servers,
         # tool total, reconnects, platform liveness).
         "gateway": {"mode": "hermes_agent_log"},
@@ -882,16 +709,8 @@ def collect(profile: dict) -> dict:
     # Section 2 — MCP servers
     servers: dict[str, dict] = {}
     mcp_log: dict = {}
-    mode = profile.get("mcp_servers_mode")
-    if mode == "mcporter":
-        servers = run_mcporter_list(prefix, profile.get("mcporter_home", "/var/lib/openclaw"))
-        vm_live = run_mcporter_list_via_ssh(ssh_key, ssh_target, prefix)
-        for name in profile.get("host_blind_servers", frozenset()):
-            servers.pop(name, None)
-            if name in vm_live:
-                servers[name] = vm_live[name]
-    elif mode == "agent_log":
-        # Hermes: real per-server tool counts from the agent's startup log.
+    if profile.get("mcp_servers_mode") == "agent_log":
+        # Real per-server tool counts from the agent's startup log.
         mcp_log = parse_hermes_mcp_log(profile["agent_log"], 24, now)
 
     # Section 4 — uptime
@@ -985,7 +804,7 @@ def _compute_issues(profile: dict, data: dict) -> list[str]:
     state = data["uptime"].get(first_unit, {}).get("active")
     if state not in ("active", None, "unknown"):
         issues.append(f"{first_unit} state: {state}")
-    # structurally-invalid MCP servers (openclaw)
+    # structurally-invalid MCP servers
     bad = [n for n, ok in _server_ok_map(live, profile.get("server_ok_metric")).items()
            if ok != 1]
     if bad:
@@ -1028,7 +847,6 @@ def render_mcp_servers(profile, data) -> list[str]:
     if mode == "agent_log":
         # Hermes: real per-server tool counts parsed from agent.log (the agent
         # logs `registered N tool(s)` per MCP server at startup). Same table
-        # shape as the OpenClaw mcporter path.
         mlog = data.get("mcp_log", {})
         counts = mlog.get("servers", {})
         reconnecting = set(mlog.get("reconnect_servers", []))
@@ -1058,26 +876,10 @@ def render_mcp_servers(profile, data) -> list[str]:
         lines.append(f"  MCP layer: sse_open={sse}  ask_hermes={ask}{ask_s_str}")
         return lines
 
-    # mcporter mode (OpenClaw)
-    live = data["live"]
-    servers = data["servers"]
-    server_ok = _server_ok_map(live, profile.get("server_ok_metric"))
-    expected = sorted(server_ok.keys()) or list(profile["expected_servers"])
-    all_names = sorted(set(expected) | set(servers.keys()))
-    blind = profile.get("host_blind_servers", frozenset())
-    lines.append(f"  {'Server':<28} {'Struct':<7} {'Live':<6} Status")
-    lines.append(f"  {'-' * 28} {'-' * 7} {'-' * 6} {'-' * 26}")
-    for name in all_names:
-        struct = "OK" if server_ok.get(name) == 1 else ("?" if name not in server_ok else "FAIL")
-        info = servers.get(name)
-        if name in blind and info is None:
-            live_count, status = "n/a", "(skipped from host context)"
-        elif info is None:
-            live_count, status = "?", "(not seen in mcporter list)"
-        else:
-            live_count = (str(info["tool_count"]) if info["tool_count"] is not None else "—")
-            status = info["status"]
-        lines.append(f"  {name:<28} {struct:<7} {live_count:<6} {status}")
+    # No other mcp_servers_mode is implemented. Say so in the report rather than
+    # returning None and blowing up in the renderer — a profile with an unknown
+    # mode is a config error, and the email is where the operator will see it.
+    lines.append(_na(f"unsupported mcp_servers_mode: {mode!r}"))
     return lines
 
 
@@ -1090,7 +892,7 @@ def render_gateway(profile, data) -> list[str]:
         lines.append(_na("agent has no plugin-gateway analog", kind="not applicable"))
         return lines
     if mode == "hermes_agent_log":
-        # Real platform/MCP-readiness analog (no OpenClaw-style plugin gateway):
+        # Real platform/MCP-readiness analog:
         # loaded servers + tool total + reconnect health + platform liveness.
         mlog = data.get("mcp_log", {})
         live = data["live"]
@@ -1167,17 +969,6 @@ def render_probe_summary(profile, data) -> list[str]:
 def render_discord(profile, data) -> list[str]:
     lines = _section("Discord activity (last 24h)")
     dprof = profile["discord"]
-    if dprof["mode"] == "metrics":
-        live = data["live"]
-        connected = live.get(dprof["connected"])
-        age = live.get(dprof["last_ready_age"])
-        conn_str = "yes" if connected == 1.0 else ("no" if connected == 0.0 else "?")
-        lines.append(f"  WebSocket connected:   {conn_str}")
-        if age is not None:
-            lines.append(f"  last ready event age:  {_age_str(age)}")
-        else:
-            lines.append("  last ready event age:  ?")
-        return lines
     # log mode (Hermes)
     counts = data["discord"].get("counts") or {t: 0 for t in EVENT_KEYWORDS}
     latest = data["discord"].get("latest") or {}
@@ -1208,19 +999,6 @@ def render_ha_mcp(profile, data) -> list[str]:
         else:
             lines.append(_na("home-assistant not seen registered in agent.log"))
         return lines
-    live = data["live"]
-    lines.append(f"  token present:          {_ok(live.get(ha['token']))}")
-    lines.append(f"  endpoint reachable:     {_ok(live.get(ha['reachable']))}")
-    lines.append(f"  bearer token accepted:  {_ok(live.get(ha['auth']))}")
-    lr = live.get(ha.get("last_run"))
-    if lr:
-        try:
-            lr_dt = dt.datetime.fromtimestamp(lr, dt.timezone.utc).astimezone()
-            age_min = (dt.datetime.now().astimezone() - lr_dt).total_seconds() / 60
-            lines.append(f"  last check:             {lr_dt:%Y-%m-%d %H:%M %Z} ({age_min:.0f}m ago)")
-        except (OSError, ValueError, OverflowError):
-            pass
-    return lines
 
 
 def render_errors(profile, data) -> list[str]:

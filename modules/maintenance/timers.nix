@@ -362,7 +362,24 @@ in
           "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive"
           "${pkgs.coreutils}/bin/chmod -R g+rX /var/lib/git-workspace-archive/github"
         ];
-        TimeoutStartSec = "1h";
+        # 1h -> 2h (2026-08-05). A normal night is 15-27 min, but this job fetches
+        # 632 repositories single-threaded and git runs its AUTOMATIC gc during
+        # fetch, so whichever night a big mirror crosses gc.auto pays a repack on
+        # top of the fetch. On 2026-08-05 that landed: CPU went 5-6 min -> 58m51s
+        # and disk reads 11G -> 30.2G with the repo count unchanged, the nixpkgs
+        # mirror alone taking 14m18s of it, and the unit was SIGTERMed at the 1h
+        # cap having completed 560 of 632 repos.
+        #
+        # The cost of the cap being too low is not just an incomplete archive: the
+        # kill leaves the sync-state file unwritten, so BOTH staleness checks go
+        # critical and SystemdServiceFailed fires -- one repack night produced five
+        # alerts across Prometheus and the Nagios mirror.
+        #
+        # 2h is chosen against the measured repack night (~46 min of completed work
+        # plus the unfinished tail), not against the quiet-night figure. Do not tune
+        # it back down toward the 15-27 min normal case: this cap exists precisely
+        # for the abnormal night, and TimeoutStartSec is enforced here.
+        TimeoutStartSec = "2h";
         RemainAfterExit = false;
         StandardOutput = "journal";
         StandardError = "journal";

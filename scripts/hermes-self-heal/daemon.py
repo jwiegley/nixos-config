@@ -235,7 +235,14 @@ def reconcile_orphans(state, now=None, vm_ts=None, probe=None):
             continue
         if now - _last_activity_ts(inc) < ORPHAN_MIN_QUIET_S:
             continue
-        if not probe(inc):
+        # not_before=vm_ts: the restart this path is already crediting IS the
+        # freshness floor. Without it a green verdict carried forward from before
+        # that restart resolves the orphan, and because correlation_key buckets on
+        # startsAt a still-firing episode keeps the same key, gets skipped as
+        # already-resolved, and remediation stops for up to RESOLVED_RETENTION_S on
+        # a system that never recovered. vm_ts is a unix stamp directly comparable
+        # to hermes_mcp_ask_hermes_last_attempt_timestamp_seconds.
+        if not probe(inc, not_before=vm_ts):
             continue
         inc["resolved_from_status"] = inc["status"]
         inc["status"] = "resolved"

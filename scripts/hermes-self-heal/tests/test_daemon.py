@@ -497,7 +497,7 @@ def _orphan_inc(status="in_progress", vm_ts=1000,
 def test_reconcile_resolves_in_progress_superseded_by_vm_restart():
     state = {"active": {"k": _orphan_inc()}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                                 probe=lambda inc: True)
+                                 probe=lambda inc, not_before=0.0: True)
     assert n == 1
     inc = state["active"]["k"]
     assert inc["status"] == "resolved"
@@ -508,7 +508,7 @@ def test_reconcile_resolves_in_progress_superseded_by_vm_restart():
 def test_reconcile_leaves_same_boot_incident():
     state = {"active": {"k": _orphan_inc(vm_ts=2000)}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                                 probe=lambda inc: True)
+                                 probe=lambda inc, not_before=0.0: True)
     assert n == 0
     assert state["active"]["k"]["status"] == "in_progress"
 
@@ -516,7 +516,7 @@ def test_reconcile_leaves_same_boot_incident():
 def test_reconcile_requires_probe_clear():
     state = {"active": {"k": _orphan_inc()}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                                 probe=lambda inc: False)
+                                 probe=lambda inc, not_before=0.0: False)
     assert n == 0
     assert state["active"]["k"]["status"] == "in_progress"
 
@@ -524,7 +524,7 @@ def test_reconcile_requires_probe_clear():
 def test_reconcile_skips_recent_activity():
     state = {"active": {"k": _orphan_inc(attempt_ts=_NOW - 60)}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                                 probe=lambda inc: True)
+                                 probe=lambda inc, not_before=0.0: True)
     assert n == 0
     assert state["active"]["k"]["status"] == "in_progress"
 
@@ -532,7 +532,7 @@ def test_reconcile_skips_recent_activity():
 def test_reconcile_resolves_orphaned_stuck_and_records_prior_status():
     state = {"active": {"k": _orphan_inc(status="stuck")}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                                 probe=lambda inc: True)
+                                 probe=lambda inc, not_before=0.0: True)
     assert n == 1
     inc = state["active"]["k"]
     assert inc["status"] == "resolved"
@@ -544,7 +544,7 @@ def test_reconcile_failsafe_on_unknown_vm_ts():
     we then cannot prove the VM restarted past the incident: touch nothing."""
     state = {"active": {"k": _orphan_inc()}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW, vm_ts=0,
-                                 probe=lambda inc: True)
+                                 probe=lambda inc, not_before=0.0: True)
     assert n == 0
     assert state["active"]["k"]["status"] == "in_progress"
 
@@ -564,7 +564,7 @@ def test_reconcile_defaults_read_systemd_and_health_metrics(monkeypatch):
 def test_reconciled_incident_archives_after_retention():
     state = {"active": {"k": _orphan_inc()}, "history": []}
     daemon.reconcile_orphans(state, now=_NOW, vm_ts=2000,
-                             probe=lambda inc: True)
+                             probe=lambda inc, not_before=0.0: True)
     assert daemon.sweep_resolved(state, now=_NOW) == 0
     assert daemon.sweep_resolved(
         state, now=_NOW + daemon.RESOLVED_RETENTION_S) == 1

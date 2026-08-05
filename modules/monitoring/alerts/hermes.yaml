@@ -550,20 +550,37 @@ groups:
       # E2E probe hasn't run recently. Catches the case where the
       # probe service is failing to start (e.g., EnvironmentFile
       # missing) — distinct from "probe ran but got non-200".
+      #
+      # THRESHOLD IS COUPLED TO services.hermesE2eChatProbe.intervalSeconds in
+      # hosts/vulcan/default.nix, and nothing enforces that coupling: these
+      # rule files are static YAML auto-discovered by
+      # modules/monitoring/services/alerting.nix, so the interval cannot be
+      # interpolated in. If you change the interval, change this number too.
+      #
+      # 4500s = the 3600s cadence plus the probe's own ~90s budget plus slack,
+      # so a genuinely missed cycle alerts ~13 minutes late while normal
+      # operation never does. The previous value of 900 was left behind by the
+      # 2026-08-04 move to hourly and fired for roughly 45 minutes of every
+      # hour against a probe that was perfectly healthy — the exact false
+      # positive that teaches an operator to ignore this alert. Note the old
+      # description was ALSO stale: it claimed a 5-minute cadence when the
+      # probe had already been at 15 minutes for some time.
       - alert: HermesE2eChatProbeStale
-        expr: time() - hermes_e2e_chat_last_run_timestamp_seconds > 900
+        expr: time() - hermes_e2e_chat_last_run_timestamp_seconds > 4500
         for: 5m
         labels:
           severity: warning
           category: monitoring
           service: hermes
         annotations:
-          summary: "hermes-e2e-chat-probe has not run in >15 min"
+          summary: "hermes-e2e-chat-probe has not run in >75 min"
           description: |
-            The hermes-e2e-chat-probe.timer should fire every 5 min.
-            Stale >15 min means the timer or service is broken. Check
-            `systemctl status hermes-e2e-chat-probe.timer` and the
-            most recent service journal.
+            The hermes-e2e-chat-probe.timer fires hourly. Stale >75 min means
+            the timer or service is broken, NOT that the probe failed — a
+            failed probe still writes its metrics and shows up as
+            HermesE2eChatFailing instead. Check
+            `systemctl status hermes-e2e-chat-probe.timer` and the most recent
+            service journal.
 
       # Fallback chain triggered — Hermes' agent loop hit a non-retryable
       # error (typically 401/403/404 from upstream) and tried a fallback

@@ -222,6 +222,13 @@
     # free checks in hermes-health-check still run every 15 minutes. This probe
     # only adds "a real completion round-tripped", which needs confirming
     # regularly, not constantly. ~24 probes/day instead of ~96.
+    #
+    # CHANGING THIS ALSO REQUIRES editing HermesE2eChatProbeStale's threshold in
+    # modules/monitoring/alerts/hermes.yaml. Those rule files are static YAML
+    # auto-discovered by alerting.nix, so this value cannot be interpolated into
+    # them and nothing catches the mismatch. Missing that step on 2026-08-04
+    # left a >900s staleness rule against an hourly probe, firing for ~45
+    # minutes of every hour while the probe was healthy.
     intervalSeconds = 3600;
   };
   # The Discord round-trip canary was REMOVED 2026-07-31 together with OpenClaw. It was

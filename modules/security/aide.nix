@@ -373,7 +373,31 @@
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${pkgs.aide}/bin/aide --update";
-      ExecStartPost = "${pkgs.coreutils}/bin/mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db";
+      ExecStartPost = [
+        "${pkgs.coreutils}/bin/mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db"
+        # Re-check against the database we just installed, so the PUBLISHED metric
+        # agrees with the baseline that now exists.
+        #
+        # Without this, AIDEChangesDetected latches for up to a full day after the
+        # condition is resolved. aide-check runs daily and its ExecStopPost is the
+        # single emitter of aide_result.prom, so a rebuild at 04:20 leaves the
+        # 00:23 verdict published until 00:19 the next night — measured on
+        # 2026-08-05, where the database was correctly re-baselined at 04:21:55 and
+        # the alert nonetheless still read changes_detected=1, changed_files=77 for
+        # a further sixteen hours. On a host that is rebuilt several times a day
+        # that makes the alert permanently on, which is no control at all.
+        #
+        # This RE-MEASURES rather than asserting a clean result. Writing zeroes
+        # here would have been cheaper and wrong twice over: it would duplicate the
+        # emitter that lines 227-238 exist to warn against — two writers of these
+        # gauges once had them contradicting each other in a single scrape — and it
+        # would report a state nothing had verified.
+        #
+        # --no-block because this runs inside a ExecStartPost and aide-check has no
+        # ordering relationship to this unit; blocking on it would deadlock the
+        # transaction.
+        "${pkgs.systemd}/bin/systemctl start --no-block aide-check.service"
+      ];
       # AIDE exit codes: 0=no changes, 1-7=changes detected (all valid for update)
       # Codes are additive bits (1=new, 2=removed, 4=changed), so:
       # 1=new, 2=removed, 3=new+removed, 4=changed, 5=new+changed, 6=removed+changed, 7=all

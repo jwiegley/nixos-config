@@ -89,7 +89,18 @@ let
     OUT_TMP = OUT_FINAL.with_suffix(".prom.tmp")
 
     # Total per-probe timeouts.
-    ASK_HERMES_BUDGET_S = 60.0
+    #
+    # ASK 60 -> 150 on 2026-08-04. This probe exercises the full
+    # agent-with-tools path, and that path got materially heavier the same day:
+    # the GitHub and Gitea MCP servers took Hermes from ~29 tools to ~79, whose
+    # schema is re-sent on every request. Measured with the exact prompt below
+    # after that change: 35.3s on a cold session, 11.4s warm. The probe always
+    # runs cold — it opens a new session each time — so it pays the 35s case
+    # every time, and 60s left too little headroom for any gateway contention on
+    # a serially-served backend. Every attempt from 18:26 onward hit exactly
+    # 60.0s while the plain-completion probe stayed green at 12.9s, which is the
+    # signature of a budget that no longer matches the work.
+    ASK_HERMES_BUDGET_S = 150.0
     SSE_OPEN_BUDGET_S = 5.0
     API_PROBE_BUDGET_S = 5.0
 
@@ -119,6 +130,21 @@ let
     # "no problem"). The attempt timestamp is published so a reader can always
     # tell a fresh verdict from a carried one.
     ASK_HERMES_MIN_INTERVAL_S = 3600.0
+
+    # ...but only while the last verdict was GOOD. A failure is re-tested on the
+    # normal 900s cycle instead.
+    #
+    # Without this the hourly gate turns one flaky probe into an hour of
+    # consequences: the verdict is carried forward unchanged, so a single
+    # transient timeout pins HermesAskFailing red for a full hour — and that
+    # alert is self_heal_eligible, so the daemon acts on it. That is not
+    # hypothetical; on 2026-08-04 it restarted the Hermes VM twice (18:32, 18:53)
+    # over a probe that was merely slow, because the upstream preflight
+    # correctly passed — the model was fine, the agent was fine, only the budget
+    # was wrong. Before the hourly gate a transient failure was retested 15
+    # minutes later and usually cleared itself; the gate removed that safety
+    # valve. Cheap probes stay hourly, expensive-to-be-wrong ones retry fast.
+    ASK_HERMES_RETRY_INTERVAL_S = 900.0
 
 
     async def probe_api_server(api_key: str) -> tuple[int, float]:
@@ -727,7 +753,14 @@ let
         prev = previous_metrics()
         ask_last_attempt = prev.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds", 0.0)
         have_prev_verdict = "hermes_mcp_ask_hermes_ok" in prev
-        if not have_prev_verdict or (time.time() - ask_last_attempt) >= ASK_HERMES_MIN_INTERVAL_S:
+        # A red verdict is re-tested on the normal cycle, not held for an hour —
+        # see ASK_HERMES_RETRY_INTERVAL_S.
+        ask_due_after = (
+            ASK_HERMES_MIN_INTERVAL_S
+            if prev.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
+            else ASK_HERMES_RETRY_INTERVAL_S
+        )
+        if not have_prev_verdict or (time.time() - ask_last_attempt) >= ask_due_after:
             ask_ok, ask_seconds, _ = await capped(
                 probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
             )
@@ -841,14 +874,21 @@ in
 
         ExecStart = "${healthScript}";
 
-        # Backstop only. Each probe now enforces its OWN total wall-clock cap
-        # via asyncio.timeout() (see `capped` in the script), so the script's
-        # real max runtime is ~sum of budgets (5+5+60) + overhead < 120s and it
-        # always exits cleanly writing metrics. This 120s is a last-resort hang
-        # guard, NOT the probe's timeout — do not lower it toward the internal
-        # budgets or a slow-Hermes run will be SIGTERM-killed again (the
-        # 2026-07-07 SystemdServiceFailed regression).
-        TimeoutStartSec = "120s";
+        # Backstop only. Each probe enforces its OWN total wall-clock cap via
+        # asyncio.timeout() (see `capped` in the script), so the script's real
+        # max runtime is ~sum of budgets + overhead and it always exits cleanly
+        # writing metrics. This is a last-resort hang guard, NOT the probe's
+        # timeout — do not lower it toward the internal budgets or a slow-Hermes
+        # run will be SIGTERM-killed again (the 2026-07-07 SystemdServiceFailed
+        # regression).
+        #
+        # 120s -> 240s on 2026-08-04, in lockstep with ASK_HERMES_BUDGET_S going
+        # 60 -> 150. Worst case is now 5 + 5 + 150 = 160s of budget plus
+        # overhead. Leaving this at 120s would have made that raise
+        # self-defeating in the worst way: the unit would be SIGTERM-killed
+        # mid-probe having written NO metrics, so a merely slow agent would read
+        # as a missing one. THIS MUST STAY ABOVE THE SUM OF THE BUDGETS ABOVE.
+        TimeoutStartSec = "240s";
 
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];
         ReadOnlyPaths = [

@@ -99,13 +99,40 @@ groups:
           description: "A process was killed due to OOM condition. System may be under memory pressure."
 
       # Alert on segmentation faults
+      #
+      # The `!=` excludes crashes inside Nix build sandboxes. This host sets
+      # boot.binfmt.emulatedSystems = [ "x86_64-linux" ] (modules/core/base.nix)
+      # so it can build x86_64 derivations under qemu-x86_64, and emulated
+      # prebuilt binaries -- npm's bundled node helpers especially -- do crash
+      # there. That is a property of the build, not of the running system: it
+      # cannot affect a service, and if it matters at all the build fails and
+      # says so. Left unfiltered it fires a warning on ordinary rebuilds
+      # (2026-08-04: `npm rebuild` under uid 30010, alerting for 20 minutes),
+      # which is precisely how an operator is taught to ignore this alert before
+      # a real segfault arrives.
+      #
+      # COREDUMP_CGROUP is the discriminator rather than the uid or the process
+      # name, because it states the actual fact -- "this crashed inside a Nix
+      # build" -- and holds for every build user and every emulated binary.
+      # Note the filter matches against a JSON-serialised journal entry: this
+      # host's systemd-coredump records reach Loki as the full structured entry,
+      # not a plain message, which is also why `journalctl | grep segfault` finds
+      # nothing for these events. Kernel-emitted `foo[123]: segfault at ...`
+      # lines are plain text, carry no COREDUMP_CGROUP field, and still alert.
       - alert: SystemdSegmentationFault
         expr: |
-          count_over_time({job="systemd-journal"} |~ "segfault|segmentation fault|SIGSEGV" [10m]) > 0
+          count_over_time({job="systemd-journal"}
+            |~ "segfault|segmentation fault|SIGSEGV"
+            != `"COREDUMP_CGROUP":"/system.slice/nix-daemon.service"`
+          [10m]) > 0
         for: 1m
         labels:
           severity: warning
           category: logs
         annotations:
           summary: "Segmentation fault detected"
-          description: "A process has crashed with a segmentation fault. This may indicate a software bug or memory corruption."
+          description: >-
+            A process outside the Nix build sandbox crashed with a segmentation
+            fault, which may indicate a software bug or memory corruption.
+            Identify it with `coredumpctl list --since "-30m"`; build-sandbox
+            crashes are deliberately excluded from this alert.

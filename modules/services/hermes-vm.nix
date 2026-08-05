@@ -756,14 +756,50 @@ in
           enabled = true;
           min_turns = 3;
         };
-        # Content that must never be stored. The canary probes this used to
-        # filter were removed 2026-08-05, so the only rule left is a manual
-        # opt-out: put [nomem] anywhere in a message and the exchange is not
-        # remembered. Kept because it is a useful affordance for ad-hoc testing
-        # and costs nothing; the plugin defaults are otherwise empty.
+        # Content that must never be stored.
+        #
+        # The scheduled canary probes were removed 2026-08-05, and these shape
+        # rules were removed with them -- which was wrong. Automation was never
+        # the only source of probe traffic: an operator or an agent verifying a
+        # change by hand sends the same thing. Within hours of the removal, four
+        # ad-hoc "Reply with exactly HERMES_OK" round-trips landed in the store
+        # (7 points), evading the then-current rules on two counts: the prompt
+        # was not the "single word" phrasing, and HERMES_OK holds an underscore,
+        # which [A-Z]{2,20} rejects. So the rules are back, and generalised.
+        #
+        # Semantics, from the deployed plugin (pkgs/hermes-qdrant-memory,
+        # qdrant.py _is_ignored / _write_filter_rules) -- get these wrong and a
+        # pattern silently never fires:
+        #   * every pattern is compiled with re.IGNORECASE, so a case-SENSITIVE
+        #     subexpression needs an explicit (?-i:...) scope;
+        #   * matching is `search` against the RAW text, not a whitespace-
+        #     normalised copy (only `exact` sees the normalised, casefolded form);
+        #   * the filter is EXCHANGE-scoped: either side matching drops both the
+        #     user and the assistant row, which is why the instruction and the
+        #     bare-token reply do not each need to match.
+        #
+        # A bad regex here is logged and skipped, never raised -- a typo
+        # disables the rule silently rather than failing the build. Changes are
+        # covered by tests/hermes-write-filter, which reads THIS list and runs
+        # it against every probe shape seen in the wild plus real messages that
+        # must survive. Editing these patterns by hand is fine; the suite pins
+        # the outcome, not the wording.
         write_filter = {
           exact = [ ];
-          patterns = [ "\\[no-?mem(ory)?\\]" ];
+          patterns = [
+            # Manual opt-out: [nomem] anywhere in a message.
+            "\\[no-?mem(ory)?\\]"
+            # "Reply with exactly HERMES_OK" / "Reply only with ACK" / "Reply
+            # with the single word ROVER and nothing else." The ALL-CAPS token
+            # is required, and is what keeps a genuine "Reply with your thoughts
+            # on the pool heater" out of the net.
+            "^\\s*reply\\s+(?:with|only)\\b.{0,70}?(?-i:\\b[A-Z][A-Z0-9_]{1,30}\\b).{0,40}$"
+            # The bare-token reply, in either direction: ACK, ROVER, HERMES_OK,
+            # HERMES_PI_OK. Underscores and digits included -- their absence is
+            # what let HERMES_OK through. This does drop a genuine one-word
+            # "OK"/"YES", which carries no recall value anyway.
+            "^\\s*(?-i:[A-Z][A-Z0-9_]{1,30})[.!]*\\s*$"
+          ];
           min_content_chars = 0;
         };
       };

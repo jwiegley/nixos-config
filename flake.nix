@@ -331,6 +331,20 @@
             ];
           };
 
+          # Behaviour of the Qdrant memory write-filter. The suite parses the
+          # pattern list out of hermes-vm.nix, so the sandbox needs that one
+          # file alongside it -- assembled here rather than handing the check
+          # the whole repo, which would rebuild it on every unrelated commit.
+          hermes-write-filter-tests = helpers.mkPytestCheck {
+            name = "hermes-write-filter-tests";
+            src = pkgs.runCommand "hermes-write-filter-src" { } ''
+              mkdir -p "$out/tests"
+              cp ${./tests/hermes-write-filter}/*.py "$out/tests/"
+              cp ${./modules/services/hermes-vm.nix} "$out/hermes-vm.nix"
+            '';
+            suiteDir = "tests";
+          };
+
           drafts-mcp-check-tests = helpers.mkPytestCheck {
             name = "drafts-mcp-check-tests";
             src = ./scripts/drafts-mcp-check;

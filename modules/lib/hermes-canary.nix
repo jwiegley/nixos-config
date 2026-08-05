@@ -26,7 +26,9 @@
   expectFragment = "ACK";
 
   ignore = {
-    # Whitespace-normalised, case-insensitive equality. Cheapest check.
+    # Whitespace-normalised, case-insensitive equality. Cheapest check, and the
+    # only place case-insensitivity is wanted: it catches a lowercase "ack" that
+    # the deliberately case-sensitive ALL-CAPS pattern below will not.
     exact = [
       "ACK"
       "ACK."
@@ -34,13 +36,27 @@
 
     # Python `re` syntax, searched case-insensitively against each side of the
     # exchange (see pkgs/hermes-qdrant-memory/src/qdrant.py:_is_ignored).
+    #
+    # These match the SHAPE of a one-word canary, not specific words. The first
+    # version of this file named ACK literally, and within the hour a second
+    # canary appeared using ROVER and a trailing `/no_think`. Enumerating words
+    # is a treadmill; a new canary of this shape now needs no change here.
     patterns = [
-      # The probe prompt. Anchored so a real message *quoting* it — which is
-      # exactly what a conversation about this filter looks like — is still
-      # remembered.
-      "^\\s*Reply with the single word ACK\\b"
-      # The one-word reply, tolerating trailing punctuation the model may add.
-      "^\\s*ACK[\\s.!]*$"
+      # Any "Reply with the single word X and nothing else." probe, whatever X
+      # is and whatever trails it (a `/no_think` directive, extra instructions).
+      # Anchored at the start so a real message *quoting* the prompt — exactly
+      # what a conversation about this filter looks like — is still remembered.
+      "^\\s*Reply with the single word\\b"
+      # The answer side: a bare ALL-CAPS single word, with optional trailing
+      # punctuation the model may add. This side can be stored without its
+      # prompt, so it needs its own rule.
+      #
+      # (?-i:...) is load-bearing. The whole filter compiles with IGNORECASE, so
+      # an unscoped [A-Z] would swallow every one-word reply Hermes ever gives —
+      # "why", "hello", "thanks" — and quietly delete real exchanges. The scoped
+      # flag restores case-sensitivity for just this class. Verified available on
+      # the guest's Python (3.12 and 3.13 both present; scoped flags need 3.11+).
+      "^\\s*(?-i:[A-Z]{2,20})[.!]*\\s*$"
       # Manual opt-out for ad-hoc testing: put [nomem] anywhere in a message and
       # the exchange is not stored. Unanchored on purpose — the marker is
       # explicit intent wherever it appears.

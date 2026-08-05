@@ -243,6 +243,52 @@ let
     exec ${lightPython}/bin/python3 ${perplexityMcpScript}
   '';
 
+  # GitHub MCP server: read-only access to the repositories, issues and pull
+  # requests the operator works on, over the already-allowed 443 egress.
+  #
+  # UPSTREAM'S OFFICIAL SERVER, not a local script like the six around it.
+  # GitHub maintains it against their own API, and being Go it is a single
+  # static binary — a ~62 MiB closure with no npm dependency hash to rot on
+  # aarch64, which is the trap that already cost us a pin in
+  # pkgs/hermes-agent (shared npmDepsHash is x86-only). Writing another
+  # scripts/*-mcp.py would mean hand-maintaining GitHub API coverage forever.
+  #
+  # --read-only IS LOAD-BEARING, not decoration. The same binary without it
+  # exposes 40 tools including create_repository, create_branch, delete_file,
+  # create_or_update_file and create_pull_request. The requirement is to ANSWER
+  # QUESTIONS about repositories; write access would be pure blast radius on a
+  # token that reaches every repo the operator can. Measured: 40 tools → 23.
+  #
+  # Default toolsets (context, repos, issues, pull_requests, users) are kept
+  # rather than trimmed. Measured cost of the alternatives, read-only:
+  #   default                        23 tools, ~4.8k tokens of schema
+  #   context,repos,issues,prs       22 tools, ~4.5k   (drops only search_users)
+  #   context,repos,issues           19 tools, ~3.4k   (loses PR questions)
+  #   --dynamic-toolsets             26 tools, ~5.2k   — WORSE, it adds
+  #                                  meta-tools on top rather than replacing
+  #                                  them, so it is not the context saving its
+  #                                  name suggests.
+  # That schema is re-sent on every request, so this is a real standing cost
+  # (~29 local MCP tools today, before the Home Assistant bridge). It buys the
+  # whole stated capability, and trimming `users` would save 244 tokens.
+  #
+  # TOKEN: reuses the EXISTING open-source-secretary/github-token rather than
+  # adding a second GitHub PAT to SOPS — the same reasoning as the shared
+  # qdrant/api-key. One copy in secrets.yaml, one thing to rotate. That token
+  # is already scoped for reading issues and PRs across these repos, which is
+  # exactly and only what a read-only server can use. Exported from the staged
+  # file so it never lands in the unit env or the Nix store.
+  githubMcpServer = pkgs.writeShellScript "github-mcp" ''
+    set -eu
+    TOKEN_FILE="/run/hermes-secrets/github-token"
+    if [ ! -r "$TOKEN_FILE" ]; then
+      echo "github-mcp: token not readable at $TOKEN_FILE" >&2
+      exit 1
+    fi
+    export GITHUB_PERSONAL_ACCESS_TOKEN="$(cat "$TOKEN_FILE")"
+    exec ${pkgs.github-mcp-server}/bin/github-mcp-server stdio --read-only
+  '';
+
   # org-db MCP server: read-only org-mode access. org_sql connects to
   # PostgreSQL (org database, read-only role `openclaw`) over the 5432 DNAT
   # via psycopg2/libpq; org_search shells `org db search` against the LLM gateway
@@ -1006,6 +1052,21 @@ in
       perplexity = {
         command = "${perplexityMcpServer}";
         args = [ ];
+      };
+
+      github = {
+        command = "${githubMcpServer}";
+        args = [ ];
+        env = {
+          # SSL_CERT_FILE, deliberately — NOT the REQUESTS_CA_BUNDLE /
+          # NIX_SSL_CERT_FILE pair the Python servers need. Those exist because
+          # certifi ignores SSL_CERT_FILE; Go's crypto/x509 is the mirror image
+          # and honours exactly this one. Go would also find /etc/ssl/certs
+          # unaided, so this is belt-and-braces — but the stdio children start
+          # with an effectively EMPTY environment (see the vulcanCaBundle note
+          # at the top), and being explicit removes a class of surprise.
+          SSL_CERT_FILE = vulcanCaBundle;
+        };
       };
 
       # Read-only org-mode access: org_sql (sanitized single SELECT via

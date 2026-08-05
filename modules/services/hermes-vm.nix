@@ -25,6 +25,10 @@ let
   models = import ../../models.nix;
   agentModel = models.llm.reasoning.name;
 
+  # Shared with modules/monitoring/services/hermes-health-check.nix, which SENDS
+  # the probe traffic this filters out. See that file for why they must agree.
+  canary = import ../lib/hermes-canary.nix;
+
   # System CA bundle inside the VM. security.pki.certificates (below) bakes
   # the Vulcan Step-CA root into this file at build time. The stdio MCP
   # children do NOT inherit the agent's environment — hermes-agent loads
@@ -743,6 +747,21 @@ in
           # during heavy sessions. min_turns=3 spares trivial sessions entirely.
           enabled = true;
           min_turns = 3;
+        };
+        # Synthetic traffic that must never be remembered. The health check asks
+        # the agent a fixed question every scrape and she answers "ACK"; nothing
+        # at the plugin's write path could tell that from a person talking, so
+        # those exchanges were stored as turns and then surfaced in recall --
+        # 6 of 39 points were canary residue when this was added (2026-08-04),
+        # and `search_kinds` above had just made turns reachable, so the operator
+        # started seeing them.
+        #
+        # Values come from the file the health check itself reads, so changing
+        # the probe text cannot leave this filter behind.
+        write_filter = {
+          exact = canary.ignore.exact;
+          patterns = canary.ignore.patterns;
+          min_content_chars = canary.ignore.minContentChars;
         };
       };
 

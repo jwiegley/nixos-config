@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 from typing import Any, Dict, List
 
@@ -36,6 +37,7 @@ class QdrantMemoryProvider(MemoryProvider):
         self._prefetch_result = ""
         self._prefetch_lock = threading.Lock()
         self._prefetch_thread: threading.Thread | None = None
+        self._write_filter: tuple[frozenset[str], tuple[Any, ...], int] | None = None
 
     @property
     def name(self) -> str:
@@ -154,6 +156,9 @@ class QdrantMemoryProvider(MemoryProvider):
     def sync_turn(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
         if not self._should_write():
             return
+        if self._is_ignored(user_content, assistant_content):
+            logger.debug("qdrant: exchange matched write_filter, not stored")
+            return
         sid = session_id or self._session_id
         user_row = self._build_turn_row("user", user_content, sid)
         assistant_row = self._build_turn_row("assistant", assistant_content, sid)
@@ -189,6 +194,8 @@ class QdrantMemoryProvider(MemoryProvider):
         metadata: Dict[str, Any] | None = None,
     ) -> None:
         if action != "add" or not content or not self._should_write():
+            return
+        if self._is_ignored(content):
             return
         category = "preference" if target == "user" else "general"
         row = self.build_fact_row(
@@ -382,6 +389,11 @@ class QdrantMemoryProvider(MemoryProvider):
         if not self._should_write() or not self._config.get("extraction", {}).get("enabled", True):
             return []
         min_turns = int(self._config.get("extraction", {}).get("min_turns", 3))
+        # Drop synthetic turns before the min_turns count and before extraction,
+        # so probe traffic can neither pad a session up to the threshold nor be
+        # cited as a fact's evidence. Rebinding `messages` keeps the evidence
+        # indices returned by extract() consistent with _evidence_to_turn_ids.
+        messages = [msg for msg in messages if not self._is_ignored(msg.get("content") or "")]
         user_turns = sum(1 for msg in messages if msg.get("role") == "user")
         if user_turns < min_turns:
             return []
@@ -429,6 +441,62 @@ class QdrantMemoryProvider(MemoryProvider):
 
     def _should_write(self) -> bool:
         return self._agent_context not in {"cron", "subagent", "flush"}
+
+    def _write_filter_rules(self) -> tuple[frozenset[str], tuple[Any, ...], int]:
+        """Compile write_filter once. A bad regex is dropped, never raised.
+
+        This runs on the write path of every exchange, so an operator typo in a
+        pattern must degrade filtering rather than break memory entirely.
+        """
+        if self._write_filter is None:
+            cfg = self._config.get("write_filter") or {}
+            exact = frozenset(
+                " ".join(str(s).split()).casefold()
+                for s in (cfg.get("exact") or [])
+                if str(s).strip()
+            )
+            patterns = []
+            for raw in cfg.get("patterns") or []:
+                try:
+                    patterns.append(re.compile(str(raw), re.IGNORECASE))
+                except re.error as exc:
+                    logger.warning(
+                        "qdrant write_filter pattern %r is not a valid regex, ignoring it: %s",
+                        raw,
+                        exc,
+                    )
+            self._write_filter = (
+                exact,
+                tuple(patterns),
+                int(cfg.get("min_content_chars") or 0),
+            )
+        return self._write_filter
+
+    def _is_ignored(self, *contents: str) -> bool:
+        """True when any of `contents` is synthetic probe/canary traffic.
+
+        Monitoring asks the agent a fixed question every few minutes and the
+        agent answers with one word; nothing at the write path distinguishes that
+        from a person talking, so it was being stored as turns and then surfacing
+        in recall. Matching ANY side condemns the whole exchange: a canary's
+        one-word reply is as useless without its prompt as the prompt is without
+        the reply.
+        """
+        exact, patterns, min_chars = self._write_filter_rules()
+        if not exact and not patterns and min_chars <= 0:
+            return False
+        for content in contents:
+            text = str(content or "")
+            norm = " ".join(text.split())
+            if not norm:
+                continue
+            if norm.casefold() in exact:
+                return True
+            if min_chars > 0 and len(norm) < min_chars:
+                return True
+            if any(pattern.search(text) for pattern in patterns):
+                return True
+        return False
 
     def _get_embedder(self) -> FastEmbedEmbedder:
         if self._embedder is None:

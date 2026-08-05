@@ -77,6 +77,26 @@ plugins:
       top_k: 10
       search_kinds: [fact]
 
+    write_filter:
+      # Content that must never be stored, however it arrives. LOCAL ADDITION,
+      # not upstream: monitoring asks the agent a fixed question every few
+      # minutes over the API server, and `_should_write()` cannot see that --
+      # it only excludes cron/subagent/flush agent contexts, while the probe
+      # looks like an ordinary interactive session. So probe exchanges were
+      # stored as turns and then came back out of recall (6 of 39 points on
+      # 2026-08-04, before this existed).
+      #
+      # Matching EITHER side of an exchange drops BOTH rows: a canary's one-word
+      # reply is as useless without its prompt as the prompt is without it.
+      #
+      # Empty here on purpose. The real values live in ONE place --
+      # modules/lib/hermes-canary.nix -- shared with the health check that
+      # generates the traffic, so the filter cannot go stale when the probe text
+      # changes. hermes-vm.nix renders them into ~/.hermes/config.yaml.
+      exact: []
+      patterns: []
+      min_content_chars: 0
+
     extraction:
       # Deliberately OFF for the initial deployment. Extraction calls the LLM at
       # session boundaries to distil facts; leaving it off makes the first

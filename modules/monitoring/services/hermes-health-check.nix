@@ -34,6 +34,12 @@ let
   cfg = config.services.hermesHealthCheck;
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
+  # Shared with modules/services/hermes-vm.nix, which renders the same strings
+  # into the memory plugin's write_filter so this probe's traffic is never
+  # remembered. Editing the prompt text HERE alone would silently re-pollute the
+  # memory store — that is exactly why it lives in one file.
+  canary = import ../../lib/hermes-canary.nix;
+
   healthScript = pkgs.writeScript "hermes-health-check.py" ''
     #!${
       pkgs.python3.withPackages (
@@ -88,8 +94,11 @@ let
     API_PROBE_BUDGET_S = 5.0
 
     # The end-to-end probe prompt is intentionally tiny and deterministic.
-    PROBE_PROMPT = "Reply with the single word ACK and nothing else."
-    PROBE_EXPECT_FRAGMENT = "ACK"
+    # Sourced from modules/lib/hermes-canary.nix, which the Qdrant memory
+    # plugin's write_filter reads too — so this exchange is provably the same
+    # text the filter drops. Do not inline a literal here.
+    PROBE_PROMPT = ${builtins.toJSON canary.probePrompt}
+    PROBE_EXPECT_FRAGMENT = ${builtins.toJSON canary.expectFragment}
 
 
     async def probe_api_server(api_key: str) -> tuple[int, float]:

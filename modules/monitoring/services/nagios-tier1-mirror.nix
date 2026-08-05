@@ -33,6 +33,12 @@ let
 
   inherit (lib) concatMapStrings;
 
+  # Writer cadence for hermes_e2e_chat.prom, read from the option that actually
+  # controls it so the freshness thresholds below cannot drift away from it. See
+  # the hermes_e2e_chat.prom entry for why this one is derived and the rest are
+  # literals.
+  e2eChatInterval = config.services.hermesE2eChatProbe.intervalSeconds;
+
   # --------------------------------------------------------------------------
   # FAMILY 1 — textfile-collector freshness.
   #
@@ -124,8 +130,23 @@ let
     }
     {
       file = "hermes_e2e_chat.prom";
-      warn = 900;
-      crit = 1800;
+      # DERIVED, not hardcoded — the only entry in this family that is, and
+      # deliberately so. Its writer's cadence is a NixOS option
+      # (services.hermesE2eChatProbe.intervalSeconds), so any literal here is a
+      # copy that silently rots the moment the option changes. It did: these were
+      # warn 900 / crit 1800, i.e. the 3x/6x rule above applied to the option's
+      # DEFAULT of 300s, while the host has run at 900s for a long time (warn was
+      # therefore tripping at exactly 1x cadence). Raising the probe to hourly on
+      # 2026-08-04 then pushed the file past crit, and this check became the
+      # host's only hard CRITICAL — pinning NagiosServicesCritical on and firing
+      # NagiosServicesCriticalIncreased, which is the same "permanent CRITICAL is
+      # not a monitor" failure the schwab_token.prom note above was written about.
+      #
+      # That made it the THIRD place this one cadence had to be restated, after
+      # the Nix option and HermesE2eChatProbeStale in alerts/hermes.yaml. Two of
+      # the three had already drifted. This removes one of them for good.
+      warn = e2eChatInterval * 3;
+      crit = e2eChatInterval * 6;
       template = "standard";
     }
     {

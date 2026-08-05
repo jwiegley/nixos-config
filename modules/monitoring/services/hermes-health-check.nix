@@ -132,7 +132,7 @@ let
     ASK_HERMES_MIN_INTERVAL_S = 3600.0
 
     # ...but only while the last verdict was GOOD. A failure is re-tested on the
-    # normal 900s cycle instead.
+    # very next cycle instead.
     #
     # Without this the hourly gate turns one flaky probe into an hour of
     # consequences: the verdict is carried forward unchanged, so a single
@@ -141,10 +141,33 @@ let
     # hypothetical; on 2026-08-04 it restarted the Hermes VM twice (18:32, 18:53)
     # over a probe that was merely slow, because the upstream preflight
     # correctly passed — the model was fine, the agent was fine, only the budget
-    # was wrong. Before the hourly gate a transient failure was retested 15
-    # minutes later and usually cleared itself; the gate removed that safety
-    # valve. Cheap probes stay hourly, expensive-to-be-wrong ones retry fast.
-    ASK_HERMES_RETRY_INTERVAL_S = 900.0
+    # was wrong. Cheap probes stay hourly, expensive-to-be-wrong ones retry fast.
+    #
+    # NO INTERVAL AT ALL while the verdict is red — every cycle re-probes.
+    #
+    # This was ASK_HERMES_RETRY_INTERVAL_S = 900.0, a threshold exactly equal to
+    # the unit's cycle, and it could never fire for the timeout it was written
+    # for. The gate compares against a stamp taken AFTER the probe returns, while
+    # the timer anchors on the service's START (verified:
+    # NextElapseUSecMonotonic == InactiveExitTimestampMonotonic + interval). So
+    # elapsed at the next gate is cycle - probe_duration + jitter; a 150s timeout
+    # gave 748-763s against a 900s threshold, deferring the retry to the cycle
+    # AFTER next — ~30 minutes, not the ~15 the comment claimed.
+    #
+    # Stamping earlier would not have fixed it either: the stamp still lands some
+    # seconds into the run, so elapsed stays short of a full cycle. ANY threshold
+    # compared against a post-run stamp is fragile here, so there is no threshold
+    # for the red case — "red means try again now" needs no arithmetic and cannot
+    # drift when intervalSeconds changes.
+    #
+    # This also makes self-heal's aux/kick_health_check effective: the daemon
+    # kicks this unit after a remediation and then reads the verdict, so the
+    # kicked run MUST be willing to re-probe or the daemon is judging its own fix
+    # by a stale number (see probe_clear in scripts/hermes-self-heal/daemon.py).
+    #
+    # Cost while red: one inference per cycle instead of one per hour. That is
+    # the pre-gate behaviour, and a red ask probe is exactly when a fresh answer
+    # is worth an inference.
 
 
     async def probe_api_server(api_key: str) -> tuple[int, float]:
@@ -747,20 +770,22 @@ let
 
         sse_ok = await capped(probe_mcp_sse_open(), SSE_OPEN_BUDGET_S + 2.0, 0)
 
-        # Hourly, not every cycle — see ASK_HERMES_MIN_INTERVAL_S. Probing when
-        # no previous verdict exists (first run, or an unreadable/rotated .prom)
-        # is deliberate: an unknown must be resolved, never carried.
+        # Hourly WHILE GREEN, every cycle while red — see
+        # ASK_HERMES_MIN_INTERVAL_S. Three ways to become due, and none of them
+        # compares a threshold against the post-run stamp:
+        #   1. no previous verdict at all (first run, unreadable/rotated .prom) --
+        #      an unknown must be resolved, never carried;
+        #   2. the previous verdict was NOT ok -- red means try again now;
+        #   3. green, and the hourly interval has elapsed.
         prev = previous_metrics()
         ask_last_attempt = prev.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds", 0.0)
         have_prev_verdict = "hermes_mcp_ask_hermes_ok" in prev
-        # A red verdict is re-tested on the normal cycle, not held for an hour —
-        # see ASK_HERMES_RETRY_INTERVAL_S.
-        ask_due_after = (
-            ASK_HERMES_MIN_INTERVAL_S
-            if prev.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
-            else ASK_HERMES_RETRY_INTERVAL_S
-        )
-        if not have_prev_verdict or (time.time() - ask_last_attempt) >= ask_due_after:
+        prev_ask_ok = prev.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
+        if (
+            not have_prev_verdict
+            or not prev_ask_ok
+            or (time.time() - ask_last_attempt) >= ASK_HERMES_MIN_INTERVAL_S
+        ):
             ask_ok, ask_seconds, _ = await capped(
                 probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
             )

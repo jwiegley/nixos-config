@@ -2,9 +2,19 @@ groups:
   - name: hermes_availability
     interval: 60s
     rules:
-      # End-to-end probe through hermes-mcp → Hermes Agent. This is the
-      # single load-bearing signal for "the OpenClaw ↔ Hermes bridge works
-      # right now"; if this is red for >5min, callers cannot reach Hermes.
+      # End-to-end probe through hermes-mcp → Hermes Agent. This is the single
+      # load-bearing signal for "a caller can reach Hermes and get an answer
+      # right now".
+      #
+      # SAMPLED HOURLY since 2026-08-04, not every cycle: the probe costs a real
+      # inference on the serially-served oMLX gateway, so a frequent canary
+      # competes with the agent's actual work. Between attempts the health check
+      # carries the previous verdict forward unchanged, which is what keeps this
+      # `== 0` expression meaningful — but it also means a red here can be up to
+      # an hour stale, and will stay red until the next hourly attempt even if
+      # the cause has cleared. Check
+      # hermes_mcp_ask_hermes_last_attempt_timestamp_seconds to see how fresh
+      # the verdict actually is before acting on it.
       - alert: HermesAskFailing
         expr: hermes_mcp_ask_hermes_ok == 0
         for: 5m
@@ -14,15 +24,16 @@ groups:
           service: hermes-mcp
           self_heal_eligible: "true"
         annotations:
-          summary: "Hermes end-to-end ask_hermes probe failing for 5 minutes"
+          summary: "Hermes end-to-end ask_hermes probe failing"
           description: |
-            The 5-minute health check has failed to round-trip
-            `ask_hermes(prompt="Reply with the single word ACK")` for
-            5 consecutive minutes. The chain hermes-mcp ⇒ Hermes Agent
-            api_server (10.99.1.2:8080) ⇒ Qwen on hera is broken
-            somewhere. The downstream component metrics
-            (hermes_api_server_ok, hermes_mcp_sse_open_ok) tell you
-            which leg failed first.
+            The hourly health check failed to round-trip
+            `ask_hermes(prompt="Reply with the single word ACK")`. The chain
+            hermes-mcp ⇒ Hermes Agent api_server (10.99.1.2:8080) ⇒ the
+            reasoning model on hera is broken somewhere. The downstream
+            component metrics (hermes_api_server_ok, hermes_mcp_sse_open_ok)
+            tell you which leg failed first; if both are green the fault is
+            upstream at the model, and restarting the VM will not fix it —
+            the restart_microvm preflight declines in exactly that case.
 
       # The api_server platform inside Hermes Agent. If this is red,
       # Hermes itself is unreachable; restarting hermes-mcp will not

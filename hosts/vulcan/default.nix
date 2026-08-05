@@ -200,18 +200,29 @@
   services.draftsMcpSelfHeal.enable = true;
   services.hermesHealthCheck = {
     enable = true;
-    # 5min → 15min: this is the single full agent-with-tools liveness probe
-    # (a ~28k-token ask_hermes round-trip). Cutting its cadence removes the
-    # dominant share of synthetic LLM canary load (see the LLM-probe analysis).
+    # Stays at 900s, but the ask_hermes leg inside it now runs HOURLY on its own
+    # gate (ASK_HERMES_MIN_INTERVAL_S in hermes-health-check.nix). This unit also
+    # carries the free checks — api_server, MCP SSE, Discord heartbeat age,
+    # Qdrant memory — and slowing those to an hour to spare one LLM call would
+    # have traded agent-liveness detection latency for nothing.
     intervalSeconds = 900;
   };
   services.hermesSelfHeal.enable = true;
   services.hermesE2eChatProbe = {
     enable = true;
-    # 900s = 15 min. Detection latency ~20 min when paired with the
-    # fallback counter (1 min cadence) that catches per-conversation
-    # failures immediately. ~96 probes/day, ~11 min MLX compute/day.
-    intervalSeconds = 900;
+    # 900s → 3600s (2026-08-04, at the operator's direction). This is a pure LLM
+    # canary: every run is a full chat completion on the shared oMLX gateway,
+    # which serves serially, so the probe does not merely observe contention —
+    # it causes it. An interactive session held DeepSeek long enough that this
+    # probe and ask_hermes both timed out for an hour, alerting critical while
+    # the agent was in fact working.
+    #
+    # Detection latency is unchanged in practice: hermes-fallback-counter runs
+    # every minute and catches per-conversation failures immediately, and the
+    # free checks in hermes-health-check still run every 15 minutes. This probe
+    # only adds "a real completion round-tripped", which needs confirming
+    # regularly, not constantly. ~24 probes/day instead of ~96.
+    intervalSeconds = 3600;
   };
   # The Discord round-trip canary was REMOVED 2026-07-31 together with OpenClaw. It was
   # inherently cross-agent -- the two agents probed EACH OTHER -- so it cannot outlive the

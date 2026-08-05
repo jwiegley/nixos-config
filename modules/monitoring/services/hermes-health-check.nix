@@ -100,6 +100,26 @@ let
     PROBE_PROMPT = ${builtins.toJSON canary.probePrompt}
     PROBE_EXPECT_FRAGMENT = ${builtins.toJSON canary.expectFragment}
 
+    # ask_hermes is the ONLY probe here that costs an LLM inference, and the
+    # oMLX gateway serves serially: every probe queues behind whatever real work
+    # the agent is doing, and adds to it. At the 900s cycle that is 96 inferences
+    # a day spent proving a model answers, which is why an interactive session
+    # and the canary now contend (2026-08-04: both probes timed out for an hour
+    # while a real session held DeepSeek).
+    #
+    # So this one probe runs hourly while every other check here stays on the
+    # 900s cycle. Moving the whole unit to an hourly timer would have been
+    # simpler and wrong: Discord-liveness and api_server detection would have
+    # slowed from 15 minutes to an hour, and those probes are free.
+    #
+    # State lives in the .prom this unit already writes -- no stamp file, no
+    # StateDirectory, nothing new to keep in sync. Between real attempts the
+    # previous ok/seconds are carried forward verbatim so the series never goes
+    # absent (HermesAskFailing reads `== 0`, and a vanishing series would read as
+    # "no problem"). The attempt timestamp is published so a reader can always
+    # tell a fresh verdict from a carried one.
+    ASK_HERMES_MIN_INTERVAL_S = 3600.0
+
 
     async def probe_api_server(api_key: str) -> tuple[int, float]:
         """Hermes api_server /v1/capabilities — returns (ok, latency_s)."""
@@ -621,6 +641,7 @@ let
         "hermes_mcp_sse_open_ok": "1 if hermes-mcp /sse accepted a connection and emitted the endpoint event",
         "hermes_mcp_ask_hermes_ok": "1 if a full ask_hermes round-trip completed within 60s",
         "hermes_mcp_ask_hermes_seconds": "Wall-clock seconds for the end-to-end ask_hermes probe",
+        "hermes_mcp_ask_hermes_last_attempt_timestamp_seconds": "Unix time ask_hermes was last actually probed (hourly); between attempts the ok/seconds above are carried forward unchanged",
         "hermes_discord_event_present": "1 if at least one Discord event was found in gateway.log tail",
         "hermes_discord_heartbeat_present": "1 if the discord.py heartbeat-ACK stamp file was readable",
         "hermes_discord_heartbeat_age_seconds": "Wall-clock seconds since the last Discord gateway HEARTBEAT_ACK (via in-VM shim)",
@@ -665,6 +686,28 @@ let
         except (asyncio.TimeoutError, TimeoutError):
             return fallback
 
+    def previous_metrics() -> "dict[str, float]":
+        """Parse the .prom this unit last wrote; its own output is its state.
+
+        Returns an empty dict on any read or parse problem, which makes the
+        caller fall back to actually running the probe -- the safe direction.
+        """
+        out: "dict[str, float]" = {}
+        try:
+            text = OUT_FINAL.read_text()
+        except OSError:
+            return out
+        for line in text.splitlines():
+            if line.startswith("#"):
+                continue
+            name, _, value = line.partition(" ")
+            try:
+                out[name] = float(value)
+            except ValueError:
+                continue
+        return out
+
+
     async def main_async() -> int:
         api_key = read_api_key()
         api_key_present = 1 if api_key else 0
@@ -677,9 +720,21 @@ let
             api_ok, api_seconds = 0, 0.0
 
         sse_ok = await capped(probe_mcp_sse_open(), SSE_OPEN_BUDGET_S + 2.0, 0)
-        ask_ok, ask_seconds, _ = await capped(
-            probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
-        )
+
+        # Hourly, not every cycle — see ASK_HERMES_MIN_INTERVAL_S. Probing when
+        # no previous verdict exists (first run, or an unreadable/rotated .prom)
+        # is deliberate: an unknown must be resolved, never carried.
+        prev = previous_metrics()
+        ask_last_attempt = prev.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds", 0.0)
+        have_prev_verdict = "hermes_mcp_ask_hermes_ok" in prev
+        if not have_prev_verdict or (time.time() - ask_last_attempt) >= ASK_HERMES_MIN_INTERVAL_S:
+            ask_ok, ask_seconds, _ = await capped(
+                probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
+            )
+            ask_last_attempt = time.time()
+        else:
+            ask_ok = int(prev["hermes_mcp_ask_hermes_ok"])
+            ask_seconds = prev.get("hermes_mcp_ask_hermes_seconds", 0.0)
 
         disco_present, disco_age = discord_last_event_age_seconds()
         hb_present, hb_age = discord_heartbeat_age_seconds()
@@ -729,6 +784,7 @@ let
                 "hermes_mcp_sse_open_ok": sse_ok,
                 "hermes_mcp_ask_hermes_ok": ask_ok,
                 "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),
+                "hermes_mcp_ask_hermes_last_attempt_timestamp_seconds": round(ask_last_attempt, 1),
                 "hermes_discord_event_present": disco_present,
                 "hermes_discord_heartbeat_present": hb_present,
                 "hermes_discord_heartbeat_age_seconds": round(hb_age, 1),

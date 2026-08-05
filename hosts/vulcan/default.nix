@@ -10,9 +10,6 @@
     # Hardware configuration
     ./hardware-configuration.nix
 
-    # Options
-    ../../modules/options
-
     # Core modules
     ../../modules/core/base.nix
     ../../modules/core/networking.nix

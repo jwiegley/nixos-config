@@ -9,6 +9,18 @@
   # Core Prometheus server configuration
   services.prometheus = {
     enable = true;
+
+    # Effectively "keep everything". MOVED HERE 2026-08-05 from
+    # modules/options/default.nix, which was a 368-line options framework with
+    # zero consumers -- and was nonetheless the SOLE definer of this value,
+    # because its config block was gated only on an option defaulting to true.
+    # That made the framework a trap rather than dead code: deleting it as the
+    # obvious cleanup would have silently reverted retention to the 15-day
+    # upstream default and destroyed the history, with no build error. Everything
+    # else that framework set (prometheus.enable, scrape_interval,
+    # podman.enable/dockerCompat) was already defined in the module that owns it,
+    # verified by evaluating each before and after the deletion.
+    retentionTime = "100y";
     port = 9090;
 
     # Validate config syntax at build time without checking file existence

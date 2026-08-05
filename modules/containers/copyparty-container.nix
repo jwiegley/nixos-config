@@ -81,26 +81,41 @@ in
     };
 
     script = ''
+      # 0750 root:copyparty, NOT 0755. Group is the container's copyparty user
+      # (see the mode note below); nothing else needs to traverse this directory.
       mkdir -p /var/lib/copyparty-passwords
-      chmod 755 /var/lib/copyparty-passwords
+      chown root:copyparty /var/lib/copyparty-passwords
+      chmod 0750 /var/lib/copyparty-passwords
 
-      # Copy passwords from SOPS to password files
-      cat ${config.sops.secrets."copyparty/admin-password".path} > /var/lib/copyparty-passwords/admin
-      cat ${config.sops.secrets."copyparty/johnw-password".path} > /var/lib/copyparty-passwords/johnw
-      cat ${config.sops.secrets."copyparty/friend-password".path} > /var/lib/copyparty-passwords/friend
+      # 0640 root:copyparty. These were 0644 in a 0755 directory, i.e. four
+      # cleartext account passwords readable by every local user and every
+      # unprivileged service on the host, for an instance published to the
+      # internet. That also broke this repo's own rule (CLAUDE.md: password files
+      # are 600/400) and was invisible to the SecretsWorldReadable check, which
+      # only scans /run/secrets.
+      #
+      # The old note here claimed 0644 was unavoidable "because the copyparty user
+      # (with a container-allocated UID) needs to read them". That premise is
+      # false, and this repository disproves it in two places: users.users.copyparty
+      # pins uid 970 on the host (above), and modules/services/copyparty.nix pins
+      # uid 970 / gid 970 inside the container. The container declares no
+      # privateUsers and the mount below is a plain read-only bind, so numeric
+      # ownership is shared and group 970 resolves to the same principal on both
+      # sides. Verified live before this change: host `copyparty:970:970`.
+      #
+      # install(1) rather than `cat >` then chmod: the old form created each file
+      # with root's umask (0644) and only narrowed it afterwards, so every rebuild
+      # reopened a world-readable window on a secret. install sets the mode as the
+      # file is created. Same pattern as hermes-prepare-secrets.
+      install -m 0640 -o root -g copyparty \
+        ${config.sops.secrets."copyparty/admin-password".path} /var/lib/copyparty-passwords/admin
+      install -m 0640 -o root -g copyparty \
+        ${config.sops.secrets."copyparty/johnw-password".path} /var/lib/copyparty-passwords/johnw
+      install -m 0640 -o root -g copyparty \
+        ${config.sops.secrets."copyparty/friend-password".path} /var/lib/copyparty-passwords/friend
       ${lib.optionalString (config.sops.secrets ? "copyparty/nasimw-password") ''
-        cat ${config.sops.secrets."copyparty/nasimw-password".path} > /var/lib/copyparty-passwords/nasimw
-      ''}
-
-      # Note: 644 is required here because these files are bind-mounted into a
-      # NixOS container where the copyparty user (with a container-allocated UID)
-      # needs to read them. The files are owned by root:root on the host, so
-      # world-readable is the only way the container user can access them.
-      chmod 644 /var/lib/copyparty-passwords/admin
-      chmod 644 /var/lib/copyparty-passwords/johnw
-      chmod 644 /var/lib/copyparty-passwords/friend
-      ${lib.optionalString (config.sops.secrets ? "copyparty/nasimw-password") ''
-        chmod 644 /var/lib/copyparty-passwords/nasimw
+        install -m 0640 -o root -g copyparty \
+          ${config.sops.secrets."copyparty/nasimw-password".path} /var/lib/copyparty-passwords/nasimw
       ''}
     '';
   };
@@ -131,7 +146,10 @@ in
     "d /var/lib/copyparty-container 0755 root root -"
     "d /var/lib/copyparty-container/.hist 0755 copyparty copyparty -"
     "d /var/lib/copyparty-container/.th 0755 copyparty copyparty -"
-    "d /var/lib/copyparty-passwords 0755 root root -"
+    # 0750 root:copyparty, matching copyparty-password-setup.service. If this
+    # stays 0755 root:root, tmpfiles re-widens the directory on every boot and
+    # quietly undoes the permission fix.
+    "d /var/lib/copyparty-passwords 0750 root copyparty -"
     # NOTE: /tank/Public/{johnw,nasimw} tmpfiles rules were removed
     # 2026-07-03 (post-reboot audit). These are persistent ZFS-backed data
     # directories; per CLAUDE.md they must not be managed via tmpfiles, and

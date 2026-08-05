@@ -317,9 +317,56 @@ def current_metrics():
     return out
 
 
-def probe_clear(incident):
+# How stale the health-check TEXTFILE may be before its contents stop counting
+# as evidence about the present.
+#
+# Deliberately keyed on hermes_health_check_last_run_timestamp_seconds -- "is
+# the health check still running?" -- and NOT on the age of the ask verdict
+# itself. While the ask probe is green it is re-attempted only hourly and the
+# value is carried forward in between, so a rule like "ask verdict younger than
+# one cycle" would be false for most of every healthy hour and would silently
+# stop orphan reconciliation from ever running. What must be excluded is a dead
+# writer, not a deliberately carried value; 1800s is two of the health check's
+# own cycles, and it needs no coupling to the ask cadence.
+#
+# Judging whether a REMEDIATION worked is a different question, and the
+# not_before argument answers that one -- see probe_clear.
+HEALTH_PROM_MAX_AGE_S = 1800
+
+
+def probe_clear(incident, not_before: float = 0.0) -> bool:
+    """True when the ask probe says healthy AND that verdict is current.
+
+    Guarding on freshness matters in both directions. A carried GREEN would
+    otherwise resolve an incident on evidence up to an hour old, and because
+    resolved incidents are skipped for RESOLVED_RETENTION_S the daemon would
+    then stop remediating a system that is still broken. A carried RED is the
+    mirror image: it hides a remediation that actually worked, so repeat
+    webhooks walk the incident to CIRCUIT_MAX_ATTEMPTS and page
+    HermesSelfHealStuck for a host that recovered.
+
+    not_before: reject any verdict measured before this unix time. Callers pass
+    the moment their remediation finished, so "the probe was already green
+    before I acted" cannot be mistaken for "my action fixed it".
+    """
     m = current_metrics()
-    return m.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
+    if m.get("hermes_mcp_ask_hermes_ok", 0.0) != 1.0:
+        return False
+
+    # A file nobody is writing any more proves nothing, whatever it says.
+    ran = m.get("hermes_health_check_last_run_timestamp_seconds")
+    if ran is not None and (time.time() - ran) > HEALTH_PROM_MAX_AGE_S:
+        return False
+
+    if not_before:
+        stamped = m.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds")
+        if stamped is None:
+            # Health check predates the freshness metric: fall back to the bare
+            # value rather than refusing to ever resolve an incident.
+            return True
+        if stamped < not_before:
+            return False
+    return True
 
 
 def microvm_active_enter_ts(unit: str = "microvm@hermes.service") -> int:
@@ -597,9 +644,14 @@ def handle_alertmanager_payload(payload):
         emit_synthetic_alert("HermesSelfHealActed",
             {"action": action, "alert": alert_meta["alert_name"], "by": by,
              "ok": result.get("ok")})
+        # not_before = now: only a verdict measured AFTER this remediation counts
+        # as evidence it worked. The kicked run re-probes because the verdict is
+        # red (see ASK_HERMES_MIN_INTERVAL_S in
+        # modules/monitoring/services/hermes-health-check.nix).
+        acted_ts = time.time()
         _kick_health_check()
         time.sleep(15)
-        if probe_clear(inc):
+        if probe_clear(inc, not_before=acted_ts):
             inc["status"] = "resolved"
             inc["resolved_ts"] = int(time.time())
         save_state(STATE_PATH, state)

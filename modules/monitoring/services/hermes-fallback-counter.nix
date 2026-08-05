@@ -10,7 +10,8 @@
 # node-exporter textfile collector; resets to 0 on log rotation,
 # which Prometheus' increase() handles.
 #
-# Complements hermes-e2e-chat-probe: that probe checks the chat path
+# Since the e2e chat probe was removed (2026-08-05) this is the ONLY per-conversation
+# failure detector. It replaces what that probe checked
 # proactively every 5 min; this counter records every actual user-
 # visible failure as it happens.
 

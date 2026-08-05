@@ -592,7 +592,8 @@ PROFILES: dict[str, dict] = {
         "agent": "hermes", "display_name": "Hermes",
         "env_prefix": "HERMES_REPORT", "report_header": "X-Hermes-Report",
         "default_from": "hermes-health@vulcan.lan",
-        "live_textfiles": [f"{TF}/hermes_health.prom", f"{TF}/hermes_e2e_chat.prom",
+        # hermes_e2e_chat.prom dropped 2026-08-05 with the canary probes.
+        "live_textfiles": [f"{TF}/hermes_health.prom",
                            f"{TF}/hermes_self_heal.prom"],
         # Authoritative inventory = nix services.hermes-agent.mcpServers.
         # SearXNG is the native web backend, NOT an MCP server.
@@ -605,9 +606,9 @@ PROFILES: dict[str, dict] = {
         "mcp_servers_mode": "agent_log",
         "agent_log": "/var/lib/hermes/.hermes/logs/agent.log",
         "server_ok_metric": None,
-        "mcp_aggregate": {"sse": "hermes_mcp_sse_open_ok",
-                          "ask": "hermes_mcp_ask_hermes_ok",
-                          "ask_s": "hermes_mcp_ask_hermes_seconds"},
+        # `ask`/`ask_s` removed 2026-08-05: they came from a probe that sent
+        # Hermes a synthetic message on every cycle. SSE open is passive and stays.
+        "mcp_aggregate": {"sse": "hermes_mcp_sse_open_ok"},
         # There is no separate plugin gateway, but agent.log + the discord
         # heartbeat give a real platform/MCP-readiness analog (loaded servers,
         # tool total, reconnects, platform liveness).
@@ -618,9 +619,10 @@ PROFILES: dict[str, dict] = {
         "web_search_backend": "SearXNG (native)",
         "units": ["microvm@hermes.service", "hermes-mcp.service",
                   "hermes-self-heal.service"],
-        "probe_families": [{"label": "Hermes e2e chat",
-                            "ok": "hermes_e2e_chat_ok",
-                            "dur": "hermes_e2e_chat_duration_seconds"}],
+        # No probe families: both e2e probes were message-generating canaries and
+        # were removed 2026-08-05. Liveness now comes from the passive metrics in
+        # verdict_fail_if_zero plus the Discord heartbeat below.
+        "probe_families": [],
         "discord": {"mode": "log",
                     "log": "/var/lib/hermes/.hermes/logs/gateway.log",
                     "heartbeat_age_metric": "hermes_discord_heartbeat_age_seconds"},
@@ -639,7 +641,7 @@ PROFILES: dict[str, dict] = {
              "url": "https://trader.vulcan.lan/api/schwab/status"}],
         "verdict_fail_if_zero": [("hermes_api_server_ok", "api_server down"),
                                  ("hermes_mcp_sse_open_ok", "hermes-mcp SSE down"),
-                                 ("hermes_mcp_ask_hermes_ok", "ask_hermes round-trip failing")],
+                                 ],
         "errors_fail_threshold": 50,
     },
 }
@@ -815,10 +817,18 @@ def render_mcp_servers(profile, data) -> list[str]:
             lines.append(f"  total: {tot_t} tools from {tot_s} servers (agent.log)")
         agg = profile.get("mcp_aggregate", {})
         live = data["live"]
-        sse, ask = _ok(live.get(agg.get("sse"))), _ok(live.get(agg.get("ask")))
-        ask_s = live.get(agg.get("ask_s"))
-        ask_s_str = f" ({ask_s:.1f}s round-trip)" if isinstance(ask_s, (int, float)) else ""
-        lines.append(f"  MCP layer: sse_open={sse}  ask_hermes={ask}{ask_s_str}")
+        # Render only the aggregate keys the profile actually declares. The
+        # ask_hermes pair was unconditional until 2026-08-05, when the probe that
+        # produced it was removed; hard-coding it printed "ask_hermes=--" forever.
+        parts = []
+        if agg.get("sse"):
+            parts.append(f"sse_open={_ok(live.get(agg['sse']))}")
+        if agg.get("ask"):
+            ask_s = live.get(agg.get("ask_s"))
+            suffix = f" ({ask_s:.1f}s round-trip)" if isinstance(ask_s, (int, float)) else ""
+            parts.append(f"ask_hermes={_ok(live.get(agg['ask']))}{suffix}")
+        if parts:
+            lines.append("  MCP layer: " + "  ".join(parts))
         return lines
 
     # No other mcp_servers_mode is implemented. Say so in the report rather than

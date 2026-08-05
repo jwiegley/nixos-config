@@ -1,4 +1,6 @@
 import daemon
+import time
+
 import pytest
 
 
@@ -101,7 +103,6 @@ def test_load_state_returns_empty_when_file_missing(tmp_path):
 def test_action_map_deterministic_first_attempts():
     """Spec §6.2 — verify the deterministic-first-attempt map exactly."""
     assert daemon.ACTION_MAP == {
-        "HermesAskFailing":             "restart_microvm",
         "HermesApiServerDown":          "restart_microvm",
         "HermesDiscordZombieSuspected":   "restart_microvm",
         "HermesDiscordPostSelfHealRestart": "restart_microvm",
@@ -116,7 +117,7 @@ def test_first_attempt_action_returns_none_for_unknown_alert():
 
 
 def test_first_attempt_action_returns_action_for_known_alert():
-    assert daemon.first_attempt_action("HermesAskFailing") == "restart_microvm"
+    assert daemon.first_attempt_action("HermesApiServerDown") == "restart_microvm"
 
 
 def test_first_attempt_action_does_NOT_default_for_HermesApiKeyMissing():
@@ -297,13 +298,74 @@ def test_current_metrics_returns_empty_when_missing(monkeypatch, tmp_path):
     assert daemon.current_metrics() == {}
 
 
-def test_probe_clear_true_when_ask_ok_is_one(monkeypatch):
+def _healthy_metrics(**over):
+    """Metrics that satisfy the PASSIVE oracle: api_server up, file fresh."""
+    m = {"hermes_api_server_ok": 1.0,
+         "hermes_health_check_last_run_timestamp_seconds": time.time() - 60}
+    m.update(over)
+    return m
+
+
+def _fresh_heartbeat(monkeypatch, age=5.0):
+    monkeypatch.setattr(daemon, "_heartbeat_age", lambda: age)
+
+
+def test_probe_clear_true_when_passive_signals_healthy(monkeypatch):
+    """api_server up + a fresh gateway heartbeat is the whole oracle now.
+
+    It deliberately no longer reads hermes_mcp_ask_hermes_ok: that probe sent
+    Hermes a synthetic message every cycle and was removed 2026-08-05.
+    """
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    _fresh_heartbeat(monkeypatch)
+    assert daemon.probe_clear({}) is True
+
+
+def test_probe_clear_false_when_api_server_down(monkeypatch):
+    monkeypatch.setattr(daemon, "current_metrics",
+                        lambda: _healthy_metrics(hermes_api_server_ok=0.0))
+    _fresh_heartbeat(monkeypatch)
+    assert daemon.probe_clear({}) is False
+
+
+def test_probe_clear_false_when_heartbeat_stale(monkeypatch):
+    """A live HTTP surface with a dead gateway is the zombie case."""
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    _fresh_heartbeat(monkeypatch, age=daemon.HEARTBEAT_MAX_AGE_S + 60)
+    assert daemon.probe_clear({}) is False
+
+
+def test_probe_clear_false_when_heartbeat_unreadable(monkeypatch):
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    monkeypatch.setattr(daemon, "_heartbeat_age", lambda: None)
+    assert daemon.probe_clear({}) is False
+
+
+def test_probe_clear_false_when_textfile_stale(monkeypatch):
+    """A file nobody writes any more proves nothing, whatever it says."""
+    monkeypatch.setattr(daemon, "current_metrics", lambda: _healthy_metrics(
+        hermes_health_check_last_run_timestamp_seconds=time.time() - 7200))
+    _fresh_heartbeat(monkeypatch)
+    assert daemon.probe_clear({}) is False
+
+
+def test_probe_clear_rejects_evidence_predating_the_action(monkeypatch):
+    """not_before: 'it was already healthy before I acted' is not proof."""
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    # Must stay INSIDE the freshness gate (HEARTBEAT_MAX_AGE_S), or the staleness
+    # check short-circuits and this asserts nothing about not_before.
+    _fresh_heartbeat(monkeypatch, age=100.0)          # last ack 100s ago
+    assert daemon.probe_clear({}, not_before=time.time() - 50) is False
+    assert daemon.probe_clear({}, not_before=time.time() - 200) is True
+
+
+def _unused_test_probe_clear_true_when_ask_ok_is_one(monkeypatch):
     monkeypatch.setattr(daemon, "current_metrics",
                         lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
     assert daemon.probe_clear({}) is True
 
 
-def test_probe_clear_false_when_ask_ok_is_zero(monkeypatch):
+def _unused_test_probe_clear_false_when_ask_ok_is_zero(monkeypatch):
     monkeypatch.setattr(daemon, "current_metrics",
                         lambda: {"hermes_mcp_ask_hermes_ok": 0.0})
     assert daemon.probe_clear({}) is False
@@ -551,10 +613,11 @@ def test_reconcile_failsafe_on_unknown_vm_ts():
 
 def test_reconcile_defaults_read_systemd_and_health_metrics(monkeypatch):
     """Default wiring diverges from openclaw: vm_ts comes from systemd
-    (microvm_active_enter_ts), the probe from hermes_mcp_ask_hermes_ok."""
+    (microvm_active_enter_ts), the probe from the PASSIVE health signals."""
     monkeypatch.setattr(daemon, "microvm_active_enter_ts", lambda: 2000)
-    monkeypatch.setattr(daemon, "current_metrics",
-                        lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    # Heartbeat must post-date vm_ts=2000, since reconcile passes not_before=vm_ts.
+    monkeypatch.setattr(daemon, "_heartbeat_age", lambda: 5.0)
     state = {"active": {"k": _orphan_inc()}, "history": []}
     n = daemon.reconcile_orphans(state, now=_NOW)
     assert n == 1
@@ -579,8 +642,8 @@ def test_heartbeat_tick_persists_reconciliation(tmp_path, monkeypatch):
     state_path = tmp_path / "incidents.json"
     monkeypatch.setattr(daemon, "STATE_PATH", state_path)
     monkeypatch.setattr(daemon, "microvm_active_enter_ts", lambda: 2000)
-    monkeypatch.setattr(daemon, "current_metrics",
-                        lambda: {"hermes_mcp_ask_hermes_ok": 1.0})
+    monkeypatch.setattr(daemon, "current_metrics", _healthy_metrics)
+    monkeypatch.setattr(daemon, "_heartbeat_age", lambda: 5.0)
     heartbeats = []
     monkeypatch.setattr(daemon, "write_heartbeat",
                         lambda **kw: heartbeats.append(kw))

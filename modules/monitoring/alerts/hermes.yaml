@@ -2,38 +2,6 @@ groups:
   - name: hermes_availability
     interval: 60s
     rules:
-      # End-to-end probe through hermes-mcp → Hermes Agent. This is the single
-      # load-bearing signal for "a caller can reach Hermes and get an answer
-      # right now".
-      #
-      # SAMPLED HOURLY since 2026-08-04, not every cycle: the probe costs a real
-      # inference on the serially-served oMLX gateway, so a frequent canary
-      # competes with the agent's actual work. Between attempts the health check
-      # carries the previous verdict forward unchanged, which is what keeps this
-      # `== 0` expression meaningful — but it also means a red here can be up to
-      # an hour stale, and will stay red until the next hourly attempt even if
-      # the cause has cleared. Check
-      # hermes_mcp_ask_hermes_last_attempt_timestamp_seconds to see how fresh
-      # the verdict actually is before acting on it.
-      - alert: HermesAskFailing
-        expr: hermes_mcp_ask_hermes_ok == 0
-        for: 5m
-        labels:
-          severity: critical
-          category: availability
-          service: hermes-mcp
-          self_heal_eligible: "true"
-        annotations:
-          summary: "Hermes end-to-end ask_hermes probe failing"
-          description: |
-            The hourly health check failed to round-trip
-            `ask_hermes(prompt="Reply with the single word ACK")`. The chain
-            hermes-mcp ⇒ Hermes Agent api_server (10.99.1.2:8080) ⇒ the
-            reasoning model on hera is broken somewhere. The downstream
-            component metrics (hermes_api_server_ok, hermes_mcp_sse_open_ok)
-            tell you which leg failed first; if both are green the fault is
-            upstream at the model, and restarting the VM will not fix it —
-            the restart_microvm preflight declines in exactly that case.
 
       # The api_server platform inside Hermes Agent. If this is red,
       # Hermes itself is unreachable; restarting hermes-mcp will not
@@ -440,37 +408,6 @@ groups:
             fail. Check `sops-install-secrets.service` status and
             the `hermes:` block in secrets.yaml.
 
-      # End-to-end chat probe — the real test. Sends a chat completion
-      # through the Hermes Agent api_server (the path Discord uses) and
-      # validates the response contains an expected token. Catches any
-      # regression in routing, auth, model availability, or the MLX
-      # backend that the static smoke probe (openclaw_hermes_smoke)
-      # would silently miss.
-      #
-      # History: 2026-05-24 incident — Discord chat returned HTTP 401
-      # from openrouter.ai for 24+ hours while openclaw_hermes_smoke_ok
-      # stayed at 1 (probe used a short-circuited fixed 185-byte path).
-      # This alert would have fired within 5 min.
-      - alert: HermesE2eChatFailing
-        expr: hermes_e2e_chat_ok == 0
-        for: 5m
-        labels:
-          severity: critical
-          category: availability
-          service: hermes-agent
-        annotations:
-          summary: "Hermes end-to-end chat probe failing for >5 min"
-          description: |
-            The hermes-e2e-chat-probe (every 5 min) is returning a
-            non-200 or missing-token response from
-            http://10.99.1.2:8080/v1/chat/completions. The chat path
-            Discord uses is broken — users will see "Non-retryable
-            error" or no response. Check `/var/lib/hermes/.hermes/logs/
-            errors.log` for the upstream HTTP status and the failing
-            base_url; the most common causes are model.base_url
-            misrouting (config regression) and gateway auth
-            mismatch.
-
       # Direct liveness of the hera-side oMLX model backend — the terminal
       # upstream every gateway model request lands on, and thus the terminal
       # dependency of all Hermes chat. blackbox_hera_qwen GETs
@@ -505,7 +442,7 @@ groups:
       # SELECTOR HISTORY. Widened 2026-08-01 to job=~"blackbox_hera_(mlx|qwen)" after this
       # rule sat green through a total outage of the chat backend: it watched only :8080
       # while the model Hermes uses lives behind :8443, so probe_success stayed 1 while
-      # hermes_e2e_chat_ok was 0. NARROWED again 2026-08-03 to blackbox_hera_qwen alone,
+      # the (since-removed) e2e chat probe was red. NARROWED again 2026-08-03 to blackbox_hera_qwen alone,
       # because hera stopped running the :8080 llama-swap endpoint entirely -- that job then
       # probed a port nothing listens on and reported probe_success=0 forever, firing this
       # warning against a perfectly healthy backend. The :8080 job is deleted; :8443 is the
@@ -546,41 +483,6 @@ groups:
               3. If hera itself is wedged (also see DNSServerDown /
                  LocalNetworkIssue for hera.lan), recover hera first — this rule
                  self-suppresses while hera is unreachable.
-
-      # E2E probe hasn't run recently. Catches the case where the
-      # probe service is failing to start (e.g., EnvironmentFile
-      # missing) — distinct from "probe ran but got non-200".
-      #
-      # THRESHOLD IS COUPLED TO services.hermesE2eChatProbe.intervalSeconds in
-      # hosts/vulcan/default.nix, and nothing enforces that coupling: these
-      # rule files are static YAML auto-discovered by
-      # modules/monitoring/services/alerting.nix, so the interval cannot be
-      # interpolated in. If you change the interval, change this number too.
-      #
-      # 4500s = the 3600s cadence plus the probe's own ~90s budget plus slack,
-      # so a genuinely missed cycle alerts ~13 minutes late while normal
-      # operation never does. The previous value of 900 was left behind by the
-      # 2026-08-04 move to hourly and fired for roughly 45 minutes of every
-      # hour against a probe that was perfectly healthy — the exact false
-      # positive that teaches an operator to ignore this alert. Note the old
-      # description was ALSO stale: it claimed a 5-minute cadence when the
-      # probe had already been at 15 minutes for some time.
-      - alert: HermesE2eChatProbeStale
-        expr: time() - hermes_e2e_chat_last_run_timestamp_seconds > 4500
-        for: 5m
-        labels:
-          severity: warning
-          category: monitoring
-          service: hermes
-        annotations:
-          summary: "hermes-e2e-chat-probe has not run in >75 min"
-          description: |
-            The hermes-e2e-chat-probe.timer fires hourly. Stale >75 min means
-            the timer or service is broken, NOT that the probe failed — a
-            failed probe still writes its metrics and shows up as
-            HermesE2eChatFailing instead. Check
-            `systemctl status hermes-e2e-chat-probe.timer` and the most recent
-            service journal.
 
       # Fallback chain triggered — Hermes' agent loop hit a non-retryable
       # error (typically 401/403/404 from upstream) and tried a fallback
@@ -649,23 +551,56 @@ groups:
             service crashed (check `systemctl status hermes-self-heal`)
             or the textfile collector cannot read its output.
 
-      # An incident has been open for >30 minutes. The daemon has
-      # exhausted its 3 attempts or the AI tier returned escalate.
-      # Human action required.
+      # SPLIT INTO TWO RULES, 2026-08-05. These were one alertname covering two
+      # different conditions, with two producers: this rule (keyed on
+      # in_progress) and a synthetic alert the daemon pushed straight to
+      # Alertmanager when it marked an incident stuck. Different fingerprints, so
+      # one stuck incident could notify twice, and the pushed copy could not
+      # self-resolve -- it only aged out after a 4h TTL.
+      #
+      # The daemon's pushes are gone; Prometheus is the only producer now. That
+      # required emitting a NEW gauge, because the in_progress gauge below never
+      # covered the stuck case at all: an incident marked "stuck" is no longer
+      # in_progress, so the push was genuinely the only signal for it. Removing
+      # the push without adding hermes_self_heal_stuck_incidents would have
+      # silently deleted the alert rather than deduplicated it.
+
+      # The daemon has GIVEN UP: three attempts exhausted, the AI tier said
+      # escalate, or the circuit breaker refused to act. Human action required.
+      # Self-resolves when the incident resolves or ages out of the active map.
       - alert: HermesSelfHealStuck
-        expr: hermes_self_heal_active_incidents > 0
-        for: 30m
+        expr: hermes_self_heal_stuck_incidents > 0
+        for: 5m
         labels:
           severity: critical
           category: availability
           service: hermes-self-heal
         annotations:
+          summary: "Hermes self-heal has given up on an incident"
+          description: |
+            The daemon marked one or more incidents stuck — it will take no
+            further automatic action on them. Inspect
+            /var/lib/hermes-self-heal/incidents.json for `stuck_reason`
+            (escalate / circuit_breaker) and recent journal output, then decide
+            on a manual action.
+
+      # Remediation is still RUNNING but has not succeeded in 30 minutes. Distinct
+      # from the above: the daemon has not given up here, it is still trying.
+      - alert: HermesSelfHealIncidentUnresolved
+        expr: hermes_self_heal_active_incidents > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: availability
+          service: hermes-self-heal
+        annotations:
           summary: "Hermes self-heal incident open for >30 minutes"
           description: |
-            One or more Hermes incidents have not resolved despite
-            the daemon's attempts. Inspect
-            /var/lib/hermes-self-heal/incidents.json and recent
-            journal output to decide on a manual action.
+            An incident has been in_progress for over half an hour without
+            resolving or being marked stuck. Inspect
+            /var/lib/hermes-self-heal/incidents.json and recent journal output.
+            If it has stopped making attempts, HermesSelfHealStuck is the alert
+            to expect instead.
 
       # Track how often the AI tier was unreachable. >3/hour suggests
       # the LLM gateway is down and the daemon is degraded to deterministic-only.

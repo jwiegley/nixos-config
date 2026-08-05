@@ -10,6 +10,7 @@ __version__ = "0.1.0"
 
 import time
 import json
+import contextlib
 import fcntl
 import os
 import pathlib
@@ -89,6 +90,14 @@ def should_escalate(incident: dict) -> bool:
 # of how incidents correlate, and refuses to act once the budget is spent —
 # turning an unfixable outage into a single sustained HermesSelfHealStuck page
 # instead of a restart/flap storm. It re-arms as old attempts age out.
+# NOTE on how "stuck" is reported (changed 2026-08-05, operator's decision).
+# This daemon no longer pushes a synthetic HermesSelfHealStuck alert straight to
+# Alertmanager. There were two producers for that one alertname -- these pushes
+# and the Prometheus rule on hermes_self_heal_active_incidents -- with different
+# fingerprints, so a single stuck incident could notify twice and the pushed copy
+# could not self-resolve, it just aged out after its 4h TTL. The Prometheus rule
+# is now the only producer: it resolves by itself when the gauge returns to 0,
+# which is what an alert about a persistent condition should do.
 CIRCUIT_WINDOW_S = 3600
 CIRCUIT_MAX_ATTEMPTS = 3
 
@@ -124,30 +133,65 @@ def recent_action_count(state, now=None, window_s=CIRCUIT_WINDOW_S) -> int:
     return count
 
 
+@contextlib.contextmanager
+def state_lock(path):
+    """Hold an exclusive lock across a whole load -> mutate -> save sequence.
+
+    The locks that used to live inside load_state/save_state could not serialize
+    anything: the read took LOCK_SH on the real file while the write took LOCK_EX
+    on a DIFFERENT inode (the .tmp), so the two never excluded each other, and
+    os.replace then swapped the inode out from under any shared holder. The tmp
+    file was also truncated by open("w") BEFORE its lock was acquired.
+
+    That mattered because this daemon is genuinely concurrent -- a
+    ThreadingHTTPServer runs one thread per Alertmanager POST and a heartbeat
+    thread does its own load/mutate/save every 60s -- so two overlapping updates
+    silently lost whichever landed first. Losing an attempt record undercounts
+    the rolling remediation budget, which is the guard added after a 72-restart
+    storm, so a lost write could re-enable exactly the storm the breaker exists
+    to stop. reconcile_orphans' docstring already conceded the race.
+
+    A SIDECAR lockfile, not the state file itself: the state file is replaced by
+    rename on every save, so its inode is not stable enough to lock against.
+    """
+    lock_path = pathlib.Path(str(path) + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 def load_state(path):
+    """Read the state file. Callers MUST hold state_lock() around load+save."""
     p = pathlib.Path(path)
     if not p.exists():
         return {"active": {}, "history": []}
-    with p.open("r") as f:
-        fcntl.flock(f, fcntl.LOCK_SH)
-        try:
+    try:
+        with p.open("r") as f:
             return json.load(f)
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    except (json.JSONDecodeError, OSError) as exc:
+        # A truncated or unreadable state file used to raise straight out of the
+        # webhook handler as a 500. Losing the history is better than refusing
+        # every alert until someone notices.
+        print(f"state file unreadable ({exc}); starting from empty", flush=True)
+        return {"active": {}, "history": []}
 
 
 def save_state(path, state):
+    """Atomically replace the state file. Caller holds state_lock()."""
     p = pathlib.Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
     with tmp.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            json.dump(state, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+        json.dump(state, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, p)
 
 
@@ -256,7 +300,6 @@ def reconcile_orphans(state, now=None, vm_ts=None, probe=None):
 
 
 ACTION_MAP = {
-    "HermesAskFailing":             "restart_microvm",
     "HermesApiServerDown":          "restart_microvm",
     "HermesDiscordZombieSuspected":   "restart_microvm",
     "HermesDiscordPostSelfHealRestart": "restart_microvm",
@@ -338,40 +381,78 @@ def current_metrics():
 #
 # Judging whether a REMEDIATION worked is a different question, and the
 # not_before argument answers that one -- see probe_clear.
+# How stale the health-check textfile may be before its contents stop counting
+# as evidence about the present. 1800s is two of the health check's own cycles.
 HEALTH_PROM_MAX_AGE_S = 1800
+
+# How stale the Discord gateway heartbeat stamp may be. discord.py acks roughly
+# every 41s while the websocket is alive, so 180s is three missed acks.
+HEARTBEAT_MAX_AGE_S = 180
+
+HEARTBEAT_STAMP = pathlib.Path(
+    "/var/lib/hermes/.hermes/logs/discord_ws_heartbeat"
+)
+
+
+def _heartbeat_age():
+    """Seconds since the last Discord HEARTBEAT_ACK, or None if unknown."""
+    try:
+        return max(0.0, time.time() - float(HEARTBEAT_STAMP.read_text().strip()))
+    except (OSError, ValueError):
+        return None
 
 
 def probe_clear(incident, not_before: float = 0.0) -> bool:
-    """True when the ask probe says healthy AND that verdict is current.
+    """True when PASSIVE signals say the agent is up, and they are current.
 
-    Guarding on freshness matters in both directions. A carried GREEN would
-    otherwise resolve an incident on evidence up to an hour old, and because
-    resolved incidents are skipped for RESOLVED_RETENTION_S the daemon would
-    then stop remediating a system that is still broken. A carried RED is the
-    mirror image: it hides a remediation that actually worked, so repeat
-    webhooks walk the incident to CIRCUIT_MAX_ATTEMPTS and page
-    HermesSelfHealStuck for a host that recovered.
+    PASSIVE ONLY as of 2026-08-05. This used to read
+    hermes_mcp_ask_hermes_ok -- the verdict of a probe that sent Hermes a
+    synthetic "reply with the single word ACK" message every cycle. That probe
+    was removed because every one of those exchanges landed in the operator's
+    real message history. So the oracle is now built from signals that generate
+    no traffic:
 
-    not_before: reject any verdict measured before this unix time. Callers pass
-    the moment their remediation finished, so "the probe was already green
-    before I acted" cannot be mistaken for "my action fixed it".
+      * hermes_api_server_ok -- the agent's HTTP API answered /v1/capabilities.
+      * the discord.py heartbeat-ACK stamp -- the gateway websocket is alive
+        RIGHT NOW, written in-VM roughly every 41s.
+
+    Both are required, deliberately. api_server alone is sampled only every 900s
+    and so can be stale; the heartbeat alone is written by a background task and
+    a fresh ack does NOT prove the agent loop is healthy -- that is precisely the
+    zombie case self-heal exists to fix. Requiring both means "the HTTP surface
+    answered recently AND the gateway is still ticking", which is the strongest
+    statement available without sending a message.
+
+    WHAT THIS GIVES UP, honestly: nothing here proves the model can answer. A
+    Hermes that is up, connected, and failing every inference will look clear to
+    this function. hermes-fallback-counter is what catches that, within a minute,
+    from real conversations.
+
+    not_before: reject evidence older than this unix time. Callers judging their
+    own remediation pass the moment it finished, so "it was already healthy
+    before I acted" cannot be mistaken for "my action fixed it". The heartbeat is
+    what makes this usable -- at ~41s granularity it produces fresh evidence
+    within seconds of a recovery, where the 900s api_server sample would not.
     """
     m = current_metrics()
-    if m.get("hermes_mcp_ask_hermes_ok", 0.0) != 1.0:
-        return False
 
     # A file nobody is writing any more proves nothing, whatever it says.
     ran = m.get("hermes_health_check_last_run_timestamp_seconds")
     if ran is not None and (time.time() - ran) > HEALTH_PROM_MAX_AGE_S:
         return False
 
+    if m.get("hermes_api_server_ok", 0.0) != 1.0:
+        return False
+
+    hb_age = _heartbeat_age()
+    if hb_age is None or hb_age > HEARTBEAT_MAX_AGE_S:
+        return False
+
     if not_before:
-        stamped = m.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds")
-        if stamped is None:
-            # Health check predates the freshness metric: fall back to the bare
-            # value rather than refusing to ever resolve an incident.
-            return True
-        if stamped < not_before:
+        # The heartbeat is the only signal fine-grained enough to attribute a
+        # recovery to an action. Its stamp is time.time() at the last ack, so
+        # "stamped after the action" == "the gateway was alive after I acted".
+        if (time.time() - hb_age) < not_before:
             return False
     return True
 
@@ -556,6 +637,21 @@ def render_prompt(incident, metrics, err_log_tail, out_log_tail):
 
 
 def handle_alertmanager_payload(payload):
+    """Serialize the whole load -> mutate -> save under one lock.
+
+    The lock is held for the entire handler, including run_action and its
+    post-action settle, so two overlapping Alertmanager POSTs queue instead of
+    interleaving. That is the intended semantics rather than a cost: the circuit
+    breaker counts attempts across incidents, and it can only be trusted if no
+    two handlers can read the same budget and both act on it. A long remediation
+    therefore also delays heartbeat_tick's orphan reconcile until it finishes,
+    which is acceptable -- that pass is idempotent and runs every 60s.
+    """
+    with state_lock(STATE_PATH):
+        return _handle_alertmanager_payload_locked(payload)
+
+
+def _handle_alertmanager_payload_locked(payload):
     from datetime import datetime
     state = load_state(STATE_PATH)
     if sweep_resolved(state):
@@ -593,12 +689,6 @@ def handle_alertmanager_payload(payload):
             inc["stuck_ts"] = int(time.time())
             inc["stuck_reason"] = "circuit_breaker"
             save_state(STATE_PATH, state)
-            emit_synthetic_alert(
-                "HermesSelfHealStuck",
-                {"alert": alert_meta["alert_name"],
-                 "attempts": recent_action_count(state),
-                 "reason": "circuit breaker: too many recent remediations, backing off"},
-                severity="critical", duration_s=14400)
             continue
         n = next_attempt_n(inc)
         ai_reason = None
@@ -622,27 +712,18 @@ def handle_alertmanager_payload(payload):
             if ai_resp.get("action") == "escalate":
                 inc["status"] = "stuck"
                 save_state(STATE_PATH, state)
-                emit_synthetic_alert("HermesSelfHealStuck",
-                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
-                    severity="critical", duration_s=14400)
                 continue
             try:
                 action = validate_action(ai_resp["action"])
             except (ActionRejectedError, KeyError):
                 inc["status"] = "stuck"
                 save_state(STATE_PATH, state)
-                emit_synthetic_alert("HermesSelfHealStuck",
-                    {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
-                    severity="critical", duration_s=14400)
                 continue
             by = "ai"
             ai_reason = ai_resp.get("reason")
         else:
             inc["status"] = "stuck"
             save_state(STATE_PATH, state)
-            emit_synthetic_alert("HermesSelfHealStuck",
-                {"alert": alert_meta["alert_name"], "attempts": len(inc["attempts"])},
-                severity="critical", duration_s=14400)
             continue
         result = run_action(action)
         inc["attempts"].append({"ts": int(time.time()), "action": action, "by": by,
@@ -676,7 +757,7 @@ TEXTFILE_DIR = "/var/lib/prometheus-node-exporter-textfiles"
 HEARTBEAT_PATH = pathlib.Path(TEXTFILE_DIR) / "hermes_self_heal.prom"
 
 
-def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
+def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, stuck_count=0, action_counts=None,
                     gateway_unreachable=0, unknown_alerts=0):
     action_counts = action_counts or {}
     tmp = pathlib.Path(str(out_path) + ".tmp")
@@ -686,6 +767,9 @@ def write_heartbeat(out_path=HEARTBEAT_PATH, active_count=0, action_counts=None,
             "# HELP hermes_self_heal_last_heartbeat_seconds Last heartbeat from hermes-self-heal daemon\n"
             "# TYPE hermes_self_heal_last_heartbeat_seconds gauge\n"
             f"hermes_self_heal_last_heartbeat_seconds {time.time()}\n"
+            "# HELP hermes_self_heal_stuck_incidents Incidents the daemon has GIVEN UP on (escalated or circuit-broken)\n"
+            "# TYPE hermes_self_heal_stuck_incidents gauge\n"
+            f"hermes_self_heal_stuck_incidents {stuck_count}\n"
             "# HELP hermes_self_heal_active_incidents Currently in_progress incidents\n"
             "# TYPE hermes_self_heal_active_incidents gauge\n"
             f"hermes_self_heal_active_incidents {active_count}\n"
@@ -709,6 +793,12 @@ import threading
 
 
 def heartbeat_tick():
+    """Locked wrapper -- see handle_alertmanager_payload."""
+    with state_lock(STATE_PATH):
+        return _heartbeat_tick_locked()
+
+
+def _heartbeat_tick_locked():
     state = load_state(STATE_PATH)
     # State maintenance must run here, not only in handle_alertmanager_payload:
     # with no incoming hermes alerts nothing else ever reconciles orphans or
@@ -716,6 +806,13 @@ def heartbeat_tick():
     if reconcile_orphans(state) + sweep_resolved(state):
         save_state(STATE_PATH, state)
     active = sum(1 for v in state["active"].values() if v["status"] == "in_progress")
+    # Counted separately from `active` because they are different conditions and
+    # used to share one alertname. `active` is "remediation still running";
+    # `stuck` is "the daemon gave up". The old synthetic push was the ONLY
+    # producer for the stuck case -- the gauge below never covered it, since a
+    # stuck incident is no longer in_progress -- so emitting it is what lets the
+    # Prometheus rule become the single producer without losing the signal.
+    stuck = sum(1 for v in state["active"].values() if v["status"] == "stuck")
     counts = {a: 0 for a in ACTION_ALLOWLIST}
     gateway_unreachable = 0
     for inc in list(state["active"].values()) + state["history"]:
@@ -724,7 +821,7 @@ def heartbeat_tick():
                 counts[att["action"]] += 1
             if att.get("notes") == "gateway_unreachable":
                 gateway_unreachable += 1
-    write_heartbeat(active_count=active, action_counts=counts,
+    write_heartbeat(active_count=active, stuck_count=stuck, action_counts=counts,
                     gateway_unreachable=gateway_unreachable,
                     unknown_alerts=_UNKNOWN_ALERTS_TOTAL)
 

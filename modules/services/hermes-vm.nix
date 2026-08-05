@@ -25,10 +25,6 @@ let
   models = import ../../models.nix;
   agentModel = models.llm.reasoning.name;
 
-  # Shared with modules/monitoring/services/hermes-health-check.nix, which SENDS
-  # the probe traffic this filters out. See that file for why they must agree.
-  canary = import ../lib/hermes-canary.nix;
-
   # System CA bundle inside the VM. security.pki.certificates (below) bakes
   # the Vulcan Step-CA root into this file at build time. The stdio MCP
   # children do NOT inherit the agent's environment — hermes-agent loads
@@ -241,91 +237,6 @@ let
     fi
     export PERPLEXITY_API_KEY="$(cat "$KEY_FILE")"
     exec ${lightPython}/bin/python3 ${perplexityMcpScript}
-  '';
-
-  # GitHub MCP server: read-only access to the repositories, issues and pull
-  # requests the operator works on, over the already-allowed 443 egress.
-  #
-  # UPSTREAM'S OFFICIAL SERVER, not a local script like the six around it.
-  # GitHub maintains it against their own API, and being Go it is a single
-  # static binary — a ~62 MiB closure with no npm dependency hash to rot on
-  # aarch64, which is the trap that already cost us a pin in
-  # pkgs/hermes-agent (shared npmDepsHash is x86-only). Writing another
-  # scripts/*-mcp.py would mean hand-maintaining GitHub API coverage forever.
-  #
-  # --read-only IS LOAD-BEARING, not decoration. The same binary without it
-  # exposes 40 tools including create_repository, create_branch, delete_file,
-  # create_or_update_file and create_pull_request. The requirement is to ANSWER
-  # QUESTIONS about repositories; write access would be pure blast radius on a
-  # token that reaches every repo the operator can. Measured: 40 tools → 23.
-  #
-  # Default toolsets (context, repos, issues, pull_requests, users) are kept
-  # rather than trimmed. Measured cost of the alternatives, read-only:
-  #   default                        23 tools, ~4.8k tokens of schema
-  #   context,repos,issues,prs       22 tools, ~4.5k   (drops only search_users)
-  #   context,repos,issues           19 tools, ~3.4k   (loses PR questions)
-  #   --dynamic-toolsets             26 tools, ~5.2k   — WORSE, it adds
-  #                                  meta-tools on top rather than replacing
-  #                                  them, so it is not the context saving its
-  #                                  name suggests.
-  # That schema is re-sent on every request, so this is a real standing cost
-  # (~29 local MCP tools today, before the Home Assistant bridge). It buys the
-  # whole stated capability, and trimming `users` would save 244 tokens.
-  #
-  # TOKEN: reuses the EXISTING open-source-secretary/github-token rather than
-  # adding a second GitHub PAT to SOPS — the same reasoning as the shared
-  # qdrant/api-key. One copy in secrets.yaml, one thing to rotate. That token
-  # is already scoped for reading issues and PRs across these repos, which is
-  # exactly and only what a read-only server can use. Exported from the staged
-  # file so it never lands in the unit env or the Nix store.
-  githubMcpServer = pkgs.writeShellScript "github-mcp" ''
-    set -eu
-    TOKEN_FILE="/run/hermes-secrets/github-token"
-    if [ ! -r "$TOKEN_FILE" ]; then
-      echo "github-mcp: token not readable at $TOKEN_FILE" >&2
-      exit 1
-    fi
-    export GITHUB_PERSONAL_ACCESS_TOKEN="$(cat "$TOKEN_FILE")"
-    exec ${pkgs.github-mcp-server}/bin/github-mcp-server stdio --read-only
-  '';
-
-  # Gitea MCP server: the same capability against the self-hosted forge.
-  # Upstream's official server (pkgs.gitea-mcp-server), for the same reasons as
-  # the GitHub one above.
-  #
-  # DIFFERS FROM GITHUB IN TWO WAYS THAT MATTER:
-  #
-  # 1. Gitea is a HOST service, not a public API. It is reached at
-  #    gitea.vulcan.lan through nginx, which means the guest resolves that name
-  #    to the bridge address (networking.hosts below) and rides the existing 443
-  #    DNAT. Using the public https://gitea.newartisans.com instead would work,
-  #    but would hairpin a local request out through Cloudflare and back for no
-  #    benefit.
-  # 2. Therefore SSL_CERT_FILE is REQUIRED here, not belt-and-braces: that vhost
-  #    presents a Vulcan Step-CA certificate, which is only trusted because
-  #    security.pki.certificates (below) bakes the root into this bundle. The
-  #    server offers a `-insecure` flag to skip verification; it is deliberately
-  #    NOT used, because the whole point of running Step-CA is that internal TLS
-  #    is verifiable.
-  #
-  # -read-only again load-bearing, and more so than for GitHub: unrestricted
-  # this server exposes 57 tools of which 28 mutate (create/delete/edit repos,
-  # branches, files, issues, PRs, releases). Measured 57 → 27 tools, 28 → 0
-  # write-capable. Unlike the GitHub server there is no toolset selection, so 27
-  # tools / ~3.5k tokens of schema is the floor for having Gitea at all.
-  #
-  # The token goes through the ENVIRONMENT, never the `-token` flag the server
-  # also accepts: an argv token is world-readable in /proc/<pid>/cmdline for the
-  # life of the process.
-  giteaMcpServer = pkgs.writeShellScript "gitea-mcp" ''
-    set -eu
-    TOKEN_FILE="/run/hermes-secrets/gitea-token"
-    if [ ! -r "$TOKEN_FILE" ]; then
-      echo "gitea-mcp: token not readable at $TOKEN_FILE" >&2
-      exit 1
-    fi
-    export GITEA_ACCESS_TOKEN="$(cat "$TOKEN_FILE")"
-    exec ${pkgs.gitea-mcp-server}/bin/gitea-mcp -t stdio -read-only
   '';
 
   # org-db MCP server: read-only org-mode access. org_sql connects to
@@ -593,7 +504,6 @@ in
       "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
       "trader.vulcan.lan" # stock-trader service (via nginx 443)
-      "gitea.vulcan.lan" # Gitea forge (gitea MCP server, via nginx 443)
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.1.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.1.1:5232 → 127.0.0.1:5232)
@@ -834,20 +744,15 @@ in
           enabled = true;
           min_turns = 3;
         };
-        # Synthetic traffic that must never be remembered. The health check asks
-        # the agent a fixed question every scrape and she answers "ACK"; nothing
-        # at the plugin's write path could tell that from a person talking, so
-        # those exchanges were stored as turns and then surfaced in recall --
-        # 6 of 39 points were canary residue when this was added (2026-08-04),
-        # and `search_kinds` above had just made turns reachable, so the operator
-        # started seeing them.
-        #
-        # Values come from the file the health check itself reads, so changing
-        # the probe text cannot leave this filter behind.
+        # Content that must never be stored. The canary probes this used to
+        # filter were removed 2026-08-05, so the only rule left is a manual
+        # opt-out: put [nomem] anywhere in a message and the exchange is not
+        # remembered. Kept because it is a useful affordance for ad-hoc testing
+        # and costs nothing; the plugin defaults are otherwise empty.
         write_filter = {
-          exact = canary.ignore.exact;
-          patterns = canary.ignore.patterns;
-          min_content_chars = canary.ignore.minContentChars;
+          exact = [ ];
+          patterns = [ "\\[no-?mem(ory)?\\]" ];
+          min_content_chars = 0;
         };
       };
 
@@ -1092,35 +997,6 @@ in
       perplexity = {
         command = "${perplexityMcpServer}";
         args = [ ];
-      };
-
-      github = {
-        command = "${githubMcpServer}";
-        args = [ ];
-        env = {
-          # SSL_CERT_FILE, deliberately — NOT the REQUESTS_CA_BUNDLE /
-          # NIX_SSL_CERT_FILE pair the Python servers need. Those exist because
-          # certifi ignores SSL_CERT_FILE; Go's crypto/x509 is the mirror image
-          # and honours exactly this one. Go would also find /etc/ssl/certs
-          # unaided, so this is belt-and-braces — but the stdio children start
-          # with an effectively EMPTY environment (see the vulcanCaBundle note
-          # at the top), and being explicit removes a class of surprise.
-          SSL_CERT_FILE = vulcanCaBundle;
-        };
-      };
-
-      gitea = {
-        command = "${giteaMcpServer}";
-        args = [ ];
-        env = {
-          # Resolves to the bridge address via networking.hosts below, then
-          # rides the 443 DNAT to the host's nginx.
-          GITEA_HOST = "https://gitea.vulcan.lan";
-          # REQUIRED, unlike the github server's copy of this line: that vhost
-          # serves a Vulcan Step-CA certificate, so without the bundle carrying
-          # the Step-CA root every call fails verification.
-          SSL_CERT_FILE = vulcanCaBundle;
-        };
       };
 
       # Read-only org-mode access: org_sql (sanitized single SELECT via

@@ -156,7 +156,10 @@ def test_render_hermes_mcp_real_per_server_counts():
     assert "tools registered" in joined
     assert "OK" in joined  # struct column now shows OK like OpenClaw
     assert "total: 67 tools from 6 servers" in joined
-    assert "MCP layer: sse_open=OK  ask_hermes=OK" in joined
+    # ask_hermes dropped from the aggregate 2026-08-05 with the canary probe; the
+    # line now renders only the keys the profile declares.
+    assert "MCP layer: sse_open=OK" in joined
+    assert "ask_hermes" not in joined
 
 
 

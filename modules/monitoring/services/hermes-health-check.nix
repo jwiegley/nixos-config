@@ -1,14 +1,19 @@
 # Hermes / hermes-mcp end-to-end health check.
 #
-# Mirrors the openclaw-mcporter-check.nix shape but with deeper probes:
+# ALL PROBES HERE ARE PASSIVE. Nothing in this unit sends Hermes a message.
+#
+# It used to: a scheduled `ask_hermes` round-trip with a fixed micro-prompt was
+# the deepest check, proving inference end to end. That was removed 2026-08-05 at
+# the operator's request because every probe landed in the real Discord/Conduit
+# message history as a synthetic "reply with the single word ACK" exchange, which
+# is a poor trade for a liveness signal. What is lost is genuine: nothing here
+# now proves the model can answer. What remains proves the agent process is up
+# and connected, and hermes-fallback-counter still catches per-conversation
+# failures within a minute.
 #
 #   1. Hermes Agent api_server `/v1/capabilities` (HTTP 200)
 #   2. hermes-mcp `/sse` (server accepts SSE upgrade)
-#   3. Full MCP round-trip:
-#        initialize → notifications/initialized → tools/list → tools/call ask_hermes
-#      with a fixed micro-prompt and a 60s budget — proves the entire chain
-#      OpenClaw VM would traverse actually works, including Hermes inference.
-#   4. Discord platform liveness: primarily the age of the discord.py
+#   3. Discord platform liveness: primarily the age of the discord.py
 #      heartbeat-ACK stamp file (written by the in-VM sitecustomize shim in
 #      hermes-vm.nix on every gateway HEARTBEAT_ACK, ~every 41s while the WS
 #      is alive). This is traffic-independent — a stale stamp means acks have
@@ -33,12 +38,6 @@
 let
   cfg = config.services.hermesHealthCheck;
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
-
-  # Shared with modules/services/hermes-vm.nix, which renders the same strings
-  # into the memory plugin's write_filter so this probe's traffic is never
-  # remembered. Editing the prompt text HERE alone would silently re-pollute the
-  # memory store — that is exactly why it lives in one file.
-  canary = import ../../lib/hermes-canary.nix;
 
   healthScript = pkgs.writeScript "hermes-health-check.py" ''
     #!${
@@ -89,85 +88,8 @@ let
     OUT_TMP = OUT_FINAL.with_suffix(".prom.tmp")
 
     # Total per-probe timeouts.
-    #
-    # ASK 60 -> 150 on 2026-08-04. This probe exercises the full
-    # agent-with-tools path, and that path got materially heavier the same day:
-    # the GitHub and Gitea MCP servers took Hermes from ~29 tools to ~79, whose
-    # schema is re-sent on every request. Measured with the exact prompt below
-    # after that change: 35.3s on a cold session, 11.4s warm. The probe always
-    # runs cold — it opens a new session each time — so it pays the 35s case
-    # every time, and 60s left too little headroom for any gateway contention on
-    # a serially-served backend. Every attempt from 18:26 onward hit exactly
-    # 60.0s while the plain-completion probe stayed green at 12.9s, which is the
-    # signature of a budget that no longer matches the work.
-    ASK_HERMES_BUDGET_S = 150.0
     SSE_OPEN_BUDGET_S = 5.0
     API_PROBE_BUDGET_S = 5.0
-
-    # The end-to-end probe prompt is intentionally tiny and deterministic.
-    # Sourced from modules/lib/hermes-canary.nix, which the Qdrant memory
-    # plugin's write_filter reads too — so this exchange is provably the same
-    # text the filter drops. Do not inline a literal here.
-    PROBE_PROMPT = ${builtins.toJSON canary.probePrompt}
-    PROBE_EXPECT_FRAGMENT = ${builtins.toJSON canary.expectFragment}
-
-    # ask_hermes is the ONLY probe here that costs an LLM inference, and the
-    # oMLX gateway serves serially: every probe queues behind whatever real work
-    # the agent is doing, and adds to it. At the 900s cycle that is 96 inferences
-    # a day spent proving a model answers, which is why an interactive session
-    # and the canary now contend (2026-08-04: both probes timed out for an hour
-    # while a real session held DeepSeek).
-    #
-    # So this one probe runs hourly while every other check here stays on the
-    # 900s cycle. Moving the whole unit to an hourly timer would have been
-    # simpler and wrong: Discord-liveness and api_server detection would have
-    # slowed from 15 minutes to an hour, and those probes are free.
-    #
-    # State lives in the .prom this unit already writes -- no stamp file, no
-    # StateDirectory, nothing new to keep in sync. Between real attempts the
-    # previous ok/seconds are carried forward verbatim so the series never goes
-    # absent (HermesAskFailing reads `== 0`, and a vanishing series would read as
-    # "no problem"). The attempt timestamp is published so a reader can always
-    # tell a fresh verdict from a carried one.
-    ASK_HERMES_MIN_INTERVAL_S = 3600.0
-
-    # ...but only while the last verdict was GOOD. A failure is re-tested on the
-    # very next cycle instead.
-    #
-    # Without this the hourly gate turns one flaky probe into an hour of
-    # consequences: the verdict is carried forward unchanged, so a single
-    # transient timeout pins HermesAskFailing red for a full hour — and that
-    # alert is self_heal_eligible, so the daemon acts on it. That is not
-    # hypothetical; on 2026-08-04 it restarted the Hermes VM twice (18:32, 18:53)
-    # over a probe that was merely slow, because the upstream preflight
-    # correctly passed — the model was fine, the agent was fine, only the budget
-    # was wrong. Cheap probes stay hourly, expensive-to-be-wrong ones retry fast.
-    #
-    # NO INTERVAL AT ALL while the verdict is red — every cycle re-probes.
-    #
-    # This was ASK_HERMES_RETRY_INTERVAL_S = 900.0, a threshold exactly equal to
-    # the unit's cycle, and it could never fire for the timeout it was written
-    # for. The gate compares against a stamp taken AFTER the probe returns, while
-    # the timer anchors on the service's START (verified:
-    # NextElapseUSecMonotonic == InactiveExitTimestampMonotonic + interval). So
-    # elapsed at the next gate is cycle - probe_duration + jitter; a 150s timeout
-    # gave 748-763s against a 900s threshold, deferring the retry to the cycle
-    # AFTER next — ~30 minutes, not the ~15 the comment claimed.
-    #
-    # Stamping earlier would not have fixed it either: the stamp still lands some
-    # seconds into the run, so elapsed stays short of a full cycle. ANY threshold
-    # compared against a post-run stamp is fragile here, so there is no threshold
-    # for the red case — "red means try again now" needs no arithmetic and cannot
-    # drift when intervalSeconds changes.
-    #
-    # This also makes self-heal's aux/kick_health_check effective: the daemon
-    # kicks this unit after a remediation and then reads the verdict, so the
-    # kicked run MUST be willing to re-probe or the daemon is judging its own fix
-    # by a stale number (see probe_clear in scripts/hermes-self-heal/daemon.py).
-    #
-    # Cost while red: one inference per cycle instead of one per hour. That is
-    # the pre-gate behaviour, and a red ask probe is exactly when a fresh answer
-    # is worth an inference.
 
 
     async def probe_api_server(api_key: str) -> tuple[int, float]:
@@ -198,89 +120,6 @@ let
             return 0
         except Exception:
             return 0
-
-
-    async def probe_ask_hermes_e2e() -> tuple[int, float, str]:
-        """Full MCP round-trip: open SSE, init, list_tools, call ask_hermes."""
-        start = time.monotonic()
-        try:
-            async with httpx.AsyncClient(timeout=ASK_HERMES_BUDGET_S) as c:
-                async with c.stream("GET", HERMES_MCP_SSE_URL) as r:
-                    if r.status_code != 200:
-                        return (0, time.monotonic() - start, "sse_open_status")
-
-                    lines = r.aiter_lines()
-                    endpoint = None
-                    async for line in lines:
-                        if line.startswith("data:") and "/messages/" in line:
-                            endpoint = line[len("data:"):].strip()
-                            break
-                    if not endpoint:
-                        return (0, time.monotonic() - start, "sse_no_endpoint")
-
-                    base = HERMES_MCP_SSE_URL.rsplit("/sse", 1)[0]
-                    post_url = f"{base}{endpoint}"
-
-                    async def post(payload):
-                        resp = await c.post(
-                            post_url,
-                            json=payload,
-                            headers={"Accept": "application/json, text/event-stream"},
-                        )
-                        resp.raise_for_status()
-
-                    async def next_event():
-                        async for line in lines:
-                            if line.startswith("data:"):
-                                return json.loads(line[len("data:"):].strip())
-                        return None
-
-                    await post(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "initialize",
-                            "params": {
-                                "protocolVersion": "2024-11-05",
-                                "capabilities": {},
-                                "clientInfo": {"name": "hermes-health-check", "version": "1"},
-                            },
-                        }
-                    )
-                    init = await next_event()
-                    if not init or "result" not in init:
-                        return (0, time.monotonic() - start, "init_failed")
-
-                    await post({"jsonrpc": "2.0", "method": "notifications/initialized"})
-
-                    await post(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "method": "tools/call",
-                            "params": {
-                                "name": "ask_hermes",
-                                "arguments": {"prompt": PROBE_PROMPT},
-                            },
-                        }
-                    )
-                    call_resp = await next_event()
-                    elapsed = time.monotonic() - start
-                    if not call_resp or "result" not in call_resp:
-                        return (0, elapsed, "ask_no_result")
-                    content = call_resp["result"].get("content") or []
-                    text = " ".join(
-                        b.get("text", "") for b in content if b.get("type") == "text"
-                    )
-                    if PROBE_EXPECT_FRAGMENT.lower() in text.lower():
-                        return (1, elapsed, "ok")
-                    # Got a reply but Hermes didn't say ACK — still a "the path
-                    # works" signal, just downgraded so we can tell apart.
-                    return (1, elapsed, "ok_off_topic")
-        except asyncio.TimeoutError:
-            return (0, time.monotonic() - start, "timeout")
-        except Exception as e:
-            return (0, time.monotonic() - start, f"exception:{type(e).__name__}")
 
 
     DISCORD_EVENT_RE = re.compile(
@@ -688,9 +527,6 @@ let
         "hermes_api_server_ok": "1 if Hermes api_server /v1/capabilities returned 200",
         "hermes_api_server_probe_seconds": "Wall-clock seconds for the api_server capabilities probe",
         "hermes_mcp_sse_open_ok": "1 if hermes-mcp /sse accepted a connection and emitted the endpoint event",
-        "hermes_mcp_ask_hermes_ok": "1 if a full ask_hermes round-trip completed within 60s",
-        "hermes_mcp_ask_hermes_seconds": "Wall-clock seconds for the end-to-end ask_hermes probe",
-        "hermes_mcp_ask_hermes_last_attempt_timestamp_seconds": "Unix time ask_hermes was last actually probed (hourly); between attempts the ok/seconds above are carried forward unchanged",
         "hermes_discord_event_present": "1 if at least one Discord event was found in gateway.log tail",
         "hermes_discord_heartbeat_present": "1 if the discord.py heartbeat-ACK stamp file was readable",
         "hermes_discord_heartbeat_age_seconds": "Wall-clock seconds since the last Discord gateway HEARTBEAT_ACK (via in-VM shim)",
@@ -735,17 +571,6 @@ let
         except (asyncio.TimeoutError, TimeoutError):
             return fallback
 
-    def previous_metrics() -> "dict[str, float]":
-        """Parse the .prom this unit last wrote; its own output is its state.
-
-        Returns an empty dict on any read or parse problem, which makes the
-        caller fall back to actually running the probe -- the safe direction.
-        """
-        out: "dict[str, float]" = {}
-        try:
-            text = OUT_FINAL.read_text()
-        except OSError:
-            return out
         for line in text.splitlines():
             if line.startswith("#"):
                 continue
@@ -770,29 +595,6 @@ let
 
         sse_ok = await capped(probe_mcp_sse_open(), SSE_OPEN_BUDGET_S + 2.0, 0)
 
-        # Hourly WHILE GREEN, every cycle while red — see
-        # ASK_HERMES_MIN_INTERVAL_S. Three ways to become due, and none of them
-        # compares a threshold against the post-run stamp:
-        #   1. no previous verdict at all (first run, unreadable/rotated .prom) --
-        #      an unknown must be resolved, never carried;
-        #   2. the previous verdict was NOT ok -- red means try again now;
-        #   3. green, and the hourly interval has elapsed.
-        prev = previous_metrics()
-        ask_last_attempt = prev.get("hermes_mcp_ask_hermes_last_attempt_timestamp_seconds", 0.0)
-        have_prev_verdict = "hermes_mcp_ask_hermes_ok" in prev
-        prev_ask_ok = prev.get("hermes_mcp_ask_hermes_ok", 0.0) == 1.0
-        if (
-            not have_prev_verdict
-            or not prev_ask_ok
-            or (time.time() - ask_last_attempt) >= ASK_HERMES_MIN_INTERVAL_S
-        ):
-            ask_ok, ask_seconds, _ = await capped(
-                probe_ask_hermes_e2e(), ASK_HERMES_BUDGET_S + 2.0, (0, ASK_HERMES_BUDGET_S, "timeout")
-            )
-            ask_last_attempt = time.time()
-        else:
-            ask_ok = int(prev["hermes_mcp_ask_hermes_ok"])
-            ask_seconds = prev.get("hermes_mcp_ask_hermes_seconds", 0.0)
 
         disco_present, disco_age = discord_last_event_age_seconds()
         hb_present, hb_age = discord_heartbeat_age_seconds()
@@ -840,9 +642,6 @@ let
                 "hermes_extract_last_success_timestamp_seconds": round(ext_ok_ts, 1),
                 "hermes_extract_last_failure_timestamp_seconds": round(ext_fail_ts, 1),
                 "hermes_mcp_sse_open_ok": sse_ok,
-                "hermes_mcp_ask_hermes_ok": ask_ok,
-                "hermes_mcp_ask_hermes_seconds": round(ask_seconds, 3),
-                "hermes_mcp_ask_hermes_last_attempt_timestamp_seconds": round(ask_last_attempt, 1),
                 "hermes_discord_event_present": disco_present,
                 "hermes_discord_heartbeat_present": hb_present,
                 "hermes_discord_heartbeat_age_seconds": round(hb_age, 1),
@@ -907,13 +706,15 @@ in
         # run will be SIGTERM-killed again (the 2026-07-07 SystemdServiceFailed
         # regression).
         #
-        # 120s -> 240s on 2026-08-04, in lockstep with ASK_HERMES_BUDGET_S going
-        # 60 -> 150. Worst case is now 5 + 5 + 150 = 160s of budget plus
-        # overhead. Leaving this at 120s would have made that raise
-        # self-defeating in the worst way: the unit would be SIGTERM-killed
-        # mid-probe having written NO metrics, so a merely slow agent would read
-        # as a missing one. THIS MUST STAY ABOVE THE SUM OF THE BUDGETS ABOVE.
-        TimeoutStartSec = "240s";
+        # 240s -> 60s on 2026-08-05, when the ask_hermes probe was removed. The
+        # remaining probes are all cheap: 5s api_server + 5s SSE (each +2s via
+        # capped()) plus three synchronous calls with their own 5s/10s/30s
+        # timeouts, so the bounded worst case is ~59s. Note the previous comment
+        # here claimed a worst case of "5 + 5 + 150 = 160s" and undercounted by
+        # over 50s because it omitted those three synchronous probes entirely --
+        # so this value is set against the enumerated total, not a remembered one.
+        # THIS MUST STAY ABOVE THE SUM OF EVERY PROBE TIMEOUT ABOVE.
+        TimeoutStartSec = "90s";
 
         ReadWritePaths = [ "/var/lib/prometheus-node-exporter-textfiles" ];
         ReadOnlyPaths = [

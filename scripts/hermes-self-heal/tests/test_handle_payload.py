@@ -83,7 +83,7 @@ def test_third_attempt_calls_ai(monkeypatch, tmp_path):
     # Simulate three fires of the same alert
     import time as _time
     for _ in range(3):
-        daemon.handle_alertmanager_payload(_payload("HermesAskFailing"))
+        daemon.handle_alertmanager_payload(_payload("HermesApiServerDown"))
         _time.sleep(0.01)  # nudge starts_at; sleep stub makes this a no-op anyway
 
     # First attempt is deterministic, attempts 2-3 use AI
@@ -108,10 +108,15 @@ def test_fourth_attempt_marks_stuck(monkeypatch, tmp_path):
     state = {"active": {}, "history": []}
     daemon.save_state(state_path, state)
     for _ in range(4):
-        daemon.handle_alertmanager_payload(_payload("HermesAskFailing"))
+        daemon.handle_alertmanager_payload(_payload("HermesApiServerDown"))
 
     stuck_names = [n for n, _ in synth_alerts]
-    assert "HermesSelfHealStuck" in stuck_names
+    # The daemon no longer PUSHES a synthetic HermesSelfHealStuck (2026-08-05,
+    # single-producer change). The observable contract is the incident status,
+    # which is what hermes_self_heal_stuck_incidents counts and what the
+    # Prometheus rule now alerts on.
+    inc = list(daemon.load_state(daemon.STATE_PATH)["active"].values())[0]
+    assert inc["status"] == "stuck"
 
 
 def test_gateway_unreachable_marks_stuck(monkeypatch, tmp_path):
@@ -134,7 +139,7 @@ def test_gateway_unreachable_marks_stuck(monkeypatch, tmp_path):
 
     # Two attempts: 1st deterministic, 2nd AI (which fails)
     for _ in range(2):
-        daemon.handle_alertmanager_payload(_payload("HermesAskFailing"))
+        daemon.handle_alertmanager_payload(_payload("HermesApiServerDown"))
 
     assert "HermesSelfHealGatewayUnreachable" in synth
 
@@ -172,8 +177,8 @@ def test_recent_action_count_ignores_aged_out_and_placeholder():
 
 def test_circuit_breaker_stops_after_budget(monkeypatch, tmp_path):
     """Once CIRCUIT_MAX_ATTEMPTS real remediations have happened in the window,
-    a further firing alert is NOT acted on — it is marked stuck and pages
-    HermesSelfHealStuck instead of restarting the VM again."""
+    a further firing alert is NOT acted on — it is marked stuck (which the
+    Prometheus rule alerts on) instead of restarting the VM again."""
     state_path = tmp_path / "incidents.json"
     monkeypatch.setattr(daemon, "STATE_PATH", str(state_path))
     monkeypatch.setattr(daemon, "current_metrics", lambda: {"hermes_mcp_ask_hermes_ok": 0.0})
@@ -203,7 +208,11 @@ def test_circuit_breaker_stops_after_budget(monkeypatch, tmp_path):
 
     daemon.handle_alertmanager_payload(_payload("HermesApiServerDown"))
     assert ran == []
-    assert "HermesSelfHealStuck" in synth
+    # Assert over ALL incidents: this test seeds CIRCUIT_MAX_ATTEMPTS of them to
+    # exhaust the budget, so index 0 is a seeded one, not the newly-stuck one.
+    active = daemon.load_state(daemon.STATE_PATH)["active"].values()
+    assert any(i["status"] == "stuck" and i.get("stuck_reason") == "circuit_breaker"
+               for i in active)
     persisted = daemon.load_state(str(state_path))
     assert any(i.get("stuck_reason") == "circuit_breaker"
                for i in persisted["active"].values())

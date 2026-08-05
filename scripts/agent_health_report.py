@@ -613,10 +613,10 @@ PROFILES: dict[str, dict] = {
         # heartbeat give a real platform/MCP-readiness analog (loaded servers,
         # tool total, reconnects, platform liveness).
         "gateway": {"mode": "hermes_agent_log"},
-        # SearXNG is Hermes' native web_search backend (settings.web.
-        # search_backend in hermes-vm.nix), NOT an MCP server — surfaced here so
-        # its absence from the MCP-servers table above isn't mistaken for a gap.
-        "web_search_backend": "SearXNG (native)",
+        # Web search runs through the perplexity MCP server as of 2026-08-05;
+        # there is no native backend configured (see hermes-vm.nix). Surfaced here
+        # because it IS in the MCP-servers table, unlike the old native SearXNG.
+        "web_search_backend": "Perplexity (MCP)",
         "units": ["microvm@hermes.service", "hermes-mcp.service",
                   "hermes-self-heal.service"],
         # No probe families: both e2e probes were message-generating canaries and

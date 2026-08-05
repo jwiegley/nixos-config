@@ -65,7 +65,7 @@ let
   # The host PREROUTING DNAT, per-interface INPUT accepts, and the
   # hermes-isolate RETURN rules below are all parameterized on this list, so
   # adding a port here propagates to all three automatically:
-  #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan)
+  #   443  nginx HTTPS (vane.vulcan.lan, trader.vulcan.lan)
   #   993  Dovecot IMAPS (email-contacts)
   #   2525 Postfix SMTP (email-contacts)
   #   4000 LLM gateway (chat + org-search embeddings, nginx -> hera)
@@ -513,7 +513,14 @@ in
       "postgresql-openclaw-setup.service"
     ];
   };
-  sops.secrets."openclaw/perplexity-api-key" = {
+  # Perplexity, under a HERMES-owned name (2026-08-05). This was
+  # `openclaw/perplexity-api-key`, inherited from the removed sibling VM and kept
+  # only because the name in secrets.yaml had to match. The operator has since
+  # added `hermes/perplexity-api-key`, so the last legacy-named secret that was
+  # purely Hermes' own is now named for its actual owner. Two of the three
+  # openclaw/-prefixed entries remain and MUST keep those names -- see the note
+  # above -- because they are genuinely shared with the Postgres role setup.
+  sops.secrets."hermes/perplexity-api-key" = {
     owner = "root";
     group = "root";
     mode = "0400";
@@ -605,7 +612,7 @@ in
       fi
 
       # Perplexity API key (perplexity-mcp.py wrapper exports it from this file)
-      PERPLEXITY_KEY_SRC="${config.sops.secrets."openclaw/perplexity-api-key".path}"
+      PERPLEXITY_KEY_SRC="${config.sops.secrets."hermes/perplexity-api-key".path}"
       if [ -f "$PERPLEXITY_KEY_SRC" ]; then
         install -m 0400 -o hermes -g hermes \
           "$PERPLEXITY_KEY_SRC" "${secretsStagingDir}/perplexity-api-key"

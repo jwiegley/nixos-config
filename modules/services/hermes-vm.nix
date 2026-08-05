@@ -19,9 +19,13 @@
   ...
 }:
 let
-  # Single source of truth for LLM selection. Mirrors openclaw-vm.nix:41-42
-  # so Hermes and OpenClaw stay on the same `agent` model unless one is
-  # intentionally pinned. Edit /etc/nixos/models.nix to change.
+  # Single source of truth for LLM selection: the `reasoning` tier in
+  # /etc/nixos/models.nix. Edit that file to change Hermes' model.
+  #
+  # NOT `llm.agent`. That tier existed for a second agent VM, had no consumer
+  # once Hermes moved to `reasoning`, and was removed 2026-08-05 -- but two
+  # comments here (including this one) had gone on naming it, so anyone
+  # following them edited a value nothing read and saw no effect.
   models = import ../../models.nix;
   agentModel = models.llm.reasoning.name;
 
@@ -496,12 +500,11 @@ in
   # 192.168.0.0/16, so normal DNS resolution (the real LAN IP) is
   # unreachable; pointing these names at the gateway routes them through the
   # two-stage DNAT instead. Mirrors openclaw-vm.nix's networking.hosts.
-  # searxng/vane/trader/imap/smtp/radicale are load-bearing (the scripts use
+  # vane/trader/imap/smtp/radicale are load-bearing (the scripts use
   # the hostnames); hass.vulcan.lan is included for consistency but is
   # unused — the HA bridge connects to 127.0.0.1:8123 by IP via the DNAT.
   networking.hosts = {
     ${bridgeAddr} = [
-      "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
       "trader.vulcan.lan" # stock-trader service (via nginx 443)
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
@@ -644,14 +647,23 @@ in
       # `hermes config set` so this file is the only source of truth.
       logging.level = "INFO";
 
-      # SearXNG is the NATIVE web-search backend (no MCP server, no script).
-      # Setting SEARXNG_URL in the systemd environment (below) registers the
-      # web_search tool; forcing the backend here makes SearXNG the chosen
-      # provider rather than letting Hermes fall through its default list
-      # (firecrawl→parallel→tavily→exa→searxng→brave-free→ddgs). Reaches the
-      # host SearXNG over 443 via the bridge DNAT; TLS verifies against the
-      # Vulcan root CA already trusted in the VM.
-      web.search_backend = "searxng";
+      # NO NATIVE SEARCH BACKEND, deliberately (2026-08-05, operator's request):
+      # web search goes through the PERPLEXITY MCP SERVER instead, which returns a
+      # synthesised answer rather than a link list.
+      #
+      # This used to be `web.search_backend = "searxng"` with SEARXNG_URL set in
+      # the unit environment. Both are gone, so no native provider is available:
+      # firecrawl/parallel/tavily/exa/xai and brave-free all need API keys this
+      # guest does not have, ddgs needs a Python package absent from the closure,
+      # and searxng needs the URL. The agent therefore reaches for the Perplexity
+      # tool when it searches.
+      #
+      # KNOWN ARTIFACT: the native `web_search` tool is still REGISTERED and will
+      # error if the model calls it, because Hermes' only disable mechanism is
+      # `agent.disabled_toolsets` and web_search shares the "web" toolset with
+      # web_extract -- disabling the toolset would take extraction with it, and
+      # extraction is what lets the agent read a page it found. Verified against
+      # tools/web_tools.py:1326-1345 in hermes-agent 0.15.1.
 
       # The EXTRACT half. SearXNG cannot fetch arbitrary URLs, so without this
       # `web_extract` has no provider and the agent can find pages but never
@@ -793,9 +805,10 @@ in
       };
       # Model routing — Hermes consumes OPENROUTER_API_KEY and
       # OPENROUTER_BASE_URL from the env file. The model identifier is
-      # pulled from /etc/nixos/models.nix (`llm.agent.name`) so it tracks
-      # the same setting OpenClaw uses for its long-running tool-using
-      # sessions; change models.nix to update both modules at once.
+      # pulled from /etc/nixos/models.nix (`llm.reasoning.name`, via the
+      # agentModel binding at the top of this file). This said `llm.agent.name`
+      # until 2026-08-05, which was wrong: that tier had no reader at all, so
+      # editing it to change Hermes' model did nothing.
       #
       # IMPORTANT: in Hermes v0.14 the model field accepts either a flat
       # string OR a dict with {default, provider, base_url, api_key, ...}.
@@ -1077,12 +1090,6 @@ in
   # let-block above for the why.
   systemd.services.hermes-agent.environment = {
     PYTHONPATH = "${hermesPyShim}";
-    # Native SearXNG web backend. Setting this registers Hermes's web_search
-    # tool; settings.web.search_backend = "searxng" (above) forces it as the
-    # provider. Reaches the host SearXNG over 443 via the bridge DNAT; the
-    # SearXNG provider GETs /search?format=json, which the host instance
-    # already enables. No API key, no extra deps (uses core httpx).
-    SEARXNG_URL = "https://searxng.vulcan.lan";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions.
     # Consumers are host-side only: the OpenClaw↔Hermes MCP bridge
     # (hermes-mcp.service), the e2e chat probe, and Open WebUI, all of which

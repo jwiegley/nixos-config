@@ -79,7 +79,9 @@ def test_render_hermes_gateway_real_analog():
     assert "platform:" in joined and "discord" in joined
     assert "MCP servers loaded:   6 (67 tools" in joined
     assert "MCP reconnects (24h): 1" in joined
-    assert "web_search backend:" in joined and "SearXNG (native)" in joined
+    # Web search moved from the native SearXNG backend to the perplexity MCP
+    # server on 2026-08-05; the profile field carries whatever is configured.
+    assert "web_search backend:" in joined and "Perplexity (MCP)" in joined
     assert "n/a" not in joined
 
 

@@ -1,17 +1,13 @@
 # Nagios ⇄ Prometheus Reverse Mirror — Design Spec
 
-**Status:** **implemented and live** (verified 2026-07-27) — all seven files in
-the §7 manifest exist, tiers 1–2 are imported at `hosts/vulcan/default.nix:168-169`
-and tier 3 at `modules/monitoring/services/default.nix:28`. Live figures on
-2026-07-27: 483 `PROM-MIRROR` services in `status.dat` (480 rule mirrors + the 3
-per-datasource API health checks) out of 830 Nagios services total;
-`nagios_mirror_divergence_total` = 0 in both directions and
-`nagios_mirror_reconciler_success` = 1. The design below is the as-built
-description; the counts inside it are the 2026-06-10 recon snapshot, not today's.
-Original operator directive 2026-06-10: "I want there to be 100% duplication.
-Each is a check and validation of the other."
-**Companion:** docs/MONITORING_DEFERRED_SPECS.md (#nagios-topology-decision),
-memory `feedback_nagios_prometheus_duplication`.
+**Status:** **SUPERSEDED, 2026-07-31.** Tier 2 (the generated `PROM-MIRROR`
+service per Prometheus rule — 499 of them) and the divergence reconciler were
+deleted when the operator began undoing the Nagios/Prometheus duplication. Only
+the hand-curated tier-1 mirror survives, at
+`modules/monitoring/services/nagios-tier1-mirror.nix`, and it is kept
+deliberately: several of its textfile-freshness checks have no Prometheus
+equivalent. Read the sections below as design history, not as a description of
+what runs.
 
 ## 1. TL;DR
 

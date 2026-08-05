@@ -40,7 +40,7 @@ sudo analyze-logs
 sudo analyze-logs --since 2h --no-history
 
 # Direct invocation, supplying the key yourself
-export LITELLM_API_KEY="your-api-key"
+export LLM_API_KEY="your-api-key"
 sudo /etc/nixos/scripts/log-summarizer.py
 
 # Without a key it still runs, falling back to the non-AI grouped summary
@@ -53,7 +53,7 @@ You do **not** need to hand-write logwatch config files for this; the integratio
 declarative in `modules/services/monitoring.nix`:
 
 - `analyzeLogsScript` (`:91`) is a `writeShellApplication` named **`analyze-logs`**
-  that exports `LITELLM_API_KEY` from `/run/secrets/litellm-vulcan-lan-logwatch`
+  that exports `LLM_API_KEY` from `/run/secrets/hermes/env`
   and execs the summarizer. It is installed into `environment.systemPackages`, so
   **`sudo analyze-logs` is the normal way to run this tool.**
 - `logwatchAiScript` (`:112`) wraps it as `analyze-logs --quiet` and is registered
@@ -62,8 +62,8 @@ declarative in `modules/services/monitoring.nix`:
 - Logwatch itself runs from `logwatch.timer` with
   `range = "since 24 hours ago for those hours"`, mailing `johnw@vulcan.lan`.
 
-Note the secret name: the key is `litellm-vulcan-lan` deployed as
-`/run/secrets/litellm-vulcan-lan-logwatch`. There is no `/run/secrets/litellm-api-key`.
+Note the secret name: the key now comes from the shared LLM gateway credential in
+`/run/secrets/hermes/env`. LiteLLM was removed 2026-08-01; the gateway is reached through the hera proxy.
 
 ### As a Systemd Service/Timer
 
@@ -74,7 +74,7 @@ configuration if you ever want a dedicated timer:
 systemd.services.log-summarizer = {
   description = "AI-Powered Log Summarizer";
   script = ''
-    export LITELLM_API_KEY=$(cat /run/secrets/litellm-vulcan-lan-logwatch)
+    export LLM_API_KEY=$(cat /run/secrets/hermes/env)
     ${pkgs.python3}/bin/python3 /etc/nixos/scripts/log-summarizer.py
   '';
   serviceConfig = {
@@ -108,7 +108,7 @@ systemd.timers.log-summarizer = {
 
 ### Environment Variables
 
-- `LITELLM_API_KEY`: API key for LiteLLM authentication (optional, script works without it)
+- `LLM_API_KEY`: API key for LiteLLM authentication (optional, script works without it)
 - `MODELS_CONFIG`: override the models JSON path (same as `--models-config`)
 
 ### LiteLLM API Settings
@@ -212,7 +212,7 @@ STATISTICS:
 
 ### "API connection error: HTTP Error 401: Unauthorized"
 
-- Set `LITELLM_API_KEY` environment variable
+- Set `LLM_API_KEY` environment variable
 - Verify LiteLLM is running. It is a **rootless** container owned by the `litellm`
   user, so `systemctl status litellm` (system scope) finds nothing; use
   `sudo -u litellm env XDG_RUNTIME_DIR=/run/user/$(id -u litellm) systemctl --user status litellm.service`

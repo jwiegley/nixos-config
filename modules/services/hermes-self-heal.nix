@@ -149,7 +149,7 @@ in
           "/var/lib/hermes-self-heal"
           "/var/log/hermes-self-heal"
           "/var/lib/prometheus-node-exporter-textfiles"
-          # See openclaw-self-heal.nix comment block: /run/sudo needed even
+          # See the removed OpenClaw self-heal module comment block: /run/sudo needed even
           # with NOPASSWD, otherwise sudo fails AND spawns a stuck sendmail.
           "/run/sudo"
         ];

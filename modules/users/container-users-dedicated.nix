@@ -189,7 +189,7 @@
   # ownership and stat only; no secret contents read). Per path:
   #   - 3 were exact duplicates of a sops `path=` override that names the very same
   #     path, and sops had already won: the live symlink was owned by the service
-  #     user, not root. shlink-web-client (modules/containers/shlink-quadlet.nix),
+  #     user, not root. shlink-web-client (modules/containers/the removed Shlink quadlet),
   #     open-webui-secrets (open-webui-quadlet.nix), speedtest-tracker-secrets
   #     (speedtest-tracker-quadlet.nix). Those overrides remain and are unchanged.
   #   - 9 had no consumer anywhere — not in any unit, --env-file, EnvironmentFile,

@@ -65,7 +65,7 @@ let
   # modules/users/home-manager/rootless-podman-image-prune.nix:38 uses to decide
   # which users get the weekly image-prune timer, so the two can never disagree.
   #
-  # Verified 2026-07-29 by `nix eval`: yields exactly the 14 names that used to be
+  # Verified 2026-07-29 by `nix eval`: yields the derived rootless-container-user set, which used to be
   # hand-listed here, in container-health-exporter.nix, in container-cve-exporter.nix
   # and in maintenance/timers.nix. Structural exclusions, all correct:
   #   - technitium-dns-exporter: ROOT podman quadlet, no HM user — covered by the

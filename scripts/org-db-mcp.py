@@ -11,7 +11,7 @@ Provides two READ-ONLY views into the ``org`` database:
   * ``org_sql``    — direct, sanitized SELECT queries via psycopg2.
   * ``org_search`` — semantic search by shelling out to the ``org`` CLI,
     mirroring the ``org-db-search`` wrapper defined in
-    modules/services/openclaw-microvm.nix (an OpenClaw-VM binary; it is not
+    the removed OpenClaw microVM module (an OpenClaw-VM binary; it is not
     installed on the host).
 
 Both tools are strictly read-only. ``org_sql`` rejects anything that is
@@ -46,7 +46,7 @@ from mcp.server.fastmcp import FastMCP
 
 # -- PostgreSQL connection parameters --------------------------------------
 # psycopg2/libpq already honors PG* env vars, but we read them explicitly so
-# the defaults match the org-db-search wrapper in openclaw-microvm.nix
+# the defaults match the org-db-search wrapper in the removed OpenClaw microVM module
 # (PGUSER=openclaw, etc.) and so we can pass an explicit dict to
 # psycopg2.connect().
 PGHOST = os.getenv("PGHOST", "127.0.0.1")
@@ -292,7 +292,7 @@ def org_search(query: str, n: int = 10) -> str:
 
     api_key = os.getenv("OPENROUTER_API_KEY", "")
 
-    # Mirror orgDbSearch in openclaw-microvm.nix:
+    # Mirror orgDbSearch in the removed OpenClaw microVM module:
     #   org -c <config> db search --base-url http://127.0.0.1:4000 \
     #       -m bge-m3-mlx-fp16 --api-key "$KEY" "<query>" -n <n>
     cmd = [

@@ -14,9 +14,9 @@ let
   # producer of those units and the reader of them can never drift apart.
   #
   # Verified 2026-07-29 by `nix eval` and against live TSDB
-  # (count by (user) (last_over_time(container_image_prune_failed[30d])) = these
-  # 14 users): exactly the 14 names formerly hardcoded in the ROOTLESS_USERS
-  # string below. Excluded structurally, and correctly:
+  # (count by (user) (last_over_time(container_image_prune_failed[30d])) matched
+  # this set): the derived rootless-container-user set, formerly a hardcoded
+  # ROOTLESS_USERS string below. Excluded structurally, and correctly:
   #   - technitium-dns-exporter: runs as a ROOT podman container (already covered
   #     by the root sweep), no rootless store, no HM user. config.users.users
   #     WOULD include it (15 names) — hence home-manager.users, not users.users.

@@ -1,5 +1,18 @@
 # Discord Round-Trip Canary — Setup Runbook (mutual cross-probing)
 
+> **REMOVED — do not follow this runbook.** The mutual cross-agent canary was
+> deleted with OpenClaw on 2026-07-31 (it probed two agents against each other, so
+> it could not outlive one of them), and the remaining synthetic Hermes probes —
+> the `ask_hermes` round-trip and the e2e chat probe — were removed on 2026-08-05
+> because every probe landed in the operator's real Discord/Conduit message
+> history. Nothing described below exists any more.
+>
+> What replaced it: passive liveness only. `hermes-health-check` probes the
+> api_server and the MCP SSE endpoint and reads the Discord heartbeat-ACK stamp;
+> `hermes-fallback-counter` catches per-conversation failures from real traffic
+> within a minute. Kept as design history for anyone considering synthetic
+> agent probing again — note the tradeoff that decided it.
+
 ## What it is / why
 
 An **active** probe that verifies Discord's inbound `MESSAGE_CREATE → agent

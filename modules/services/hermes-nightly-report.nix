@@ -5,7 +5,7 @@
   ...
 }:
 let
-  # Shared engine — built identically in openclaw-nightly-report.nix (same
+  # Shared engine — built identically in the removed OpenClaw nightly report (same
   # name, source, and flakeIgnore → Nix dedupes to one derivation). Invoked
   # with `--agent hermes` below.
   reportScript = pkgs.writers.writePython3Bin "agent-health-report" {

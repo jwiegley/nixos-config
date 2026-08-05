@@ -176,7 +176,7 @@ in
           "CAP_CHOWN"
         ];
         ReadWritePaths = [
-          # See openclaw-self-heal.nix comment block: /run/sudo needed even
+          # See the removed OpenClaw self-heal module comment block: /run/sudo needed even
           # with NOPASSWD, otherwise sudo fails AND spawns a stuck sendmail.
           "/run/sudo"
         ];

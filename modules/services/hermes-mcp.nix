@@ -1,12 +1,21 @@
-# hermes-mcp: OpenClaw↔Hermes MCP bridge.
+# hermes-mcp: MCP front door to the Hermes Agent.
 #
 # Wraps the hermes-mcp package (pkgs/hermes-mcp, wired via
 # overlays/default.nix) as a hardened systemd service. The service
-# exposes an MCP Streamable HTTP/SSE endpoint on 127.0.0.1:9081
-# that OpenClaw's microVM reaches via the existing two-stage DNAT
-# chain (see modules/services/openclaw-microvm.nix): the VM connects
-# to 10.99.0.1:9081, which is host-PREROUTING-DNAT'ed to
-# 127.0.0.1:9081 on the br-openclaw interface.
+# exposes an MCP Streamable HTTP/SSE endpoint on 127.0.0.1:9081.
+#
+# THIS MODULE IS LIVE -- do not read the history below as a reason to delete it.
+# Until 2026-08-05 this header described it as the "OpenClaw<->Hermes bridge"
+# reached by a second agent VM over a `br-openclaw` interface and a DNAT chain in
+# a module that no longer exists. All three were deleted with that VM on
+# 2026-07-31, and `br-openclaw` appeared nowhere else in the tree -- so the file's
+# stated reason for existing pointed only at things that were gone, which is an
+# invitation to remove a service that is still depended on.
+#
+# Its consumer today is loopback-local: modules/monitoring/services/
+# hermes-health-check.nix probes 127.0.0.1:9081/sse. Note hermes-microvm.nix
+# deliberately EXCLUDES 9081 from the guest DNAT set, because this port fronts
+# that guest -- forwarding it inward would be a loop.
 #
 # The bridge talks to the Hermes Agent microVM at 10.99.1.2:8080
 # (api_server platform) using Authorization: Bearer ${API_SERVER_KEY}.
@@ -21,8 +30,7 @@
 # packaging patterns. Differences vs stock-trader.nix:
 #
 #   - No nginx vhost or TLS termination. The bridge is loopback-only
-#     and only reachable via the openclaw-microvm DNAT chain; LAN
-#     hosts on 192.168.0.0/16 cannot reach it.
+#     so nothing off this host can reach it.
 #   - Static User= (not DynamicUser=) because we need a stable
 #     identity that owns /var/lib/hermes-mcp/sessions.db across
 #     rebuilds and runs.
@@ -48,9 +56,8 @@ in
       default = "127.0.0.1";
       description = ''
         Bind address for the SSE endpoint. The default 127.0.0.1
-        keeps the service unreachable from the LAN; OpenClaw's
-        microVM accesses it via the two-stage DNAT chain in
-        openclaw-microvm.nix.
+        keeps the service unreachable from the LAN; its only consumer is
+          the loopback health probe in hermes-health-check.nix.
       '';
     };
 
@@ -120,7 +127,7 @@ in
     sops.secrets."hermes/env".restartUnits = [ "hermes-mcp.service" ];
 
     systemd.services.hermes-mcp = {
-      description = "OpenClaw↔Hermes MCP bridge (SSE)";
+      description = "Hermes MCP bridge (SSE)";
       # microvm@hermes.service must be up for the api_server to answer.
       # We don't `requires=` it (the bridge should start cleanly even
       # if the VM is briefly down and recover on its own retry), but

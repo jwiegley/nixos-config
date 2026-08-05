@@ -167,7 +167,7 @@ let
     ps.psycopg2
   ]);
 
-  # canonical copy in openclaw-microvm.nix
+  # canonical copy in the removed OpenClaw microVM module
   financialPython = pkgs.python312.withPackages (ps: [
     ps.mcp
     ps.pandas
@@ -180,7 +180,7 @@ let
     ps.simplejson
   ]);
 
-  # canonical copy in openclaw-microvm.nix
+  # canonical copy in the removed OpenClaw microVM module
   khardFixed = pkgs.khard.overrideAttrs (_: {
     dontCheckRuntimeDeps = true;
   });
@@ -188,7 +188,7 @@ let
   # ── MCP server wrapper scripts ─────────────────────────────────────────
   # Each wrapper sets the env the corresponding script expects, then exec's
   # the right Python interpreter on the script's absolute store path. These
-  # mirror openclaw-vm.nix's *McpServer wrappers; Hermes registers them via
+  # mirror the removed OpenClaw VM config's *McpServer wrappers; Hermes registers them via
   # services.hermes-agent.mcpServers.<name>.command below. The scripts are
   # referenced as Nix paths so they land in the store (shared into the VM
   # via the ro-store virtiofs mount).
@@ -256,7 +256,7 @@ let
   # fall back to `--api-key unused` and every embedding call would 401).
   # Instead we source the SAME gateway key Hermes already holds out
   # of ${stateDir}/env (no new SOPS secret, no widened secret surface) and
-  # export it ourselves — mirroring how openclaw-microvm.nix's orgDbSearch
+  # export it ourselves — mirroring how the removed OpenClaw microVM module's orgDbSearch
   # reads its key from its own config rather than trusting env
   # inheritance. ORG_CONFIG points at the khard-style config written by
   # hermes-tools-setup.
@@ -264,7 +264,7 @@ let
   orgDbMcpServer = pkgs.writeShellScript "org-db-mcp" ''
     set -eu
     # org_search shells the bare `org` binary; put org-jw on PATH so it
-    # resolves (matches openclaw-microvm.nix's orgDbSearch wrapper).
+    # resolves (matches the removed OpenClaw microVM module's orgDbSearch wrapper).
     export PATH="${pkgs.org-jw}/bin:$PATH"
     export PGHOST=127.0.0.1
     export PGPORT=5432
@@ -300,7 +300,7 @@ let
   '';
 
   # Stdio bridge from Hermes's MCP client to Home Assistant's streamable
-  # HTTP MCP server. Mirrors openclaw-vm.nix's homeAssistantMcpBridge: we
+  # HTTP MCP server. Mirrors the removed OpenClaw VM config's homeAssistantMcpBridge: we
   # use mcp-proxy with a static Bearer header rather than a direct HTTP
   # connection because clients that auto-probe OAuth metadata fail against
   # HA (no RFC 7591 dynamic client registration). The token is read from
@@ -447,7 +447,7 @@ in
   # Required for the nftables OUTPUT DNAT below that rewrites localhost
   # connections to the host bridge IP — without this, the kernel
   # refuses to route packets with source 127.0.0.1 via eth0.
-  # Matches openclaw-vm.nix:398-402.
+  # Matches the removed OpenClaw VM config.
   boot.kernel.sysctl."net.ipv4.conf.all.route_localnet" = 1;
 
   # ---- Guest resources ----
@@ -487,7 +487,7 @@ in
   ];
   # Match `e*` (not just `eth*`) — the kernel may assign an `en*` predictable
   # name to the virtio-net interface. OpenClaw uses the same prefix at
-  # openclaw-vm.nix:434.
+  # the removed OpenClaw VM config.
   systemd.network.networks."10-eth" = {
     matchConfig.Name = "e*";
     address = [ "${vmAddr}/30" ];
@@ -499,7 +499,7 @@ in
   # MCP servers reach host services directly. The host egress filter blocks
   # 192.168.0.0/16, so normal DNS resolution (the real LAN IP) is
   # unreachable; pointing these names at the gateway routes them through the
-  # two-stage DNAT instead. Mirrors openclaw-vm.nix's networking.hosts.
+  # two-stage DNAT instead. Mirrors the removed OpenClaw VM config's networking.hosts.
   # vane/trader/imap/smtp/radicale are load-bearing (the scripts use
   # the hostnames); hass.vulcan.lan is included for consistency but is
   # unused — the HA bridge connects to 127.0.0.1:8123 by IP via the DNAT.
@@ -521,7 +521,7 @@ in
   # rule (hermes-host-dnat.service) rewrites them back to 127.0.0.1
   # on the host. The port set is threaded from hermes-microvm.nix via
   # _module.args (dnatPortList) so it stays in sync with the host-side
-  # PREROUTING/INPUT rules. Same shape as openclaw-vm.nix:469.
+  # PREROUTING/INPUT rules. Same shape as the removed OpenClaw VM config.
   networking.nftables.enable = true;
   networking.nftables.tables.hermes-dnat = {
     family = "ip";
@@ -592,7 +592,7 @@ in
   # ${stateDir}/vulcan-root-ca.crt via a tmpfiles `C+` entry; that entry was
   # dropped (commit a776481) because this readFile burns the cert content into
   # the store, so nothing needs the staged copy for trust any more. Same
-  # pattern as openclaw-vm.nix:293.
+  # pattern as the removed OpenClaw VM config.
   security.pki.certificates = [
     (builtins.readFile ../../certs/vulcan-root-ca.crt)
   ];
@@ -788,7 +788,7 @@ in
         # rather than posting in the channel. Keep it -- but note the consequence for the
         # round-trip canary: a thread started from a message carries the SAME snowflake as
         # that message, and thread messages do NOT appear in the parent channel's message
-        # list. scripts/discord_canary.py therefore polls BOTH /channels/<channel>/messages
+        # list. the removed Discord canary script therefore polls BOTH /channels/<channel>/messages
         # and /channels/<posted_message_id>/messages. Before it did, the probe read "no
         # reply within timeout" on nine consecutive runs while Hermes was answering all
         # nine correctly (agent.log: finish_reason=stop response_len=18, exactly
@@ -927,7 +927,7 @@ in
     # would fail evaluation. Hermes derives each tool's doc from the MCP
     # server's own FastMCP tool docstrings, not from this option, so the
     # human-readable descriptions live as comments here (mirroring the
-    # spirit of openclaw-vm.nix's mcporter `description` fields).
+    # spirit of the removed OpenClaw VM config's mcporter `description` fields).
     mcpServers = {
       # Vane (Perplexica) — AI answer engine that runs SearXNG behind the
       # scenes and synthesizes a cited answer from web sources. Slower than
@@ -1152,7 +1152,7 @@ in
   # ---- Tool config + contact sync (runs before hermes-agent) ----
   # Writes the per-tool config files the email-contacts and org-db MCP
   # servers need, then does a best-effort contact sync. This is the
-  # relevant slice of openclaw-vm.nix's giant preStart, factored out into
+  # relevant slice of the removed OpenClaw VM config's giant preStart, factored out into
   # its own oneshot so the hermes-agent unit stays declarative.
   #
   # All generated config goes under ${stateDir}/.config (the read-write
@@ -1167,7 +1167,7 @@ in
   # below is `jq --arg pass "$ORG_DB_PASS" …`, so the plaintext value is in
   # jq's argv and readable from /proc/<pid>/cmdline for the life of that
   # process. Only the resulting file is protected (mode 600), not the
-  # injection itself. openclaw-vm.nix uses the identical pattern. If that
+  # injection itself. the removed OpenClaw VM config uses the identical pattern. If that
   # exposure window matters, pass the value from the secret file rather than
   # on the command line — but that is a code change, not a comment change.
   systemd.services.hermes-tools-setup = {
@@ -1210,7 +1210,7 @@ in
 
       # ── vdirsyncer: sync Radicale contacts to local vCard files ───────
       # Password is fetched at command time from the staged secret so it
-      # never lands in this file. Mirrors openclaw-vm.nix's vdirsyncer cfg.
+      # never lands in this file. Mirrors the removed OpenClaw VM config's vdirsyncer cfg.
       cat > ${stateDir}/.config/vdirsyncer/config << VDIRSYNCER_END
       [general]
       status_path = "${stateDir}/.vdirsyncer/status"
@@ -1252,7 +1252,7 @@ in
       # ── sherlock: read-only DB query config (org connection) ──────────
       # Written with a PLACEHOLDER password, then the real org-db password
       # is injected via jq so it never appears in argv. Mode 600. Mirrors
-      # openclaw-vm.nix's sherlock config.
+      # the removed OpenClaw VM config's sherlock config.
       ORG_DB_PASS=""
       if [ -r /run/hermes-secrets/org-db-password ]; then
         ORG_DB_PASS=$(cat /run/hermes-secrets/org-db-password)
@@ -1339,7 +1339,7 @@ in
       # replaced by: hermes-nightly-report.nix:30-33 documents this same key,
       # private half in SOPS as hermes/probe-ssh-private-key, as the credential
       # for its in-VM corroboration step. So do NOT remove it — that would
-      # break the nightly report. Mirrors openclaw-vm.nix:525-528.
+      # break the nightly report. Mirrors the removed OpenClaw VM config.
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINYXL7oqQT3RgRbnWRQNcKNrywkP3TV2F5m8w02+eGUB claude-hermes-debug"
     ];
   };
@@ -1347,7 +1347,7 @@ in
 
   # ---- In-VM sshd (debug only) ----
   # Listens on the bridge IP so the host (and only the host, via the
-  # extraInputRules nft restriction) can reach it.  Mirrors openclaw-vm.nix.
+  # extraInputRules nft restriction) can reach it.  Mirrors the removed OpenClaw VM config.
   services.openssh = {
     enable = true;
     openFirewall = false;

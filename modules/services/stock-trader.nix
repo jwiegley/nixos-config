@@ -5,12 +5,12 @@
 # behind an nginx vhost terminating step-ca TLS at
 # https://trader.vulcan.lan.
 #
-# Modeled on modules/services/jupyterlab.nix (the gold-standard native
-# Python service on this host). Differences vs jupyterlab.nix:
+# Modeled on modules/services/the removed JupyterLab module (the gold-standard native
+# Python service on this host). Differences vs the removed JupyterLab module:
 #
 #   - Stricter hardening: stock-trader does not need SageMath's broad
 #     system access, so we keep the Protect* / Restrict* directives
-#     enabled. jupyterlab.nix disables them in comments — that
+#     enabled. the removed JupyterLab module disables them in comments — that
 #     accommodation does not apply here.
 #   - Uses LoadCredential rather than passing secrets through HOME
 #     because the runtime reads API keys from environment variables.
@@ -231,7 +231,7 @@ in
           "alpha-vantage-api-key:${config.sops.secrets."stock-trader/alpha-vantage-api-key".path}"
         ];
 
-        # Hardening. Stricter than jupyterlab.nix because we don't
+        # Hardening. Stricter than the removed JupyterLab module because we don't
         # need sage's broad system access.
         ProtectSystem = "strict";
         ProtectHome = true;
@@ -250,7 +250,7 @@ in
         RestrictSUIDSGID = true;
         LockPersonality = true;
         # MemoryDenyWriteExecute would break Python's CPython JIT in
-        # 3.13+; leaving false matches jupyterlab.nix which has the
+        # 3.13+; leaving false matches the removed JupyterLab module which has the
         # same caveat. Python 3.12 (our runtime) does not strictly
         # need it disabled, but enable=False removes a future breakage.
         MemoryDenyWriteExecute = false;

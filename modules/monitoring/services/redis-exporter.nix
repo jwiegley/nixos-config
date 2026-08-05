@@ -9,7 +9,7 @@
   # Redis exporter for multiple Redis instances.
   # Primary -redis.addr target (job="redis"): rspamd (127.0.0.1:6381).
   # Multi-target /scrape probes (job="redis-multi"): openproject(6383),
-  # shlink(6385), searxng(6386), rspamd(6381), speedtest-tracker(6387), plus the
+  # searxng(6386), rspamd(6381), speedtest-tracker(6387), plus the
   # two UNIX-socket instances gitea + immich (via unix:// targets — see below).
   # The systemd-unit-state alert for the socket pair is kept as a backstop.
 
@@ -87,7 +87,7 @@
     # the redis URL, yielding redis_up{instance="redis://127.0.0.1:6383"} etc.
     #
     # All five TCP-listening instances are reachable on 127.0.0.1 (verified live;
-    # openproject/shlink bind 0.0.0.0 but answer on loopback too). The two
+    # openproject binds 0.0.0.0 but answers on loopback too). The two
     # remaining instances, redis-gitea and redis-immich, use UNIX SOCKETS in
     # 0750 dirs owned by their own service users (redis-gitea / redis-immich).
     # The exporter is now in both groups (SupplementaryGroups above) so it can

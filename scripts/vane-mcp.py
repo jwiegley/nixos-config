@@ -6,7 +6,7 @@ inline citations. Use this when you want a researched response rather
 than a list of search hits.
 
 Runs inside BOTH agent microVMs: in OpenClaw as an mcporter stdio child
-(openclaw-vm.nix) and in Hermes as a `services.hermes-agent.mcpServers`
+(the removed OpenClaw VM config) and in Hermes as a `services.hermes-agent.mcpServers`
 stdio child (hermes-vm.nix), from the same source file.
 Talks to https://vane.vulcan.lan over HTTPS using the Vulcan Step-CA root
 trusted at the system level.

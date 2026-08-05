@@ -207,7 +207,7 @@
   # The Discord round-trip canary was REMOVED 2026-07-31 together with OpenClaw. It was
   # inherently cross-agent -- the two agents probed EACH OTHER -- so it cannot outlive the
   # removal of one of them. Both probes,
-  # modules/monitoring/services/discord-canary.nix, scripts/discord_canary.py and all 12
+  # modules/monitoring/services/discord-canary.nix, the removed Discord canary script and all 12
   # *DiscordCanary* rules went with it.
   #
   # It never reached a clean steady state either: @Claw's bot holds neither MANAGE_MESSAGES

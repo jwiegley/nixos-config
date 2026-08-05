@@ -10,7 +10,7 @@
 # ignores SSH_ORIGINAL_COMMAND).
 #
 # OpenClaw (10.99.0.2) and Hermes (10.99.1.2) reach 127.0.0.1:9082 via the
-# two-stage DNAT chain (openclaw-microvm.nix / hermes-microvm.nix dnatPorts).
+# two-stage DNAT chain (the removed OpenClaw microVM module / hermes-microvm.nix dnatPorts).
 # LAN hosts cannot reach it — the bind is loopback-only.
 #
 # Modeled on:
@@ -104,7 +104,7 @@ in
       description = ''
         Bind address for the SSE endpoint. The default 127.0.0.1 keeps the
         bridge unreachable from the LAN; OpenClaw and Hermes microVMs reach it
-        via the two-stage DNAT chain (openclaw-microvm.nix / hermes-microvm.nix).
+        via the two-stage DNAT chain (the removed OpenClaw microVM module / hermes-microvm.nix).
       '';
     };
 

@@ -311,6 +311,26 @@
             suiteDir = "agent-health-report-tests";
           };
 
+          # The largest suite in the repo (16 files) and, until 2026-08-05, the
+          # only one that never ran in CI -- so it passed or failed only when
+          # someone ran it by hand. It needs more than bare pytest: the module
+          # imports psycopg2/requests and the tests use pytest-mock, responses
+          # and freezegun.
+          flume-data-tests = helpers.mkPytestCheck {
+            name = "flume-data-tests";
+            src = ./scripts/flume-data;
+            suiteDir = "tests";
+            extraPackages = ps: [
+              ps.pytest-mock
+              ps.responses
+              ps.freezegun
+              ps.psycopg2
+              ps.requests
+              ps.python-dateutil
+              ps.pyyaml
+            ];
+          };
+
           drafts-mcp-check-tests = helpers.mkPytestCheck {
             name = "drafts-mcp-check-tests";
             src = ./scripts/drafts-mcp-check;

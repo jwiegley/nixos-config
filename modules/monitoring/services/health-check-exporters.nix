@@ -13,27 +13,6 @@ let
   backupNames = builtins.attrNames config.services.restic.backups;
 
   # Critical services to monitor
-  criticalServices = [
-    # Infrastructure
-    "postgresql"
-    "nginx"
-    "step-ca"
-    "dovecot"
-    "postfix"
-    "radicale"
-
-    # Monitoring Stack
-    "prometheus"
-    "alertmanager"
-    "grafana"
-    "loki"
-    "victoriametrics"
-
-    # Critical Application Services
-    "home-assistant"
-    "node-red"
-    "technitium-dns-server"
-  ];
 
   # Script to generate backup status metrics
   backupStatusExporter = pkgs.writeShellScript "backup-status-exporter" ''
@@ -138,86 +117,6 @@ let
   '';
 
   # Simple HTTP exporter for critical services health
-  criticalServicesExporter = pkgs.writeShellScript "critical-services-exporter" ''
-        #!${pkgs.bash}/bin/bash
-        set -euo pipefail
-
-        # HTTP response function
-        http_response() {
-          local code="$1"
-          local content_type="$2"
-          local body="$3"
-
-          echo -ne "HTTP/1.1 $code\r\n"
-          echo -ne "Content-Type: $content_type\r\n"
-          echo -ne "Content-Length: ''${#body}\r\n"
-          echo -ne "Connection: close\r\n"
-          echo -ne "\r\n"
-          echo -ne "$body"
-        }
-
-        # Generate metrics
-        generate_metrics() {
-          cat <<'HEADER'
-    # HELP critical_service_active Whether the critical service is active (1 = active, 0 = inactive)
-    # TYPE critical_service_active gauge
-    # HELP critical_service_failed Whether the critical service is in failed state (1 = failed, 0 = not failed)
-    # TYPE critical_service_failed gauge
-    # HELP critical_service_load_state Service load state (1 = loaded, 0 = not loaded)
-    # TYPE critical_service_load_state gauge
-    HEADER
-
-          for service in ${lib.concatStringsSep " " criticalServices}; do
-            # Check if service is active
-            if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service" 2>/dev/null; then
-              ACTIVE=1
-            else
-              ACTIVE=0
-            fi
-
-            # Check if service is failed
-            if ${pkgs.systemd}/bin/systemctl is-failed --quiet "$service" 2>/dev/null; then
-              FAILED=1
-            else
-              FAILED=0
-            fi
-
-            # Check load state
-            LOAD_STATE=$(${pkgs.systemd}/bin/systemctl show -p LoadState --value "$service" 2>/dev/null || echo "not-found")
-            if [ "$LOAD_STATE" = "loaded" ]; then
-              LOADED=1
-            else
-              LOADED=0
-            fi
-
-            cat <<EOF
-    critical_service_active{service="$service"} $ACTIVE
-    critical_service_failed{service="$service"} $FAILED
-    critical_service_load_state{service="$service"} $LOADED
-    EOF
-          done
-        }
-
-        # Handle single HTTP request (socat fork spawns new instance per connection)
-        # Read HTTP request (use read instead of head to avoid buffering issues)
-        IFS= read -r REQUEST
-
-        # Consume headers until we hit blank line
-        while IFS= read -r line; do
-          line=$(echo "$line" | tr -d '\r')
-          [ -z "$line" ] && break
-        done
-
-        # Check if it's a GET request for /metrics
-        if echo "$REQUEST" | grep -q "^GET /metrics"; then
-          METRICS=$(generate_metrics)
-          http_response "200 OK" "text/plain; version=0.0.4" "$METRICS"
-        elif echo "$REQUEST" | grep -q "^GET /health"; then
-          http_response "200 OK" "text/plain" "OK"
-        else
-          http_response "404 Not Found" "text/plain" "Not Found"
-        fi
-  '';
 in
 {
   # Systemd services for textfile exporters
@@ -228,21 +127,6 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = backupStatusExporter;
-        User = "root";
-      };
-    };
-
-    # Critical services health exporter - HTTP server on port 9221
-    critical-services-exporter = {
-      description = "Critical services health exporter for Prometheus";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "simple";
-        ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:9221,bind=127.0.0.1,reuseaddr,fork EXEC:${criticalServicesExporter}";
-        Restart = "always";
-        RestartSec = 5;
         User = "root";
       };
     };
@@ -269,16 +153,12 @@ in
   };
 
   # Open firewall for critical services exporter (localhost only)
-  networking.firewall.interfaces."lo".allowedTCPPorts = [ 9221 ];
 
   # Prometheus scrape configuration for critical services exporter
   services.prometheus.scrapeConfigs = [
     {
       job_name = "critical-services-health";
       static_configs = [
-        {
-          targets = [ "127.0.0.1:9221" ];
-        }
       ];
       scrape_interval = "10s"; # Check every 10 seconds for quick detection
       scrape_timeout = "5s";

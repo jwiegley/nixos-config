@@ -21,20 +21,11 @@ groups:
           summary: "Systemd service {{ $labels.name }} has failed"
           description: "Service {{ $labels.name }} is in failed state on {{ $labels.instance }}. Check logs: journalctl -u {{ $labels.name }} -n 50"
 
-      # Critical services that should always be running
-      - alert: CriticalServiceInactive
-        expr: |
-          node_systemd_unit_state{
-            name=~"(sshd|postgresql|nginx|prometheus|tailscaled|step-ca|docker)\\.service",
-            state="inactive"
-          } == 1
-        for: 2m
-        labels:
-          severity: critical
-          category: systemd
-        annotations:
-          summary: "Critical service {{ $labels.name }} is inactive"
-          description: "Critical service {{ $labels.name }} is not running on {{ $labels.instance }}"
+      # CriticalServiceInactive REMOVED 2026-08-05. It was one of three
+      # overlapping mechanisms watching the same units; the survivor is
+      # CriticalServiceDown in health-checks.yaml, which covers a superset of the
+      # names, uses state="active" == 0 (so it also catches FAILED, which the old
+      # inactive == 1 form missed) and carries an absence guard.
 
       # Service restart detection - high restart count
       - alert: ServiceRestartingFrequently

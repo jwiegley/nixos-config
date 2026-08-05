@@ -3,14 +3,19 @@
 # Nix sandbox; failure of pytest fails the flake check.
 { pkgs }:
 let
-  pytestPython = pkgs.python312.withPackages (ps: [ ps.pytest ]);
-
   mkPytestCheck =
     {
       name,
       src,
       suiteDir,
+      # Opt-in extra Python packages for suites that need more than bare pytest.
+      # Per-check rather than global so one suite's dependencies do not inflate
+      # every other check's closure.
+      extraPackages ? (_ps: [ ]),
     }:
+    let
+      pytestPython = pkgs.python312.withPackages (ps: [ ps.pytest ] ++ extraPackages ps);
+    in
     pkgs.runCommand "${name}-check"
       {
         nativeBuildInputs = [ pytestPython ];

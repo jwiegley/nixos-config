@@ -1,9 +1,10 @@
 # Host-side parent module for the Hermes Agent microVM.
 # Imported by /etc/nixos/hosts/vulcan/default.nix.
 #
-# Sibling to modules/services/openclaw-microvm.nix; intentionally on
-# its own private /30 bridge so neither VM's networking can affect the
-# other.
+# The guest sits on its own private /30 bridge. That was originally so this VM
+# and a second agent VM could not affect each other's networking; the second VM
+# is gone, but the isolation is kept on its own merits — the guest reaches host
+# services only through the explicit DNAT list below, and nothing else.
 #
 # INBOUND FROM THE LAN: https://hermes.vulcan.lan, for the Conduit iOS client.
 # nginx on the host is the sole ingress; the guest itself remains reachable only
@@ -34,9 +35,9 @@ let
   bridgeCidr = "${bridgeAddr}/30";
   vmAddr = "10.99.1.2";
 
-  # External NIC used for VM NAT. Matches openclaw-microvm.nix:25 — the
-  # host's physical interface on this Asahi/aarch64 box. Update both
-  # files together if it ever changes.
+  # External NIC used for VM NAT: the host's physical interface on this
+  # Asahi/aarch64 box. Note the host is multi-homed (end0 + WiFi) and this
+  # deliberately names the wired NIC only.
   externalInterface = "end0";
 
   # Hermes api_server listen port. Single source of truth: it is `inherit`ed
@@ -51,22 +52,19 @@ let
   stateDir = "/var/lib/hermes";
 
   # Host-side staging dir for SOPS secret *content* shared into the VM via
-  # virtiofs as /run/hermes-secrets. Mirrors openclaw-microvm.nix:43
-  # ("${microvmBase}/secrets"). sops-nix decrypts on the host; the
+  # virtiofs as /run/hermes-secrets. sops-nix decrypts on the host; the
   # hermes-prepare-secrets oneshot copies the content here at 0400
   # hermes:hermes before the VM starts (the guest has no sops-nix).
   secretsStagingDir = "/var/lib/microvms/hermes/secrets";
 
   # -- Host-side loopback services that the VM needs to reach --
-  # Strategy mirrors openclaw-microvm.nix:122-125 — two-stage DNAT:
+  # Two-stage DNAT, so guest code can use plain 127.0.0.1:port addresses:
   #   1. Guest nftables OUTPUT: 127.0.0.1:port -> 10.99.1.1:port
   #   2. Host iptables PREROUTING (on hermes-br0): 10.99.1.1:port -> 127.0.0.1:port
   #   3. Host sysctl route_localnet=1 on hermes-br0 (allows the loopback hop)
-  # Service-parity set (mirrors the OpenClaw service surface, minus
-  # OpenClaw-only ports). The host PREROUTING DNAT, per-interface INPUT
-  # accepts, and the hermes-isolate RETURN rules below are all
-  # parameterized on this list, so adding a port here propagates to all
-  # three automatically:
+  # The host PREROUTING DNAT, per-interface INPUT accepts, and the
+  # hermes-isolate RETURN rules below are all parameterized on this list, so
+  # adding a port here propagates to all three automatically:
   #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan)
   #   993  Dovecot IMAPS (email-contacts)
   #   2525 Postfix SMTP (email-contacts)
@@ -82,16 +80,15 @@ let
   #   6335 Qdrant inference bridge — called BY qdrant on the host to reach the
   #        LLM gateway for server-side embeddings. It is never a client-side
   #        callee, so the guest has no use for it.
-  #   9081 the OpenClaw↔Hermes bridge — Hermes *is* Hermes.
+  #   9081 hermes-mcp's own SSE port — this guest IS what that port fronts, so
+  #        forwarding it into the guest would be a loop.
   #
-  # 6333 WAS excluded here as "OpenClaw-memory-specific" (and in
-  # docs/superpowers/specs/2026-05-28-hermes-service-parity-design.md:111-112).
-  # That premise expired on 2026-08-03 when Hermes got its own Qdrant-backed
-  # memory, with its own collection (hermes_memories, separate from
-  # openclaw_memories). Honest note on what this does and does not change:
-  # 443 is already forwarded and nginx already fronts qdrant.vulcan.lan, so the
-  # guest could reach Qdrant before this. Adding 6333 buys explicitness and a
-  # clean failure mode, NOT new privilege.
+  # 6333 was excluded until 2026-08-03 on the theory that Qdrant served only
+  # another agent's memory. That stopped being true when Hermes got her own
+  # Qdrant-backed memory. Honest note on what including it does and does not
+  # change: 443 is already forwarded and nginx already fronts
+  # qdrant.vulcan.lan, so the guest could reach Qdrant before this. Adding 6333
+  # buys explicitness and a clean failure mode, NOT new privilege.
   dnatPorts = [
     443
     993
@@ -292,13 +289,12 @@ in
   # bridgeAddr:PORT → 127.0.0.1:PORT but the packet still arrives via
   # hermes-br0; the INPUT chain must whitelist the post-DNAT ports on
   # this interface or `nixos-fw-log-refuse` drops them at end-of-chain.
-  # Matches openclaw-microvm.nix:546-553.
   networking.firewall.interfaces.${bridgeName} = {
     allowedUDPPorts = [ 53 ];
     allowedTCPPorts = [ 53 ] ++ dnatPorts;
   };
 
-  # ---- Egress isolation (iptables-nft, matching OpenClaw) ----
+  # ---- Egress isolation (iptables-nft) ----
   # Outbound reaches the public internet on TCP/UDP 443 (Discord +
   # OpenRouter via the hera/* route) and TCP/UDP 53 (DNS) only;
   # everything else leaving the bridge is logged as
@@ -327,7 +323,7 @@ in
     # bridgeAddr. We need BOTH rules — the bridgeAddr one is belt-and-
     # suspenders if the DNAT ever stops running (the connection then fails
     # noisily rather than silently slipping through), and the 127.0.0.1 one
-    # is what actually matches in steady state. Matches openclaw-isolate.
+    # is what actually matches in steady state.
     iptables -A hermes-isolate -d ${bridgeAddr} -p tcp -m multiport --dports ${dnatPortList} -j RETURN
     iptables -A hermes-isolate -d 127.0.0.1 -p tcp -m multiport --dports ${dnatPortList} -j RETURN
 
@@ -423,7 +419,7 @@ in
   # ---- Nix store / virtiofs interaction ----
   # The guest mounts /nix/store via virtiofs in hermes-vm.nix.
   # Auto-optimise on the host can produce stale file handles inside
-  # the guest — disable. Matches openclaw-microvm.nix:736.
+  # the guest — disable.
   nix.optimise.automatic = false;
 
   # ---- LAN-facing reverse proxy for the Hermes API server ----
@@ -455,7 +451,7 @@ in
   # default /run/secrets/hermes/env on the host, and a prepare-secrets
   # oneshot below copies the *content* into the state share at
   # ${stateDir}/env so the in-VM hermes-agent.service can read a real
-  # file via virtio-fs. Same pattern as openclaw-microvm.nix:564.
+  # file via virtio-fs.
   sops.secrets."hermes/env" = {
     mode = "0640";
     owner = "hermes";
@@ -470,7 +466,7 @@ in
 
   # ---- Reused SOPS secrets: append Hermes restart triggers only ----
   # owner/group/mode for these five are declared by their canonical
-  # owners (openclaw-microvm.nix, email-tester, vdirsyncer). Declaring
+  # owners (email-tester, vdirsyncer). Declaring
   # them again here would conflict; sops-nix `restartUnits` is a list
   # that merges across modules, so we add ONLY the restart triggers so
   # that rotating any of these re-stages the secret and restarts the VM.
@@ -482,15 +478,18 @@ in
     "hermes-prepare-secrets.service"
     "microvm@hermes.service"
   ];
-  # These three keep their legacy `openclaw/` NAMES because that is what they are
-  # called in secrets.yaml, but Hermes is now their only consumer. Their full
-  # declarations lived in modules/services/openclaw-microvm.nix until OpenClaw was
-  # removed 2026-08-03; they are re-homed here rather than deleted, because
-  # deleting them breaks hermes-prepare-secrets and with it the HA MCP bridge,
-  # org-db MCP and the Perplexity tool.
+  # DO NOT RENAME THESE THREE. The `openclaw/` prefix is not a leftover
+  # reference to a removed service — it is the literal KEY NAME inside the
+  # encrypted secrets.yaml, which lives in a separate repo and is not edited
+  # from here. The name in this file must match the name in that file or
+  # sops-nix has nothing to decrypt. Hermes is now their only consumer, and
+  # deleting or renaming them breaks hermes-prepare-secrets and with it three
+  # of her capabilities at once: the Home Assistant bridge, org-db, and
+  # Perplexity. Renaming is possible, but only as a coordinated change to
+  # secrets.yaml, and it buys nothing but tidiness.
   #
-  # owner root, NOT openclaw: the openclaw user no longer exists, and
-  # hermes-prepare-secrets is a Type=oneshot with no User=, i.e. it runs as root
+  # owner root, and that is correct: no `openclaw` user exists any more, and
+  # hermes-prepare-secrets is a Type=oneshot with no User=, so it runs as root
   # and `install -m 0400 -o hermes -g hermes` copies each one into
   # /run/hermes-secrets itself. Root-owned sources are exactly what it needs.
   sops.secrets."openclaw/home-assistant-token" = {
@@ -550,15 +549,15 @@ in
 
       # Staging dir for the virtio-fs hermes-secrets share. Owned by root
       # (0755); virtiofs handles per-file access, the files themselves are
-      # 0400 hermes:hermes. Matches openclaw-prepare-secrets:570-571.
+      # 0400 hermes:hermes.
       mkdir -p "${secretsStagingDir}"
       chmod 0755 "${secretsStagingDir}"
 
-      # Stage the five reused SOPS secrets' *content* into the share. These
-      # are NOT hermes-owned SOPS entries (they're reused from OpenClaw /
-      # email-tester / vdirsyncer), so guard each copy with `if [ -f ]` the
-      # same way openclaw-prepare-secrets does for its reused secrets — a
-      # missing source must not fail the unit and block the VM.
+      # Stage the five reused SOPS secrets' *content* into the share. These are
+      # not hermes-owned SOPS entries — they are shared with email-tester,
+      # vdirsyncer, and the legacy `openclaw/`-named keys above — so guard each
+      # copy with `if [ -f ]`: a missing source must not fail the unit and block
+      # the VM from starting at all.
 
       # IMAP/SMTP password (reuse email-tester-imap-password — same Dovecot passdb)
       IMAP_PASS_SRC="${config.sops.secrets."email-tester-imap-password".path}"
@@ -569,8 +568,8 @@ in
       fi
 
       # Qdrant API key for the memory provider. Reuses the EXISTING
-      # `qdrant/api-key` secret that qdrant.nix and OpenClaw already share, so
-      # there is exactly one copy of this key in SOPS. The alternative -- adding
+      # `qdrant/api-key` secret that qdrant.nix also reads, so there is exactly
+      # one copy of this key in SOPS. The alternative -- adding
       # QDRANT_API_KEY to the hermes/env blob -- would create a second copy that
       # silently desyncs on the next rotation, and would need an interactive sops
       # session to establish.
@@ -642,7 +641,7 @@ in
           ;
         # Secrets share root (guest mounts this as /run/hermes-secrets) and
         # the comma-joined DNAT port set (guest threads it into its
-        # OUTPUT-DNAT rule, mirroring openclaw-vm.nix's dnatPortList arg).
+        # OUTPUT-DNAT rule).
         # Both inherit the single let-block source of truth so the host
         # firewall rules and the guest DNAT can never drift.
         inherit secretsStagingDir dnatPortList;

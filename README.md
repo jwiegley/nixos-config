@@ -63,7 +63,7 @@ packages security services storage test users` — and 237 `.nix` files; see
 This is the main service catalog as actually deployed on `vulcan`. It is accurate
 but not exhaustive — as of 2026-07-27 it omits, among others, memory-vault,
 drafts-mcp, calendar-publisher, the rclone cloud-drive mirrors, NUT/UPS
-monitoring, and the OpenClaw / Hermes self-heal daemons. Each entry
+monitoring, and the Hermes self-heal daemon. Each entry
 notes the runtime model — **(native)** for native systemd services, **(Quadlet)**
 for Podman containers managed by quadlet-nix (most of which now run *rootless*,
 as per-user systemd units under a dedicated lingering service user declared in
@@ -82,7 +82,7 @@ external-facing services tunnel out via Cloudflare.
   map (`modules/services/cloudflare-tunnels.nix:46-49`) exposes
   `data.newartisans.com` → `localhost:18080` (the static-nginx container, which
   serves `/tank/Public`), `gitea.newartisans.com` → Gitea,
-  `s.newartisans.com` → Shlink, and `calendar.newartisans.com` → the
+  and `calendar.newartisans.com` → the
   Sacramento-cluster `.ics` publisher. Anything else through the tunnel gets a
   404.
 - **Glance** (native): personal dashboard at `glance.vulcan.lan` with GitHub /
@@ -117,7 +117,7 @@ external-facing services tunnel out via Cloudflare.
   OpenProject, Stock Trader, BudgetBoard, and others.
 - **pgAdmin** (native): web admin UI at `postgres.vulcan.lan`.
 - **Redis** (native, multi-instance): dedicated instances for Gitea, Rspamd,
-  SearXNG, LiteLLM, OpenProject, Shlink, and Speedtest Tracker.
+  SearXNG, OpenProject, and Speedtest Tracker.
 - **Qdrant** (native): vector database at `qdrant.vulcan.lan`; paired with
   `qdrant-inference-bridge` (translates Qdrant inference to OpenAI-compatible
   endpoints) and a Nagios health check.
@@ -142,10 +142,10 @@ external-facing services tunnel out via Cloudflare.
   external host groups.
 - **Prometheus exporters** (mostly native, some Quadlet): node (its `systemd`
   collector replaces a separate systemd exporter), zfs,
-  postgres, redis, postfix, nginx, gitea, immich, litellm, node-red, jupyterlab,
+  postgres, redis, postfix, nginx, gitea, immich, node-red,
   vdirsyncer, qdrant, aria2, atd, restic, AIDE, ZFS pool health, certificate
   expiry, container health, HA backup freshness, stock-trader,
-  git-workspace, openclaw-canary, OPNsense (Quadlet), Technitium DNS (Quadlet),
+  git-workspace, OPNsense (Quadlet), Technitium DNS (Quadlet),
   copyparty, and remote-nodes.
 - **opnsense-api-transformer** (Quadlet): Python proxy patching the OPNsense
   exporter's gateway-collector output.
@@ -179,25 +179,13 @@ external-facing services tunnel out via Cloudflare.
 
 ### AI / LLM Services
 
-- **LiteLLM** (Quadlet): OpenAI-compatible LLM proxy/router at
-  `litellm.vulcan.lan`, backed by Postgres + Redis.
-- **litellm-anthropic-fixup** (native): sanitizing forward proxy that reorders
-  `function_call` / `message` items in Anthropic Responses-API conversions.
-- **Open WebUI** (Quadlet): ChatGPT-style web UI at `chat.vulcan.lan`.
-- **llama-swap** (native): orchestrator at `llama-swap.vulcan.lan` for swapping
-  llama.cpp backends on demand.
-- **OpenClaw** (microVM): hardware-isolated AI-agent gateway at
-  `openclaw.vulcan.lan`; persistent state via virtiofs from
-  `/var/lib/openclaw`; openclaw-canary monitors liveness.
-- **Hermes Agent** (microVM): second, independently bridged AI-agent guest
+- **Hermes Agent** (microVM): hardware-isolated AI-agent guest on its own bridge
   (`modules/services/hermes-microvm.nix` host side, `hermes-vm.nix` guest side).
   Outbound-only — no LAN-facing vhost; the guest reaches host loopback services
   through two-stage DNAT. Paired with `hermes-mcp`, `hermes-self-heal`, and a
   nightly health report.
 - **Stock Trader** (native): hardened Python service at `trader.vulcan.lan`
   (Schwab OAuth-bootstrapped) pinned to a Gitea-hosted release tag.
-- **JupyterLab** (native): notebook server at `jupyter.vulcan.lan` with a
-  SageMath kernel.
 - **model-config** (native): deploys `models.nix` as `/etc/models.json` for
   non-Nix consumers (CLI tools, scripts).
 
@@ -209,7 +197,7 @@ external-facing services tunnel out via Cloudflare.
   patched `aiopnsense` for Python 3.13 compatibility.
 - **Matter Server** (Quadlet): python-matter-server controller for HA's Matter
   integration.
-- **wyoming-openai** (Quadlet): Wyoming STT bridge to the LiteLLM
+- **wyoming-openai** (Quadlet): Wyoming STT bridge to the LLM
   `hera/cohere-transcribe-03-2026` route on loopback for the HA voice pipeline.
 - **Mosquitto** (native, see above): MQTT broker for HA / HASS.Agent.
 - **Node-RED** (native): flow-based automation at `nodered.vulcan.lan`.
@@ -241,9 +229,6 @@ external-facing services tunnel out via Cloudflare.
   `openproject.vulcan.lan`.
 - **Wallabag** (Quadlet): read-it-later / article archiving at
   `wallabag.vulcan.lan`.
-- **Shlink** (Quadlet) + **Shlink Web Client** (Quadlet): URL shortener; admin
-  at `shlink.vulcan.lan`, API at `shlink-api.vulcan.lan`, public at
-  `s.newartisans.com`.
 - **BudgetBoard** (Quadlet pod): personal-finance app (C# server + React
   client) at `budget.vulcan.lan`.
 - **ChangeDetection.io** (Quadlet): web-page change monitoring with
@@ -478,11 +463,11 @@ sudo podman ps
 journalctl -u matter-server -f
 sudo systemctl restart matter-server
 
-# Rootless Home-Manager containers (litellm, open-webui, wallabag, shlink,
+# Rootless Home-Manager containers (open-webui, wallabag,
 # wallabag, vane, …) run as *user* units under a lingering service user:
-journalctl _SYSTEMD_USER_UNIT=litellm.service -f
-sudo -u litellm XDG_RUNTIME_DIR=/run/user/$(id -u litellm) \
-  systemctl --user restart litellm
+journalctl _SYSTEMD_USER_UNIT=wallabag.service -f
+sudo -u wallabag XDG_RUNTIME_DIR=/run/user/$(id -u wallabag) \
+  systemctl --user restart wallabag
 ```
 
 ### ZFS Management
@@ -612,7 +597,7 @@ Two levels deep, as of 2026-07-27 (per-directory `.nix` counts in parentheses):
 │   └── test/          (1)         # sops-ownership-test.nix (imported by nothing)
 ├── overlays/         (22)         # package overrides (default.nix + leaf overlays)
 ├── pkgs/                          # custom derivations (stock-trader, hermes-mcp, …)
-├── tests/                         # checks.nix + openclaw/, wired from flake.nix
+├── tests/                         # checks.nix, wired from flake.nix
 ├── certs/                         # certificate scripts + CERTIFICATES.md
 ├── scripts/                       # helper scripts (Python/shell) used by modules
 ├── config/ · files/ · templates/  # static config/data shipped by modules
@@ -773,14 +758,14 @@ Many services follow similar patterns:
 Flake inputs (see `flake.nix` for current pin rationales):
 
 - `nixpkgs`: `nixos-25.11` — the system channel
-- `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for JupyterLab,
+- `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for
   Home Assistant and other packages needing newer versions
 - `nixos-apple-silicon`: Apple hardware support (pinned for ZFS/kernel compat)
 - `home-manager`: `release-25.11`, user environment management
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
 - `quadlet-nix`: Podman container integration
-- `microvm`: the OpenClaw and Hermes microVMs
+- `microvm`: the Hermes microVM
 - `hermes-agent`: Hermes agent source (pinned to rev `c47b9d12`; the `hermes-agent`
   input in `flake.nix` carries the reason)
 - `nix-config-ai`, `nix-config`, `llm-agents`: shared AI / home-manager config

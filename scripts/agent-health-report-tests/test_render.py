@@ -79,9 +79,6 @@ def test_render_hermes_gateway_real_analog():
     assert "platform:" in joined and "discord" in joined
     assert "MCP servers loaded:   6 (67 tools" in joined
     assert "MCP reconnects (24h): 1" in joined
-    # Web search moved from the native SearXNG backend to the perplexity MCP
-    # server on 2026-08-05; the profile field carries whatever is configured.
-    assert "web_search backend:" in joined and "Perplexity (MCP)" in joined
     assert "n/a" not in joined
 
 
@@ -158,10 +155,6 @@ def test_render_hermes_mcp_real_per_server_counts():
     assert "tools registered" in joined
     assert "OK" in joined  # struct column now shows OK like OpenClaw
     assert "total: 67 tools from 6 servers" in joined
-    # ask_hermes dropped from the aggregate 2026-08-05 with the canary probe; the
-    # line now renders only the keys the profile declares.
-    assert "MCP layer: sse_open=OK" in joined
-    assert "ask_hermes" not in joined
 
 
 

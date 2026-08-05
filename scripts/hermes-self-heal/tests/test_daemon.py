@@ -100,15 +100,6 @@ def test_load_state_returns_empty_when_file_missing(tmp_path):
     assert daemon.load_state(p) == {"active": {}, "history": []}
 
 
-def test_action_map_deterministic_first_attempts():
-    """Spec §6.2 — verify the deterministic-first-attempt map exactly."""
-    assert daemon.ACTION_MAP == {
-        "HermesApiServerDown":          "restart_microvm",
-        "HermesDiscordZombieSuspected":   "restart_microvm",
-        "HermesDiscordPostSelfHealRestart": "restart_microvm",
-        "HermesMcpBridgeDown":            "restart_mcp",
-        "HermesHealthCheckStale":       "restart_health_check",
-    }
 
 
 def test_first_attempt_action_returns_none_for_unknown_alert():

@@ -393,18 +393,18 @@ files at the repo root are `flake.nix` and `models.nix`; the host configuration 
 ```
 /etc/nixos/
 ├── flake.nix                # Main flake configuration (entry point)
-├── models.nix               # Shared LLM model registry (llm.agent.name, ...)
+├── models.nix               # Shared LLM model registry (llm.reasoning.name, ...)
 ├── hosts/vulcan/
 │   ├── default.nix          # THE host configuration (the big `imports` list; stateVersion here)
 │   └── hardware-configuration.nix
-├── modules/                 # 237 .nix across 13 category dirs
-│   ├── services/            # Service configurations (92 .nix)
+├── modules/                 # 204 .nix across 11 category dirs
+│   ├── services/            # Service configurations (80 .nix)
 │   ├── monitoring/          # Prometheus, Grafana, alerts/, exporters
 │   ├── containers/          # Container / quadlet definitions
 │   ├── core/                # base, networking, system, programs, wifi, ...
 │   ├── users/               # Users + home-manager/ modules
 │   └── ...                  # storage, security, packages, lib, maintenance,
-│                            #   hardware, options, test
+│                            #   hardware
 ├── overlays/                # Package overlays
 ├── pkgs/                    # Locally packaged software
 ├── certs/                   # Certificate scripts (renew-certificate.sh)
@@ -448,5 +448,3 @@ journalctl -u <service> -f  # View logs
 - `/tank/Backups/` - Backup storage location
 - `/run/secrets/` - Runtime secret deployment
 
-## Task Master AI Instructions
-@./.taskmaster/CLAUDE.md

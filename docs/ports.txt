@@ -10,7 +10,6 @@
 
 # SSH & Remote Access
 22 0.0.0.0 :: SSH
-22 10.99.0.2 OpenClaw microVM sshd (ingress restricted to host bridge 10.99.0.1; probe-only)
 22 10.99.1.2 Hermes microVM sshd (host-only via nftables; key: /root/.ssh/hermes-debug)
 2222 * :: Gitea SSH
 2022 end0 wlp1s0f0 Eternal Terminal (etserver; binds 0.0.0.0/:: but firewall-scoped to LAN ifaces end0 + wlp1s0f0)
@@ -122,13 +121,11 @@
 21069 0.0.0.0 :: Home Assistant
 
 # microVM Bridge Services
-9081 127.0.0.1 hermes-mcp (OpenClaw↔Hermes MCP bridge; OpenClaw VM reaches via br-openclaw DNAT 10.99.0.1:9081→127.0.0.1:9081)
-9081 127.0.0.1 openclaw-hermes-smoke (15-min synthetic ask_hermes probe; second loopback consumer of the same bridge port)
-9082 127.0.0.1 drafts-mcp (Drafts(hera) MCP SSE bridge; OpenClaw via br-openclaw 10.99.0.1:9082→127.0.0.1:9082 and Hermes via hermes-br0 10.99.1.1:9082→127.0.0.1:9082)
-18789 10.99.0.2 OpenClaw AI Gateway (microVM, proxied by nginx)
+9081 127.0.0.1 hermes-mcp (Hermes MCP SSE bridge; loopback only -- consumed by hermes-health-check)
+9082 127.0.0.1 drafts-mcp (Drafts(hera) MCP SSE bridge; Hermes via the guest DNAT)
 # Hermes VM bridge DNAT (hermes-br0 gateway 10.99.1.1): host PREROUTING maps 10.99.1.1:PORT→127.0.0.1:PORT
 # so the Hermes microVM (10.99.1.2) can reach EXISTING host loopback listeners. NOT new listeners — see the
-# 443/993/2525/4000/5232/5432/8123 entries above. (Mirrors the OpenClaw br-openclaw DNAT pattern.)
+# 443/993/2525/4000/5232/5432/8123 entries above.
 443  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:443 (Nginx HTTPS: searxng/vane/trader.vulcan.lan)
 993  10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:993 (Dovecot IMAPS)
 2525 10.99.1.1 Hermes VM bridge DNAT → 127.0.0.1:2525 (Postfix plain-SMTP for microVMs)
@@ -141,7 +138,6 @@
 8880 127.0.0.1 vmalert (VictoriaMetrics alerting engine — web/API + self-metrics)
 9085 127.0.0.1 Drafts MCP Self-Heal webhook receiver
 9090 127.0.0.1 Prometheus Server
-9092 127.0.0.1 OpenClaw Self-Heal webhook receiver
 9093 127.0.0.1 Alertmanager
 9094 * :: Alertmanager clustering (UDP + TCP)
 9096 * :: Loki gRPC
@@ -158,7 +154,6 @@
 9154 * :: Postfix Exporter
 9166 * :: Dovecot Exporter
 9187 * :: PostgreSQL Exporter
-9221 127.0.0.1 Health Check Exporter (critical services)
 9273 127.0.0.1 OPNsense Exporter (Prometheus metrics wrapper; rootless container)
 9274 127.0.0.1 Technitium DNS Exporter
 9275 127.0.0.1 DNS Query Exporter (Python)

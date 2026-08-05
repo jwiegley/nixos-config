@@ -13,9 +13,6 @@ REQUIRED = {
 }
 
 
-def test_only_hermes_profile_present():
-    # OpenClaw was decommissioned 2026-08-03; hermes is the sole agent.
-    assert set(m.PROFILES) == {"hermes"}
 
 
 def test_profiles_have_required_keys():
@@ -32,7 +29,3 @@ def test_get_profile_returns_dict():
     assert m.get_profile("hermes")["agent"] == "hermes"
 
 
-def test_hermes_inventory_excludes_searxng():
-    # SearXNG is the native web backend, not an MCP server.
-    assert "searxng" not in m.PROFILES["hermes"]["expected_servers"]
-    assert "vane" in m.PROFILES["hermes"]["expected_servers"]

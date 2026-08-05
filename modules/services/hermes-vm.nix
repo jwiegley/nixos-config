@@ -647,6 +647,18 @@ in
       # `hermes config set` so this file is the only source of truth.
       logging.level = "INFO";
 
+      # Deliver scheduled-job output verbatim. Left at its default of `true`,
+      # cron/scheduler.py wraps every delivery in a "Cronjob Response: <name>
+      # (job_id: ...)" header and a "To stop or manage this job..." footer,
+      # which is noise in the Discord channel where these land.
+      #
+      # The scheduler re-reads this from ~/.hermes/config.yaml at delivery time
+      # rather than holding the value from startup, so it does NOT come from the
+      # store path -- it only works because the upstream module deep-merges
+      # `settings` into that file at activation. Verified against
+      # cron/scheduler.py:640-661 in hermes-agent 0.15.1.
+      cron.wrap_response = false;
+
       # NO NATIVE SEARCH BACKEND, deliberately (2026-08-05, operator's request):
       # web search goes through the PERPLEXITY MCP SERVER instead, which returns a
       # synthesised answer rather than a link list.

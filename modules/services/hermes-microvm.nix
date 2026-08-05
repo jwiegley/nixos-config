@@ -65,7 +65,8 @@ let
   # The host PREROUTING DNAT, per-interface INPUT accepts, and the
   # hermes-isolate RETURN rules below are all parameterized on this list, so
   # adding a port here propagates to all three automatically:
-  #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan)
+  #   443  nginx HTTPS (searxng.vulcan.lan, vane.vulcan.lan, trader.vulcan.lan,
+  #        gitea.vulcan.lan)
   #   993  Dovecot IMAPS (email-contacts)
   #   2525 Postfix SMTP (email-contacts)
   #   4000 LLM gateway (chat + org-search embeddings, nginx -> hera)
@@ -488,6 +489,10 @@ in
     "hermes-prepare-secrets.service"
     "microvm@hermes.service"
   ];
+  sops.secrets."open-source-secretary/gitea-token".restartUnits = [
+    "hermes-prepare-secrets.service"
+    "microvm@hermes.service"
+  ];
   # DO NOT RENAME THESE THREE. The `openclaw/` prefix is not a leftover
   # reference to a removed service — it is the literal KEY NAME inside the
   # encrypted secrets.yaml, which lives in a separate repo and is not edited
@@ -632,6 +637,15 @@ in
         install -m 0400 -o hermes -g hermes \
           "$GITHUB_TOKEN_SRC" "${secretsStagingDir}/github-token"
         echo "GitHub token staged"
+      fi
+
+      # Gitea PAT for the read-only gitea MCP server, shared with the same
+      # nightly report. Same guard, same reasoning as the GitHub token above.
+      GITEA_TOKEN_SRC="${config.sops.secrets."open-source-secretary/gitea-token".path}"
+      if [ -f "$GITEA_TOKEN_SRC" ]; then
+        install -m 0400 -o hermes -g hermes \
+          "$GITEA_TOKEN_SRC" "${secretsStagingDir}/gitea-token"
+        echo "Gitea token staged"
       fi
 
       echo "Hermes secrets staged to ${secretsStagingDir}"

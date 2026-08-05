@@ -289,6 +289,45 @@ let
     exec ${pkgs.github-mcp-server}/bin/github-mcp-server stdio --read-only
   '';
 
+  # Gitea MCP server: the same capability against the self-hosted forge.
+  # Upstream's official server (pkgs.gitea-mcp-server), for the same reasons as
+  # the GitHub one above.
+  #
+  # DIFFERS FROM GITHUB IN TWO WAYS THAT MATTER:
+  #
+  # 1. Gitea is a HOST service, not a public API. It is reached at
+  #    gitea.vulcan.lan through nginx, which means the guest resolves that name
+  #    to the bridge address (networking.hosts below) and rides the existing 443
+  #    DNAT. Using the public https://gitea.newartisans.com instead would work,
+  #    but would hairpin a local request out through Cloudflare and back for no
+  #    benefit.
+  # 2. Therefore SSL_CERT_FILE is REQUIRED here, not belt-and-braces: that vhost
+  #    presents a Vulcan Step-CA certificate, which is only trusted because
+  #    security.pki.certificates (below) bakes the root into this bundle. The
+  #    server offers a `-insecure` flag to skip verification; it is deliberately
+  #    NOT used, because the whole point of running Step-CA is that internal TLS
+  #    is verifiable.
+  #
+  # -read-only again load-bearing, and more so than for GitHub: unrestricted
+  # this server exposes 57 tools of which 28 mutate (create/delete/edit repos,
+  # branches, files, issues, PRs, releases). Measured 57 → 27 tools, 28 → 0
+  # write-capable. Unlike the GitHub server there is no toolset selection, so 27
+  # tools / ~3.5k tokens of schema is the floor for having Gitea at all.
+  #
+  # The token goes through the ENVIRONMENT, never the `-token` flag the server
+  # also accepts: an argv token is world-readable in /proc/<pid>/cmdline for the
+  # life of the process.
+  giteaMcpServer = pkgs.writeShellScript "gitea-mcp" ''
+    set -eu
+    TOKEN_FILE="/run/hermes-secrets/gitea-token"
+    if [ ! -r "$TOKEN_FILE" ]; then
+      echo "gitea-mcp: token not readable at $TOKEN_FILE" >&2
+      exit 1
+    fi
+    export GITEA_ACCESS_TOKEN="$(cat "$TOKEN_FILE")"
+    exec ${pkgs.gitea-mcp-server}/bin/gitea-mcp -t stdio -read-only
+  '';
+
   # org-db MCP server: read-only org-mode access. org_sql connects to
   # PostgreSQL (org database, read-only role `openclaw`) over the 5432 DNAT
   # via psycopg2/libpq; org_search shells `org db search` against the LLM gateway
@@ -554,6 +593,7 @@ in
       "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
       "trader.vulcan.lan" # stock-trader service (via nginx 443)
+      "gitea.vulcan.lan" # Gitea forge (gitea MCP server, via nginx 443)
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
       "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.1.1:2525 → 127.0.0.1:2525)
       "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.1.1:5232 → 127.0.0.1:5232)
@@ -1065,6 +1105,20 @@ in
           # unaided, so this is belt-and-braces — but the stdio children start
           # with an effectively EMPTY environment (see the vulcanCaBundle note
           # at the top), and being explicit removes a class of surprise.
+          SSL_CERT_FILE = vulcanCaBundle;
+        };
+      };
+
+      gitea = {
+        command = "${giteaMcpServer}";
+        args = [ ];
+        env = {
+          # Resolves to the bridge address via networking.hosts below, then
+          # rides the 443 DNAT to the host's nginx.
+          GITEA_HOST = "https://gitea.vulcan.lan";
+          # REQUIRED, unlike the github server's copy of this line: that vhost
+          # serves a Vulcan Step-CA certificate, so without the bundle carrying
+          # the Step-CA root every call fails verification.
           SSL_CERT_FILE = vulcanCaBundle;
         };
       };

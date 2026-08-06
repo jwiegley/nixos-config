@@ -686,6 +686,28 @@ in
       "mcp"
     ];
 
+    # Shell tools the AGENT'S OWN scripts need. This option feeds the unit's
+    # `path` (upstream nixosModules.nix:912-917), so it is what a no_agent cron
+    # job — a bare shell script with no model and no tool registry — actually
+    # resolves against.
+    #
+    # curl is here because its absence silently destroyed a job the operator
+    # asked for. Hermes wrote ~/.hermes/scripts/econ_license_watch.sh to poll
+    # `curl -s -k --user ... imaps://imap.vulcan.lan/INBOX` every 10 minutes and
+    # ping when a vendor licence mail arrived. curl was on none of the unit's 18
+    # PATH entries, so every run exited 127 into `2>/dev/null`, fell through the
+    # script's `[ -z "$NEW_UIDS" ] && exit 0`, and recorded last_status=ok. 123
+    # consecutive no-ops, zero IMAP connections from the guest, and a job that
+    # looked healthy in `hermes cron list` the whole time.
+    #
+    # The failure mode generalises: an agent-authored script that shells out to
+    # a binary NixOS never put on this PATH fails silently and reports success.
+    # If another such job appears dead, check its interpreter's PATH before
+    # believing the exit status. Audited against this script — grep, sed, head,
+    # tr, cat and timeout all already resolve; curl was the only gap. gawk, jq
+    # and python3 are still absent, and are the likely next casualties.
+    extraPackages = with pkgs; [ curl ];
+
     # Directory-based plugin: the module symlinks this into
     # ${stateDir}/.hermes/plugins/nix-managed-<name> and asserts on duplicate
     # names. Still requires settings.plugins.enabled below — extraPlugins

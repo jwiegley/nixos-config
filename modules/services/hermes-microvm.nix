@@ -180,6 +180,22 @@ in
   # The Vulcan root CA is embedded into the VM's trust store at
   # evaluation time via security.pki.certificates (see hermes-vm.nix),
   # so no host-side staging is needed.
+  # THE MODE HERE IS NOT WHAT YOU WILL FIND ON DISK, and that is not a bug to
+  # "fix" by chasing it. This directory is the virtio-fs source for the guest's
+  # ${stateDir}, and the guest's upstream module declares the SAME directory
+  # 2770: once via tmpfiles (nixosModules.nix:707) and again via `chmod 2770` in
+  # its activation script (:727), deliberately -- setgid, so files created by
+  # any hostUser inherit the hermes group. So host and guest genuinely disagree,
+  # and whichever ran last wins: a host tmpfiles run leaves 0750, the next guest
+  # boot leaves 2770. Observed flipping to 2770 three seconds after the VM went
+  # active on 2026-08-06.
+  #
+  # Harmless in both states -- each grants group `hermes` the traversal that
+  # hermes-log-reader needs for hermes-fallback-counter -- so this is left
+  # alone rather than loosened to match. Do not read a 2770 here as drift or as
+  # evidence of the 2026-08-05 incident, where a stray HERMES_HOME pointed at
+  # this directory chmodded it 0700 and DID break that counter. 0700 is the
+  # failure; 2770 and 0750 are both fine.
   systemd.tmpfiles.rules = [
     "d ${stateDir} 0750 hermes hermes -"
   ];

@@ -731,19 +731,45 @@ in
       # and searxng needs the URL. The agent therefore reaches for the Perplexity
       # tool when it searches.
       #
-      # KNOWN ARTIFACT: the native `web_search` tool is still REGISTERED and will
-      # error if the model calls it, because Hermes' only disable mechanism is
-      # `agent.disabled_toolsets` and web_search shares the "web" toolset with
-      # web_extract -- disabling the toolset would take extraction with it, and
-      # extraction is what lets the agent read a page it found. Verified against
-      # tools/web_tools.py:1326-1345 in hermes-agent 0.15.1.
-
-      # The EXTRACT half. SearXNG cannot fetch arbitrary URLs, so without this
-      # `web_extract` has no provider and the agent can find pages but never
-      # read them. "local" is the trafilatura provider — see the
-      # localExtractPlugin comment near the top of this file for why local
-      # rather than a hosted reader or one of the bundled (uniformly paid)
-      # backends.
+      # CONSEQUENCE, and it is worse than the note that stood here until
+      # 2026-08-06. That note claimed the native `web_search` stays REGISTERED
+      # and merely errors when called. Both halves were wrong, and the error it
+      # predicted is unreachable:
+      #
+      #   * web_search registers with `check_fn=check_web_api_key`
+      #     (tools/web_tools.py:1326-1335), and registry.get_definitions SKIPS
+      #     any entry whose check_fn fails (tools/registry.py:358-364). So the
+      #     model is never shown the schema. It reports the tool as absent, which
+      #     is exactly what Hermes told the operator on 2026-08-06.
+      #   * check_web_api_key (:1155-1163) consults `web.backend` and otherwise a
+      #     HARDCODED list -- exa, parallel, firecrawl, tavily, searxng,
+      #     brave-free, ddgs, xai. It never asks the plugin registry, so no
+      #     nix-managed provider can satisfy it.
+      #   * web_extract shares THE SAME check_fn (:1342). The two stand or fall
+      #     together, so `extract_backend = "local"` below resolves correctly and
+      #     is then never advertised. The trafilatura extractor is dead weight
+      #     until the gate passes.
+      #
+      # Blast radius is every platform, not just cron: resolving each real
+      # toolset against this config yields web_search=False and web_extract=False
+      # for discord, api_server and cron alike. Interactive chat only LOOKS fine
+      # because mcp_perplexity_web_search and mcp_vane_web_research remain --
+      # but nothing in the MCP set extracts a URL, so page-reading is gone
+      # everywhere.
+      #
+      # Scheduled jobs get hit hardest, because a job may pin `enabled_toolsets`.
+      # The "Iran conflict watch" job pinned ["web"], which after the gate
+      # resolves to the empty set -- MCP tools live under `mcp-<server>`
+      # (tools/mcp_tool.py:3365), so pinning "web" also excludes Perplexity. Its
+      # advertised tool list was literally empty and it hallucinated three
+      # web_search calls before reporting it could not search. That job now pins
+      # ["web", "mcp-perplexity"].
+      #
+      # Setting SEARXNG_URL alone flips check_web_api_key true and brings BOTH
+      # tools back (SearXNG is still running on the host, port 8890). That is the
+      # one-line restoration if the operator wants native web tooling back; it
+      # would also make the model prefer SearXNG over Perplexity for search,
+      # which is why it is not done unilaterally here.
       web.extract_backend = "local";
 
       # User plugins are OPT-IN. hermes_cli/plugins.py auto-loads bundled

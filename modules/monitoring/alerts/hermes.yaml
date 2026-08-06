@@ -175,28 +175,50 @@ groups:
             plugin. See pkgs/hermes-qdrant-memory/__init__.py for the second one.
 
       # Guards against the failure this whole design is most exposed to: the
-      # provider quietly not being used at all. If sessions are happening (the
-      # e2e probe alone drives one every 15 min) but none of them activated a
-      # memory provider for 6h, memory is effectively off.
+      # provider quietly not being used at all.
+      #
+      # THRESHOLD WIDENED 6h -> 30h on 2026-08-06, because the premise the 6h
+      # was chosen under no longer holds. It read "sessions happen at least
+      # every 15 minutes (the e2e chat probe), so 6h without an activation means
+      # the provider is not being selected" -- but that probe was removed the day
+      # before, and it was the only thing guaranteeing traffic. Activations now
+      # happen ONLY when a person talks to Hermes: the retained log shows 106 on
+      # 2026-08-05 (probe-driven, max gap 2.0h) against 2 on 2026-08-06. The
+      # first quiet night therefore fired this alert at 9.3h idle, with nothing
+      # wrong. Left at 6h it would fire every night.
+      #
+      # So this no longer distinguishes "provider broken" from "nobody has used
+      # Hermes". It measures the weaker "no memory-activating session in 30h",
+      # chosen to clear a normal night plus a quiet day. Accept the cost: a real
+      # breakage can now hide for up to 30h.
+      #
+      # Making it precise again needs a session-start metric to compare against,
+      # so the rule could say "sessions ARE happening and none activated memory".
+      # There is no clean marker for that today: `gateway.run: inbound message`
+      # covers only Discord (12 lines vs 127 activations in one log), and
+      # `agent_init` also fires for the auxiliary title-generation client, which
+      # legitimately runs long after the activation it follows.
       - alert: HermesMemoryProviderNotActivating
         expr: |
-          (time() - hermes_memory_last_activation_timestamp_seconds) > 21600
-          and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 21600
+          (time() - hermes_memory_last_activation_timestamp_seconds) > 108000
+          and ignoring(__name__) (time() - hermes_vm_start_time_seconds) > 108000
         for: 30m
         labels:
           severity: warning
           category: availability
           service: hermes-agent
         annotations:
-          summary: "Hermes has not activated its memory provider in 6 hours"
+          summary: "Hermes has not activated its memory provider in 30 hours"
           description: |
-            No "Memory provider ... activated" line in the agent log for 6
-            hours, on a VM that has been up at least that long. Sessions do
-            occur at least every 15 minutes (the e2e chat probe), so this means
-            the provider is no longer being selected -- most likely
+            No "Memory provider ... activated" line in the agent log for 30
+            hours, on a VM that has been up at least that long. Either the
+            provider is no longer being selected -- most likely
             settings.memory.provider no longer matches the installed plugin
-            directory. NOTE a 0 timestamp means "never seen in the retained
-            log tail", which also trips this.
+            directory -- or nobody has talked to Hermes in that time, which this
+            rule cannot tell apart. Check hermes_memory_points: if it is
+            growing, sessions are happening and memory is working. NOTE a 0
+            timestamp means "never seen in the retained log tail", which also
+            trips this.
 
       # A large drop in stored points means memories were deleted -- a wiped
       # collection, an errant forget, or a restore over the top. `< -5` rather

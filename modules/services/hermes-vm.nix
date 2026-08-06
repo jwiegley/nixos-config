@@ -423,6 +423,43 @@ let
   hangCapture = pkgs.writeShellScript "hermes-hang-capture" (
     builtins.readFile ../../scripts/hermes-hang-capture.sh
   );
+
+  # Deletes mcp_servers entries that the Nix config no longer declares.
+  # Rationale in the activationScripts.hermes-prune-stale-mcp comment below.
+  #
+  # Same interpreter derivation as the upstream merge script, so this adds
+  # nothing to the guest closure. Ownership and mode are restored explicitly:
+  # upstream chowns the file immediately after merging, and this runs after
+  # that, so a fresh root-owned file would otherwise be left behind.
+  pruneStaleMcpServers = pkgs.writeScript "hermes-prune-stale-mcp" ''
+    #!${pkgs.python3.withPackages (ps: [ ps.pyyaml ])}/bin/python3
+    import os, sys, yaml
+    from pathlib import Path
+
+    path, keep = Path(sys.argv[1]), set(sys.argv[2:])
+    if not path.exists():
+        sys.exit(0)
+
+    cfg = yaml.safe_load(path.read_text()) or {}
+    servers = cfg.get("mcp_servers")
+    if not isinstance(servers, dict):
+        sys.exit(0)
+
+    stale = sorted(set(servers) - keep)
+    if not stale:
+        sys.exit(0)
+    for name in stale:
+        del servers[name]
+
+    st = path.stat()
+    tmp = path.parent / (path.name + ".prune")
+    with open(tmp, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    tmp.replace(path)
+    print("hermes: pruned stale mcp_servers: " + ", ".join(stale))
+  '';
 in
 {
   imports = [
@@ -585,6 +622,30 @@ in
   # `dev-virtio\x2dfs-state.mount`. Check virtiofsd status on the host
   # (microvm-virtiofsd@hermes.service) before suspecting in-VM issues.
   fileSystems."${stateDir}".neededForBoot = lib.mkForce true;
+
+  # ---- Prune MCP servers the operator has removed ----
+  # The upstream activation (hermes-agent-setup, nixosModules.nix:721) runs
+  # `hermes-config-merge`, which does `deep_merge(existing, nix)` into
+  # ${stateDir}/.hermes/config.yaml. That merge NEVER DELETES: by design it
+  # "preserves user-added keys". Right for a hand-added key like `onboarding`,
+  # but it cannot tell a key the operator deleted from one they added, so
+  # REMOVING an mcpServers entry below does not remove it from the running
+  # agent. The state file keeps it forever and Hermes keeps launching it.
+  #
+  # Found 2026-08-06, a day after the fact: `github` and `gitea`, removed at the
+  # operator's request in 3af2dabfb because their token cost was too high, were
+  # still being launched. So was `memory-vault`, whose service was deleted
+  # outright in efbd70fb5 -- 101 connection failures (Errno 111) in one retained
+  # log, three retries deep on every session that touched MCP. The generated
+  # config had 7 servers; the file the agent actually reads had 10. Verifying a
+  # removal against the store path is therefore meaningless -- check the state
+  # file.
+  #
+  # This makes the SET of mcp_servers authoritative while leaving every other
+  # key to the upstream merge. Ordered after the script that writes the file.
+  system.activationScripts.hermes-prune-stale-mcp = lib.stringAfter [ "hermes-agent-setup" ] ''
+    ${pruneStaleMcpServers} ${stateDir}/.hermes/config.yaml ${lib.concatStringsSep " " (builtins.attrNames config.services.hermes-agent.mcpServers)}
+  '';
 
   # ---- Vulcan CA bundle (HTTPS to internal services) ----
   # Embed the host's root CA at evaluation time so it lands in the

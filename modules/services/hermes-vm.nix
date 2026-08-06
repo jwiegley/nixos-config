@@ -537,11 +537,12 @@ in
   # 192.168.0.0/16, so normal DNS resolution (the real LAN IP) is
   # unreachable; pointing these names at the gateway routes them through the
   # two-stage DNAT instead. Mirrors the removed OpenClaw VM config's networking.hosts.
-  # vane/trader/imap/smtp/radicale are load-bearing (the scripts use
+  # searxng/vane/trader/imap/smtp/radicale are load-bearing (the scripts use
   # the hostnames); hass.vulcan.lan is included for consistency but is
   # unused — the HA bridge connects to 127.0.0.1:8123 by IP via the DNAT.
   networking.hosts = {
     ${bridgeAddr} = [
+      "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
       "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
       "trader.vulcan.lan" # stock-trader service (via nginx 443)
       "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
@@ -731,45 +732,47 @@ in
       # and searxng needs the URL. The agent therefore reaches for the Perplexity
       # tool when it searches.
       #
-      # CONSEQUENCE, and it is worse than the note that stood here until
-      # 2026-08-06. That note claimed the native `web_search` stays REGISTERED
-      # and merely errors when called. Both halves were wrong, and the error it
-      # predicted is unreachable:
+      # SearXNG is the NATIVE web-search backend, and it is ALSO what keeps
+      # web_extract alive. Restored 2026-08-06 after removing it on 2026-08-05
+      # broke more than intended. Read this before removing it again:
       #
-      #   * web_search registers with `check_fn=check_web_api_key`
-      #     (tools/web_tools.py:1326-1335), and registry.get_definitions SKIPS
-      #     any entry whose check_fn fails (tools/registry.py:358-364). So the
-      #     model is never shown the schema. It reports the tool as absent, which
-      #     is exactly what Hermes told the operator on 2026-08-06.
+      #   * Both web tools sit behind ONE gate. web_search
+      #     (tools/web_tools.py:1326-1335) and web_extract (:1342) register with
+      #     the SAME `check_fn=check_web_api_key`, and registry.get_definitions
+      #     SKIPS any entry whose check_fn fails (tools/registry.py:358-364).
+      #     A failing gate does not make the tool error when called -- the model
+      #     never receives the schema and reports the tool as absent.
       #   * check_web_api_key (:1155-1163) consults `web.backend` and otherwise a
-      #     HARDCODED list -- exa, parallel, firecrawl, tavily, searxng,
-      #     brave-free, ddgs, xai. It never asks the plugin registry, so no
-      #     nix-managed provider can satisfy it.
-      #   * web_extract shares THE SAME check_fn (:1342). The two stand or fall
-      #     together, so `extract_backend = "local"` below resolves correctly and
-      #     is then never advertised. The trafilatura extractor is dead weight
-      #     until the gate passes.
+      #     HARDCODED list: exa, parallel, firecrawl, tavily, searxng, brave-free,
+      #     ddgs, xai. It NEVER asks the plugin registry, so the nix-managed
+      #     `local` extract provider cannot satisfy it. SEARXNG_URL is the only
+      #     entry on that list this guest can satisfy without a paid key.
       #
-      # Blast radius is every platform, not just cron: resolving each real
-      # toolset against this config yields web_search=False and web_extract=False
-      # for discord, api_server and cron alike. Interactive chat only LOOKS fine
-      # because mcp_perplexity_web_search and mcp_vane_web_research remain --
-      # but nothing in the MCP set extracts a URL, so page-reading is gone
-      # everywhere.
+      # So dropping SEARXNG_URL silently took page-reading with it, on every
+      # platform, for a day: `extract_backend = "local"` still RESOLVED, but the
+      # tool was never advertised. Interactive chat masked it (the Perplexity and
+      # Vane MCP tools survived), and it surfaced only when a cron job that pinned
+      # `enabled_toolsets = ["web"]` was left with an empty tool list.
       #
-      # Scheduled jobs get hit hardest, because a job may pin `enabled_toolsets`.
-      # The "Iran conflict watch" job pinned ["web"], which after the gate
-      # resolves to the empty set -- MCP tools live under `mcp-<server>`
-      # (tools/mcp_tool.py:3365), so pinning "web" also excludes Perplexity. Its
-      # advertised tool list was literally empty and it hallucinated three
-      # web_search calls before reporting it could not search. That job now pins
-      # ["web", "mcp-perplexity"].
+      # Perplexity is NOT displaced by this. It is an MCP tool
+      # (mcp_perplexity_web_search) in its own `mcp-perplexity` toolset
+      # (tools/mcp_tool.py:3365), so it coexists: the model picks SearXNG's
+      # web_search for a link list and Perplexity when it wants a synthesised
+      # answer. Forcing the backend below just stops Hermes walking its default
+      # list (firecrawl→parallel→tavily→exa→searxng→brave-free→ddgs) to get here.
       #
-      # Setting SEARXNG_URL alone flips check_web_api_key true and brings BOTH
-      # tools back (SearXNG is still running on the host, port 8890). That is the
-      # one-line restoration if the operator wants native web tooling back; it
-      # would also make the model prefer SearXNG over Perplexity for search,
-      # which is why it is not done unilaterally here.
+      # Reaches the host SearXNG over 443 via the bridge DNAT; TLS verifies
+      # against the Vulcan root CA already trusted in the VM.
+      web.search_backend = "searxng";
+
+      # The EXTRACT half. SearXNG cannot fetch arbitrary URLs, so without this
+      # `web_extract` has no provider and the agent can find pages but never
+      # read them. "local" is the trafilatura provider — see the
+      # localExtractPlugin comment near the top of this file for why local
+      # rather than a hosted reader or one of the bundled (uniformly paid)
+      # backends. Explicit config wins over availability in
+      # _get_capability_backend (:182-192), so this stays "local" even though
+      # searxng is now the search backend.
       web.extract_backend = "local";
 
       # User plugins are OPT-IN. hermes_cli/plugins.py auto-loads bundled
@@ -1225,6 +1228,19 @@ in
   # let-block above for the why.
   systemd.services.hermes-agent.environment = {
     PYTHONPATH = "${hermesPyShim}";
+    # Native SearXNG web backend. This variable is load-bearing for BOTH web
+    # tools, not just search: it is the only entry on check_web_api_key's
+    # hardcoded backend list that this guest can satisfy, and that one check
+    # gates web_search AND web_extract together (see the settings.web comment
+    # above). Removing it on 2026-08-05 silently disabled page-reading agent-wide
+    # until 2026-08-06 — so if this is ever dropped again, expect to lose
+    # extraction with it, and confirm against tools/registry.py:358-364 first.
+    #
+    # settings.web.search_backend = "searxng" (above) forces it as the provider.
+    # Reaches the host SearXNG over 443 via the bridge DNAT; the SearXNG provider
+    # GETs /search?format=json, which the host instance already enables. No API
+    # key, no extra deps (uses core httpx).
+    SEARXNG_URL = "https://searxng.vulcan.lan";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions.
     # Consumers are host-side only: the OpenClaw↔Hermes MCP bridge
     # (hermes-mcp.service), the e2e chat probe, and Open WebUI, all of which

@@ -1264,10 +1264,33 @@ in
     # key, no extra deps (uses core httpx).
     SEARXNG_URL = "https://searxng.vulcan.lan";
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions.
-    # Consumers are host-side only: the OpenClaw↔Hermes MCP bridge
-    # (hermes-mcp.service), the e2e chat probe, and Open WebUI, all of which
-    # reach the guest over the /30 bridge. There is deliberately no LAN ingress
-    # — see the note at the top of hermes-microvm.nix.
+    # Consumers are host-side only: the Hermes MCP bridge (hermes-mcp.service)
+    # and Open WebUI, both reaching the guest over the /30 bridge, plus whatever
+    # the operator points at it directly. There is deliberately no LAN ingress
+    # — see the note at the top of hermes-microvm.nix. (This list previously also
+    # named the OpenClaw bridge and the e2e chat probe; both were removed, the
+    # probe on 2026-08-05 with the message-sending canaries.)
+    #
+    # RETRIES RE-RUN SIDE EFFECTS ON THIS PATH, and there is no guard. An
+    # OpenAI-compatible client sends the whole message history per request and
+    # carries no Hermes session id, so EVERY request opens a fresh session with
+    # no memory of the last one. If such a client retries — on a slow first
+    # token, a dropped connection, a double-submit — Hermes cannot know it is
+    # repeating itself and will execute the tool call again.
+    #
+    # Observed 2026-08-07: one request to send a test email produced TWO
+    # deliveries. Sessions api-4ebe8c06c6bd317b and api-4183fbcf231052dd, the
+    # second created one second after the first finished; Postfix logged two
+    # connections from 10.99.1.2, two SASL auths and two queue IDs. Nothing was
+    # wrong with Hermes — it was asked twice.
+    #
+    # Deliberately NOT fixed with a duplicate-suppressor (operator's call,
+    # 2026-08-07). A window-based guard on send_email would refuse legitimate
+    # resends, and would still leave cronjob creation and every other
+    # side-effecting tool exposed. The honest mitigation is knowing the
+    # property: treat any tool call made over this path as at-least-once, not
+    # exactly-once. The Discord path does NOT have this problem — it keeps one
+    # session across turns.
     # `API_SERVER_KEY` is supplied via environmentFiles=…/env (sops);
     # requests must present that key as `Authorization: Bearer …`.
     API_SERVER_ENABLED = "true";

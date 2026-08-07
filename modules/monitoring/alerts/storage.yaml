@@ -354,13 +354,45 @@ groups:
       # distinguishes broken block-sharing from a legitimately large dataset, but if the
       # PostgreSQL dump grows substantially this needs revisiting -- a separate
       # absolute-waste-only rule at a much higher floor would cover the gap.
+      #
+      # RETUNED 2026-08-07: floor 100 -> 250 GiB, plus a pool-pressure gate. Two reasons, and
+      # the first is a caution about how to READ this rule:
+      #
+      #   1. It fired that morning on tank/Backups/PostgreSQL at 101.8 GiB waste / ratio 13.9
+      #      -- 1.8 GiB over the floor. Taken at the annotation's word ("block sharing has
+      #      stopped working") that reads as a regression. It was the opposite: the same
+      #      dataset measured 1719.6 GiB / ratio 43.7 when this rule was written, so it had
+      #      improved 94% and merely crossed a floor on the way DOWN. A threshold sitting at
+      #      the steady state flaps forever.
+      #   2. ~100 GiB IS the steady state, structurally, not as a fault. pg_dump output is not
+      #      byte-stable between runs, so rsync rewrites each dump whole and ZFS copy-on-write
+      #      makes the next snapshot pin the previous copy entire. Six daily snapshots of
+      #      6.07-7.26 GiB across a 9-day retention window is ~100 GiB. No amount of block
+      #      sharing avoids that -- it is the price of the retention policy. 250 GiB clears it
+      #      with ~2.5x headroom for database growth while still firing far below anything
+      #      resembling the original 1.7 TiB.
+      #
+      # The pool gate encodes the operator's policy verbatim: residue from older snapshot
+      # generations does not matter until tank itself is under 10% free. Until then this is
+      # accounting, not a problem -- tank was 35.1% free with 10.2 TiB available when this was
+      # set. CONSEQUENCE, deliberately accepted: the rule is now silent until the pool is
+      # genuinely tight, making it a companion to ZFSPoolCapacityHigh (>80% allocated) rather
+      # than an early warning. To restore the early warning, relax the GATE -- do not lower the
+      # floor, which is the part that was actually mis-set.
+      #
+      # Validated against live data before deploying: the full expression returned 0 series,
+      # while the same expression with the gate relaxed to <0.40 free returned exactly
+      # tank/Backups/PostgreSQL -- proving the joins resolve and that the gate, not a broken
+      # label match, is what suppresses it.
       - alert: BackupMirrorSnapshotAmplification
         expr: |
           (zfs_dataset_used_bytes{name=~"tank/Backups/(PostgreSQL|TechnitiumDNS|NodeRED)"}
-            - on(name,pool,instance,job) zfs_dataset_used_by_dataset_bytes) > 100*1024*1024*1024
+            - on(name,pool,instance,job) zfs_dataset_used_by_dataset_bytes) > 250*1024*1024*1024
           and on(name,pool,instance,job)
           (zfs_dataset_used_bytes{name=~"tank/Backups/(PostgreSQL|TechnitiumDNS|NodeRED)"}
             / on(name,pool,instance,job) zfs_dataset_used_by_dataset_bytes) > 10
+          and on(pool)
+          (zfs_pool_free_bytes / zfs_pool_size_bytes) < 0.10
         for: 1h
         labels:
           severity: warning
@@ -368,7 +400,7 @@ groups:
           service: restic
         annotations:
           summary: "Backup mirror {{ $labels.name }} is wasting {{ $value | humanize1024 }}B in snapshot residue"
-          description: "Dataset {{ $labels.name }} is a flat rsync mirror, so its snapshots should share blocks with live data. It is currently holding {{ $value | humanize1024 }}B more than its live size, at over 10x amplification -- meaning block sharing has stopped working. Usual cause: a large file rewritten in full on every run (an uncompressed pg_dump of a high-churn table defeats rsync --checksum), so each snapshot pins a near-complete copy. Check `zfs list -o name,used,usedbydataset,usedbysnapshots -r tank/Backups` and `zfs list -t snapshot -r <dataset>`."
+          description: "Dataset {{ $labels.name }} is holding {{ $value | humanize1024 }}B more than its live size at over 10x amplification, AND tank is now under 10% free -- which is the only condition under which this residue was declared to matter. Do NOT read this as 'block sharing broke'. For a mirror of full pg_dumps, roughly 100 GiB of residue is the structural cost of the retention window: dumps are not byte-stable, so rsync rewrites them whole and each snapshot pins the previous copy entire. This fires at 250 GiB, so the real question is whether retention has grown past what the pool can now afford -- trim snapshots or shorten retention rather than hunting a block-sharing fault. Check `zfs list -o name,used,usedbydataset,usedbysnapshots -r tank/Backups` and `zfs list -t snapshot -r <dataset>`."
 
       # UNIT ERROR FIXED 2026-07-28: this was off by 86,400x and could never fire.
       # `rate()` returns a PER-SECOND change, but the threshold 10737418240 is 10 GiB and

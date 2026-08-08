@@ -277,6 +277,10 @@ let
     # rather than a boolean is the same lesson as hermes_vm_start_time_seconds:
     # a snapshot boolean cannot express "no evidence either way".
     AGENT_LOG = pathlib.Path("/var/lib/hermes/.hermes/logs/agent.log")
+    # The rotated predecessor, read to keep log-derived stamps alive across a
+    # rollover -- see read_agent_log_tail. Rotation is plain (.1/.2/.3), not
+    # compressed, so this needs no decompression.
+    AGENT_LOG_PREV = pathlib.Path("/var/lib/hermes/.hermes/logs/agent.log.1")
     # Only the tail is read: this log grows without bound and the health check
     # must not become the reason the host is busy. 2 MB covers hours of agent
     # activity, and both callers walk it in reverse so the newest event wins.
@@ -290,19 +294,62 @@ let
         Cached because two independent probes scan it and re-reading 2 MB per
         probe would double the I/O for no benefit -- and, worse, could give the
         two probes views from different instants.
+
+        SPANS ROTATION. Reading only agent.log made every log-derived stamp reset
+        to 0 the moment the file rolled over, and 0 means "never seen" to the
+        alerts, which read `time() - stamp`. Concretely, on 2026-08-08 the log
+        rotated at 19:46 with the last memory activation at 19:03 left behind in
+        agent.log.1; the probe found none, published 0.0, and
+        HermesMemoryProviderNotActivating fired claiming no activation in 30
+        hours when the true gap was about 12 -- while hermes_memory_points was
+        visibly climbing 105 -> 131, i.e. memory was working the whole time.
+        Rotation happens at ~5 MB and agent.log.1 held 142 activations, so this
+        was not an edge case: it would misfire after EVERY rotation that no
+        session happened to follow quickly.
+
+        So the budget is filled from the ROTATED predecessor first, then the
+        current file, keeping the total capped at AGENT_LOG_TAIL_BYTES and the
+        result in chronological order -- both consumers scan it with reversed()
+        and take the first match as the newest, so order is load-bearing. The
+        predecessor is only opened when the current log does not already fill
+        the budget, which is exactly the post-rotation window.
+
+        Safe for the two consumers because neither COUNTS occurrences; each
+        takes the newest match and stops. Extra history can only supply an
+        answer where there was none.
         """
         global _agent_log_cache
         if _agent_log_cache is not None:
             return _agent_log_cache
+
         try:
             size = AGENT_LOG.stat().st_size
+        except OSError:
+            size = 0
+
+        lines: "list[str]" = []
+        if size < AGENT_LOG_TAIL_BYTES and AGENT_LOG_PREV.is_file():
+            want = AGENT_LOG_TAIL_BYTES - size
+            try:
+                prev_size = AGENT_LOG_PREV.stat().st_size
+                with AGENT_LOG_PREV.open("rb") as fh:
+                    if prev_size > want:
+                        fh.seek(prev_size - want)
+                        fh.readline()  # discard the partial first line
+                    lines += fh.read().decode("utf-8", "replace").splitlines()
+            except OSError:
+                pass
+
+        try:
             with AGENT_LOG.open("rb") as fh:
                 if size > AGENT_LOG_TAIL_BYTES:
                     fh.seek(size - AGENT_LOG_TAIL_BYTES)
                     fh.readline()  # discard the partial first line
-                _agent_log_cache = fh.read().decode("utf-8", "replace").splitlines()
+                lines += fh.read().decode("utf-8", "replace").splitlines()
         except OSError:
-            _agent_log_cache = []
+            pass
+
+        _agent_log_cache = lines
         return _agent_log_cache
     MEM_OK_RE = re.compile(r"Memory provider '[^']*' activated")
     MEM_FAIL_RE = re.compile(

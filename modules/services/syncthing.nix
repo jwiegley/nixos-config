@@ -129,25 +129,9 @@ in
           syncOwnership = false;
           sendOwnership = false;
           copyOwnershipFromParent = false;
-          # Vulcan's POSIX ACLs and macOS metadata are not portable in either
-          # direction. Keep receiving file data without applying remote xattrs.
+          # POSIX ACLs and macOS metadata are host-local policy.
           syncXattrs = false;
-          sendXattrs = true;
-          xattrFilter = {
-            # POSIX ACLs are local filesystem policy, not shared file metadata.
-            entries = [
-              {
-                match = "system.*";
-                permit = false;
-              }
-              {
-                match = "*";
-                permit = true;
-              }
-            ];
-            maxSingleEntrySize = 16777216;
-            maxTotalSize = 67108864;
-          };
+          sendXattrs = false;
         }
         // removeAttrs folder [
           "dataset"

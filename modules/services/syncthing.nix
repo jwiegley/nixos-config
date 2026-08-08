@@ -40,14 +40,21 @@ let
   };
 
   folders = {
-    obsidian = {
-      label = "Obsidian";
-      path = "/tank/doc/obsidian";
-      dataset = "tank/doc";
+    documents = {
+      label = "Documents";
+      path = "/tank/Documents";
+      dataset = "tank/Documents";
       mode = "0700";
       devices = [ "hera" ];
       ignorePatterns = [
         "(?d).DS_Store"
+        "(?d).direnv"
+        "(?d).mypy_cache"
+        "(?d).pytest_cache"
+        "(?d).ruff_cache"
+        "(?d).venv"
+        "(?d)__pycache__"
+        "(?d)node_modules"
         "/.git"
       ];
     };
@@ -120,8 +127,11 @@ in
           filesystemType = "basic";
           fsWatcherEnabled = true;
           fsWatcherDelayS = 1.0;
-          fsWatcherTimeoutS = 0.0;
-          rescanIntervalS = 300;
+          fsWatcherTimeoutS = 5.0;
+          rescanIntervalS = 3600;
+          scanProgressIntervalS = -1;
+          maxConcurrentWrites = 4;
+          disableFsync = false;
           # The local POSIX ACL, not remote mode bits, keeps both the service
           # account and johnw able to work with newly received files.
           ignorePerms = true;

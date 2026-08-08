@@ -43,6 +43,7 @@
 138 0.0.0.0 :: NetBIOS Datagram Service (UDP)
 139 0.0.0.0 :: SMB over NetBIOS
 445 0.0.0.0 :: SMB Direct
+22000 192.168.1.2 Syncthing TCP transport (Hera-only peer allowlist)
 
 # Discovery Protocols
 1900 0.0.0.0 * SSDP (UDP)
@@ -97,6 +98,7 @@
 8123 127.0.0.1 Home Assistant
 8180 127.0.0.1 OpenProject web interface
 8234 127.0.0.1 Stock Trader web service - trader.vulcan.lan (uvicorn FastAPI)
+8384 127.0.0.1 Syncthing administration GUI
 8428 127.0.0.1 VictoriaMetrics
 8443 127.0.0.1 Step-CA
 8765 127.0.0.1 Speedtest Tracker web interface

@@ -125,6 +125,7 @@
     ../../modules/monitoring/services/hermes-fallback-counter.nix
     ../../modules/services/nginx-default-vhost.nix
     ../../modules/services/hera-llm-proxy.nix
+    ../../modules/services/syncthing.nix
     ../../modules/services/aria2.nix
     ../../modules/services/atd.nix
     ../../modules/services/atd-web.nix

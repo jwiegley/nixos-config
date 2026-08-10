@@ -56,7 +56,29 @@
       # lines (~23/hour, chronic): those come from the CHIP SDK's own native
       # logger at ERROR level and are a real, if benign, signal about Thread
       # device subscriptions. Deliberately left visible.
-      exec = "--log-level warning";
+      # THE STORAGE FLAGS ARE LOAD-BEARING AND MUST STAY HERE. Podman args after
+      # the image name REPLACE the image's CMD (ENTRYPOINT is kept), and this
+      # image declares
+      #   Cmd = ["--storage-path" "/data" "--paa-root-cert-dir" "/data/credentials"]
+      # so an `exec` of just "--log-level warning" silently DELETED both.
+      #
+      # That is what happened from 2026-08-03 12:25:23 (generation 2390; 2389 was
+      # the last clean one) until 2026-08-10. With --storage-path gone the Python
+      # layer fell back to $HOME/.matter_server inside the container's --rm
+      # writable layer, minted a SUBSTITUTE CA and fabric, and served that to
+      # Home Assistant. All 6 commissioned devices -- 26 entities -- were
+      # unavailable for seven days while the unit reported active and the real
+      # node DB in /var/lib/matter-server sat untouched.
+      #
+      # It stayed silent because the split is PARTIAL: the native CHIP layer has
+      # compiled-in Home Assistant add-on defaults, so chip_factory.ini,
+      # chip_config.ini and chip_counters.ini kept resolving to /data and kept
+      # being written. Only the Python-level chip.json followed the missing flag.
+      # So the mount looked live in every `ls` while the fabric was not, and the
+      # nightly update-containers restart re-ran the broken start eight times.
+      #
+      # If you need to change the log level again, APPEND. Do not replace.
+      exec = "--storage-path /data --paa-root-cert-dir /data/credentials --log-level warning";
     };
 
     unitConfig = {

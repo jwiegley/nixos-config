@@ -120,15 +120,49 @@ let
     };
 
     # aioafero: Hubspace (Afero cloud) async client
+    #
+    # 9.0.1, not the 6.0.1 that stood here until 2026-08-10.
+    # custom_components/hubspace 8.0.0 calls AferoAuth.for_login(), which does
+    # not exist before 9.x, so on 6.0.1 the config flow raised AttributeError and
+    # Home Assistant surfaced its generic "Unknown error occurred" the moment the
+    # password was submitted. Nothing was wrong with the credentials -- the flow
+    # never got as far as checking them.
+    #
+    # NOTE for anyone chasing this later: nixpkgs does NOT package aioafero at
+    # all, in either channel. This derivation is its only source on the host, so
+    # the pinned nixpkgs-unstable input is irrelevant here and must not be moved
+    # on its account.
     aioafero = hasPy.buildPythonPackage rec {
       pname = "aioafero";
-      version = "6.0.1";
+      version = "9.0.1";
       pyproject = true;
       src = prev.fetchPypi {
         inherit pname version;
-        sha256 = "1a66e3e4e9dae32295b136e5ca87536e73f5143c16dae8bbebe421f0e895e7ac";
+        sha256 = "5493d3a6709a47e0c499df999b430a207e0bd606533fe6bd9e0b59d8ba12106d";
       };
+
+      # 9.0.1 raises its floor to aiohttp>=3.14.3 while Home Assistant pins
+      # aiohttp==3.14.1 EXACTLY (HA core's package_constraints.txt). With
+      # pythonRuntimeDepsCheckHook active, a bare version bump fails the BUILD
+      # ("aiohttp>=3.14.3 not satisfied by version 3.14.1") -- fail-closed, so a
+      # mistake here cannot reach the running system.
+      #
+      # Lowering aioafero's floor rather than raising HA's aiohttp is deliberate:
+      # upstream's changelog gives CVE hygiene, not an API change, as the reason
+      # for the bump, and 3.14.2/3.14.3 are bugfix-only with no new public API.
+      # Moving HA's aiohttp instead would diverge from a pin HA asserts exactly,
+      # which is the one change in this area that could break HA itself.
+      # Patching the metadata keeps the override visible in the diff rather than
+      # hiding it behind dontCheckRuntimeDeps.
+      #
+      # REVISIT when HA's own aiohttp reaches 3.14.3: delete this postPatch.
+      postPatch = ''
+        substituteInPlace pyproject.toml \
+          --replace-fail '"aiohttp>=3.14.3"' '"aiohttp>=3.14.1"'
+      '';
+
       build-system = with hasPy; [ hatchling ];
+      # Unchanged from 6.0.1 -- 9.0.1 introduces no new dependencies.
       dependencies = with hasPy; [
         aiohttp
         beautifulsoup4

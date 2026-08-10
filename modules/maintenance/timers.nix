@@ -83,8 +83,30 @@ let
 
         log "[$label] Checking image: $image"
 
+        # Compare the image ID across the pull. The previous test grepped the
+        # pull's OUTPUT for "Downloading\|Copying\|Getting image", which is
+        # ALWAYS TRUE: podman prints "Getting image source signatures" and
+        # "Copying blob ... skipped: already exists" even when nothing changed.
+        # So every container was declared Updated and restarted every night.
+        # Measured over the retained journal before this fix: "Already
+        # up-to-date" appeared 0 times and "Updated:" 39 times (13 images x 3
+        # nights), while the local image configs were months old.
+        #
+        # That is how a stateful container got recreated nightly. It did not by
+        # itself destroy anything -- every managed container runs --rm --replace,
+        # so a restart always discards the writable layer, and only matter-server
+        # was keeping state there (a separate bug, fixed in
+        # modules/containers/matter-server-quadlet.nix). But it re-ran that
+        # broken start eight times and turned a one-off misconfiguration into a
+        # week-long outage, so the gate is worth making honest.
+        #
+        # An unchanged digest yields an identical ID, so this is exact rather
+        # than heuristic. If the image is absent beforehand, `inspect` fails and
+        # before_id is empty, which correctly reads as "changed".
+        before_id=$("''${podman_cmd[@]}" image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)
         if output=$("''${podman_cmd[@]}" pull "$image" 2>&1); then
-          if echo "$output" | grep -q "Downloading\|Copying\|Getting image"; then
+          after_id=$("''${podman_cmd[@]}" image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)
+          if [ "$before_id" != "$after_id" ]; then
             log "[$label] Updated: $image"
             updated_images="$updated_images $image"
           else

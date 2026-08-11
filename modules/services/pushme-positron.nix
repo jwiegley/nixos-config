@@ -30,11 +30,37 @@
 #     the Tailscale FQDN and the raw 100.85.190.60 are both refused.
 #   * `from=` is vulcan's source address on the route to hera.
 #
-# ONLY rsync IS EXECUTED ON andoria-08. Nothing here runs a remote shell
-# command; pushme drives rsync and nothing else. If you want that enforced
-# rather than merely intended, the andoria side is the place: give this key its
-# own authorized_keys entry there with a forced `rrsync`-style command scoped to
-# $HOME. That is andoria's config, not ours.
+# !! THIS MODULE IS NOT YET FUNCTIONAL -- the timer is deliberately left stopped.
+#
+# TWO UPSTREAM FACTS ABOUT pushme 3.0.0 BREAK THE DESIGN BELOW, both verified
+# against the source at /tank/src/pushme (commit f8ea0cc):
+#
+# 1. rsync IS NOT THE ONLY COMMAND RUN ON andoria-08. Before every transfer,
+#    checkDirectory (Main.hs:490-495) runs `test -d <path>` on the remote to
+#    decide whether the sync can proceed. So a forced `rrsync`-style command in
+#    andoria's authorized_keys -- which an earlier version of this comment
+#    recommended -- would NOT harden this job, it would BREAK it: the test would
+#    fail and syncStores would abandon the transfer, logging "Either local
+#    directory missing / OR remote directory missing" and returning
+#    TransferError. Note that is loud in the LOG but silent in the EXIT CODE:
+#    stock pushme 3.0.0 returns 0 regardless, which is why the unit below
+#    inspects the log rather than trusting the status.
+#
+# 2. pushme's OWN ssh CALLS IGNORE EVERYTHING CONFIGURED HERE. `remote`
+#    (Main.hs:777-781) builds the argv as literally
+#      ("ssh", hostName : cmd : args)
+#    -- a bare `ssh` off PATH with no -F and no options, so it uses johnw's
+#    DEFAULT ~/.ssh/config, which has no jump for andoria-08. The `--rsh`
+#    wrapper below covers ONLY rsync's own transport, not this. There is no
+#    config key to inject ssh options into that path.
+#
+# HOW THIS HID ITSELF: the first run appeared to work and moved ~8 GB. It only
+# succeeded because a ControlMaster mux socket left over from interactive
+# testing was still alive, which made bare `ssh andoria-08` resolve. Once it
+# expired, every run failed with
+#   Command failed: test ["-d","/home/jwiegley/"]: ssh: Could not resolve
+#   hostname andoria-08: Name or service not known
+# A passing test that depends on a leftover mux socket is not a passing test.
 {
   config,
   lib,
@@ -70,7 +96,18 @@ in
   sops.secrets."pushme/positron-ssh-private-key" = {
     owner = user;
     mode = "0400";
-    restartUnits = [ "pushme-positron.service" ];
+    # `restartUnits = [ "pushme-positron.service" ]` BELONGS HERE and must be
+    # restored at the same time as the timer's `wantedBy` -- the two are a pair,
+    # and re-enabling one without the other is the mistake this note exists to
+    # prevent.
+    #
+    # It is omitted while the job is disarmed because it is not inert: sops-nix
+    # restarts the listed unit whenever the secret is (re)deployed, which starts
+    # the service even though no timer is armed. That is not hypothetical --
+    # it happened at 2026-08-10 23:03:39, when the secret first deployed and
+    # the known-broken job ran and failed. Left in place, the next key rotation
+    # would fire the exact critical SystemdServiceFailed alert that disarming
+    # the timer was meant to avoid.
   };
 
   home-manager.users.${user} = {
@@ -138,6 +175,21 @@ in
 
       Common:
         PreserveAttrs: true
+        # PreserveAttrs is a BLANKET: it is read once at Options.hs:49 and then
+        # fed as the default for ACLs, xattrs, atimes, crtimes, hardlinks and
+        # executability across Options.hs:55-60. That
+        # turns on rsync's -N, and vulcan's rsync 3.4.1 is built WITHOUT crtimes
+        # ("stop-at, no crtimes" in --version), so every run died with
+        # "This rsync does not support --crtimes (-N)". hera's macOS rsync does
+        # support it, which is why the same fileset works there and not here.
+        #
+        # An explicit key beats the blanket in the same object. The parser at
+        # Options.hs:58 is `((<|> preserveAll) <$> v .:? "PreserveCrtimes")` --
+        # the alternative is applied INSIDE the parser's functor, not to its
+        # result, so an explicit `Just False` is kept rather than falling back
+        # to preserveAll. The destination is ZFS on Linux, which has no
+        # creation-time attribute to preserve anyway, so nothing is lost.
+        PreserveCrtimes: false
     '';
 
     # ---- ssh config used ONLY by this job ----
@@ -171,15 +223,47 @@ in
 
   systemd.services.pushme-positron = {
     description = "Pull andoria-08 home into /tank/work/positron (pushme)";
-    # Both matter: nss-lookup because the jump resolves hera.lan and a boot-time
-    # start can otherwise race DNS (the same failure drafts-mcp hit on
-    # 2026-07-03), and the sops target because the identity is a secret.
+    # nss-lookup because the jump resolves hera.lan and a boot-time start can
+    # otherwise race DNS (the same failure drafts-mcp hit on 2026-07-03); and
+    # home-manager because it is what materialises the three config files this
+    # unit reads. That second one is not theoretical -- the very first
+    # activation started this service at 23:03:39 and home-manager-johnw
+    # finished at 23:03:40, so pushme died on "Yaml file not found". Ordering
+    # only, no `wants`: a sync must never trigger a home-manager activation.
+    #
+    # There is deliberately NO `sops-nix.service` entry: no such unit exists on
+    # this host (`systemctl cat sops-nix.service` fails), because sops-nix
+    # installs secrets from an activation script rather than a service. An
+    # earlier revision ordered against it, which was simply a no-op.
     after = [
       "network-online.target"
       "nss-lookup.target"
-      "sops-nix.service"
+      "home-manager-${user}.service"
     ];
     wants = [ "network-online.target" ];
+
+    # NOTE: this is `path`, the NixOS option, NOT `serviceConfig.Path`. There is
+    # no `Path=` directive in a systemd [Service] section, and serviceConfig is
+    # freeform -- so writing it there renders `Path=` lines that systemd
+    # discards with "Unknown key 'Path' in section [Service], ignoring", the
+    # build stays green, and the unit fails at runtime exactly as if nothing had
+    # been set. That is precisely what happened here.
+    #
+    # pushme execs FOUR external programs: `hostname`, `rsync`, `find` and
+    # `ssh`. (An earlier version of this comment claimed three "and nothing
+    # else", which was wrong in the one way that mattered -- `ssh` is execed
+    # from `remote` at Main.hs:779 and is exactly the call that breaks the jump,
+    # per the header above.)
+    #
+    # `find` already arrives on the default unit PATH via findutils. The others
+    # do not: the first manual run died on
+    # `hostname: posix_spawnp: does not exist`. openssh covers both pushme's own
+    # ssh calls and the rsh wrapper's.
+    path = [
+      pkgs.rsync
+      pkgs.openssh
+      pkgs.nettools # hostname
+    ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -188,12 +272,6 @@ in
       # pushme reads ~/.config/pushme by default; setting HOME explicitly means
       # the unit and an interactive `pushme` run use the SAME files.
       Environment = [ "HOME=/home/${user}" ];
-      # rsync and ssh must both be resolvable; openssh is also what the rsh
-      # wrapper execs.
-      Path = [
-        pkgs.rsync
-        pkgs.openssh
-      ];
       # A full pass over a home directory across a Tailscale relay can be slow.
       # This is a ceiling against a wedged transfer, not a target -- the timer's
       # own overlap guard (systemd will not start a second instance while one
@@ -203,16 +281,70 @@ in
       IOSchedulingClass = "idle";
     };
 
+    # WHY THIS IS NOT JUST `exec pushme ...`:
+    #
+    # pushme ALWAYS EXITS 0. Main.hs:266 ends at `runReaderT processBindings
+    # opts` with no exitWith anywhere in the program; the per-host result is
+    # computed at Main.hs:327 and then only *printed* as "done", "done (with
+    # warnings)" or "done (with errors)". So a transfer that failed outright --
+    # the unsupported-flag abort above, a refused ReceiveFrom, a dead jump host
+    # -- is indistinguishable from success to systemd, and this unit would sit
+    # there reporting a clean run every hour while copying nothing. That is the
+    # worst failure mode an unattended backup job can have, so the log string
+    # is the only signal available and we act on it.
+    #
+    # "(with warnings)" is deliberately NOT a failure: Main.hs:598-599 maps it
+    # to rsync exit 23/24, partial transfer and vanished source files, which are
+    # both routine when mirroring a home directory somebody is actively using.
+    #
+    # --no-color keeps the marker free of the ANSI escapes Main.hs:333 would
+    # otherwise wrap it in, so the grep matches plain text.
     script = ''
-      exec ${inputs.pushme.packages.${system}.default}/bin/pushme \
+      set -o pipefail
+      out=$(mktemp)
+      trap 'rm -f "$out"' EXIT
+
+      # `|| rc=$?` rather than a bare pipeline: NixOS runs this script under
+      # `bash -e`, so an abort would exit before the log inspection below ever
+      # ran. Putting the pipeline in a condition context suspends errexit.
+      #
+      # pipefail yields the RIGHTMOST non-zero status, not the leftmost (an
+      # earlier version of this comment had it backwards): `(exit 3) | (exit 7)`
+      # gives 7. That does not change the outcome here, because `tee` exits 0
+      # whenever it can write, so `(exit N) | (exit 0)` yields N and rc is
+      # pushme's status -- but do not rely on the wrong rule if a stage is ever
+      # added to this pipeline.
+      rc=0
+      ${inputs.pushme.packages.${system}.default}/bin/pushme \
+        --no-color \
         --filesets work/positron \
-        andoria tank
+        andoria tank 2>&1 | tee "$out" || rc=$?
+
+      if [ "$rc" -ne 0 ]; then
+        echo "pushme exited $rc"
+        exit "$rc"
+      fi
+
+      if grep -qF 'done (with errors)' "$out"; then
+        echo "pushme reported a transfer error (it still exits 0; see above)"
+        exit 1
+      fi
+
+      if ! grep -qF 'done' "$out"; then
+        echo "pushme printed no completion line -- treating as a failed run"
+        exit 1
+      fi
     '';
   };
 
   systemd.timers.pushme-positron = {
     description = "Hourly andoria-08 -> /tank/work/positron sync";
-    wantedBy = [ "timers.target" ];
+    # DISARMED ON PURPOSE -- see the two upstream blockers at the top of this
+    # file. `wantedBy = [ "timers.target" ]` belongs here and must be restored
+    # the moment those are resolved; it is omitted only because an hourly job
+    # that cannot succeed would fire SystemdServiceFailed (critical) every hour.
+    # The unit is still fully defined, so `systemctl start pushme-positron` runs
+    # it on demand for testing.
     timerConfig = {
       OnCalendar = "hourly";
       # Catch up after downtime rather than silently skipping an hour.

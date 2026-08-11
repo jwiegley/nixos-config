@@ -4,6 +4,11 @@
 /Claude Conversations/
 __pycache__/
 
+# Python linter cache. Not merely untidy: it is created by `ruff` running as
+# johnw inside this root-owned flake repo, and flake source copying then fails
+# with "Permission denied", breaking `nix eval` / `/etc/nixos/build` outright.
+/.ruff_cache/
+
 # SOPS age keys (keep private - these decrypt the secrets)
 *.age
 *.bak

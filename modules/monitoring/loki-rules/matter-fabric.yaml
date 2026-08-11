@@ -1,0 +1,73 @@
+# Matter fabric session-failure detection. Loki ruler rule — needs an L+ symlink
+# in modules/services/loki.nix (loki-rules/*.yaml are NOT auto-discovered).
+# Deleting this file without its L+ line, or vice versa, has TWICE silently
+# killed ALL log-based alerting on this host; change both together.
+#
+# WHY A LOG RULE AND NOT A METRIC:
+# matter-server stays healthy as a systemd unit while individual Matter nodes
+# fail, so MatterServerDown (alerts/application-services.yaml) cannot fire —
+# during the 2026-08-10 incident the unit was `active` with 0 restarts
+# throughout. Home Assistant does surface the symptom as entities flipping to
+# `unavailable`, but the median unavailable dwell measured on this host is
+# 15.7 SECONDS, which is far too short for any `for:`-based availability alert
+# to catch (a `for: 10m` trigger would have fired roughly twice against 124 real
+# flaps in 24h). The fabric-level CASE failure is the durable signal.
+#
+# TRANSPORT (verified 2026-08-11): matter-server logs CHIP_ERROR lines at
+# priority 3, inside promtail's 0-4 keep band, so they reach Loki as
+# {job="systemd-journal", unit="matter-server.service"}. Confirmed live:
+# `unit` is a real label with the value `matter-server.service`, and the query
+# below returned 91 and 63 matches in consecutive one-hour windows.
+#
+# THRESHOLD: baseline is unambiguous. Across the 13-to-2-days-before window
+# there were ZERO CASE timeouts per hour; during the incident, 57-93 per hour.
+# >20/h therefore sits far above noise and far below the fault, and cannot
+# become a dead rule (the failure mode this repo keeps hitting — see
+# project_alert_dead_metric_remediation).
+#
+# SCOPE: this is deliberately FABRIC-WIDE, not per-device. The peer node id is
+# in the message body, not a label, and promoting it to a label would add
+# unbounded cardinality. A storm on any one node trips the rule, so the
+# description tells the operator how to bucket by peer.
+groups:
+  - name: matter_fabric
+    interval: 1m
+    rules:
+      # CASE = Certificate Authenticated Session Establishment. Repeated
+      # timeouts mean matter-server cannot re-establish a secure session with
+      # a commissioned node: the node is unreachable, not merely slow.
+      - alert: MatterNodeSessionFailures
+        expr: |
+          sum(count_over_time(
+            {job="systemd-journal", unit="matter-server.service"}
+            |~ "CASESession timed out while waiting for a response from peer"
+            [1h]
+          )) > 20
+        for: 15m
+        labels:
+          severity: warning
+          category: logs
+          service: matter-server
+        annotations:
+          summary: "Matter fabric: repeated CASE session timeouts (a node is unreachable)"
+          description: |
+            matter-server logged more than 20 CASE session timeouts in the last
+            hour, sustained for 15 minutes. Baseline on this host is zero per
+            hour, so this is a real fabric fault rather than noise.
+
+            This is fabric-wide. Identify the failing node first — the peer id
+            is in the message body, not a label:
+
+              journalctl -u matter-server.service --since -1h \
+                | grep -oE 'peer <[0-9A-F]+' | sort | uniq -c | sort -rn
+
+            Then map that node id to a device in Home Assistant and check
+            whether it is a Thread node (advertises an fd:: mesh ULA) or a
+            WiFi/LAN node (advertises a routable address). The two have
+            completely different causes: Thread points at the border router
+            (the Aqara Hub M3 is the only one on this fabric and is a SPOF),
+            WiFi points at signal strength, AP association or DHCP.
+
+            DO NOT reflexively restart matter-server. Prior experience on this
+            host is that it does not help, and the 2026-08-10 flap storm began
+            at the moment of a matter-server restart.

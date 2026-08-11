@@ -99,6 +99,19 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # obr: per-repository task tracking. Required by the shared home-manager
+    # config, whose config/obr.nix resolves `inputs.obr.packages.<system>.default`
+    # and asserts it is non-null ("managed home requires ...").
+    #
+    # It MUST be declared here rather than inherited: `nix-config` below is
+    # consumed with `flake = false`, so it is only a source tree and its own
+    # inputs are never resolved. Declared exactly as nix-config declares it
+    # (flake.nix:7) -- plain url, no `follows` -- so both sides resolve to the
+    # same derivation.
+    obr = {
+      url = "github:jwiegley/obr";
+    };
+
     git-scripts = {
       url = "git+ssh://gitea/johnw/git-scripts";
       flake = false;

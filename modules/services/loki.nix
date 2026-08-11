@@ -119,21 +119,37 @@
     "d /tmp/loki 0755 loki loki -"
     "d /tmp/loki/rules 0755 loki loki -"
 
-    # Deploy Loki alert rules (fake tenant for single-tenant mode)
+    # Deploy Loki alert rules (fake tenant for single-tenant mode).
+    #
+    # The symlinks resolve into the NIX STORE, not /etc/nixos. That is
+    # load-bearing, not stylistic: these used to point at
+    # /etc/nixos/modules/monitoring/loki-rules/*.yaml, and loki runs as the
+    # `loki` user. On 2026-08-10 21:13:33 something chmod'ed
+    # /etc/nixos/modules and /etc/nixos/modules/monitoring to 0700 johnw:johnw,
+    # and 18 seconds later the ruler began logging
+    #   unable to list rules ... permission denied
+    # once a minute. ALL log-based alerting was silently dead from that moment
+    # until 2026-08-11 -- the ruler refuses the whole tenant when it cannot stat
+    # ANY one rule file, so a single unreadable path takes out every rule.
+    # Store paths are world-readable by construction, so no permission on
+    # /etc/nixos can ever break this again.
+    #
+    # The list is also DERIVED from the directory rather than hand-maintained.
+    # Previously each rule needed a matching L+ line here, and forgetting one
+    # (or deleting a file without its line) had twice killed log alerting. Now
+    # dropping a .yaml into modules/monitoring/loki-rules is sufficient.
+    #
+    # NOTE: the file must be `git add`ed -- flakes only see tracked files, so an
+    # untracked rule is invisible to readDir here and will not deploy.
     "d /var/lib/loki/rules/fake 0755 loki loki -"
-    "L+ /var/lib/loki/rules/fake/dns-query-exporter.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/dns-query-exporter.yaml"
-    "L+ /var/lib/loki/rules/fake/systemd-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/systemd-errors.yaml"
-    # Added 2026-07-29 alongside the dedicated ha-nodered promtail scrape; without that
-    # scrape these rules could never match, since HA/node-red log at priority 6 and the
-    # consolidated journal scrape drops 5-7.
-    "L+ /var/lib/loki/rules/fake/home-assistant-errors.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/home-assistant-errors.yaml"
-    "L+ /var/lib/loki/rules/fake/uas-enclosure.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/uas-enclosure.yaml"
-    "L+ /var/lib/loki/rules/fake/ssh-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/ssh-security.yaml"
-    "L+ /var/lib/loki/rules/fake/nginx-web.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/nginx-web.yaml"
-    "L+ /var/lib/loki/rules/fake/auth-security.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/auth-security.yaml"
-    "L+ /var/lib/loki/rules/fake/microvm-oom.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/microvm-oom.yaml"
-    "L+ /var/lib/loki/rules/fake/vm-egress-tripwires.yaml - - - - /etc/nixos/modules/monitoring/loki-rules/vm-egress-tripwires.yaml"
-  ];
+  ]
+  ++ (
+    let
+      rulesDir = ../monitoring/loki-rules;
+      ruleFiles = lib.filter (n: lib.hasSuffix ".yaml" n) (lib.attrNames (builtins.readDir rulesDir));
+    in
+    map (n: "L+ /var/lib/loki/rules/fake/${n} - - - - ${rulesDir}/${n}") ruleFiles
+  );
 
   # Loki nginx upstream with retry logic
   # Prevents 502 errors during service restarts

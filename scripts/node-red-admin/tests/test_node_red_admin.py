@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -22,6 +23,7 @@ CONTRACT_PATH = os.environ.get("NODE_RED_ADMIN_CONTRACT")
 TOKEN = "synthetic-node-red-admin-token"
 FLOW_ID = "0123456789abcdef"
 LEGACY_FLOW_ID = "91ad451.f6e52b8"
+VALID_DIGEST = "sha256:" + "0" * 64
 
 
 class Stdin:
@@ -67,11 +69,23 @@ def install_response(
     status: int,
     body: bytes = b"",
 ) -> list[dict[str, object]]:
+    return install_responses(admin, monkeypatch, [(status, body)])
+
+
+def install_responses(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    responses: list[tuple[int, bytes]],
+) -> list[dict[str, object]]:
     calls: list[dict[str, object]] = []
 
     class Response:
+        def __init__(self, status: int, body: bytes):
+            self.status = status
+            self.body = body
+
         def read(self, limit: int) -> bytes:
-            return body[:limit]
+            return self.body[:limit]
 
     class Connection:
         def __init__(self, host: str, port: int, *, timeout: int, context: object):
@@ -103,9 +117,7 @@ def install_response(
             )
 
         def getresponse(self) -> Response:
-            response = Response()
-            response.status = status
-            return response
+            return Response(*responses[len(calls) - 1])
 
         def close(self) -> None:
             calls[-1]["closed"] = True
@@ -114,6 +126,38 @@ def install_response(
     monkeypatch.setattr(admin, "_tls_context", lambda: tls_context)
     monkeypatch.setattr(admin, "_LoopbackHTTPSConnection", Connection)
     return calls
+
+
+def put_envelope(
+    admin: ModuleType,
+    flow: dict[str, object],
+    *,
+    base_flow: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "baseDigest": admin._flow_digest(flow if base_flow is None else base_flow),
+        "flow": flow,
+    }
+
+
+def install_put_response(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    flow: dict[str, object],
+    *,
+    status: int,
+    body: bytes = b"",
+    current_flow: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    current = flow if current_flow is None else current_flow
+    return install_responses(
+        admin,
+        monkeypatch,
+        [
+            (200, json.dumps(current).encode()),
+            (status, body),
+        ],
+    )
 
 
 @pytest.mark.parametrize(
@@ -369,19 +413,45 @@ def test_full_get_output_round_trips_to_put_without_losing_fields(
     )
     assert admin.main(["flow", "get", flow_id]) == 0
     get_output = capsys.readouterr()
-    assert json.loads(get_output.out) == flow
+    envelope = json.loads(get_output.out)
+    assert list(envelope) == ["baseDigest", "flow"]
+    assert envelope["baseDigest"] == admin._flow_digest(flow)
+    assert envelope["flow"] == flow
     assert get_output.err == ""
 
     monkeypatch.setattr(sys, "stdin", Stdin(get_output.out.encode()))
-    calls = install_response(admin, monkeypatch, status=204)
+    calls = install_put_response(admin, monkeypatch, flow, status=204)
     assert admin.main(["flow", "put", flow_id]) == 0
     put_output = capsys.readouterr()
     assert put_output.out == f'{{"ok":true,"id":"{flow_id}"}}\n'
     assert put_output.err == ""
-    assert json.loads(calls[0]["body"]) == flow
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["path"] == f"/flow/{flow_id}"
+    assert calls[1]["method"] == "PUT"
+    assert calls[1]["path"] == f"/flow/{flow_id}"
+    assert json.loads(calls[1]["body"]) == flow
 
 
-@pytest.mark.parametrize("status,body", [(200, b'{"accepted":true}'), (204, b"")])
+def test_flow_digest_is_sha256_of_canonical_strict_json(admin: ModuleType) -> None:
+    first = {"nodes": [], "label": "\N{LATIN SMALL LETTER E WITH ACUTE}", "id": FLOW_ID}
+    reordered = {
+        "id": FLOW_ID,
+        "label": "\N{LATIN SMALL LETTER E WITH ACUTE}",
+        "nodes": [],
+    }
+    canonical = '{"id":"0123456789abcdef","label":"\\u00e9","nodes":[]}'.encode()
+    expected = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    assert admin._flow_digest(first) == expected
+    assert admin._flow_digest(reordered) == expected
+
+
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (200, b'{"id":"0123456789abcdef"}'),
+        (204, b""),
+    ],
+)
 def test_put_accepts_exact_success_statuses(
     admin: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
@@ -390,10 +460,86 @@ def test_put_accepts_exact_success_statuses(
     body: bytes,
 ) -> None:
     flow = {"id": FLOW_ID, "nodes": [], "configs": []}
-    monkeypatch.setattr(sys, "stdin", Stdin(json.dumps(flow).encode()))
-    install_response(admin, monkeypatch, status=status, body=body)
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Stdin(json.dumps(put_envelope(admin, flow)).encode()),
+    )
+    install_put_response(admin, monkeypatch, flow, status=status, body=body)
     assert admin.main(["flow", "put", FLOW_ID]) == 0
     assert capsys.readouterr().out == '{"ok":true,"id":"0123456789abcdef"}\n'
+
+
+def test_put_rejects_stale_selected_flow_without_writing(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    predecessor = {"id": FLOW_ID, "nodes": [], "label": "before"}
+    edited = {"id": FLOW_ID, "nodes": [], "label": "my edit"}
+    conflicting = {"id": FLOW_ID, "nodes": [], "label": "other writer"}
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Stdin(
+            json.dumps(
+                put_envelope(admin, edited, base_flow=predecessor),
+            ).encode()
+        ),
+    )
+    calls = install_response(
+        admin,
+        monkeypatch,
+        status=200,
+        body=json.dumps(conflicting).encode(),
+    )
+
+    assert admin.main(["flow", "put", FLOW_ID]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "node-red-admin: selected flow changed; fetch again\n"
+    assert [(call["method"], call["path"]) for call in calls] == [
+        ("GET", f"/flow/{FLOW_ID}")
+    ]
+
+
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (200, b""),
+        (200, b"[]"),
+        (200, b"{}"),
+        (200, b'{"id":"different"}'),
+        (200, b'{"id":"0123456789abcdef","id":"0123456789abcdef"}'),
+        (204, b"\n"),
+        (204, b"{}"),
+    ],
+)
+def test_put_rejects_invalid_success_response(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    body: bytes,
+) -> None:
+    flow = {"id": FLOW_ID, "nodes": []}
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Stdin(json.dumps(put_envelope(admin, flow)).encode()),
+    )
+    calls = install_put_response(
+        admin,
+        monkeypatch,
+        flow,
+        status=status,
+        body=body,
+    )
+    assert admin.main(["flow", "put", FLOW_ID]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("node-red-admin: ")
+    assert calls[-1]["method"] == "PUT"
 
 
 @pytest.mark.parametrize("status", [200, 204, 206, 301, 307, 400, 500])
@@ -421,8 +567,18 @@ def test_put_rejects_redirects_and_non_success_statuses(
     status: int,
 ) -> None:
     flow = {"id": FLOW_ID, "nodes": []}
-    monkeypatch.setattr(sys, "stdin", Stdin(json.dumps(flow).encode()))
-    install_response(admin, monkeypatch, status=status, body=b'{"ignored":true}')
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Stdin(json.dumps(put_envelope(admin, flow)).encode()),
+    )
+    install_put_response(
+        admin,
+        monkeypatch,
+        flow,
+        status=status,
+        body=b'{"ignored":true}',
+    )
     assert admin.main(["flow", "put", FLOW_ID]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -432,13 +588,38 @@ def test_put_rejects_redirects_and_non_success_statuses(
 @pytest.mark.parametrize(
     "body",
     [
-        b'[]',
-        b'not-json',
-        b'{"id":"different","nodes":[]}',
-        b'{"id":"' + FLOW_ID.encode() + b'","nodes":{}}',
-        b'{"id":"' + FLOW_ID.encode() + b'","nodes":[],"configs":{}}',
-        b'{"id":"' + FLOW_ID.encode() + b'","nodes":[]}{}',
-        b'{"id":"' + FLOW_ID.encode() + b'","nodes":[]} trailing',
+        b"[]",
+        b"not-json",
+        b'{"id":"' + FLOW_ID.encode() + b'","nodes":[]}',
+        b'{"baseDigest":"bad","flow":{"id":"' + FLOW_ID.encode() + b'","nodes":[]}}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"different","nodes":[]}}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"'
+        + FLOW_ID.encode()
+        + b'","nodes":{}}}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"'
+        + FLOW_ID.encode()
+        + b'","nodes":[],"configs":{}}}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"'
+        + FLOW_ID.encode()
+        + b'","nodes":[]},"extra":true}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"'
+        + FLOW_ID.encode()
+        + b'","nodes":[]}}{}',
+        b'{"baseDigest":"'
+        + VALID_DIGEST.encode()
+        + b'","flow":{"id":"'
+        + FLOW_ID.encode()
+        + b'","nodes":[]}} trailing',
     ],
 )
 def test_put_rejects_invalid_input_before_http(
@@ -465,7 +646,10 @@ def test_strict_json_rejects_non_finite_put_numbers(
     monkeypatch: pytest.MonkeyPatch,
     constant: str,
 ) -> None:
-    body = f'{{"id":"{FLOW_ID}","nodes":[],"value":{constant}}}'.encode()
+    body = (
+        f'{{"baseDigest":"{VALID_DIGEST}","flow":'
+        f'{{"id":"{FLOW_ID}","nodes":[],"value":{constant}}}}}'
+    ).encode()
     monkeypatch.setattr(sys, "stdin", Stdin(body))
     monkeypatch.setattr(
         admin,
@@ -486,6 +670,81 @@ def test_strict_json_rejects_non_finite_get_numbers(
     assert admin.main(["flow", "get", FLOW_ID]) == 1
 
 
+def test_deep_caller_json_is_normalized_to_exit_two(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    depth = sys.getrecursionlimit() + 100
+    body = (
+        f'{{"baseDigest":"{VALID_DIGEST}","flow":{{"id":"{FLOW_ID}","nodes":'.encode()
+        + b"[" * depth
+        + b"]" * depth
+        + b"}}"
+    )
+    monkeypatch.setattr(sys, "stdin", Stdin(body))
+    monkeypatch.setattr(
+        admin,
+        "_request",
+        lambda *_args, **_kwargs: pytest.fail("HTTP must not be attempted"),
+    )
+    assert admin.main(["flow", "put", FLOW_ID]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.endswith(admin.USAGE)
+    assert "Recursion" not in captured.err
+
+
+@pytest.mark.parametrize("stage", ["token-traversal", "encode"])
+def test_deep_decoded_input_recursion_is_a_caller_error(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stage: str,
+) -> None:
+    nested: object = []
+    for _ in range(sys.getrecursionlimit() + 100):
+        nested = [nested]
+    value = {
+        "baseDigest": VALID_DIGEST,
+        "flow": {"id": FLOW_ID, "nodes": nested},
+    }
+    monkeypatch.setattr(sys, "stdin", Stdin(b"{}"))
+    monkeypatch.setattr(admin, "_decode_json", lambda *_args: value)
+    if stage == "encode":
+        monkeypatch.setattr(admin, "_contains_token", lambda *_args: False)
+        monkeypatch.setattr(
+            admin.json,
+            "dumps",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RecursionError()),
+        )
+    monkeypatch.setattr(
+        admin,
+        "_request",
+        lambda *_args, **_kwargs: pytest.fail("HTTP must not be attempted"),
+    )
+    assert admin.main(["flow", "put", FLOW_ID]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.endswith(admin.USAGE)
+    assert "Recursion" not in captured.err
+
+
+def test_deep_upstream_json_is_normalized_to_operational_failure(
+    admin: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    depth = sys.getrecursionlimit() + 100
+    body = f'{{"id":"{FLOW_ID}","nodes":'.encode() + b"[" * depth + b"]" * depth + b"}"
+    install_response(admin, monkeypatch, status=200, body=body)
+    assert admin.main(["flow", "get", FLOW_ID]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "node-red-admin: JSON nesting is too deep\n"
+    assert "Recursion" not in captured.err
+
+
 @pytest.mark.parametrize("direction", ["get-value", "get-key", "put-value", "put-key"])
 def test_escaped_runtime_token_is_rejected_recursively(
     admin: ModuleType,
@@ -498,12 +757,14 @@ def test_escaped_runtime_token_is_rejected_recursively(
         extra = f'"outer":{{"items":[{{"{escaped}":"value"}}]}}'
     else:
         extra = f'"outer":{{"items":[{{"note":"{escaped}"}}]}}'
-    body = f'{{"id":"{FLOW_ID}","nodes":[],{extra}}}'.encode()
+    flow_body = f'{{"id":"{FLOW_ID}","nodes":[],{extra}}}'
+    body = flow_body.encode()
     if direction.startswith("get"):
         install_response(admin, monkeypatch, status=200, body=body)
         result = admin.main(["flow", "get", FLOW_ID])
         expected_exit = 1
     else:
+        body = (f'{{"baseDigest":"{VALID_DIGEST}","flow":{flow_body}}}').encode()
         monkeypatch.setattr(sys, "stdin", Stdin(body))
         monkeypatch.setattr(
             admin,
@@ -523,7 +784,8 @@ def test_literal_runtime_token_is_rejected_in_put_raw_bytes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    body = json.dumps({"id": FLOW_ID, "nodes": [], "note": TOKEN}).encode()
+    flow = {"id": FLOW_ID, "nodes": [], "note": TOKEN}
+    body = json.dumps(put_envelope(admin, flow)).encode()
     monkeypatch.setattr(sys, "stdin", Stdin(body))
     monkeypatch.setattr(
         admin,
@@ -541,9 +803,19 @@ def test_token_in_successful_put_response_is_rejected(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     flow = {"id": FLOW_ID, "nodes": []}
-    monkeypatch.setattr(sys, "stdin", Stdin(json.dumps(flow).encode()))
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Stdin(json.dumps(put_envelope(admin, flow)).encode()),
+    )
     escaped = "\\u0073" + TOKEN[1:]
-    install_response(admin, monkeypatch, status=200, body=f'{{"{escaped}":true}}'.encode())
+    install_put_response(
+        admin,
+        monkeypatch,
+        flow,
+        status=200,
+        body=f'{{"id":"{FLOW_ID}","{escaped}":true}}'.encode(),
+    )
     assert admin.main(["flow", "put", FLOW_ID]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -554,21 +826,29 @@ def test_input_raw_and_normalized_limits(
     admin: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    minimal = json.dumps({"id": FLOW_ID, "nodes": []}).encode()
+    flow = {"id": FLOW_ID, "nodes": []}
+    minimal = json.dumps(
+        put_envelope(admin, flow),
+        separators=(",", ":"),
+    ).encode()
     exact = minimal + b" " * (admin.MAX_INPUT_BYTES - len(minimal))
     monkeypatch.setattr(sys, "stdin", Stdin(exact))
-    install_response(admin, monkeypatch, status=204)
+    install_put_response(admin, monkeypatch, flow, status=204)
     assert admin.main(["flow", "put", FLOW_ID]) == 0
 
     monkeypatch.setattr(sys, "stdin", Stdin(exact + b" "))
     assert admin.main(["flow", "put", FLOW_ID]) == 2
 
-    expanded = {
+    expanded_flow = {
         "id": FLOW_ID,
         "nodes": [],
         "label": "é" * (admin.MAX_INPUT_BYTES // 5),
     }
-    raw = json.dumps(expanded, ensure_ascii=False, separators=(",", ":")).encode()
+    raw = json.dumps(
+        put_envelope(admin, expanded_flow),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
     assert len(raw) < admin.MAX_INPUT_BYTES
     monkeypatch.setattr(sys, "stdin", Stdin(raw))
     assert admin.main(["flow", "put", FLOW_ID]) == 2
@@ -579,7 +859,9 @@ def test_upstream_read_limit_exact_and_plus_one(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    install_response(admin, monkeypatch, status=200, body=b"x" * admin.MAX_RESPONSE_BYTES)
+    install_response(
+        admin, monkeypatch, status=200, body=b"x" * admin.MAX_RESPONSE_BYTES
+    )
     assert admin.main(["flows", "get"]) == 1
     assert "invalid JSON" in capsys.readouterr().err
 
@@ -880,7 +1162,9 @@ def test_core_and_dumpable_controls_run_before_token_read(
     class Libc:
         prctl = Prctl()
 
-    module.resource.setrlimit = lambda limit, value: calls.append(("rlimit", limit, value))
+    module.resource.setrlimit = lambda limit, value: calls.append(
+        ("rlimit", limit, value)
+    )
     module.ctypes.CDLL = lambda *_args, **_kwargs: Libc()
     module._disable_core_dumps()
     assert calls == [
@@ -965,13 +1249,13 @@ def test_built_backend_is_exact_and_ignores_hostile_environment(tmp_path: Path) 
     assert backend_text.startswith(f"#!{contract['bash']}/bin/bash -p\n")
     assert (
         f"exec {contract['coreutils']}/bin/env -i LC_ALL=C "
-        f"{contract['python']}/bin/python3 -I -B {source} \"$@\"\n"
+        f'{contract["python"]}/bin/python3 -I -B {source} "$@"\n'
         in backend_text.replace("\\\n  ", "")
     )
     assert frontend.read_text() == (
         f"#!{contract['bash']}/bin/bash -p\n"
         "exec /run/wrappers/bin/sudo -n -u node-red-admin -g node-red-admin -- "
-        f"{backend} \"$@\"\n"
+        f'{backend} "$@"\n'
     )
 
     marker = tmp_path / "hostile-environment-ran"
@@ -983,7 +1267,9 @@ def test_built_backend_is_exact_and_ignores_hostile_environment(tmp_path: Path) 
         f"from pathlib import Path\nPath({str(marker)!r}).write_text('site')\n"
     )
     startup = tmp_path / "startup.py"
-    startup.write_text(f"from pathlib import Path; Path({str(marker)!r}).write_text('startup')\n")
+    startup.write_text(
+        f"from pathlib import Path; Path({str(marker)!r}).write_text('startup')\n"
+    )
     hostile = {
         "BASH_ENV": str(bash_env),
         "ENV": str(bash_env),
@@ -1026,7 +1312,7 @@ def test_settings_and_every_maintained_port_consumer_use_privileged_port() -> No
     ]
     active = "\n".join((REPO_ROOT / path).read_text() for path in active_paths)
     settings = (REPO_ROOT / "config/node-red-settings.js").read_text()
-    assert 'uiPort: process.env.PORT || 844' in settings
+    assert "uiPort: process.env.PORT || 844" in settings
     assert 'uiHost: "127.0.0.1"' in settings
     # The only retained active-file 1880 text is the explicitly historical
     # 2026-07-27 observation in the alert-rule comment.

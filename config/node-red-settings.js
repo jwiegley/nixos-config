@@ -11,41 +11,70 @@
  */
 
 const fs = require('fs');
-const path = require('path');
+
+const ADMIN_PASSWORD_DIAGNOSTIC =
+    'CRITICAL: Node-RED admin password secret is unavailable or invalid.';
+const API_TOKENS_DIAGNOSTIC =
+    'CRITICAL: Node-RED API token secret is unavailable or invalid.';
+const BCRYPT_HASH = /^\$2[aby]\$(?:0[4-9]|[12][0-9]|3[01])\$[./A-Za-z0-9]{53}$/;
 
 /**
  * Load secrets from SOPS-deployed files
  * These files are created by sops-nix during system activation (there is no
  * sops-install-secrets.service on this host) and appear under /run/secrets/
  */
-function loadSecret(secretPath) {
+function failStartup(diagnostic) {
+    console.error(diagnostic);
+    throw new Error(diagnostic);
+}
+
+function loadOptionalSecret(secretPath) {
     try {
         return fs.readFileSync(secretPath, 'utf8').trim();
-    } catch (error) {
-        console.error(`Failed to load secret from ${secretPath}:`, error.message);
+    } catch {
         return null;
     }
 }
 
-function loadJsonSecret(secretPath) {
+function loadAdminPassword(secretPath) {
+    let value;
     try {
-        const content = fs.readFileSync(secretPath, 'utf8');
-        return JSON.parse(content);
-    } catch (error) {
-        console.error(`Failed to load JSON secret from ${secretPath}:`, error.message);
-        return null;
+        value = fs.readFileSync(secretPath, 'utf8');
+    } catch {
+        failStartup(ADMIN_PASSWORD_DIAGNOSTIC);
     }
+    if (value.endsWith('\n')) {
+        value = value.slice(0, -1);
+    }
+    if (!BCRYPT_HASH.test(value)) {
+        failStartup(ADMIN_PASSWORD_DIAGNOSTIC);
+    }
+    return value;
+}
+
+function loadApiTokens(secretPath) {
+    let value;
+    try {
+        value = JSON.parse(fs.readFileSync(secretPath, 'utf8'));
+    } catch {
+        failStartup(API_TOKENS_DIAGNOSTIC);
+    }
+    if (!Array.isArray(value) || !value.every(entry =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.token === 'string' &&
+        entry.token.length > 0
+    )) {
+        failStartup(API_TOKENS_DIAGNOSTIC);
+    }
+    return value;
 }
 
 // Load authentication secrets
-const adminUsername = loadSecret('/run/secrets/node-red/admin-username') || 'admin';
-const adminPasswordHash = loadSecret('/run/secrets/node-red/admin-password-hash');
-const apiTokens = loadJsonSecret('/run/secrets/node-red/api-tokens') || [];
-
-// Validate that required secrets are available
-if (!adminPasswordHash) {
-    console.error('CRITICAL: Admin password hash not found! Node-RED admin interface will be INSECURE.');
-}
+const adminUsername = loadOptionalSecret('/run/secrets/node-red/admin-username') || 'admin';
+const adminPasswordHash = loadAdminPassword('/run/secrets/node-red/admin-password-hash');
+const apiTokens = loadApiTokens('/run/secrets/node-red/api-tokens');
 
 if (apiTokens.length === 0) {
     console.warn('WARNING: No API tokens configured. HTTP nodes will only accept basic auth.');
@@ -60,7 +89,7 @@ module.exports = {
      * Secures the Node-RED editor and Admin API
      * Users must log in with username/password to access the editor
      */
-    adminAuth: adminPasswordHash ? {
+    adminAuth: {
         type: "credentials",
         users: [{
             username: adminUsername,
@@ -83,7 +112,7 @@ module.exports = {
             }
             return null;
         }
-    } : undefined,
+    },
 
     /**
      * HTTP Node Middleware

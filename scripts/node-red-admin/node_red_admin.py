@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import hashlib
 import http.client
 import json
 import math
@@ -43,6 +44,7 @@ MAX_INPUT_BYTES = 1024 * 1024
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 1024 * 1024
 FLOW_ID_RE = re.compile(r"[0-9a-f]{1,32}(?:\.[0-9a-f]{1,32})?\Z")
+BASE_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 USAGE = """usage:
   node-red-admin flows get
@@ -130,16 +132,19 @@ def _valid_flow_id(value: object) -> bool:
 
 
 def _contains_token(value: Any, token: str) -> bool:
-    if isinstance(value, str):
-        return token in value
-    if isinstance(value, list):
-        return any(_contains_token(item, token) for item in value)
-    if isinstance(value, dict):
-        return any(
-            _contains_token(key, token) or _contains_token(item, token)
-            for key, item in value.items()
-        )
-    return False
+    try:
+        if isinstance(value, str):
+            return token in value
+        if isinstance(value, list):
+            return any(_contains_token(item, token) for item in value)
+        if isinstance(value, dict):
+            return any(
+                _contains_token(key, token) or _contains_token(item, token)
+                for key, item in value.items()
+            )
+        return False
+    except RecursionError as error:
+        raise OperationalError("JSON nesting is too deep") from error
 
 
 def _secure_directory(metadata: os.stat_result) -> bool:
@@ -171,7 +176,10 @@ def _read_token() -> str:
             dir_fd=run_fd,
             follow_symlinks=False,
         )
-        if not stat.S_ISLNK(link_metadata.st_mode) or link_metadata.st_uid != TRUSTED_UID:
+        if (
+            not stat.S_ISLNK(link_metadata.st_mode)
+            or link_metadata.st_uid != TRUSTED_UID
+        ):
             raise OperationalError("admin credential path invalid")
 
         # Following this root-owned generation link is the normal sops-nix
@@ -260,19 +268,30 @@ def _decode_json(raw: bytes, error_message: str) -> Any:
             parse_constant=_reject_json_constant,
             parse_float=_strict_json_float,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        RecursionError,
+        ValueError,
+    ) as error:
         raise OperationalError(error_message) from error
 
 
-def _encode_json(value: Any, error_message: str) -> bytes:
+def _encode_json(
+    value: Any,
+    error_message: str,
+    *,
+    sort_keys: bool = False,
+) -> bytes:
     try:
         return json.dumps(
             value,
             ensure_ascii=True,
             allow_nan=False,
             separators=(",", ":"),
+            sort_keys=sort_keys,
         ).encode("ascii")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
+    except (RecursionError, TypeError, ValueError, UnicodeEncodeError) as error:
         raise OperationalError(error_message) from error
 
 
@@ -314,11 +333,11 @@ def _read_input(token: str) -> tuple[dict[str, Any], bytes]:
         value = _decode_json(raw, "input must be one strict JSON object")
     except OperationalError as error:
         raise CallerError(str(error)) from error
-    if not isinstance(value, dict):
-        raise CallerError("input must be one strict JSON object")
-    if _contains_token(value, token):
-        raise CallerError("input rejected")
     try:
+        if not isinstance(value, dict):
+            raise CallerError("input must be one strict JSON object")
+        if _contains_token(value, token):
+            raise CallerError("input rejected")
         encoded = _encode_json(value, "input must be one strict JSON object")
         _reject_token_bytes(encoded, token)
     except OperationalError as error:
@@ -397,6 +416,21 @@ def _validate_flow(value: Any, expected_id: str) -> dict[str, Any]:
     return value
 
 
+def _flow_digest(flow: dict[str, Any]) -> str:
+    canonical = _encode_json(
+        flow,
+        "flow is not valid JSON",
+        sort_keys=True,
+    )
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
+def _fetch_flow(token: str, flow_id: str) -> dict[str, Any]:
+    status, body = _request(token, "GET", f"/flow/{flow_id}")
+    _require_status(status, {200})
+    return _validate_flow(_decode_response(body, token), flow_id)
+
+
 def _list_flows(token: str) -> None:
     status, body = _request(token, "GET", "/flows")
     _require_status(status, {200})
@@ -424,22 +458,45 @@ def _list_flows(token: str) -> None:
 
 
 def _get_flow(token: str, flow_id: str) -> None:
-    status, body = _request(token, "GET", f"/flow/{flow_id}")
-    _require_status(status, {200})
-    flow = _validate_flow(_decode_response(body, token), flow_id)
-    _emit_json(flow, token)
+    flow = _fetch_flow(token, flow_id)
+    _emit_json(
+        {
+            "baseDigest": _flow_digest(flow),
+            "flow": flow,
+        },
+        token,
+    )
 
 
 def _put_flow(token: str, flow_id: str) -> None:
-    value, body = _read_input(token)
+    value, _normalized = _read_input(token)
+    if set(value) != {"baseDigest", "flow"} or not isinstance(
+        value.get("baseDigest"),
+        str,
+    ):
+        raise CallerError("input must contain baseDigest and flow")
+    base_digest = value["baseDigest"]
+    if BASE_DIGEST_RE.fullmatch(base_digest) is None:
+        raise CallerError("input baseDigest is invalid")
     try:
-        flow = _validate_flow(value, flow_id)
+        flow = _validate_flow(value.get("flow"), flow_id)
+        body = _encode_json(flow, "input flow must be valid JSON")
+        _reject_token_bytes(body, token)
     except OperationalError as error:
         raise CallerError("input must match FLOW_ID and contain nodes") from error
+
+    current_flow = _fetch_flow(token, flow_id)
+    if _flow_digest(current_flow) != base_digest:
+        raise OperationalError("selected flow changed; fetch again")
+
     status, response_body = _request(token, "PUT", f"/flow/{flow_id}", body)
     _require_status(status, {200, 204})
-    if response_body:
-        _decode_response(response_body, token)
+    if status == 200:
+        response = _decode_response(response_body, token)
+        if not isinstance(response, dict) or response.get("id") != flow_id:
+            raise OperationalError("Node-RED returned an invalid PUT response")
+    elif response_body != b"":
+        raise OperationalError("Node-RED returned an invalid PUT response")
     _emit_json({"ok": True, "id": flow["id"]}, token)
 
 

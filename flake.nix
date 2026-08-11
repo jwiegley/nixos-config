@@ -367,7 +367,10 @@
             in
             pkgs.runCommand "node-red-admin-tests-check"
               {
-                nativeBuildInputs = [ pytestPython ];
+                nativeBuildInputs = [
+                  pkgs.nodejs
+                  pytestPython
+                ];
               }
               ''
                 set -euo pipefail

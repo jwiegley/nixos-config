@@ -73,9 +73,10 @@ module.exports = {
         // inactivity timeout. Does not apply to the service tokens below.
         sessionExpiryTime: 604800,
         // Service tokens: same SOPS-managed tokens used by httpNodeMiddleware
-        // also authorize the Admin API, with full permissions. Lets local
-        // automation talk to /flow/<id> etc. via Authorization: Bearer <token>
-        // without going through the password login flow.
+        // also authorize the Admin API, with full permissions. Local flow
+        // automation uses the host-owned node-red-admin helper so callers do
+        // not handle this service token directly. Other HTTP-node consumers
+        // continue to use their separately scoped bearer-token files.
         tokens: async function (token) {
             if (apiTokens.some(t => t.token === token)) {
                 return { username: "service", permissions: "*" };
@@ -141,7 +142,8 @@ module.exports = {
     /**
      * Editor UI Settings
      */
-    uiPort: process.env.PORT || 1880,
+    // Keep the fallback on the privileged loopback listener if PORT is absent.
+    uiPort: process.env.PORT || 844,
     uiHost: "127.0.0.1", // Only listen on localhost (nginx proxies from outside)
 
     /**

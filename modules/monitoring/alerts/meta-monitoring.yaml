@@ -162,29 +162,30 @@ groups:
       # iPhone critical-push relay listener down (P1, monitoring-self).
       #
       # Alertmanager's `iphone-notifier` receiver POSTs critical alerts to the
-      # Node-RED HTTP-In endpoint at http://127.0.0.1:1880/alert (see
+      # Node-RED HTTP-In endpoint at http://127.0.0.1:844/alert (see
       # modules/services/alertmanager.nix). If that listener is down, critical
       # alerts never reach the phone — even though Alertmanager itself reports
       # success at the queue level. The blackbox probe target is added by the
       # web-blackbox workstream (a GET probe of the /alert endpoint, accepting
       # 404/405 since it is a POST-only route — any response proves the listener is
       # up). The instance is matched by host:port regex because the exact target
-      # string (path / trailing slash) is owned by the other workstream. That
-      # target has since landed — verified 2026-07-27:
+      # string (path / trailing slash) is owned by the other workstream. The
+      # former unprivileged target was verified live on 2026-07-27:
       # probe_success{job="blackbox_iphone_relay",
-      # instance="http://127.0.0.1:1880/alert"} == 1 — so this rule is live, not
-      # dormant. (Were the target ever removed, the selector would match no
-      # series and the rule would silently stop firing.)
+      # instance="http://127.0.0.1:1880/alert"} == 1. This candidate moves the
+      # target and selector to 844 together; the 844 series still requires
+      # post-activation verification. (Were the target ever removed, the
+      # selector would match no series and the rule would silently stop firing.)
       - alert: IphoneRelayEndpointDown
         expr: |
-          probe_success{instance=~"https?://127\\.0\\.0\\.1:1880(/.*)?"} == 0
+          probe_success{instance=~"https?://127\\.0\\.0\\.1:844(/.*)?"} == 0
         for: 5m
         labels:
           severity: critical
           category: monitoring
         annotations:
           summary: "iPhone critical-push relay listener is down"
-          description: "iPhone critical-push relay listener down — critical alerts will not reach the phone. The Node-RED /alert HTTP endpoint that Alertmanager's iphone-notifier receiver POSTs to (http://127.0.0.1:1880/alert) has failed its blackbox probe for over 5 minutes. Critical alerts may be silently undelivered to the phone even while Alertmanager reports queue-level success."
+          description: "iPhone critical-push relay listener down — critical alerts will not reach the phone. The Node-RED /alert HTTP endpoint that Alertmanager's iphone-notifier receiver POSTs to (http://127.0.0.1:844/alert) has failed its blackbox probe for over 5 minutes. Critical alerts may be silently undelivered to the phone even while Alertmanager reports queue-level success."
 
       # vmalert down (P1, monitoring-self).
       #

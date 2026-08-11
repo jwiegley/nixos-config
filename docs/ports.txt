@@ -67,7 +67,7 @@
 6387 127.0.0.1 Redis - Speedtest Tracker
 
 # Web Applications (localhost only, proxied via nginx)
-1880 127.0.0.1 Node-RED
+844 127.0.0.1 Node-RED privileged internal HTTP
 2283 127.0.0.1 Immich photo management
 3000 127.0.0.1 Grafana
 3003 127.0.0.1 Immich gunicorn (machine-learning / API auxiliary)

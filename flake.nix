@@ -291,6 +291,56 @@
       checks.${system} =
         let
           helpers = import ./tests/checks.nix { inherit pkgs; };
+          vulcanConfig = inputs.self.nixosConfigurations.vulcan.config;
+          inherit (vulcanConfig.services.node-red) port;
+          find =
+            description: predicate: values:
+            pkgs.lib.findFirst predicate (throw "missing ${description}") values;
+          nodeRedAdminPackage = find "node-red-admin package" (
+            package: pkgs.lib.getName package == "node-red-admin"
+          ) vulcanConfig.environment.systemPackages;
+          nodeRedAdminSudoRule = find "node-red-admin sudo rule" (
+            rule: rule.runAs == "node-red-admin:node-red-admin"
+          ) vulcanConfig.security.sudo.extraRules;
+          nodeRedAdminSudoCommand = find "node-red-admin sudo command" (
+            command: command.command == "${nodeRedAdminPackage.nodeRedAdminBackend}/bin/node-red-admin-backend"
+          ) nodeRedAdminSudoRule.commands;
+          nodeRedAlertmanagerReceiver = find "Node-RED Alertmanager receiver" (
+            receiver: receiver.name == "iphone-notifier"
+          ) vulcanConfig.services.prometheus.alertmanager.configuration.receivers;
+          nodeRedBlackboxJob = find "Node-RED blackbox job" (
+            job: job.job_name == "blackbox_iphone_relay"
+          ) vulcanConfig.services.prometheus.scrapeConfigs;
+          nodeRedPrometheusJob = find "Node-RED Prometheus job" (
+            job: job.job_name == "node-red"
+          ) vulcanConfig.services.prometheus.scrapeConfigs;
+          nodeRedAdminContract = pkgs.writeText "node-red-admin-contract.json" (
+            builtins.toJSON {
+              inherit port;
+              sysctl = vulcanConfig.boot.kernel.sysctl."net.ipv4.ip_unprivileged_port_start";
+              upstreams = builtins.attrNames vulcanConfig.services.nginx.upstreams."node-red".servers;
+              ambientCapabilities = vulcanConfig.systemd.services.node-red.serviceConfig.AmbientCapabilities;
+              capabilityBoundingSet = vulcanConfig.systemd.services.node-red.serviceConfig.CapabilityBoundingSet;
+              secret = {
+                inherit (vulcanConfig.sops.secrets."node-red-admin-token") owner group mode;
+              };
+              user = {
+                inherit (vulcanConfig.users.users.node-red-admin) isSystemUser group;
+              };
+              sudo = {
+                inherit (nodeRedAdminSudoRule) users runAs;
+                inherit (nodeRedAdminSudoCommand) command options;
+              };
+              alertmanagerUrl = (builtins.head nodeRedAlertmanagerReceiver.webhook_configs).url;
+              blackboxTarget = builtins.head (builtins.head nodeRedBlackboxJob.static_configs).targets;
+              prometheusTarget = builtins.head (builtins.head nodeRedPrometheusJob.static_configs).targets;
+              frontend = "${nodeRedAdminPackage}/bin/node-red-admin";
+              backend = "${nodeRedAdminPackage.nodeRedAdminBackend}/bin/node-red-admin-backend";
+              source = nodeRedAdminPackage.nodeRedAdminSource;
+              inherit (pkgs) bash coreutils;
+              python = pkgs.python3;
+            }
+          );
         in
         {
           llama-cpp-overlay-compat =
@@ -310,6 +360,30 @@
             src = ./scripts;
             suiteDir = "agent-health-report-tests";
           };
+
+          node-red-admin-tests =
+            let
+              pytestPython = pkgs.python312.withPackages (ps: [ ps.pytest ]);
+            in
+            pkgs.runCommand "node-red-admin-tests-check"
+              {
+                nativeBuildInputs = [ pytestPython ];
+              }
+              ''
+                set -euo pipefail
+                mkdir -p suite suite/docs
+                cp -r ${./config} suite/config
+                cp -r ${./hosts} suite/hosts
+                cp -r ${./modules} suite/modules
+                cp -r ${./scripts} suite/scripts
+                cp -r ${./tests} suite/tests
+                cp ${./docs/ports.txt} suite/docs/ports.txt
+                chmod -R +w suite
+                export NODE_RED_ADMIN_CONTRACT=${nodeRedAdminContract}
+                cd suite
+                ${pytestPython}/bin/pytest scripts/node-red-admin/tests -v
+                touch "$out"
+              '';
 
           # The largest suite in the repo (16 files) and, until 2026-08-05, the
           # only one that never ran in CI -- so it passed or failed only when

@@ -336,7 +336,7 @@
           name = "iphone-notifier";
           webhook_configs = [
             {
-              url = "http://127.0.0.1:1880/alert";
+              url = "http://127.0.0.1:${toString config.services.node-red.port}/alert";
               send_resolved = true;
               http_config = {
                 authorization = {

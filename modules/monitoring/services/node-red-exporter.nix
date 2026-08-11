@@ -1,14 +1,12 @@
 {
   config,
-  lib,
-  pkgs,
   ...
 }:
 
 {
   # Node-RED Prometheus metrics monitoring
   # Scrapes metrics from Node-RED's built-in Prometheus exporter
-  # Metrics exposed at http://localhost:1880/metrics
+  # Metrics exposed on Node-RED's privileged loopback listener.
 
   # SOPS secret for Prometheus to authenticate with Node-RED
   # This should be one of the tokens from node-red/api-tokens
@@ -25,7 +23,7 @@
       job_name = "node-red";
       static_configs = [
         {
-          targets = [ "localhost:1880" ];
+          targets = [ "localhost:${toString config.services.node-red.port}" ];
           labels = {
             service = "node-red";
             instance = "vulcan";
@@ -48,7 +46,7 @@
       # Node-RED Prometheus Metrics Monitoring
 
       ## Overview
-      Node-RED exposes Prometheus metrics at http://localhost:1880/metrics
+      Node-RED exposes Prometheus metrics at http://localhost:${toString config.services.node-red.port}/metrics
 
       ## Available Metrics
       Node-RED can export custom metrics using prometheus-contrib nodes:
@@ -63,7 +61,7 @@
       check-node-red-metrics
 
       # View raw metrics
-      curl http://localhost:1880/metrics
+      curl http://localhost:${toString config.services.node-red.port}/metrics
 
       # Check Prometheus scrape status
       curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="node-red")'

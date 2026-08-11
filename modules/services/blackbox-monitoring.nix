@@ -950,7 +950,7 @@ in
             scrape_interval = "30s";
             scrape_timeout = "10s";
           }
-          # Node-RED /alert HTTP-In endpoint on 127.0.0.1:1880 — the listener
+          # Node-RED /alert HTTP-In endpoint on its privileged loopback port — the listener
           # the Alertmanager iphone-notifier receiver POSTs critical pages to.
           # GET /alert returns 404 (it is a POST-only HTTP-In node), which the
           # http_alive module accepts: a 404 still proves the listener is up
@@ -966,7 +966,7 @@ in
             };
             static_configs = [
               {
-                targets = [ "http://127.0.0.1:1880/alert" ];
+                targets = [ "http://127.0.0.1:${toString config.services.node-red.port}/alert" ];
                 labels = {
                   service = "nodered-alert-relay";
                 };

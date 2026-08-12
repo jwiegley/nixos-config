@@ -1,4 +1,5 @@
-# Hourly pull of andoria-08's home directory into /tank/work/positron.
+# Hourly pull of andoria-08's home directory into
+# /tank/Backups/Contracts/Positron/nfs.
 #
 # Replaces the mirror that used to live on hera. hera is still in the path, but
 # only as an SSH JUMP HOST -- it no longer stores a copy.
@@ -30,37 +31,31 @@
 #     the Tailscale FQDN and the raw 100.85.190.60 are both refused.
 #   * `from=` is vulcan's source address on the route to hera.
 #
-# !! THIS MODULE IS NOT YET FUNCTIONAL -- the timer is deliberately left stopped.
+# REQUIRES pushme >= 3.1.0. Two defects in 3.0.0 made this design impossible,
+# and both were fixed upstream specifically for it:
 #
-# TWO UPSTREAM FACTS ABOUT pushme 3.0.0 BREAK THE DESIGN BELOW, both verified
-# against the source at /tank/src/pushme (commit f8ea0cc):
+# 1. pushme's OWN ssh CALLS IGNORED EVERYTHING CONFIGURED HERE. `remote` built
+#    the argv as literally ("ssh", hostName : cmd : args) -- a bare `ssh` off
+#    PATH with no -F -- so the `test -d` precheck in checkDirectory consulted
+#    johnw's DEFAULT ~/.ssh/config, which has no jump for andoria-08, and died
+#    with "Could not resolve hostname andoria-08". The `--rsh` wrapper below
+#    covers ONLY rsync's transport, never that call. 3.1.0 adds the per-alias
+#    `SshOptions`, applied at Main.hs `remote` as
+#      ("ssh", map unpack (host ^. hostSshOptions) ++ (hostName : cmd : args))
+#    which is why `SshOptions` appears on the andoria alias below and is
+#    load-bearing, not decorative.
 #
-# 1. rsync IS NOT THE ONLY COMMAND RUN ON andoria-08. Before every transfer,
-#    checkDirectory (Main.hs:490-495) runs `test -d <path>` on the remote to
-#    decide whether the sync can proceed. So a forced `rrsync`-style command in
-#    andoria's authorized_keys -- which an earlier version of this comment
-#    recommended -- would NOT harden this job, it would BREAK it: the test would
-#    fail and syncStores would abandon the transfer, logging "Either local
-#    directory missing / OR remote directory missing" and returning
-#    TransferError. Note that is loud in the LOG but silent in the EXIT CODE:
-#    stock pushme 3.0.0 returns 0 regardless, which is why the unit below
-#    inspects the log rather than trusting the status.
+# 2. pushme ALWAYS EXITED 0, even on a failed transfer -- the per-host status
+#    was computed and then only printed. An unattended hourly backup that
+#    reports success while copying nothing is the worst available failure mode.
+#    3.1.0 maps transfer error -> 1, usage -> 2, and success/warning -> 0, so
+#    the unit below can simply `exec` and trust systemd.
 #
-# 2. pushme's OWN ssh CALLS IGNORE EVERYTHING CONFIGURED HERE. `remote`
-#    (Main.hs:777-781) builds the argv as literally
-#      ("ssh", hostName : cmd : args)
-#    -- a bare `ssh` off PATH with no -F and no options, so it uses johnw's
-#    DEFAULT ~/.ssh/config, which has no jump for andoria-08. The `--rsh`
-#    wrapper below covers ONLY rsync's own transport, not this. There is no
-#    config key to inject ssh options into that path.
-#
-# HOW THIS HID ITSELF: the first run appeared to work and moved ~8 GB. It only
-# succeeded because a ControlMaster mux socket left over from interactive
-# testing was still alive, which made bare `ssh andoria-08` resolve. Once it
-# expired, every run failed with
-#   Command failed: test ["-d","/home/jwiegley/"]: ssh: Could not resolve
-#   hostname andoria-08: Name or service not known
-# A passing test that depends on a leftover mux socket is not a passing test.
+# HOW THE 3.0.0 BREAKAGE HID ITSELF, worth remembering: the first run appeared
+# to work and moved ~8 GB. It only succeeded because a ControlMaster mux socket
+# left over from interactive testing was still alive, which made bare
+# `ssh andoria-08` resolve. Once it expired every run failed. A passing test
+# that depends on a leftover mux socket is not a passing test.
 {
   config,
   lib,
@@ -96,18 +91,12 @@ in
   sops.secrets."pushme/positron-ssh-private-key" = {
     owner = user;
     mode = "0400";
-    # `restartUnits = [ "pushme-positron.service" ]` BELONGS HERE and must be
-    # restored at the same time as the timer's `wantedBy` -- the two are a pair,
-    # and re-enabling one without the other is the mistake this note exists to
-    # prevent.
-    #
-    # It is omitted while the job is disarmed because it is not inert: sops-nix
-    # restarts the listed unit whenever the secret is (re)deployed, which starts
-    # the service even though no timer is armed. That is not hypothetical --
-    # it happened at 2026-08-10 23:03:39, when the secret first deployed and
-    # the known-broken job ran and failed. Left in place, the next key rotation
-    # would fire the exact critical SystemdServiceFailed alert that disarming
-    # the timer was meant to avoid.
+    # Restored 2026-08-12 alongside the timer's `wantedBy` -- the two are a pair.
+    # sops-nix restarts the listed unit whenever the secret is redeployed, which
+    # starts the sync even with no timer due. That is exactly what happened at
+    # 2026-08-10 23:03:39 while the job was still broken; now that it works, an
+    # extra sync after a key rotation is harmless and arguably desirable.
+    restartUnits = [ "pushme-positron.service" ];
   };
 
   home-manager.users.${user} = {
@@ -134,8 +123,29 @@ in
             # `command -v rsync` -> /home/jwiegley/.nix-profile/bin/rsync.
             # Without this the transfer dies with "rsync: command not found".
             - "--rsync-path=/home/jwiegley/.nix-profile/bin/rsync"
-            # Routes every ssh through the jump config below.
+            # Routes RSYNC's transport through the jump config below. This does
+            # NOT cover pushme's own ssh calls -- that is what SshOptions is for.
             - "--rsh=${rshWrapper}"
+          # pushme >= 3.1.0. Arguments for pushme's OWN ssh invocations, placed
+          # before the hostname. Not interchangeable with Options: that is rsync
+          # flags, this is ssh flags, and rsync never sees these.
+          #
+          # BELT AND BRACES, not strictly required as configured. The only ssh
+          # call pushme makes for itself is checkDirectory's `test -d`, and
+          # CheckRemoteDirectory below disables it, so today nothing consumes
+          # this. It stays because it is the correct value if that probe is ever
+          # re-enabled, and because any future pushme code path that shells out
+          # would otherwise silently fall back to johnw's default ~/.ssh/config
+          # -- the exact failure that made 3.0.0 unusable here.
+          SshOptions:
+            - "-F"
+            - "${configDir}/ssh_config"
+          # Do not run `test -d` on andoria before transferring. The stated
+          # constraint for this job is that rsync is the ONLY command it executes
+          # there, and the probe was the sole violation of it. With the probe off
+          # the destination is taken on trust; if it is genuinely missing, rsync
+          # reports that itself and 3.1.0's exit code surfaces it.
+          CheckRemoteDirectory: false
 
         tank:
           Host: vulcan
@@ -161,7 +171,10 @@ in
 
       Stores:
         tank:
-          Path: $tank/work/positron
+          # Destination changed 2026-08-12 from $tank/work/positron. The old
+          # tree (tank/work/positron, 339G referenced) is left in place and is
+          # no longer written to by this job.
+          Path: $tank/Backups/Contracts/Positron/nfs
           PreserveXattrs: false
           ReceiveFrom:
             - hera
@@ -222,7 +235,7 @@ in
   };
 
   systemd.services.pushme-positron = {
-    description = "Pull andoria-08 home into /tank/work/positron (pushme)";
+    description = "Pull andoria-08 home into /tank/Backups/Contracts/Positron/nfs (pushme)";
     # nss-lookup because the jump resolves hera.lan and a boot-time start can
     # otherwise race DNS (the same failure drafts-mcp hit on 2026-07-03); and
     # home-manager because it is what materialises the three config files this
@@ -272,79 +285,49 @@ in
       # pushme reads ~/.config/pushme by default; setting HOME explicitly means
       # the unit and an interactive `pushme` run use the SAME files.
       Environment = [ "HOME=/home/${user}" ];
-      # A full pass over a home directory across a Tailscale relay can be slow.
-      # This is a ceiling against a wedged transfer, not a target -- the timer's
-      # own overlap guard (systemd will not start a second instance while one
-      # runs) handles the ordinary long-run case.
-      TimeoutStartSec = "50m";
+      # A ceiling against a WEDGED transfer, not a target. The timer's own
+      # overlap guard (systemd will not start a second instance while one runs)
+      # handles the ordinary long-run case.
+      #
+      # Raised from 50m to 4h on 2026-08-12. 50m was measured to be too tight
+      # for the initial convergence: the 04:43 run moved +23 GiB (dataset
+      # 379G -> 402G) and was still killed at the ceiling, and each timeout
+      # fires a critical SystemdServiceFailed. The tree does converge across
+      # successive runs, since rsync resumes from what is already on disk, but
+      # it would page hourly for as long as that took.
+      #
+      # Steady-state hourly deltas finish in minutes, so this ceiling should
+      # only ever be reached by something genuinely stuck. The cost of the
+      # larger value is detection latency: a hung transfer now sits for up to
+      # 4h before systemd kills it.
+      TimeoutStartSec = "4h";
       Nice = 10;
       IOSchedulingClass = "idle";
     };
 
-    # WHY THIS IS NOT JUST `exec pushme ...`:
+    # A plain `exec` is now correct. Until 3.1.0 this had to capture the output
+    # and grep it for "done (with errors)", because pushme always exited 0 and a
+    # failed transfer was indistinguishable from a good one. 3.1.0 returns 1 on
+    # transfer error and 2 on usage error, so systemd sees the truth directly and
+    # the log-scraping guard is gone.
     #
-    # pushme ALWAYS EXITS 0. Main.hs:266 ends at `runReaderT processBindings
-    # opts` with no exitWith anywhere in the program; the per-host result is
-    # computed at Main.hs:327 and then only *printed* as "done", "done (with
-    # warnings)" or "done (with errors)". So a transfer that failed outright --
-    # the unsupported-flag abort above, a refused ReceiveFrom, a dead jump host
-    # -- is indistinguishable from success to systemd, and this unit would sit
-    # there reporting a clean run every hour while copying nothing. That is the
-    # worst failure mode an unattended backup job can have, so the log string
-    # is the only signal available and we act on it.
-    #
-    # "(with warnings)" is deliberately NOT a failure: Main.hs:598-599 maps it
-    # to rsync exit 23/24, partial transfer and vanished source files, which are
-    # both routine when mirroring a home directory somebody is actively using.
-    #
-    # --no-color keeps the marker free of the ANSI escapes Main.hs:333 would
-    # otherwise wrap it in, so the grep matches plain text.
+    # A warning still exits 0 on purpose: it maps to rsync 23/24 (partial
+    # transfer, vanished source files), both routine when mirroring a home
+    # directory somebody is actively using.
     script = ''
-      set -o pipefail
-      out=$(mktemp)
-      trap 'rm -f "$out"' EXIT
-
-      # `|| rc=$?` rather than a bare pipeline: NixOS runs this script under
-      # `bash -e`, so an abort would exit before the log inspection below ever
-      # ran. Putting the pipeline in a condition context suspends errexit.
-      #
-      # pipefail yields the RIGHTMOST non-zero status, not the leftmost (an
-      # earlier version of this comment had it backwards): `(exit 3) | (exit 7)`
-      # gives 7. That does not change the outcome here, because `tee` exits 0
-      # whenever it can write, so `(exit N) | (exit 0)` yields N and rc is
-      # pushme's status -- but do not rely on the wrong rule if a stage is ever
-      # added to this pipeline.
-      rc=0
-      ${inputs.pushme.packages.${system}.default}/bin/pushme \
+      exec ${inputs.pushme.packages.${system}.default}/bin/pushme \
         --no-color \
         --filesets work/positron \
-        andoria tank 2>&1 | tee "$out" || rc=$?
-
-      if [ "$rc" -ne 0 ]; then
-        echo "pushme exited $rc"
-        exit "$rc"
-      fi
-
-      if grep -qF 'done (with errors)' "$out"; then
-        echo "pushme reported a transfer error (it still exits 0; see above)"
-        exit 1
-      fi
-
-      if ! grep -qF 'done' "$out"; then
-        echo "pushme printed no completion line -- treating as a failed run"
-        exit 1
-      fi
+        andoria tank
     '';
   };
 
   systemd.timers.pushme-positron = {
-    description = "Hourly andoria-08 -> /tank/work/positron sync";
-    # DISARMED ON PURPOSE -- see the two upstream blockers at the top of this
-    # file. `wantedBy = [ "timers.target" ]` belongs here and must be restored
-    # the moment those are resolved; it is omitted only because an hourly job
-    # that cannot succeed would fire SystemdServiceFailed (critical) every hour.
-    # The unit is still fully defined, so `systemctl start pushme-positron` runs
-    # it on demand for testing.
+    description = "Hourly andoria-08 -> /tank/Backups/Contracts/Positron/nfs sync";
+    # ARMED 2026-08-12, once pushme 3.1.0 supplied SshOptions and real exit
+    # codes. Restored together with `restartUnits` on the sops secret above --
+    # they are a pair.
+    wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "hourly";
       # Catch up after downtime rather than silently skipping an hour.

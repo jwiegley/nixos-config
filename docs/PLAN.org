@@ -6,7 +6,7 @@
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-5sj
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:40]
 :MODIFIED: [2026-08-11 Tue 16:46]
@@ -21,7 +21,7 @@
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-cmq
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 22:25]
@@ -43,17 +43,45 @@ This is a latent property of the host, independent of any Tailscale decision, an
 global port list to end0/wlp1s0f0 explicitly.
 
 ** Close Reason
+
 Implemented as a default-deny guard chain (John's choice). nixos-fw-ifguard is inserted at nixos-fw position 3 — after NixOS's invariant lo and ESTABLISHED,RELATED accepts, before every port accept — with a RETURN per legitimately-served interface (end0, wlp1s0f0, podman0, hermes-br0, ve+, vm+) and nixos-fw-refuse at the end. Any FUTURE interface therefore inherits nothing.
 
 Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE — iptables 1.8.11 rejects it with 'multiple --in-interface options not allowed'. Caught by validating the syntax in a throwaway chain before switching; it would otherwise have broken the firewall start script.
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
+* TODO [#C] restartUnits races home-manager: pushme runs with stale config during a switch
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-djx
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-12 Wed 04:46]
+:MODIFIED: [2026-08-12 Wed 04:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+On the 2026-08-12 00:21 switch, pushme-positron.service ran at 00:21:26 and failed, two seconds BEFORE the switch finished at 00:21:28. It used the OLD fileset (destination /tank/work/positron) and still performed the test -d probe, even though the new module sets a new path and CheckRemoteDirectory: false — because home-manager had not yet re-linked ~/.config/pushme/*.
+
+Trigger is sops.secrets."pushme/positron-ssh-private-key".restartUnits = [ "pushme-positron.service" ]. sops-nix restarts the listed unit when the secret is (re)deployed, and that restart is a SEPARATE systemd transaction, so the unit's 'after = home-manager-johnw.service' ordering does not constrain it. The same race produced the very first failure of this unit on 2026-08-10 23:03:39.
+
+Consequences: a sync can run against stale configuration at every switch — wrong destination, wrong flags. Here it merely failed; with a valid-but-stale destination it would silently write to the wrong place, and rsync carries --delete.
+
+Options to consider (none applied yet):
+  a) drop restartUnits and accept that a rotated key is picked up at the next hourly run
+  b) add ConditionPathExists or a guard in the unit that verifies the config is the expected generation before running
+  c) have the unit read its config from the Nix store rather than ~/.config, removing home-manager from the runtime path entirely — the same fix used for the Loki rules and vdirsyncer (see nixos-ye9)
+
+Option (c) is the structural one and matches how two other silent failures on this host were resolved.
+
 * TODO [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-fvz
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 16:39]
@@ -74,7 +102,7 @@ anything non-idempotent. Consider deduplicating (a join/gate on event summary) i
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2u
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 16:39]
@@ -100,7 +128,7 @@ Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-lsi
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 22:19]
@@ -125,7 +153,7 @@ repo will not shrink for ~7 days (--keep-daily 7).
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-mwl
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 16:39]
@@ -145,35 +173,68 @@ If revisited, note two traps: 'Restart' in extraServiceConfig fails Nix evaluati
 mkMbsyncModule.nix:158 becomes lib.mkDefault (or mkForce is used), and StartLimitBurst/StartLimitIntervalSec
 are [Unit]-section options that extraServiceConfig cannot carry at all.
 
-* TODO [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
+* DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-nyr
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-12 Wed 00:11]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
 :END:
 
-Patch is at /home/johnw/pushme-ssh-options-and-exit-codes.patch (also uncommitted in /tank/src/pushme).
-Adds Alias.SshOptions, Alias.CheckRemoteDirectory, and real exit codes (transfer error 1, usage 2,
-warning 0). Verified on aarch64 with GHC 9.10.3, -Wall clean, existing 8-test suite passing, and all
-exit codes plus both new options confirmed empirically against a built binary.
+#+begin_example
+Land the pushme SshOptions/exit-code work, then re-arm the timer.
 
-Steps: push to github:jwiegley/pushme -> nix flake update pushme -> restore BOTH
-'wantedBy = [ "timers.target" ]' on the timer AND 'restartUnits' on the sops secret in
-modules/services/pushme-positron.nix (they are a pair) -> then the log-grep guard in the unit script
-can be deleted in favour of a plain exec.
+,*** BLOCKED 2026-08-12: the pushed 3.1.0 does NOT contain the patch. ***
+github:jwiegley/pushme rev 4b977a2f8c8d (fetched and inspected at
+/nix/store/bn2spkl8bf1x1jjqfdwybzk8v2m3fm68-source) has version bumped to 3.1.0 but:
+  SshOptions           0 occurrences
+  CheckRemoteDirectory 0
+  exitWith / RunResult 0
+  hostSshOptions       0
+i.e. it is a version bump only. A ~118-derivation toolchain build (incl. ghc-9.10.3) was started
+against it and killed once this was discovered — building it would have produced a binary that
+fixes nothing.
+
+The patch is intact at /home/johnw/pushme-ssh-options-and-exit-codes.patch (16214 bytes, 6 files)
+and applied cleanly to a pristine tree when generated. The local /tank/src/pushme working tree no
+longer carries the changes (HEAD 7f8722d, clean) — this is the second time that checkout has lost
+them, see nixos-tvy for the related unexplained-revert pattern.
+
+NEXT STEP IS JOHN'S: apply the patch to pushme and push a release that actually contains it, then
+this issue can proceed.
+
+,*** DESTINATION CHANGE (John, 2026-08-12) ***
+When the module work happens, the sync destination changes from
+    /tank/work/positron
+to
+    /tank/Backups/Contracts/Positron/nfs/
+This affects the  store Path in the work_positron fileset in
+modules/services/pushme-positron.nix. John is doing the initial copy manually.
+
+REMAINING WORK once a patched pushme exists:
+  1. verify --help exposes SshOptions/CheckRemoteDirectory and exit codes behave (1/2/0)
+  2. add SshOptions to the andoria alias — the change that actually makes the jump work
+  3. set the new destination path above
+  4. restore BOTH wantedBy on the timer AND restartUnits on the sops secret (they are a pair)
+  5. replace the log-grep guard in the unit script with a plain exec
+  6. live sync test before closing
+
+NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system has 3.0.0. Any
+./build switch will trigger the multi-hour toolchain build. Consider reverting the lock until a
+patched release exists.
+#+end_example
 
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rqw
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 22:25]
@@ -207,7 +268,7 @@ and replaces working WireGuard connectivity — John should be present.
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-tvy
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 21:58]
 :MODIFIED: [2026-08-11 Tue 21:58]
@@ -233,7 +294,7 @@ Worth identifying: an activation script, a hook, a tool run as johnw, or a manua
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-v9g
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 20:19]
@@ -259,7 +320,7 @@ Nest stops dropping to 75.
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ye9
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 21:58]
@@ -286,7 +347,7 @@ Also worth identifying what set 0700 in the first place, since it happened unpro
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-z5v
-:LABELS: []
+:LABELS:   []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-11 Tue 16:39]
 :MODIFIED: [2026-08-11 Tue 22:19]

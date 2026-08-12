@@ -112,15 +112,16 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
-* TODO [#D] Duplicate calendar notifications when an event is on two calendars
+* DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-fvz
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-12 Wed 11:26]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-12 Wed 11:26]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -132,6 +133,14 @@ Each has its own ha-events-calendar pair on the Office tab: a 'Before' node (off
 
 Harmless today because both set the same colour and the action is idempotent, but it would matter for
 anything non-idempotent. Consider deduplicating (a join/gate on event summary) if it becomes a problem.
+
+** Close Reason
+
+Won't fix, by John's decision 2026-08-12. 'Ruhi Book 10' exists on both calendar.baha_i and calendar.jwiegley_gmail_com, and each has its own ha-events-calendar pair on the Office tab (Before at -3min, Start at +1min), so a single event fires the blue WiZ notification twice at T-3min and twice at T+1min.
+
+Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with the same rgb_color on the same two bulbs, so the visible result is identical whether it fires once or twice. A dedupe gate would add flow state to a chain that currently has none, for no observable benefit — and flow context resets on every deploy.
+
+IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
 * TODO [#B] Matter outdoor plug flapping (node 0x1A) — needs physical/WiFi check
 :PROPERTIES:
@@ -299,15 +308,16 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
+* DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-tvy
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 21:58]
-:MODIFIED: [2026-08-11 Tue 21:58]
+:MODIFIED: [2026-08-12 Wed 11:38]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-12 Wed 11:38]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -324,6 +334,22 @@ load-bearing — but the cause is still unknown and nothing prevents a recurrenc
 
 Worth identifying: an activation script, a hook, a tool run as johnw, or a manual command. Consider whether
 /etc/nixos subdirs should have a declared mode at all, given a root-owned flake repo read by non-root services.
+
+** Close Reason
+
+PREMISE FALSIFIED — nothing chmod'ed anything.
+
+This issue assumed a chmod event on 2026-08-10 21:13:33 that could recur. AIDE disproves it. AIDE covers /etc/nixos (aide.conf:98) and its CONFIG ruleset is p+i+n+u+g+s+b+m+c+sha256 — it tracks PERMISSIONS. Across every run since 2026-08-09 it reported ZERO entries with a p flag; the /etc/nixos directory entries show 'mc..' only, i.e. mtime and ctime, never permissions. So /etc/nixos/modules and modules/monitoring were already 0700 before the incident, not changed during it.
+
+Supporting: johnw's login umask is 0022, so no interactive shell created 0700 directories. The ctime-only timestamps I originally read as chmod evidence are shared by seven 0755 directories too (all ctime 2026-08-03 11:37:18), so they mark some bulk metadata operation, not a mode change.
+
+WHAT WAS ACTUALLY WRONG was architectural, not a permission event: services running as non-root users read files from /etc/nixos at runtime, and /etc/nixos/modules is 0700 johnw:johnw by long standing. Any such service breaks. That is now fixed for both victims — loki serves rules from the Nix store (commit a2685a68e), vdirsyncer-status runs its script from the store (commit 02ab44ea1).
+
+VERIFIED at close: exactly one /etc/nixos reference remains in any deployed unit — hermes-nightly-report.service reading /etc/nixos/certs, which runs as root AND is 0755, so it is safe on both counts. Loki has all 10 rule groups loaded with zero ruler errors and every symlink resolving into the store.
+
+THE DURABLE INVARIANT, which is the real output of this work: NO SERVICE MAY READ FROM /etc/nixos AT RUNTIME. Reference repo files as Nix paths so they are copied into the world-readable store. The 0700 modes need no correcting — they are simply not load-bearing any more.
+
+Not determined: why loki's ruler began erroring at 21:13:51 specifically, given the modes predate it. Left unresolved deliberately — it no longer has any consequence, and the architectural fix makes it unable to recur.
 
 * DONE [#C] Verify the VTherm comfort fix on the next office trigger
 :PROPERTIES:
@@ -358,36 +384,40 @@ Nest stops dropping to 75.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 09:55]
-:MODIFIED: [2026-08-12 Wed 09:55]
+:MODIFIED: [2026-08-12 Wed 11:25]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
 :END:
 
-GiteaPushMirrorFailing has been firing for repo hf since 2026-08-12 14:02Z. Gitea's stored last_error is:
+#+begin_example
+GiteaPushMirrorFailing on repo hf. Stored last_error is a TLS mismatch:
+  certificate subject name 'dotcom.glb' does not match target hostname 'github.com'
+(dotcom.glb is GitHub's internal LB default cert, normally the signature of SNI not being sent).
 
-  push failed: fatal: unable to access 'https://github.com/jwiegley/hf.git/':
-  SSL: certificate subject name 'dotcom.glb' does not match target hostname 'github.com'
+INVESTIGATION 2026-08-12 — every structural explanation is RULED OUT:
 
-dotcom.glb is GitHub's internal load-balancer default certificate, which is the classic signature of a
-TLS connection where SNI was not sent or was stripped in transit.
+,  * NOT environmental. 12 push mirrors exist; 11 succeed. HTTPS to github.com works from both johnw
+    and the gitea user with the correct CN=github.com certificate.
+,  * NOT configuration. All 12 remotes are structurally identical: scheme=https, host=github.com,
+    no credentials embedded in remote_address.
+,  * NOT timing. Ten mirrors synced at exactly 08-12 04:08. NINE SUCCEEDED, hf failed — same second,
+    same host, same config.
+,  * NOT the remote. GitHub API (read-only) reports jwiegley/hf exists, public, not archived, not
+    disabled, push permission true, default branch main, pushed_at 2026-05-20.
 
-NOT REPRODUCIBLE NOW (checked 2026-08-12 09:54 PDT): plain HTTPS to github.com succeeds from both johnw
-and the gitea user (HTTP/2 200), and the presented certificate is CN=github.com. nix flake update also
-reached api.github.com successfully earlier the same day. So the recorded error looks transient rather
-than a standing misconfiguration on this host.
+What remains: a sub-second transient hitting one push in a sequential batch of twelve, or a stale
+last_error that a successful attempt would clear. The mirror interval is 8h and gitea derives
+gitea_push_mirror_failed from last_error, so one failure keeps the alert lit for hours regardless.
 
-ALERT MECHANICS worth knowing: gitea_push_mirror_failed is derived from the stored last_error, and the
-mirror interval is 8h, so a single transient failure keeps the alert lit for up to 8 hours after the
-underlying problem has cleared. Expect it to resolve on the next successful sync.
+The repo is dormant: 227 kB in gitea, updated 2026-03-16.
 
-Repo is small (227 kB) and is not itself a mirror. Deliberately did NOT trigger a manual mirror push to
-force a retry: that is an outward-facing action against John's GitHub account.
-
-NEXT: if it is still firing after the next scheduled sync, the transient explanation is wrong and this
-needs a real look at how gitea's git reaches github.com — possible middlebox interception or an SNI
-issue on that particular code path.
+NEXT: the scheduled retry (~12:08) is the discriminator. If it clears, close as transient. If it fails
+again with the same TLS error while siblings succeed alongside it, that is genuinely anomalous and
+worth deeper work. Deliberately did NOT force a manual sync — that is outward-facing against John's
+GitHub account.
+#+end_example
 
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:

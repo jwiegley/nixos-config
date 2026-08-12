@@ -17,6 +17,39 @@
 :ORIGINAL_SIZE: 0
 :END:
 
+* TODO [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-7j3
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-12 Wed 11:13]
+:MODIFIED: [2026-08-12 Wed 11:13]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+NagiosServicesCriticalIncreased fired 2026-08-12 18:10Z. The single HARD CRITICAL service is 'PING on b-hyve-sprinkler' (301 services monitored, 0 hosts down).
+
+THE DEVICE IS FINE. Verified at the time of the alert:
+  - ping from vulcan: 3/3 replies
+  - ARP entry state: REACHABLE
+  - Home Assistant has live data from it via the B-Hyve cloud integration —
+    sensor.sprinkler_control_state = auto (updated 08:08), valve entities updated 09:36 the same day
+  - Nagios' own last_time_ok was only 14.5 minutes before the alert
+
+So this is an intermittent ICMP drop from a WiFi IoT device, not an outage. B-Hyve controllers are known to sleep or deprioritise ICMP.
+
+RECURRENCE: over 7 days, ALERTS shows 629 samples of NagiosServicesCritical and 242 of NagiosServicesCriticalIncreased. nagios_services_critical_total was 0 for the preceding 12 hours, so each episode is short but they repeat.
+
+WHY NOT FIXED HERE: the check lives in the Nagios host definitions, which are in a SEPARATE git repo consumed as the flake input 'nagios' (see CLAUDE.md). Standing commit approval covers /etc/nixos only. Also worth deciding rather than assuming: the right change is probably more retries / a longer check interval for this host, or dropping the PING check entirely given the device is monitored far better through the HA integration than through ICMP.
+
+NOTE: the exporter only publishes aggregate counts (nagios_services_critical_total), not per-service series, so Prometheus alone cannot say WHICH service is critical — identifying it required reading /var/lib/nagios/status.dat. That is worth remembering the next time one of these fires, and is arguably a gap in the exporter.
+#+end_example
+
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

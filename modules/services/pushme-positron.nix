@@ -91,12 +91,26 @@ in
   sops.secrets."pushme/positron-ssh-private-key" = {
     owner = user;
     mode = "0400";
-    # Restored 2026-08-12 alongside the timer's `wantedBy` -- the two are a pair.
-    # sops-nix restarts the listed unit whenever the secret is redeployed, which
-    # starts the sync even with no timer due. That is exactly what happened at
-    # 2026-08-10 23:03:39 while the job was still broken; now that it works, an
-    # extra sync after a key rotation is harmless and arguably desirable.
-    restartUnits = [ "pushme-positron.service" ];
+    # `restartUnits` is deliberately ABSENT. It was restored on 2026-08-12 and
+    # removed again the same day, because it caused two distinct failures:
+    #
+    # 1. STALE CONFIG (obr nixos-djx). sops-nix restarts the listed unit in a
+    #    SEPARATE systemd transaction, so this unit's
+    #    `after = home-manager-johnw.service` does not constrain it. At
+    #    00:21:26 the sync ran two seconds before the switch finished, using
+    #    the OLD fileset -- old destination, and the `test -d` probe still on.
+    #    It merely failed; with a valid-but-stale destination it would have
+    #    written to the wrong place, and rsync here carries --delete.
+    #
+    # 2. BLOCKED SWITCHES. The unit is Type=oneshot, so `systemctl start`
+    #    blocks until it completes, and switch-to-configuration therefore waits
+    #    for the whole sync. With TimeoutStartSec now 4h, a switch could hang
+    #    for four hours holding the /etc/nixos/.nixos-build lock and stalling
+    #    every other rebuild. Observed live: a switch sat >8 minutes mid-sync
+    #    until the sync was stopped by hand.
+    #
+    # The cost of omitting it is small: a rotated key is picked up at the next
+    # hourly run rather than immediately. For an hourly backup that is nothing.
   };
 
   home-manager.users.${user} = {

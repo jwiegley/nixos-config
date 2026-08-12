@@ -316,6 +316,44 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
+* TODO [#D] Gitea push mirror for 'hf' failing on a TLS hostname mismatch
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-x8j
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-12 Wed 09:55]
+:MODIFIED: [2026-08-12 Wed 09:55]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+GiteaPushMirrorFailing has been firing for repo hf since 2026-08-12 14:02Z. Gitea's stored last_error is:
+
+  push failed: fatal: unable to access 'https://github.com/jwiegley/hf.git/':
+  SSL: certificate subject name 'dotcom.glb' does not match target hostname 'github.com'
+
+dotcom.glb is GitHub's internal load-balancer default certificate, which is the classic signature of a
+TLS connection where SNI was not sent or was stripped in transit.
+
+NOT REPRODUCIBLE NOW (checked 2026-08-12 09:54 PDT): plain HTTPS to github.com succeeds from both johnw
+and the gitea user (HTTP/2 200), and the presented certificate is CN=github.com. nix flake update also
+reached api.github.com successfully earlier the same day. So the recorded error looks transient rather
+than a standing misconfiguration on this host.
+
+ALERT MECHANICS worth knowing: gitea_push_mirror_failed is derived from the stored last_error, and the
+mirror interval is 8h, so a single transient failure keeps the alert lit for up to 8 hours after the
+underlying problem has cleared. Expect it to resolve on the next successful sync.
+
+Repo is small (227 kB) and is not itself a mirror. Deliberately did NOT trigger a manual mirror push to
+force a retry: that is an outward-facing action against John's GitHub account.
+
+NEXT: if it is still firing after the next scheduled sync, the transient explanation is wrong and this
+needs a real look at how gitea's git reaches github.com — possible middlebox interception or an SNI
+issue on that particular code path.
+
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

@@ -50,15 +50,17 @@ Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
-* TODO [#C] restartUnits races home-manager: pushme runs with stale config during a switch
+* DONE [#C] restartUnits races home-manager: pushme runs with stale config during a switch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-djx
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 04:46]
-:MODIFIED: [2026-08-12 Wed 04:46]
+:MODIFIED: [2026-08-12 Wed 10:02]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-12 Wed 10:02]
+:CLOSE_REASON: Fixed by removing restartUnits from the sops secret (commit 7e93bf16b). It caused two failures: (1) the stale-config race this issue describes — sops-nix restarts the unit in a separate systemd transaction, so 'after = home-manager-johnw.service' does not constrain it, and at 00:21:26 the sync ran two seconds before the switch finished using the old fileset; (2) worse, it BLOCKED EVERY SWITCH — the unit is Type=oneshot so systemctl start blocks until completion, and with TimeoutStartSec at 4h a switch could hang four hours holding the build lock. Observed live: a switch sat >8 minutes mid-sync until the sync was stopped by hand. Chose option (a) from the issue: drop restartUnits and accept that a rotated key is picked up at the next hourly run. Verified: no sops restart references remain, and a switch now completes and releases the lock while the sync runs.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

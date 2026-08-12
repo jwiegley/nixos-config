@@ -181,6 +181,57 @@ Check WiFi signal at the plug, AP association, and DHCP lease stability; ask wha
 Do NOT restart matter-server: prior experience says it does not help, and the restart is what started this.
 Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
+* TODO [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-kvr
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-12 Wed 12:48]
+:MODIFIED: [2026-08-12 Wed 12:48]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+The work/positron fileset has NO filters at all: rsync's argv contains no --exclude, --include or --filter, and the deployed fileset yaml declares none. It therefore mirrors andoria's ENTIRE home directory, including machine-regenerable caches.
+
+MEASURED 2026-08-12:
+  /tank/Backups/Contracts/Positron/nfs/.cache  =  55 GB
+and still growing — the run in progress was writing
+  .cache/huggingface/hub/models--google--gemma-4-12B-it/blobs/...
+i.e. LLM model weights, which are re-downloadable from HuggingFace at any time.
+
+CONSEQUENCES:
+,  * Sync runtime. Runs take hours. The 04:43 run hit the old 50m ceiling; the current run has been
+    going 2h43m. TimeoutStartSec had to be raised to 4h partly because of this volume.
+,  * Throughput collapse. Early transfer ran at 7-8 MB/s; while pulling model blobs it fell to
+    ~950 KB/s, so the tail of every sync is dominated by the least valuable data.
+,  * Storage. 55 GB of the 432 GB destination is cache, and it is also captured by every ZFS snapshot
+    of tank/Backups, multiplying the cost.
+
+PROPOSED FIX (not applied — this is John's call about what his backup should contain):
+add a Filters block to the fileset, e.g.
+
+  Common:
+    Filters: |
+      - .cache/
+      - .cargo/registry/
+      - .npm/
+      - node_modules/
+      - .venv/
+      - __pycache__/
+
+pushme passes Filters to rsync via --include-from (Main.hs withFilters), so the syntax is rsync
+filter rules. Start with .cache/ alone, which is the measured 55 GB, and add others only with evidence.
+
+NOTE: excluding a path that is already in the destination does NOT delete it — rsync --delete only
+removes files that are absent from the source AND not excluded. Excluded paths are protected, so the
+existing 55 GB would remain until removed deliberately.
+#+end_example
+
 * DONE [#D] Unexplained: /tank/doc reduction not visible on disk
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

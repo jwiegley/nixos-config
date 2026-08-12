@@ -17,15 +17,16 @@
 :ORIGINAL_SIZE: 0
 :END:
 
-* TODO [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
+* DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-cmq
 :LABELS: []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 22:25]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 22:25]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -40,6 +41,13 @@ Consequence: the moment any new interface appears (tailscale0, a VPN, a bridge),
 DNS 53, every nginx vhost on 80/443 and MQTT 1883 become reachable from it.
 This is a latent property of the host, independent of any Tailscale decision, and worth scoping the
 global port list to end0/wlp1s0f0 explicitly.
+
+** Close Reason
+Implemented as a default-deny guard chain (John's choice). nixos-fw-ifguard is inserted at nixos-fw position 3 — after NixOS's invariant lo and ESTABLISHED,RELATED accepts, before every port accept — with a RETURN per legitimately-served interface (end0, wlp1s0f0, podman0, hermes-br0, ve+, vm+) and nixos-fw-refuse at the end. Any FUTURE interface therefore inherits nothing.
+
+Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE — iptables 1.8.11 rejects it with 'multiple --in-interface options not allowed'. Caught by validating the syntax in a throwaway chain before switching; it would otherwise have broken the firewall start script.
+
+Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
 * TODO [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
@@ -88,15 +96,17 @@ Check WiFi signal at the plug, AP association, and DHCP lease stability; ask wha
 Do NOT restart matter-server: prior experience says it does not help, and the restart is what started this.
 Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
-* TODO [#D] Unexplained: /tank/doc reduction not visible on disk
+* DONE [#D] Unexplained: /tank/doc reduction not visible on disk
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-lsi
 :LABELS: []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 22:19]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 22:19]
+:CLOSE_REASON: Resolved by observation. The reduction landed: /tank/doc/Documents is now 0 files and REFER dropped 53.1G -> 40.3G. It simply was not visible during any of five earlier measurements. As predicted, space was not freed — USEDSNAP rose 33.5G -> 47.5G because the deleted data is pinned in ZFS snapshots, so USED actually rose slightly (86.6G -> 87.8G). John's decision: let it age out on the normal sanoid retention rather than destroying snapshots; there is no space pressure (tank AVAIL 9.93T).
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -159,27 +169,39 @@ Steps: push to github:jwiegley/pushme -> nix flake update pushme -> restore BOTH
 modules/services/pushme-positron.nix (they are a pair) -> then the log-grep guard in the unit script
 can be deleted in favour of a plain exec.
 
-* TODO [#E] Decide the Tailscale/Headscale question on its own merits
+* DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rqw
 :LABELS: []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 22:25]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
 :END:
 
-docs/TAILSCALE_HEADSCALE_PLAN.md is 'design accepted; not yet implemented'. Tailscale is entirely absent
-from the host (no module, no package, no unit, no state); pinned nixpkgs ships 1.90.9 with all needed options.
+DEFERRED — planned future work, not active.
 
-Deliberately deferred 2026-08-11: the pushme job that motivated it now routes via the hera jump instead,
-so the tailnet should be decided on its own merits rather than as a side effect of a backup job.
-If pursued: shields-up must go in extraSetFlags (extraUpFlags applies only at first login), its support in
-1.90.9 is UNVERIFIED, and the interface-agnostic firewall ports issue should be fixed FIRST.
+CORRECTED PREMISE (John, 2026-08-11): vulcan is NOT and will never be intended to join the
+Tailscale network that andoria-08 sits on. Any earlier framing of this issue as 'join the tailnet
+so pushme can reach andoria directly' was wrong; pushme reaches andoria-08 through the hera SSH
+jump and that is the intended design.
+
+WHAT THIS ISSUE ACTUALLY IS: Headscale as a self-hosted coordination plane for John's OWN private
+network, replacing the WireGuard setup currently in use. The accepted design and full deployment
+runbook already exist at docs/TAILSCALE_HEADSCALE_PLAN.md — 'design accepted; not yet implemented',
+re-verified 2026-07-27. Chosen architecture is Headscale on vulcan with OPNsense as the network's
+entry point, in phases 0-7.
+
+PREREQUISITE recorded from nixos-cmq: the firewall must default-deny on unknown interfaces before a
+new interface (headscale/wireguard) appears, otherwise the 17 TCP + 6 UDP globally-declared ports
+become reachable from it the moment it exists.
+
+Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
+and replaces working WireGuard connectivity — John should be present.
 
 * TODO [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:
@@ -260,15 +282,17 @@ But no audit was done of whether any OTHER service reads from /etc/nixos at runt
 Prometheus is fine (its rules are copied into the store). Find the rest.
 Also worth identifying what set 0700 in the first place, since it happened unprompted.
 
-* TODO [#D] Should office occupancy change the upstairs thermostat at all?
+* DONE [#D] Should office occupancy change the upstairs thermostat at all?
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-z5v
 :LABELS: []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 22:19]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 22:19]
+:CLOSE_REASON: Working as designed, confirmed by John. The two nodes form a deliberate symmetric occupancy pair: arrive (mac active 1min / office door opened / 06:00 daily -> john home? -> office door closed?) sets upstairs comfort; leave (mac inactive 15min + out of office 15min -> join-wait 'confirmed absent') sets eco. The two-signal debounce on the leave side is careful engineering, not leftovers. The only defect was preset 'none' instead of 'comfort', fixed and verified (nixos-v9g).
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

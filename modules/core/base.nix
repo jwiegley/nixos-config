@@ -139,11 +139,83 @@
     # Router sends IGMP membership queries to 224.0.0.1 (all-hosts multicast)
     # These have unicast MAC but multicast IP, so logRefusedUnicastsOnly doesn't filter them
     # IGMP is harmless - just for multicast group management
+    # NOTE ON ORDERING: the IGMP rule below APPENDS (-A), so it lands after the
+    # port accepts. The default-deny rule after it must INSERT (-I) instead, so
+    # it lands *before* them. Getting that backwards makes the deny a no-op.
     extraCommands = ''
       iptables -A nixos-fw -i wlp1s0f0 -p igmp -j nixos-fw-accept
+
+      # ---- default-deny on interfaces we do not explicitly serve ----
+      #
+      # WHY: every `networking.firewall.allowedTCPPorts` in this repo (~10
+      # modules: dovecot, web/nginx, databases, home-assistant, hermes-microvm,
+      # ...) is emitted WITHOUT an `-i` filter — NixOS only adds one for
+      # `firewall.interfaces.<name>` entries (firewall-iptables.nix:161-165,
+      # 191-196). The result is 17 TCP + 6 UDP ports, including 445/SMB,
+      # 5432/PostgreSQL, 53/DNS, 80+443 for every nginx vhost and 1883/MQTT,
+      # that automatically apply to any interface that ever exists.
+      #
+      # Nothing is wrongly exposed TODAY — every current interface is one we
+      # intend to serve. This rule is about the next one: a WireGuard or
+      # headscale device (see docs/TAILSCALE_HEADSCALE_PLAN.md and obr
+      # nixos-rqw), a new bridge, a VPN. Without it, such an interface silently
+      # inherits all 23 ports the moment it appears.
+      #
+      # POSITION 3 IS DELIBERATE. NixOS always emits, in order:
+      #   1  -i lo                       -> accept
+      #   2  ctstate ESTABLISHED,RELATED -> accept
+      # so inserting at 3 puts this ahead of every port accept while leaving
+      # both invariants intact. That ordering is also the safety property that
+      # makes this rule survivable: an already-established SSH session matches
+      # rule 2 and is unaffected even if an interface name here is wrong, which
+      # leaves room to roll back.
+      #
+      # The allowlist is every interface currently carrying legitimate traffic:
+      #   end0, wlp1s0f0  - the wired and wireless uplinks
+      #   podman0         - containers reaching host services (pinned 10.88.0.1)
+      #   hermes-br0      - the hermes microVM bridge (it needs 53; see
+      #                     modules/services/hermes-microvm.nix:309-310)
+      #   ve+             - nspawn/container veths: ve-static-nginx,
+      #                     ve-copyparty, veth0, veth1
+      #   vm+             - microVM taps: vm-hermes
+      # `+` is iptables' trailing wildcard. `lo` is absent on purpose: rule 1
+      # accepts it before this rule is ever reached.
+      #
+      # IMPLEMENTED AS A GUARD CHAIN, not as one `! -i a ! -i b ...` rule:
+      # iptables 1.8.11 (nf_tables) rejects that outright with
+      #   "multiple --in-interface options not allowed"
+      # so the negated-list form does not exist. Each allowed interface gets its
+      # own RETURN rule; anything reaching the end of the chain is refused.
+      # A RETURN resumes nixos-fw at the rule after the jump — i.e. the port
+      # accepts — so allowed interfaces behave exactly as before.
+      #
+      # The chain is flushed and rebuilt on every firewall start so repeated
+      # activations cannot accumulate duplicates.
+      for ipt in iptables ip6tables; do
+        $ipt -N nixos-fw-ifguard 2>/dev/null || true
+        $ipt -F nixos-fw-ifguard
+        $ipt -A nixos-fw-ifguard -i end0       -j RETURN
+        $ipt -A nixos-fw-ifguard -i wlp1s0f0   -j RETURN
+        $ipt -A nixos-fw-ifguard -i podman0    -j RETURN
+        $ipt -A nixos-fw-ifguard -i hermes-br0 -j RETURN
+        $ipt -A nixos-fw-ifguard -i ve+        -j RETURN
+        $ipt -A nixos-fw-ifguard -i vm+        -j RETURN
+        $ipt -A nixos-fw-ifguard -j nixos-fw-refuse
+        # Drop any stale jump before re-inserting, so restarts do not stack them.
+        $ipt -D nixos-fw -j nixos-fw-ifguard 2>/dev/null || true
+        $ipt -I nixos-fw 3 -j nixos-fw-ifguard
+      done
     '';
     extraStopCommands = ''
       iptables -D nixos-fw -i wlp1s0f0 -p igmp -j nixos-fw-accept 2>/dev/null || true
+
+      # Mirror of the guard chain above: unhook it, then empty and delete it.
+      # A chain cannot be deleted while it is still referenced, hence the order.
+      for ipt in iptables ip6tables; do
+        $ipt -D nixos-fw -j nixos-fw-ifguard 2>/dev/null || true
+        $ipt -F nixos-fw-ifguard 2>/dev/null || true
+        $ipt -X nixos-fw-ifguard 2>/dev/null || true
+      done
     '';
   };
 

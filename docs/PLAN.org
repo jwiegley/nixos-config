@@ -1,0 +1,255 @@
+#+TITLE: Obr Issues
+#+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
+#+ISSUE_PREFIX: nixos
+
+* DONE [#C] nix flake update fails: GitHub API rate limit (403, unauthenticated)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-5sj
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 16:40]
+:MODIFIED: [2026-08-11 Tue 16:46]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 16:46]
+:CLOSE_REASON: Fixed: sops-nix renders the existing github-token secret into a 0440 root:wheel file that nix.conf !includes. Verified live — johnw's nix reports github.com=<token>, a non-wheel user gets empty + exit 0 (soft fail), and an authenticated API fetch now returns exit 0 with zero rate-limit errors.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+* TODO [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-cmq
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+networking.firewall opens 17 TCP (22,53,80,139,443,445,465,587,853,993,1883,2222,4190,5357,5432,8096,21063)
+and 6 UDP (53,137,138,3702,5353,5540) with trustedInterfaces=[lo] only.
+NixOS emits allowedTCPPorts/allowedUDPPorts rules WITHOUT any '-i <iface>' filter
+(firewall-iptables.nix:161-165,191-196), so they apply to every present and future interface.
+
+Consequence: the moment any new interface appears (tailscale0, a VPN, a bridge), SMB 445, PostgreSQL 5432,
+DNS 53, every nginx vhost on 80/443 and MQTT 1883 become reachable from it.
+This is a latent property of the host, independent of any Tailscale decision, and worth scoping the
+global port list to end0/wlp1s0f0 explicitly.
+
+* TODO [#D] Duplicate calendar notifications when an event is on two calendars
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-fvz
+:LABELS: []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+'Ruhi Book 10' exists on both calendar.baha_i and calendar.jwiegley_gmail_com.
+Each has its own ha-events-calendar pair on the Office tab: a 'Before' node (offset -3 minutes) and a
+'Start' node (offset +1 minute). So the blue WiZ notification fires twice at T-3min and twice at T+1min.
+
+Harmless today because both set the same colour and the action is idempotent, but it would matter for
+anything non-idempotent. Consider deduplicating (a join/gate on event summary) if it becomes a problem.
+
+* TODO [#B] Matter outdoor plug flapping (node 0x1A) — needs physical/WiFi check
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-h2u
+:LABELS: []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+switch.smart_outdoor_plug_switch_1/2 cycles off<->unavailable ~117x/day vs a 2-3/day baseline.
+Onset was exactly the matter-server restart at 2026-08-10 15:18 (zero p3 errors in hours 10-14, then 183 in hour 15).
+matter-server logs 'CASESession timed out ... peer <000000000000001A>' at ~1.4/min (~2000/day).
+
+IMPORTANT correction to earlier analysis: this is a WiFi/LAN node reached over wlp1s0f0, NOT Thread.
+Every genuine Thread node on this fabric advertises an fd:: mesh ULA; 0x1A advertises on the routable LAN.
+So the Aqara Hub M3 border router is NOT in its path and Thread-range advice does not apply.
+Check WiFi signal at the plug, AP association, and DHCP lease stability; ask what changed around Aug 10.
+
+Do NOT restart matter-server: prior experience says it does not help, and the restart is what started this.
+Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
+
+* TODO [#D] Unexplained: /tank/doc reduction not visible on disk
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-lsi
+:LABELS: []
+:ISSUE_TYPE: question
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+John reported reducing 'doc'. /tank/doc/Documents remained 26,692 files / 13G across five measurements
+(08:15, 10:20, 12:15, and later), with tank/doc REFER steady at 53.1G.
+
+Possibilities not yet distinguished: (a) done inside DEVONthink (Files.dtBase2 was being written 09:54-10:03)
+and not committed to disk or still in the database's internal trash; (b) the separate tank/Documents
+dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Documents; (c) done elsewhere.
+Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
+repo will not shrink for ~7 days (--keep-daily 7).
+
+* TODO [#E] mbsync-rbcca transient Gmail timeouts raise critical pages (~4/week)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-mwl
+:LABELS: []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+mbsync-rbcca fails ~4x/week with 'Socket error on imap.gmail.com: timeout'; johnw/bia/assembly had zero
+failures over the same 7 days. rbcca's maildir is 435M vs bia's 3.0M, which likely explains why only it
+times out. No mail is lost (Sync Pull, idempotent, SyncState preserved) and it self-heals on the next
+15-minute tick — but the unit sits 'failed' until then, raising a critical SystemdServiceFailed each time.
+
+John chose to LEAVE IT ALONE on 2026-08-11. Recorded for the backlog only.
+If revisited, note two traps: 'Restart' in extraServiceConfig fails Nix evaluation unless the base
+mkMbsyncModule.nix:158 becomes lib.mkDefault (or mkForce is used), and StartLimitBurst/StartLimitIntervalSec
+are [Unit]-section options that extraServiceConfig cannot carry at all.
+
+* TODO [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-nyr
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Patch is at /home/johnw/pushme-ssh-options-and-exit-codes.patch (also uncommitted in /tank/src/pushme).
+Adds Alias.SshOptions, Alias.CheckRemoteDirectory, and real exit codes (transfer error 1, usage 2,
+warning 0). Verified on aarch64 with GHC 9.10.3, -Wall clean, existing 8-test suite passing, and all
+exit codes plus both new options confirmed empirically against a built binary.
+
+Steps: push to github:jwiegley/pushme -> nix flake update pushme -> restore BOTH
+'wantedBy = [ "timers.target" ]' on the timer AND 'restartUnits' on the sops secret in
+modules/services/pushme-positron.nix (they are a pair) -> then the log-grep guard in the unit script
+can be deleted in favour of a plain exec.
+
+* TODO [#E] Decide the Tailscale/Headscale question on its own merits
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-rqw
+:LABELS: []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+docs/TAILSCALE_HEADSCALE_PLAN.md is 'design accepted; not yet implemented'. Tailscale is entirely absent
+from the host (no module, no package, no unit, no state); pinned nixpkgs ships 1.90.9 with all needed options.
+
+Deliberately deferred 2026-08-11: the pushme job that motivated it now routes via the hera jump instead,
+so the tailnet should be decided on its own merits rather than as a side effect of a backup job.
+If pursued: shields-up must go in extraSetFlags (extraUpFlags applies only at first login), its support in
+1.90.9 is UNVERIFIED, and the interface-agnostic firewall ports issue should be fixed FIRST.
+
+* DONE [#C] Verify the VTherm comfort fix on the next office trigger
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-v9g
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 20:19]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 20:19]
+:CLOSE_REASON: Verified. 'upstairs exit eco' (904d7910ec794811) fired at 19:04:27 on 2026-08-11 and produced ZERO preset='none' samples afterwards — before the fix every firing forced comfort->none/77. VTherm now holds comfort/80. The 19:01:32 attribute gap was an unrelated HA restart (Started Home Assistant 19:01:17).
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+climate.upstairs_vtherm was being pushed to preset 'none' (= manual) by the Node-RED node
+'upstairs exit eco' (Office tab, id 904d7910ec794811) on every office-occupancy trigger.
+On a Versatile Thermostat 'none' means MANUAL, not 'return to schedule', so it pinned a low setpoint
+(77) versus comfort (80) and, in cool mode, drove the underlying Nest down to 75.
+Over 14 days: manual 21,628 samples vs comfort 1,011.
+
+John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confirmed live in the flow).
+Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
+Nest stops dropping to 75.
+
+* TODO [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ye9
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+/etc/nixos/modules and /etc/nixos/modules/monitoring are drwx------ johnw:johnw.
+Something chmod'ed them at 2026-08-10 21:13:33 (pure metadata change: ctime moved, mtime did not).
+18 seconds later Loki's ruler began failing 'unable to stat rule file ... permission denied' once a minute,
+and ALL log-based alerting was silently dead for ~17.5h — the ruler drops the whole tenant if it cannot
+stat any single rule file.
+
+Fixed for Loki by serving rules from the Nix store (commit a2685a68e), so the 0700 modes were left alone.
+But no audit was done of whether any OTHER service reads from /etc/nixos at runtime and is still broken.
+Prometheus is fine (its rules are copied into the store). Find the rest.
+Also worth identifying what set 0700 in the first place, since it happened unprompted.
+
+* TODO [#D] Should office occupancy change the upstairs thermostat at all?
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-z5v
+:LABELS: []
+:ISSUE_TYPE: question
+:CREATED:  [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 16:39]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The 'upstairs exit eco' node is triggered by the OFFICE occupancy chain
+(mac active 1min / office door opened / 06:00 daily -> john home? -> office door closed?).
+It fires 6+ times a day and acts on climate.upstairs_vtherm.
+
+Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
+earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
+

@@ -78,6 +78,43 @@
   nix.settings.max-jobs = 4; # Limit concurrent builds (default: auto = 10 cores)
   nix.settings.cores = 2; # Limit cores per build job (default: 0 = all cores)
 
+  # GitHub API authentication for flake input resolution.
+  #
+  # Unauthenticated api.github.com allows 60 requests/hour PER IP. This flake has
+  # ~20 `github:` inputs and each one costs a request, so `nix flake update`
+  # exhausts the quota in a couple of runs and dies with
+  #   error: unable to download '...': HTTP error 403
+  #   "API rate limit exceeded for <ip>"
+  # An authenticated request gets 5000/hour instead.
+  #
+  # The token is deliberately NOT placed in `nix.settings.access-tokens`: that
+  # would render it into /etc/nix/nix.conf, which is world-readable (0444).
+  # Instead sops-nix renders it into a 0440 root:wheel file that nix.conf
+  # `!include`s, so the credential never enters the Nix store or a public file.
+  #
+  # SAFE FOR NON-WHEEL USERS -- verified empirically on nix 2.31.5 (2026-08-11)
+  # rather than assumed, because a hard failure here would break nix for
+  # gitea-runner and the container users:
+  #   * a reader who CAN see the file gets the token
+  #     (`nix config show access-tokens` reports it)
+  #   * a reader who CANNOT gets an empty value and exit 0
+  # i.e. the include fails SOFT. Do not tighten this to a mode that root alone
+  # can read without re-testing: `nix flake update` runs as johnw, not root.
+  #
+  # Reuses the existing `github-token` secret (declared in
+  # modules/maintenance/timers.nix:345) rather than storing a second copy of the
+  # same credential.
+  sops.templates."nix-access-tokens.conf" = {
+    content = "access-tokens = github.com=${config.sops.placeholder."github-token"}";
+    mode = "0440";
+    owner = "root";
+    group = "wheel";
+  };
+
+  nix.extraOptions = ''
+    !include ${config.sops.templates."nix-access-tokens.conf".path}
+  '';
+
   # Also set NIX_SSL_CERT_FILE environment variable for all users
   # This ensures git operations invoked by Nix use the correct CA bundle
   environment.variables.NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";

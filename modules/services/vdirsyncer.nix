@@ -257,7 +257,27 @@ in
       Restart = "always";
       RestartSec = 5;
 
-      ExecStart = "${pkgs.python3}/bin/python3 /etc/nixos/scripts/vdirsyncer-status.py";
+      # Run the script FROM THE NIX STORE, not from /etc/nixos/scripts.
+      #
+      # This unit runs as `vdirsyncer`, and /etc/nixos/scripts is 0700
+      # johnw:johnw, so that user cannot traverse into it:
+      #   PermissionError: [Errno 13] Permission denied:
+      #   '/etc/nixos/scripts/vdirsyncer-status.py'
+      # The service nevertheless looked healthy (active, Result=success,
+      # exit 0, no journal entries) because it has been running since
+      # 2026-07-03, 38 days BEFORE the directory was chmod'ed to 0700 on
+      # 2026-08-10 21:13:33 — python still holds the descriptor it opened
+      # then. It would have died permanently at the next restart or reboot,
+      # with nothing alerting on it.
+      #
+      # A store path is immune: the store is world-readable by construction,
+      # so no permission on /etc/nixos can break this again. Same reasoning as
+      # the Loki rules in modules/services/loki.nix, which lost ALL log-based
+      # alerting for 17.5h to the identical cause.
+      #
+      # Safe as a single-file reference: the script is git-tracked (required —
+      # flakes only see tracked files) and imports nothing but the stdlib.
+      ExecStart = "${pkgs.python3}/bin/python3 ${../../scripts/vdirsyncer-status.py}";
 
       # Hardening
       NoNewPrivileges = true;

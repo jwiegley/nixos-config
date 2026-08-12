@@ -181,6 +181,32 @@ so the tailnet should be decided on its own merits rather than as a side effect 
 If pursued: shields-up must go in extraSetFlags (extraUpFlags applies only at first login), its support in
 1.90.9 is UNVERIFIED, and the interface-agnostic firewall ports issue should be fixed FIRST.
 
+* TODO [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-tvy
+:LABELS: []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-11 Tue 21:58]
+:MODIFIED: [2026-08-11 Tue 21:58]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Six directories under /etc/nixos are 0700 johnw:johnw: config, templates, configs, modules, scripts, docs.
+At least modules/ and modules/monitoring were changed at 2026-08-10 21:13:33 (pure metadata change — ctime
+moved while mtime did not, so a chmod/chown rather than an entry change).
+
+Consequences so far: ALL Loki log-based alerting dead 17.5h (fixed, commit a2685a68e), and
+vdirsyncer-status.service left as a latent failure that would have died at the next reboot (fixed, this issue).
+Both were fixed structurally by serving files from the Nix store, so the 0700 modes are no longer
+load-bearing — but the cause is still unknown and nothing prevents a recurrence on some future path.
+
+Worth identifying: an activation script, a hook, a tool run as johnw, or a manual command. Consider whether
+/etc/nixos subdirs should have a declared mode at all, given a root-owned flake repo read by non-root services.
+
 * DONE [#C] Verify the VTherm comfort fix on the next office trigger
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -207,15 +233,17 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
-* TODO [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
+* DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ye9
 :LABELS: []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-11 Tue 21:58]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-11 Tue 21:58]
+:CLOSE_REASON: Audit complete. SIX dirs are 0700 johnw:johnw (config, templates, configs, modules, scripts, docs), not two. Exactly ONE real breakage found: vdirsyncer-status.service (User=vdirsyncer) ran /etc/nixos/scripts/vdirsyncer-status.py and could not traverse it — latent, since it had run since 2026-07-03 on a pre-chmod fd while reporting active/success/exit-0 with no journal output. Fixed by running it from the Nix store; verified serving HTTP 200 with real metrics on :8089. cleanup.service and drafts-mcp-self-heal.service reference scripts/ but run as root (safe); the sudoers self-heal actions execute via sudo->root (safe); openclaw-self-heal/actions is empty (service removed 2026-07-31). All other /etc/nixos references are documentation (man pages, markdown) or a stale git worktree build result. No other unit has failed since the chmod.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

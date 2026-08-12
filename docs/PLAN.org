@@ -390,15 +390,16 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
-* TODO [#D] Gitea push mirror for 'hf' failing on a TLS hostname mismatch
+* DONE [#D] Gitea push mirror for 'hf' failing on a TLS hostname mismatch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-x8j
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 09:55]
-:MODIFIED: [2026-08-12 Wed 11:25]
+:MODIFIED: [2026-08-12 Wed 12:23]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-12 Wed 12:23]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -430,6 +431,22 @@ NEXT: the scheduled retry (~12:08) is the discriminator. If it clears, close as 
 again with the same TLS error while siblings succeed alongside it, that is genuinely anomalous and
 worth deeper work. Deliberately did NOT force a manual sync — that is outward-facing against John's
 GitHub account.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Resolved — transient, exactly as the elimination predicted. The mirror retried at 2026-08-12 12:14 and succeeded; gitea's last_error is now empty and all 12 push mirrors report clean.
+
+The four eliminations that led here, none of which needed changing anything:
+,  * NOT environmental — 11 of 12 mirrors succeeded throughout; HTTPS to github.com worked from both johnw and the gitea user with the correct CN=github.com certificate.
+,  * NOT configuration — all 12 remotes structurally identical (https, github.com, no embedded credentials).
+,  * NOT timing — ten mirrors synced at exactly 04:08; NINE succeeded and only hf failed, same second, same host.
+,  * NOT the remote — GitHub API confirmed jwiegley/hf exists, public, not archived, push permission true.
+
+MONITORING LAG WORTH REMEMBERING, and the reason the alert outlived the fault by ~50 minutes: gitea_push_mirror_failed comes from a textfile exporter on an HOURLY timer (gitea-push-mirror-exporter.timer, OnCalendar=hourly). The mirror recovered at 12:14 but the textfile still said 1, having last been written at 12:03:57; the next scheduled write was 13:04. Forcing the exporter (read-only) rewrote it to 0 and the alert cleared.
+
+So the total worst-case lag between a real recovery and the alert clearing is up to 8h (the mirror interval, before it even retries) plus up to 1h (the exporter interval). For a single transient that means an alert can stay lit most of a day with nothing wrong. Worth knowing before treating a firing GiteaPushMirrorFailing as current.
 #+end_example
 
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)

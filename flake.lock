@@ -2310,11 +2310,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1786509910,
-        "narHash": "sha256-TGbDX2Za3k4eclFfuGM7CNxAKrRQti/00NPEceCWFBI=",
+        "lastModified": 1786517963,
+        "narHash": "sha256-g5rP41l0gFyQnlV+0czU5zKMi2utmeZCf4NPAq8NCHk=",
         "ref": "refs/heads/main",
-        "rev": "b3263de3d700ab0650fb9cceadd6586fd1126f1a",
-        "revCount": 3160,
+        "rev": "5853a19b7be1c80756af4ba5c7ee1478e19477b8",
+        "revCount": 3166,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2344,11 +2344,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1786509910,
-        "narHash": "sha256-TGbDX2Za3k4eclFfuGM7CNxAKrRQti/00NPEceCWFBI=",
+        "lastModified": 1786517963,
+        "narHash": "sha256-g5rP41l0gFyQnlV+0czU5zKMi2utmeZCf4NPAq8NCHk=",
         "ref": "refs/heads/main",
-        "rev": "b3263de3d700ab0650fb9cceadd6586fd1126f1a",
-        "revCount": 3160,
+        "rev": "5853a19b7be1c80756af4ba5c7ee1478e19477b8",
+        "revCount": 3166,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2956,11 +2956,11 @@
         "rust-overlay": "rust-overlay_3"
       },
       "locked": {
-        "lastModified": 1786403254,
-        "narHash": "sha256-Kig6WFpei/KoRoLwiEk9G8mzm46dcQ0ZxLP4Jveuijk=",
+        "lastModified": 1786518114,
+        "narHash": "sha256-u28X/RZ0L+Qi4jwhwJ7AV4M8x+rnOGYfIVXEkzn+lZw=",
         "owner": "jwiegley",
         "repo": "obr",
-        "rev": "14c74a3b267d76d85ead9867978a3e9581735987",
+        "rev": "d8d93a8241d5c8776de18b8741379e66e9931e23",
         "type": "github"
       },
       "original": {
@@ -3190,11 +3190,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782595559,
-        "narHash": "sha256-Mz9tFaXAidtYSThs3OwtKUwnoEyfFCT39bB1If78giQ=",
+        "lastModified": 1786518581,
+        "narHash": "sha256-A+z59AwKqZxeIzGNIY8k9met4Sl7SYbFd4W+5o0WNQI=",
         "owner": "jwiegley",
         "repo": "pushme",
-        "rev": "f8ea0cc7c47a7ea8e6d3755f58284b0b8a9ad42d",
+        "rev": "ff4d79aa260abf5bc24ed15952e7bab5569b6eb8",
         "type": "github"
       },
       "original": {

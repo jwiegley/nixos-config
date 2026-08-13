@@ -63,14 +63,14 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] pushme never converges: source andoria-08 drops mid-transfer (not a timeout)
+* TODO [#C] pushme: andoria-08 closes the session right after auth (host is UP, not offline)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-9ue
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 04:49]
+:MODIFIED: [2026-08-13 Thu 08:48]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -244,6 +244,53 @@ off or asleep overnight, an hourly timer spends the night generating failures
 (and keeping SystemdServiceFailed lit) for no possible benefit. Retiming the
 timer to andoria-08's actual uptime window would fix the noise and lose nothing.
 Needs John's answer on what that window is.
+
+----------------------------------------------------------------------
+
+CORRECTION (2026-08-13 08:45) -- my earlier "andoria-08 is offline or asleep"
+conclusion was WRONG. The host is up and authenticating us; the session is being
+terminated immediately after successful authentication.
+
+Verbose ssh through the configured jump shows the full handshake succeeding:
+  - key exchange completes against andoria-08's ED25519 host key
+  - "Host '<remote>' is known and matches the ED25519 host key"
+  - "Server accepts key: <pushme identity> ED25519"
+  - then, with no command output whatsoever:
+      channel 0: FORCE input drain
+      Connection closed by UNKNOWN port 65535
+So DNS, routing, the jump hop, sshd, the host key and our authorized key are all
+fine. What fails is the SESSION, after auth.
+
+An A/B test rules out my own change as the cause:
+  TEST B  --rsync-path, WITHOUT --partial-dir  -> rsync 255, 0 bytes
+  TEST C  --rsync-path, WITH    --partial-dir  -> rsync 255, 0 bytes
+Identical. --partial-dir/--timeout are exonerated; the transfers fail with or
+without them. (My first attempt at this test omitted --rsync-path, which the
+real job passes, so its result was meaningless -- rerun with the real flag set.)
+
+Invoking the remote rsync binary explicitly
+(`/home/jwiegley/.nix-profile/bin/rsync --version`) also returns zero output and
+closes. Nothing on the remote gets far enough to speak, not even to report a
+missing binary.
+
+"Authentication succeeds, then the session closes silently with no output" is
+the signature of a session-level restriction on the account rather than a
+network or key problem -- e.g. the login shell set to a non-shell, a
+ForceCommand that exits immediately, or an account/PAM session restriction. It
+is NOT reachability.
+
+Timeline: the 00:01 run connected and moved 690 MB before dropping at 00:12.
+Every attempt since -- 00:53, 01:00, 02:02, 03:01, 04:04, 05:03, 06:00, 07:01,
+08:03 -- has returned 0 bytes. So whatever changed on andoria-08 happened in
+that window and has persisted for over eight hours, through the start of the
+working day.
+
+NEEDS JOHN / the andoria-08 side. Nothing on vulcan can fix a remote account
+whose sessions are closed at login, and the constraint that only `rsync` may run
+there means I cannot probe further without exceeding it. Worth checking on that
+host: the login shell and account status for the pushme user, any ForceCommand /
+authorized_keys options on the key we present, and whether
+/home/jwiegley/.nix-profile/bin/rsync still exists.
 #+end_example
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
@@ -676,6 +723,65 @@ on spec:
       it would hide a genuine 5xx on /metrics too.
 Needs a call on which trade is acceptable before doing either.
 #+end_example
+
+* TODO [#D] GiteaPushMirrorFailing latched on nix-config while both refs are identical
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-tvl
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-13 Thu 08:48]
+:MODIFIED: [2026-08-13 Thu 08:48]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+GiteaPushMirrorFailing fires on johnw/nix-config -> github.com/jwiegley/nix-config
+while the two repositories are, in fact, byte-identical.
+
+State at 2026-08-13 08:50:
+  gitea  johnw/nix-config  main = e0afc16bd31d
+  github jwiegley/nix-config main = e0afc16bd31d
+  github's tip is present in gitea's object store (verified with cat-file -e)
+So there is nothing to push and nothing is behind.
+
+WHY IT STILL ALERTS: gitea_push_mirror_failed encodes Gitea's `last_error`
+field, which is level-triggered -- set on a rejected push, cleared only on a
+LATER SUCCESSFUL push (documented in scripts/gitea-push-mirror-exporter.py).
+Four pushes were rejected today (00:40:23, 01:07:53, 03:54:08, 05:04:29) and
+none since. With the repo now quiescent there is no new commit to trigger a
+successful push, so nothing clears last_error and the alert stays lit even
+though the mirror is healthy. The rule's `for: 2h` is designed to ride out
+transients but cannot help here: the condition is latched, not flapping.
+
+ROOT CAUSE OF THE REJECTIONS -- two writers. Every rejection is a
+compare-and-swap failure:
+  ! [remote rejected] main -> main (cannot lock ref 'refs/heads/main':
+      is at <X> but expected <Y>)
+and the "is at" hash is DIFFERENT on every attempt. That means GitHub's ref is
+moving between Gitea's read and its push, i.e. something other than the mirror
+is pushing to github.com/jwiegley/nix-config -- almost certainly direct pushes
+from hera, since nix-config is the shared Darwin config repo. A push mirror and
+a human pushing to the same branch will race indefinitely; the mirror always
+loses because it pushes with an expected-old-value lease.
+
+NOT caused by this host's commits: /etc/nixos pushes to johnw/nixos-config
+(with an S), a different repository, whose mirror reports healthy (value 0).
+All 11 other mirrors are also 0.
+
+NEEDS JOHN -- this is a workflow decision, not a bug to patch:
+  (a) treat GitHub as authoritative for nix-config and delete the push mirror;
+  (b) treat Gitea as authoritative and stop pushing to GitHub directly from
+      hera;
+  (c) keep both and accept periodic rejections plus a latched alert.
+Any of these changes where John's own commits are expected to land, so none can
+be chosen here.
+
+Recorded so future health cycles do not re-derive this: seeing this alert with
+both refs equal means the latched-last_error case, not a broken mirror. Compare
+the two tips before investigating further.
 
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:

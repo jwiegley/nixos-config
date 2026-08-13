@@ -2310,11 +2310,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1786599204,
-        "narHash": "sha256-+ktYsprrNTcZErsYBRkPBOMODXpj8sXs3lK6ZkOktVY=",
+        "lastModified": 1786623528,
+        "narHash": "sha256-9QVNXhlFLGhr+c0fWw9gvKQUvO7nFuwf/rsRp084OhM=",
         "ref": "refs/heads/main",
-        "rev": "6a87f731eb5704e536a0925fb080a285afe5259f",
-        "revCount": 3211,
+        "rev": "c143b2ec4e0714117d59e7977ff9fb45d5cd675b",
+        "revCount": 3236,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2344,11 +2344,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1786599204,
-        "narHash": "sha256-+ktYsprrNTcZErsYBRkPBOMODXpj8sXs3lK6ZkOktVY=",
+        "lastModified": 1786623528,
+        "narHash": "sha256-9QVNXhlFLGhr+c0fWw9gvKQUvO7nFuwf/rsRp084OhM=",
         "ref": "refs/heads/main",
-        "rev": "6a87f731eb5704e536a0925fb080a285afe5259f",
-        "revCount": 3211,
+        "rev": "c143b2ec4e0714117d59e7977ff9fb45d5cd675b",
+        "revCount": 3236,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2956,11 +2956,11 @@
         "rust-overlay": "rust-overlay_3"
       },
       "locked": {
-        "lastModified": 1786602453,
-        "narHash": "sha256-MFROqJr6o2KP3mlrcKVpK/WJ3vpn1fKbW5NrvolpHFY=",
+        "lastModified": 1786622038,
+        "narHash": "sha256-B3g+aIX5VQnHUX5XZi5QmH587su07/FpOXxtauArsQA=",
         "owner": "jwiegley",
         "repo": "obr",
-        "rev": "12e477bd00cecee5b490fbde60c5c8c3206d0383",
+        "rev": "9ca9afc0b3fdc294ae033511492cabe9765cbabc",
         "type": "github"
       },
       "original": {
@@ -3466,11 +3466,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1786375908,
-        "narHash": "sha256-G7qDAT98nywA4EFmJCwIRO5wKvDlBBN3BWpsOnjAto8=",
+        "lastModified": 1786629091,
+        "narHash": "sha256-gkig4nPi1CWc4Z50GBsjE4ygSE7hMpl/TwID2an2Cck=",
         "owner": "Mic92",
         "repo": "sops-nix",
-        "rev": "d1337e05ba0a8e88a75d2c0e1595d82f3b3e2ac4",
+        "rev": "a8627b21b9107c5711c96b84f32a9a4b3d45295f",
         "type": "github"
       },
       "original": {

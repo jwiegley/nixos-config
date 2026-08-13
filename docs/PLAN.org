@@ -181,15 +181,16 @@ Check WiFi signal at the plug, AP association, and DHCP lease stability; ask wha
 Do NOT restart matter-server: prior experience says it does not help, and the restart is what started this.
 Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
-* TODO [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
+* DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-kvr
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-12 Wed 12:48]
-:MODIFIED: [2026-08-12 Wed 12:48]
+:MODIFIED: [2026-08-12 Wed 17:50]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-12 Wed 17:50]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -231,6 +232,24 @@ NOTE: excluding a path that is already in the destination does NOT delete it —
 removes files that are absent from the source AND not excluded. Excluded paths are protected, so the
 existing 55 GB would remain until removed deliberately.
 #+end_example
+
+** Close Reason
+
+Fixed and verified. Applied the filter list hera used when it held this mirror, verbatim — 65 rules covering caches (.cache, .npm, .bun, .cabal, .rustup, .cargo, .elan), toolchain state (/.local/share/{cargo,rustup,uv}, /.local/state, /go), build artifacts (target/, dist/, build/, node_modules/, dist-newstyle/, .venv/, .direnv/) and compiler outputs (*.o, *.hi, *.vo, ...). Reproduced rather than reinvented, since guessing at build directories is how a backup quietly loses something that matters.
+
+Because filters PROTECT what they exclude (rsync --delete removes only files absent from the source AND not excluded), the ~150 GiB already copied would have persisted. --delete-excluded was added TEMPORARILY for one run to clear it, then removed the same day; a comment in the module records why it must not become permanent — left in place, any future filter edit becomes an immediate mass deletion.
+
+Before deleting anything, previewed with rsync -n -v driven directly (pushme's own --dry-run is useless here: execute() short-circuits before rsync runs, so it prints 'done' having done nothing). The preview listed 298,613 deletions, every one mapping to an intended rule: .cache 107757, .rustup 50748, .cargo 19049, .codex 17460, .elan 14491, .local 12344, .npm 9659. Checked the three narrow ones — .ssh entries were strictly under sockets/, and the .claude/.config entries were .git/ai/ working logs matched by that rule, not by .claude/worktrees/.
+
+VERIFIED AFTER THE RUN:
+  referenced 424G -> 274G (150 GiB reclaimed; used stays high until ZFS snapshots expire)
+  every excluded tree gone: .cache .rustup .cargo .codex .elan .npm .bun .cabal
+    .local/state .local/share/{uv,rustup} .local/lib go nix-cache .ssh/sockets
+    .git-ai .claude/worktrees .direnv .venv
+  real data preserved: .ssh/ .config/ .local/ .gitconfig, 85 top-level entries
+  deployed fileset parses with no Options key and all 65 filter rules present
+
+Process note: the first deletion pass was killed partway through by my own cleanup command, which matched the running service rather than only the preview processes. Harmless (rsync resumes) but it is why the deletion arrived in two passes.
 
 * DONE [#D] Unexplained: /tank/doc reduction not visible on disk
 :PROPERTIES:

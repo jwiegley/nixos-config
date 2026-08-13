@@ -190,6 +190,22 @@ in
           # no longer written to by this job.
           Path: $tank/Backups/Contracts/Positron/nfs
           PreserveXattrs: false
+          # NOTE: `--delete-excluded` was set here TEMPORARILY on 2026-08-12 and
+          # removed the same day, once it had done its one job.
+          #
+          # Filters PROTECT what they exclude: rsync --delete removes only files
+          # absent from the source AND not excluded. So everything copied before
+          # the Filters block existed -- .cache, .rustup, .cargo, .codex, .elan,
+          # .npm, .bun, .cabal and the rest, ~150 GiB -- would have sat in the
+          # destination forever. --delete-excluded additionally removes
+          # destination paths the filters exclude, which cleared that backlog:
+          # referenced went 424G -> 274G and every excluded tree verified gone,
+          # with .ssh/, .config/, .local/ and real data preserved.
+          #
+          # It must NOT become permanent. Left in place, every future edit to the
+          # Filters block turns into an immediate mass deletion rather than a
+          # change that merely stops copying something. Re-add it deliberately,
+          # for one run, if the filter list is ever widened again.
           ReceiveFrom:
             - hera
             - clio
@@ -201,6 +217,99 @@ in
           ReceiveFrom: []
 
       Common:
+        # Exclusions, carried over verbatim from the filter list hera used when
+        # IT held this mirror. Reproduced as-is rather than reinvented: these
+        # are known to produce a correct copy of this particular home
+        # directory, and guessing at build/cache directories is how a backup
+        # quietly loses something that mattered.
+        #
+        # WHY THIS EXISTS (obr nixos-kvr): without filters the job mirrored the
+        # entire home including regenerable caches. Measured 2026-08-12:
+        # .cache alone was 55 GB of the 432 GB destination, and a run was
+        # observed pulling
+        #   .cache/huggingface/hub/models--google--gemma-4-12B-it/blobs/...
+        # i.e. re-downloadable LLM weights. Throughput fell from 7-8 MB/s to
+        # ~950 KB/s while doing so, so the tail of every sync was dominated by
+        # its least valuable bytes -- a large part of why TimeoutStartSec had
+        # to be raised to 4h.
+        #
+        # SYNTAX: pushme hands this to rsync as --include-from (Main.hs
+        # withFilters), and under --include-from a leading "- " marks a line as
+        # an EXCLUDE. So these are exclusions despite the flag's name. Leading
+        # "/" anchors to the transfer root; a trailing "/" matches directories
+        # only.
+        #
+        # NOTE: excluding a path does NOT delete what is already in the
+        # destination. rsync --delete only removes files absent from the source
+        # AND not excluded, so the 55 GB already copied is now PROTECTED and
+        # will persist until it is removed deliberately.
+        Filters: |
+          - .autoagent/
+          - .claude/worktrees/
+          - .git/ai/
+          - .rustup/
+          - .tmp/
+          - .npm/
+          - .bun/
+          - .elan/
+          - *-tmp/
+          - .cache/
+          - /.cargo/
+          - /.codex/
+          - /.git-ai/
+          - /.ssh/sockets/
+          - /.local/lib/
+          - /.local/share/agent-deck-hosts/
+          - /.local/share/cargo/
+          - /.local/share/rustup/
+          - /.local/share/uv/
+          - /.local/state/
+          - /.partner-*/
+          - /ares-gemma-4-runs/
+          - /ares-rust-rinzler-cpp/stats/rinzler/stats/
+          - /go/
+          - /nix-cache
+          - gen/
+          - gen-*/
+          - logs-rinzler-side-by-side/
+
+          - *.agdai
+          - *.d
+          - *.glob
+          - *.hi
+          - *.o
+          - *.vio
+          - *.viok
+          - *.vios
+          - *.vo
+          - *.vok
+          - *.vos
+          - *~
+          - .*.aux
+          - .*.cache
+          - .cabal*
+          - .cargo-home/
+          - .direnv/
+          - .envrc
+          - .ghc.*
+          - .lake/
+          - .tmp/
+          - .vagrant/
+          - .venv/
+          - .venv-trace/
+          - MAlonzo/
+          - Makefile.coq
+          - Makefile.coq.conf
+          - bash_snapshots/
+          - build-debug/
+          - build/
+          - cabal.project.local*
+          - dist-newstyle/
+          - dist/
+          - node_modules/
+          - result
+          - result-*
+          - target/
         PreserveAttrs: true
         # PreserveAttrs is a BLANKET: it is read once at Options.hs:49 and then
         # fed as the default for ACLs, xattrs, atimes, crtimes, hardlinks and

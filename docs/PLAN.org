@@ -70,7 +70,7 @@ Rationale recorded in the commit and inline in hosts.nix: when the check went HA
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 08:48]
+:MODIFIED: [2026-08-13 Thu 12:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -291,6 +291,29 @@ there means I cannot probe further without exceeding it. Worth checking on that
 host: the login shell and account status for the pushme user, any ForceCommand /
 authorized_keys options on the key we present, and whether
 /home/jwiegley/.nix-profile/bin/rsync still exists.
+
+----------------------------------------------------------------------
+
+2026-08-13 12:45 -- still failing, and a monitoring caveat that hid it.
+
+Four more attempts since the last cycle, all identical: 09:02:54, 10:03:00,
+11:00:27, 12:04:53, each rsync 255 with 0 bytes received. That is thirteen
+consecutive 0-byte runs since 00:53. The session-closed-after-auth condition on
+andoria-08 has now persisted for more than twelve hours, across the whole
+working morning, so it is not a transient.
+
+CAVEAT -- this cycle's health check initially read CLEAN and it was wrong.
+`systemctl --failed` reported 0 and SystemdServiceFailed was not firing, because
+an activation at 12:11:34 (John rebuilding directly, not via /etc/nixos/build --
+build.log's last entry is 04:46) reset the unit's failed state seven minutes
+after the 12:04:53 failure. The unit then reported Result=success while
+ExecMainStatus was 1 and the journal recorded "Failed with result 'exit-code'".
+The contradiction between Result and ExecMainStatus is the tell. The hourly
+failures continue regardless; the next run will re-raise the alert.
+
+Recorded as a durable lesson in memory (feedback_switch_clears_failed_units)
+because this is the second time an activation has produced a false clean read on
+this exact unit.
 #+end_example
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
@@ -724,14 +747,14 @@ on spec:
 Needs a call on which trade is acceptable before doing either.
 #+end_example
 
-* TODO [#D] GiteaPushMirrorFailing latched on nix-config while both refs are identical
+* TODO [#D] nix-config has two writers: gitea push mirror races direct pushes to GitHub
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-tvl
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-13 Thu 08:48]
-:MODIFIED: [2026-08-13 Thu 08:48]
+:MODIFIED: [2026-08-13 Thu 12:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -782,6 +805,27 @@ be chosen here.
 Recorded so future health cycles do not re-derive this: seeing this alert with
 both refs equal means the latched-last_error case, not a broken mirror. Compare
 the two tips before investigating further.
+
+** Notes
+
+2026-08-13 12:45 -- the SYMPTOM self-resolved, the CAUSE did not.
+
+gitea_push_mirror_failed{repo="nix-config"} is now 0 and sum() over all mirrors
+is 0, so GiteaPushMirrorFailing has cleared. That is exactly what the exporter's
+level-triggered design predicts: a later successful push cleared Gitea's
+last_error. No intervention was made here.
+
+What has NOT changed is why the pushes were rejected in the first place. All
+four rejections today were compare-and-swap failures whose "is at" hash differed
+every time, i.e. github.com/jwiegley/nix-config is being written by something
+other than the mirror. A push mirror and a direct pusher on the same branch race
+indefinitely and the mirror always loses, because it pushes with an expected-old
+-value lease. Expect this alert to return whenever both writers are active in
+the same window.
+
+Retitled to the decision that actually needs making rather than the symptom.
+The three options in the description stand; all three change where John's own
+commits are expected to land, so none can be taken here.
 
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:

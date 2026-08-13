@@ -747,14 +747,14 @@ on spec:
 Needs a call on which trade is acceptable before doing either.
 #+end_example
 
-* TODO [#D] nix-config has two writers: gitea push mirror races direct pushes to GitHub
+* TODO [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-tvl
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-13 Thu 08:48]
-:MODIFIED: [2026-08-13 Thu 12:45]
+:MODIFIED: [2026-08-13 Thu 13:36]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -808,6 +808,53 @@ the two tips before investigating further.
 
 ** Notes
 
+#+begin_example
+GiteaPushMirrorFailing fires on johnw/nix-config -> github.com/jwiegley/nix-config
+while the two repositories are, in fact, byte-identical.
+
+State at 2026-08-13 08:50:
+  gitea  johnw/nix-config  main = e0afc16bd31d
+  github jwiegley/nix-config main = e0afc16bd31d
+  github's tip is present in gitea's object store (verified with cat-file -e)
+So there is nothing to push and nothing is behind.
+
+WHY IT STILL ALERTS: gitea_push_mirror_failed encodes Gitea's `last_error`
+field, which is level-triggered -- set on a rejected push, cleared only on a
+LATER SUCCESSFUL push (documented in scripts/gitea-push-mirror-exporter.py).
+Four pushes were rejected today (00:40:23, 01:07:53, 03:54:08, 05:04:29) and
+none since. With the repo now quiescent there is no new commit to trigger a
+successful push, so nothing clears last_error and the alert stays lit even
+though the mirror is healthy. The rule's `for: 2h` is designed to ride out
+transients but cannot help here: the condition is latched, not flapping.
+
+ROOT CAUSE OF THE REJECTIONS -- two writers. Every rejection is a
+compare-and-swap failure:
+  ! [remote rejected] main -> main (cannot lock ref 'refs/heads/main':
+      is at <X> but expected <Y>)
+and the "is at" hash is DIFFERENT on every attempt. That means GitHub's ref is
+moving between Gitea's read and its push, i.e. something other than the mirror
+is pushing to github.com/jwiegley/nix-config -- almost certainly direct pushes
+from hera, since nix-config is the shared Darwin config repo. A push mirror and
+a human pushing to the same branch will race indefinitely; the mirror always
+loses because it pushes with an expected-old-value lease.
+
+NOT caused by this host's commits: /etc/nixos pushes to johnw/nixos-config
+(with an S), a different repository, whose mirror reports healthy (value 0).
+All 11 other mirrors are also 0.
+
+NEEDS JOHN -- this is a workflow decision, not a bug to patch:
+  (a) treat GitHub as authoritative for nix-config and delete the push mirror;
+  (b) treat Gitea as authoritative and stop pushing to GitHub directly from
+      hera;
+  (c) keep both and accept periodic rejections plus a latched alert.
+Any of these changes where John's own commits are expected to land, so none can
+be chosen here.
+
+Recorded so future health cycles do not re-derive this: seeing this alert with
+both refs equal means the latched-last_error case, not a broken mirror. Compare
+the two tips before investigating further.
+
+----------------------------------------------------------------------
 2026-08-13 12:45 -- the SYMPTOM self-resolved, the CAUSE did not.
 
 gitea_push_mirror_failed{repo="nix-config"} is now 0 and sum() over all mirrors
@@ -826,6 +873,58 @@ the same window.
 Retitled to the decision that actually needs making rather than the symptom.
 The three options in the description stand; all three change where John's own
 commits are expected to land, so none can be taken here.
+
+REPOSITORY IDENTIFICATION (asked 2026-08-13) -- exactly ONE repo is affected.
+
+  Gitea:  johnw/nix-config   (/var/lib/gitea/repositories/johnw/nix-config.git)
+  GitHub: github.com/jwiegley/nix-config
+
+18 PushRejected events over the last 7 days, ALL on that one repository:
+  2026-08-08 12:34
+  2026-08-09 20:02
+  2026-08-12 14:35, 15:33, 15:39
+  2026-08-13 00:40, 01:07, 03:54, 05:04
+Every one is the same compare-and-swap signature ("cannot lock ref
+'refs/heads/main': is at <X> but expected <Y>") with a different <X> each time.
+
+NOT affected, despite looking similar:
+
+  johnw/nixos-config  (github.com/jwiegley/nixos-config) -- note the S. This is
+  the repo /etc/nixos itself pushes to. Its mirror has never been rejected and
+  reports healthy. My own commits are not involved in this problem.
+
+  johnw/hf -- one "Error pushing" on 2026-08-12 04:08, but a DIFFERENT failure
+  entirely and not a rejection: exit status 128, "unable to access
+  'https://github.com/jwiegley/hf.git/': SSL: certificate subject name
+  'dotcom.glb' does not match target hostname 'github.com'". That is a TLS
+  interception / edge-certificate artifact, one occurrence, self-resolved. It
+  shares no cause with the nix-config race and should not be bundled into this
+  issue.
+
+All 12 push mirrors currently report 0 (healthy).
+
+DECISION (John, 2026-08-13): option (b). His other session will push nix-config
+only to the hera/Gitea side and no longer directly to github.com. That leaves
+the Gitea push mirror as the SOLE writer to github.com/jwiegley/nix-config, so
+the compare-and-swap race has no second party and cannot recur by this
+mechanism.
+
+No change is needed on vulcan -- the mirror config was never wrong, it was
+losing a race it could not win. Nothing to build or deploy here.
+
+VERIFICATION PENDING, deliberately not closed yet. The fix is the absence of an
+event, and absence needs a window to be meaningful. Close this when a clean
+window has actually been observed:
+  - no new PushRejected for johnw/nix-config in the gitea journal, AND
+  - at least one SUCCESSFUL mirror push in that window (so we know the path is
+    live and we are not just looking at a quiescent repo, which is exactly the
+    latched-metric trap this issue already documents).
+Check with:
+  journalctl -u gitea.service --since '<window>' | grep -c 'nix-config.*PushRejected'
+  gitea_push_mirror_failed{repo="nix-config"}   # expect 0
+Baseline for comparison: 18 rejections in the 7 days to 2026-08-13, the most
+recent at 05:04:29 that day.
+#+end_example
 
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:

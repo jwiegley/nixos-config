@@ -70,7 +70,7 @@ Rationale recorded in the commit and inline in hosts.nix: when the check went HA
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 00:57]
+:MODIFIED: [2026-08-13 Thu 00:58]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -191,6 +191,24 @@ window now makes forward progress instead of discarding it, which may be enough
 on its own -- but if the machine is only reliably up during working hours, the
 timer should probably be retimed to match rather than retrying hourly into a
 closed door.
+
+ALERT CONSEQUENCE (2026-08-13, needs a call from John):
+The unit sits in `failed` between hourly attempts, so SystemdServiceFailed
+(critical, for=1m, the host-wide catch-all in alerts/systemd.yaml) is firing on
+it -- 539 ALERTS samples in the last 24h. Because the email route repeats at
+24h this is roughly one mail a day rather than an hourly page, so it is not
+urgent, but it is a critical-severity alert standing permanently true for an
+issue already tracked here.
+
+Three options, all real trade-offs, so none taken autonomously:
+  (a) time-bounded Alertmanager silence -- reversible, expires on its own, but
+      hides a genuine failing unit for its duration;
+  (b) add name!="pushme-positron.service" to SystemdServiceFailed, as was done
+      for ServiceStuckActivating -- permanent, and a REAL pushme regression
+      would then never alert;
+  (c) leave it, accepting one mail a day until the sync converges.
+(c) is the honest default while the issue is open and being worked. Worth
+revisiting if it outlives the investigation.
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:

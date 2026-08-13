@@ -63,14 +63,14 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] pushme: andoria-08 closes the session right after auth (host is UP, not offline)
+* TODO [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-9ue
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 12:45]
+:MODIFIED: [2026-08-13 Thu 16:44]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -314,6 +314,38 @@ failures continue regardless; the next run will re-raise the alert.
 Recorded as a durable lesson in memory (feedback_switch_clears_failed_units)
 because this is the second time an activation has produced a false clean read on
 this exact unit.
+
+----------------------------------------------------------------------
+
+2026-08-13 16:43 -- FIRST SUSTAINED RUN. andoria-08 came back (John confirmed);
+a dry-run probe with the real flag set returned exit 0 and itemized the file, so
+the session-closed-after-auth condition is gone.
+
+The run started at 13:30:56 and is still going 3h12m later with no error, no
+drop and no reconnect -- by an enormous margin the longest this job has ever
+run. It is genuinely moving data, not stalled:
+    13:39   used 455G  referenced 275G  logical 425G
+    16:43   used 450G  referenced 281G  logical 441G
++6G referenced, +16G logical in ~3h, i.e. ~1.5 MB/s, which is the expected
+small-file rate for this tree. Two rsync processes alive with accumulating CPU.
+
+At that rate convergence is still slow, but the 12h ceiling gives this run until
+~01:30, and for the first time the constraint being tested is throughput rather
+than the transport dying.
+
+--partial-dir remains UNEXERCISED, correctly: partials only materialise when a
+transfer is interrupted mid-file, and nothing has been interrupted. Zero
+.rsync-partial directories in the destination. Its value is still unproven and
+will stay so until a run drops mid-transfer -- which is the right outcome to
+hope not to need.
+
+Timer interaction verified healthy, not broken: pushme-positron.timer shows
+SubState=running with an EMPTY NextElapseUSecRealtime. That is not a lost
+schedule -- it fired at 14:01:43, found the service already active, and holds
+without queueing a second run until the current one finishes. Persistent=true
+means the deferred trigger fires immediately afterwards. No overlapping runs are
+possible, which is what we want for a job that can now legitimately run for
+hours.
 #+end_example
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically

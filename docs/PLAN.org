@@ -63,6 +63,55 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
+* TODO [#C] pushme sync never completes: every run hits the 4h ceiling
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-9ue
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-12 Wed 20:46]
+:MODIFIED: [2026-08-12 Wed 20:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Since the filters landed, EVERY pushme-positron run has ended in 'Failed with result timeout' at exactly TimeoutStartSec=4h, or been killed. Across all time the unit has logged exactly ONE 'Finished Pull', and that was the 2026-08-10 23:16 run which aborted early on the unsupported --crtimes flag. A full pass has therefore never succeeded.
+
+Observed runs:
+  14:00:36  timeout (the 10:00:35 run, 4h)
+  16:34:51  killed (my cleanup command, not the job's fault)
+  16:43:36 -> 20:43:36  timeout, exactly 4h
+  20:43:36  new run started by the timer
+
+MEASUREMENTS 2026-08-12 20:44:
+  throughput ~1 MB/s (40 MiB written and 39 MiB read in a 40s sample)
+  destination referenced 278G; 34,311 files within depth 4 alone
+  earlier phases of the same job ran at 7-8 MB/s, so throughput varies hugely
+  with file size -- small files over the jump are overhead-dominated
+
+CONSEQUENCE: each timeout raises a critical SystemdServiceFailed, and because the
+timer is hourly the job restarts and re-scans from scratch rather than resuming
+where it stopped. rsync does skip already-transferred files, so progress is not
+lost, but the fixed cost of walking the whole source tree is paid every run.
+
+NOT a filter problem: the exclusions work and reclaimed 150 GiB (obr nixos-kvr).
+What remains is genuine data -- e.g. Products/ is 39 GB across 111 ares-* CI
+output directories.
+
+OPTIONS, needing John's decision:
+  a) raise TimeoutStartSec further (8-12h) so one pass can finish, accepting that
+     a genuinely wedged run takes that long to detect
+  b) converge once by hand with no timeout, then let the hourly job handle the
+     small steady-state delta -- probably the fastest route to a working state
+  c) reduce scope further: decide whether Products/ and similar build output
+     belong in this backup at all
+  d) lengthen the timer interval so runs do not overlap-and-restart so often
+
+Recommend (b) then (a) as a smaller number: converge once, then the ceiling only
+ever guards against a real hang.
+
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

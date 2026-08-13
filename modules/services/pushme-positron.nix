@@ -401,6 +401,22 @@ in
       pkgs.nettools # hostname
     ];
 
+    # NEVER let a switch restart this unit.
+    #
+    # It is Type=oneshot, so `systemctl start` BLOCKS until the run completes,
+    # and switch-to-configuration therefore waits for the whole sync. With
+    # TimeoutStartSec at 12h a single switch could hang for twelve hours holding
+    # /etc/nixos/.nixos-build and stalling every other rebuild on the host.
+    # Observed twice on 2026-08-12: first via sops-nix `restartUnits` (removed),
+    # and then again via the DEFAULT `restartIfChanged = true`, which restarts
+    # any active unit whose definition changed -- including the very change that
+    # raised the timeout.
+    #
+    # A backup has no reason to be interrupted by an activation. Config changes
+    # take effect at the next scheduled run, which for an hourly timer is soon
+    # enough, and a run in flight is left alone.
+    restartIfChanged = false;
+
     serviceConfig = {
       Type = "oneshot";
       User = user;
@@ -412,18 +428,35 @@ in
       # overlap guard (systemd will not start a second instance while one runs)
       # handles the ordinary long-run case.
       #
-      # Raised from 50m to 4h on 2026-08-12. 50m was measured to be too tight
-      # for the initial convergence: the 04:43 run moved +23 GiB (dataset
-      # 379G -> 402G) and was still killed at the ceiling, and each timeout
-      # fires a critical SystemdServiceFailed. The tree does converge across
-      # successive runs, since rsync resumes from what is already on disk, but
-      # it would page hourly for as long as that took.
+      # 50m -> 4h -> 12h, both raises on 2026-08-12 and both driven by
+      # measurement rather than guesswork.
       #
-      # Steady-state hourly deltas finish in minutes, so this ceiling should
-      # only ever be reached by something genuinely stuck. The cost of the
-      # larger value is detection latency: a hung transfer now sits for up to
-      # 4h before systemd kills it.
-      TimeoutStartSec = "4h";
+      # 50m was too tight for the initial convergence: the 04:43 run moved
+      # +23 GiB (dataset 379G -> 402G) and was still killed at the ceiling.
+      #
+      # 4h was still too tight. EVERY run under it ended in
+      # "Failed with result 'timeout'" at exactly four hours -- 14:00:36, then
+      # 16:43:36 -> 20:43:36 -- and across the unit's whole history there was
+      # exactly one "Finished Pull", from the 2026-08-10 run that aborted early
+      # on the unsupported --crtimes flag. A full pass had never completed.
+      # Throughput is the reason it varies so much: 7-8 MB/s on large files but
+      # ~1 MB/s on small ones, which over a jump host is overhead-dominated.
+      #
+      # 12h reflects John's judgement that this source is "sometimes big". It
+      # is a ceiling against a WEDGED transfer, not a target: a healthy
+      # steady-state delta finishes in minutes, and the timer's overlap guard
+      # means a long run simply causes the next hourly trigger to be dropped
+      # rather than stacking a second copy.
+      #
+      # The cost is detection latency -- a genuinely hung transfer now sits for
+      # up to 12h before systemd kills it. That is acceptable here because the
+      # job is a backup with no downstream consumer waiting on it, and because
+      # a hang is still eventually caught rather than silently ignored.
+      #
+      # Note this unit is EXCLUDED from ServiceStuckActivating (see
+      # modules/monitoring/alerts/systemd.yaml) precisely because a legitimate
+      # run now sits in `activating` for hours.
+      TimeoutStartSec = "12h";
       Nice = 10;
       IOSchedulingClass = "idle";
     };

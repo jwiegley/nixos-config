@@ -473,7 +473,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-12 Wed 23:27]
-:MODIFIED: [2026-08-12 Wed 23:27]
+:MODIFIED: [2026-08-13 Thu 00:53]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -516,6 +516,57 @@ Possible fixes, none urgent:
   (c) leave it, now that it is documented as benign.
 
 Prefer (a) if OpenProject exposes the knob; otherwise (c) is defensible.
+#+end_example
+
+** Notes
+
+#+begin_example
+2026-08-13 -- investigated. The noise is real but the recorded mitigation was NOT
+working, which is the more important finding.
+
+`modules/users/home-manager/openproject.nix` carried:
+
+    # Filter out info-level HTTP access logs to reduce log volume
+    # Saves ~4,200 lines/day by only logging warnings and above
+    LogLevelMax = "warning";
+
+Measured over a 4h window with that setting live and confirmed effective on the
+unit (`systemctl --user show -p LogLevelMax` returned 4):
+
+    prio 3 err      240
+    prio 5 notice    15
+    prio 6 info    1334
+
+Nothing was being filtered -- ~8k info lines/day were flowing through a setting
+documented as suppressing them.
+
+MECHANISM: LogLevelMax caps messages systemd relays from the stream it manages.
+podman's default journald log driver has conmon write to journald DIRECTLY; the
+records carry _COMM=conmon and SYSLOG_IDENTIFIER=openproject and never traverse
+the unit's StandardOutput, so the cap has nothing to act on. Verified by
+grouping the info-priority records by _COMM.
+
+This also explains why the earlier 30s->60s scrape-interval change (documented
+in modules/containers/openproject-quadlet.nix) was the only mitigation that
+actually reduced anything: it cut the requests at the source rather than trying
+to filter the output.
+
+ACTION TAKEN: removed the dead LogLevelMax and replaced it with the measurement
+above plus the two approaches that would genuinely work. A setting that looks
+like a working mitigation is worse than no setting -- it stops the next person
+from looking. Verified after deploy: LogLevelMax reads -1 (unset), openproject
+restarted cleanly (ActiveEnter 00:51:23, NRestarts 0), Prometheus target up,
+https://openproject.vulcan.lan/ returns 302.
+
+STILL OPEN -- the volume itself is unchanged (~1440 err + ~5760 info lines/day).
+Two real options, both deliberate observability trade-offs, so neither applied
+on spec:
+  (a) LogDriver=passthrough on the quadlet -- routes container output back
+      through the unit's stdout/stderr and so back under LogLevelMax, at the
+      cost of `podman logs` no longer working;
+  (b) a journald/promtail drop rule keyed on the access-line shape -- cheap, but
+      it would hide a genuine 5xx on /metrics too.
+Needs a call on which trade is acceptable before doing either.
 #+end_example
 
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur

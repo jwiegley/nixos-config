@@ -122,9 +122,29 @@
           RestartSec = "15s";
           TimeoutStartSec = "900"; # OpenProject can take a while to start on first run
 
-          # Filter out info-level HTTP access logs to reduce log volume
-          # Saves ~4,200 lines/day by only logging warnings and above
-          LogLevelMax = "warning";
+          # NO LogLevelMax here -- it does not work for container output, and a
+          # setting that looks like a working mitigation is worse than none.
+          #
+          # `LogLevelMax = "warning"` sat here claiming to "filter out info-level
+          # HTTP access logs" and to save ~4,200 lines/day. Measured 2026-08-13
+          # over a 4h window, with that setting live and effective on the unit
+          # (systemctl show -p LogLevelMax returned 4):
+          #     prio 3 err      240
+          #     prio 5 notice    15
+          #     prio 6 info    1334
+          # Nothing was being filtered. LogLevelMax caps messages systemd itself
+          # relays from the stream it manages, but podman's default journald log
+          # driver has conmon write to journald DIRECTLY -- the records carry
+          # _COMM=conmon, SYSLOG_IDENTIFIER=openproject and never pass through
+          # this unit's StandardOutput, so the cap has nothing to act on.
+          #
+          # What WOULD work, if the volume ever justifies it:
+          #   - LogDriver=passthrough on the quadlet, which routes container
+          #     output back through the unit's stdout/stderr and so back under
+          #     LogLevelMax -- at the cost of `podman logs` no longer working;
+          #   - a journald/promtail drop rule keyed on the access-line shape.
+          # Both are deliberate observability trade-offs, so neither is applied
+          # here on spec. See obr nixos-t2q.
         };
       };
     };

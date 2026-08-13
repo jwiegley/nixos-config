@@ -104,10 +104,12 @@ in
     #
     # 2. BLOCKED SWITCHES. The unit is Type=oneshot, so `systemctl start`
     #    blocks until it completes, and switch-to-configuration therefore waits
-    #    for the whole sync. With TimeoutStartSec now 4h, a switch could hang
-    #    for four hours holding the /etc/nixos/.nixos-build lock and stalling
-    #    every other rebuild. Observed live: a switch sat >8 minutes mid-sync
-    #    until the sync was stopped by hand.
+    #    for the whole sync. With TimeoutStartSec now 12h, a switch could hang
+    #    for half a day holding the /etc/nixos/.nixos-build lock and stalling
+    #    every other rebuild. Observed live twice: a switch sat >8 minutes
+    #    mid-sync until the sync was stopped by hand, and then again on
+    #    2026-08-12 via `restartIfChanged` -- see that setting below, which
+    #    closes the second, independent path into this same hang.
     #
     # The cost of omitting it is small: a rotated key is picked up at the next
     # hourly run rather than immediately. For an hourly backup that is nothing.

@@ -70,7 +70,7 @@ Rationale recorded in the commit and inline in hosts.nix: when the check went HA
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 00:58]
+:MODIFIED: [2026-08-13 Thu 04:49]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -114,6 +114,7 @@ ever guards against a real hang.
 
 ** Notes
 
+#+begin_example
 2026-08-12 -- decision recorded. John chose option (a): "Change the pushme
 ceiling to 12 hours. Sometimes it's big." TimeoutStartSec 4h -> 12h, deployed
 and verified live (unit file and running instance both report 12h).
@@ -209,6 +210,41 @@ Three options, all real trade-offs, so none taken autonomously:
   (c) leave it, accepting one mail a day until the sync converges.
 (c) is the honest default while the issue is open and being worked. Worth
 revisiting if it outlives the investigation.
+
+----------------------------------------------------------------------
+
+OVERNIGHT EVIDENCE (2026-08-13 04:43 cycle) -- the source-availability reading
+is now well supported, and the shape is a clean cutoff rather than flakiness.
+
+Four consecutive scheduled runs, all identical:
+    01:00:00  rsync 255, "connection unexpectedly closed (0 bytes received)"
+    02:02:34  rsync 255, 0 bytes
+    03:01:05  rsync 255, 0 bytes
+    04:04:43  rsync 255, 0 bytes
+Against the one run that did connect:
+    00:01:28  ran 11 min, moved 690,359,921 bytes, then rsync 12 (dropped)
+
+So andoria-08 was reachable until ~00:12 and has been unreachable since, with
+not a single byte moved in four attempts. Not intermittent -- a hard cutoff.
+
+Re-verified this cycle that the failure is NOT on vulcan's side:
+  - jump host resolves and tcp/22 is OPEN from vulcan
+  - vulcan's own uplink is fine (external tcp/443 reachable, 3 default routes)
+  - nothing on vulcan changed between 00:01 and 01:00 except the rsync flags
+So the break remains past the jump, at andoria-08 itself.
+
+The --partial-dir change therefore remains UNTESTED end-to-end: with 0 bytes
+moved on every run since it was deployed, no partial has been created and
+nothing has been resumed. The destination still holds no .rsync-partial
+directories. Its value will only show on the first run that connects, transfers,
+and then drops -- which is precisely the 00:01 shape.
+
+This does not change the recommendation, it sharpens it: if andoria-08 is simply
+off or asleep overnight, an hourly timer spends the night generating failures
+(and keeping SystemdServiceFailed lit) for no possible benefit. Retiming the
+timer to andoria-08's actual uptime window would fix the noise and lose nothing.
+Needs John's answer on what that window is.
+#+end_example
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:

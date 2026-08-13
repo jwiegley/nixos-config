@@ -466,6 +466,58 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
+* TODO [#E] openproject container logs successful /metrics scrapes at error priority (~1440/day)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-t2q
+:LABELS:   []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-08-12 Wed 23:27]
+:MODIFIED: [2026-08-12 Wed 23:27]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+`journalctl -p 3` attributes ~1440 error-priority lines/day to user@928.service
+(the rootless `openproject` container, uid 928). Every one of them is a
+SUCCESSFUL Prometheus scrape:
+
+    <ip> - - [../Aug/..] "GET /metrics HTTP/1.1" 200 - 0.0
+
+240 lines per 4h = exactly one per minute = the scrape interval. All 240 in the
+sampled window were HTTP 200, and the `openproject` Prometheus target reports
+health=up with no lastError.
+
+Cause: conmon maps a container's stderr to syslog priority 3. OpenProject writes
+its HTTP access log to stderr, so ordinary access logging is indexed as "error".
+
+Impact is triage noise, not a malfunction:
+  - `journalctl -p 3` is useless for this unit -- real openproject errors are
+    buried under a 1/min heartbeat.
+  - A host-wide "what failed recently" sweep ranks openproject #2 behind
+    matter-server, which is misleading. This cost one full investigation during
+    the 2026-08-12 23:30 health cycle before it was shown benign; without this
+    issue on record, every future cycle repeats that.
+  - It inflates Loki ingest by ~1440 lines/day of zero information.
+
+Verified NOT to corrupt alerting: the only broad rule is
+SystemdJournalHighErrorRate (systemd-errors.yaml), which matches
+`level=error|ERROR|failed`. The access-log line contains none of those tokens,
+so it does not feed that rule. No Loki or Prometheus rule mentions openproject.
+
+Possible fixes, none urgent:
+  (a) point OpenProject's access log at stdout (priority 6) instead of stderr --
+      correct at the source, needs a container env/config change;
+  (b) drop `"GET /metrics` lines for this unit in the promtail pipeline --
+      cheap, but hides a real 5xx on /metrics too;
+  (c) leave it, now that it is documented as benign.
+
+Prefer (a) if OpenProject exposes the knob; otherwise (c) is defensible.
+#+end_example
+
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

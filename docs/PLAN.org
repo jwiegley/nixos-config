@@ -63,14 +63,14 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] pushme sync has never completed a full pass (ceiling now 12h, untested)
+* TODO [#C] pushme never converges: source andoria-08 drops mid-transfer (not a timeout)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-9ue
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-12 Wed 23:23]
+:MODIFIED: [2026-08-13 Thu 00:57]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -137,6 +137,60 @@ real run -- the next hourly timer fire is the first trial. What would close
 this issue is a logged `Finished Pull` with a non-zero transferred byte count,
 followed by a subsequent run that completes quickly (proving convergence, not
 just a long first pass).
+
+----------------------------------------------------------------------
+
+2026-08-13 -- the 12h ceiling was NOT the binding constraint, and the root cause
+looks like source availability rather than anything on vulcan.
+
+Run 1, 00:01:28 (first under the 12h ceiling): did NOT time out. Died at 00:12
+after ~11 minutes with rsync exit 12 --
+  "connection unexpectedly closed (690359921 bytes received so far) [receiver]"
+Run 2, 00:53 (triggered by hand): failed in under 25 seconds with rsync exit 255
+and "Connection closed by UNKNOWN port 65535", 0 bytes received.
+
+So the transport dropped mid-stream, and then 40 minutes later could not be
+established at all. The jump host is reachable (DNS resolves, tcp/22 OPEN from
+vulcan), so the break is PAST the jump -- consistent with andoria-08 itself
+being offline or asleep between the two attempts. Nothing on vulcan changed
+between them.
+
+This reframes the whole issue. Raising the ceiling could never have helped: the
+job is not running out of time, it is losing its source. Every prior "timeout"
+result was the 50m/4h ceiling expiring while rsync sat on a connection that had
+already gone quiet.
+
+FIX APPLIED -- rsync resumability (deployed and verified reaching rsync):
+    --partial-dir=.rsync-partial
+    --timeout=600
+Without --partial, a dropped connection discards the entire in-flight file. At
+the ~1 MB/s this link sustains, any file needing longer to transfer than the
+mean time between drops can NEVER complete -- every run restarts it from zero.
+That is a convergence failure no timeout value can fix, and it matches the
+observed behaviour exactly: 424G logical in the destination, yet never a
+completed pass.
+
+--partial-dir (not bare --partial) keeps partials in a side directory, so the
+destination never holds a truncated file under its real name. The path is
+relative, so rsync appends its own perishable exclude and --delete will not reap
+the partials before they are reused -- checked against the rsync 3.4.1 man page,
+and our filter list never mentions .rsync-partial so nothing shadows that rule.
+--timeout=600 bounds the other failure shape, a stalled-but-open stream, which
+would otherwise sit until the 12h ceiling and waste the entire window.
+
+Verified: both flags appear in the rsync argv pushme actually invoked. NOT yet
+verified end-to-end -- run 2 moved 0 bytes, so no partial has been created or
+resumed yet. No .rsync-partial directories exist in the destination.
+
+Destination now: tank/Backups/Contracts/Positron used 474G / referenced 274G /
+logicalreferenced 424G, 35 top-level entries.
+
+NEEDS JOHN: how available is andoria-08 expected to be? An hourly job against a
+machine that sleeps will keep taking partial windows. With --partial-dir each
+window now makes forward progress instead of discarding it, which may be enough
+on its own -- but if the machine is only reliably up during working hours, the
+timer should probably be retimed to match rather than retrying hourly into a
+closed door.
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:

@@ -328,6 +328,35 @@ in
         # to preserveAll. The destination is ZFS on Linux, which has no
         # creation-time attribute to preserve anyway, so nothing is lost.
         PreserveCrtimes: false
+        # RESUMABILITY (obr nixos-9ue). The 2026-08-13 00:01 run -- the first
+        # under the 12h ceiling -- did NOT time out. It died after 11 minutes
+        # with rsync exit 12, "connection unexpectedly closed (690359921 bytes
+        # received so far)". The transport to andoria-08 drops mid-stream.
+        #
+        # Without --partial, a drop discards the entire in-flight file. At the
+        # ~1 MB/s this link sustains on small files, any file that takes longer
+        # to transfer than the mean time between drops can NEVER complete: every
+        # run restarts it from zero. That is a convergence failure no timeout
+        # value can fix, which is why raising the ceiling alone did not help.
+        #
+        # --partial-dir (not bare --partial) is the safe form: partials are
+        # stashed in a side directory instead of being written out under the
+        # real filename, so the destination never contains a truncated file
+        # masquerading as a complete one. Because the path is RELATIVE, rsync
+        # appends its own perishable exclude (`-f '-p .rsync-partial/'`) after
+        # our filters, which stops --delete from reaping the partials before
+        # they can be used -- verified against rsync 3.4.1's man page. Our
+        # filter list never mentions .rsync-partial, so nothing shadows that
+        # auto-rule.
+        #
+        # --timeout=600 bounds a STALLED stream, which is the other failure
+        # shape: a hung connection that never closes would otherwise sit until
+        # the 12h ceiling and waste the whole window. rsync sends keepalives
+        # during long file-list and delete phases, so this does not fire on a
+        # legitimately busy-but-quiet run.
+        Options:
+          - --partial-dir=.rsync-partial
+          - --timeout=600
     '';
 
     # ---- ssh config used ONLY by this job ----

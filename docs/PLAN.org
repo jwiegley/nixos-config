@@ -63,14 +63,14 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] pushme sync never completes: every run hits the 4h ceiling
+* TODO [#C] pushme sync has never completed a full pass (ceiling now 12h, untested)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-9ue
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-12 Wed 20:46]
+:MODIFIED: [2026-08-12 Wed 23:23]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -111,6 +111,32 @@ OPTIONS, needing John's decision:
 
 Recommend (b) then (a) as a smaller number: converge once, then the ceiling only
 ever guards against a real hang.
+
+** Notes
+
+2026-08-12 -- decision recorded. John chose option (a): "Change the pushme
+ceiling to 12 hours. Sometimes it's big." TimeoutStartSec 4h -> 12h, deployed
+and verified live (unit file and running instance both report 12h).
+
+Raising it exposed a SECOND blocking path, distinct from the sops-nix
+restartUnits one already removed. NixOS `restartIfChanged` defaults to true, so
+a switch that CHANGES this unit restarts it -- and because it is Type=oneshot,
+switch-to-configuration blocks until the run completes. The very switch that
+deployed the 12h ceiling hung, holding /etc/nixos/.nixos-build. At 12h that is
+half a day of every rebuild on the host stalled behind a backup.
+
+Fixed with `restartIfChanged = false` (verified X-RestartIfChanged=false; the
+follow-up switch completed normally). Config changes now take effect at the
+next scheduled run rather than by interrupting a run in flight, which is the
+correct semantics for a backup regardless.
+
+Committed as cf28397aa.
+
+STILL OPEN: no full pass has ever completed. The 12h ceiling is untested by a
+real run -- the next hourly timer fire is the first trial. What would close
+this issue is a logged `Finished Pull` with a non-zero transferred byte count,
+followed by a subsequent run that completes quickly (proving convergence, not
+just a long first pass).
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:

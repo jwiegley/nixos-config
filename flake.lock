@@ -2310,11 +2310,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1786571749,
-        "narHash": "sha256-d8iZXPjLynKByETcCteNuJEMesAGfM6sRFzZvSGVpBs=",
+        "lastModified": 1786595347,
+        "narHash": "sha256-bmfp3vKxSvjLCv2HCUYWf01W+V89XBTdRV8aT3r/m/o=",
         "ref": "refs/heads/main",
-        "rev": "8d44b0d79a52aeb1334f6984a61d58089803c733",
-        "revCount": 3187,
+        "rev": "cd6827fffdc2e272ba59d7c1ffc2059286f8ce77",
+        "revCount": 3209,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2344,11 +2344,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1786571749,
-        "narHash": "sha256-d8iZXPjLynKByETcCteNuJEMesAGfM6sRFzZvSGVpBs=",
+        "lastModified": 1786595347,
+        "narHash": "sha256-bmfp3vKxSvjLCv2HCUYWf01W+V89XBTdRV8aT3r/m/o=",
         "ref": "refs/heads/main",
-        "rev": "8d44b0d79a52aeb1334f6984a61d58089803c733",
-        "revCount": 3187,
+        "rev": "cd6827fffdc2e272ba59d7c1ffc2059286f8ce77",
+        "revCount": 3209,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2956,11 +2956,11 @@
         "rust-overlay": "rust-overlay_3"
       },
       "locked": {
-        "lastModified": 1786521468,
-        "narHash": "sha256-8x5teDqiFkVo5lctT9Gms1m9d3IlKxwQlBKyrshZ4Wc=",
+        "lastModified": 1786585747,
+        "narHash": "sha256-UTPHe+3pqBMu57VZi5U9uJ18E64DogftMAcleEqSUJU=",
         "owner": "jwiegley",
         "repo": "obr",
-        "rev": "3641b837919b1df329e4efa54b906c52f8285183",
+        "rev": "99653729a2d5a94dcdf133eab5c6f7a58583a01b",
         "type": "github"
       },
       "original": {
@@ -3446,11 +3446,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784070824,
-        "narHash": "sha256-X8nCS0EkrmUtFkS9+V76XI0DaaNvgDHPCaUxFeJB1SA=",
+        "lastModified": 1786595150,
+        "narHash": "sha256-wAigTO5o16t4SfvWzl4dOsw/krNOJj25+hDxWZTabs8=",
         "owner": "jwiegley",
         "repo": "sizes",
-        "rev": "821d3d5d4fd071ffd49d3a499a4140712ea610c9",
+        "rev": "52feaa822ff3112c7d39d853ec38fd1528d83c12",
         "type": "github"
       },
       "original": {

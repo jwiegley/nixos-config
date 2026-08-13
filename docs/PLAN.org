@@ -710,6 +710,64 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
+* DONE [#D] rclone-cloud-backup passes --track-renames to copy, logging ERROR every run
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-x0u
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-13 Thu 04:48]
+:MODIFIED: [2026-08-13 Thu 04:48]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-13 Thu 04:48]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+rclone-cloud-backup carried `--track-renames` in its shared `baseFlags`, so the
+flag reached the `rclone copy` call sites as well as the `rclone sync` ones.
+
+rclone honours --track-renames only for `sync`. For `copy` and `move` it ignores
+the flag and logs, at ERROR priority, once per invocation:
+
+    ERROR : Local file system at <dest>/SharedWithMe: Ignoring --track-renames
+            as it doesn't work with copy or move, only sync
+
+So every nightly pass emitted ERROR-priority journal lines about a flag that was
+doing nothing. Surfaced during the 2026-08-13 04:43 health cycle as the sole new
+entry in a 4h `journalctl -p 3` sweep; the unit itself exits 0, so this never
+failed anything -- it just polluted the error stream, which is exactly what makes
+a real rclone error harder to spot.
+
+Two `copy` call sites were affected (SharedWithMe, and the per-shared-drive copy
+inside the drives loop); the two `sync` sites (Google MyDrive, OneDrive) were
+using it correctly.
+
+FIX: lifted --track-renames out of baseFlags into its own `trackRenames` binding
+and applied it at the two sync call sites only.
+
+** Close Reason
+
+#+begin_example
+Fixed and verified in the DEPLOYED unit, not just the source.
+
+modules/services/rclone-cloud-backup.nix: --track-renames lifted out of baseFlags
+into a separate `trackRenames` binding, applied only at the two `rclone sync`
+call sites (Google MyDrive line 211, OneDrive line 244). Both `rclone copy` sites
+(SharedWithMe, and the per-shared-drive copy in the drives loop) no longer receive it.
+
+Verified against the generated ExecStart script (rclone-cloud-backup-start) after
+./build switch, rather than trusting the Nix source:
+  - total occurrences of --track-renames in the deployed script: 2
+  - both fall on `rclone sync` lines (54, 87)
+  - copy-context occurrences: 0
+
+The unit already exited 0 before this change, so nothing was broken; the value is
+that the nightly pass stops writing ERROR-priority lines about an ignored flag,
+which was making a genuine rclone error harder to see.
+#+end_example
+
 * DONE [#D] Gitea push mirror for 'hf' failing on a TLS hostname mismatch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

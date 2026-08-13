@@ -12,8 +12,18 @@ let
   workConfig = "/run/rclone-backup/rclone.conf";
   textfileDir = "/var/lib/prometheus-node-exporter-textfiles";
 
+  # --track-renames is deliberately NOT here. rclone honours it only for `sync`;
+  # for `copy` and `move` it ignores the flag AND logs, at ERROR level, once per
+  # invocation:
+  #   ERROR : Local file system at <dest>: Ignoring --track-renames as it
+  #           doesn't work with copy or move, only sync
+  # Carried in baseFlags it reached both `rclone copy` call sites below (one of
+  # which runs once per shared drive), so every nightly pass wrote ERROR-priority
+  # lines about a flag that was doing nothing.
+  # Applied at the two `sync` call sites instead, via trackRenames.
+  trackRenames = "--track-renames";
+
   baseFlags = lib.concatStringsSep " " [
-    "--track-renames"
     "--transfers=8"
     "--checkers=16"
     "--max-delete=2000"
@@ -199,7 +209,7 @@ in
 
       sync_google() {  # $1 = remote  $2 = dest
         local remote="$1" dest="$2" drives
-        rclone sync "$remote": "$dest/MyDrive" ${commonFlags} ${driveFlags} || return 1
+        rclone sync "$remote": "$dest/MyDrive" ${commonFlags} ${trackRenames} ${driveFlags} || return 1
         # Shared-with-me / shared drives are best-effort and use `copy`, not `sync`:
         # the source view is intentionally partial (--drive-skip-shortcuts hides
         # shortcut targets; 403 "cannotDownloadFile" hides forbidden shares), so
@@ -232,7 +242,7 @@ in
         # No --fast-list: OneDrive's server-side recursive listing chokes on the
         # locked "Personal Vault" folder (invalidResourceId / ObjectHandle is
         # Invalid). Skip it and list incrementally so the filter applies.
-        rclone sync "$1": "$2" ${baseFlags} --exclude "/Personal Vault/**" || return 1
+        rclone sync "$1": "$2" ${baseFlags} ${trackRenames} --exclude "/Personal Vault/**" || return 1
         return 0
       }
 

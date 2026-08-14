@@ -697,7 +697,7 @@ Option (c) is the structural one and matches how two other silent failures on th
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-14 Fri 12:52]
-:MODIFIED: [2026-08-14 Fri 12:52]
+:MODIFIED: [2026-08-14 Fri 16:44]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -774,6 +774,42 @@ OPEN QUESTIONS FOR JOHN:
     the unit FAILS every night clio is away. Decide whether clio's absence
     should be success (skip) or a real failure.
   - should pushme switch from its SOPS-stored key to id_rsync?
+#+end_example
+
+** Notes
+
+#+begin_example
+2026-08-14 16:45 -- STATUS: 1 of 4 source hosts working.
+
+  hera        OK, 46 entries listed over rsync with id_rsync.
+  clio        rc=255 "No route to host" at the pinned 192.168.1.5. Verified
+              clio is unreachable at BOTH 192.168.1.5 and 10.6.0.2, so it is
+              simply down rather than on the VPN. The pin is doing exactly what
+              was asked -- no gathering off-LAN -- but this is also a live
+              demonstration of the open question below: tonight's run would fail
+              on clio alone even with every other host fixed.
+  vps         rc=255 Permission denied (publickey). id_rsync not installed yet.
+  andoria-t2  rc=255 "channel 0: open failed: administratively prohibited".
+              hera's permitopen still names andoria-08:22 while the transport is
+              andoria-t2.
+
+The gatherer-side blockers found earlier are FIXED and pushed to GitHub as
+21cd324 (sessions repo): --protect-args removed because rrsync disables it
+outright, and the 24 remote rows rewritten to home-relative paths because rrsync
+resolves requests beneath its own root. All 17 rows on the reachable hosts
+resolved with 0 failures at the time of that fix, including the space-bearing
+"Library/Application Support/..." paths. So the remaining work is entirely
+key/permitopen installation, not code.
+
+STILL NEEDS JOHN:
+  1. install id_rsync on vps (no from= restriction -- vulcan reaches it over the
+     public internet through NAT, so its apparent source is a dynamic WAN
+     address, not 192.168.1.2);
+  2. widen hera's permitopen to andoria-t2:22, or switch the transport column
+     back to andoria-08;
+  3. decide whether clio being away should count as failure. As built the
+     gatherer returns non-zero if any row fails, so the unit fails every night
+     clio is off-LAN -- which, as of this cycle, it is.
 #+end_example
 
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars

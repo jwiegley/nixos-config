@@ -244,6 +244,15 @@ in
         ".stfolder"
         ".stignore"
         ".stversions"
+        # Requested by John 2026-08-14, "for now" -- expected to be revisited.
+        # NOTE: no directory of this name existed anywhere under /tank/Documents
+        # when this was added (checked case-insensitively at every depth; the
+        # only 'session' hits were two Obsidian .md files). The pattern is
+        # therefore inert today and will start excluding the moment such a
+        # directory appears. Left unanchored, like the .st* entries above, so it
+        # matches at any depth rather than only at the dataset root -- the
+        # intended location was not known.
+        "Sessions"
       ];
     })
     (mkBackup {

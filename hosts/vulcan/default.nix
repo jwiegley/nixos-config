@@ -127,6 +127,7 @@
     ../../modules/services/hera-llm-proxy.nix
     ../../modules/services/syncthing.nix
     ../../modules/services/pushme-positron.nix
+    ../../modules/services/session-gather.nix
     ../../modules/services/aria2.nix
     ../../modules/services/atd.nix
     ../../modules/services/atd-web.nix

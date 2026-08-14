@@ -807,7 +807,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-12 Wed 23:27]
-:MODIFIED: [2026-08-13 Thu 00:53]
+:MODIFIED: [2026-08-13 Thu 22:55]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -901,6 +901,55 @@ on spec:
   (b) a journald/promtail drop rule keyed on the access-line shape -- cheap, but
       it would hide a genuine 5xx on /metrics too.
 Needs a call on which trade is acceptable before doing either.
+
+2026-08-14 -- traced the actual source, which corrects two guesses in the
+original description.
+
+NOT Apache. The container runs apache2, but its access.log is 0 bytes and the
+only active Apache file is other_vhosts_access.log, a real file inside the
+container that never reaches journald. Apache is a red herring.
+
+The line comes from the Ruby process serving the metrics port. Container port
+9394 is published to 127.0.0.1:9394 (the Prometheus target); it answers HTTP 200
+with ~88 KB of metrics. The log format is Rack::CommonLogger exactly:
+    <ip> - - [14/Aug/2026:05:54:58 +0000] "GET /metrics HTTP/1.1" 200 - 0.0016
+i.e. host, user, time, request, status, length ("-" when zero), duration. So
+OpenProject's prometheus_exporter web server logs every scrape through Rack and
+out the container's stderr. There is no Apache directive to change.
+
+WHY NO CLEAN FIX EXISTS -- the priority is decided by the STREAM, never by the
+content:
+  - Today, with podman's journald log driver, conmon writes container stderr to
+    journald as priority 3 (err) and stdout as priority 6 (info). Routine access
+    logs land at err purely because Rack writes them to stderr.
+  - With LogDriver=passthrough the streams instead go through the unit, and
+    systemd assigns ONE priority to both via SyslogLevel= (default info). The
+    access noise would leave `journalctl -p 3` -- but so would every genuine
+    OpenProject error, because systemd does not mark stderr as err. And pairing
+    that with LogLevelMax=warning, as this module used to attempt, would then
+    DISCARD real errors outright.
+So passthrough does not separate signal from noise, it just relabels everything.
+Either way `journalctl -p 3` for this unit is uninformative: today it is all
+noise, afterwards it would be all silence.
+
+Only CONTENT-based filtering can actually separate them, and that lives outside
+journald:
+  (b) a promtail/Loki drop rule keyed on the access-line shape. IMPORTANT
+      CORRECTION to the original description: this fixes Loki ingest volume
+      ONLY. It does not touch what journald stores, so `journalctl -p 3` stays
+      exactly as noisy. It also hides a genuine 5xx on /metrics.
+  (a) is not available as described -- there is no OpenProject knob to move the
+      exporter's Rack log to stdout, and the Apache route does not apply.
+
+REVISED RECOMMENDATION: (c), leave it, is now the strongest option rather than
+merely defensible. The noise is documented, it corrupts no alert (verified: the
+only broad rule, SystemdJournalHighErrorRate, matches level=error|ERROR|failed
+and the access line contains none of those), and every alternative trades real
+error visibility for tidiness. The 30s -> 60s scrape interval already halved it
+at the source and 60s is the floor set by OpenProjectNoWorkers' for: 2m.
+
+The one thing worth keeping is what was already done: the dead LogLevelMax is
+gone, so nobody is misled into thinking this is handled.
 #+end_example
 
 * DONE [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation

@@ -800,15 +800,16 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#E] openproject container logs successful /metrics scrapes at error priority (~1440/day)
+* DONE [#E] openproject container logs successful /metrics scrapes at error priority (~1440/day)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-t2q
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-12 Wed 23:27]
-:MODIFIED: [2026-08-13 Thu 22:55]
+:MODIFIED: [2026-08-13 Thu 23:02]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-13 Thu 23:02]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -950,6 +951,49 @@ at the source and 60s is the floor set by OpenProjectNoWorkers' for: 2m.
 
 The one thing worth keeping is what was already done: the dead LogLevelMax is
 gone, so nobody is misled into thinking this is handled.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+EXPECTED BEHAVIOUR -- closed by John's decision, 2026-08-14. Not fixed, and deliberately so.
+
+The ~1440 error-priority lines/day are successful Prometheus scrapes logged by
+Rack::CommonLogger from the Ruby process serving the metrics port (container
+9394 -> 127.0.0.1:9394, HTTP 200, ~88KB). They land at priority 3 only because
+Rack writes to stderr and podman's journald driver has conmon tag stderr as err.
+
+There is no clean fix, because the priority is decided by the STREAM and never
+by the content:
+  - conmon maps stderr -> err(3), stdout -> info(6);
+  - LogDriver=passthrough would instead let systemd assign ONE priority to both
+    (SyslogLevel=, default info), moving the noise out of -p 3 along with every
+    genuine OpenProject error -- and combined with LogLevelMax=warning it would
+    discard real errors outright;
+  - a promtail/Loki drop rule fixes ingest volume ONLY, leaves journalctl
+    untouched, and would hide a real 5xx on /metrics;
+  - there is no OpenProject knob to move the exporter's Rack log to stdout, and
+    Apache is not involved (its access.log is 0 bytes).
+Every alternative trades real error visibility for tidiness.
+
+Verified harmless before closing: no alert is corrupted. The only broad rule is
+SystemdJournalHighErrorRate (systemd-errors.yaml), which matches
+level=error|ERROR|failed; the access line contains none of those tokens. No Loki
+or Prometheus rule mentions openproject. The Prometheus target is healthy.
+
+Already mitigated as far as is sensible: the scrape interval was cut 30s -> 60s,
+halving the volume at the source, and 60s is the FLOOR -- OpenProjectNoWorkers
+uses for: 2m and needs two samples inside that window.
+
+The one real defect found along the way IS fixed (commit b1e3b3f72): the module
+carried LogLevelMax = "warning" documented as saving ~4,200 lines/day, which
+filtered nothing -- 1334 info and 15 notice lines were flowing straight past it,
+because conmon writes to journald directly and never traverses the unit's
+StandardOutput. That dead setting is gone and replaced with the measurement, so
+nobody is misled into thinking this is handled.
+
+Standing note for future health cycles: openproject ranking high in a
+'journalctl -p 3' sweep is EXPECTED and benign. Do not re-investigate it.
 #+end_example
 
 * DONE [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation

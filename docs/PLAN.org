@@ -690,6 +690,92 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
+* TODO [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ep6
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-14 Fri 12:52]
+:MODIFIED: [2026-08-14 Fri 12:52]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+session-gather.service and .timer are deployed (commit 9878b3483) and the timer
+is armed for 02:30 nightly, but the job CANNOT SUCCEED until the id_rsync public
+key is installed on each source host. Until then the nightly run fails, raising a
+failed unit and SystemdServiceFailed.
+
+Key created on vulcan 2026-08-14: /home/johnw/.ssh/id_rsync, ed25519, mode 600,
+no passphrase (required for unattended use).
+  fingerprint SHA256:oO6GcyEo+c7vRfDPuUAaX1N7ycuhS+pzh9YK5cFbYlM
+
+Measured reachability from vulcan as johnw BEFORE the key existed:
+  hera        connects and authenticates, but its authorized_keys entry for
+              id_vulcan is
+              from="192.168.1.2",restrict,port-forwarding,
+              permitopen="andoria-08:22",command="/usr/bin/false"
+              -- jump-only. That is why `ssh hera true` exits 1 with no output
+              and why rsync from hera dies with exit 12 / 0 bytes.
+  clio        directly reachable; only Permission denied (publickey).
+  vps         directly reachable; host key accepted via TOFU; only
+              Permission denied (publickey).
+  andoria     not routable from vulcan and absent from johnw's ssh config;
+              reached only by forwarding through hera, as pushme does.
+
+WHAT JOHN NEEDS TO ADD (each entry confines the key to read-only rsync under one
+subtree via rrsync, which is pkgs.rrsync -- NOT part of pkgs.rsync):
+
+  ~/src/nix   config/darwin.nix, shared keys list, covers hera AND clio:
+              from="192.168.1.2",restrict,port-forwarding,
+              permitopen="andoria-t2:22",
+              command="${pkgs.rrsync}/bin/rrsync -ro /Users/johnw"
+              One entry serves both roles on hera: the forced command governs
+              exec channels while forwarding is separate, exactly as the
+              existing jump key works.
+
+  ~/src/vps   modules/users/johnw.nix (needs pkgs in scope):
+              restrict,command="${pkgs.rrsync}/bin/rrsync -ro /home/johnw"
+              NO from= restriction -- vulcan reaches the VPS over the public
+              internet through NAT, so its apparent source is a dynamic WAN
+              address. Verified: vulcan has no tunnel interfaces at all, and the
+              route to the OVH host leaves via end0's default gateway. A
+              from="192.168.1.2" there would reject every connection.
+
+  andoria     /home/jwiegley/.ssh/authorized_keys on the NFS-shared home. The
+              ~/src/andoria repo is a home-manager config that manages no ssh
+              keys, so today's pushme entry was placed by hand. It can be made
+              declarative with home.file.".ssh/authorized_keys" following the
+              repo's existing materializeHostSshConfig idiom -- but that
+              replaces the whole file, so the existing pushme entry must be
+              folded in.
+              from="192.168.1.2",restrict,
+              command="${pkgs.rrsync}/bin/rrsync -ro /home/jwiegley"
+              /home/jwiegley covers both jobs, so this key can also replace
+              id_positron for pushme.
+
+TRAP: hera's current permitopen names andoria-08:22, but sources.vulcan.tsv uses
+andoria-t2 as transport. The forward would be refused. Either widen permitopen to
+andoria-t2:22 or switch the transport column back to andoria-08.
+
+OPEN QUESTIONS FOR JOHN:
+  - rrsync -ro /Users/johnw grants read of the WHOLE home, not just session
+    dirs, because the roots are scattered dotdirs and rrsync takes one root. A
+    wrapper validating SSH_ORIGINAL_COMMAND against an allowlist would be
+    tighter.
+  - from="192.168.1.2" is vulcan's WIRED address; it also has 192.168.3.16 on
+    wifi. If traffic ever egresses via wifi these keys silently stop matching.
+  - clio is pinned to 192.168.1.5 so gathering only happens on the LAN, as
+    requested. Consequence: the gatherer returns non-zero if any row fails, so
+    the unit FAILS every night clio is away. Decide whether clio's absence
+    should be success (skip) or a real failure.
+  - should pushme switch from its SOPS-stored key to id_rsync?
+#+end_example
+
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -727,7 +813,7 @@ IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announce
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-13 Thu 18:43]
+:MODIFIED: [2026-08-14 Fri 12:51]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -824,6 +910,38 @@ The matter-server restart at 08-10 15:18 was noted earlier as the onset
 correlate. Treat that as coincidence unless the AP side comes back clean -- a
 service restart does not change RF conditions, and the observed signature is
 unambiguously RF/link, not application-level.
+
+2026-08-14 12:50 -- MatterNodeSessionFailures has STOPPED FIRING. This does NOT
+mean the issue is resolved, and the distinction matters for future cycles.
+
+Verified the instrument first, because a silent Loki rule looks identical to a
+fixed problem: loki.service active and /ready, 28 matter-server lines ingested in
+the last hour, and the rule itself reports state=inactive with health=ok. So the
+rule is evaluating and simply not crossing its threshold.
+
+CASE/session failures per hour over the preceding six hours:
+    5h ago  41   <- over the >20/hr threshold
+    4h ago  31   <-
+    3h ago  29   <-
+    2h ago  31   <-
+    1h ago   9
+    now      3
+A genuine decline, crossing below the threshold about two hours ago.
+
+But the plug is STILL FLAPPING. HA's recorder -- an entirely independent source
+from Loki -- shows 15 unavailable transitions per 4h for each of
+switch.smart_outdoor_plug_switch_1/2, about 90/day. That is down from the
+~117/day peak but nowhere near the 2-5/day baseline this issue was opened
+against.
+
+So the alert under-detects: it keys on matter-server's CASE-failure log rate,
+while the user-visible symptom is entity availability. The two track each other
+loosely and the alert goes quiet well before the flapping stops. Do not treat
+"MatterNodeSessionFailures not firing" as evidence this is fixed -- check the
+recorder query in this issue instead.
+
+Still needs the AP-side check. Nothing has been changed on the plug, the AP or
+matter-server, so the decline is external and may reverse.
 #+end_example
 
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models

@@ -136,6 +136,14 @@ let
     # cloud-drive mirrors (rclone-cloud-backup): local-only, never pushed to B2
     "GoogleDrive"
     "OneDrive"
+    # Sessions (dataset tank/Backups/Sessions) is the gathered AI-session
+    # archive. It is itself a copy of session roots that still live on their
+    # source hosts, so shipping it to B2 pays to protect a backup with a backup.
+    # Left in, it would roughly double this repo: 350.9 GB at the time of
+    # writing, against an archive the gatherer expects to reach ~220 GiB.
+    # Excluded at John's direction 2026-08-14; the sessions design scopes Restic
+    # out explicitly too.
+    "Sessions"
   ];
 
   # Photos excludes

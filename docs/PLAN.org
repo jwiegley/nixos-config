@@ -17,14 +17,14 @@
 :ORIGINAL_SIZE: 0
 :END:
 
-* TODO [#E] etterminal client aborts ~1.4x/day (20 in 14d); SIGABRT not covered by the crash alert
+* TODO [#E] etterminal aborts at UserTerminalHandler.cpp:107 on ENOENT (87% of sessions; harmless)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-6ey
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-14 Fri 00:29]
-:MODIFIED: [2026-08-14 Fri 00:44]
+:MODIFIED: [2026-08-14 Fri 00:56]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -80,6 +80,51 @@ aborts cluster around session start, reconnect, or the ssh-agent socket path.
 ** Notes
 
 #+begin_example
+`etterminal` (the Eternal Terminal CLIENT binary) has aborted 20 times in 14
+days -- about 1.4/day -- and nothing alerts on it.
+
+Full coredump census, 2026-07-31..2026-08-14, classified by signal and cgroup:
+
+    etterminal      SIGABRT   user-session         20
+    qemu-x86_64     SIGABRT   nix-build-sandbox    11
+    python3.14      SIGBUS    nix-build-sandbox     6
+    qemu-x86_64     SIGTRAP   nix-build-sandbox     5
+    qemu-x86_64     SIGSEGV   nix-build-sandbox     3
+    collect2        SIGABRT   user-session          1
+    obr             SIGABRT   user-session          1
+    mergiraf        SIGABRT   user-session          1
+
+Everything in the sandbox is expected and correctly suppressed: the
+SystemdSegmentationFault rule (loki-rules/systemd-errors.yaml) deliberately
+excludes `"COREDUMP_CGROUP":"/system.slice/nix-daemon.service"`, which is why
+even the three genuine SIGSEGVs from qemu-user do not alert. That part of the
+design is working as documented.
+
+WHY NOTHING FIRES for etterminal: that rule matches only
+`segfault|segmentation fault|SIGSEGV`. These are SIGABRT, so a user binary
+aborting 1.4 times a day is invisible to alerting. This is a coverage shape
+worth knowing about generally -- the crash alert is signal-specific, not
+crash-generic.
+
+IMPACT is limited and not a service outage:
+  - eternal-terminal.service (etserver, the SERVER) is healthy: active, up
+    since 2026-07-03, NRestarts=0. Only the client aborts.
+  - 369M across 56 files in /var/lib/systemd/coredump. Small against a 1.7T
+    root at 28%, but it only grows.
+  - John would notice client crashes directly as dropped sessions, so this is
+    probably a known annoyance rather than a silent fault. Possibly related to
+    the stale-agent-socket behaviour already recorded for ET.
+
+DELIBERATELY NOT DONE: widening SystemdSegmentationFault to match SIGABRT. That
+would alert 1.4x/day on a known-crashy client and add exactly the repeated
+noise that has been trimmed elsewhere. Fix the crash, or leave it unwatched --
+do not turn it into a daily page.
+
+Next step if this is worth pursuing: get a backtrace with
+`coredumpctl info etterminal` (no secrets in that output) and check whether the
+aborts cluster around session start, reconnect, or the ssh-agent socket path.
+
+----------------------------------------------------------------------
 2026-08-14 -- backtrace analysis. All twenty crashes are ONE bug, not twenty.
 
 Extracted the first eight frames from every etterminal core and compared their
@@ -112,6 +157,53 @@ either one cheap to act on, since any single new core reproduces the same path.
 Confirms the earlier read: this is a real, repeatable bug rather than
 environmental flakiness. It remains client-side only -- eternal-terminal.service
 (the SERVER) is still active with NRestarts=0 since 2026-07-03.
+
+2026-08-14 -- ROOT CAUSE FOUND, without needing debug symbols. Eternal Terminal
+writes its own client logs to /tmp/etterminal-$USER-*.log, and they name the
+crash site directly.
+
+Every one of the twenty cores has a matching log, and all twenty abort at the
+SAME source location:
+
+    [FATAL ... terminal-main UserTerminalHandler.cpp:107] Stack Trace:
+    ...
+    Error: (2): No such file or directory
+    [WARNING ... UserTerminalHandler.cpp:107] Aborting application.
+        Reason: Fatal log at [/build/source/src/te...]
+
+So: ENOENT (errno 2) is turned into a glog LOG(FATAL), which calls abort()
+rather than being handled. That independently confirms the earlier
+backtrace-signature finding (20/20 identical low-16-bit frame offsets) by source
+line, and it means the symbol-rebuild route recorded earlier is unnecessary.
+
+THIS IS THE NORMAL EXIT PATH, not a rare fault. Of 23 etterminal session logs
+present in /tmp, 20 end in this abort and only 3 end cleanly -- 87%. Session
+lifetimes before the abort span 4 seconds to 743 minutes, so it is neither a
+startup race nor anything on a fixed timer; sessions simply end this way
+whenever they end. The last ordinary log line before the fatal is consistently
+the client connecting to /var/run/etserver.idpasskey.fifo and reporting a good
+socket.
+
+Read together, the most likely story is that etterminal aborts during session
+teardown on a path that finds an already-removed file, instead of exiting
+cleanly. That fits every observation: John sees no problem, the server is
+untouched, and the crash count simply tracks how often he uses ET.
+
+IMPACT: cosmetic. eternal-terminal.service (the SERVER) remains active with
+NRestarts=0 since 2026-07-03. Coredump storage is 369M over 56 files against
+1.2T free, and systemd-coredump is at its defaults, so it is bounded by MaxUse
+(10% of the filesystem) and KeepFree (15%). Nothing is at risk.
+
+Upstream context (searched 2026-08-14): the pattern matches EternalTerminal's
+known habit of surfacing recoverable errors as fatal logs -- e.g. issue #75,
+where a socket write failure aborts via a glog check rather than being handled.
+Nothing found that matches this exact ENOENT-at-teardown signature for 6.2.11.
+
+RECOMMENDATION: close as harmless-upstream-behaviour unless John wants it
+reported to MisterTea/EternalTerminal. Filing an upstream issue is an
+outward-facing action and is his call, not something to do unasked. There is
+nothing to fix on this host: suppressing the coredumps would only hide a
+correctly-reported abort, and the disk cost is negligible.
 #+end_example
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy

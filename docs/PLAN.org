@@ -17,15 +17,16 @@
 :ORIGINAL_SIZE: 0
 :END:
 
-* TODO [#E] etterminal aborts at UserTerminalHandler.cpp:107 on ENOENT (87% of sessions; harmless)
+* DONE [#E] etterminal aborts at UserTerminalHandler.cpp:107 on ENOENT (87% of sessions; harmless)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-6ey
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-14 Fri 00:29]
-:MODIFIED: [2026-08-14 Fri 00:56]
+:MODIFIED: [2026-08-14 Fri 01:04]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-14 Fri 01:04]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -204,6 +205,52 @@ reported to MisterTea/EternalTerminal. Filing an upstream issue is an
 outward-facing action and is his call, not something to do unasked. There is
 nothing to fix on this host: suppressing the coredumps would only hide a
 correctly-reported abort, and the disk cost is negligible.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+HARMLESS -- closed by John's decision, 2026-08-14. Fully diagnosed, deliberately not fixed.
+
+etterminal aborts at src/terminal/UserTerminalHandler.cpp:107, where ENOENT
+("Error: (2): No such file or directory") is promoted to a glog LOG(FATAL) that
+calls abort() instead of being handled. Two independent lines of evidence agree:
+  - all 20 cores share one backtrace signature (low-16-bit frame offsets
+    2134 2120 bb1c 59c0 4e70 a318 b714 9a94, invariant under ASLR, 20/20);
+  - all 20 matching /tmp/etterminal-johnw-*.log files name that same source
+    line, which is how the site was identified without debug symbols.
+
+It is the NORMAL exit path rather than a rare fault: 20 of 23 session logs end
+this way (87%), and lifetimes span 4 seconds to 743 minutes, ruling out both a
+startup race and anything on a fixed timer. The last ordinary log line is always
+the client connecting to the etserver fifo. Best reading is an abort during
+session teardown on an already-removed file, which matches every observation --
+John sees no problem, and the crash count simply tracks how often ET is used.
+
+Verified harmless before closing:
+  - eternal-terminal.service (the SERVER) active, NRestarts=0 since 2026-07-03;
+  - coredump storage 369M over 56 files against 1.2T free, with
+    systemd-coredump at defaults, so bounded by MaxUse (10% of the filesystem)
+    and KeepFree (15%). Nothing at risk.
+  - no alert is affected: SystemdSegmentationFault matches segfault/SIGSEGV
+    only, and these are SIGABRT, so nothing was ever firing or suppressed
+    incorrectly.
+
+NOT DONE, on purpose:
+  - widening the crash alert to SIGABRT -- it would page ~1.4x/day on a known
+    -crashy client, exactly the repeated noise trimmed elsewhere;
+  - suppressing the coredumps -- that would hide a correctly-reported abort for
+    negligible disk gain;
+  - filing upstream at MisterTea/EternalTerminal -- outward-facing, John's call.
+    The diagnosis above is complete enough to file from if he ever wants to. The
+    pattern matches that project's habit of surfacing recoverable errors as
+    fatal logs (cf. issue #75); nothing matching this exact ENOENT-at-teardown
+    signature was found for 6.2.11.
+
+Standing note for future health cycles: etterminal cores in coredumpctl are
+EXPECTED and benign. Do not re-investigate. The qemu-user and python3.14 cores
+alongside them are nix build-sandbox crashes, correctly excluded from alerting
+by design.
 #+end_example
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy

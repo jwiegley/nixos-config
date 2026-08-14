@@ -24,7 +24,7 @@
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-14 Fri 00:29]
-:MODIFIED: [2026-08-14 Fri 00:29]
+:MODIFIED: [2026-08-14 Fri 00:44]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -75,6 +75,43 @@ do not turn it into a daily page.
 Next step if this is worth pursuing: get a backtrace with
 `coredumpctl info etterminal` (no secrets in that output) and check whether the
 aborts cluster around session start, reconnect, or the ssh-agent socket path.
+#+end_example
+
+** Notes
+
+#+begin_example
+2026-08-14 -- backtrace analysis. All twenty crashes are ONE bug, not twenty.
+
+Extracted the first eight frames from every etterminal core and compared their
+low 16 bits, which are invariant under ASLR:
+
+    20 x  2134 2120 bb1c 59c0 4e70 a318 b714 9a94
+    total traces examined: 20
+
+A single signature, 20/20. Different processes, different ASLR bases, identical
+call site. That rules out random memory corruption and points at one
+deterministic code path.
+
+Shape of the stack: frames #0-#3 sit at 0x7f.../0x7e... addresses (shared
+library) and frames #4-#7 at 0x55.../0x558... (the main executable). SIGABRT
+raised from inside libc with application frames below it is the classic
+abort()-from-library pattern; for a C++ program like Eternal Terminal the
+overwhelmingly likely cause is an uncaught exception reaching std::terminate,
+or a failed assertion.
+
+BLOCKED ON SYMBOLS. The nixpkgs eternal-terminal binary is stripped -- every
+frame resolves as "n/a (n/a + 0x0)" -- so the crashing function cannot be named
+from these cores. Options if this is worth pursuing:
+  - rebuild eternal-terminal with `separateDebugInfo = true` (or a debug
+    output) via an overlay, then re-symbolize a fresh core;
+  - or check upstream: a deterministic abort in a widely used client is likely
+    already reported against 6.2.11.
+Neither is worth doing on spec for a P4, but the single-signature finding makes
+either one cheap to act on, since any single new core reproduces the same path.
+
+Confirms the earlier read: this is a real, repeatable bug rather than
+environmental flakiness. It remains client-side only -- eternal-terminal.service
+(the SERVER) is still active with NRestarts=0 since 2026-07-03.
 #+end_example
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy

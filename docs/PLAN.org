@@ -903,15 +903,16 @@ on spec:
 Needs a call on which trade is acceptable before doing either.
 #+end_example
 
-* TODO [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation
+* DONE [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-tvl
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-13 Thu 08:48]
-:MODIFIED: [2026-08-13 Thu 13:36]
+:MODIFIED: [2026-08-13 Thu 20:45]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-13 Thu 20:45]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1081,6 +1082,43 @@ Check with:
 Baseline for comparison: 18 rejections in the 7 days to 2026-08-13, the most
 recent at 05:04:29 that day.
 #+end_example
+
+** Close Reason
+
+CONFIRMED FIXED. Both close conditions met, including the one specifically designed to rule out a false clean read.
+
+Condition 1 -- no new rejections: zero 'nix-config.*PushRejected' in the gitea
+journal since 2026-08-13 13:00, against a baseline of 18 in the preceding 7 days
+(most recent 05:04:29 that morning). sum(gitea_push_mirror_failed) = 0.
+
+Condition 2 -- at least one SUCCESSFUL mirror push, so that a quiescent repo
+cannot masquerade as a fixed one. Satisfied by evidence:
+    gitea  johnw/nix-config  main = a82a21a5d816
+    github jwiegley/nix-config main = a82a21a5d816   (identical)
+    2 new commits since this afternoon's e0afc16bd31d, and merge-base
+    --is-ancestor confirms a82a21a5 descends from it, i.e. a fast-forward and
+    not a history rewrite. Newest commit 2026-08-13 20:30:47 -0700.
+So the repo advanced by two commits AFTER John's change and the mirror carried
+both to GitHub cleanly.
+
+INSTRUMENT CORRECTION worth recording: the check originally planned here --
+grepping the gitea journal for successful SyncPushMirror lines -- returns 0 and
+is WORTHLESS, because Gitea logs mirror FAILURES only and never logs a success.
+Relying on it would have produced 'no successful push observed' and held this
+issue open indefinitely. The correct instrument is comparing the two refs and
+proving the advance is a fast-forward.
+
+Root cause was two writers racing on the same GitHub branch; every rejection was
+a compare-and-swap failure with a different 'is at' hash. John changed his other
+session to push nix-config only to the hera/Gitea side, leaving the push mirror
+as the sole writer to github.com/jwiegley/nix-config. No change was needed on
+vulcan -- the mirror config was never wrong, it was losing a race it could not
+win.
+
+Scope confirmed earlier: only johnw/nix-config was ever affected.
+johnw/nixos-config (what /etc/nixos pushes to) is a different repository and was
+always healthy; johnw/hf's single failure was an unrelated TLS-interception
+error.
 
 * DONE [#C] Find what chmod'ed /etc/nixos subdirs to 0700 — it can recur
 :PROPERTIES:

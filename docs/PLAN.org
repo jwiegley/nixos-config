@@ -63,15 +63,16 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
+* DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-9ue
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-12 Wed 20:46]
-:MODIFIED: [2026-08-13 Thu 16:44]
+:MODIFIED: [2026-08-13 Thu 20:44]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-13 Thu 20:44]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -346,6 +347,49 @@ without queueing a second run until the current one finishes. Persistent=true
 means the deferred trigger fires immediately afterwards. No overlapping runs are
 possible, which is what we want for a job that can now legitimately run for
 hours.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+CONVERGED. The sync completed a full pass and subsequent passes are now cheap, which was the close condition set when this was opened.
+
+Evidence, 2026-08-13:
+  13:30:56 -> 19:38:39   6h07m43s   'andoria done'   first full pass
+  19:38:39 -> 19:56:00     17m21s   'andoria done'
+  20:02:53 -> 20:05:08      2m15s   'andoria done'
+All three logged 'Finished Pull' and 'Deactivated successfully' (exit 0). Note
+the marker: 'andoria done' with NO '(with errors)' suffix, which every previous
+run in this issue's history carried. 6h07m -> 17m -> 2m15s is convergence, not a
+single lucky long pass.
+
+Destination reconciled: referenced 275G -> 286G and logicalreferenced 425G ->
+447G over the day, while used fell 455G -> 306G as --delete removed content no
+longer present on the source. Zero .rsync-partial directories remain.
+
+WHAT ACTUALLY FIXED IT -- not my changes. The root cause was on andoria-08: the
+host was up and authenticating us, but closing every session immediately after
+auth (verified by ssh -v: kex complete, host key matched, 'Server accepts key',
+then FORCE input drain with no command output). Thirteen consecutive runs moved
+0 bytes. John restored the host; the very next probe returned exit 0 and the
+transfer ran.
+
+Honest accounting of the three changes made here:
+  - TimeoutStartSec 4h -> 12h: NECESSARY. The successful pass took 6h07m, which
+    would have been killed by the old 4h ceiling. This is the one change that
+    demonstrably mattered.
+  - restartIfChanged = false: NECESSARY for a different reason -- it prevented a
+    switch from restarting the unit mid-pass and from blocking on it. A switch
+    did occur at 18:48 during the 6h run and the run survived it.
+  - --partial-dir / --timeout=600: UNPROVEN. Nothing was interrupted mid-file
+    during the successful passes, so no partial was ever created or resumed.
+    The reasoning for it stands (a drop without --partial discards the in-flight
+    file), but it has not been demonstrated and should not be claimed as
+    load-bearing. It costs nothing to keep.
+
+Follow-on work is tracked separately: nixos-tvl (gitea mirror), and the stale
+pre-filter .tmp leftovers in the destination (~3.4G from 2026-06-26), which John
+has been asked about and which are not part of this issue.
 #+end_example
 
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically

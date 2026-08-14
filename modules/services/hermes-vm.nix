@@ -1263,6 +1263,10 @@ in
     # GETs /search?format=json, which the host instance already enables. No API
     # key, no extra deps (uses core httpx).
     SEARXNG_URL = "https://searxng.vulcan.lan";
+    # Native search uses httpx, which reads Python's default trust from this
+    # variable. The Vulcan CA is already embedded in this guest bundle.
+    SSL_CERT_FILE = vulcanCaBundle;
+
     # api_server Platform — exposes OpenAI-compatible /v1/chat/completions.
     # Consumers are host-side only: the Hermes MCP bridge (hermes-mcp.service)
     # and Open WebUI, both reaching the guest over the /30 bridge, plus whatever
@@ -1297,6 +1301,14 @@ in
     API_SERVER_HOST = "0.0.0.0";
     API_SERVER_PORT = toString apiServerPort;
   };
+
+  assertions = [
+    {
+      assertion =
+        (config.systemd.services.hermes-agent.environment.SSL_CERT_FILE or null) == vulcanCaBundle;
+      message = "Hermes native SearXNG must use the guest's Vulcan-aware CA bundle";
+    }
+  ];
 
   # ---- Hang detector + forensic capture ----
   # Independent of hermes-agent (it must keep running while the gateway is

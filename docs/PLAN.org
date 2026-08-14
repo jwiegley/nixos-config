@@ -849,6 +849,24 @@ VERIFIED AFTER THE RUN:
 
 Process note: the first deletion pass was killed partway through by my own cleanup command, which matched the running service rather than only the preview processes. Harmless (rsync resumes) but it is why the deletion arrived in two passes.
 
+* DONE [#B] Trust the Vulcan CA in Hermes native SearXNG
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-lh2
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-14 Fri 00:56]
+:MODIFIED: [2026-08-14 Fri 00:58]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-14 Fri 00:58]
+:CLOSE_REASON: Hermes service now exports the guest Vulcan-aware CA bundle through SSL_CERT_FILE; the packaged-httpx env-i negative/positive TLS regression passed, and the full Vulcan build completed at rhaansni6zj0big7g4gxjfd71h9yii8m without activation.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Set SSL_CERT_FILE on the in-VM hermes-agent service so packaged Python/httpx trusts the already-installed Vulcan CA for native SearXNG. Add an evaluation assertion and a deterministic packaged-httpx TLS regression. Build-only verification; no service restart or activation.
+
 * DONE [#D] Unexplained: /tank/doc reduction not visible on disk
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

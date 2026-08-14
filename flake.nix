@@ -362,6 +362,32 @@
               || pkgs.llama-cpp ? npmDeps;
             pkgs.runCommand "llama-cpp-overlay-compat-check" { } "touch $out";
 
+          hermes-searxng-tls =
+            let
+              hermesPython = inputs.hermes-agent.packages.${system}.default.hermesVenv;
+            in
+            pkgs.runCommand "hermes-searxng-tls-check"
+              {
+                nativeBuildInputs = [ pkgs.openssl ];
+              }
+              ''
+                openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+                  -subj /CN=Hermes-Test-CA -keyout ca.key -out ca.crt >/dev/null 2>&1
+                openssl req -newkey rsa:2048 -nodes -subj /CN=127.0.0.1 \
+                  -keyout server.key -out server.csr >/dev/null 2>&1
+                printf '%s\n' 'subjectAltName=IP:127.0.0.1' 'extendedKeyUsage=serverAuth' >server.ext
+                openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+                  -CAcreateserial -days 1 -out server.crt -extfile server.ext >/dev/null 2>&1
+
+                env -i HOME="$TMPDIR" PYTHONDONTWRITEBYTECODE=1 \
+                  ${hermesPython}/bin/python3 ${./tests/hermes-searxng-tls.py} \
+                  server.crt server.key fail
+                env -i HOME="$TMPDIR" PYTHONDONTWRITEBYTECODE=1 SSL_CERT_FILE="$PWD/ca.crt" \
+                  ${hermesPython}/bin/python3 ${./tests/hermes-searxng-tls.py} \
+                  server.crt server.key succeed
+                touch "$out"
+              '';
+
           hermes-self-heal-tests = helpers.mkPytestCheck {
             name = "hermes-self-heal-tests";
             src = ./scripts/hermes-self-heal;

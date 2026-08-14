@@ -649,6 +649,11 @@ let
       mount = "/tank";
     }
     {
+      name = "restic-backups-Documents.service";
+      display = "Restic Backup: Documents";
+      mount = "/tank";
+    }
+    {
       name = "restic-backups-doc.service";
       display = "Restic Backup: doc";
       mount = "/tank";

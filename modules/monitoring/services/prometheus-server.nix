@@ -225,7 +225,7 @@
 
       ## Restic Monitoring
       Restic metrics are collected via textfile collector for all repositories:
-      Audio, Backups, Databases, Home, Nasim, Photos, Video, doc, src
+      Audio, Backups, Databases, Documents, Home, Photos, Public, Video, doc, src
 
       Metrics are updated every 6 hours via systemd timer.
       To manually refresh: systemctl start restic-metrics.service

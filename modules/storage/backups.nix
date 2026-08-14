@@ -224,6 +224,29 @@ in
       exclude = sourceExcludes;
     })
     (mkBackup {
+      name = "Documents";
+      # 04:25 rather than continuing the 20-minute rhythm: 04:10 (Public) and
+      # 04:40 (Photos) were the nearest neighbours and this splits that gap.
+      # The stagger exists to keep concurrent reads off the USB tank enclosure,
+      # and measured 2026-08-14 every existing job finishes in well under a
+      # minute once the initial upload is done -- Public 3s, Audio 7s, Video 7s,
+      # doc 10s, Backups 11s, Photos 11s, src 20s, Databases 36s, Home 39s.
+      # 15 minutes of clearance either side is therefore generous. The FIRST run
+      # is the exception: it uploads the whole 12.5G and will take far longer.
+      time = "04:25:00";
+      # Syncthing bookkeeping, excluded on the same reasoning as Public below.
+      # .stversions is Syncthing's own copy of superseded file versions (209M at
+      # the dataset root, 118K under Obsidian) and is redundant here: restic
+      # already keeps 7 daily / 5 weekly / 12 monthly / 3 yearly snapshots, so
+      # file history is preserved by the backup itself rather than by shipping
+      # Syncthing's duplicate of it to B2.
+      exclude = [
+        ".stfolder"
+        ".stignore"
+        ".stversions"
+      ];
+    })
+    (mkBackup {
       name = "Public";
       time = "04:10:00";
       # Retained historical sync markers remain under Public. Keep only

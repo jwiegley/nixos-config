@@ -26,6 +26,7 @@ let
               "Audio"
               "Backups"
               "Databases"
+              "Documents"
               "Home"
               "Photos"
               "Public"

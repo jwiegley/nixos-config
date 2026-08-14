@@ -17,6 +17,66 @@
 :ORIGINAL_SIZE: 0
 :END:
 
+* TODO [#E] etterminal client aborts ~1.4x/day (20 in 14d); SIGABRT not covered by the crash alert
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-6ey
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-14 Fri 00:29]
+:MODIFIED: [2026-08-14 Fri 00:29]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+`etterminal` (the Eternal Terminal CLIENT binary) has aborted 20 times in 14
+days -- about 1.4/day -- and nothing alerts on it.
+
+Full coredump census, 2026-07-31..2026-08-14, classified by signal and cgroup:
+
+    etterminal      SIGABRT   user-session         20
+    qemu-x86_64     SIGABRT   nix-build-sandbox    11
+    python3.14      SIGBUS    nix-build-sandbox     6
+    qemu-x86_64     SIGTRAP   nix-build-sandbox     5
+    qemu-x86_64     SIGSEGV   nix-build-sandbox     3
+    collect2        SIGABRT   user-session          1
+    obr             SIGABRT   user-session          1
+    mergiraf        SIGABRT   user-session          1
+
+Everything in the sandbox is expected and correctly suppressed: the
+SystemdSegmentationFault rule (loki-rules/systemd-errors.yaml) deliberately
+excludes `"COREDUMP_CGROUP":"/system.slice/nix-daemon.service"`, which is why
+even the three genuine SIGSEGVs from qemu-user do not alert. That part of the
+design is working as documented.
+
+WHY NOTHING FIRES for etterminal: that rule matches only
+`segfault|segmentation fault|SIGSEGV`. These are SIGABRT, so a user binary
+aborting 1.4 times a day is invisible to alerting. This is a coverage shape
+worth knowing about generally -- the crash alert is signal-specific, not
+crash-generic.
+
+IMPACT is limited and not a service outage:
+  - eternal-terminal.service (etserver, the SERVER) is healthy: active, up
+    since 2026-07-03, NRestarts=0. Only the client aborts.
+  - 369M across 56 files in /var/lib/systemd/coredump. Small against a 1.7T
+    root at 28%, but it only grows.
+  - John would notice client crashes directly as dropped sessions, so this is
+    probably a known annoyance rather than a silent fault. Possibly related to
+    the stale-agent-socket behaviour already recorded for ET.
+
+DELIBERATELY NOT DONE: widening SystemdSegmentationFault to match SIGABRT. That
+would alert 1.4x/day on a known-crashy client and add exactly the repeated
+noise that has been trimmed elsewhere. Fix the crash, or leave it unwatched --
+do not turn it into a daily page.
+
+Next step if this is worth pursuing: get a backtrace with
+`coredumpctl info etterminal` (no secrets in that output) and check whether the
+aborts cluster around session start, reconnect, or the ssh-agent socket path.
+#+end_example
+
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

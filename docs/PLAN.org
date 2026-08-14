@@ -440,14 +440,14 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
-* TODO [#B] Matter outdoor plug flapping (node 0x1A) — needs physical/WiFi check
+* TODO [#D] Outdoor plug WiFi flapping: device works, but 11pm turn-off is 5->11 min late
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2u
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-13 Thu 18:43]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -465,6 +465,86 @@ Check WiFi signal at the plug, AP association, and DHCP lease stability; ask wha
 
 Do NOT restart matter-server: prior experience says it does not help, and the restart is what started this.
 Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
+
+** Notes
+
+#+begin_example
+2026-08-13 -- reframed after John confirmed "the lights come on every evening,
+so the switch is working fine". The DEVICE is fine; this is a telemetry fault
+with a small but growing functional tail.
+
+WHAT THE DATA SAYS
+
+Onset is a sharp step, not a drift -- daily `unavailable` counts for
+switch.smart_outdoor_plug_switch_1:
+    07-31..08-09   1-5 per day
+    08-10          10
+    08-11         133
+    08-12         109
+    08-13         132
+Roughly 30x, beginning 08-10/08-11.
+
+The timing is RANDOM, not periodic. Gaps between consecutive dropouts over 48h:
+    2.7-9.9 min  151
+    10-19 min     53
+    20-29 min     22
+    30-37 min      9
+    40-44 min      3
+    55 min         1
+    291 min        1
+That smooth exponential decay is a memoryless/Poisson process. A DHCP lease, a
+polling cycle or any scheduled event would spike at a fixed interval instead.
+This is link-layer/RF flakiness, NOT a lease or a timer.
+
+Outages are short and self-recovering: avg 55.9s, min 4.8s, max 456.5s, n=241
+over 48h. That is ~8% of the day spent unavailable.
+
+NO SIGNAL TELEMETRY EXISTS for this device. It exposes only the two switch
+entities -- no RSSI, unlike every other smart plug here
+(sensor.smart_plug_*_signal_level). So signal quality cannot be read from HA and
+must come from the AP/controller side.
+
+FUNCTIONAL IMPACT -- real, small, and growing
+
+Two automations use the plug as `condition: state`. The one that matters is
+"Turn off outside lights at 11pm" (id 1777493677003). Its first action is
+DISABLED (enabled: false), so the only thing that turns the lights off is:
+
+    - repeat:
+        until:  [ condition: state, entity_id: ...switch_1, state: 'off' ]
+        sequence: [ action: switch.turn_off, target: ...switch_1 ]
+
+`unavailable` is not `'off'`, so during a dropout the until-condition cannot be
+satisfied and the loop retries. It works -- but it is late, and getting later:
+    08-10  lights off at 23:04:54   (+4m54s)
+    08-11  lights off at 23:07:00   (+7m00s)
+    08-12  lights off at 23:11:01   (+11m01s)
+The retry has no count limit and no delay in its sequence, so during a dropout
+it spins as fast as HA will let it. No HA warnings have been logged in 7 days,
+so it is not yet causing visible harm, but the trend is the wrong direction and
+the longest observed dropout (456s) is approaching the delays being seen.
+
+PRIORITY: P1 is too high now that the device is confirmed working. Suggest P3.
+Nothing here is urgent; the lights work, just late.
+
+WHAT THE "PHYSICAL/WIFI CHECK" ACTUALLY MEANS -- concrete list for John:
+  1. From the AP/controller (NOT from HA -- there is no RSSI entity): find this
+     client and read signal dBm, band, which AP it is associated with, and any
+     retry/deauth counters.
+  2. Confirm the band. These plugs are typically 2.4 GHz only; band steering or
+     a min-RSSI/roaming setting that changed can produce exactly this pattern.
+  3. Identify what changed on 08-10/08-11. The step is far too sharp to be
+     gradual degradation. Candidates: AP firmware or auto-channel change, a new
+     2.4 GHz interference source, something physically moved between the plug
+     and the AP, or an enclosure/weather change (it is outdoors).
+  4. 2.4 GHz congestion: scan for a neighbouring AP that moved onto the channel.
+  5. Physical: moisture/heat in the outdoor enclosure, and distance/obstructions.
+
+The matter-server restart at 08-10 15:18 was noted earlier as the onset
+correlate. Treat that as coincidence unless the AP side comes back clean -- a
+service restart does not change RF conditions, and the observed signature is
+unambiguously RF/link, not application-level.
+#+end_example
 
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:

@@ -413,6 +413,57 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
+* TODO [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-81n
+:LABELS:   []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-08-15 Sat 12:48]
+:MODIFIED: [2026-08-15 Sat 12:48]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+13 occurrences per day in the priority-3 journal, growing (3 in one 4h window on
+2026-08-15 morning, 8 in the next). Benign, but it recurs every health cycle and
+costs a re-investigation each time, so recording it rather than rediscovering it.
+
+  error: channel_setup_fwd_listener_tcpip: cannot listen to port: 8317
+  error: bind [ADDR]:8317: Address already in use
+  error: connect_to [ADDR] port 22: failed.
+
+WHAT IT IS. Port 8317 is a loopback-only remote forward (-R 8317) requested by
+johnw's incoming SSH sessions. One sshd-session already holds it, bound on both
+127.0.0.1 and [::1]; each NEW session requests the same fixed port and loses the
+race. The emitting units are session-*.scope, i.e. interactive SSH sessions, not
+any managed service.
+
+Already known to the tooling, which is why nothing alerts: the port-drift
+exporter names 8317 explicitly in its dual-stack dedup comment as
+"(sshd-session, binds 127.0.0.1 + [::1])".
+
+NOT CONFIG DRIFT, and deliberately not added to docs/ports.txt. It is one of
+four unregistered loopback listeners; the other three are also transient user
+processes (a python3 -m http.server on 18099, and two python3 - stdin processes
+on 18123/18124). Registering ephemeral user processes would be wrong -- they
+vanish. The port_drift_unexpected_loopback_listeners counter is info-only with no
+rule reading it; only the WILDCARD class pages
+(UnexpectedWildcardListener, currently 0). So the classification is working as
+designed.
+
+IMPACT. The second and later sessions simply do not get the forward, so whatever
+uses 8317 in those sessions either fails or silently talks to the first session's
+target. No system fault.
+
+NOT ACTED ON, and needs John: the fix is in his CLIENT ssh configuration, which
+lives in the nix-config repo, not on vulcan. Options are a dynamic remote port
+(-R 0:) with the port read back, ExitOnForwardFailure tuning, or simply accepting
+the collision. Choosing among those is his call, and none of it is a vulcan
+change.
+
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1568,15 +1619,16 @@ combined ~9 failures/10 days, not a per-account fault. John's standing decision
 to leave it alone is unchanged; recorded only so a future cycle does not open a
 duplicate issue when bia surfaces.
 
-* TODO [#D] Textfile staleness guard has no coverage backstop: unclassified collectors freeze unnoticed
+* DONE [#D] Textfile staleness guard has no coverage backstop: unclassified collectors freeze unnoticed
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-nhd
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-15 Sat 08:50]
-:MODIFIED: [2026-08-15 Sat 08:50]
+:MODIFIED: [2026-08-15 Sat 12:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 12:48]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1587,6 +1639,27 @@ meta_textfile_staleness classifies collectors with three explicit allowlists (fa
 Found live 2026-08-15: openclaw_canary.prom, residue from the OpenClaw service removed 2026-07-31, had not been written since 2026-08-03 (11.5 days). Its uid/gid (916/908) no longer resolve, no unit or timer writes it, and the only repo reference is a docstring in hermes-self-heal/daemon.py describing what OpenClaw's canary USED to write. Yet node_exporter kept re-serving the file every scrape, so openclaw_gateway_ready_plugins_total read a healthy 6 with a CURRENT timestamp. A frozen instrument presenting as live -- the exact failure class this rule group exists to catch, in the one blind spot it left.
 
 No alert rule or Grafana dashboard consumed any of its 10 metrics, so nothing made a bad decision on it. The risk is the general case, not this instance.
+
+** Close Reason
+
+#+begin_example
+IMPLEMENTED and verified in 45a781a7c, plus the live orphan removed.
+
+Two halves, both done.
+
+1. The instance. openclaw_canary.prom -- residue of the OpenClaw service removed 2026-07-31 -- had not been written since 2026-08-03 (11.5 days). Its uid/gid 916/908 no longer resolve, no unit or timer wrote it, and the only repo reference was a docstring in hermes-self-heal/daemon.py describing what OpenClaw USED to write. node_exporter kept re-serving the stale file every scrape, so openclaw_gateway_ready_plugins_total read a healthy 6 carrying a CURRENT timestamp. Verified no rule and no dashboard consumed any of its 10 metrics before removing it; the file was moved aside reversibly, and the phantom series then went 1 -> 0 with node_textfile_scrape_error still 0. Confirmed again this cycle: 0 openclaw_ series, 51 textfiles, 0 scrape errors.
+
+2. The class. TextfileCollectorUnclassifiedStale now backstops the three allowlists, which cover only 18 of 51 files and assume the rest have their own triads -- an assumption nothing enforced.
+
+VERIFIED THIS CYCLE, including the instrument itself rather than just its output:
+  - rule loaded in group meta_textfile_staleness, state=inactive, health=ok, for=3600s, lastError=none
+  - Prometheus carries 485 rules (was 484), 0 unhealthy, 0 with lastError
+  - THE RULE IS ALIVE, NOT MERELY QUIET: running its own expression with the threshold lowered to 0 returns 33 series, proving the negative-match selector and the comparison both work. At the real 14d threshold it returns 0. An inactive rule that could never fire would have returned 0 in both cases -- that is exactly the dead-rule failure this issue is about, so it was worth testing directly.
+  - headroom is real: the stalest unclassified file is container_cve.prom at 6.35 days, i.e. 7.65 days below the threshold, so no false positive is imminent
+  - the partition is exact: 33 unclassified + 18 classified = 51 total
+
+Threshold reasoning is recorded in the rule comment: the slowest legitimate unlisted cadence is weekly, so 14 days is two consecutive missed weekly runs -- unambiguously dead rather than late -- which follows the same 'detect dead, not skipped' logic the Hourly tier already documents. The negative match means new collectors are covered the moment they appear, and adding a file to a tier above tightens it here automatically.
+#+end_example
 
 * DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:
@@ -1761,15 +1834,16 @@ target, ensureDatabases and ensureUsers entries all materialise; with enable=fal
 they are all absent.
 #+end_example
 
-* TODO [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
+* DONE [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-sil
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-15 Sat 08:58]
-:MODIFIED: [2026-08-15 Sat 11:32]
+:MODIFIED: [2026-08-15 Sat 12:47]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 12:47]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1789,6 +1863,26 @@ Proven pre-existing and proven to be this bump, not a local edit:
     /nix/store/w79yfvcwvkk1xfqsv8f9jfwysx57n5q5-nixos-system-vulcan-...drv
 
 UPSTREAM DEFECT, worth reporting separately: nix-config requires inputs.rust-overlay but declares it NOWHERE in its own flake.nix (0 occurrences). It is only satisfiable by a consumer that happens to declare it. Fixing it upstream would be the more durable half.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+FIXED and verified end to end in 779f43fc3.
+
+Root cause confirmed, not inferred: flake.lock update c0187698c (2026-08-15 07:49) moved nix-config 24b2133cd100 -> aa72a9b0f1e0, whose config/obr.nix gates on BOTH inputs.obr and inputs.rust-overlay. Only obr was declared here, so the assertion aborted system.build.toplevel and nothing could be rebuilt. Proven both directions before changing anything: HEAD with a clean working tree failed the identical assertion, and substituting HEAD~1 flake.lock evaluated cleanly to w79yfvcwvkk1xfqsv8f9jfwysx57n5q5.
+
+Fix: declared rust-overlay as a root input, for the same documented reason obr already is -- nix-config is consumed with flake = false, so its outputs function never runs and every input its home-manager modules reference must be supplied by the consumer. inputs.nixpkgs.follows set, so no second nixpkgs was locked.
+
+VERIFIED NOW, this cycle:
+  - rust-overlay declared in flake.nix and present as a root input of flake.lock
+  - the configuration evaluates to xgkwisqm6rn77a0w6iwm6v9nr7dwdac9
+  - nix derivation show proves that drv realises to chjzplqsd2jj6mgmk1ddmlq2nz884di6, which is EXACTLY the running /run/current-system -- so the committed tree is the running system, not merely a thing that once built
+  - two full build+switch cycles have completed since, 0 failed units
+
+Still load-bearing: upstream nix-config HEAD is still aa72a9b0f1e0 (git ls-remote, checked this cycle), so no upstream fix has landed and this declaration is what keeps the host buildable.
+
+The 'upstream defect' claim in the original description was WRONG and was corrected in 58b2c8f97 plus a comment on this issue: nix-config obtains rust-overlay legitimately via nix-config-ai lib.inputSet merged as rootInputs // portableInputs, so consumers taking it as a real flake were never affected. The recurring class -- vulcan re-declaring nix-config inputs by hand -- is tracked separately as nixos-czc.
 #+end_example
 
 ** Comments

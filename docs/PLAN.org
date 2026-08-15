@@ -826,14 +826,14 @@ Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
-* TODO [#C] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
+* TODO [#D] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-czc
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 11:32]
-:MODIFIED: [2026-08-15 Sat 11:32]
+:MODIFIED: [2026-08-15 Sat 16:48]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -892,6 +892,20 @@ wants a decision rather than an autonomous edit.
 Worth noting either way: the two known inputs are now declared and the system
 builds, so this is prevention, not an outage.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 4,
+    "issue_id": "nixos-czc",
+    "author": "johnw",
+    "text": "2026-08-15, later the same day -- MEASURED THE ACTUAL EXPOSURE. The acute instance\nis gone and the residual risk is much smaller than this issue implies, so the\nproposal below should be judged on prevention, not on outage risk.\n\nWhat changed: John advanced nix-config to 1e0d2f6e (\"simplified Obr integration\",\nconsumer cd3bd2830) and removed the rust-overlay declaration I had added. Verified\nthis cycle -- flake.nix contains 0 occurrences of rust-overlay, it is no longer a\nroot input, and the tree evaluates to a derivation that realises to exactly the\nrunning /run/current-system.\n\nThe new config/obr.nix no longer builds obr from source with a Rust toolchain; it\ntakes inputs.obr.packages.<system>.default directly. That is what removed the\nrust-overlay requirement at the root.\n\nEXPOSURE NOW, measured rather than assumed. Vulcan imports exactly two files from\nnix-config:\n\n  config/packages.nix -- references inputs.llm-agents and inputs.nix-config-ai.\n                         BOTH declared here. No exposure.\n  config/johnw.nix    -- references inputs.git-ai, and pulls in config/obr.nix.\n\nPer-input status across nix-config's config/ tree:\n\n  obr        3 refs, 1 guard, 1 ASSERTION  -- the ONLY mandatory input. Declared here.\n  git-ai     2 refs, 3 guards              -- fully guarded by (inputs ? git-ai),\n                                              so vulcan silently does not get its\n                                              home-manager module or package. A\n                                              feature gap, not a break.\n  dirscan, emacs-src, hours, ledger, org2tc, scripts, stock-trader, git-scripts\n             1 unguarded ref each, ALL in config/overlays.nix -- which vulcan does\n             NOT import (confirmed: the only two ${inputs.nix-config}/... paths in\n             this repo are packages.nix and johnw.nix).\n\nSo there is NO current exposure. Correcting my own earlier reading in the process:\nI first flagged git-ai as unguarded in johnw.nix, which was a grep artifact -- my\nguard pattern used \"inputs ? \" with a trailing space and missed the parenthesised\n\"(inputs ? git-ai)\" form. It is guarded three times over.\n\nTHE RISK THAT REMAINS is therefore narrower than originally written:\n\n  1. A NEW asserted input upstream breaks every rebuild here, exactly as\n     rust-overlay did. Today only obr asserts, and it is declared. This is the\n     real recurrence risk and the reason to keep this issue open.\n  2. Importing config/overlays.nix would break on 8 unguarded references at once.\n     Nothing plans to, but it is a sharp edge worth knowing about.\n  3. Optional inputs degrade SILENTLY. Vulcan is missing git-ai today and nothing\n     reports that. If it should have it, that is a separate decision.\n\nThe proposal below is unchanged and still John's call, including merge direction:\ninputs // inputSet matches upstream but lets nix-config-ai's nixpkgs-unstable\nshadow this host's 25.11, while inputSet // inputs fills gaps only and keeps\nvulcan's own inputs winning. Given (1) is now the only outage path and it is\ncurrently closed, this is prevention rather than repair -- so a lower priority\nthan when it was filed is defensible.\n",
+    "created_at": "2026-08-15T23:48:17Z"
+  }
+]
+#+end_src
 
 * DONE [#C] restartUnits races home-manager: pushme runs with stale config during a switch
 :PROPERTIES:
@@ -1459,21 +1473,53 @@ The middle option is still available and is probably the best value: keep
 hera/codex-cli-archived. That needs a per-row column the TSV does not currently
 have, so it is real work rather than a flag flip.
 
-* TODO [#B] Adopt restored upstream Obr integration
+* DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-k37
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 15:58]
-:MODIFIED: [2026-08-15 Sat 15:58]
+:MODIFIED: [2026-08-15 Sat 16:46]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 16:46]
 :SOURCE_REPO: nix-rollout-vulcan.9KFUlj
 :SOURCE_REPO_PATH: /private/tmp/nix-rollout-vulcan.9KFUlj
 :ORIGINAL_SIZE: 0
 :END:
 
 Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
+
+** Close Reason
+
+#+begin_example
+DUPLICATE of nixos-qob, which is already closed for the same work. Both were created 2026-08-15 15:58 with identical descriptions from the same rollout (SOURCE_REPO nix-rollout-vulcan.9KFUlj, a Darwin path), so one copy was left open by accident.
+
+Closing on verified evidence rather than on the duplicate's say-so -- every claim in the shared description was checked against this live system:
+
+  1. 'Advance paired nix-config inputs to signed root revision 1e0d2f6e'
+     flake.lock nix-config rev = 1e0d2f6e993271ce8b2aaa3f7e0ee84f1c50015f  MATCHES
+
+  2. 'advance direct Obr to b20b6f0'
+     flake.lock obr rev = b20b6f0a49882311f3c96c2f8f1bf7752d757b0e  MATCHES
+     and the binary reports obr 0.2.22+6, so it is the running one
+
+  3. 'remove the obsolete direct rust-overlay workaround introduced for aa72'
+     flake.nix contains 0 occurrences of rust-overlay, and the lock no longer
+     carries it as a root input. This removed the declaration I added in
+     779f43fc3, which is correct: it was only ever needed because nix-config
+     aa72a9b0 required an input that this flake=false consumer had to supply.
+
+  4. 'activate Vulcan'
+     The current tree evaluates to 6q261n1p33s9j09zvf09crcvjcxycx9l.drv, and
+     nix derivation show proves that drv realises to
+     0w4633m8bcarpjxnkr2aapfikhilbn6x -- which IS the running
+     /run/current-system. So the committed tree is the activated closure, not
+     merely something that once built.
+
+System health at time of closing: 0 failed units, no unit with Result!=success,
+ZFS ONLINE, 485 rules with 0 unhealthy and 0 lastError, 0 scrape targets down.
+#+end_example
 
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:

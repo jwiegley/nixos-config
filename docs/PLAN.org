@@ -752,14 +752,14 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
-* TODO [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
+* DOING [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ep6
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-14 Fri 12:52]
-:MODIFIED: [2026-08-14 Fri 19:03]
+:MODIFIED: [2026-08-14 Fri 20:05]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -840,23 +840,77 @@ OPEN QUESTIONS FOR JOHN:
 
 ** Notes
 
-2026-08-14 19:00 -- TRANSPORT CHANGED to andoria-08 (John's direction), so hera's
-permitopen does NOT need widening; it already names andoria-08:22.
+#+begin_example
+2026-08-14 16:45 -- STATUS: 1 of 4 source hosts working.
 
-REMAINING BLOCKER, now pinpointed. hera refuses to FORWARD for id_rsync:
-    jump with id_vulcan -> forward succeeds
-    jump with id_rsync  -> 'channel 0: open failed: administratively prohibited'
-Tested with the jump identity forced explicitly, since ssh -i applies to the
-final hop and not to a ProxyJump -- an earlier test that did not force it was
-inconclusive.
+  hera        OK, 46 entries listed over rsync with id_rsync.
+  clio        rc=255 "No route to host" at the pinned 192.168.1.5. Verified
+              clio is unreachable at BOTH 192.168.1.5 and 10.6.0.2, so it is
+              simply down rather than on the VPN. The pin is doing exactly what
+              was asked -- no gathering off-LAN -- but this is also a live
+              demonstration of the open question below: tonight's run would fail
+              on clio alone even with every other host fixed.
+  vps         rc=255 Permission denied (publickey). id_rsync not installed yet.
+  andoria-t2  rc=255 "channel 0: open failed: administratively prohibited".
+              hera's permitopen still names andoria-08:22 while the transport is
+              andoria-t2.
 
-So hera's id_rsync entry currently grants rrsync but NOT port-forwarding. It
-needs both: the forced rrsync command for hera's own 9 rows, AND
-port-forwarding + permitopen="andoria-08:22" so the andoria rows can be reached
-through it. One entry does both, because the forced command governs exec
-channels while forwarding is separate.
+The gatherer-side blockers found earlier are FIXED and pushed to GitHub as
+21cd324 (sessions repo): --protect-args removed because rrsync disables it
+outright, and the 24 remote rows rewritten to home-relative paths because rrsync
+resolves requests beneath its own root. All 17 rows on the reachable hosts
+resolved with 0 failures at the time of that fix, including the space-bearing
+"Library/Application Support/..." paths. So the remaining work is entirely
+key/permitopen installation, not code.
 
-vps still needs the key installed (no from=, public internet via NAT).
+STILL NEEDS JOHN:
+  1. install id_rsync on vps (no from= restriction -- vulcan reaches it over the
+     public internet through NAT, so its apparent source is a dynamic WAN
+     address, not 192.168.1.2);
+  2. widen hera's permitopen to andoria-t2:22, or switch the transport column
+     back to andoria-08;
+  3. decide whether clio being away should count as failure. As built the
+     gatherer returns non-zero if any row fails, so the unit fails every night
+     clio is off-LAN -- which, as of this cycle, it is.
+
+2026-08-14 20:05 -- CONFIG-ORDERING BUG FOUND AND FIXED (would have broken
+andoria even after the key landed).
+
+The job's ssh_config had `Host *` FIRST. OpenSSH keeps the first value it
+obtains for each keyword, so the wildcard's `User johnw` was taken before the
+`Host andoria-08` block was read, and andoria's `User jwiegley` was silently
+discarded. Proven with ssh -G rather than by reading the file:
+
+    before   andoria-08  user=johnw
+    after    andoria-08  user=jwiegley  hostname=andoria-08  proxyjump=hera
+
+Every andoria transfer would have failed with an authentication error even once
+id_rsync was installed there, and it would have looked like a key problem rather
+than an ordering one. Host blocks now precede the wildcard; hera/clio/vps still
+resolve to johnw and all four still take IdentityFile id_rsync. Fixed in nixos
+92ce570cb.
+
+Remaining blockers unchanged, both on John's side:
+  - hera's id_rsync entry needs port-forwarding + permitopen="andoria-08:22"
+    (currently grants rrsync only; id_vulcan forwards, id_rsync does not);
+  - vps needs id_rsync installed, with no from= restriction.
+A Markdown prompt covering both, plus andoria's authorized_keys, was handed to
+John on 2026-08-14 for execution from hera.
+#+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 1,
+    "issue_id": "nixos-ep6",
+    "author": "johnw",
+    "text": "2026-08-14 continuation: corrected two false premises before activation. A ProxyJump final hop sees Hera, not Vulcan; an exact Vulcan -> Hera -> Andoria probe showed source 100.120.206.121. The id_rsync authorization was installed once in the NFS-shared Andoria home with that source constraint, mode 0600, existing pushme key preserved. All four shared-work aliases see the same inode/fingerprint; Vulcan list-only succeeds with id_rsync on the final hop and a dry-run upload is rejected. Darwin source now grants forwarding only on Hera (Clio remains rrsync-only); direct evaluation passes. VPS source is source-unrestricted as required; its exact flake check, rrsync derivation, and materialized authorized_keys leaf pass. The Vulcan job config also had Host * before Host andoria-08, so OpenSSH selected user johnw; source now puts specific hosts first and a new ssh -G regression check plus the full non-activating Vulcan system build pass. No system activation, publication, commit, or final service run was performed. Current job-config loop remains hera OK, clio/vps/andoria-08 FAILED until the relevant activations/adoption; Clio is expected away. Hera full build is independently blocked by nix-config issue nix-kk0z (git-all evaluates unsupported x86_64-darwin on Nixpkgs 26.11).",
+    "created_at": "2026-08-15T02:33:26Z"
+  }
+]
+#+end_src
 
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:

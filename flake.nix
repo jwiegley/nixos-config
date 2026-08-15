@@ -305,6 +305,9 @@
         let
           helpers = import ./tests/checks.nix { inherit pkgs; };
           vulcanConfig = inputs.self.nixosConfigurations.vulcan.config;
+          sessionGatherSshConfig = pkgs.writeText "session-gather-ssh-config" (
+            vulcanConfig.home-manager.users.johnw.xdg.configFile."sessions/ssh_config".text
+          );
           inherit (vulcanConfig.services.node-red) port;
           find =
             description: predicate: values:
@@ -356,6 +359,24 @@
           );
         in
         {
+          session-gather-ssh-config =
+            pkgs.runCommand "session-gather-ssh-config-check"
+              {
+                nativeBuildInputs = [ pkgs.openssh ];
+              }
+              ''
+                effective_user() {
+                  ssh -G -F ${sessionGatherSshConfig} "$1" 2>/dev/null | sed -n 's/^user //p'
+                }
+
+                test "$(effective_user hera)" = johnw
+                test "$(effective_user clio)" = johnw
+                test "$(effective_user vps)" = johnw
+                test "$(effective_user andoria-08)" = jwiegley
+                test "$(ssh -G -F ${sessionGatherSshConfig} andoria-08 2>/dev/null | sed -n 's/^proxyjump //p')" = hera
+                touch "$out"
+              '';
+
           llama-cpp-overlay-compat =
             assert
               !(builtins.elem pkgs.npmHooks.npmConfigHook (pkgs.llama-cpp.nativeBuildInputs or [ ]))

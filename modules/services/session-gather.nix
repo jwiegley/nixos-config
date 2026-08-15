@@ -60,9 +60,34 @@ in
     # nothing has to be widened there. Changing this name requires a matching
     # permitopen on hera, or the forward is refused with "administratively
     # prohibited".
+    # The JUMP uses a different identity from the endpoint, deliberately.
+    #
+    # hera plays two roles: it is a gathering source (its key is confined to
+    # `rrsync -ro /Users/johnw`, which is all it needs to serve its own 9 rows)
+    # and it is the only route to andoria. Those need different privileges. A
+    # forced-command key can still forward -- the command governs exec channels
+    # while port-forwarding is separate -- but hera's id_rsync entry currently
+    # grants only the rrsync command, so forwarding with it is refused with
+    # "channel 0: open failed: administratively prohibited".
+    #
+    # id_vulcan already carries port-forwarding and permitopen="andoria-08:22"
+    # (it is the existing pushme jump key), so using it for the jump alone
+    # unblocks andoria without changing anything on hera. The endpoint still
+    # authenticates with id_rsync, which IS installed on andoria -- verified by
+    # listing 45 entries through this exact path.
+    #
+    # To consolidate onto one key later, add port-forwarding and
+    # permitopen="andoria-08:22" to hera's id_rsync entry and point ProxyJump
+    # back at `hera`.
+    Host hera-jump
+      HostName hera.lan
+      User ${user}
+      IdentityFile ${home}/.ssh/id_vulcan
+      IdentitiesOnly yes
+
     Host andoria-08
       User jwiegley
-      ProxyJump hera
+      ProxyJump hera-jump
 
     # OpenSSH keeps the first value it obtains, so host-specific values above
     # must precede these shared defaults.

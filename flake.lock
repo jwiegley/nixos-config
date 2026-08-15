@@ -3328,6 +3328,7 @@
         "org-jw": "org-jw",
         "pushme": "pushme",
         "quadlet-nix": "quadlet-nix",
+        "rust-overlay": "rust-overlay_4",
         "sacramento-cluster-ics": "sacramento-cluster-ics",
         "secrets": "secrets",
         "sizes": "sizes",
@@ -3392,6 +3393,26 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "rev": "3d1b34a12a26be073f7ae67165a6b61229ca6025",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_4": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786762605,
+        "narHash": "sha256-iQpYIhInh8gRx+cSnPtX+Yp2Gg9kr2h+MehETCqRgDo=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "ad8ebb59d84bcf3780c46f107e1d99eb4ca2fe7f",
         "type": "github"
       },
       "original": {

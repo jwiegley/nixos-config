@@ -65,7 +65,14 @@ in
     # Andoria is not routable from vulcan; hera forwards to it. hera's
     # authorized_keys entry for id_rsync must carry port-forwarding and a
     # permitopen naming this exact host:port, or the channel is refused.
-    Host andoria-t2
+    #
+    # andoria-08 rather than andoria-t2, at John's direction 2026-08-14. The two
+    # are aliases for one NFS-shared home, so either works as transport, but
+    # hera's existing permitopen already names andoria-08:22 -- using it means
+    # nothing has to be widened there. Changing this name requires a matching
+    # permitopen on hera, or the forward is refused with "administratively
+    # prohibited".
+    Host andoria-08
       User jwiegley
       ProxyJump hera
   '';

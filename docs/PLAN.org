@@ -2,15 +2,16 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
-* TODO [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
+* DONE [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-5nt
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-14 Fri 18:40]
-:MODIFIED: [2026-08-14 Fri 18:40]
+:MODIFIED: [2026-08-14 Fri 19:03]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-14 Fri 19:03]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -43,6 +44,25 @@ FIX is a rename on one side, e.g. on vulcan:
 
 Left for John: renaming touches the content of his JumpDesktop configuration,
 and either side could be the intended spelling. Not an autonomous call.
+
+** Close Reason
+
+Resolved by renaming to lowercase 'hera' at John's direction.
+
+CORRECTION to the original diagnosis: I attributed the conflict to vulcan's ZFS
+being case-sensitive. It is not. tank/Documents is casesensitivity=insensitive
+with normalization=formD and utf8only=on -- deliberately configured to match
+macOS. The dataset therefore stores ONE entry, spelled 'Computer - Hera - ...',
+and cannot hold a second differing only in case, which is what Syncthing needed
+in order to accept hera's 'Computer - hera - ...'.
+
+A plain mv failed with 'are the same file' for exactly that reason; the rename
+needed two steps via a temporary name.
+
+Verified fully converged afterwards:
+    needFiles 0   needBytes 0   pullErrors 0
+    localFiles 27412 == globalFiles 27412   state=idle
+against 1 file / 2751 bytes / 1 pull error before.
 
 * DONE [#C] nix flake update fails: GitHub API rate limit (403, unauthenticated)
 :PROPERTIES:
@@ -739,7 +759,7 @@ Option (c) is the structural one and matches how two other silent failures on th
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-14 Fri 12:52]
-:MODIFIED: [2026-08-14 Fri 16:44]
+:MODIFIED: [2026-08-14 Fri 19:03]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -820,39 +840,23 @@ OPEN QUESTIONS FOR JOHN:
 
 ** Notes
 
-#+begin_example
-2026-08-14 16:45 -- STATUS: 1 of 4 source hosts working.
+2026-08-14 19:00 -- TRANSPORT CHANGED to andoria-08 (John's direction), so hera's
+permitopen does NOT need widening; it already names andoria-08:22.
 
-  hera        OK, 46 entries listed over rsync with id_rsync.
-  clio        rc=255 "No route to host" at the pinned 192.168.1.5. Verified
-              clio is unreachable at BOTH 192.168.1.5 and 10.6.0.2, so it is
-              simply down rather than on the VPN. The pin is doing exactly what
-              was asked -- no gathering off-LAN -- but this is also a live
-              demonstration of the open question below: tonight's run would fail
-              on clio alone even with every other host fixed.
-  vps         rc=255 Permission denied (publickey). id_rsync not installed yet.
-  andoria-t2  rc=255 "channel 0: open failed: administratively prohibited".
-              hera's permitopen still names andoria-08:22 while the transport is
-              andoria-t2.
+REMAINING BLOCKER, now pinpointed. hera refuses to FORWARD for id_rsync:
+    jump with id_vulcan -> forward succeeds
+    jump with id_rsync  -> 'channel 0: open failed: administratively prohibited'
+Tested with the jump identity forced explicitly, since ssh -i applies to the
+final hop and not to a ProxyJump -- an earlier test that did not force it was
+inconclusive.
 
-The gatherer-side blockers found earlier are FIXED and pushed to GitHub as
-21cd324 (sessions repo): --protect-args removed because rrsync disables it
-outright, and the 24 remote rows rewritten to home-relative paths because rrsync
-resolves requests beneath its own root. All 17 rows on the reachable hosts
-resolved with 0 failures at the time of that fix, including the space-bearing
-"Library/Application Support/..." paths. So the remaining work is entirely
-key/permitopen installation, not code.
+So hera's id_rsync entry currently grants rrsync but NOT port-forwarding. It
+needs both: the forced rrsync command for hera's own 9 rows, AND
+port-forwarding + permitopen="andoria-08:22" so the andoria rows can be reached
+through it. One entry does both, because the forced command governs exec
+channels while forwarding is separate.
 
-STILL NEEDS JOHN:
-  1. install id_rsync on vps (no from= restriction -- vulcan reaches it over the
-     public internet through NAT, so its apparent source is a dynamic WAN
-     address, not 192.168.1.2);
-  2. widen hera's permitopen to andoria-t2:22, or switch the transport column
-     back to andoria-08;
-  3. decide whether clio being away should count as failure. As built the
-     gatherer returns non-zero if any row fails, so the unit fails every night
-     clio is off-LAN -- which, as of this cycle, it is.
-#+end_example
+vps still needs the key installed (no from=, public internet via NAT).
 
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:

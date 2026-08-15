@@ -1734,15 +1734,17 @@ NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system
 patched release exists.
 #+end_example
 
-* DOING [#B] Adopt restored upstream Obr integration
+* DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-qob
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 15:58]
-:MODIFIED: [2026-08-15 Sat 15:58]
+:MODIFIED: [2026-08-15 Sat 16:05]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 16:05]
+:CLOSE_REASON: Completed: published signed consumer cd3bd283 with paired root/AI 1e0d2f6e and Obr b20b6f0, removed the obsolete direct rust-overlay workaround, passed the authoritative firmware-aware /etc/nixos/build build, activated the exact realized closure, and verified Obr 0.2.22+6 with system state running. No daemon policy, trust, CPU, restart, secret, or unrelated service changes were made.
 :SOURCE_REPO: nix-rollout-vulcan.9KFUlj
 :SOURCE_REPO_PATH: /private/tmp/nix-rollout-vulcan.9KFUlj
 :ORIGINAL_SIZE: 0

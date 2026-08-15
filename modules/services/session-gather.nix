@@ -37,18 +37,6 @@ in
   # Darwin nix-config repo and is the wrong place for vulcan-only automation.
   # Keeping it here also means id_rsync is the only identity this job can offer.
   home-manager.users.${user}.xdg.configFile."sessions/ssh_config".text = ''
-    Host *
-      User ${user}
-      IdentityFile ${identity}
-      IdentitiesOnly yes
-      BatchMode yes
-      ConnectTimeout 15
-      # Pinned on first contact, stable thereafter. A CHANGED host key fails the
-      # transfer rather than prompting, which is what an unattended job wants.
-      # This is TOFU, not disabled checking: StrictHostKeyChecking=no is never used.
-      StrictHostKeyChecking accept-new
-      UserKnownHostsFile ${configDir}/known_hosts
-
     Host hera
       HostName hera.lan
 
@@ -75,6 +63,20 @@ in
     Host andoria-08
       User jwiegley
       ProxyJump hera
+
+    # OpenSSH keeps the first value it obtains, so host-specific values above
+    # must precede these shared defaults.
+    Host *
+      User ${user}
+      IdentityFile ${identity}
+      IdentitiesOnly yes
+      BatchMode yes
+      ConnectTimeout 15
+      # Pinned on first contact, stable thereafter. A CHANGED host key fails the
+      # transfer rather than prompting, which is what an unattended job wants.
+      # This is TOFU, not disabled checking: StrictHostKeyChecking=no is never used.
+      StrictHostKeyChecking accept-new
+      UserKnownHostsFile ${configDir}/known_hosts
   '';
 
   systemd.services.session-gather = {

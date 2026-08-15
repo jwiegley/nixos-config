@@ -2,6 +2,48 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
+* TODO [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-5nt
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-14 Fri 18:40]
+:MODIFIED: [2026-08-14 Fri 18:40]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+One file in the Documents Syncthing folder cannot converge because hera and
+vulcan disagree about its capitalisation:
+
+  remote  JumpDesktop/Viewer/Servers/Computer - hera - DFD7C7D7-...-052CD807E288.jump
+  local   JumpDesktop/Viewer/Servers/Computer - Hera - DFD7C7D7-...-052CD807E288.jump
+
+Syncthing's message: "uses different upper or lowercase characters ... change the
+casing on either side to match the other".
+
+Same file, same UUID, differing only in hera vs Hera. macOS is case-insensitive
+so hera can hold either form; vulcan's ZFS is case-sensitive and will not create
+a second entry differing only in case. Syncthing refuses to guess which side is
+authoritative, which is correct behaviour.
+
+NOT a permissions problem. Verified after the ACL mask repair (nixos-g9y) that
+the containing directory has mask::rwx with user:syncthing:rwx effective.
+
+IMPACT is negligible and non-blocking: a single 2751-byte JumpDesktop connection
+profile. The folder sits at state=idle with the other 27411 files synced and
+needBytes=2751.
+
+FIX is a rename on one side, e.g. on vulcan:
+  mv '/tank/Documents/JumpDesktop/Viewer/Servers/Computer - Hera - DFD7C7D7-3E37-4EFC-9F9C-052CD807E288.jump' \
+     '/tank/Documents/JumpDesktop/Viewer/Servers/Computer - hera - DFD7C7D7-3E37-4EFC-9F9C-052CD807E288.jump'
+
+Left for John: renaming touches the content of his JumpDesktop configuration,
+and either side could be the intended spelling. Not an autonomous call.
+
 * DONE [#C] nix flake update fails: GitHub API rate limit (403, unauthenticated)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

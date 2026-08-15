@@ -112,60 +112,6 @@
       url = "github:jwiegley/obr";
     };
 
-    # rust-overlay: the second half of the same requirement as `obr` above, and
-    # declared here for the identical reason -- `nix-config` is consumed with
-    # `flake = false`, so its own inputs are never resolved and every input its
-    # home-manager modules reference must be declared by the consumer.
-    #
-    # config/obr.nix gates on BOTH:
-    #   hasObrInputs = inputs ? obr && inputs.obr ? outPath
-    #               && inputs ? rust-overlay && inputs.rust-overlay ? outPath;
-    # and packages/source-project-apps.nix builds obr with
-    # `pkgs.extend (import inputs.rust-overlay.outPath)`.
-    #
-    # Added 2026-08-15 after `flake.lock: Update` (c0187698c, 07:49) moved
-    # nix-config 24b2133cd100 -> aa72a9b0f1e0 and introduced the rust-overlay
-    # half. The whole configuration stopped evaluating -- not just obr -- because
-    # the assertion aborts `system.build.toplevel`. Verified both directions:
-    # HEAD failed with no working-tree changes, and substituting HEAD~1's
-    # flake.lock evaluated cleanly.
-    #
-    # NOT an upstream defect, contrary to what this comment first claimed.
-    # Researched properly 2026-08-15 after the fact:
-    #
-    #   config/ai/flake.nix declares rust-overlay (identically to the block
-    #     below, url + inputs.nixpkgs.follows);
-    #   its outputs export `lib.inputSet = builtins.removeAttrs inputs ["self"]`,
-    #     so rust-overlay is in that set;
-    #   nix-config/flake.nix then does
-    #     portableInputs = rootInputs.nix-config-ai.lib.inputSet;
-    #     inputs = rootInputs // portableInputs;
-    #   and passes that merged set down via `extraSpecialArgs`.
-    #
-    # So a consumer that takes nix-config as a REAL flake (hera, darwin) gets
-    # inputs.rust-overlay for free and never sees this break. It is absent here
-    # for exactly the reason the obr note above gives -- `flake = false` means
-    # that outputs function never runs, so the merge never happens and vulcan
-    # must supply the input itself. The upstream repo is consistent; only this
-    # consumption mode has the gap.
-    #
-    # Consequence worth knowing: vulcan pins its own rust-overlay revision
-    # (ad8ebb59, 2026-08-15) while nix-config-ai pins 6ef009bf (2026-07-31), so
-    # obr is built here with a different toolchain revision than on hera. Both
-    # work; they simply drift independently.
-    #
-    # This is the SECOND input to arrive this way (obr, now rust-overlay), so the
-    # class recurs. See nixos-czc for the option of mirroring upstream's merge
-    # instead of chasing each input by hand.
-    #
-    # `follows` on nixpkgs is deliberate: only the overlay file is used (via
-    # `import ... .outPath`), never the flake's own outputs, so pinning it to
-    # this host's nixpkgs avoids locking a second full nixpkgs for nothing.
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     git-scripts = {
       url = "git+ssh://gitea/johnw/git-scripts";
       flake = false;

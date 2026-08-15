@@ -1459,6 +1459,22 @@ The middle option is still available and is probably the best value: keep
 hera/codex-cli-archived. That needs a per-row column the TSV does not currently
 have, so it is real work rather than a flag flip.
 
+* TODO [#B] Adopt restored upstream Obr integration
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-k37
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 15:58]
+:MODIFIED: [2026-08-15 Sat 15:58]
+:CREATED_BY: johnw
+:SOURCE_REPO: nix-rollout-vulcan.9KFUlj
+:SOURCE_REPO_PATH: /private/tmp/nix-rollout-vulcan.9KFUlj
+:ORIGINAL_SIZE: 0
+:END:
+
+Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
+
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1717,6 +1733,22 @@ NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system
 ./build switch will trigger the multi-hour toolchain build. Consider reverting the lock until a
 patched release exists.
 #+end_example
+
+* DOING [#B] Adopt restored upstream Obr integration
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-qob
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 15:58]
+:MODIFIED: [2026-08-15 Sat 15:58]
+:CREATED_BY: johnw
+:SOURCE_REPO: nix-rollout-vulcan.9KFUlj
+:SOURCE_REPO_PATH: /private/tmp/nix-rollout-vulcan.9KFUlj
+:ORIGINAL_SIZE: 0
+:END:
+
+Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
 
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:

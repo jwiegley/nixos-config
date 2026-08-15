@@ -1088,6 +1088,61 @@ are genuinely failing and being retried, so the automation layer is doing real
 work to paper over the fault. Still not urgent and still not autonomous to fix
 -- the remedy remains the AP-side signal check -- but it is more than cosmetic.
 
+* TODO [#D] session-gather re-hashes the whole tree nightly (--checksum): 50 min, 124 GB per run
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-k2g
+:LABELS:   []
+:ISSUE_TYPE: question
+:CREATED:  [2026-08-15 Sat 00:45]
+:MODIFIED: [2026-08-15 Sat 00:45]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+bin/gather-sessions passes --checksum, which makes rsync read EVERY file on both
+sides on every run: locally off the archive, and remotely over SSH on each
+source. Runs are therefore not cheap deltas -- the whole tree is re-hashed
+nightly.
+
+MEASURED, first full pass on 2026-08-14:
+    started 21:55:16, ended 22:45:01  =  49m45s
+    27 rows attempted, 8 skipped (clio travelling), 0 failed, exit 0
+    124.5 GB read from disk by the unit
+    archive: 118G used / 476G apparent (sparse, so apparent >> allocated)
+
+That cost recurs every night at 02:30, and it is paid on the remote side too:
+each source host hashes its own copy, including a VPS over the public internet
+and a laptop that travels.
+
+WHY IT IS THERE, and why this is a trade rather than a bug: --checksum is what
+catches an edit that keeps the same size AND mtime. The repo has a deliberate
+regression test for exactly that case (same-stat.bin in
+test/gather-sessions.bash), so removing the flag would silently weaken a
+property someone chose to protect.
+
+THE TRADE:
+  keep --checksum  -- correct for same-size/same-mtime edits; hours of I/O
+                      nightly on vulcan and on every source host
+  drop --checksum  -- runs become fast size/mtime deltas; risks missing an
+                      in-place edit that preserves both
+
+Session transcripts are largely append-only, which argues the practical risk of
+dropping it is low -- an append changes size. But that is a judgement about
+John's data, not a mechanical fact, so it is his call.
+
+A middle option exists: keep --checksum but stop re-hashing what cannot have
+changed, e.g. --size-only for the archived/immutable roots (codex-cli-archived)
+while keeping full checksums on live ones. That needs per-row configuration the
+TSV does not currently express.
+
+PENDING: the second consecutive run started 2026-08-15 00:43:48 will give the
+INCREMENTAL cost, which is the number that actually decides this. If an
+unchanged pass still takes ~50 minutes and reads ~124 GB, the case for changing
+something is much stronger than if it drops sharply.
+
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

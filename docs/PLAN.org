@@ -752,15 +752,16 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
-* DOING [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
+* DONE [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ep6
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-14 Fri 12:52]
-:MODIFIED: [2026-08-14 Fri 20:05]
+:MODIFIED: [2026-08-15 Sat 04:44]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 04:44]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -896,6 +897,57 @@ Remaining blockers unchanged, both on John's side:
   - vps needs id_rsync installed, with no from= restriction.
 A Markdown prompt covering both, plus andoria's authorized_keys, was handed to
 John on 2026-08-14 for execution from hera.
+
+----------------------------------------------------------------------
+CORRECTION to the close reason above. One line was mangled when it was written:
+the phrase naming the ssh_config ordering bug contained backticks, which bash
+expanded as command substitution before obr ever saw the text, deleting the very
+token the sentence was about. It should read:
+
+  - vulcan's ssh_config put the "Host *" wildcard block FIRST, so its
+    "User johnw" overrode andoria's "User jwiegley" -- OpenSSH keeps the FIRST
+    value it obtains for each keyword, not the most specific one. Fixed in nixos
+    92ce570cb; ssh -G then resolved andoria-08 to user=jwiegley.
+
+Recorded rather than silently left wrong, because that entry is the review trail
+for a bug that would otherwise look like a key problem.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+CONVERGED. Three consecutive runs exit 0, including one fired by the nightly timer.
+
+  run1  21:55:16 -> 22:45:01  49m45s  27 attempted / 8 skipped / 0 failed  124.5 GB read
+  run2  00:43:48 -> 01:34:10  50m22s  27 / 8 / 0
+  run3  02:30:02 -> 03:32:17  62m15s  27 / 8 / 0                          125.9 GB read
+run3 was started by session-gather.timer on schedule, so the nightly path itself
+is proven, not just manual invocation. Next elapse Sun 2026-08-16 02:30.
+
+Destination verified: all 27 configured (machine, agent) pairs exist on disk,
+none missing and none extra, and no directory for the NFS aliases andoria-t2,
+delphi-3bd4 or gpu-server. Archive 121G used / 482G apparent, so --sparse is
+holding -- the Andoria Codex holes are not being written out.
+
+The 8 skips are clio's 8 rows, correctly treated as offline rather than failed
+while it travels. Its HostName stays pinned to 192.168.1.5, so nothing is pulled
+over the VPN even though clio is currently reachable at 10.6.0.2.
+
+WHAT THE BLOCKERS ACTUALLY WERE, all now resolved:
+  - rrsync refuses --protect-args; removed (sessions 21cd324).
+  - rrsync resolves paths beneath its own root, so the 24 remote rows had to
+    become home-relative (sessions 21cd324), and the gatherer's validation had
+    to stop requiring absolute paths for remote rows (sessions cff50a0).
+  - An offline host failed the whole run; now skipped (sessions cff50a0).
+  - vulcan's ssh_config put  FIRST, so the wildcard's User johnw
+    overrode andoria's User jwiegley -- OpenSSH keeps the first value obtained
+    (nixos 92ce570cb).
+  - hera would not forward for id_rsync. Worked around with a split jump key,
+    then collapsed back onto id_rsync alone once John granted port-forwarding
+    (nixos 132464f03).
+
+Follow-on recorded separately as nixos-k2g: every run re-hashes the whole tree
+because of --checksum, so the ~50-62 min / ~125 GB cost does not decay.
 #+end_example
 
 ** Comments
@@ -1088,14 +1140,14 @@ are genuinely failing and being retried, so the automation layer is doing real
 work to paper over the fault. Still not urgent and still not autonomous to fix
 -- the remedy remains the AP-side signal check -- but it is more than cosmetic.
 
-* TODO [#D] session-gather re-hashes the whole tree nightly (--checksum): 50 min, 124 GB per run
+* TODO [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-k2g
 :LABELS:   []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-15 Sat 00:45]
-:MODIFIED: [2026-08-15 Sat 00:45]
+:MODIFIED: [2026-08-15 Sat 04:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1142,6 +1194,86 @@ PENDING: the second consecutive run started 2026-08-15 00:43:48 will give the
 INCREMENTAL cost, which is the number that actually decides this. If an
 unchanged pass still takes ~50 minutes and reads ~124 GB, the case for changing
 something is much stronger than if it drops sharply.
+
+** Notes
+
+bin/gather-sessions passes --checksum, which makes rsync read EVERY file on both
+sides on every run: locally off the archive, and remotely over SSH on each
+source. Runs are therefore not cheap deltas -- the whole tree is re-hashed
+nightly.
+
+MEASURED, first full pass on 2026-08-14:
+    started 21:55:16, ended 22:45:01  =  49m45s
+    27 rows attempted, 8 skipped (clio travelling), 0 failed, exit 0
+    124.5 GB read from disk by the unit
+    archive: 118G used / 476G apparent (sparse, so apparent >> allocated)
+
+That cost recurs every night at 02:30, and it is paid on the remote side too:
+each source host hashes its own copy, including a VPS over the public internet
+and a laptop that travels.
+
+WHY IT IS THERE, and why this is a trade rather than a bug: --checksum is what
+catches an edit that keeps the same size AND mtime. The repo has a deliberate
+regression test for exactly that case (same-stat.bin in
+test/gather-sessions.bash), so removing the flag would silently weaken a
+property someone chose to protect.
+
+THE TRADE:
+  keep --checksum  -- correct for same-size/same-mtime edits; hours of I/O
+                      nightly on vulcan and on every source host
+  drop --checksum  -- runs become fast size/mtime deltas; risks missing an
+                      in-place edit that preserves both
+
+Session transcripts are largely append-only, which argues the practical risk of
+dropping it is low -- an append changes size. But that is a judgement about
+John's data, not a mechanical fact, so it is his call.
+
+A middle option exists: keep --checksum but stop re-hashing what cannot have
+changed, e.g. --size-only for the archived/immutable roots (codex-cli-archived)
+while keeping full checksums on live ones. That needs per-row configuration the
+TSV does not currently express.
+
+PENDING: the second consecutive run started 2026-08-15 00:43:48 will give the
+INCREMENTAL cost, which is the number that actually decides this. If an
+unchanged pass still takes ~50 minutes and reads ~124 GB, the case for changing
+something is much stronger than if it drops sharply.
+
+2026-08-15 -- THE INCREMENTAL COST IS THE SAME AS THE FIRST PASS. This is the
+number the question was waiting on, and it settles it: the cost does not decay.
+
+  run1  21:55:16 -> 22:45:01   49m45s   124.5 GB read   (first full pass)
+  run2  00:43:48 -> 01:34:10   50m22s                   (nothing changed since run1)
+  run3  02:30:02 -> 03:32:17   62m15s   125.9 GB read   (nightly timer)
+
+All three exit 0, 27 rows attempted, 8 skipped, 0 failed. run3 was longer while
+reading marginally more, so the variance is I/O contention rather than work
+done.
+
+So a nightly run re-reads ~125 GB locally and re-hashes every source tree
+remotely, for an archive of 482 GB apparent / 121 GB allocated, whether or not
+anything changed. That is roughly an hour of sustained disk and network activity
+every night, paid on vulcan AND on each source: a VPS over the public internet
+and a laptop that travels.
+
+Worth noting the two costs are separable. --checksum is what forces the READ;
+the transfer itself is already minimal (the archive grew 118G -> 121G across
+three runs, nearly all of it real new session data). Dropping --checksum would
+not reduce what is copied, only what is hashed.
+
+The trade recorded above is unchanged, and remains John's call:
+  keep  -- catches an edit preserving both size and mtime; ~1h/night of I/O on
+           four machines
+  drop  -- runs become fast size/mtime deltas; risks missing an in-place edit
+           that preserves both
+
+Session transcripts are overwhelmingly append-only and an append changes size,
+so the practical exposure looks small -- but that is a judgement about the value
+of John's data, not a mechanical fact, which is why this stays a question.
+
+The middle option is still available and is probably the best value: keep
+--checksum on live roots and use --size-only for ones that cannot change, e.g.
+hera/codex-cli-archived. That needs a per-row column the TSV does not currently
+have, so it is real work rather than a flag flip.
 
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:

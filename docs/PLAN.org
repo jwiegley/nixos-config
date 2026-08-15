@@ -1201,14 +1201,14 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
-* TODO [#E] mbsync-rbcca transient Gmail timeouts raise critical pages (~4/week)
+* TODO [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-mwl
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-11 Tue 16:39]
+:MODIFIED: [2026-08-15 Sat 00:44]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1224,6 +1224,29 @@ John chose to LEAVE IT ALONE on 2026-08-11. Recorded for the backlog only.
 If revisited, note two traps: 'Restart' in extraServiceConfig fails Nix evaluation unless the base
 mkMbsyncModule.nix:158 becomes lib.mkDefault (or mkForce is used), and StartLimitBurst/StartLimitIntervalSec
 are [Unit]-section options that extraServiceConfig cannot carry at all.
+
+** Notes
+
+2026-08-15 -- NOT rbcca-only. mbsync-bia shows the same failure, so the title's
+focus on one account understates the scope.
+
+Survey of every mbsync unit over 10 days:
+    mbsync-rbcca      7 failures, 7 of them "Socket error ... timeout"
+    mbsync-bia        2 failures, 2 of them "Socket error ... timeout"
+    mbsync-assembly   0
+    mbsync-johnw      0
+    (all four *-health-check units clean)
+
+Both affected accounts are Gmail-backed and both currently report
+result=success -- bia's most recent run at 00:35:04 succeeded, so it self-
+recovers exactly as rbcca does. Verbatim shape:
+    Socket error on imap.gmail.com (<ip>:993): timeout.
+    Synchronization failed with exit code 1
+
+So this is one transient-Gmail-timeout class affecting 2 of 4 accounts at a
+combined ~9 failures/10 days, not a per-account fault. John's standing decision
+to leave it alone is unchanged; recorded only so a future cycle does not open a
+duplicate issue when bia surfaces.
 
 * DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:

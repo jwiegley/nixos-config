@@ -775,6 +775,73 @@ Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
+* TODO [#C] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-czc
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 11:32]
+:MODIFIED: [2026-08-15 Sat 11:32]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+/etc/nixos consumes nix-config with `flake = false`, so nix-config's own outputs
+function never runs. That function is where upstream assembles the input set its
+home-manager modules actually read:
+
+    portableInputs = rootInputs.nix-config-ai.lib.inputSet;   # nix-config/flake.nix:141
+    inputs         = rootInputs // portableInputs;            # nix-config/flake.nix:142
+
+and config/ai/flake.nix builds that set as
+`builtins.removeAttrs inputs ["self"]`, exporting it as `lib.inputSet`.
+
+Because vulcan skips that merge, every input nix-config's modules reference must
+be declared by hand here. This has now bitten twice:
+
+  - obr          -- declared after the first breakage
+  - rust-overlay -- declared 2026-08-15 in 779f43fc3, after the whole system
+                    became unbuildable for ~5 hours
+
+Each time the symptom is identical and total: an assertion in config/obr.nix
+aborts system.build.toplevel, so NOTHING rebuilds, and the cause is invisible
+from this repo -- nothing here changed, an input moved.
+
+PROPOSAL: mirror upstream's merge instead of chasing inputs individually.
+`nix-config-ai` is ALREADY a root input here (verified: root.inputs.nix-config-ai
+is present), so `inputs.nix-config-ai.lib.inputSet` is reachable today with no
+new input. The change would be in modules/users/home-manager/default.nix:30,
+which currently passes the raw set:
+
+    extraSpecialArgs = { hostname = ...; inherit inputs; };
+
+DIRECTION MATTERS, and this is the part needing a decision:
+
+  a) inputs // inputs.nix-config-ai.lib.inputSet
+     Exactly what upstream does. But it lets nix-config-ai's inputs SHADOW
+     vulcan's -- including `nixpkgs`, where nix-config-ai tracks
+     nixpkgs-unstable while this host is pinned to 25.11. Any module reading
+     inputs.nixpkgs would silently switch channels. Upstream can accept this
+     because its rootInputs are designed around it; vulcan's are not.
+
+  b) inputs.nix-config-ai.lib.inputSet // inputs
+     Portable inputs fill gaps only; vulcan's own always win. Fixes the class
+     without the shadowing hazard. Diverges from upstream's ordering, so a
+     module that genuinely WANTS the portable version of a shared input would
+     not get it.
+
+(b) looks right for this host, but it is a real choice about how vulcan consumes
+nix-config and it touches the input set of every home-manager module, so it
+wants a decision rather than an autonomous edit.
+
+Worth noting either way: the two known inputs are now declared and the system
+builds, so this is prevention, not an outage.
+#+end_example
+
 * DONE [#C] restartUnits races home-manager: pushme runs with stale config during a switch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1619,7 +1686,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-15 Sat 08:58]
-:MODIFIED: [2026-08-15 Sat 08:58]
+:MODIFIED: [2026-08-15 Sat 11:32]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1641,6 +1708,20 @@ Proven pre-existing and proven to be this bump, not a local edit:
 
 UPSTREAM DEFECT, worth reporting separately: nix-config requires inputs.rust-overlay but declares it NOWHERE in its own flake.nix (0 occurrences). It is only satisfiable by a consumer that happens to declare it. Fixing it upstream would be the more durable half.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 3,
+    "issue_id": "nixos-sil",
+    "author": "johnw",
+    "text": "CORRECTION 2026-08-15, after researching the question rather than leaving it open.\nThe \"UPSTREAM DEFECT\" paragraph in the description above is WRONG and should not\nbe acted on. nix-config is consistent; I had only checked its flake.nix.\n\nWhat I originally claimed: nix-config requires inputs.rust-overlay but declares\nit nowhere in its own flake.nix (0 occurrences), so it is only satisfiable by a\nconsumer that happens to declare it.\n\nWhat is actually true, traced end to end at rev aa72a9b0:\n\n  1. config/ai/flake.nix:12-15 declares rust-overlay, identically to how vulcan\n     now does (url = github:oxalica/rust-overlay, inputs.nixpkgs.follows).\n  2. config/ai/flake.nix:73,83 exports\n       portableInputs = builtins.removeAttrs inputs [ \"self\" ];\n       lib.inputSet   = portableInputs;\n     so rust-overlay is in that set.\n  3. nix-config/flake.nix:141-142 merges it into what its modules see:\n       portableInputs = rootInputs.nix-config-ai.lib.inputSet;\n       inputs         = rootInputs // portableInputs;\n  4. That merged set is handed to home-manager via extraSpecialArgs\n     (flake.nix:199-201, 271), which is what config/obr.nix reads.\n\nSo any consumer taking nix-config as a REAL flake -- hera, darwin -- resolves\ninputs.rust-overlay fine and never sees this break. It broke on vulcan for the\nreason the obr comment already gave: `flake = false` means that outputs function\nnever runs, so the merge never happens.\n\nAlso checked, since the open question was whether an upstream fix had landed:\ngit ls-remote ssh://gitea/johnw/nix-config shows HEAD is still exactly\naa72a9b0f1e05e2735bf464e848819f3ef7811b7 -- the revision we pin. Upstream has not\nmoved, so no `nix flake update nix-config` is warranted and the consumer-side\ndeclaration in 779f43fc3 remains the load-bearing fix.\n\nOne real consequence, not a defect: vulcan pins rust-overlay ad8ebb59\n(2026-08-15) while nix-config-ai pins 6ef009bf (2026-07-31), so obr is built here\nwith a different toolchain revision than on hera. Both build; they drift.\n\nThe genuine finding underneath is the recurring CLASS -- obr, then rust-overlay,\nboth arriving the same way -- filed as nixos-czc. The flake.nix comment has been\ncorrected to match all of the above.\n",
+    "created_at": "2026-08-15T18:32:56Z"
+  }
+]
+#+end_src
 
 * DONE [#E] openproject container logs successful /metrics scrapes at error priority (~1440/day)
 :PROPERTIES:

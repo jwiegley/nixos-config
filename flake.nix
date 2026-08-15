@@ -130,11 +130,33 @@
     # HEAD failed with no working-tree changes, and substituting HEAD~1's
     # flake.lock evaluated cleanly.
     #
-    # Unlike `obr`, this cannot be declared "exactly as nix-config declares it":
-    # nix-config does not declare rust-overlay at all (0 occurrences in its
-    # flake.nix) despite requiring it. That is an upstream defect -- see
-    # nixos-sil. If nix-config later declares it, re-check that both sides still
-    # resolve to one derivation.
+    # NOT an upstream defect, contrary to what this comment first claimed.
+    # Researched properly 2026-08-15 after the fact:
+    #
+    #   config/ai/flake.nix declares rust-overlay (identically to the block
+    #     below, url + inputs.nixpkgs.follows);
+    #   its outputs export `lib.inputSet = builtins.removeAttrs inputs ["self"]`,
+    #     so rust-overlay is in that set;
+    #   nix-config/flake.nix then does
+    #     portableInputs = rootInputs.nix-config-ai.lib.inputSet;
+    #     inputs = rootInputs // portableInputs;
+    #   and passes that merged set down via `extraSpecialArgs`.
+    #
+    # So a consumer that takes nix-config as a REAL flake (hera, darwin) gets
+    # inputs.rust-overlay for free and never sees this break. It is absent here
+    # for exactly the reason the obr note above gives -- `flake = false` means
+    # that outputs function never runs, so the merge never happens and vulcan
+    # must supply the input itself. The upstream repo is consistent; only this
+    # consumption mode has the gap.
+    #
+    # Consequence worth knowing: vulcan pins its own rust-overlay revision
+    # (ad8ebb59, 2026-08-15) while nix-config-ai pins 6ef009bf (2026-07-31), so
+    # obr is built here with a different toolchain revision than on hera. Both
+    # work; they simply drift independently.
+    #
+    # This is the SECOND input to arrive this way (obr, now rust-overlay), so the
+    # class recurs. See nixos-czc for the option of mirroring upstream's merge
+    # instead of chasing each input by hand.
     #
     # `follows` on nixpkgs is deliberate: only the overlay file is used (via
     # `import ... .outPath`), never the flake's own outputs, so pinning it to

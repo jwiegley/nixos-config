@@ -435,3 +435,43 @@ groups:
         annotations:
           summary: "Daily textfile collector {{ $labels.file }} is stale"
           description: "{{ $labels.file }} has not been rewritten in over 26 hours (its timer runs ~daily). The metrics it produces are FROZEN at their last value, so freshness/size/last-success signals derived from it are no longer trustworthy. Check the corresponding daily job/timer."
+
+      # COVERAGE BACKSTOP for the three allowlists above. Added 2026-08-15.
+      #
+      # The three tiers above are opt-in: a collector is watched only if someone
+      # remembered to add it. The group comment justifies that by asserting the
+      # unlisted files "have their own last-success triads" -- but nothing
+      # enforces the assertion, so a file on no allowlist AND with no triad is
+      # watched by nothing at all. 18 of 51 files are currently classified.
+      #
+      # That blind spot was live, not theoretical. openclaw_canary.prom -- residue
+      # of the OpenClaw service removed 2026-07-31 -- stopped being written on
+      # 2026-08-03 and went unnoticed for 11.5 days. Its uid/gid no longer resolve
+      # and no unit writes it, yet node_exporter re-served the stale file on every
+      # scrape, so openclaw_gateway_ready_plugins_total read a healthy 6 carrying a
+      # CURRENT timestamp. Nothing consumed it, so nothing was decided wrongly; the
+      # defect is that no rule could have told us. File removed the same day.
+      #
+      # Deliberately LOOSE, and deliberately a different question from the tiers
+      # above. Those ask "did this collector skip a run?"; this asks only "is this
+      # collector dead or orphaned?", for the files no one classified. The slowest
+      # legitimate unlisted cadence is weekly (measured 2026-08-15: container_cve
+      # 6.2d, flume_cross_check 5.2d, restic_read_data and restic_check 5.1d, every
+      # other unlisted file under 1d). 14 days is therefore two consecutive missed
+      # weekly runs -- unambiguously dead rather than merely late -- which follows
+      # the same "detect dead, not skipped" reasoning the Hourly tier documents.
+      # Verified at authoring time: 0 firing series at 7d, 10d, 14d and 30d.
+      #
+      # The negative match means new collectors are covered the moment they appear,
+      # with no allowlist edit. Adding a file to a tier above tightens it here
+      # automatically, because the tiers and this rule partition the same set.
+      - alert: TextfileCollectorUnclassifiedStale
+        expr: |
+          time() - node_textfile_mtime_seconds{file!~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status|atd|imapsieve|git_workspace|secrets-perms|prometheus_rule_audit|hermes_health|container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide|fts_staleness)\\.prom"} > 1209600
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Unwatched textfile collector {{ $labels.file }} is dead (14d+ stale)"
+          description: "{{ $labels.file }} is on none of the fast/hourly/daily staleness allowlists and has not been rewritten in over 14 days, which is longer than any legitimate cadence on this host (the slowest unlisted collectors are weekly). Every metric in it is FROZEN at its last value while node_exporter keeps re-serving it with a current timestamp, so it reads as live and healthy. Either the collector is dead -- check its timer/oneshot -- or it is orphaned residue from a removed service, in which case delete the .prom file so the phantom series stop being published. If it is a real collector on a legitimately slow cadence, add it to the appropriate tier above instead of raising this threshold."

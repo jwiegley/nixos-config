@@ -2,6 +2,58 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
+* TODO [#D] PostgreSQL cache-hit dips below 85% in bursts; the rule aggregates all databases so one busy DB masks which
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-06u
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 09:07]
+:MODIFIED: [2026-08-15 Sat 09:07]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+PostgreSQLCacheHitLow went pending 2026-08-15 ~08:00 and has never fired in 7d,
+so the 1h "for" clause has been doing its job. Investigated while it was pending.
+
+Measured, hourly aggregate over 12h (threshold 0.85):
+  21:06 99.6 | 22:06 83.0 | 23:06 99.5 | 00:06 99.6 | 01:06 99.5
+  02:06 49.9 | 03:06 80.8 | 04:06 99.5 | 05:06 99.6 | 06:06 99.6
+  07:06 99.5 | 08:06 81.5 | 09:06 81.8
+
+So the baseline is ~99.5% and it drops below threshold in bursts: the 02:06 dip
+is the nightly PostgreSQL backup (expected), and the current one is driven
+entirely by hass, reading ~208 blocks/s from disk at 63% hit ratio while every
+other database sits at 96-100%.
+
+NOT a stuck query. pg_stat_activity on hass shows 3 idle + 1 active, max age 13s.
+The reads come from many short queries against a large hot table:
+  states 1238 MB (3.6M live tuples, 33M index scans), statistics_short_term 516 MB,
+  events 460 MB, state_attributes 235 MB, statistics 231 MB; 2597 MB total.
+event_types shows 2.0M seq scans but has 26 rows, so that is optimal, not a defect.
+
+TWO READINGS, and choosing between them is a judgement call rather than a fix:
+
+1. Genuine capacity: the hass recorder working set exceeds what PostgreSQL caches,
+   so any busy HA period goes to disk. Would be addressed by shared_buffers /
+   effective_cache_size tuning, or by shortening recorder retention.
+
+2. Alert shape: the rule sums blks_hit/blks_read across ALL databases, so it is a
+   single global ratio. One busy database at 63% drags the aggregate under 0.85
+   even while eleven others are at 96-100%. A per-datname rule would say which
+   database is actually degraded instead of reporting a fleet-wide number that no
+   single database experiences.
+
+Possible aggravator worth checking together with nixos-h2u: that plug flaps
+off<->unavailable ~117x/day, and every flap writes recorder rows.
+
+Not acted on. Tuning PostgreSQL memory and changing an alert's shape are both
+choices with real alternatives, so they want a decision rather than an autonomous
+edit.
+
 * DONE [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1081,7 +1133,7 @@ with 0 pull errors.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-14 Fri 20:44]
+:MODIFIED: [2026-08-15 Sat 09:04]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1139,6 +1191,20 @@ CORRECTION to my earlier framing on this issue. I described the impact as
 are genuinely failing and being retried, so the automation layer is doing real
 work to paper over the fault. Still not urgent and still not autonomous to fix
 -- the remedy remains the AP-side signal check -- but it is more than cosmetic.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 2,
+    "issue_id": "nixos-h2u",
+    "author": "johnw",
+    "text": "2026-08-15 -- ALERT CONFIRMED IT, AND THE NODE IS NOW PINNED EXACTLY.\n\nMatterNodeSessionFailures (the Loki rule added for this issue) is firing, so the\ndetector built for this fault works. Following its own embedded runbook:\n\n  - 2038 CASE timeouts in 24h, steady at 85-113/hour with no gaps. Not a burst,\n    not diurnal. Baseline on this host is zero.\n  - Last 2h: 203 failures, and EVERY ONE names the same peer, 0x1A. There is no\n    second failing node. The remaining ids in the log are node 0 (the unknown/\n    placeholder peer in EM retransmission lines), not a real device.\n\nMapped the peer via the matter-server WebSocket API (get_nodes, port 5580).\n6 nodes on the fabric; node 26 = 0x1A = TP-Link Smart Outdoor Plug. The other\nfive are Aqara (3 door/window sensors, the Hub M3, an FP300 presence sensor) and\nnone of them appear in the failure lines.\n\nTRANSPORT CONFIRMED FROM THE DEVICE, not inferred: node 26's NetworkCommissioning\nFeatureMap (attribute 0/49/65532) is 1, i.e. WiFi. Thread is bit 1 and is unset.\nThis independently confirms the earlier correction in this issue and definitively\nrules out the Aqara Hub M3 border router -- it is not in this device's path at\nall, so no amount of Thread/border-router work can affect this.\n\nTWO NEW OBSERVATIONS worth keeping:\n\n1. matter-server reports available=True for node 26 while its CASE sessions have\n   been failing continuously for over 24h. So the availability flag is NOT a\n   usable health signal for this fault -- it reads clean while the device is\n   effectively unreachable. Anything gating on it would see nothing wrong. This\n   is why the alert had to be built on the log stream instead.\n\n2. node 26's last_interview is 2026-04-26. It has not been re-interviewed in\n   ~3.5 months, far longer than any other node's activity in the logs.\n\nSTILL NOT AUTONOMOUS, and the reason is unchanged: every remaining step is\nphysical or AP-side. What is needed is the plug's WiFi signal/RSSI at its actual\noutdoor location, which AP and band it is associated with, and whether its DHCP\nlease is stable -- plus whatever changed around 2026-08-10, which is when this\nstarted. Restarting matter-server remains explicitly wrong here: the 2026-08-10\nrestart is what began the storm.\n",
+    "created_at": "2026-08-15T16:04:56Z"
+  }
+]
+#+end_src
 
 * TODO [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:
@@ -1435,6 +1501,26 @@ combined ~9 failures/10 days, not a per-account fault. John's standing decision
 to leave it alone is unchanged; recorded only so a future cycle does not open a
 duplicate issue when bia surfaces.
 
+* TODO [#D] Textfile staleness guard has no coverage backstop: unclassified collectors freeze unnoticed
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-nhd
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-15 Sat 08:50]
+:MODIFIED: [2026-08-15 Sat 08:50]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+meta_textfile_staleness classifies collectors with three explicit allowlists (fast/hourly/daily, 18 of 51 files). Its comment states that unlisted files are excluded because 'they have their own last-success triads' -- but nothing enforces that assumption.
+
+Found live 2026-08-15: openclaw_canary.prom, residue from the OpenClaw service removed 2026-07-31, had not been written since 2026-08-03 (11.5 days). Its uid/gid (916/908) no longer resolve, no unit or timer writes it, and the only repo reference is a docstring in hermes-self-heal/daemon.py describing what OpenClaw's canary USED to write. Yet node_exporter kept re-serving the file every scrape, so openclaw_gateway_ready_plugins_total read a healthy 6 with a CURRENT timestamp. A frozen instrument presenting as live -- the exact failure class this rule group exists to catch, in the one blind spot it left.
+
+No alert rule or Grafana dashboard consumed any of its 10 metrics, so nothing made a bad decision on it. The risk is the general case, not this instance.
+
 * DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1525,6 +1611,36 @@ become reachable from it the moment it exists.
 
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
+
+* TODO [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-sil
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-15 Sat 08:58]
+:MODIFIED: [2026-08-15 Sat 08:58]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Commit c0187698c ('flake.lock: Update', 2026-08-15 07:49) moved the nix-config input 24b2133cd100 -> aa72a9b0f1e0. That revision's config/obr.nix now gates on BOTH inputs.obr and inputs.rust-overlay:
+
+  hasObrInputs = inputs ? obr && inputs.obr ? outPath
+              && inputs ? rust-overlay && inputs.rust-overlay ? outPath;
+
+and packages/source-project-apps.nix does 'pkgs.extend (import inputs.rust-overlay.outPath)' to build obr with a Rust nightly toolchain. /etc/nixos declares obr but not rust-overlay, so the assertion fails and NOTHING can be rebuilt -- not a config change, not a security update.
+
+Proven pre-existing and proven to be this bump, not a local edit:
+  - HEAD with no working-tree changes fails the same assertion.
+  - Substituting HEAD~1's flake.lock (nix-config 24b2133cd100) evaluates cleanly to
+    /nix/store/w79yfvcwvkk1xfqsv8f9jfwysx57n5q5-nixos-system-vulcan-...drv
+
+UPSTREAM DEFECT, worth reporting separately: nix-config requires inputs.rust-overlay but declares it NOWHERE in its own flake.nix (0 occurrences). It is only satisfiable by a consumer that happens to declare it. Fixing it upstream would be the more durable half.
+#+end_example
 
 * DONE [#E] openproject container logs successful /metrics scrapes at error priority (~1440/day)
 :PROPERTIES:

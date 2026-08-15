@@ -277,6 +277,14 @@ with lib;
                           title = "OpenProject";
                           url = "https://openproject.vulcan.lan";
                         }
+                      ]
+                      # Gated so the dashboard does not advertise a tile that
+                      # 502s while services.nocobase.enable is false.
+                      ++ optional config.services.nocobase.enable {
+                        title = "NocoBase";
+                        url = "https://nocobase.vulcan.lan";
+                      }
+                      ++ [
                         {
                           title = "BudgetBoard";
                           url = "https://budget.vulcan.lan";

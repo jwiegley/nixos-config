@@ -791,6 +791,11 @@ in
                   "https://hass.vulcan.lan"
                   "https://nodered.vulcan.lan"
                   "https://wallabag.vulcan.lan"
+                ]
+                # Gated: probing a vhost that does not exist would return
+                # probe_success=0 forever and fire the generic probe alerts.
+                ++ lib.optional config.services.nocobase.enable "https://nocobase.vulcan.lan"
+                ++ [
                   "https://jellyfin.vulcan.lan"
                   "https://prometheus.vulcan.lan"
                   "https://victoriametrics.vulcan.lan"

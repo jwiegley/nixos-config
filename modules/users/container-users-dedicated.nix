@@ -221,6 +221,13 @@
     "d /run/secrets-openproject 0750 openproject openproject - -"
     "d /run/secrets-open-webui 0750 open-webui open-webui - -"
     "d /run/secrets-speedtest-tracker 0750 speedtest-tracker speedtest-tracker - -"
+    # nocobase is the one container user NOT defined in this file. It has to be
+    # gated on services.nocobase.enable, and a lib.mkIf nested inside the single
+    # literal `users = { ... }` attrset above is not a definition boundary, so
+    # the module system would hand the submodule a raw { _type = "if"; }. Its
+    # user, group, allowed-users entry and /run/secrets-nocobase directory are
+    # therefore declared in modules/containers/nocobase-quadlet.nix, and merge
+    # with these.
   ];
   # Note: vane currently has no SOPS secrets (configured via web UI)
   # Add secret entries here if/when API keys are managed via SOPS

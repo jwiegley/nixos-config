@@ -21,6 +21,24 @@ in
       secretPath = config.sops.secrets."budgetboard/database-password".path;
       dependentService = "podman-budget-board-server.service";
     })
+    # NocoBase (evaluation, restored 2026-08-15). Gated on services.nocobase.enable.
+    #
+    # `imports` is static, so this entry is always present and instead wraps its
+    # own config in mkIf. secretPath is the literal /run/secrets path rather than
+    # config.sops.secrets."nocobase-db-password".path on purpose: that attribute
+    # only exists when the secret is declared, which is itself gated, so reading
+    # it here would force evaluation and fail while NocoBase is off. The literal
+    # is the sops default path for a secret with no `path=` override, which is
+    # exactly how modules/containers/nocobase-quadlet.nix declares it.
+    (
+      { lib, ... }:
+      lib.mkIf config.services.nocobase.enable (mkPostgresUserSetup {
+        user = "nocobase";
+        database = "nocobase";
+        secretPath = "/run/secrets/nocobase-db-password";
+        dependentService = "podman-nocobase.service";
+      })
+    )
     (mkPostgresUserSetup {
       user = "rspamd";
       database = "rspamd";
@@ -155,6 +173,9 @@ in
       ensureDatabases = [
         "open_webui"
         "wallabag"
+      ]
+      ++ lib.optional config.services.nocobase.enable "nocobase"
+      ++ [
         "budgetboard"
         "gitea"
         "mailarchiver"
@@ -167,6 +188,12 @@ in
         { name = "postgres"; }
         { name = "johnw"; }
         { name = "wallabag"; }
+      ]
+      ++ lib.optional config.services.nocobase.enable {
+        name = "nocobase";
+        ensureDBOwnership = true;
+      }
+      ++ [
         {
           name = "budgetboard";
           ensureDBOwnership = true;

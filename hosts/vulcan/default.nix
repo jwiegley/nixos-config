@@ -44,6 +44,7 @@
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
+    ../../modules/users/home-manager/nocobase.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)
@@ -330,6 +331,18 @@
   # The Phase 1 templates + utility meters deploy independently of this
   # (gated GPM sensors, integration totals, weekly/monthly cycles).
   services.flume-data.enable = true;
+
+  # NocoBase low-code platform, restored 2026-08-15 for evaluation (it was
+  # removed 2026-03-14 in f40e2ac01). Everything is wired -- container, user,
+  # database, nginx vhost, blackbox probe, certificate renewal, dashboard link.
+  #
+  # OFF until its two SOPS keys exist, because sops-nix fails activation for a
+  # declared secret whose key is absent, which would break EVERY rebuild on this
+  # host rather than just this service. Add nocobase-db-password and
+  # nocobase-secrets (exact contents documented at the top of
+  # modules/containers/nocobase-quadlet.nix), then flip this to true and issue
+  # the certificate as described there.
+  services.nocobase.enable = false;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

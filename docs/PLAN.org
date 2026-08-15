@@ -1679,6 +1679,88 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
+* TODO [#C] Restore NocoBase for evaluation: wired and building, blocked on two SOPS keys
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-s6j
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 12:01]
+:MODIFIED: [2026-08-15 Sat 12:01]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+NocoBase was removed 2026-03-14 in f40e2ac01 (alongside n8n, Windows 11 and
+ntopng). Restored 2026-08-15 for evaluation, 1216 commits later, against a
+configuration that has changed substantially underneath it.
+
+NOTHING of the old deployment survived, so this is a fresh install rather than a
+state restore. Verified: no PostgreSQL role or database named nocobase, no
+/var/lib/nocobase, no /var/lib/containers/nocobase, no nocobase user or group, no
+certificate, no image in any store.
+
+BLOCKED ON SOPS -- the one thing I cannot do. f40e2ac01's own message says "SOPS
+secrets must be cleaned up manually", and they were: secrets/secrets.yaml
+contains no key matching nocobase (checked by key name only; never decrypted).
+sops-nix fails activation for a declared secret whose key is absent, which would
+break EVERY rebuild on this host rather than just this service. So the whole
+thing is gated behind services.nocobase.enable, which is false.
+
+To enable, John needs to add two keys with `sops /etc/nixos/secrets/secrets.yaml`:
+
+  nocobase-db-password: <password for the PostgreSQL role "nocobase">
+
+  nocobase-secrets: |        # env file, one KEY=VALUE per line
+    APP_KEY=<random, openssl rand -hex 32>
+    ENCRYPTION_FIELD_KEY=<random, openssl rand -hex 32>
+    DB_PASSWORD=<SAME value as nocobase-db-password>
+    INIT_ROOT_EMAIL=<first-run admin email>
+    INIT_ROOT_PASSWORD=<first-run admin password>
+
+then set services.nocobase.enable = true in hosts/vulcan/default.nix and rebuild.
+The certificate provisions itself -- nocobase.vulcan.lan is already in
+certs/renew-nginx-certs.sh, which creates as well as renews.
+
+WHAT CHANGED SINCE 2026-03, i.e. why this is not a revert:
+
+,  * DB_HOST is now 10.88.0.1, not 127.0.0.1. The original set POSTGRES_HOST,
+    which NocoBase does not read at all (it uses DB_*). 10.88.0.1 is the pinned
+    podman bridge address that avoids the 2026-07-03 boot race documented in
+    modules/containers/quadlet.nix.
+,  * ExecStartPre polls for PostgreSQL instead of a single pg_isready -t 30.
+,  * The alert file was NOT restored. 4 of its 7 rules were dead or would be:
+    three keyed on systemd_unit_state (0 series here; it is node_systemd_unit_state,
+    which sees only SYSTEM units, so a rootless container unit is invisible to it),
+    and one watched a mountpoint "/var/lib/nocobase" that is a directory on /, so
+    it never had a series. Coverage is now automatic instead: container-health-exporter
+    derives its targets from config.home-manager.users, so the generic ContainerDown /
+    ContainerUnhealthy / ContainerRestarting / ContainerCPUSaturated /
+    ContainerImageOutdated rules apply. Verified by evaluation that "nocobase"
+    lands in that derived list. wallabag, the closest analogue, has no per-service
+    alert file either.
+,  * No timers.nix edit. rootlessContainerUsers is derived now; the hand-maintained
+    list that used to drift is gone.
+,  * No L+ tmpfiles symlink -- container-users-dedicated.nix explicitly forbids
+    them, mandating a sops path= override, which is what this uses.
+,  * No Nagios block; Nagios was retired 2026-07-31.
+,  * secrets-migration.nix no longer exists; the container-db shared-secret grouping
+    went with the shared container users.
+
+The container user is declared in modules/containers/nocobase-quadlet.nix rather
+than alongside the others, because it must be gated and a lib.mkIf nested inside
+container-users-dedicated.nix's single literal users = { ... } attrset is not a
+definition boundary.
+
+VERIFIED both ways by evaluation before any switch: with enable=true the user,
+home-manager user, nginx vhost, both sops secrets, container image, blackbox
+target, ensureDatabases and ensureUsers entries all materialise; with enable=false
+they are all absent.
+#+end_example
+
 * TODO [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

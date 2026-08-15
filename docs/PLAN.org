@@ -1022,14 +1022,14 @@ blocked by this same fault, not by a missing device entry.
 Remaining: 1 file (2751 bytes) still converging, JumpDesktop/Viewer/Servers/...,
 with 0 pull errors.
 
-* TODO [#D] Outdoor plug WiFi flapping: device works, but 11pm turn-off is 5->11 min late
+* TODO [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2u
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-14 Fri 12:51]
+:MODIFIED: [2026-08-14 Fri 20:44]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1050,115 +1050,43 @@ Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
 ** Notes
 
-#+begin_example
-2026-08-13 -- reframed after John confirmed "the lights come on every evening,
-so the switch is working fine". The DEVICE is fine; this is a telemetry fault
-with a small but growing functional tail.
+2026-08-14 20:40 -- THIRD OBSERVED SYMPTOM: failed service calls in Node-RED.
+John reported this repeating:
 
-WHAT THE DATA SAYS
+    HomeAssistantError: src/protocols/secure_channel/CASESession.cpp:594:
+    CHIP Error 0x00000032: Timeout
+    source: {id: 93dd1999f70f45c5-3bcb451b88c7cc7a, type: api-call-service,
+             name: "Perform Action"}
 
-Onset is a sharp step, not a drift -- daily `unavailable` counts for
-switch.smart_outdoor_plug_switch_1:
-    07-31..08-09   1-5 per day
-    08-10          10
-    08-11         133
-    08-12         109
-    08-13         132
-Roughly 30x, beginning 08-10/08-11.
+Traced it: the composite id is <flow>-<node>. 93dd1999f70f45c5 is a subflow
+INSTANCE named "Turn on Patio Lights" on the Home tab; 3bcb451b88c7cc7a is the
+api-call-service inside subflow 862be551b633e122, calling switch.turn_on. That
+instance's env sets EntityID = switch.smart_outdoor_plug_switch_2 -- this very
+plug. Same subflow also drives "Turn off Patio Lights"; the Outdoor Lights pair
+inherit their entity.
 
-The timing is RANDOM, not periodic. Gaps between consecutive dropouts over 48h:
-    2.7-9.9 min  151
-    10-19 min     53
-    20-29 min     22
-    30-37 min      9
-    40-44 min      3
-    55 min         1
-    291 min        1
-That smooth exponential decay is a memoryless/Poisson process. A DHCP lease, a
-polling cycle or any scheduled event would spike at a fixed interval instead.
-This is link-layer/RF flakiness, NOT a lease or a timer.
+So it is the SAME root cause reaching the automation layer, not a new fault:
+link drops -> matter-server cannot establish a CASE session -> switch.turn_on
+times out -> the Node-RED node throws.
 
-Outages are short and self-recovering: avg 55.9s, min 4.8s, max 456.5s, n=241
-over 48h. That is ~8% of the day spent unavailable.
+IT IS ALREADY SELF-HEALING. Subflow 862be551b633e122 contains exactly the
+act-until-observed machinery: chronos-repeat, an api-current-state "Check State",
+and a catch node named "catch Matter timeout -> sto[p]" -- written specifically
+for this error. The recorder confirms the outcome: the plug was off through
+19:16 and came on at 20:00, with repeats at 20:03, 20:08 and 20:11. No light
+failed.
 
-NO SIGNAL TELEMETRY EXISTS for this device. It exposes only the two switch
-entities -- no RSSI, unlike every other smart plug here
-(sensor.smart_plug_*_signal_level). So signal quality cannot be read from HA and
-must come from the AP/controller side.
+INSTRUMENT NOTE for future cycles: `journalctl -u node-red` shows ZERO
+CASESession errors. That is not evidence of absence -- Node-RED surfaces node
+errors to the debug sidebar and to catch nodes, not to the journal, unless a
+catch node explicitly forwards them. Use the debug pane or a catch node, not the
+journal, to count these.
 
-FUNCTIONAL IMPACT -- real, small, and growing
-
-Two automations use the plug as `condition: state`. The one that matters is
-"Turn off outside lights at 11pm" (id 1777493677003). Its first action is
-DISABLED (enabled: false), so the only thing that turns the lights off is:
-
-    - repeat:
-        until:  [ condition: state, entity_id: ...switch_1, state: 'off' ]
-        sequence: [ action: switch.turn_off, target: ...switch_1 ]
-
-`unavailable` is not `'off'`, so during a dropout the until-condition cannot be
-satisfied and the loop retries. It works -- but it is late, and getting later:
-    08-10  lights off at 23:04:54   (+4m54s)
-    08-11  lights off at 23:07:00   (+7m00s)
-    08-12  lights off at 23:11:01   (+11m01s)
-The retry has no count limit and no delay in its sequence, so during a dropout
-it spins as fast as HA will let it. No HA warnings have been logged in 7 days,
-so it is not yet causing visible harm, but the trend is the wrong direction and
-the longest observed dropout (456s) is approaching the delays being seen.
-
-PRIORITY: P1 is too high now that the device is confirmed working. Suggest P3.
-Nothing here is urgent; the lights work, just late.
-
-WHAT THE "PHYSICAL/WIFI CHECK" ACTUALLY MEANS -- concrete list for John:
-  1. From the AP/controller (NOT from HA -- there is no RSSI entity): find this
-     client and read signal dBm, band, which AP it is associated with, and any
-     retry/deauth counters.
-  2. Confirm the band. These plugs are typically 2.4 GHz only; band steering or
-     a min-RSSI/roaming setting that changed can produce exactly this pattern.
-  3. Identify what changed on 08-10/08-11. The step is far too sharp to be
-     gradual degradation. Candidates: AP firmware or auto-channel change, a new
-     2.4 GHz interference source, something physically moved between the plug
-     and the AP, or an enclosure/weather change (it is outdoors).
-  4. 2.4 GHz congestion: scan for a neighbouring AP that moved onto the channel.
-  5. Physical: moisture/heat in the outdoor enclosure, and distance/obstructions.
-
-The matter-server restart at 08-10 15:18 was noted earlier as the onset
-correlate. Treat that as coincidence unless the AP side comes back clean -- a
-service restart does not change RF conditions, and the observed signature is
-unambiguously RF/link, not application-level.
-
-2026-08-14 12:50 -- MatterNodeSessionFailures has STOPPED FIRING. This does NOT
-mean the issue is resolved, and the distinction matters for future cycles.
-
-Verified the instrument first, because a silent Loki rule looks identical to a
-fixed problem: loki.service active and /ready, 28 matter-server lines ingested in
-the last hour, and the rule itself reports state=inactive with health=ok. So the
-rule is evaluating and simply not crossing its threshold.
-
-CASE/session failures per hour over the preceding six hours:
-    5h ago  41   <- over the >20/hr threshold
-    4h ago  31   <-
-    3h ago  29   <-
-    2h ago  31   <-
-    1h ago   9
-    now      3
-A genuine decline, crossing below the threshold about two hours ago.
-
-But the plug is STILL FLAPPING. HA's recorder -- an entirely independent source
-from Loki -- shows 15 unavailable transitions per 4h for each of
-switch.smart_outdoor_plug_switch_1/2, about 90/day. That is down from the
-~117/day peak but nowhere near the 2-5/day baseline this issue was opened
-against.
-
-So the alert under-detects: it keys on matter-server's CASE-failure log rate,
-while the user-visible symptom is entity availability. The two track each other
-loosely and the alert goes quiet well before the flapping stops. Do not treat
-"MatterNodeSessionFailures not firing" as evidence this is fixed -- check the
-recorder query in this issue instead.
-
-Still needs the AP-side check. Nothing has been changed on the plug, the AP or
-matter-server, so the decline is external and may reverse.
-#+end_example
+CORRECTION to my earlier framing on this issue. I described the impact as
+"telemetry only, plus a late 11pm turn-off". That understated it: service calls
+are genuinely failing and being retried, so the automation layer is doing real
+work to paper over the fault. Still not urgent and still not autonomous to fix
+-- the remedy remains the AP-side signal check -- but it is more than cosmetic.
 
 * DONE [#C] pushme backs up andoria's regenerable caches — 55GB+ of HuggingFace models
 :PROPERTIES:

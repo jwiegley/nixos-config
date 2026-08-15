@@ -248,13 +248,35 @@ in
           fi
 
           ${traversalGrants}
+          # The mask is set EXPLICITLY alongside every named entry, and must
+          # stay that way.
+          #
+          # chmod rewrites a directory's ACL mask. `chmod ${folder.mode}` above
+          # sets mask::--- , which silently reduces every named entry to
+          # "#effective:---" while leaving it visibly present in getfacl output.
+          # The grant still looks correct and does nothing. Without -m m::rwx
+          # here, any later chmod -- a re-run of this script, an install -d, a
+          # manual tidy-up -- re-breaks access and the folder fails with
+          # "stat <path>/.stfolder: permission denied".
+          #
+          # Observed on /tank/Documents: this service reported success on
+          # 2026-08-08 18:47 and the folder went to state=error at 19:37 the
+          # same evening, then sat there for six days with 642 files and 1.74 GB
+          # unpulled from hera. 453 pull errors accumulated, all of the form
+          # "mkdir ...: permission denied". Restoring the mask alone fixed it.
+          #
+          # Setting the mask grants nothing new: it only re-enables the u:
+          # entries named on the same line. group:: and other:: are untouched,
+          # verified by confirming nobody and postgres remain denied afterwards.
           setfacl -R \
             -m u:syncthing:rwX \
             -m u:johnw:rwX \
+            -m m::rwX \
             ${path}
           find ${path} -type d -exec setfacl \
             -m d:u:syncthing:rwX \
             -m d:u:johnw:rwX \
+            -m d:m::rwx \
             {} +
         ''
       ) folderList;

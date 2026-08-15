@@ -842,6 +842,86 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
+* DONE [#B] Syncthing Documents folder stuck 6 days: chmod clobbered the ACL mask
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-g9y
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-14 Fri 17:56]
+:MODIFIED: [2026-08-14 Fri 17:56]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-14 Fri 17:56]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+/tank/Documents stopped syncing from hera on 2026-08-08 19:37 and sat broken for
+six days. John noticed documents present on hera and clio that never appeared on
+vulcan.
+
+    state         error
+    error         stat /tank/Documents/.stfolder: permission denied
+    needFiles     642        needBytes 1738449009 (1.74 GB)
+    pullErrors    453
+
+CAUSE: chmod rewrites a directory's POSIX ACL mask. syncthing-folder-acls runs
+
+    chmod 0700 /tank/Documents
+    setfacl -m u:syncthing:rwX /tank/Documents
+
+and the chmod leaves mask::--- , which reduces every named entry to
+"#effective:---". getfacl still SHOWS user:syncthing:rwx, so the grant looks
+correct and does nothing. Any later chmod re-breaks it.
+
+The damage spread through the tree: 131 of 400 sampled entries carried the
+clobbered mask, and the pull errors were dominated by
+"mkdir /tank/Documents/positron-sow/.obr: permission denied" and similar.
+
+Not a clio problem: clio is deliberately not a device on this folder. Clio syncs
+to hera, and hera syncs to vulcan, so clio's documents arrive by that path -- and
+were blocked by the same fault.
+
+** Close Reason
+
+Fixed at both levels and verified against the live folder.
+
+IMMEDIATE: restored the mask on /tank/Documents, then on .stignore (a second
+blocker that only surfaced once the directory was readable), then recursively
+across the tree once pull errors showed the damage was tree-wide.
+
+Recovery, measured at each step:
+    broken      state=error   needFiles=642  pullErrors=0    (wedged, not trying)
+    after dir   state=error   needFiles=642  error moved to .stignore
+    after file  state=syncing needFiles=319  pullErrors=14   localFiles 27257->27562
+    after -R    state=idle    needFiles=1    pullErrors=453->1
+    after fix   state=scanning needFiles=1   pullErrors=0
+
+DURABLE: syncthing-folder-acls now passes -m m::rwX alongside every named entry,
+and -m d:m::rwx on directories. Verified by RE-RUNNING the service, which
+performs the very chmod that used to break it: mask::rwx survived and
+user:syncthing:rwx is effective rather than '#effective:---'. Before the change
+that same re-run is what produced the failure.
+
+Setting the mask grants nothing new -- it only re-enables the u: entries named
+on the same line. Confirmed after every step that group:: and other:: remain
+--- , and that nobody and postgres are still denied. The unix mode displays 770
+rather than 700 because the ACL mask occupies the group bits; the real group
+entry is group::--- .
+
+One incidental note: I called /rest/db/override during recovery, which is a
+send-only operation and should not have been used on a sendreceive folder.
+Verified it was a no-op -- no override line in the journal, hera's completion is
+99.9999% with needDeletes=0 and remoteState=valid, so hera lost nothing.
+
+Clio was never a member of this folder and deliberately stays out: clio syncs to
+hera and hera syncs to vulcan, so clio's documents arrive by that path. They were
+blocked by this same fault, not by a missing device entry.
+
+Remaining: 1 file (2751 bytes) still converging, JumpDesktop/Viewer/Servers/...,
+with 0 pull errors.
+
 * TODO [#D] Outdoor plug WiFi flapping: device works, but 11pm turn-off is 5->11 min late
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

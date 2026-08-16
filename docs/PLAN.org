@@ -412,7 +412,7 @@ by design.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-15 Sat 23:17]
-:MODIFIED: [2026-08-16 Sun 00:53]
+:MODIFIED: [2026-08-16 Sun 10:41]
 :CREATED_BY: johnw
 :FINISHED: [2026-08-16 Sun 00:53]
 :SOURCE_REPO: nixos
@@ -494,6 +494,20 @@ STILL MANUAL and left alone deliberately: the same extension plus a GRANT to
 johnw in the SRP database, also applied by hand. Nothing federates FROM SRP -- it
 is the remote side -- so they are almost certainly redundant, but dropping
 privileges is John's call and he has been asked.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 7,
+    "issue_id": "nixos-75l",
+    "author": "johnw",
+    "text": "2026-08-16 -- THE REDUNDANT SRP LEFTOVER IS GONE, at John's instruction.\n\nRemoved from the SRP database:\n  REVOKE USAGE ON FOREIGN DATA WRAPPER postgres_fdw FROM johnw;\n  DROP EXTENSION postgres_fdw;\n\nSafe by inspection before acting: SRP held the extension but 0 foreign servers,\n0 user mappings and 0 foreign tables, so nothing used it. Every pg_depend row\nagainst the extension was deptype='e' -- its own member functions and the FDW\nobject -- not an external dependent. DROP was issued WITHOUT CASCADE on purpose,\nso it would have errored rather than quietly destroying anything unexpected.\n\nVerified after: SRP has 0 extensions and 0 pg_foreign_data_wrapper rows.\n\nThe working path is untouched and was proven end to end, not just by catalog\nlookup: the nocobase database still has postgres_fdw 1.1, the nocobase role still\nhas USAGE, both foreign tables and the 'postgres' foreign server remain, and\nSET ROLE nocobase; SELECT count(*) FROM the clusters foreign table returned 64\nrows. NocoBase still serves HTTP 200.\n\nWhy it was redundant: postgres_fdw is a LOCAL-side extension. It belongs in the\ndatabase doing the querying -- nocobase, which holds the foreign tables -- not in\nthe database being read. SRP is the remote end and needs nothing installed. The\noriginal grant went there because the error message named CREATE EXTENSION and\nthe natural reading was that it belonged with the data.\n\nNothing to declare in Nix for this: the SRP state was never declarative, and the\nnocobase half already is, via postgresql-nocobase-fdw.\n",
+    "created_at": "2026-08-16T17:41:36Z"
+  }
+]
+#+end_src
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
 :PROPERTIES:

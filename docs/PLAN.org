@@ -2,15 +2,16 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
-* TODO [#D] PostgreSQL cache-hit dips below 85% in bursts; the rule aggregates all databases so one busy DB masks which
+* DONE [#D] PostgreSQL cache-hit dips below 85% in bursts; the rule aggregates all databases so one busy DB masks which
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-06u
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 09:07]
-:MODIFIED: [2026-08-15 Sat 09:07]
+:MODIFIED: [2026-08-15 Sat 23:15]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 23:15]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -53,6 +54,43 @@ off<->unavailable ~117x/day, and every flap writes recorder rows.
 Not acted on. Tuning PostgreSQL memory and changing an alert's shape are both
 choices with real alternatives, so they want a decision rather than an autonomous
 edit.
+
+** Close Reason
+
+BOTH HALVES DONE, per John's choice.
+
+1. THE RULE IS NOW PER-DATABASE. PostgreSQLCacheHitLow summed over every database,
+   producing one cluster-wide number that no individual database experienced:
+   measured live at 81-82% for two hours while hass alone sat at 63% reading ~208
+   blocks/s from disk and eleven other databases were at 96-100%. It named no
+   culprit. It now groups by (datname) and the annotation reports which database
+   is degraded.
+
+   A BUG I INTRODUCED AND CAUGHT BEFORE COMMITTING: the first version wrapped the
+   denominator in clamp_min(..., 1) to avoid NaN, which turns a database doing NO
+   I/O into 0/1 = 0% -- comfortably under 0.85. template0 fired on the very first
+   live test. The bare division is correct instead: 0/0 is NaN and NaN comparisons
+   are false, so idle databases drop out by themselves. A '> 1 block/s' gate then
+   excludes the near-idle case, sized against live traffic (hass 81 blocks/s,
+   postgres 113 blocks/s, template0 exactly 0).
+
+   Verified after switching: promtool 19 rules SUCCESS, the rule is loaded with
+   by (datname), and 0 series are firing.
+
+2. MEMORY RAISED. shared_buffers 2GB -> 8GB, effective_cache_size 4GB -> 24GB on a
+   62GB host. hass is 2.6GB with a 1.2GB states table and 3.6M live tuples, so its
+   hot set alone was a large fraction of a 2GB pool shared with ~26 databases.
+
+   Both are LIVE, verified with SHOW: shared_buffers=8GB, effective_cache_size=24GB,
+   and pg_settings reports 0 rows pending_restart.
+
+   CORRECTION recorded in the module: I had commented that shared_buffers would not
+   take effect until an explicit restart, because a switch only reloads PostgreSQL.
+   That was wrong for this setting -- the switch DID restart postgresql.service (new
+   MainPID, ActiveEnterTimestamp moved), so the value went live immediately and the
+   ~26 databases plus dependents were bounced as part of a routine switch. The
+   comment now says so, and warns that any future edit to this setting belongs in a
+   planned window.
 
 * DONE [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
 :PROPERTIES:
@@ -366,6 +404,59 @@ EXPECTED and benign. Do not re-investigate. The qemu-user and python3.14 cores
 alongside them are nix build-sandbox crashes, correctly excluded from alerting
 by design.
 #+end_example
+
+* TODO [#D] postgres_fdw extension and GRANT for NocoBase exist only in the live database, not in Nix
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-75l
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-15 Sat 23:17]
+:MODIFIED: [2026-08-15 Sat 23:17]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+NocoBase's foreign-data-wrapper setup was applied by hand and exists only in the
+running database. A rebuilt or restored nocobase database loses it silently, and
+NocoBase then fails with "permission denied to create extension postgres_fdw"
+again.
+
+Applied 2026-08-16, NOT in any Nix module:
+
+  \c nocobase
+  CREATE EXTENSION postgres_fdw;                              -- superuser only
+  GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO nocobase;
+
+Why it was needed: postgres_fdw is not a trusted extension
+(pg_available_extension_versions: trusted=f, superuser=t), so the unprivileged
+nocobase role cannot create it. NocoBase issues
+`CREATE EXTENSION IF NOT EXISTS postgres_fdw;` as nocobase@nocobase on every
+external-data-source attempt.
+
+Verified working: SET ROLE nocobase then CREATE SERVER ... FOREIGN DATA WRAPPER
+postgres_fdw succeeded and was dropped again.
+
+ALSO APPLIED BY HAND AND LIKELY REDUNDANT: the same extension plus a GRANT to
+johnw in the SRP database. Nothing federates FROM SRP -- it is the remote side --
+so those can probably be dropped. Confirm with John before removing.
+
+OPTIONS:
+  a) Declare it in the nocobase module, e.g. a postgresql-nocobase-fdw oneshot
+     ordered after postgresql-setup.service, running the two statements
+     idempotently (CREATE EXTENSION IF NOT EXISTS is already idempotent; GRANT is
+     naturally idempotent).
+  b) Fold it into services.postgresql.ensureDatabases-adjacent setup if a
+     suitable hook exists.
+  c) Leave manual and document it.
+
+(a) matches how every other privileged database step here is done
+(mkPostgresUserSetup). Worth noting the security shape either way: USAGE on the
+FDW lets the grantee make the PostgreSQL server process open outbound
+connections and authenticate as whatever a user mapping stores, and mapping
+passwords live in pg_user_mapping readable by the mapping owner.
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
 :PROPERTIES:
@@ -826,15 +917,16 @@ Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
-* TODO [#D] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
+* DONE [#D] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-czc
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 11:32]
-:MODIFIED: [2026-08-15 Sat 16:48]
+:MODIFIED: [2026-08-15 Sat 23:15]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 23:15]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -892,6 +984,38 @@ wants a decision rather than an autonomous edit.
 Worth noting either way: the two known inputs are now declared and the system
 builds, so this is prevention, not an outage.
 #+end_example
+
+** Close Reason
+
+IMPLEMENTED in the direction John chose: inputSet // inputs (gaps only, vulcan wins collisions).
+
+modules/users/home-manager/default.nix now passes
+  inputs = inputs.nix-config-ai.lib.inputSet // inputs;
+to extraSpecialArgs, mirroring what nix-config itself does for consumers that
+take it as a real flake (rootInputs // portableInputs) -- which vulcan does not
+get, because it consumes nix-config with flake = false so that outputs function
+never runs.
+
+DIRECTION VERIFIED, not assumed. Evaluated the merged set live:
+  merged has rust-overlay = YES   (in the portable set, not a vulcan root input)
+  merged has git-ai       = YES
+  merged.nixpkgs == vulcan nixpkgs = YES
+  35 keys total
+That last line is the point of inverting upstream's ordering: nix-config-ai's
+inputSet carries its own nixpkgs tracking nixpkgs-unstable, and upstream's
+rootInputs // portableInputs would let it shadow this host's 25.11 pin. With
+inputSet // inputs the portable entries only fill gaps.
+
+Built and switched: the configuration evaluates and the running system is
+2c0n24wgzcq5fy0ksjwgsfscyh1bnbbc, confirmed by nix derivation show to be the
+realisation of the committed tree. 0 failed units afterwards.
+
+Scope note recorded earlier on this issue and unchanged: this is PREVENTION, not
+repair. Measured exposure is that only 'obr' carries an assertion in the shared
+config and it was already declared, so nothing was broken at the time of the fix.
+What it buys is that the next input nix-config starts requiring arrives
+automatically rather than taking the host down first -- which is exactly how
+rust-overlay behaved on 2026-08-15 (nixos-sil).
 
 ** Comments
 
@@ -1338,15 +1462,16 @@ work to paper over the fault. Still not urgent and still not autonomous to fix
 ]
 #+end_src
 
-* TODO [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
+* DONE [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-k2g
 :LABELS:   []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-15 Sat 00:45]
-:MODIFIED: [2026-08-15 Sat 04:45]
+:MODIFIED: [2026-08-15 Sat 23:18]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 23:17]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1472,6 +1597,60 @@ The middle option is still available and is probably the best value: keep
 --checksum on live roots and use --size-only for ones that cannot change, e.g.
 hera/codex-cli-archived. That needs a per-row column the TSV does not currently
 have, so it is real work rather than a flag flip.
+
+** Close Reason
+
+#+begin_example
+RESOLVED by dropping --checksum, per John's decision 2026-08-16. sessions commit 520713d.
+
+MEASURED BEFORE AND AFTER on the real job, not in a test harness.
+
+  before (3 runs)   49m45s / 50m22s / 62m15s, ~125 GB read each
+  after  (1 run)     2m30s,                     1.77 GB read
+
+That is ~25x faster and ~71x less disk I/O, and the before-runs had already
+established the cost did NOT decay: the third was timer-fired with nothing
+changed on any source and still took 62m15s. The saving is paid on vulcan AND on
+every source, including a VPS over the public internet and a laptop that travels.
+
+CORRECTNESS PRESERVED, verified rather than assumed:
+  - 27 rows gathered, 8 skipped (hosts offline), 0 failed -- identical shape to
+    every previous run
+  - 27 destination pairs, unchanged
+  - the archive GREW: 122,191 -> 122,855 files, 121G -> 124G used, 482G -> 490G
+    apparent. So it is still transferring changes, not silently skipping
+    everything, which is the failure mode that would make a fast run meaningless
+
+ACCEPTED LIMITATION, pinned in the test suite rather than dropped: a file
+rewritten in place with BOTH size and mtime preserved is no longer detected. The
+same-stat regression test is INVERTED to assert exactly that, so the limitation
+stays provable and re-adding --checksum fails loudly with an explanation.
+Session transcripts are overwhelmingly append-only and an append changes size, so
+the missed case is narrow.
+
+TWO LATENT TEST BUGS FIXED as a side effect. Both fake rsync stubs addressed
+argv POSITIONALLY -- one tested , the other logged "$5"
+as the source operand. Removing one flag shifted the operand from $5 to $4, so
+the badhost transfer stopped failing and the relative-path assertion compared
+against the destination. Neither failure pointed anywhere near the real change.
+Both now log full argv and address the source as the penultimate argument.
+
+Full suite passes (exit 0, 'all tests passed').
+#+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 5,
+    "issue_id": "nixos-k2g",
+    "author": "johnw",
+    "text": "CORRECTION to the close reason above. One sentence lost its content: it contained\na backticked shell expression, which bash executed as command substitution before\nobr ever saw the text. The mangled line reads \"one tested , the other logged\" --\nit should read:\n\n  Both fake rsync stubs addressed argv POSITIONALLY -- one tested\n  [[ $5 != badhost:* ]] to decide which transfer should fail, and the other\n  logged \"$5\" as the source operand. Dropping a single flag shifted the source\n  operand from $5 to $4, so the badhost transfer silently stopped failing and\n  the relative-path assertion began comparing against the destination instead of\n  the source.\n\nThis is the same mistake recorded on nixos-ep6 (2026-08-15): shell metacharacters\nin an --reason argument are expanded by the shell, not passed through. The fix is\nto pass prose via --description-file / a comment file, which is how this\ncorrection is being written.\n",
+    "created_at": "2026-08-16T06:18:09Z"
+  }
+]
+#+end_src
 
 * DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:
@@ -1634,15 +1813,16 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
-* TODO [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
+* DONE [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-mwl
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-15 Sat 00:44]
+:MODIFIED: [2026-08-15 Sat 23:16]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 23:16]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1680,6 +1860,49 @@ So this is one transient-Gmail-timeout class affecting 2 of 4 accounts at a
 combined ~9 failures/10 days, not a per-account fault. John's standing decision
 to leave it alone is unchanged; recorded only so a future cycle does not open a
 duplicate issue when bia surfaces.
+
+** Close Reason
+
+RETUNED, per John's choice on 2026-08-16 (reversing his 2026-08-11 leave-it-alone).
+
+THE ORIGINAL DIAGNOSIS IN THIS ISSUE WAS RIGHT AND MY FIRST INSTINCT WAS WRONG.
+I was about to retune the three Mbsync* alert rules. Measured first: all three
+(MbsyncNotRunRecently, MbsyncLastSyncFailed, MbsyncRepeatedFailures) have fired
+ZERO times in 14 days. Worst sustained failure is 30 minutes per hour for rbcca
+and 15 for bia, never reaching MbsyncRepeatedFailures' 1h clause. Retuning them
+would have changed rules that never fire.
+
+The pages come from the GENERIC SystemdServiceFailed rule seeing the unit sit in
+'failed' between 15-minute ticks -- exactly as this issue said. Quantified over
+14 days:
+    mbsync-rbcca.service   254 critical firing samples
+    mbsync-bia.service     109 critical firing samples
+
+FIX: retry IN-PROCESS, inside the ExecStart script -- 3 attempts, 60s apart --
+so a transient Gmail socket timeout never reaches systemd as a failure at all.
+A PERSISTENT failure still exhausts the attempts and fails the unit, so the
+detector keeps its meaning; this removes false pages, not coverage.
+
+Retrying in the script rather than via systemd was deliberate, and it sidesteps
+both traps this issue documented. Restart = "no" in mkMbsyncModule.nix is
+load-bearing (its own comment: restarting blocks nixos-rebuild); 'Restart' in
+extraServiceConfig fails Nix evaluation while the base is a plain assignment; and
+StartLimitBurst/StartLimitIntervalSec are [Unit] options extraServiceConfig
+cannot carry. None of that has to change.
+
+Bounded against the surrounding timings: worst case adds ~2 minutes against a
+30min TimeoutStartSec and a 15min timer, and if a retry run overruns the next
+tick the existing lock file makes that tick exit 0 rather than pile up.
+
+Verified deployed: the ExecStart script
+/nix/store/8rmpq37ya0ybmvf5yicgw6j5yk9sv3bf-mbsync-rbcca contains the retry loop
+('for attempt in 1 2 3'), reached via the built unit. All four mbsync units are
+currently Result=success.
+
+Note for the next cycle: mbsync is NOT the worst SystemdServiceFailed offender.
+pushme-positron.service logged 1955 firing samples over the same 14 days, with
+hermes-fallback-counter at 669, logwatch at 644 and git-workspace-archive at 400.
+Filed separately.
 
 * DONE [#D] Textfile staleness guard has no coverage backstop: unclassified collectors freeze unnoticed
 :PROPERTIES:
@@ -1832,15 +2055,16 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#C] Restore NocoBase for evaluation: wired and building, blocked on two SOPS keys
+* DONE [#C] Restore NocoBase for evaluation: wired and building, blocked on two SOPS keys
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-s6j
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 12:01]
-:MODIFIED: [2026-08-15 Sat 12:01]
+:MODIFIED: [2026-08-15 Sat 23:15]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-15 Sat 23:15]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1912,6 +2136,46 @@ VERIFIED both ways by evaluation before any switch: with enable=true the user,
 home-manager user, nginx vhost, both sops secrets, container image, blackbox
 target, ensureDatabases and ensureUsers entries all materialise; with enable=false
 they are all absent.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+DEPLOYED AND SERVING. John added the two SOPS keys 2026-08-16; I enabled services.nocobase.enable, rebuilt, and verified end to end.
+
+Live evidence:
+  - container 'nocobase' Up, image docker.io/nocobase/nocobase:latest
+  - direct http://127.0.0.1:13000/ -> HTTP 200
+  - through nginx https://nocobase.vulcan.lan/ -> HTTP 200 WITH and WITHOUT SNI
+    (no-SNI tested deliberately; an SNI-only check once missed 6 vhost breakages)
+  - cert served is the one issued: CN=nocobase.vulcan.lan, notAfter Aug 16 2027
+  - first-boot migrations ran: 103 tables in the nocobase database
+  - secrets land correctly: /run/secrets-nocobase/nocobase-secrets is a symlink
+    (mode 777 is normal for a symlink) to a 400 nocobase:nocobase regular file in
+    a 750 dir, carrying all five expected keys
+  - monitoring is automatic, as designed: container_running{name=nocobase}=1 and
+    container_health_status present, because container-health-exporter derives
+    its targets from config.home-manager.users and nocobase now appears in that
+    derived list
+
+TWO DEFECTS SURFACED AND WERE FIXED ALONG THE WAY:
+
+1. postgresql-nocobase-setup.service failed with 'role "nocobase" does not
+   exist', failing switch-to-configuration with exit 4. Cause: mkPostgresUserSetup
+   ordered only after postgresql.service, but ensureUsers/ensureDatabases are
+   applied by postgresql-setup.service. The race was LATENT FOR EVERY consumer of
+   that helper -- they only worked because their roles already existed from an
+   earlier boot. Fixed by ordering after/wants postgresql-setup.service; verified
+   the deployed unit now lists both.
+
+2. The quadlet generator had not run when the switch reached the user manager, so
+   nocobase.service was loaded=bad. A user daemon-reload cleared it and the
+   container started. Filed separately as it may recur on boot.
+
+The certificate had to be issued by hand: nocobase.vulcan.lan is in
+certs/renew-nginx-certs.sh, but that timer is monthly and next due 2026-09-01, so
+nginx would have refused to start referencing a missing cert. Issued with the
+documented script at 644/600 nginx:nginx.
 #+end_example
 
 * DONE [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
@@ -2578,6 +2842,45 @@ MONITORING LAG WORTH REMEMBERING, and the reason the alert outlived the fault by
 So the total worst-case lag between a real recovery and the alert clearing is up to 8h (the mirror interval, before it even retries) plus up to 1h (the exporter interval). For a single transient that means an alert can stay lit most of a day with nothing wrong. Worth knowing before treating a firing GiteaPushMirrorFailing as current.
 #+end_example
 
+* TODO [#C] SystemdServiceFailed noise census: pushme-positron 1955 critical samples in 14d, 5x the mbsync case
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-xzc
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-15 Sat 23:17]
+:MODIFIED: [2026-08-15 Sat 23:17]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+While quantifying the mbsync pages (nixos-mwl) I ranked every unit tripping the
+generic SystemdServiceFailed rule over 14 days. mbsync was not close to the top:
+
+  1955 samples  pushme-positron.service
+   669 samples  hermes-fallback-counter.service
+   644 samples  logwatch.service
+   400 samples  git-workspace-archive.service
+   254 samples  mbsync-rbcca.service      <- fixed in nixos-mwl
+   109 samples  mbsync-bia.service        <- fixed in nixos-mwl
+    16 samples  container-health-exporter.service
+     6 samples  NetworkManager-wait-online.service
+
+SystemdServiceFailed is severity=critical, so pushme-positron alone accounts for
+roughly 5x the noise that nixos-mwl was filed for, and the top four together are
+~3600 of the ~4000 samples.
+
+Not investigated yet -- this is a census, not a diagnosis. Each needs its own
+look, and the right fix will differ: some of these are oneshots whose transient
+failure is genuinely uninteresting (the mbsync pattern, fixable by in-process
+retry), while others may be reporting something real that nobody is acting on.
+
+pushme-positron is worth taking first on volume alone. Note it was recently made
+restartIfChanged = false after it blocked two switches, so tread carefully around
+its unit semantics.
+
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2604,6 +2907,45 @@ Fixed for Loki by serving rules from the Nix store (commit a2685a68e), so the 07
 But no audit was done of whether any OTHER service reads from /etc/nixos at runtime and is still broken.
 Prometheus is fine (its rules are copied into the store). Find the rest.
 Also worth identifying what set 0700 in the first place, since it happened unprompted.
+
+* TODO [#E] New rootless quadlet container needs a manual user daemon-reload on its first switch
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-yfp
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-15 Sat 23:17]
+:MODIFIED: [2026-08-15 Sat 23:17]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Introducing a NEW rootless quadlet container leaves its user unit unusable until
+a manual `systemctl --user daemon-reload`, so the container does not start on the
+switch that creates it.
+
+Observed 2026-08-16 enabling NocoBase. After switch-to-configuration completed:
+
+  systemctl --user start nocobase.service
+  -> Failed to start nocobase.service: Unit nocobase.service has a bad unit file setting.
+
+The quadlet-nix stub in ~/.config/systemd/user/default.target.wants/nocobase.service
+was present (just [Install] + a config hash), and the .container file was correct
+and structurally identical to wallabag's. The podman quadlet GENERATOR had simply
+not re-run in the freshly-started user manager, so no real service existed behind
+the stub. A `systemctl --user daemon-reload` as the nocobase user cleared it
+immediately (LoadState=loaded, no LoadError) and the container then started and
+has run since.
+
+NOT a persistent defect: nocobase.service now reports is-enabled=enabled,
+is-active=active, WantedBy=default.target -- identical to wallabag and
+openproject -- so it will come up normally on boot. Low priority because it costs
+one manual command, once, only on the switch that first introduces a container.
+
+Worth fixing only if adding rootless containers becomes routine; the obvious
+approach is a daemon-reload in the home-manager activation for these users.
 
 * DONE [#D] Should office occupancy change the upstairs thermostat at all?
 :PROPERTIES:

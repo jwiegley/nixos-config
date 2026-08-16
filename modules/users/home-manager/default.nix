@@ -26,10 +26,40 @@
     ];
 
     # Pass hostname and inputs to home-manager modules so they can be used
-    # by the shared johnw.nix cross-platform module
+    # by the shared johnw.nix cross-platform module.
+    #
+    # The merge mirrors what nix-config does for its own consumers, and exists
+    # because vulcan does NOT get that for free. nix-config/flake.nix does:
+    #
+    #   portableInputs = rootInputs.nix-config-ai.lib.inputSet;
+    #   inputs         = rootInputs // portableInputs;
+    #
+    # inside its `outputs` function -- but this host consumes nix-config with
+    # `flake = false`, so that function never runs and the merge never happens.
+    # Every input the shared home-manager modules reference therefore had to be
+    # re-declared by hand here, which is exactly how a nix-config bump that
+    # started requiring `rust-overlay` made the whole host unbuildable on
+    # 2026-08-15 (nixos-sil): NOTHING could be rebuilt, and the cause was
+    # invisible from this repo because nothing here had changed.
+    #
+    # DIRECTION IS DELIBERATE and inverted from upstream's. Upstream writes
+    # `rootInputs // portableInputs`, letting the portable set WIN. That is
+    # wrong here: nix-config-ai's inputSet carries its own `nixpkgs`, which
+    # tracks nixpkgs-unstable, while this host is pinned to 25.11 -- so
+    # upstream's ordering would silently switch the channel for any module
+    # reading inputs.nixpkgs. Writing it as `inputSet // inputs` makes the
+    # portable inputs fill GAPS only and keeps vulcan's own inputs winning
+    # every collision. Verified live: the inputSet supplies 14 names, of which
+    # nixpkgs and llm-agents are also declared here and must not be shadowed.
+    #
+    # Measured exposure at the time of writing (nixos-czc): only `obr` carries
+    # an assertion in the shared config, and it is declared here, so this is
+    # prevention rather than repair. What it buys is that the NEXT input
+    # nix-config starts requiring arrives automatically instead of taking the
+    # host down first.
     extraSpecialArgs = {
       hostname = config.networking.hostName;
-      inherit inputs;
+      inputs = inputs.nix-config-ai.lib.inputSet // inputs;
     };
   };
 

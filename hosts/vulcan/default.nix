@@ -342,7 +342,7 @@
   # nocobase-secrets (exact contents documented at the top of
   # modules/containers/nocobase-quadlet.nix), then flip this to true and issue
   # the certificate as described there.
-  services.nocobase.enable = false;
+  services.nocobase.enable = true;
 
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application

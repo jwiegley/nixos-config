@@ -206,20 +206,59 @@ groups:
       # for: 1h clause therefore filters those transients and only fires on a
       # genuinely sustained working set that no longer fits shared_buffers —
       # the signal that the cache is undersized or a query is thrashing it.
+      # PER-DATABASE since 2026-08-16. It was a single global ratio, summed over
+      # every database, which made the alert unactionable in the one case it is
+      # meant to catch: measured live, the aggregate sat at 81-82% for two hours
+      # while `hass` alone was at 63% reading ~208 blocks/s from disk and ELEVEN
+      # other databases were at 96-100%. The fired number described no database
+      # that actually exists, and named none of them.
+      #
+      # `datname` is preserved by using `by (datname)` rather than a bare sum, so
+      # the annotation can identify the culprit.
+      #
+      # IDLE DATABASES MUST BE EXCLUDED, and the obvious way is wrong. A first
+      # attempt wrapped the denominator in clamp_min(..., 1), which turns a
+      # database doing NO I/O into 0/1 = 0% -- comfortably under 0.85, so
+      # template0 fired immediately on the very first live test. The bare
+      # division is correct instead: 0/0 is NaN, and every NaN comparison is
+      # false, so idle databases drop out on their own.
+      #
+      # The `> 1` block/s gate then handles the near-idle case the NaN trick does
+      # not: a database serving 2 reads and 0 hits has a real, defensible ratio of
+      # 0% that says nothing worth paging about. Sized against live traffic --
+      # hass 81 blocks/s and postgres 113 blocks/s sit far above the gate, while
+      # template0 sits at exactly 0.
+      #
+      # Threshold and `for` are UNCHANGED at 0.85 / 1h deliberately. Per-database
+      # is a strictly finer view, so a lower threshold or shorter window would
+      # change two things at once and make any new firing ambiguous. Sizing check
+      # against live data: the only database that would newly qualify is hass,
+      # and its dips ran ~2h, so this may fire where the aggregate did not -- that
+      # is the intended behaviour, since a real single-database degradation was
+      # previously invisible. Watch it for a week before tightening further.
       - alert: PostgreSQLCacheHitLow
         expr: |
-          sum(rate(pg_stat_database_blks_hit[5m]))
-            /
-          (sum(rate(pg_stat_database_blks_hit[5m])) + sum(rate(pg_stat_database_blks_read[5m])))
-            < 0.85
+          (
+            sum by (datname) (rate(pg_stat_database_blks_hit[5m]))
+              /
+            (
+              sum by (datname) (rate(pg_stat_database_blks_hit[5m]))
+                + sum by (datname) (rate(pg_stat_database_blks_read[5m]))
+            )
+          ) < 0.85
+          and
+          (
+            sum by (datname) (rate(pg_stat_database_blks_hit[5m]))
+              + sum by (datname) (rate(pg_stat_database_blks_read[5m]))
+          ) > 1
         for: 1h
         labels:
           severity: warning
           category: database
           service: postgresql
         annotations:
-          summary: "PostgreSQL buffer-cache hit ratio low"
-          description: "Cluster-wide buffer-cache hit ratio is {{ $value | humanizePercentage }} (rate-based 5m, sustained 1h; steady state ~99%). The active working set no longer fits shared_buffers — expect elevated disk reads. Check for a new heavy scan/query or an undersized shared_buffers."
+          summary: "PostgreSQL buffer-cache hit ratio low for {{ $labels.datname }}"
+          description: "Buffer-cache hit ratio for database {{ $labels.datname }} is {{ $value | humanizePercentage }} (rate-based 5m, sustained 1h; steady state across this cluster is ~99%). That database's active working set no longer fits shared_buffers, so it is reading from disk. This alert is PER-DATABASE as of 2026-08-16 — it previously reported one cluster-wide number that no individual database experienced, so a single degraded database was invisible. Check that database for a new heavy scan or query before assuming shared_buffers is undersized; hass is the known candidate here (its states table alone is ~1.2 GB)."
 
       # Surprise database growth. Largest non-excluded DB is mailarchiver at
       # ~7.3 GiB; 20 GiB leaves ample headroom so this fires on UNEXPECTED growth

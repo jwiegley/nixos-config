@@ -79,9 +79,40 @@ in
       settings = {
         port = 5432;
 
-        # Memory settings - system has 62GB RAM; larger shared_buffers reduces disk reads
-        shared_buffers = "2GB"; # Increased from 256MB to cache working set across all databases
-        effective_cache_size = "4GB"; # Hint to planner about total available cache
+        # Memory settings - system has 62GB RAM; larger shared_buffers reduces disk reads.
+        #
+        # Raised 2GB -> 8GB on 2026-08-16 for nixos-06u. Measured cause: the
+        # cluster's steady-state cache-hit ratio is ~99.5%, but `hass` runs at 63%
+        # reading ~208 blocks/s from disk during active periods, dragging the
+        # (then cluster-wide) alert under its 0.85 threshold for hours at a time.
+        # hass is 2.6GB with a 1.2GB `states` table and 3.6M live tuples, so its
+        # hot set alone is a large fraction of a 2GB buffer pool shared with ~26
+        # other databases totalling ~17GB. 8GB lets the working set actually sit
+        # in cache. Headroom is ample: 62GB total with ~27GB in use and ~32GB
+        # already in page cache, so this reallocates memory the kernel was
+        # caching anyway, into a pool PostgreSQL can manage directly.
+        #
+        # !!! CHANGING THIS RESTARTS POSTGRESQL ON THE NEXT SWITCH. Measured on
+        # 2026-08-16, not assumed: this edit alone caused switch-to-configuration
+        # to restart postgresql.service (new MainPID, ActiveEnterTimestamp moved),
+        # after which `SHOW shared_buffers` read 8GB and pg_settings reported 0
+        # rows with pending_restart. So the value went live immediately, and the
+        # ~26 databases plus ~33 reverse-dependent units were bounced as part of
+        # a routine switch.
+        #
+        # That contradicts the shared_preload_libraries note below, which says a
+        # switch only RELOADS. Both observations are real and they are not in
+        # conflict: a reload suffices for reloadable settings, while a change to a
+        # postmaster-level setting like shared_buffers makes NixOS restart the
+        # unit. Treat any edit to THIS setting as a planned-window action, and do
+        # not infer from the note below that it will be applied gently.
+        shared_buffers = "8GB";
+        # Planner hint only -- allocates nothing, so it takes effect on reload
+        # rather than needing the restart above. 24GB reflects what is genuinely
+        # available to PostgreSQL between its own buffers and the kernel page
+        # cache on this host; the old 4GB understated it enough to bias the
+        # planner toward sequential scans.
+        effective_cache_size = "24GB";
         work_mem = "32MB"; # Per-sort/hash, 200 connections * ~3 = ~19GB worst case
 
         # Connection settings

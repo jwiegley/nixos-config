@@ -115,7 +115,50 @@
               # Run mbsync with proper error handling
               echo "[$(date)] Starting mbsync synchronization" | tee -a "$LOG_FILE"
 
-              if ${pkgs.isync}/bin/mbsync -c "$CONFIG_FILE" -a 2>&1 | tee -a "$LOG_FILE"; then
+              # Retry transient failures IN-PROCESS rather than letting the unit
+              # enter `failed`. Gmail closes IMAP sockets under load and rbcca is
+              # the account that trips it -- 435M maildir vs bia's 3.0M -- with
+              # "Socket error on imap.gmail.com: timeout".
+              #
+              # WHY HERE and not systemd Restart=: `Restart = "no"` a few lines
+              # below is deliberate and load-bearing (its comment: restarting
+              # would block nixos-rebuild), and the two alternatives both dead-end
+              # -- `Restart` in extraServiceConfig fails Nix evaluation while the
+              # base setting is a plain assignment rather than lib.mkDefault, and
+              # StartLimitBurst/StartLimitIntervalSec are [Unit] options that
+              # extraServiceConfig cannot carry at all. Retrying inside the script
+              # sidesteps all of that and changes nothing about how systemd sees
+              # the unit until the retries are exhausted.
+              #
+              # WHY IT MATTERS: the pages were never coming from the Mbsync* rules
+              # -- all three have fired zero times in 14 days. They came from the
+              # generic SystemdServiceFailed rule seeing the unit sit in `failed`
+              # between 15-minute ticks: 254 critical firing samples for
+              # mbsync-rbcca and 109 for mbsync-bia over 14 days. A transient that
+              # self-heals on the next tick therefore paged as critical.
+              #
+              # Bounded deliberately: 3 attempts, 60s apart, so the worst case adds
+              # ~2 minutes against a 30min TimeoutStartSec and a 15min timer. If a
+              # retry run overruns the next tick, the lock file at the top of this
+              # script makes that tick exit 0 rather than pile up. A PERSISTENT
+              # failure still exhausts the attempts and fails the unit, so the
+              # alert keeps its meaning -- this removes the false pages, not the
+              # detector.
+              SYNC_RC=0
+              for attempt in 1 2 3; do
+                SYNC_RC=0
+                ${pkgs.isync}/bin/mbsync -c "$CONFIG_FILE" -a 2>&1 | tee -a "$LOG_FILE" || SYNC_RC=$?
+                if [ "$SYNC_RC" -eq 0 ]; then
+                  break
+                fi
+                if [ "$attempt" -lt 3 ]; then
+                  echo "[$(date)] attempt $attempt/3 failed (rc=$SYNC_RC), retrying in 60s" \
+                    | tee -a "$LOG_FILE"
+                  sleep 60
+                fi
+              done
+
+              if [ "$SYNC_RC" -eq 0 ]; then
                 echo "[$(date)] Synchronization completed successfully" | tee -a "$LOG_FILE"
 
                 # Update metrics for Prometheus textfile collector
@@ -132,8 +175,11 @@
                 # Clean up old logs (keep last 10)
                 ls -t /var/log/mbsync-${name}/mbsync-*.log | tail -n +11 | xargs -r rm
               else
-                EXIT_CODE=$?
-                echo "[$(date)] Synchronization failed with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
+                # $SYNC_RC, not $?: the retry loop above is the last thing that
+                # ran, so $? would be the `[` test's status, not mbsync's.
+                EXIT_CODE=$SYNC_RC
+                echo "[$(date)] Synchronization failed after 3 attempts with exit code $EXIT_CODE" \
+                  | tee -a "$LOG_FILE"
 
                 # Update failure metrics for Prometheus textfile collector
                 METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/mbsync_${name}.prom"

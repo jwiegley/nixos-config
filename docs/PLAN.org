@@ -405,15 +405,16 @@ alongside them are nix build-sandbox crashes, correctly excluded from alerting
 by design.
 #+end_example
 
-* TODO [#D] postgres_fdw extension and GRANT for NocoBase exist only in the live database, not in Nix
+* DONE [#D] postgres_fdw extension and GRANT for NocoBase exist only in the live database, not in Nix
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-75l
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-15 Sat 23:17]
-:MODIFIED: [2026-08-15 Sat 23:17]
+:MODIFIED: [2026-08-16 Sun 00:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-16 Sun 00:53]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -457,6 +458,42 @@ OPTIONS:
 FDW lets the grantee make the PostgreSQL server process open outbound
 connections and authenticate as whatever a user mapping stores, and mapping
 passwords live in pg_user_mapping readable by the mapping owner.
+
+** Close Reason
+
+DECLARED IN NIX and verified live.
+
+modules/containers/nocobase-quadlet.nix now defines postgresql-nocobase-fdw, a
+Type=oneshot that runs the two statements I had applied by hand on 2026-08-16:
+  CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+  GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO nocobase;
+Both are idempotent, so it is safe on every boot.
+
+Ordered after postgresql-setup.service as well as postgresql.service, and before/
+requiredBy postgresql-nocobase-setup.service. That ordering is load-bearing, not
+decorative: the nocobase DATABASE is created by ensureDatabases, which
+postgresql-setup applies -- connecting before it exists is the same race that made
+postgresql-nocobase-setup fail with 'role nocobase does not exist' on the first
+activation of this service.
+
+Verified after switching to 5jn2k936agw5azih00qgw5n0rq7rj83v:
+  postgresql-nocobase-fdw: ActiveState=active Result=success ExecMainStatus=0
+  After: postgresql.service, postgresql-setup.service
+  pg_extension: postgres_fdw 1.1 present in the nocobase database
+  has_foreign_data_wrapper_privilege('nocobase', ..., 'USAGE') = t
+  NocoBase still serving HTTP 200, 0 failed units
+
+Why it mattered: postgres_fdw is not a trusted extension
+(pg_available_extension_versions reports trusted=f, superuser=t), so the
+unprivileged nocobase role cannot create it and NocoBase's
+'CREATE EXTENSION IF NOT EXISTS postgres_fdw' fails with permission denied on
+every external-data-source attempt. Held only in the live database, a restore or
+rebuilt database would have lost it silently and reproduced that failure.
+
+STILL MANUAL and left alone deliberately: the same extension plus a GRANT to
+johnw in the SRP database, also applied by hand. Nothing federates FROM SRP -- it
+is the remote side -- so they are almost certainly redundant, but dropping
+privileges is John's call and he has been asked.
 
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
 :PROPERTIES:
@@ -1946,6 +1983,87 @@ VERIFIED THIS CYCLE, including the instrument itself rather than just its output
 Threshold reasoning is recorded in the rule comment: the slowest legitimate unlisted cadence is weekly, so 14 days is two consecutive missed weekly runs -- unambiguously dead rather than late -- which follows the same 'detect dead, not skipped' logic the Hourly tier already documents. The negative match means new collectors are covered the moment they appear, and adding a file to a tier above tightens it here automatically.
 #+end_example
 
+* DONE [#D] AIDE monitors the obr cache, so routine issue tracking raises AideChangesDetected
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-nox
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-16 Sun 00:52]
+:MODIFIED: [2026-08-16 Sun 00:53]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-16 Sun 00:53]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+AIDE monitors /etc/nixos/.obr, which is obr's PER-MACHINE CACHE -- a SQLite
+database plus history snapshots that obr rewrites on essentially every command.
+It self-ignores in git for exactly that reason. The result is that ordinary
+issue-tracking activity raises AideChangesDetected.
+
+Measured 2026-08-16. The 00:24 aide-check reported 12 added and 11 changed
+entries, and ALL TWELVE additions were .obr cache files:
+
+  /etc/nixos/.obr/history/PLAN.20260816_0615*.org        (6 snapshots)
+  /etc/nixos/.obr/history/PLAN.20260816_0615*.org.meta.json  (6 siblings)
+
+with .obr/obr.db, .obr/obr.db-wal, .obr/last-touched and .obr/merge.base.jsonl
+among the changed entries. Those timestamps are from a health cycle -- the very
+activity that happens several times a day.
+
+This is the same failure the module's own aide-update note warns about, arriving
+by a different route: an alert that is permanently on "is no control at all".
+The post-rebuild re-baseline cannot help, because the churn is not tied to
+rebuilds; it happens whenever obr runs. The database WAS correctly re-baselined
+at 22:46:37 by the post-rebuild hook, and aide-check at 00:24 still found
+changes, because obr had run in between.
+
+FIX: exclude it, using the same `!` negation convention the file already applies
+to .git, result and .nixos-build:
+
+    !/etc/nixos/\.obr
+
+Signal preserved, verified in the same report: the check also correctly flagged
+docs/PLAN.org and modules/services/databases.nix, which were genuine tracked
+edits. Only the cache is excluded.
+
+** Close Reason
+
+FIXED and verified end to end.
+
+Added `!/etc/nixos/\.obr` to the AIDE rule set, using the same negation convention
+the file already applies to .git, result and .nixos-build. Confirmed live in the
+generated /etc/aide.conf (line 123, inside the /etc/nixos block).
+
+The exclusion alone was not sufficient, and the intermediate state is worth
+recording: the first aide-check after the change reported 182 REMOVED entries,
+181 of them .obr paths, because the existing database still contained them and
+AIDE no longer scans them. So the alert stayed on for a NEW reason. Re-baselining
+with aide-update resolved it, and its ExecStartPost re-measures, so the published
+metric agrees with the database that now exists.
+
+Final verdict, from the published textfile:
+  aide_check_status 0
+  aide_changes_detected 0
+  aide_added_files 0
+  aide_removed_files 0
+  aide_changed_files 0
+  aide_total_entries 3468      (was 3660)
+
+And the database itself no longer contains the cache: grep -c '\.obr'
+/var/lib/aide/aide.db returns 0.
+
+Signal preserved, not traded away: the same run that exposed this also correctly
+flagged docs/PLAN.org and modules/services/databases.nix as changed -- genuine
+tracked edits. Only the per-machine cache is excluded.
+
+One observation left for later: the post-rebuild re-baseline hook logged "Started
+Post-rebuild AIDE database update" during this switch, but aide.db's mtime did not
+move until I ran aide-update by hand. Worth a look if AideChangesDetected latches
+again after a future rebuild.
+
 * DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2842,15 +2960,16 @@ MONITORING LAG WORTH REMEMBERING, and the reason the alert outlived the fault by
 So the total worst-case lag between a real recovery and the alert clearing is up to 8h (the mirror interval, before it even retries) plus up to 1h (the exporter interval). For a single transient that means an alert can stay lit most of a day with nothing wrong. Worth knowing before treating a firing GiteaPushMirrorFailing as current.
 #+end_example
 
-* TODO [#C] SystemdServiceFailed noise census: pushme-positron 1955 critical samples in 14d, 5x the mbsync case
+* DONE [#C] SystemdServiceFailed noise census: pushme-positron 1955 critical samples in 14d, 5x the mbsync case
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-xzc
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-15 Sat 23:17]
-:MODIFIED: [2026-08-15 Sat 23:17]
+:MODIFIED: [2026-08-16 Sun 00:52]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-16 Sun 00:52]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2880,6 +2999,59 @@ retry), while others may be reporting something real that nobody is acting on.
 pushme-positron is worth taking first on volume alone. Note it was recently made
 restartIfChanged = false after it blocked two switches, so tread carefully around
 its unit semantics.
+
+** Close Reason
+
+#+begin_example
+THE PREMISE OF THIS ISSUE IS OBSOLETE. I filed it from a 14-day count, which
+aggregated resolved incidents and read as a live noise problem. Re-measured
+2026-08-16 with a recent window beside the historical one:
+
+  unit                                     14d     48h
+  pushme-positron.service                 1955       0
+  hermes-fallback-counter.service           669       0
+  logwatch.service                          644       0
+  git-workspace-archive.service             400       0
+  mbsync-rbcca.service                      225      57
+  mbsync-bia.service                        109      81
+  container-health-exporter.service          16       6
+  NetworkManager-wait-online.service          6       0
+  postgresql-nocobase-setup.service           4       4
+  microvm-state-share-exporter.service        1       0
+
+The top four -- 3668 of roughly 4000 samples -- have gone COMPLETELY SILENT in
+48h. SystemdServiceFailed is inactive with 0 active alerts right now.
+
+pushme-positron, the headline number, was traced properly:
+  - 19 exits with status=1 (rsync "connection unexpectedly closed", error 255 --
+    andoria unreachable) on 08-10, 08-12 and 08-13
+  - 8 start-timeouts on 08-11 and 08-12
+  - the 12h ceiling landed 2026-08-12 23:23 (cf28397aa), and there have been ZERO
+    timeouts since
+  - ZERO failures of any kind since 08-13; the exporter and systemd agree the
+    unit is inactive/success, not latched
+So both halves were already fixed before this issue was written. I misread a
+1337-sample "last 3 days" figure as current when every sample sat at the 08-13
+edge of the window.
+
+The two mbsync entries are the case fixed under nixos-mwl, and the fix holds:
+57 -> 0 for rbcca and 81 -> 0 for bia comparing the 48h before the retry deployed
+against the 12h after, with 93 successful syncs and 0 exhausted-retry failures.
+Honest caveat: retry activations were also 0, so no transient has occurred to
+exercise the retry path -- the noise stopped, but the retry itself is not yet
+proven in production.
+
+postgresql-nocobase-setup's 4 samples are my own, from the ordering race fixed in
+d714e4237.
+
+CLOSING as resolved-by-other-work rather than leaving a P2 open against a number
+that no longer describes anything. The measurement lesson is worth keeping: a
+14-day count over ALERTS aggregates episodes that are already over, so pair it
+with a recent window before calling anything noisy.
+
+container-health-exporter (6 in 48h) is the only genuinely live residue and is
+small; worth a look if it grows.
+#+end_example
 
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:

@@ -130,6 +130,25 @@
     !/etc/nixos/result
     # Exclude build lock file
     !/etc/nixos/\.nixos-build
+    # Exclude the obr cache. `.obr/` is a PER-MACHINE cache -- a SQLite database
+    # plus history snapshots -- that obr rewrites on essentially every command,
+    # and it self-ignores in git for exactly that reason. It is not configuration
+    # and its integrity is not meaningful.
+    #
+    # Measured 2026-08-16: the 00:24 aide-check reported 12 added and 11 changed
+    # entries, and ALL TWELVE additions were .obr/history/PLAN.*.org snapshots
+    # plus their .meta.json siblings, with obr.db, obr.db-wal, last-touched and
+    # merge.base.jsonl among the changes. So a routine issue-tracking session --
+    # the very thing that happens during every health cycle -- was enough to
+    # raise AideChangesDetected.
+    #
+    # That is the failure this module already warns about in the aide-update
+    # note: an alert that is permanently on "is no control at all". The
+    # post-rebuild re-baseline cannot help here, because the churn is not tied to
+    # rebuilds; it happens whenever obr runs. Real integrity changes elsewhere
+    # under /etc/nixos are still caught -- the same check also correctly flagged
+    # docs/PLAN.org and modules/services/databases.nix, which were genuine edits.
+    !/etc/nixos/\.obr
 
     # System configuration
     /etc/systemd CONFIG

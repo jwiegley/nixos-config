@@ -125,6 +125,62 @@ in
     # Store access for rootless image pulls (list definitions merge).
     nix.settings.allowed-users = [ "nocobase" ];
 
+    # postgres_fdw, for NocoBase's external-data-source feature.
+    #
+    # NocoBase issues `CREATE EXTENSION IF NOT EXISTS postgres_fdw;` as
+    # nocobase@nocobase whenever an external PostgreSQL data source is added.
+    # postgres_fdw is NOT a trusted extension -- pg_available_extension_versions
+    # reports trusted=f, superuser=t -- so the unprivileged nocobase role cannot
+    # create it and the attempt fails with "permission denied to create extension".
+    # A superuser has to install it once; the GRANT then lets nocobase define
+    # foreign servers, user mappings and imported schemas by itself.
+    #
+    # Both statements were first applied BY HAND on 2026-08-16 while debugging
+    # this live. Declaring them here is what stops that state from existing only
+    # in the running database, where a restore or a rebuilt database would lose
+    # it silently and NocoBase would fail the same way again (nixos-75l).
+    #
+    # Ordered after postgresql-setup.service, not merely postgresql.service: the
+    # nocobase DATABASE is created by ensureDatabases, which postgresql-setup
+    # applies. Connecting to a database that does not exist yet is exactly the
+    # race that made postgresql-nocobase-setup fail with `role "nocobase" does
+    # not exist` on this service's first activation.
+    #
+    # Both statements are idempotent (IF NOT EXISTS; GRANT is naturally
+    # repeatable), so this is safe to re-run on every boot.
+    #
+    # SECURITY NOTE, deliberately recorded rather than assumed harmless: USAGE on
+    # a foreign-data wrapper lets the grantee make the PostgreSQL server process
+    # open outbound connections and authenticate as whatever a user mapping
+    # stores, and mapping passwords live in pg_user_mapping readable by the
+    # mapping's owner. That is a real privilege, scoped here to the nocobase role
+    # in its own database.
+    systemd.services.postgresql-nocobase-fdw = {
+      description = "Install postgres_fdw for NocoBase and grant it to the nocobase role";
+      after = [
+        "postgresql.service"
+        "postgresql-setup.service"
+      ];
+      wants = [
+        "postgresql.service"
+        "postgresql-setup.service"
+      ];
+      requiredBy = [ "postgresql-nocobase-setup.service" ];
+      before = [ "postgresql-nocobase-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "postgres";
+        RemainAfterExit = true;
+      };
+      script = ''
+        ${config.services.postgresql.package}/bin/psql -d nocobase -v ON_ERROR_STOP=1 \
+          -c "CREATE EXTENSION IF NOT EXISTS postgres_fdw;"
+        ${config.services.postgresql.package}/bin/psql -d nocobase -v ON_ERROR_STOP=1 \
+          -c "GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO nocobase;"
+      '';
+    };
+
     # Nginx virtual host
     services.nginx.virtualHosts."nocobase.vulcan.lan" = {
       forceSSL = true;

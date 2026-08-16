@@ -94,6 +94,77 @@ groups:
           summary: "IoT device {{ $labels.instance }} is not answering ICMP"
           description: "IoT device {{ $labels.instance }} has not answered ICMP for more than 1 hour (host_group=iot). This mirrors the Nagios IoT ping coverage and is warning-only because these devices sleep by design."
 
+      # CHRONIC DEGRADATION, the companion to the rule above. Added 2026-08-16
+      # (nixos-mn4) to close a hole neither existing rule can cover.
+      #
+      # BlackboxICMPIoTDeviceDown catches DEATH: probe_success == 0 held for a
+      # CONTINUOUS hour. HighPacketLoss catches degradation, but explicitly
+      # excludes every IoT group (host_group!~"iot|iot-noping|iot-quiet"). So a
+      # device that is down a quarter of the time in bursts of MINUTES is invisible
+      # to both -- it never accumulates an unbroken hour, and it is not eligible for
+      # the packet-loss rule.
+      #
+      # That is not hypothetical. august-lock-garage-door.lan answered 74.8% of
+      # pings over 24h and 78.1% over 7d while its two siblings sat at 99.9% and
+      # 98.9%, and BlackboxICMPIoTDeviceDown fired for it ZERO times in 14 days.
+      # It was investigated twice across two health cycles before being written
+      # down, both times reaching "no action", because nothing alerted.
+      #
+      # SCOPED TO host_group="iot" ONLY, matching the rule above exactly. This is
+      # load-bearing, not copied: the comments above state twice that "iot-quiet"
+      # devices (grill, doorbell) are powered off or deep-asleep for long routine
+      # stretches and MUST NEVER ALERT, and that "iot-noping" devices never answer
+      # at all. An earlier draft of this rule used host_group=~"iot|iot-quiet" and
+      # would have paged on traeger-grill.lan at 95.5%. Do not widen this selector.
+      #
+      # THRESHOLD AND WINDOW SIZED BY 30-DAY REPLAY, not by the current instant.
+      # An instantaneous check is misleading here and nearly fooled me: at 6h/0.9
+      # the expression returns exactly ONE series right now (the garage lock at
+      # 81.9%, with the next worst at 95.9%), which reads as a perfectly isolated
+      # rule. Replaying the same expression across 30 days tells a different story:
+      #
+      #   window  thr   devices tripped   total hours   worst
+      #   6h      0.9         7               669       490  garage lock
+      #   24h     0.9         5               631       497  garage lock
+      #   6h      0.8         5               245       155  garage lock
+      #   24h     0.8         3               163       109  garage lock
+      #
+      # 24h/0.9 is chosen because it separates CHRONIC from TRANSIENT, which is the
+      # whole point of this rule. Going 6h -> 24h at the same threshold:
+      #   ring-chime-kitchen   13 -> 0    purely transient, correctly dropped
+      #   flume-water-meter     5 -> 0    same
+      #   august-lock-front     57 -> 15   mostly transient
+      #   august-lock-garage   490 -> 497  unchanged: genuinely chronic
+      #   GW1200B               23 -> 41   INCREASES, so its degradation is sustained
+      #   hubspace-porch-light   8 -> 22   same
+      # A wider window is not merely quieter -- it moves devices in BOTH directions
+      # according to whether their degradation is sustained, which is the property
+      # worth alerting on. Lowering the threshold to 0.8 instead would have been the
+      # cruder knob: it just hides everything except the worst offender.
+      #
+      # The 24h average is itself the smoothing, so `for` only needs to reject a
+      # single bad evaluation rather than ride out an episode; 30m does that.
+      #
+      # EXPECT THE GARAGE LOCK TO FIRE ALMOST CONTINUOUSLY until it is addressed --
+      # 497 of the last 720 hours qualify. That is correct behaviour for a
+      # chronic-degradation rule and is precisely why nixos-mn4 was filed, but it
+      # does mean this rule is not a good place to add more devices casually. If it
+      # ever becomes a permanent fixture for several devices at once it has stopped
+      # being a control; retune or reclassify rather than ignore it.
+      #
+      # Warning, never critical: these devices sleep by design and a degraded lock
+      # still locks. The point is to make chronic decay VISIBLE, not to page on it.
+      - alert: IoTDeviceChronicallyUnreachable
+        expr: avg_over_time(probe_success{job="blackbox_icmp",host_group="iot"}[24h]) < 0.9
+        for: 30m
+        labels:
+          severity: warning
+          category: network
+          service: connectivity
+        annotations:
+          summary: "IoT device {{ $labels.instance }} is chronically unreachable ({{ $value | humanizePercentage }} over 24h)"
+          description: "IoT device {{ $labels.instance }} answered only {{ $value | humanizePercentage }} of ICMP probes over the last 24 hours, against a healthy-peer baseline above 95%. This is DEGRADATION rather than death: BlackboxICMPIoTDeviceDown needs a continuous hour at zero and will not fire for a device that flaps in bursts of minutes. Check the device's radio/signal and, before assuming it is broken, check whether it still WORKS -- ping is a poor health proxy for this class of device, and Home Assistant is the better instrument (the garage lock that motivated this rule reported 'locked' with zero unavailable entries while answering only 75% of pings). If ICMP is simply not meaningful for this device, move it to host_group=iot-noping rather than raising this threshold."
+
       # High latency warning for ICMP probes
       # TL-WPA8630 is a powerline adapter with inherently higher latency - excluded
       # host_group iot/iot-noping/iot-quiet excluded: sleepy battery devices

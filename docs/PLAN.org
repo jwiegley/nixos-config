@@ -555,15 +555,16 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
+* DONE [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-81n
 :LABELS:   []
 :ISSUE_TYPE: chore
 :CREATED:  [2026-08-15 Sat 12:48]
-:MODIFIED: [2026-08-15 Sat 12:48]
+:MODIFIED: [2026-08-16 Sun 10:56]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-16 Sun 10:56]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -605,6 +606,36 @@ lives in the nix-config repo, not on vulcan. Options are a dynamic remote port
 (-R 0:) with the port read back, ExitOnForwardFailure tuning, or simply accepting
 the collision. Choosing among those is his call, and none of it is a vulcan
 change.
+
+** Close Reason
+
+RESOLVED BY JOHN, upstream in his nix-config, on 2026-08-16. Closing at his
+instruction ("this should no longer be your concern").
+
+State at close, recorded so a future cycle does not re-open this on stale
+evidence: port 8317 is STILL bound, and errors are STILL appearing -- 1 in the
+last hour, 6 in the last 6 hours. That is expected and not a sign the fix failed.
+The sshd-session holding the port has been alive for 1 day 3 hours, so it predates
+the config change and still carries the old -R 8317 request. New sessions that
+collide with it keep logging:
+
+  error: channel_setup_fwd_listener_tcpip: cannot listen to port: 8317
+  error: bind [ADDR]:8317: Address already in use
+
+The errors should stop once that long-lived session ends and no session is
+requesting the fixed forward any more. If they are still appearing after every
+pre-change session has been recycled, the change did not take -- that, not the
+current count, is the test.
+
+Nothing was changed on vulcan for this. What was established here and is worth
+keeping: 8317 is a loopback-only remote forward from interactive sessions, it is
+already named in the port-drift exporter's dual-stack dedup comment, and it was
+deliberately NOT added to docs/ports.txt -- it is one of four unregistered
+loopback listeners, the others being an ad-hoc `python3 -m http.server` and two
+`python3 -` stdin processes. Registering transient user processes would be wrong;
+they vanish. The port_drift_unexpected_loopback_listeners counter is info-only
+with no rule reading it, so that classification is working as designed and only
+the WILDCARD class pages.
 
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
@@ -1864,15 +1895,16 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
-* TODO [#E] august-lock-garage-door: 74.8% ICMP availability but never alerts; device is fine per HA
+* DONE [#E] august-lock-garage-door: 74.8% ICMP availability but never alerts; device is fine per HA
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-mn4
 :LABELS:   []
 :ISSUE_TYPE: question
 :CREATED:  [2026-08-16 Sun 08:46]
-:MODIFIED: [2026-08-16 Sun 08:46]
+:MODIFIED: [2026-08-16 Sun 10:59]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-16 Sun 10:59]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1910,6 +1942,67 @@ John's, not mine:
 (a) is the status quo and defensible. I lean (c) if anything, since it makes the
 existing classification honest, but it hides a real signal if the lock ever does
 die. Not acting.
+
+** Close Reason
+
+IMPLEMENTED, per John's choice of the availability-rule approach (option b).
+
+New rule IoTDeviceChronicallyUnreachable in modules/monitoring/alerts/network.yaml,
+sitting beside BlackboxICMPIoTDeviceDown in the network_connectivity group:
+
+  avg_over_time(probe_success{job="blackbox_icmp",host_group="iot"}[24h]) < 0.9
+  for: 30m, severity: warning
+
+THE HOLE IT CLOSES, confirmed by reading both existing rules rather than assuming:
+  BlackboxICMPIoTDeviceDown  probe_success == 0, for 1h  -> catches DEATH
+  HighPacketLoss             rate < 0.95, for 8h, but with
+                             host_group!~"iot|iot-noping|iot-quiet"  -> excludes ALL IoT
+So a device down a quarter of the time in bursts of MINUTES was invisible to both:
+it never accumulates an unbroken hour, and it is not eligible for the packet-loss
+rule. That is exactly august-lock-garage-door, which sat at 74.8%/24h while
+BlackboxICMPIoTDeviceDown fired for it zero times in 14 days.
+
+TWO THINGS I GOT WRONG AND CORRECTED BEFORE COMMITTING:
+
+1. Scope. My first draft used host_group=~"iot|iot-quiet". The comments in that
+   file state TWICE that iot-quiet devices (grill, doorbell) are powered off or
+   deep-asleep for long routine stretches and MUST NEVER ALERT. That draft would
+   have paged on traeger-grill.lan at 95.5%. Scoped to host_group="iot" only,
+   matching the sibling rule exactly. Reading the surrounding comments caught
+   this, not the metrics.
+
+2. Window. I sized 6h/0.9 on the CURRENT instant, where it returns exactly one
+   series with the next worst 14 points away -- which reads as a perfectly
+   isolated rule. A 30-day replay said otherwise: 7 devices, 669 hours. Comparing
+   properly:
+       6h /0.9  -> 7 devices, 669h      24h/0.9 -> 5 devices, 631h
+       6h /0.8  -> 5 devices, 245h      24h/0.8 -> 3 devices, 163h
+   Chose 24h/0.9 because it separates CHRONIC from TRANSIENT rather than merely
+   being quieter. Moving 6h -> 24h at the same threshold drops the purely
+   transient trippers to zero (ring-chime-kitchen 13 -> 0, flume-water-meter
+   5 -> 0), leaves the genuinely chronic case untouched (garage 490 -> 497), and
+   INCREASES two devices whose degradation is actually sustained (GW1200B
+   23 -> 41, hubspace-porch-light 8 -> 22). Lowering the threshold to 0.8 instead
+   would have been the cruder knob -- it just hides everything but the worst.
+
+   The replay itself needed a correction: my first query used
+   `count by (instance) (count_over_time(...))`, which counts SERIES not samples
+   and returned a suspicious "1" for every device. Reading the value directly
+   gave the real distribution.
+
+VERIFIED: promtool 32 rules SUCCESS; Prometheus loaded 486 rules (was 485); the
+rule is health=ok and correctly pending on august-lock-garage-door at 76.4%/24h,
+the only device currently under threshold.
+
+EXPECT IT TO FIRE ALMOST CONTINUOUSLY for that lock -- 497 of the last 720 hours
+qualify. That is correct for a chronic-degradation rule and is why this issue
+existed, but it is documented in the rule as a caution: if this ever becomes a
+permanent fixture for several devices at once it has stopped being a control.
+
+The underlying device question is unchanged and still John's: the lock WORKS (HA
+reports it locked with zero unavailable entries), so the options remain fixing its
+radio/position or reclassifying it as iot-noping. The rule makes the decay
+visible; it does not decide that.
 
 * DONE [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:

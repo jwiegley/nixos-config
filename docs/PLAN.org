@@ -1850,6 +1850,53 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
+* TODO [#E] august-lock-garage-door: 74.8% ICMP availability but never alerts; device is fine per HA
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-mn4
+:LABELS:   []
+:ISSUE_TYPE: question
+:CREATED:  [2026-08-16 Sun 08:46]
+:MODIFIED: [2026-08-16 Sun 08:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+august-lock-garage-door.lan sits at 74.8% ICMP availability over 24h and 78.1%
+over 7d, while its two siblings are at 99.9% (front door) and 98.9% (side door).
+BlackboxICMPIoTDeviceDown has NEVER fired for it in 14 days.
+
+That is not a rule defect so much as a shape the rule cannot see. Its clause is
+`probe_success{host_group="iot"} == 0` with for=3600s, so it needs a CONTINUOUS
+hour down. This lock flaps in bursts of minutes -- currently down 9 minutes, then
+back -- so it never accumulates an unbroken hour. The rule catches DEATH, not
+DEGRADATION.
+
+THE DEVICE IS FINE, checked with a better instrument than ping: Home Assistant
+reports lock.garage as 'locked' with ZERO 'unavailable' rows in 24h. Same story
+as the three nest-*.lan entries, which live in an `iot-noping` group precisely
+because they do not answer ICMP while working perfectly. Ping is a poor health
+proxy for this class of device.
+
+RECORDED RATHER THAN FIXED, and deliberately so. I have now investigated this
+twice across two cycles and reached "no action" both times; the point of the
+issue is to stop a third. Any fix is a judgement call about alert design that is
+John's, not mine:
+
+  a) leave it -- the device works, the noise is zero (nothing fires), and IoT ping
+     flakiness is normal on this network (the iot group shows jitter to 4.2s)
+  b) add an availability rule, e.g. avg_over_time(probe_success[6h]) < 0.9, which
+     would catch chronic degradation the current rule structurally cannot -- at
+     the cost of firing on devices that are working
+  c) move this lock into iot-noping alongside the Nests, conceding that ICMP is
+     not a useful signal for it
+
+(a) is the status quo and defensible. I lean (c) if anything, since it makes the
+existing classification honest, but it hides a real signal if the lock ever does
+die. Not acting.
+
 * DONE [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2173,14 +2220,14 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#D] Second Matter node failing and escalating: node 17 (Thread door sensor), distinct from the WiFi plug
+* TODO [#D] Matter node 17 (Thread door sensor) drops sessions intermittently, 7+ days, daily count trending up
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rsn
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-16 Sun 04:46]
+:MODIFIED: [2026-08-16 Sun 08:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2251,6 +2298,20 @@ HA UI (Settings -> Devices -> Matter).
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 6,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "2026-08-16, same day -- TWO CORRECTIONS TO MY OWN FRAMING, plus the episode ended.\n\nCORRECTION 1: this is NOT a fault that started on 2026-08-15. I filed it from a\n48h window, which showed the onset inside that window and nothing before it.\nWidening to 7 days shows node 17 has been failing intermittently the whole time:\n\n  2026-08-10    3\n  2026-08-12    1\n  2026-08-13    9\n  2026-08-14   14\n  2026-08-15    7\n  2026-08-16   30\n\nSo it is a LONGSTANDING low-level intermittent that had its largest burst\novernight, not a new device going bad. The daily trend is upward (3 -> 30 across\nsix days) but it is noisy, not monotonic -- 08-15 was lower than 08-14.\n\nCORRECTION 2: \"escalating\" in the title describes one episode, not the condition.\nThe 1 -> 6 -> 12 -> 18 per-hour ramp was real, but it ran 22:00-01:00 and then\nSTOPPED DEAD. Verified explicitly: 0 failures since 02:00, six hours clean at the\ntime of writing. So the alarming shape I filed on was the inside of a burst.\n\nWHAT STILL HOLDS from the original analysis, unchanged:\n  - node 17 is THREAD (FeatureMap=2), unlike the WiFi plug in nixos-h2u\n  - it is NOT the border-router SPOF: nodes 18 and 25 are also Thread and clean\n    over the same windows, and node 6 shows only isolated failures\n  - battery is ruled out; all three Aqara P2 sensors report 100%\n  - the sensors still function -- all three report state in Home Assistant\n\nWHAT THIS CHANGES FOR ACTION: less urgency, same owner. A device that has been\nquietly dropping sessions for a week and works throughout is not something to\nchase at 02:00. It is still physical/RF and still needs the room identified\n(serial ...96BDBE in Settings -> Devices -> Matter). The thing worth watching is\nwhether the DAILY count keeps climbing -- 30 in a day is the highest so far, and\nthat trend, not any single night's ramp, is the signal.\n\nKeeping at P3 on the strength of that trend. Not closing: six quiet hours against\na seven-day intermittent proves nothing.\n",
+    "created_at": "2026-08-16T15:45:54Z"
   }
 ]
 #+end_src

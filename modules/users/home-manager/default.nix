@@ -23,6 +23,11 @@
     # per-user rootless stores. See ./rootless-podman-image-prune.nix.
     sharedModules = [
       ./rootless-podman-image-prune.nix
+      # Reloads the user manager after quadlet-nix writes a .container file, so a
+      # newly introduced container gets a real unit on the switch that creates it
+      # rather than only after the next boot. Self-gates to users that declare
+      # quadlet containers. See the file for the NocoBase case that motivated it.
+      ./quadlet-daemon-reload.nix
     ];
 
     # Pass hostname and inputs to home-manager modules so they can be used

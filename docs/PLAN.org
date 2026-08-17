@@ -2181,6 +2181,56 @@ reports it locked with zero unavailable entries), so the options remain fixing i
 radio/position or reclassifying it as iot-noping. The rule makes the decay
 visible; it does not decide that.
 
+* TODO [#E] Baseline: matter-server emits ~4000 error-priority log lines per day
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-mqk
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-17 Mon 16:50]
+:MODIFIED: [2026-08-17 Mon 16:50]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Recording a measured baseline so a future cycle can tell a real regression from
+normal noise. No failure found; nothing is broken today.
+
+matter-server emits roughly 4,000 journal lines at priority<=3 (err) EVERY DAY,
+and has for the whole retained window:
+
+    Aug 12 : 3937      Aug 15 : 4788
+    Aug 13 : 4024      Aug 16 : 4182
+    Aug 14 : 4376      Aug 17 : 2034 (partial day at time of measurement)
+
+That makes matter-server the single largest source of error-priority log volume
+on the host -- during the 2026-08-17 cycle it was 143 lines in 4 hours, which
+looked alarming at first glance and is in fact BELOW its own daily baseline.
+
+WHAT THE LINES ARE. Predominantly CHIP-native retries, e.g.
+
+    CHIP_ERROR [chip.native.SC] Received error (protocol code 4) during pairing
+    process: src/protocols/secure_channel/...
+
+These carry no node label, so they cannot be attributed to a specific device
+from the journal alone. Pairing-error lines specifically run 5-70/day with no
+trend (Aug 13: 18, Aug 14: 20, Aug 15: 26, Aug 16: 5, Aug 17: 70).
+
+WHY IT IS FILED AT P4 RATHER THAN IGNORED. Volume this size is a masking
+hazard: a genuinely new matter fault has to compete with ~4,000 daily lines of
+upstream chatter, and the only reason node 17's Aug 16 episode (nixos-rsn) was
+findable at all is that it carries an explicit <Node:17> label. It is NOT
+evidence of a fault by itself -- both matter-server and home-assistant are
+active, and node 17 logged zero CASE failures on Aug 17.
+
+POSSIBLE ACTION, not taken: lowering CHIP log verbosity for the native layer.
+Deliberately left alone because turning down error-level logging on the Matter
+fabric could hide the next real fault, and the Aqara Hub M3 being the sole
+Thread border router already makes this fabric a single point of failure worth
+over-observing rather than under-observing.
+
 * DONE [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3276,6 +3326,87 @@ Over 14 days: manual 21,628 samples vs comfort 1,011.
 John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confirmed live in the flow).
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
+
+* TODO [#D] Two alert rules apply rate() to a 0/1 gauge and can never fire
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-w3w
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-17 Mon 16:50]
+:MODIFIED: [2026-08-17 Mon 16:50]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Two alert rules apply rate() to node_systemd_unit_state, which is a 0/1 GAUGE,
+not a counter. Both are provably incapable of firing. Found during the
+2026-08-17 health cycle while investigating fetchmail-good restarts.
+
+THE DEFECT. rate() is defined for monotonically increasing counters. Applied to
+a gauge that flips 0 -> 1 -> 0, it reads each fall as a counter reset, so the
+result is a tiny artifact value rather than a restart frequency. The thresholds
+were chosen as if the value were "restarts per second", which it is not.
+
+  modules/services/fetchmail-alerts.nix:45   FetchmailGoodFlapping
+      expr: rate(node_systemd_unit_state{name="fetchmail-good.service",
+                 state="activating"}[15m]) > 0.05
+
+  modules/monitoring/alerts/systemd.yaml:32  ServiceRestartingFrequently
+      expr: rate(node_systemd_unit_state{state="activating",
+                 name=~".*\\.service"}[15m]) > 0.1
+
+MEASURED, against 7 days of TSDB (retention reaches back to 2026-01-10):
+
+  FetchmailGoodFlapping      max value over 7d = 0.00112   threshold 0.05
+                             -> 45x below the threshold
+  ServiceRestartingFrequently max across ALL services 7d = 0.00897  threshold 0.1
+                             -> 11x below the threshold
+
+  0.05/s sustained over a 15m window means 45 increases in 15 minutes. Reality
+  for fetchmail-good is 8 state changes in 7 DAYS.
+
+  Firing series in the last 14 days: FetchmailGoodFlapping 0.
+
+WHY THIS IS LOW SEVERITY RATHER THAN A COVERAGE HOLE. ServiceRestartLooping
+(systemd.yaml:49) does the same job correctly, on the right metric:
+
+    increase(node_systemd_service_restart_total{...}[30m]) > 3
+
+It covers fetchmail-good (the counter series exists for it), it HAS fired in
+the last 14 days for other units, and the comment at fetchmail.nix:120 records
+that it already caught a real fetchmail restart loop ("restart-looped 23x on
+Name or service not known"). It is also well calibrated for this unit:
+fetchmail-good peaks at 2.01 restarts per 30m over the full 30-day window,
+against a >3 threshold, so it stays correctly quiet at the current baseline and
+would fire at 4.
+
+So the working rule already covers the case. The two dead rules add nothing but
+the appearance of coverage.
+
+THE OPTIONS -- this needs John because they are genuine alternatives, not a
+defect with one obvious repair:
+
+  1. Delete both. They are redundant with ServiceRestartLooping, and deleting a
+     rule that provably cannot fire changes exactly zero notifications. Fewest
+     moving parts. My recommendation for FetchmailGoodFlapping.
+
+  2. Rewrite them on node_systemd_service_restart_total. Preserves the intent of
+     having a fetchmail-specific sensitivity, but any threshold tighter than the
+     generic >3/30m needs choosing, and a rewritten rule would be close to a
+     duplicate of the generic one.
+
+  3. Leave them. Costs nothing at runtime, but a dead rule is worse than no rule
+     because it reads as coverage during a review.
+
+NOTE on option 1 for ServiceRestartingFrequently specifically: the comment
+directly above ServiceRestartLooping says "The two rules are complementary --
+keep both." That was a deliberate prior decision, so deleting that one in
+particular should be John's call rather than a cleanup.
+#+end_example
 
 * DONE [#D] rclone-cloud-backup passes --track-renames to copy, logging ERROR every run
 :PROPERTIES:

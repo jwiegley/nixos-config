@@ -2313,11 +2313,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1786940362,
-        "narHash": "sha256-zOq7u+NzDw9ltQtMxXRZLpOzZtQS90J1F2FIwaMOv+A=",
+        "lastModified": 1786984883,
+        "narHash": "sha256-BcwLjr5jF9Imu1ldbzpq+NQt6TBvsT4sydwH0Tw/wHI=",
         "ref": "refs/heads/main",
-        "rev": "aee78e538ff06a5737e7aa1ca7623162fc28ab07",
-        "revCount": 3306,
+        "rev": "66eaf03ee29d7bb150528707d9fa4755debddfef",
+        "revCount": 3308,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2347,11 +2347,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1786940362,
-        "narHash": "sha256-zOq7u+NzDw9ltQtMxXRZLpOzZtQS90J1F2FIwaMOv+A=",
+        "lastModified": 1786984883,
+        "narHash": "sha256-BcwLjr5jF9Imu1ldbzpq+NQt6TBvsT4sydwH0Tw/wHI=",
         "ref": "refs/heads/main",
-        "rev": "aee78e538ff06a5737e7aa1ca7623162fc28ab07",
-        "revCount": 3306,
+        "rev": "66eaf03ee29d7bb150528707d9fa4755debddfef",
+        "revCount": 3308,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2959,11 +2959,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1786918846,
-        "narHash": "sha256-JQoaZHDhCLmhqgDeFL5nKjmlYPTGZ5bVpkAgRbjcJrM=",
+        "lastModified": 1786984573,
+        "narHash": "sha256-oUlZG+bJ0clGmYuKvu+QflEDwVRVNb5JSODx+p0z+0Y=",
         "owner": "jwiegley",
         "repo": "obr",
-        "rev": "64ef6acccbc21bca1d61ffffb186c4314a51b4b7",
+        "rev": "c6fbfd1d5c329b61c526b739254468c3d8e346db",
         "type": "github"
       },
       "original": {

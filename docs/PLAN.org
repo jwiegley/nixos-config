@@ -637,6 +637,109 @@ they vanish. The port_drift_unexpected_loopback_listeners counter is info-only
 with no rule reading it, so that classification is working as designed and only
 the WILDCARD class pages.
 
+* DONE [#D] AIDE fires a false positive after every nix garbage collection
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-84t
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-17 Mon 10:20]
+:MODIFIED: [2026-08-17 Mon 10:26]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-17 Mon 10:26]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+AideChangesDetected fired again on 2026-08-17, two days after the .obr exclusion
+that fixed the previous instance. DIFFERENT CAUSE, and the earlier fix did not
+regress: .obr mentions in the report are 0 and .obr entries in aide.db are 0.
+
+WHAT HAPPENED. nix-gc ran at 00:00:02 and deleted 37,344 store paths (~59 GB,
+root fell 462G -> 395G). The 00:09 aide-check then reported:
+
+  Added 0   Changed 0   Removed 10
+
+and every one of the ten was a /nix/var/nix/profiles/system-22NN-link -- old
+system generation symlinks that the collection removed. aide.conf line 65
+monitors /nix/var/nix/profiles/system READONLY, so it sees them.
+
+Nothing was wrong. The database had been baselined at 21:25 the previous evening,
+BEFORE the collection, so the check was comparing against a pre-GC world.
+
+WHY IT WOULD RECUR. nix.gc is weekly (modules/core/base.nix, --delete-older-than
+30d) and aide-check is daily, so every collection produces removals that the next
+check sees. The existing post-rebuild re-baseline hook cannot help: a GC is not a
+rebuild, and a rebuild is not guaranteed to follow one. Honest limit on this
+claim -- I have ONE observed collection in the retained journal, not a series, so
+the recurrence is reasoned from the mechanism rather than measured across weeks.
+
+FIX: systemd.services.nix-gc.onSuccess = [ "aide-update.service" ], mirroring
+what a rebuild already does. onSuccess rather than a timer or ExecStartPost
+because it fires only when the collection SUCCEEDED, needs no delay (nix-gc's
+deletions are complete when the unit exits, unlike activation where the existing
+hook waits 60s), and a failed re-baseline cannot fail the collection.
+
+THE CONTROL IS NOT WEAKENED. The generation links stay monitored -- the READONLY
+rule is untouched and the rebuilt database still covers them. What changes is
+that a known, scheduled, privileged deletion is followed by a re-measurement,
+exactly as a rebuild is. An unexplained removal between collections still
+reports.
+
+Cleared the live false positive by running aide-update by hand: it completed in
+1s and the published verdict went from changes_detected=1 / removed=10 to all
+zeros at 3463 entries.
+
+** Close Reason
+
+FIXED and verified live.
+
+systemd.services.nix-gc.onSuccess = [ "aide-update.service" ] in
+modules/security/aide.nix, mirroring what a rebuild already does via the
+aide-post-rebuild activation hook.
+
+CAUSE, measured not guessed. nix-gc ran 2026-08-17 00:00:02 and deleted 37,344
+store paths (~59 GB; root fell 462G -> 395G). aide-check at 00:09 then reported
+0 added, 0 changed, 10 REMOVED -- every one a /nix/var/nix/profiles/system-22NN-link,
+i.e. old generation symlinks the collection removed. aide.conf line 65 monitors
+/nix/var/nix/profiles/system READONLY, so it sees them. The database had been
+baselined at 21:25 the previous evening, before the collection, so the check was
+comparing against a pre-GC world. Nothing was wrong.
+
+Confirmed the earlier .obr fix did NOT regress: 0 .obr mentions in the report and
+0 .obr entries in aide.db. Different cause entirely.
+
+VERIFIED AFTER SWITCHING to wbcjsp39w4b6i3mibp587npvyspdljwn:
+  systemctl show nix-gc -p OnSuccess  ->  aide-update.service
+  next collection: Mon 2026-08-24 00:00
+  0 failed units, 486 rules with 0 unhealthy and 0 lastError
+
+CONTROL NOT WEAKENED, checked explicitly rather than asserted: the READONLY rule
+on /nix/var/nix/profiles/system is still present in the generated aide.conf, and
+the rebuilt database still contains 308 generation-link entries. What changed is
+that a known, scheduled, privileged deletion is now followed by a re-measurement,
+exactly as a rebuild is. An unexplained removal between collections still reports.
+
+Cleared the live false positive by running aide-update by hand: it completed in 1s
+and the published verdict went from changes_detected=1 / removed=10 to all zeros
+at 3463 entries.
+
+ONE THING I MISREAD ALONG THE WAY, recorded because it wasted a diagnostic step:
+after the metric reached 0 the alert kept reading "firing", and I twice treated
+that as either lag or a possible dead detector. It was neither. AideChangesDetected
+lives in the config_drift group, which evaluates every 900s -- NOT in security_aide
+(300s) where I assumed it was. Its last evaluation preceded the re-baseline, so
+the alert simply had not been re-evaluated yet. When a rule's state disagrees with
+its metric, check WHICH GROUP owns it and that group's interval before concluding
+anything is broken.
+
+Recurrence caveat kept from the original report: I have one observed collection in
+the retained journal, not a series, so weekly recurrence is reasoned from the
+mechanism (weekly GC, daily check) rather than measured across weeks. The next
+collection on 08-24 is the real test -- if AideChangesDetected does not fire that
+morning, this is confirmed.
+
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

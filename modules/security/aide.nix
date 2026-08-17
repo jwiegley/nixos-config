@@ -463,6 +463,35 @@
     fi
   '';
 
+  # Re-baseline after GARBAGE COLLECTION too, for exactly the reason the
+  # post-rebuild hook above exists. A rebuild is not the only thing that
+  # legitimately changes what AIDE watches.
+  #
+  # /nix/var/nix/profiles/system is monitored READONLY (aide.conf line 65), and
+  # `nix.gc` (modules/core/base.nix, weekly, --delete-older-than 30d) deletes the
+  # numbered generation symlinks beside it. Measured 2026-08-17: nix-gc ran at
+  # 00:00:02 and removed 37,344 store paths; the 00:09 aide-check then reported
+  # 0 added, 0 changed and TEN removed entries, every one of them a
+  # /nix/var/nix/profiles/system-22NN-link, and AideChangesDetected fired.
+  #
+  # Nothing was wrong. The database was baselined at 21:25 the previous evening,
+  # before the collection, so the check was comparing against a pre-GC world.
+  # Without this, every GC produces a fresh false positive that persists until
+  # the next rebuild happens to re-baseline -- and rebuilds are not guaranteed to
+  # follow a GC.
+  #
+  # onSuccess rather than a timer or an ExecStartPost: it fires only when the
+  # collection actually SUCCEEDED, it needs no delay because nix-gc's deletions
+  # are complete when the unit exits (unlike activation, where the 60s above
+  # exists because changes land after the script returns), and a failure to
+  # re-baseline cannot fail the collection itself.
+  #
+  # This does NOT weaken the control. The generation links stay monitored; what
+  # changes is that a KNOWN, scheduled, privileged-process deletion is followed
+  # by a re-measurement, exactly as a rebuild is. An unexplained removal between
+  # collections still reports.
+  systemd.services.nix-gc.onSuccess = [ "aide-update.service" ];
+
   # ===========================================================================
   # SOPS runtime-secret permission drift monitor
   # ---------------------------------------------------------------------------

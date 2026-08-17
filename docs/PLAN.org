@@ -3410,6 +3410,75 @@ failing a home-manager activation over a refresh that the next boot would perfor
 anyway would be strictly worse than doing nothing.
 #+end_example
 
+* TODO [#D] HermesExtractFailing: bounded and self-clearing, but the metrics cannot say WHY extraction failed
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ygr
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-16 Sun 20:46]
+:MODIFIED: [2026-08-16 Sun 20:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+HermesExtractFailing fired at 2026-08-17T03:17:56Z (20:17 PDT). Investigated; not
+acted on, because the evidence needed to choose a fix does not exist.
+
+WHAT IS HAPPENING. The rule fires when the most recent extraction batch had zero
+successes AND that failure is newer than the last success AND within the last
+hour:
+
+  hermes_extract_last_failure_timestamp_seconds > 0
+  and (time() - ...last_failure...) < 3600
+  and ...last_failure... > ...last_success...
+
+Measured state at the time of the alert:
+  last failure  2026-08-16 20:09:57 PDT
+  last success  2026-08-16 19:39:50 PDT   (30 min earlier)
+  worker_ok     1        -- the worker itself is runnable
+  worker probe  0.239s   -- and responsive
+  VM uptime     58.4 h, microvm@hermes active
+
+So this is NOT a dead worker or a dead VM. One batch returned nothing.
+
+IT IS BOUNDED AND SELF-CLEARING, which is good design worth recording so nobody
+"fixes" it: the < 3600 clause means the alert releases one hour after the failing
+batch regardless of when the next batch runs. This instance was due to clear at
+21:09 PDT. That matters because extraction is LOW VOLUME -- 2 successes and 2
+failures in the last 24h, four batches total -- so without that clause a single
+failure would hold the alert for the ~6 hours until the next batch.
+
+FREQUENCY: 116 firing samples over 7 days, in exactly two episodes (08-14: 60,
+08-16: 56). Not continuous, not new.
+
+Roughly half of recent batches failed (2 of 4 in 24h). Treat that ratio as
+indicative only -- four batches is far too small a sample to call it a rate.
+
+THE REAL GAP, and why this is filed rather than fixed: the published metrics are
+timestamps only. There is no per-URL outcome, no error class, and the VM journal
+carries no extract lines at all. The rule's own description names three causes
+needing completely different responses:
+
+  - the guest lost outbound network
+  - DNS is failing
+  - the pages requested are JavaScript-only, which this extractor cannot render
+    BY DESIGN (see pkgs/hermes-local-extract/src/extract_worker.py)
+
+Nothing in the current instrumentation discriminates between them. The third is
+not a fault at all; the first two are. So the alert can tell John that extraction
+failed but not whether anything is broken.
+
+WHAT WOULD MAKE IT ACTIONABLE: publish an error class or per-URL outcome counter
+alongside the timestamps -- e.g. hermes_extract_last_error_kind or a small
+counter split by reason. That is a change to the Hermes health exporter and to
+what the worker reports, so it is real work rather than a metric rename, and it
+needs John's call on whether the capability is worth that instrumentation.
+#+end_example
+
 * DONE [#D] Should office occupancy change the upstairs thermostat at all?
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

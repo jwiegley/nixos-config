@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from typing import Any, Dict, List
 
@@ -54,6 +55,54 @@ BATCH_TIMEOUT_SECONDS = 180
 
 # Keep a batch within the worker's sequential budget.
 MAX_URLS = 10
+
+# Anything scheme-like is scrubbed out of a reason before it is logged.
+#
+# WHY THIS IS NOT PARANOIA: three of the error strings this module and the
+# worker produce interpolate an exception -- "fetch failed: {exc}",
+# "extraction failed: {exc}", "unexpected error: {exc}" -- and urllib/requests
+# exceptions routinely embed the URL that failed. The extracted URLs are the
+# user's research targets; they have no business in a log file that is retained
+# across four rotations and parsed by hermes-health-check. The reasons are the
+# diagnostic value here, the URLs are not, so the reason text is scrubbed rather
+# than trusted to be clean. Over-matching is the safe direction.
+#
+# The worker's own guards are already careful in the same way: its SSRF
+# rejection deliberately does not echo the resolved address back to the caller
+# (extract_worker.py), for the same reason.
+_URL_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9+.\-]*://\S+")
+
+# A single reason must not be able to dominate the line -- an exception string
+# can be arbitrarily long -- and neither must the set of them.
+_MAX_REASON_CHARS = 120
+_MAX_REASONS = 5
+
+
+def _failure_summary(results: List[Dict[str, Any]]) -> str:
+    """Distinct failure reasons, URL-scrubbed, most frequent first.
+
+    Empty string when nothing failed, which is what lets the caller keep the
+    original single-clause log line for the common all-succeeded case.
+    """
+    counts: Dict[str, int] = {}
+    for r in results:
+        if not isinstance(r, dict) or not r.get("error"):
+            continue
+        # Collapse whitespace: the worker's longest reason is a wrapped
+        # multi-line string, and a newline inside a log line would split one
+        # record into two as far as any line-oriented reader is concerned.
+        reason = " ".join(_URL_RE.sub("<url>", str(r["error"])).split())
+        if len(reason) > _MAX_REASON_CHARS:
+            reason = reason[: _MAX_REASON_CHARS - 3] + "..."
+        counts[reason] = counts.get(reason, 0) + 1
+
+    # Frequency first, then alphabetical, so the line is stable across runs
+    # with the same failures and diffable by eye.
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    shown = [f"{reason} (x{n})" if n > 1 else reason for reason, n in ordered[:_MAX_REASONS]]
+    if len(ordered) > _MAX_REASONS:
+        shown.append(f"+{len(ordered) - _MAX_REASONS} more")
+    return "; ".join(shown)
 
 
 def install_availability_shim() -> None:
@@ -187,6 +236,15 @@ class LocalWebExtractProvider(WebSearchProvider):
                      "HOME": os.environ.get("HOME", "/tmp")},
             )
         except subprocess.TimeoutExpired:
+            # The only failure path that used to return in total silence -- no
+            # count line, no warning -- which made a whole batch exceeding the
+            # outer bound the single most severe outcome AND the least visible
+            # one. Its two sibling handlers below both log; this now matches.
+            logger.warning(
+                "local-extract: worker timed out after %ss for %d URL(s)",
+                BATCH_TIMEOUT_SECONDS,
+                len(accepted),
+            )
             return [
                 {"url": u, "title": "", "content": "",
                  "error": f"local extraction timed out after {BATCH_TIMEOUT_SECONDS}s"}
@@ -223,7 +281,26 @@ class LocalWebExtractProvider(WebSearchProvider):
 
         results.extend(self._skipped(u) for u in rejected)
         ok = sum(1 for r in results if isinstance(r, dict) and not r.get("error"))
-        logger.info("Local extract: %d/%d URL(s) succeeded", ok, len(results))
+
+        # The count alone is not actionable. A partial batch is NORMAL here --
+        # measured across all four agent-log rotations (2026-08-04 onward),
+        # 121 of 157 URLs extracted, with 12 of 105 batches returning nothing --
+        # and every one of those was a page trafilatura could not render, not a
+        # broken extractor: worker-level errors over the same period were zero.
+        # Without the reason the two are indistinguishable in the log, which is
+        # what made HermesExtractFailing an alert nobody could act on. The
+        # reasons already exist in `results`; they were simply being discarded.
+        #
+        # The prefix through "succeeded" is load-bearing: hermes-health-check
+        # matches EXTRACT_RESULT_RE against this line with re.search, so the
+        # clause is appended rather than woven in.
+        failures = _failure_summary(results)
+        if failures:
+            logger.info(
+                "Local extract: %d/%d URL(s) succeeded; reasons: %s", ok, len(results), failures
+            )
+        else:
+            logger.info("Local extract: %d/%d URL(s) succeeded", ok, len(results))
         return results
 
     @staticmethod

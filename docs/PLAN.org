@@ -3406,6 +3406,88 @@ container-health-exporter (6 in 48h) is the only genuinely live residue and is
 small; worth a look if it grows.
 #+end_example
 
+* TODO [#D] Decide whether HermesExtractFailing should alert on a single zero-success batch
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-y6g
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-17 Mon 12:12]
+:MODIFIED: [2026-08-17 Mon 12:12]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+HermesExtractFailing fires on normal operation. Whether to retune or drop it is
+a judgement call about what John wants to be told, so it is filed rather than
+decided.
+
+NOT A BUG REPORT. The alert works exactly as written. The question is whether
+what it is written to detect is worth an alert.
+
+MEASURED BASELINE, across all four agent-log rotations (2026-08-04 to
+2026-08-17), which is the full retained history:
+
+  batches        105   -- fully ok 74, partial 19, zero-success 12  (11% zero)
+  URLs attempted 157   -- extracted 121                             (77% ok)
+  worker-level errors  0   (all four rotations)
+
+So roughly one batch in nine returns nothing, and in every observed case the
+cause was a page the extractor could not render rather than a broken extractor.
+Zero worker errors in two weeks.
+
+The rule fires when the newest batch had zero successes, that failure is newer
+than the last success, and it happened within the last hour. With extraction
+running at only a few batches a day, an 11% zero-rate means it will keep firing
+indefinitely on healthy operation. Over the 7 days sampled when nixos-ygr was
+filed: 116 firing samples in two episodes.
+
+WHAT CHANGED SINCE FILING. The log line now carries the failure reasons
+(nixos-ygr, commit adding _failure_summary to pkgs/hermes-local-extract/
+provider.py), so any future firing can be diagnosed in one grep instead of
+being unfalsifiable. That removes the reason the original issue could not be
+acted on, but it does not by itself decide the alert's fate.
+
+THE OPTIONS, in the order I would rank them:
+
+  1. Require a SUSTAINED failure rather than a single batch -- e.g. no
+     successful extraction for N hours, instead of one zero-success batch.
+     Keeps a genuine outage detectable (guest lost network, DNS down, worker
+     dead) while ignoring the ordinary unrenderable page. My recommendation.
+
+  2. Leave it. It is bounded and self-clearing within the hour, and it is
+     honest about what it observed. Costs an occasional notification that
+     needs no action.
+
+  3. Drop it. The worker-health metrics (hermes_extract_worker_ok, the probe
+     duration) already cover the failure modes that are actually faults, and
+     zero worker errors in two weeks argues they are quiet for a good reason.
+
+Option 1 needs a threshold chosen, which is exactly the input needed here.
+
+DO NOT act on this without John. It changes what he gets told about, which is
+his call and not an obvious defect to be repaired.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-y6g",
+    "depends_on_id": "nixos-ygr",
+    "type": "discovered-from",
+    "created_at": "2026-08-17T19:12:14.062021526Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3513,15 +3595,17 @@ failing a home-manager activation over a refresh that the next boot would perfor
 anyway would be strictly worse than doing nothing.
 #+end_example
 
-* TODO [#D] HermesExtractFailing: bounded and self-clearing, but the metrics cannot say WHY extraction failed
+* DONE [#D] HermesExtractFailing: bounded and self-clearing, but the metrics cannot say WHY extraction failed
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ygr
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-16 Sun 20:46]
-:MODIFIED: [2026-08-17 Mon 10:13]
+:MODIFIED: [2026-08-17 Mon 12:12]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-17 Mon 12:12]
+:CLOSE_REASON: Instrumentation gap closed: the extract log line now names WHY each failure happened. Verified end-to-end on the deployed store path.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3592,6 +3676,13 @@ needs John's call on whether the capability is worth that instrumentation.
     "author": "johnw",
     "text": "2026-08-17 -- LIVE INVESTIGATION DONE, per John's choice. The three candidate\ncauses are now separated, and two are ruled out with evidence.\n\nDROVE THE WORKER DIRECTLY. It is a standalone script taking {\"urls\":[...]} on\nstdin and returning one object per URL. Resolved the LIVE worker the plugin\npoints at (via provider.py, the same way the health check does, so no stale store\npath):\n  /nix/store/lr0lgxsfrjb7h89gl6nvmayh6srwaciy-hermes-local-extract-worker/...\n\nResults, one-off diagnostic fetches only -- deliberately not a recurring probe,\nsince the health check's own comment declines to hit \"somebody else's server for\nno diagnostic gain\":\n  empty batch          -> []            exit 0   (matches the health probe)\n  https://example.com  -> 167 chars,    no error\n  nixos.org docs page  -> 7202 chars,   no error\n  https://react.dev/   -> 3622 chars,   no error   <- a React SPA, extracted fine\n  nonexistent host     -> error: \"could not resolve host: [Errno -2] Name or\n                          service not known\"\n\nSo NETWORK, DNS AND PARSING ALL WORK. Causes 1 and 2 from the rule's description\nare ruled out. And the fourth line matters on its own: \"JavaScript-only pages\"\nis a weaker explanation than assumed -- trafilatura extracted a React SPA\nwithout trouble.\n\nTHE REAL RATE, from the agent's own log rather than a 24h snapshot. My earlier\n\"roughly half\" came from four batches and was flagged as too small a sample; it\nwas. Across all 55 recorded batches:\n\n    36  fully succeeded   (23x 1/1, 12x 2/2, 1x 2/3)\n    10  partial           (1/2 -- deliberately NOT alerted)\n     9  fully failed      (6x 0/1, 3x 0/2)\n\nThat is 16% of batches fully failing, not 50%. And ZERO worker-level errors --\nno timeouts, no parse failures, no missing worker, nothing matching\nEXTRACT_ERROR_RE anywhere in the log.\n\nCONCLUSION: every failure is CONTENT- OR URL-SPECIFIC. The extractor is healthy,\nthe guest's network is healthy, and the alert is firing on individual URLs that\nyield no extractable text -- which is the by-design limitation, not a fault.\n\nTHE FIX IS MUCH CHEAPER THAN I ESTIMATED. I wrote that surfacing the reason meant\nwork in the worker and the health exporter. It does not. provider.py already has\nthe per-URL reasons in hand and throws them away:\n\n    # provider.py:225-226\n    ok = sum(1 for r in results if isinstance(r, dict) and not r.get(\"error\"))\n    logger.info(\"Local extract: %d/%d URL(s) succeeded\", ok, len(results))\n\n`results` carries {url, title, content, error} per URL. Logging the DISTINCT\nERROR REASONS next to the count -- not the URLs, which are John's research\ntargets and need not be recorded -- would make every future occurrence\nself-diagnosing, and the health check already reads this log.\n\nDECISION NOW OPEN, with the evidence it was waiting on:\n  a) add the reason to that log line (one line, no behaviour change), so a real\n     network/DNS fault is distinguishable from the normal content case\n  b) retune or drop the alert, since 16% of batches failing on unextractable\n     pages is arguably normal operation and not worth a warning\n  c) leave both as they are -- the alert is bounded to an hour and self-clears\n\n(a) plus (b) together is defensible: keep a detector, but make it fire on\nsomething that means something.\n",
     "created_at": "2026-08-17T17:13:15Z"
+  },
+  {
+    "id": 9,
+    "issue_id": "nixos-ygr",
+    "author": "johnw",
+    "text": "FIXED in pkgs/hermes-local-extract/provider.py. The per-URL reasons already existed in the results list and were being discarded; _failure_summary now folds them into the existing log line as a deduped, frequency-ordered, URL-scrubbed clause.\n\nVERIFICATION (deployed artifact, not the working tree):\n  * Store path in the current system closure is qn8fbbg...-hermes-local-extract-plugin; grep confirms the new code is in it.\n  * Ran that deployed provider against the deployed worker binary with three URLs (one good, one unresolvable host, one loopback). Real emitted line:\n      Local extract: 1/3 URL(s) succeeded; reasons: could not resolve host: [Errno -2] Name or service not known; refusing to fetch a private, loopback or link-local address\n    Two distinct causes named, both actionable, and the alert-vs-normal question answerable at a glance.\n  * The loopback URL appears NOWHERE in that line. Reasons are scrubbed of anything scheme-like before logging, because three of the error strings interpolate an exception and urllib exceptions embed the failing URL. The extracted URLs are research targets and do not belong in a retained log.\n  * hermes-health-check parses the new line unchanged: its EXTRACT_RESULT_RE uses re.search and the prefix through \"succeeded\" is preserved, so the reasons are appended, never woven in. Checked against the literal emitted line: ok=1 total=3.\n  * 14 unit assertions against the real function (dedup, frequency+alphabetical ordering, URL scrubbing, multi-line collapse, length cap, reason-count cap with disclosed overflow, non-dict tolerance): all pass.\n  * Plugin imports cleanly inside the VM sealed venv: shim-install line at 19:09:33 UTC, 13s after microvm@hermes came up; zero import failures.\n\nALSO FIXED, same file: the subprocess.TimeoutExpired path returned in total silence, with neither a count line nor a warning. A whole batch exceeding the outer 180s bound was the single most severe outcome and the least visible one. It now logs a warning like its two sibling handlers.\n\nNOT DONE, and deliberately not: retuning or dropping the alert itself. At 11% of batches returning zero with zero worker errors in two weeks, it fires on normal operation, but changing what John gets alerted about is his decision. Split out as nixos-y6g.\n\nNOTE for whoever reads the original text above: it cites pkgs/hermes-local-extract/src/extract_worker.py. There is no src/ level; the real path is pkgs/hermes-local-extract/extract_worker.py.",
+    "created_at": "2026-08-17T19:12:31Z"
   }
 ]
 #+end_src

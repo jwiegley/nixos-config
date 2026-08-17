@@ -652,7 +652,10 @@
           "nix-config-ai",
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay"
+        "rust-overlay": [
+          "nix-config-ai",
+          "rust-overlay"
+        ]
       },
       "locked": {
         "lastModified": 1785528634,
@@ -2310,11 +2313,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1786844723,
-        "narHash": "sha256-rK8Y7i6Er3aVIvaoJ7EFm3v6YC163jjyieDn6+IBq80=",
+        "lastModified": 1786932390,
+        "narHash": "sha256-n4nk0rWuDpXDCE3ON2Q/kzMGb5Y7rmXCWbdWxG2Bn8g=",
         "ref": "refs/heads/main",
-        "rev": "669e7d40aa2b6bcfd5a61205710a04e6e1895fe4",
-        "revCount": 3283,
+        "rev": "77e4bc28c9736629eb0bb07ebb2686318069ebb3",
+        "revCount": 3301,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2339,16 +2342,16 @@
         "pi-openai-server-compaction": "pi-openai-server-compaction",
         "pi-quiet": "pi-quiet",
         "ponytail": "ponytail",
-        "rust-overlay": "rust-overlay_2",
+        "rust-overlay": "rust-overlay",
         "translate-tool": "translate-tool"
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1786844723,
-        "narHash": "sha256-rK8Y7i6Er3aVIvaoJ7EFm3v6YC163jjyieDn6+IBq80=",
+        "lastModified": 1786932390,
+        "narHash": "sha256-n4nk0rWuDpXDCE3ON2Q/kzMGb5Y7rmXCWbdWxG2Bn8g=",
         "ref": "refs/heads/main",
-        "rev": "669e7d40aa2b6bcfd5a61205710a04e6e1895fe4",
-        "revCount": 3283,
+        "rev": "77e4bc28c9736629eb0bb07ebb2686318069ebb3",
+        "revCount": 3301,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2953,7 +2956,7 @@
       "inputs": {
         "flake-utils": "flake-utils_2",
         "nixpkgs": "nixpkgs_4",
-        "rust-overlay": "rust-overlay_3"
+        "rust-overlay": "rust-overlay_2"
       },
       "locked": {
         "lastModified": 1786823334,
@@ -3340,16 +3343,15 @@
       "inputs": {
         "nixpkgs": [
           "nix-config-ai",
-          "git-ai",
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1770174315,
-        "narHash": "sha256-GUaMxDmJB1UULsIYpHtfblskVC6zymAaQ/Zqfo+13jc=",
+        "lastModified": 1786849542,
+        "narHash": "sha256-MS8cOa/ii1+QA8R3JWVzqEIoXimu9n50GwQDiBVTFOM=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "095c394bb91342882f27f6c73f64064fb9de9f2a",
+        "rev": "b211eadeba8b180da9453ec3413a8a3535c85b3f",
         "type": "github"
       },
       "original": {
@@ -3359,27 +3361,6 @@
       }
     },
     "rust-overlay_2": {
-      "inputs": {
-        "nixpkgs": [
-          "nix-config-ai",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1785476452,
-        "narHash": "sha256-/CXwCFPS41rb/JI2VitKCgVK6V5E6/sfw5ke3B9zyVQ=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "6ef009bf4c4873cdc1a621826722bdea7c03e62c",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
-    "rust-overlay_3": {
       "inputs": {
         "nixpkgs": [
           "obr",

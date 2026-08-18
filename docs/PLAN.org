@@ -1069,6 +1069,87 @@ pre-filter .tmp leftovers in the destination (~3.4G from 2026-06-26), which John
 has been asked about and which are not part of this issue.
 #+end_example
 
+* TODO [#C] Nagios removal is half done: mirror gone, 320 native checks and 36 .nix files remain
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-a71
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-17 Mon 20:49]
+:MODIFIED: [2026-08-17 Mon 20:51]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+On 2026-07-31 John gave an explicit directive:
+
+  "I am explicitly choosing today to undo the Nagios/Prometheus duplication. So
+  not only would I like to fully remove Nagios, but I would also like to remove
+  all mention to it from any and all documentation through this system
+  configuration repository."
+
+Seventeen days later that is half done and nothing was tracking the remainder.
+Filed during the 2026-08-17 health cycle after a NagiosServicesCriticalIncreased
+alert prompted the question "why is a Nagios alert firing on a host where Nagios
+was supposedly removed?"
+
+WHAT IS DONE. Commit ed8b436e3 (2026-07-31) removed the Nagios<->Prometheus
+mirror -- "499 duplicate checks gone" -- along with
+modules/monitoring/services/nagios-mirror-divergence.nix and
+scripts/nagios-mirror-divergence.py. Verified complete: objects.cache now
+contains 0 PROM-MIRROR services, and the nagios_mirror_* metrics stopped
+reporting on 2026-08-02 20:46 UTC with their last values healthy
+(reconciler_success=1, divergence_total=0). No alert rule references the dead
+mirror metrics, so that removal left no dead rules behind.
+
+WHAT REMAINS, measured today:
+
+    define service blocks in objects.cache : 320   (all native; 0 PROM-MIRROR)
+    define host blocks                     :  25
+    .nix files referencing nagios          :  36
+    systemd units                          :  12   (nagios.service active/running)
+    Nagios alert rules loaded in Prometheus:   7   (all inactive/health=ok)
+
+At decision time the memory records 339 native checks across 317 distinct names.
+Today it is 320. So roughly 19 native checks have been retired in 17 days -- the
+mirror teardown was the easy half, and the native migration has barely started.
+
+THE PRECONDITION JOHN ATTACHED, which is what makes this real work rather than a
+delete: every native Nagios check needs a Prometheus equivalent BEFORE removal.
+The riskiest part is explicitly the checks against OTHER hosts, which Prometheus
+may not scrape at all -- 25 host definitions are still in play.
+
+CURRENT STATE IS HEALTHY, so there is no urgency: 0 critical, 0 warning, 0
+unknown, 0 stale, 0 hosts down; the status exporter ran 106s before measurement
+with parse_success=1.
+
+WHY THIS IS NOT BEING DONE AUTONOMOUSLY. Removing a monitoring system is
+destructive and hard to reverse, and the gating condition requires auditing 320
+checks for Prometheus coverage and deciding what to do about cross-host checks.
+That is a migration with judgement calls in it, not cleanup.
+
+SUGGESTED SHAPE, if John wants it picked up: inventory the 320 native checks by
+distinct check name, diff that set against the Prometheus rule set to produce
+the genuine gap list, and treat cross-host checks as their own sub-problem.
+That inventory is safe to produce autonomously and would turn this into a
+countable backlog -- worth doing first, and separately from any deletion.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 11,
+    "issue_id": "nixos-a71",
+    "author": "johnw",
+    "text": "2026-08-17: first pass of the inventory this issue asks for. Read-only; nothing\nchanged. Identities are deliberately omitted throughout -- host addresses are\nnetwork topology and stay out of the tracked repo.\n\nTHE 320 NATIVE CHECKS COLLAPSE INTO 31 CHECK COMMANDS, and six of them are 79%\nof the work:\n\n     122  check_systemd_service\n      40  check_file_age_tier1\n      29  check_ssl_cert\n      23  check_ping\n      23  check_https_vhost\n      17  check_systemd_service_conditional\n      -- 66 more across 25 further commands (podman, tcp, imap/imaps, smtp,\n         ssh, dns, zfs, load/procs/users/disk, qdrant, git-workspace, atd, ...)\n\n280 distinct service descriptions; PING is the only description appearing more\nthan once (23 times, one per host).\n\nCLASS-LEVEL COVERAGE. Prometheus watches MORE targets than Nagios in every\nclass:\n\n    class (nagios count)                prometheus side\n    check_ping (23)                     42  blackbox_icmp targets\n    check_https_vhost + https (25)      40  blackbox_http targets\n    check_ssl_cert + external (30)      40  probe_ssl_earliest_cert_expiry\n    check_systemd_service* (140)       569  distinct units in node_systemd_unit_state\n    check_file_age_tier1 (40)           51  node_textfile_mtime_seconds\n    check_podman_container* (9)         16  container_health_status\n    check_zfs_pool (1)                   7  node_zfs_zpool_state\n\nDO NOT READ THAT TABLE AS COVERAGE. Higher cardinality is not set membership,\nand checking properly turned up a real gap.\n\nTHE CROSS-HOST GAP -- the risk John named at decision time. Nagios stores host\n`address` as bare IPv4 (24 of 24); Prometheus blackbox uses hostnames (34 of\n42). A naive set comparison therefore reports 23 uncovered hosts, which is a\nFORMAT ARTIFACT, not a finding. Resolving every Prometheus target to IPv4 first\ngives the real answer:\n\n    nagios host IPs                     24\n    prometheus icmp targets             42   (2 unresolvable)\n    prometheus targets as unique IPs    40\n    covered by both                     17\n    NAGIOS-ONLY                          7   <-- the true gap\n    prometheus-only (extra)             23\n\nSo 7 hosts are pinged by Nagios and have no blackbox ICMP equivalent. Between 5\nand 7 in truth, since the 2 unresolvable Prometheus targets could account for up\nto two of them.\n\nTWO CAVEATS on that 7, both of which need settling before anyone acts:\n  * ICMP is not the only coverage form. A host with no ping probe may still be\n    covered by node_exporter or an HTTP probe, so \"no ICMP\" does not mean\n    \"unmonitored\". Only 3 node_exporter instances are scraped, though, so this\n    is unlikely to explain many of the 7.\n  * The 2 unresolvable targets are themselves worth a look -- a blackbox target\n    whose name does not resolve is not monitoring anything.\n\nNEXT STEP, still safe to do autonomously: repeat this resolve-then-compare for\nthe https_vhost and ssl_cert classes, which have the same hostname-vs-address\nshape and the same artifact risk. The systemd class needs a different method\n(unit names, not addresses) and is likely well covered given 569 known units\nagainst 140 checks.\n",
+    "created_at": "2026-08-18T03:51:48Z"
+  }
+]
+#+end_src
+
 * DONE [#B] Firewall: 17 TCP + 6 UDP ports are declared interface-agnostically
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

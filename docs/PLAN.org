@@ -99,7 +99,7 @@ BOTH HALVES DONE, per John's choice.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-18 Tue 19:46]
-:MODIFIED: [2026-08-18 Tue 19:46]
+:MODIFIED: [2026-08-18 Tue 20:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -171,6 +171,20 @@ or change a pinned toolchain version.
 CONSEQUENCE WHILE OPEN: the four verified monitoring/permissions changes from
 this cycle are committed but CANNOT ACTIVATE, and neither can anything else.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 16,
+    "issue_id": "nixos-5eo",
+    "author": "johnw",
+    "text": "2026-08-18 later check: STILL BROKEN, and one candidate fix is now ruled out.\n\nnix-config main has advanced since the breakage -- it is now\n6672d2124425028af736b50e3c0086b6a04c8397 (2026-08-19T00:20Z), versus the\naa1b9b89 pinned here. So commits have landed upstream, but they do NOT fix this:\nevaluating vulcan against that current main fails with the identical error.\n\n    The option `home-manager.users.johnw.programs.starship.presets'\n    does not exist.\n\nThat rules out the cheapest possible remedy. `nix flake update nix-config`, or\nany re-lock to main, will NOT unblock the host -- it lands on a rev that still\ncarries the incompatible option. Anyone reaching for a re-lock first should skip\nit.\n\nThe three options in the original description are unchanged, and the proven one\nstill stands: pinning nix-config to 66eaf03ee29d7bb150528707d9fa4755debddfef\nevaluates cleanly (re-verified today, exit 0). Option 1 (fix the `presets` line\nin nix-config) now additionally requires an upstream commit, since main does not\nalready contain the fix.\n\nHost state while blocked: healthy but frozen. 0 failed units, only Watchdog\nfiring, ZFS ONLINE, / at 26%, all scrape targets up, all backups succeeding. The\nonly visible symptom is systemd-tmpfiles-setup/-resetup still exiting 73\n(nixos-g52), whose fix is committed at c678182d1 and waiting on this.\n",
+    "created_at": "2026-08-19T03:45:07Z"
+  }
+]
+#+end_src
 
 * DONE [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
 :PROPERTIES:
@@ -1156,7 +1170,7 @@ has been asked about and which are not part of this issue.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 20:49]
-:MODIFIED: [2026-08-18 Tue 11:28]
+:MODIFIED: [2026-08-18 Tue 20:47]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1233,6 +1247,13 @@ countable backlog -- worth doing first, and separately from any deletion.
     "author": "johnw",
     "text": "2026-08-18, second inventory pass: the https_vhost and ssl_cert classes, plus a\nCORRECTION to yesterday's object counts. Read-only; nothing changed.\n\nCORRECTION FIRST -- yesterday's \"320 native checks and 25 hosts\" was wrong, and\nso is the issue title. The real figures are 302 services and 24 hosts.\n\nI had counted `^define service`, which also matches `define servicegroup` as a\nprefix. The cache holds 302 service blocks of 33 lines each plus 18\nservicegroup blocks of 5 lines. Word-boundary counts:\n\n    define service        302        define command      39\n    define servicegroup    18        define contact       1\n    define host            24        define timeperiod    2\n    define hostgroup        1\n\nVerified against the LIVE status.dat, which is written continuously (mtime\nminutes old) rather than at process start: 302 servicestatus and 24 hoststatus\nblocks. Cache and live agree EXACTLY -- 0 descriptions in one and not the other\n-- so despite objects.cache being 5 days old (it regenerates only on nagios\nrestart, and nagios last started 2026-08-13 23:20), it is a faithful picture of\nwhat Nagios is checking right now.\n\nHTTPS / SSL COVERAGE -- the class this pass was for.\n\n    nagios https_vhost + https_vhost_auth + ssl_cert blocks   54\n    distinct targets among them                               33\n    prometheus blackbox http targets (all http-ish jobs)      39\n    ---\n    covered by BOTH                                           32\n    NAGIOS-ONLY                                                1\n    prometheus-only                                            7\n\nExtraction was checked for silent loss: 54 matching blocks, 0 with an empty\ntarget argument, collapsing to 33 distinct hosts because most are checked by\nboth an https_vhost and an ssl_cert rule. Unlike the ping class, no address\nnormalization was needed -- both sides name vhosts identically.\n\nTHE ONE GAP is a live .lan vhost: it resolves, answers https with a 301, and is\ndeclared in the repo, but no blackbox job probes it. Confirmed genuine rather\nthan a query artifact -- an exact instance-regex match returns 0 series and no\njob in `probe_success` covers it. (A loose `.*name.*` regex appeared to return\n36 series; that was matching every .lan instance, not this host.) Host identity\ndeliberately omitted here; it is one of the 33 in the https/ssl set and is\ntrivially re-derivable by re-running the comparison.\n\nRUNNING TOTAL OF TRUE COVERAGE GAPS: 7 from the ping class (hosts pinged by\nNagios with no blackbox ICMP equivalent) plus this 1 vhost.\n\nCLASSES STILL TO AUDIT: check_systemd_service (122) + conditional (17) +\nondemand (1), check_file_age_tier1 (40), check_podman_container* (9),\ncheck_tcp (6), and the ~25 single-instance commands. The systemd class needs a\ndifferent method -- unit names, not addresses -- and 569 units are known to\nnode_systemd_unit_state against 140 checks, so it is likely well covered.\n",
     "created_at": "2026-08-18T18:28:47Z"
+  },
+  {
+    "id": 17,
+    "issue_id": "nixos-a71",
+    "author": "johnw",
+    "text": "2026-08-18, third inventory pass: the systemd class -- 140 of the 302 checks,\nthe single largest group. Read-only; nothing changed.\n\nRESULT: ZERO real coverage gaps. This class needs no Prometheus work at all.\n\n    distinct units checked by Nagios        138\n    distinct units known to Prometheus      569   (node_systemd_unit_state)\n    ---\n    covered by BOTH                         134\n    nagios-only                               4   <-- none of them real, see below\n    prometheus-only                         435\n\nMethod note: unlike the ping class, no normalization was needed. Both sides name\nunits identically (138/138 and 561/569 carry a .service/.timer/.socket suffix),\nso this is a clean set comparison rather than one at risk of a format artifact.\n\nTHE FOUR APPARENT GAPS ARE ALL DEAD CHECKS, not uncovered services. Every one\nreports LoadState=not-found on this host, and all four are assigned to vulcan\nitself rather than to a remote host:\n\n  copyparty.service              The service is RUNNING and MONITORED -- it just\n                                 has a different unit name. copyparty is an\n                                 nspawn container, so the real unit is\n                                 container@copyparty.service (active/running,\n                                 5 series in node_systemd_unit_state). The\n                                 Nagios check names a unit that never existed.\n\n  critical-services-exporter.service\n  rspamd-scan-mailboxes.service\n  rspamd-scan-mailboxes.timer    Pure dead config. `grep` finds these names in\n                                 exactly ONE file each -- modules/services/\n                                 nagios.nix -- i.e. they exist only as check\n                                 definitions pointing at nothing.\n\nWHY NOBODY NOTICED, and this is the part worth carrying into the migration:\ncheck_systemd RETURNS OK FOR A UNIT THAT DOES NOT EXIST. Proven directly against\nthe deployed plugin:\n\n    check_systemd -u sshd.service        -> exit 0  \"sshd.service: active\"\n    check_systemd -u copyparty.service   -> exit 0  \"copyparty.service: inactive\"\n    check_systemd -u this-unit-cannot-possibly-exist-xyz.service\n                                         -> exit 0  \"...: inactive\"\n\nA fictional unit is reported as OK/inactive. So all 122 check_systemd_service\nchecks are structurally blind to the case \"the thing I monitor is gone\", and any\nservice renamed or removed leaves a check that passes forever. That is exactly\nwhat happened here, and it means Nagios's systemd coverage was weaker than its\ncheck count suggests -- 4 of 138 units were being watched by a check that could\nnot fail.\n\nPrometheus is not automatically better on this axis -- a removed unit loses its\nseries, and SystemdServiceFailed cannot fire on a series that is absent -- but\nthe repo already uses absent() guards for the critical set (CriticalServiceDown\nin health-checks.yaml), which is the correct pattern for it.\n\nRUNNING TOTAL OF TRUE COVERAGE GAPS, unchanged at 8:\n    ping class     7 hosts pinged by Nagios with no blackbox ICMP equivalent\n    https/ssl      1 live vhost with no blackbox probe\n    systemd        0\n\nCLASSES STILL TO AUDIT: check_file_age_tier1 (40), check_podman_container* (9),\ncheck_tcp (6), and ~25 single-instance commands (imap/imaps, smtp, ssh, dns,\nzfs, load/procs/users/disk, qdrant, git-workspace, atd). That is 80 checks left\nof the original 302, with the three largest classes now done.\n",
+    "created_at": "2026-08-19T03:47:54Z"
   }
 ]
 #+end_src

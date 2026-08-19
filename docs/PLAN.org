@@ -1750,15 +1750,17 @@ because of --checksum, so the ~50-62 min / ~125 GB cost does not decay.
 ]
 #+end_src
 
-* TODO [#C] pushme-positron fails: remote rsync binary vanished from its Nix profile
+* DONE [#C] pushme-positron fails: remote rsync binary vanished from its Nix profile
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-f0x
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 00:16]
-:MODIFIED: [2026-08-19 Wed 00:16]
+:MODIFIED: [2026-08-19 Wed 01:03]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 01:03]
+:CLOSE_REASON: Transient remote condition, not a config defect. The configured rsync path was verified working by probing with rsync only, and a real run completed in 7m16s with exit 0.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1833,6 +1835,20 @@ NOTE: no dedicated staleness alert covers this mirror -- SystemdServiceFailed is
 the only thing watching it. That is adequate while the unit fails loudly, but it
 would NOT catch the case where the unit succeeds while transferring nothing.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 21,
+    "issue_id": "nixos-f0x",
+    "author": "johnw",
+    "text": "RESOLVED. The failure was a TRANSIENT window on the remote, not a configuration\ndefect. No change was needed here, and the resilient --rsync-path I proposed in\nthe original description would have been a fix for a problem that does not exist.\n\nWHAT I PROBED, using only rsync per John's standing constraint that this process\nruns nothing else on that host. Ran rsync --list-only through the service's own\nrsh wrapper against five candidate --rsync-path values, printing exit codes only:\n\n    <home>/.nix-profile/bin/rsync            WORKS   <- the configured path\n    rsync                                    WORKS\n    /etc/profiles/per-user/$USER/bin/rsync   fail(12)\n    /run/current-system/sw/bin/rsync         fail(12)\n    /usr/bin/rsync                           WORKS\n\nThe configured path works. So the home-manager useUserPackages layout-change\nhypothesis in the original description is DISPROVEN -- the profile did not move,\nthe binary was simply absent for a window around 00:02. A nix profile operation\nor garbage collection on the remote fits: ~/.nix-profile is a symlink that is\nbriefly replaced during profile changes, and vulcan's hourly pull at :02 past\nmidnight landed inside that window.\n\nVERIFIED BY ACTUALLY RUNNING IT, not by inference:\n    systemctl reset-failed pushme-positron\n    systemctl start pushme-positron\n    00:54:04 started, 01:01:20 finished -- 7m16s, Result=success, exit=0\n    \"Finished Pull <remote> home into /tank/Backups/Contracts/<remote>/nfs\"\n    Consumed 42.9s CPU, 406.1M read from disk\nThe hourly timer then started the next run immediately at 01:01:20, so the unit\nis back on its normal schedule. Only ONE run was ever lost (00:02); the runs at\n18:07 through 23:05 the previous evening all succeeded normally.\n\nA SCARE I RAISED AND THEN DISPROVED, recorded so it is not re-investigated: I\nbriefly reported that the --rsh wrapper store path referenced by the failing run\nno longer existed, which would have implied a garbage collection removing paths\nthe running system needs. That was an artifact of MY OWN redaction -- the sed\npattern `positron[a-zA-Z0-9._-]*` ate the `-rsh` suffix, so I searched for\n`*-pushme-positron` when the real name is `*-pushme-positron-rsh`. The path is\npresent and intact, and nix-gc last ran 2026-08-17 without incident.\n\nNOTE FOR NEXT TIME: this unit is on the ServiceStuckActivating exclusion list\nfor being a legitimately long job with a 12h ceiling, which makes \"wedged\ntransfer\" the natural first hypothesis. It was wrong here -- the unit failed in\nONE SECOND. Check ExecMainExitTimestamp minus InactiveExitTimestamp before\nassuming a timeout.",
+    "created_at": "2026-08-19T08:03:31Z"
+  }
+]
+#+end_src
 
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
@@ -2111,6 +2127,89 @@ work to paper over the fault. Still not urgent and still not autonomous to fix
   }
 ]
 #+end_src
+
+* TODO [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-i4e
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 01:01]
+:MODIFIED: [2026-08-19 Wed 01:01]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Setting climate.upstairs_vtherm to eco does not reliably push the eco setpoint
+to the Google Nest (climate.upstairs). Reported by John 2026-08-19. Diagnosed,
+NOT fixed -- the remedy changes HVAC behaviour and the config lives in Home
+Assistant's UI config entries, not this repo.
+
+WHAT JOHN SAW WAS REAL, BUT TONIGHT'S INSTANCE WAS A RED HERRING:
+    00:53:02  VTherm -> eco, setpoint 80 -> 88   (context 01a019026571, user)
+    00:54:14  Nest   -> 88                       (context 01a019037977, user)
+The two contexts are DIFFERENT. Home Assistant propagates context through
+service calls, so a VTherm-initiated write would share that context or parent
+it. It did not: tonight's Nest change was a SEPARATE user action 72 seconds
+later. Over 7 days only 2 of 945 Nest state rows carry a user context at all,
+and both are John. So the VTherm did not propagate tonight either -- John set it
+himself while checking.
+
+THE REAL FAILURE, with cost attached. On 2026-08-17 eco was set at 23:29:00 and
+held until 09:33 the next morning. Across that 10-hour window the Nest's
+setpoint never left 81, and the Nest ACTIVELY COOLED:
+
+    hvac_action=idle      21 samples   room 78-81   setpoint 81
+    hvac_action=cooling    8 samples   room 78-82   setpoint 81
+
+Eco wanted no cooling until 88. The house was cooled to 78-82 for ten hours
+instead, so this is not cosmetic -- it silently defeats eco and burns AC runtime.
+
+THE FAILURE IS SILENT. Checked and ruled out at both eco transitions:
+,  * A-91 (the known `unsupported operand type(s) for -: 'float' and 'NoneType'`
+    at nest/climate.py, which silently discards setpoints): ZERO occurrences in
+    3 days. Instrument verified working -- the same journal holds 25 TypeErrors,
+    66 Tracebacks and 2575 HA lines over that period, so the absence is real.
+    The 25 TypeErrors are all `'SmartErrorCode' object is not subscriptable`,
+    which is Kasa, not Nest.
+,  * Nest OAuth failure (google_nest_sdm AuthException, 400 Bad Request): 2
+    occurrences, both on Aug 16 only.
+,  * nest/climate.py traceback (set_cool / async_set_temperature): 1 occurrence,
+    Aug 16 only.
+None of these fall on 08-17 23:29 or 08-19 00:53. Nothing was logged at all.
+
+MECHANISM, hypothesis not yet proven. The Nest setpoint is rewritten constantly
+by the integration when the VTherm has demand -- the 79/80/81/82 oscillation
+visible all day is auto-regulation at work, and the VTherm currently reports
+regulated_target_temperature = 90.0. During eco with the room already BELOW the
+eco setpoint there is no demand, and no writes occur at all. The Nest is left in
+`cool` mode carrying its last setpoint (81), so the Nest's own control loop
+resumes cooling at 82 regardless of what the VTherm wants.
+
+That fits every observation, but it is inference from the state history rather
+than something I have confirmed against the versatile_thermostat configuration.
+
+WHY NOT FIXED HERE:
+,  * The candidate remedies all CHANGE COOLING BEHAVIOUR: having the VTherm drive
+    the underlying entity to `off` in eco rather than leaving it in `cool`,
+    changing the auto-regulation mode/threshold so a setpoint is pushed even
+    with no demand, or adding an automation to mirror the eco setpoint onto the
+    Nest. Which is right depends on what John wants the Nest to do when the
+    VTherm is idle.
+,  * The VTherm is a UI config entry. Its settings live under
+    /var/lib/hass/.storage/, which this repo's rules forbid reading or editing.
+,  * Nothing in /etc/nixos ties these two entities together, so there is no
+    repo-side change that would fix it.
+,  * Independently, no NixOS change can be deployed right now (nixos-chl).
+
+SUGGESTED NEXT STEP: confirm the mechanism by watching one eco transition where
+the room is ABOVE 88 (so demand exists). If the setpoint propagates in that case
+and not otherwise, the no-demand hypothesis is confirmed and the fix is a VTherm
+configuration change rather than anything in this repo.
+#+end_example
 
 * DONE [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:

@@ -1727,6 +1727,90 @@ because of --checksum, so the ~50-62 min / ~125 GB cost does not decay.
 ]
 #+end_src
 
+* TODO [#C] pushme-positron fails: remote rsync binary vanished from its Nix profile
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-f0x
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 00:16]
+:MODIFIED: [2026-08-19 Wed 00:16]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Alert: SystemdServiceFailed for pushme-positron.service, 2026-08-19 00:04.
+Diagnosed, NOT fixed -- the fault is on the remote machine, and this host cannot
+deploy a config change right now anyway (nixos-chl).
+
+ROOT CAUSE, exactly. The remote-side rsync binary named by --rsync-path is gone:
+
+    bash: line 1: <home>/.nix-profile/bin/rsync: No such file or directory
+    rsync: connection unexpectedly closed (0 bytes received so far) [Receiver]
+    rsync error: error in rsync protocol data stream (code 12)
+
+The unit ran for ONE SECOND (00:02:28 -> 00:02:29, exit 1). That matters because
+this service is on the ServiceStuckActivating exclusion list for being a
+legitimately long job with a 12h TimeoutStartSec -- so the obvious hypothesis
+(a wedged or timed-out transfer) is wrong. It failed instantly on a missing
+remote binary.
+
+NOT A LOCAL REGRESSION. modules/services/pushme-positron.nix has not changed
+since 2026-08-13, and the --rsync-path line itself since 2026-08-11. Over the
+retained journal there are 123 successful runs against 18 "done (with errors)",
+and this is the FIRST "No such file or directory" in 7 days.
+
+WINDOW, bounded tightly by the hourly timer:
+    Aug 18 23:00:59 -> 23:05:26   SUCCESS (4m27s, normal)
+    Aug 19 00:02:28 -> 00:02:29   FAILED  (1s)
+
+So the remote's ~/.nix-profile/bin/rsync disappeared between 23:05 and 00:02.
+A nix garbage collection, a profile rebuild, or a home-manager switch on that
+machine in that window all fit. Determining which requires looking at the remote,
+which is deliberately out of scope here: John's standing rule is that the only
+command this process should ever run on that host is `rsync`.
+
+WHY THE PATH IS HARDCODED, from the module's own comment: the remote's rsync is
+a Nix profile binary and is NOT on the PATH of the non-login shell that
+rsync-over-ssh gets. `command -v rsync` was measured there as
+<home>/.nix-profile/bin/rsync. Without the flag the transfer dies with
+"rsync: command not found". So the hardcoding was deliberate and correct at the
+time -- it is simply brittle against any change to the remote's profile layout.
+
+OPTIONS:
+
+  1. Restore rsync on the remote (reinstall into that profile). No change here
+     at all, and the hourly job resumes by itself. Correct if the disappearance
+     was accidental.
+
+  2. Make --rsync-path resilient instead of exact, e.g.
+
+       --rsync-path=PATH=$HOME/.nix-profile/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:$PATH rsync
+
+     This survives all three common Nix layouts, including the home-manager
+     `useUserPackages = true` case where binaries move from ~/.nix-profile/bin
+     to /etc/profiles/per-user/<user>/bin -- which would produce EXACTLY this
+     symptom. Still a single rsync invocation, so it respects the standing
+     constraint. UNTESTED: it cannot be verified while nixos-chl blocks
+     switching, and it must not be committed unverified.
+
+  3. Both -- fix the remote now, harden the flag when the host can build again.
+
+IMPACT WHILE OPEN: the hourly pull into /tank/Backups/Contracts/<remote>/nfs is
+not running, so that mirror is frozen at the Aug 18 23:05 state. The local ZFS
+snapshots of it remain intact; nothing has been deleted. The alert is ACTIVE in
+Alertmanager and, because the timer retries hourly and fails in a second each
+time, it will keep re-notifying until either the remote is fixed or the alert is
+silenced.
+
+NOTE: no dedicated staleness alert covers this mirror -- SystemdServiceFailed is
+the only thing watching it. That is adequate while the unit fails loudly, but it
+would NOT catch the case where the unit succeeds while transferring nothing.
+#+end_example
+
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

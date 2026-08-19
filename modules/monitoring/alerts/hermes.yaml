@@ -270,33 +270,87 @@ groups:
             still exists (nix-collect-garbage after a generation was removed is
             the likely cause) and that it is executable.
 
-      # Real traffic is failing even though the worker runs. Distinguishes
-      # "extraction is broken" from "the worker is broken": this fires on network
-      # egress loss, DNS failure, or every fetched page being JS-only.
+      # Extraction has been failing for a SUSTAINED period, not just once.
       #
-      # Requires the failure to be NEWER than the last success, for the same
-      # reason as HermesMemoryProviderLoadFailing -- a recency-only test stays
-      # true after the fault clears until the window rolls past.
+      # WHY THE WINDOW IS 12 HOURS AND NOT ONE (changed 2026-08-18, nixos-y6g).
+      # The previous form fired when the single most recent batch had zero
+      # successes and that failure was under an hour old. Measured over all four
+      # agent-log rotations, that is NORMAL OPERATION rather than a fault:
+      #
+      #     121 of 157 URLs extracted        (77%)
+      #     12 of 105 batches returned zero  (11%)
+      #     worker-level errors              0, across two weeks
+      #
+      # Every zero-success batch examined was a page trafilatura could not
+      # render -- a JS-only SPA or a stub -- which this extractor cannot handle
+      # BY DESIGN. So the old rule paged roughly once in nine batches for a
+      # non-event, and an alert that fires on healthy behaviour trains you to
+      # ignore it.
+      #
+      # WHY A TIME-SINCE-SUCCESS TEST NEEDS THE FAILURE CONJUNCTION. Extraction
+      # is demand-driven, not scheduled: it runs when the agent is asked to read
+      # something. Measured gaps between consecutive SUCCESSFUL batches over 10
+      # days reach 24.0h purely from disuse (26 gaps over 6h, 6 over 12h, 1 over
+      # 24h). A bare "no success for 12h" would therefore alert on nobody using
+      # the feature. Requiring last_failure > last_success means a quiet stretch
+      # only counts if the batch preceding it actually FAILED, which reduces the
+      # exposure to roughly the 11% of gaps that begin with a failed batch.
+      #
+      # 12h was chosen deliberately over 24h/36h: this rule is the backstop for
+      # SUBTLE failures, because a dead or missing worker is already caught
+      # within ~15m by HermesExtractWorkerBroken (hermes_extract_worker_ok == 0,
+      # for: 15m) a few rules above this one. Trading
+      # an occasional false positive (~0.7 per 10 days) for half-day detection
+      # is the right side of that tradeoff.
+      # THE UPPER BOUND ON THE FAILURE IS LOAD-BEARING -- DO NOT DROP IT.
+      # The first draft of this retune omitted it and was caught in replay
+      # before deployment: over the same 14 days it produced 229 true samples
+      # against the old rule's 34, i.e. the "fix" was 7x NOISIER. Without an
+      # upper bound the rule LATCHES -- one failed batch followed by disuse
+      # keeps time-since-success growing forever and nothing ever clears it
+      # except an eventual success. Measured 14-day sample counts:
+      #
+      #     old rule (1h recency window)      34
+      #     draft without the upper bound    229   <-- latched
+      #     this rule                          7   <-- 79% quieter than old
+      #
+      # With both bounds at the same 43200 and last_failure > last_success, the
+      # pair means: last success is older than 12h AND last failure is newer
+      # than 12h, i.e. WITHIN THE LAST 12 HOURS EXTRACTION WAS ATTEMPTED AND
+      # EVERY ATTEMPT FAILED. It self-clears two ways: a success flips the
+      # ordering clause immediately, and 12h without any new attempt ages the
+      # failure out.
       - alert: HermesExtractFailing
         expr: |
           hermes_extract_last_failure_timestamp_seconds > 0
-          and (time() - hermes_extract_last_failure_timestamp_seconds) < 3600
           and ignoring(__name__) hermes_extract_last_failure_timestamp_seconds > hermes_extract_last_success_timestamp_seconds
+          and (time() - hermes_extract_last_success_timestamp_seconds) > 43200
+          and (time() - hermes_extract_last_failure_timestamp_seconds) < 43200
         for: 10m
         labels:
           severity: warning
           category: availability
           service: hermes-agent
         annotations:
-          summary: "Hermes web extraction is failing on real requests"
+          summary: "Hermes web extraction has failed every attempt for 12 hours"
           description: |
-            The agent's most recent extraction outcome was a batch in which ZERO
-            urls succeeded, or a worker-level error, within the last hour --
-            while the worker itself is runnable. Partial failures are ignored on
-            purpose, so this is not one dead link. Likely causes: the guest lost
-            outbound network, DNS is failing, or the pages being requested are
-            JavaScript-only (which this extractor cannot render by design --
-            see pkgs/hermes-local-extract/src/extract_worker.py).
+            Every extraction attempt in the last 12 hours failed, and none
+            succeeded, while the worker itself is runnable. A single failed batch
+            is expected and does NOT trigger this -- roughly one batch in nine
+            returns nothing because the page is JavaScript-only, which this
+            extractor cannot render by design.
+
+            Sustained failure points at the environment rather than the content:
+            the guest lost outbound network, or DNS is failing. Check the reason
+            text that now accompanies every batch result:
+
+              journalctl / agent.log  |  grep 'Local extract:'
+
+            The line names the distinct failure reasons (URL-scrubbed). "could
+            not resolve host" across every URL means DNS; "could not fetch the
+            page" across every URL means egress. A mixture of per-page
+            extraction complaints means the pages, and this alert is a false
+            positive worth retuning rather than investigating.
 
       # The host-side bridge that OpenClaw talks to. If this fails
       # the openclaw-side mcporter cannot reach hermes regardless of

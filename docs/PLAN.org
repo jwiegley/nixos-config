@@ -92,6 +92,86 @@ BOTH HALVES DONE, per John's choice.
    comment now says so, and warns that any future edit to this setting belongs in a
    planned window.
 
+* TODO [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-5eo
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-18 Tue 19:46]
+:MODIFIED: [2026-08-18 Tue 19:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+THE HOST CANNOT BE REBUILT. Every `/etc/nixos/build` invocation fails during
+evaluation, so no configuration change of any kind can be deployed until this is
+resolved. Found 2026-08-18 during the health cycle, when a routine switch failed.
+
+    error: The option `home-manager.users.johnw.programs.starship.presets'
+    does not exist. Definition values:
+      - In `<nix-config>/config/johnw.nix':
+          [ "nerd-font-symbols" ]
+
+THE MISMATCH. nix-config's config/johnw.nix line 232 sets
+
+    programs.starship.presets = [ "nerd-font-symbols" ];
+
+`programs.starship.presets` does not exist in the home-manager this host pins
+(release-25.11, rev 3ee51fbdac8c). nix-config evidently tracks a newer
+home-manager where that option was added.
+
+This is the SAME STRUCTURAL FAILURE as nixos-sil (2026-08-15): vulcan consumes
+nix-config with `flake = false`, so nix-config's own inputs never apply here and
+version skew between the two surfaces as an eval error with no local cause. The
+last such incident also took the host down completely.
+
+TIMELINE, established from git and the running system:
+    2026-08-17 23:25   last successful build (running system)
+    2026-08-18 14:45   b4ae2f94f  flake.lock: Update  -> nix-config 7e92da92
+    2026-08-18 14:59   beef6efe9  flake.lock: Update  -> nix-config aa1b9b89
+    2026-08-18 ~15:2x  first failing build
+
+CONFIRMED NOT CAUSED BY LOCAL WORK. The failure reproduces at HEAD with the
+working tree stashed, and the health-cycle changes in progress contain zero
+references to starship.
+
+BISECTED, and one fix is PROVEN. Reverting nix-config only to 7e92da92 (the
+14:45 rev) is NOT sufficient -- it fails identically. Pinning it to
+66eaf03ee29d7bb150528707d9fa4755debddfef, the rev in effect before BOTH of
+today's updates, evaluates cleanly (exit 0, drvPath produced). So the breaking
+change is in nix-config between 66eaf03e and 7e92da92.
+
+THE OPTIONS, all of which are John's call since two of them touch his own
+nix-config repo:
+
+  1. Fix it in nix-config -- guard or remove the `presets` line, or make it
+     conditional on the option existing. Correct in principle: nix-config should
+     work against the home-manager its consumers pin. Fastest if John is in that
+     repo anyway, and needs no change here at all.
+
+  2. Pin nix-config back to 66eaf03ee29d in this repo's flake.lock. PROVEN to
+     restore buildability, surgical, and trivially reversible. Undoes today's
+     two updates, so any other change they carried is lost until nix-config is
+     fixed.
+
+  3. Move this host's home-manager off release-25.11 to a rev that has
+     `programs.starship.presets`. Matches nix-config's expectation, but changes
+     the home-manager version for all 14 home-manager users at once, on a host
+     whose stateVersion is 25.11. Highest blast radius of the three.
+
+Recommendation: 1 if John is willing to touch nix-config now, 2 as the immediate
+unblock otherwise. NOT done autonomously -- 2 reverts a commit John made
+deliberately 20 minutes before it was found, and 1 and 3 are outside this repo
+or change a pinned toolchain version.
+
+CONSEQUENCE WHILE OPEN: the four verified monitoring/permissions changes from
+this cycle are committed but CANNOT ACTIVATE, and neither can anything else.
+#+end_example
+
 * DONE [#E] Syncthing: one JumpDesktop profile blocked by a hera/Hera case conflict
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1575,14 +1655,14 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
-* TODO [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
+* DOING [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-g52
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-17 Mon 12:48]
-:MODIFIED: [2026-08-17 Mon 12:48]
+:MODIFIED: [2026-08-18 Tue 19:47]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1648,6 +1728,20 @@ THE OPTIONS:
 DO NOT act without John: options 1 and 2 both change permissions or ownership
 semantics on a data directory that is also a network share.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 15,
+    "issue_id": "nixos-g52",
+    "author": "johnw",
+    "text": "IMPLEMENTED, NOT YET VERIFIED -- deliberately left open. Per John's decision\n(2026-08-18): chown the parent, override the mode to 0750, add johnw to immich.\n\nThe three parts are in modules/services/immich.nix and are interdependent:\n\n  1. systemd.tmpfiles.rules: \"z /tank/Photos 2750 root immich -\"\n     A root-owned parent is what makes systemd's path transition legal, which is\n     what stops the exit 73. `z` adjusts an existing path only -- non-recursive,\n     never creates or deletes. Deliberately NOT `Z` (would rewrite ownership\n     across the whole photo library) and emphatically not `D`.\n\n  2. systemd.tmpfiles.settings.immich.\"/tank/Photos/Immich\".e.mode =\n       lib.mkForce \"0750\";\n     Overrides only the mode of upstream's entry, keeping its path/user/group.\n\n  3. users.users.johnw.extraGroups = [ \"immich\" ];\n\nWHY 0750 AND NOT UPSTREAM'S 0700. /tank/Photos/Immich is exported over SMB as\n[tank-Photos-Immich] with `valid users = johnw assembly` and no `force user`, so\nSamba touches the filesystem as the logged-in user. The share was verified DEAD\nbefore this change -- johnw traverse: NO, list: NO -- because neither valid user\nis in the immich group. 0750 plus part 3 makes it work as its config intends.\nUpstream's 0700 exists to repair early-24.11 WORLD-READABLE installs; 0750\nimmich:immich is not world-readable, so that intent is preserved.\n\nPART 3 IS NOT OPTIONAL. Once the parent is root-owned johnw is no longer its\nowner, and group immich becomes his only path into /tank/Photos (2750, group\nr-x). Applying part 1 alone would lock him out of his own photo directory. This\nwas surfaced to John as a conflict between two of his answers and resolved\nexplicitly.\n\nVERIFIED SO FAR:\n  * `nix eval` of the full toplevel succeeds with these changes -- all three\n    module options are valid and mkForce merges against upstream's definition\n  * blast radius of the group grant checked before applying: no other user holds\n    group immich, /var/lib/immich is already 0755 with a single group-owned\n    entry, and /tank/Photos already carries group immich\n\nNOT VERIFIED, which is why this stays open. Every effect here happens at\nACTIVATION, and the host cannot switch (nixos-5eo, unrelated P1). After the\nfirst successful switch, confirm all four:\n    stat -c '%U:%G %a' /tank/Photos            -> expect root:immich 2750\n    stat -c '%U:%G %a' /tank/Photos/Immich     -> expect immich:immich 750\n    id -nG johnw                               -> expect immich present\n    systemctl show systemd-tmpfiles-resetup -p ExecMainStatus  -> expect 0\nThen, as johnw, confirm `test -x /tank/Photos/Immich` succeeds -- note a\npre-existing login session will not have the new group until re-login.\n",
+    "created_at": "2026-08-19T02:47:17Z"
+  }
+]
+#+end_src
 
 * DONE [#B] Syncthing Documents folder stuck 6 days: chmod clobbered the ACL mask
 :PROPERTIES:
@@ -3415,15 +3509,17 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
-* TODO [#D] Two alert rules apply rate() to a 0/1 gauge and can never fire
+* DONE [#D] Two alert rules apply rate() to a 0/1 gauge and can never fire
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-w3w
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-17 Mon 16:50]
-:MODIFIED: [2026-08-17 Mon 16:50]
+:MODIFIED: [2026-08-18 Tue 19:46]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-18 Tue 19:46]
+:CLOSE_REASON: Both rules rewritten on node_systemd_service_restart_total. Generic rule is now a 6h/>8 chronic-churn detector, genuinely disjoint from ServiceRestartLooping; the fetchmail duplicate was deleted with its rationale recorded in place.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3495,6 +3591,20 @@ directly above ServiceRestartLooping says "The two rules are complementary --
 keep both." That was a deliberate prior decision, so deleting that one in
 particular should be John's call rather than a cleanup.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 14,
+    "issue_id": "nixos-w3w",
+    "author": "johnw",
+    "text": "Both rate()-on-a-gauge rules resolved per John's decision (2026-08-18): rewrite\nboth properly, on the correct counter metric.\n\n1. ServiceRestartingFrequently (modules/monitoring/alerts/systemd.yaml) is now a\n   CHRONIC-CHURN detector, deliberately not another burst detector:\n\n       increase(node_systemd_service_restart_total{\n                 name=~\".*\\\\.service\",\n                 name!~\"[0-9a-f]{64}-.*\\\\.service\"}[6h]) > 8      for: 15m\n\n   This is what earns the \"keep both\" note above ServiceRestartLooping. A\n   rewrite at any similar window/threshold would have duplicated that rule\n   (30m/>3); a 6h window catches a shape the burst rule STRUCTURALLY CANNOT --\n   a service restarting steadily without ever reaching 3-in-30m.\n   fetchmail-good is exactly that shape: peak 2.01 per 30m, but 7 per 24h.\n\n   Calibrated on 30 days: >8 in 6h matches 1 service, and NOT the one the burst\n   rule catches, so the two now cover disjoint failure modes. >5 was rejected --\n   it sits one restart above fetchmail-good's own benign peak of 4.00/6h and\n   would fire on known-good behaviour.\n\n2. FetchmailGoodFlapping (modules/services/fetchmail-alerts.nix) DELETED rather\n   than rewritten, per John's follow-up answer. The generic chronic rule now\n   covers this unit's failure shape, and a fetchmail-specific rule would need a\n   threshold in the narrow 5-8 band with no incident to calibrate against --\n   which is precisely how the dead rule came to exist. A comment recording the\n   old expression, why it could never fire, and why it was not replaced is left\n   in place at the deletion site.\n\nWHY THEY WERE DEAD, restated for the record: node_systemd_unit_state is a 0/1\nGAUGE. rate() reads every 1->0 fall as a counter reset, so the output was a\nunitless artifact rather than restarts/second, while both thresholds had been\nwritten as if it meant restarts/second. Measured maxima over 7 days: 0.00112\nagainst a 0.05 threshold (45x below) and 0.00897 against 0.1 (11x below). Zero\nfiring series for FetchmailGoodFlapping in 14 days.\n\nVERIFICATION:\n  * new expression queried live: status=success, no error, 0 series now\n  * 7-day replay of the new expression: 0 services would have fired (quiet),\n    against 1 over 30 days -- i.e. it is live but not noisy\n  * promtool accepted both files; the built store copies confirm the new content:\n      .../alerts/systemd.yaml            contains the churning rule\n      .../fetchmail-alerts.yml           has 0 active FetchmailGoodFlapping\n                                         alert lines, FetchmailGoodDown intact\n\nNOT YET ACTIVE, blocked on nixos-5eo (unrelated P1: the host cannot switch).",
+    "created_at": "2026-08-19T02:46:52Z"
+  }
+]
+#+end_src
 
 * DONE [#D] rclone-cloud-backup passes --track-renames to copy, logging ERROR every run
 :PROPERTIES:
@@ -3706,15 +3816,17 @@ container-health-exporter (6 in 48h) is the only genuinely live residue and is
 small; worth a look if it grows.
 #+end_example
 
-* TODO [#D] Decide whether HermesExtractFailing should alert on a single zero-success batch
+* DONE [#D] Decide whether HermesExtractFailing should alert on a single zero-success batch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-y6g
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 12:12]
-:MODIFIED: [2026-08-17 Mon 12:12]
+:MODIFIED: [2026-08-18 Tue 19:46]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-18 Tue 19:46]
+:CLOSE_REASON: Retuned to a 12h sustained-failure test per John. Replay: 34 -> 7 true samples over 14 days; a latching regression in the first draft was caught and fixed before deploy.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3784,6 +3896,20 @@ his call and not an obvious defect to be repaired.
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 13,
+    "issue_id": "nixos-y6g",
+    "author": "johnw",
+    "text": "Retuned per John's decision (2026-08-18): require SUSTAINED failure, N = 12h.\n\nNEW EXPRESSION (modules/monitoring/alerts/hermes.yaml):\n\n    hermes_extract_last_failure_timestamp_seconds > 0\n    and ignoring(__name__) last_failure > last_success\n    and (time() - last_success) > 43200\n    and (time() - last_failure) < 43200\n\nSemantics: within the last 12 hours extraction was attempted and EVERY attempt\nfailed. Self-clears two ways -- a success flips the ordering clause immediately,\nand 12h with no new attempt ages the failure out.\n\nTHE FOURTH CLAUSE WAS ADDED AFTER REPLAY CAUGHT A REGRESSION IN MY OWN DRAFT.\nThe first version omitted the upper bound on the failure. Replayed over the same\n14 days it produced 229 true samples against the old rule's 34 -- the \"fix\" was\n7x NOISIER, because without an upper bound the rule LATCHES: one failed batch\nfollowed by disuse keeps time-since-success growing forever with nothing to\nclear it. That is the exact failure mode the rule's original comment warned\nabout, and I had removed the bound that prevented it.\n\nMEASURED, 14-day replay against the live TSDB:\n    old rule (1h recency)             34 true samples\n    my first draft (no upper bound)  229   <-- latching regression, not deployed\n    deployed rule                      7   <-- 79% quieter than the old rule\n\nWHY 12h RATHER THAN 24h/36h. Extraction is demand-driven, so gaps between\nsuccessful batches reach 24.0h from disuse alone (over 10 days: 26 gaps > 6h,\n6 > 12h, 1 > 24h). John chose 12h over my 24h recommendation, accepting ~0.7\nfalse positives per 10 days for half-day detection. Defensible: a dead worker is\nalready caught within ~15m by HermesExtractWorkerBroken\n(hermes_extract_worker_ok == 0, for: 15m), so this rule is only the subtle-\nfailure backstop.\n\nVERIFICATION:\n  * expression parses and returns 0 series now (extraction healthy) -- checked\n    against the live Prometheus API, status=success, no error\n  * promtool accepted the file: the checked derivation built and the store copy\n    /nix/store/irp25h80pb26px736sgdc5ma6m81ld6a-alerts/hermes.yaml contains the\n    new rule text\n  * 14-day replay numbers above\n\nNOT YET ACTIVE. The host cannot switch -- see nixos-5eo, an unrelated P1 where\nnix-config sets a home-manager option this host's pin lacks. The rule takes\neffect on the first successful switch after that is resolved. Nothing about this\nchange depends on that fix; it is purely a deployment block.",
+    "created_at": "2026-08-19T02:46:31Z"
   }
 ]
 #+end_src

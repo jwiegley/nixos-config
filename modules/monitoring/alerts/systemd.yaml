@@ -27,16 +27,58 @@ groups:
       # names, uses state="active" == 0 (so it also catches FAILED, which the old
       # inactive == 1 form missed) and carries an absence guard.
 
-      # Service restart detection - high restart count
+      # CHRONIC restart churn -- the slow-burn counterpart to
+      # ServiceRestartLooping's burst detection below.
+      #
+      # THIS RULE USED TO BE UNFIREABLE (fixed 2026-08-18, nixos-w3w). It read:
+      #
+      #     rate(node_systemd_unit_state{state="activating",...}[15m]) > 0.1
+      #
+      # node_systemd_unit_state is a 0/1 GAUGE, not a counter. rate() treats
+      # every 1->0 fall as a counter reset, so the output is an artifact with no
+      # units, not "restarts per second". Measured max across ALL services over
+      # 7 days: 0.00897 against a 0.1 threshold -- 11x below, i.e. it could
+      # never fire, and had never fired. The threshold had been written as if
+      # the value meant restarts/second.
+      #
+      # WHY 6h/>8 AND NOT A FASTER BURST TEST. Rewriting it as another burst
+      # detector would duplicate ServiceRestartLooping (30m/>3) rather than
+      # complement it, which is what the "keep both" note below asks for. A long
+      # window catches a shape the burst rule STRUCTURALLY CANNOT: a service
+      # restarting steadily without ever reaching 3-in-30m. fetchmail-good is
+      # exactly that -- it peaks at 2.01 per 30m (never trips the burst rule)
+      # but reaches 7 per 24h from transient IMAP errors.
+      #
+      # Calibrated against 30 days of history:
+      #     >8 in 6h  matches 1 service, and NOT the one the burst rule catches
+      #     >5 in 6h  matches 2, but sits one restart above fetchmail-good's own
+      #               benign peak of 4.00/6h, so it would fire on known-good
+      #               behaviour -- which is how the dead rule got written.
+      #
+      # Same exclusion as ServiceRestartLooping: transient podman healthcheck
+      # units are one-shots that never auto-restart and only add label churn.
       - alert: ServiceRestartingFrequently
-        expr: rate(node_systemd_unit_state{state="activating",name=~".*\\.service"}[15m]) > 0.1
-        for: 5m
+        expr: |
+          increase(
+            node_systemd_service_restart_total{
+              name=~".*\\.service",
+              name!~"[0-9a-f]{64}-.*\\.service"
+            }[6h]
+          ) > 8
+        for: 15m
         labels:
           severity: warning
           category: systemd
         annotations:
-          summary: "Service {{ $labels.name }} is restarting frequently"
-          description: "Service {{ $labels.name }} has restarted multiple times in the last 15 minutes"
+          summary: "Service {{ $labels.name }} is churning: {{ $value | printf \"%.0f\" }} restarts in 6h"
+          description: |
+            {{ $labels.name }} has auto-restarted more than 8 times in the last 6
+            hours WITHOUT ever bursting hard enough to trip ServiceRestartLooping
+            (more than 3 in any 30 minutes). That pattern means a service that
+            keeps falling over and being revived by its Restart= policy, rather
+            than one stuck in a tight crash loop -- typically a flaky external
+            dependency, not a broken unit. Check what the service is retrying
+            against before restarting anything.
 
       # Restart-loop detection via the systemd restart counter.
       # node_systemd_service_restart_total counts auto-restarts (systemd NRestarts,

@@ -40,17 +40,28 @@ let
       # FetchmailGoodDown's description rather than dropped -- the journal alone does not hold
       # fetchmail's own verbose per-poll output.
 
-      # Alert if fetchmail-good service is restarting frequently
-      - alert: FetchmailGoodFlapping
-        expr: rate(node_systemd_unit_state{name="fetchmail-good.service",state="activating"}[15m]) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-          service: fetchmail
-          instance: good
-        annotations:
-          summary: "Fetchmail Good folder service is restarting frequently"
-          description: "The fetchmail-good service is restarting more than once every 5 minutes. This may indicate connection issues or configuration problems."
+      # FetchmailGoodFlapping deleted 2026-08-18 (nixos-w3w). It read:
+      #
+      #     rate(node_systemd_unit_state{name="fetchmail-good.service",
+      #          state="activating"}[15m]) > 0.05
+      #
+      # UNFIREABLE, for two compounding reasons. node_systemd_unit_state is a
+      # 0/1 gauge, so rate() over it yields an artifact rather than a restart
+      # frequency: measured max over 7 days was 0.00112 against a 0.05
+      # threshold, 45x below. And the threshold itself was mis-scaled -- 0.05/s
+      # sustained over 15m means 45 restarts in 15 minutes, while fetchmail-good
+      # actually manages 8 state changes in 7 DAYS. Zero firing series in 14d.
+      #
+      # NOT REPLACED WITH A FETCHMAIL-SPECIFIC REWRITE. Two generic rules in
+      # systemd.yaml now cover this unit correctly and on the right metric
+      # (node_systemd_service_restart_total): ServiceRestartLooping catches
+      # bursts (>3 in 30m) and ServiceRestartingFrequently catches chronic churn
+      # (>8 in 6h), the latter written specifically because fetchmail-good's
+      # slow-burn shape is what a burst detector misses. A dedicated rule would
+      # need a threshold in the narrow band between fetchmail-good's benign peak
+      # (4.00 restarts/6h, from transient IMAP errors that self-heal) and the
+      # generic trigger at 8 -- a guess with no incident to calibrate against,
+      # which is precisely how the dead rule above came to exist.
   '';
 in
 {

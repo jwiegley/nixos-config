@@ -43,6 +43,10 @@ in
     port = 2283; # Default Immich port
 
     # Media storage location on ZFS
+    #
+    # NOTE: the permissions around this path are load-bearing and non-obvious --
+    # see the systemd.tmpfiles and users.groups blocks at the bottom of this
+    # file before changing the ownership of it or of its parent.
     mediaLocation = "/tank/Photos/Immich";
 
     # Enable built-in PostgreSQL with required extensions (VectorChord)
@@ -176,4 +180,66 @@ in
     9283 # Immich API metrics
     9284 # Immich microservices metrics
   ];
+
+  # ---------------------------------------------------------------------------
+  # PERMISSIONS AROUND mediaLocation  (nixos-g52, decided by John 2026-08-18)
+  # ---------------------------------------------------------------------------
+  #
+  # THE BUG THIS FIXES. systemd-tmpfiles-setup AND -resetup exited 73
+  # (EX_CANTCREAT) on EVERY run, while still reporting Result=success -- so
+  # `systemctl --failed` showed nothing and it went unnoticed for months. The
+  # cause was upstream's own rule, generated from mediaLocation above:
+  #
+  #     e /tank/Photos/Immich 0700 immich immich -
+  #
+  #     Detected unsafe path transition /tank/Photos (owned by johnw) ->
+  #     /tank/Photos/Immich (owned by immich) during canonicalization.
+  #
+  # systemd refuses to traverse into a directory whose owner differs from its
+  # parent's unless that parent is root-owned. That is a deliberate hardening,
+  # not a bug in systemd, so the fix has to satisfy it rather than work around
+  # it. Making the PARENT root-owned is what makes the transition safe.
+  #
+  # WHY THE MODE IS 0750 AND NOT UPSTREAM'S 0700. /tank/Photos/Immich is also
+  # exported over SMB as [tank-Photos-Immich] with `valid users = johnw
+  # assembly` and no `force user`, so Samba touches the filesystem as the
+  # logged-in user. At 0700 immich:immich neither valid user can read it -- the
+  # share was verified DEAD before this change (johnw traverse: NO, list: NO).
+  # 0750 plus the group membership below makes the share function as its own
+  # config always intended.
+  #
+  # Upstream's 0700 exists to repair early-24.11 installs that created
+  # WORLD-READABLE media storage (see the comment in nixos/modules/services/
+  # web-apps/immich.nix). 0750 immich:immich is not world-readable, so that
+  # privacy intent is preserved -- only the group bit is restored, and the group
+  # has exactly one non-service member.
+  #
+  # THE THREE PARTS ARE INTERDEPENDENT. Do not apply one without the others:
+  #   1. parent root:immich  -> makes the tmpfiles transition legal
+  #   2. child mode 0750     -> restores group access the parent change relies on
+  #   3. johnw in immich     -> REQUIRED, and not merely for the share: once the
+  #      parent is root-owned, johnw is no longer its owner, and group immich is
+  #      his only remaining path into his own photo directory (2750, group r-x).
+  #      Applying part 1 alone would lock him out of /tank/Photos.
+
+  # Part 1. Non-recursive: `z` adjusts an existing path's mode/ownership and
+  # never creates or deletes. Deliberately NOT `Z` (recursive -- would rewrite
+  # ownership across the whole photo library) and emphatically not `D`, which
+  # EMPTIES its target and has caused data loss on this host twice.
+  # The setgid bit is retained so new entries keep inheriting group immich.
+  systemd.tmpfiles.rules = [
+    "z /tank/Photos 2750 root immich -"
+  ];
+
+  # Part 2. Override only the mode of upstream's entry, keeping its path, user,
+  # group and `e` type. mkForce is needed because the immich module sets this
+  # same attribute unconditionally.
+  systemd.tmpfiles.settings.immich."/tank/Photos/Immich".e.mode = lib.mkForce "0750";
+
+  # Part 3. See the interdependence note above -- this is what keeps johnw able
+  # to reach /tank/Photos at all after part 1, and what makes the SMB share
+  # usable. Scope checked before granting: no other user holds this group, and
+  # the only other group-immich paths are /var/lib/immich (already 0755) and the
+  # media tree itself.
+  users.users.johnw.extraGroups = [ "immich" ];
 }

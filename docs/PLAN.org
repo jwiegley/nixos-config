@@ -1885,7 +1885,7 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 14:02]
-:MODIFIED: [2026-08-19 Wed 14:02]
+:MODIFIED: [2026-08-19 Wed 14:34]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1946,6 +1946,20 @@ temperature` failures with a heat_cool RANGE payload, and the Nest's own
 google_nest_sdm AuthException. Those have not recurred since, so they look like
 one bad day for Google auth on this host rather than an ongoing fault.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 31,
+    "issue_id": "nixos-fgp",
+    "author": "johnw",
+    "text": "PARTIAL RECOVERY confirmed 2026-08-19 14:32, after John re-authenticated. Two of\nthe three are back; one is not.\n\n    calendar.jwiegley_positron_ai    state=off           RECOVERED\n    calendar.john_bia_bahai_org      state=off           RECOVERED\n    calendar.john_usegitai_com       state=unavailable   STILL DOWN\n\nSupporting evidence: zero `Access token failure` / oauth2/v4/token lines since\n14:00, and the most recent such error anywhere in the journal is 2026-08-17\n12:46. So the token rejection that caused this has stopped.\n\nWHY \"no errors\" WAS NOT ENOUGH ON ITS OWN. The Node-RED health flow has not\nre-run since 13:45, so its silence carried no information, and calendar entities\nlegitimately go a long time without updating (their state is the next event, not\na heartbeat) so update-recency proved nothing either. The decisive check was the\nentity STATE: on/off means the platform is serving, unavailable means it is not.\n\nFIVE OTHER CALENDAR ENTITIES ARE ALSO UNAVAILABLE, and were not part of the\noriginal report:\n    calendar.birthdays_3\n    calendar.https_calendar_newartisans_com_cluster_agency_meetingsretreats_ics\n    calendar.https_calendar_newartisans_com_cluster_agency_meetingsretreats_ics_2\n    calendar.https_calendar_newartisans_com_subregional_regionalcontinental_ics\n    calendar.https_calendar_newartisans_com_subregional_regionalcontinental_ics_2\nNothing is logged for them since 13:00, so they are failing silently too.\n\nI tried to test whether those ICS feeds still exist and got HTTP 404 -- but the\nURLs were RECONSTRUCTED FROM ENTITY IDS, which replace slashes and dots with\nunderscores, so my guess is probably not the real URL. That 404 is not evidence\nabout the feeds; the configured URLs need reading from the actual integration\nrather than inferred. Recorded so nobody treats it as a finding.\n\nALSO NOTED, cosmetic: 17 `calendar.*_2` entities sit in states_meta with an\nEMPTY state frozen at 11:35:54 -- recorder rows for entities that no longer\nexist in HA, presumably duplicates created and removed during re-authentication.\nThey will age out with recorder retention and need no action.\n\nREMAINING: john_usegitai_com needs the same re-auth the other two got, and the\nfive unavailable entities above want a look at their configured sources. The\nmonitoring gap described in the original report is unchanged and is the reason\nnone of this raised an alert.\n",
+    "created_at": "2026-08-19T21:34:45Z"
+  }
+]
+#+end_src
 
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
@@ -2343,14 +2357,14 @@ configuration change rather than anything in this repo.
 ]
 #+end_src
 
-* TODO [#D] Gitea->GitHub auto-mirror automation does not exist; 3 repos need GitHub repos created
+* DEFER [#D] Gitea->GitHub auto-mirror automation does not exist; 3 repos need GitHub repos created
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-jqs
 :LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-08-19 Wed 12:35]
-:MODIFIED: [2026-08-19 Wed 12:35]
+:MODIFIED: [2026-08-19 Wed 14:33]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos

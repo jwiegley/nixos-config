@@ -466,6 +466,32 @@ in
                   "ucsd.edu"
                   "twin-cities.umn.edu"
                   "osuosl.org"
+
+                  # Nagios parity, added 2026-08-19 (nixos-a71). These four
+                  # were pinged by Nagios and by nothing here, found by resolving
+                  # BOTH sides to IPv4 before differencing -- Nagios stores bare
+                  # addresses while blackbox uses names, so a naive comparison
+                  # reports 23 phantom gaps. host_group becomes "local" via the
+                  # relabel below, so HostUnreachable owns them exactly as it
+                  # owns the rest of this block -- i.e. the same alerting weight
+                  # Nagios already applied, which is the point of closing the gap
+                  # before Nagios goes.
+                  #
+                  # Three are probed BY IP for the same reason TL-WPA8630 above
+                  # is: OPNsense registers only the PTR, so the forward name does
+                  # not resolve and a name-based probe fails even when the device
+                  # is up. Verified reachable at add time.
+                  #
+                  # DELIBERATELY NOT ADDED, from the same difference:
+                  #   * 127.0.0.1 -- that is this host, already probed as vulcan.lan
+                  #   * two *.local names -- mDNS-only (avahi resolves them,
+                  #     unicast DNS returns nothing). They would work while
+                  #     Prometheus probes from this host, but a sleeping device
+                  #     would page HostUnreachable as critical. Left for John.
+                  "router.lan" # 192.168.1.1
+                  "192.168.2.9" # netgear-gs108t -- PTR-only, forward name does not resolve
+                  "192.168.3.132" # ep25-office -- PTR-only, forward name does not resolve
+                  "192.168.3.45" # ep25-bedroom -- PTR-only, forward name does not resolve
                 ];
               }
               # IoT devices (host_group="iot"). These are intentionally
@@ -784,6 +810,18 @@ in
             static_configs = [
               {
                 targets = [
+                  # Nagios parity, added 2026-08-19 (nixos-a71). The BARE vhost was
+                  # checked by Nagios and by nothing here -- every other target is a
+                  # *.vulcan.lan subdomain. Marginal on its own (nginx failing would
+                  # take the other 39 probes with it) but it is the last item in the
+                  # https/ssl class, so closing it makes that class provably complete.
+                  #
+                  # It answers 301, and this module has valid_status_codes: [] i.e.
+                  # 2xx only -- safe ONLY because follow_redirects is true and the
+                  # redirect lands on a 200 in one hop. Verified before adding; if
+                  # that redirect target ever stops returning 2xx this probe fails
+                  # and the cause will not be obvious from the alert.
+                  "https://vulcan.lan"
                   "https://glance.vulcan.lan"
                   "https://192.168.1.1"
                   "https://dns.vulcan.lan"

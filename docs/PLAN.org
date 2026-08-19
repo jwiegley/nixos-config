@@ -1901,14 +1901,14 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
-* DOING [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
+* TODO [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-g52
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-17 Mon 12:48]
-:MODIFIED: [2026-08-18 Tue 19:47]
+:MODIFIED: [2026-08-19 Wed 12:35]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1985,6 +1985,13 @@ semantics on a data directory that is also a network share.
     "author": "johnw",
     "text": "IMPLEMENTED, NOT YET VERIFIED -- deliberately left open. Per John's decision\n(2026-08-18): chown the parent, override the mode to 0750, add johnw to immich.\n\nThe three parts are in modules/services/immich.nix and are interdependent:\n\n  1. systemd.tmpfiles.rules: \"z /tank/Photos 2750 root immich -\"\n     A root-owned parent is what makes systemd's path transition legal, which is\n     what stops the exit 73. `z` adjusts an existing path only -- non-recursive,\n     never creates or deletes. Deliberately NOT `Z` (would rewrite ownership\n     across the whole photo library) and emphatically not `D`.\n\n  2. systemd.tmpfiles.settings.immich.\"/tank/Photos/Immich\".e.mode =\n       lib.mkForce \"0750\";\n     Overrides only the mode of upstream's entry, keeping its path/user/group.\n\n  3. users.users.johnw.extraGroups = [ \"immich\" ];\n\nWHY 0750 AND NOT UPSTREAM'S 0700. /tank/Photos/Immich is exported over SMB as\n[tank-Photos-Immich] with `valid users = johnw assembly` and no `force user`, so\nSamba touches the filesystem as the logged-in user. The share was verified DEAD\nbefore this change -- johnw traverse: NO, list: NO -- because neither valid user\nis in the immich group. 0750 plus part 3 makes it work as its config intends.\nUpstream's 0700 exists to repair early-24.11 WORLD-READABLE installs; 0750\nimmich:immich is not world-readable, so that intent is preserved.\n\nPART 3 IS NOT OPTIONAL. Once the parent is root-owned johnw is no longer its\nowner, and group immich becomes his only path into /tank/Photos (2750, group\nr-x). Applying part 1 alone would lock him out of his own photo directory. This\nwas surfaced to John as a conflict between two of his answers and resolved\nexplicitly.\n\nVERIFIED SO FAR:\n  * `nix eval` of the full toplevel succeeds with these changes -- all three\n    module options are valid and mkForce merges against upstream's definition\n  * blast radius of the group grant checked before applying: no other user holds\n    group immich, /var/lib/immich is already 0755 with a single group-owned\n    entry, and /tank/Photos already carries group immich\n\nNOT VERIFIED, which is why this stays open. Every effect here happens at\nACTIVATION, and the host cannot switch (nixos-5eo, unrelated P1). After the\nfirst successful switch, confirm all four:\n    stat -c '%U:%G %a' /tank/Photos            -> expect root:immich 2750\n    stat -c '%U:%G %a' /tank/Photos/Immich     -> expect immich:immich 750\n    id -nG johnw                               -> expect immich present\n    systemctl show systemd-tmpfiles-resetup -p ExecMainStatus  -> expect 0\nThen, as johnw, confirm `test -x /tank/Photos/Immich` succeeds -- note a\npre-existing login session will not have the new group until re-login.\n",
     "created_at": "2026-08-19T02:47:17Z"
+  },
+  {
+    "id": 27,
+    "issue_id": "nixos-g52",
+    "author": "johnw",
+    "text": "PARTIALLY FIXED, and I got the analysis wrong. Reopening.\n\nDeployed in the 2026-08-19 11:54 switch. What worked:\n    /tank/Photos          -> root:immich 2750          as intended\n    /tank/Photos/Immich   -> immich:immich 750         mode override applied\n    johnw groups          -> johnw wheel immich        group grant landed\n    johnw traverses both  -> YES                       the SMB share is usable\n    immich-server / -ml   -> both active\nThe deployed tmpfiles rule confirms the override reached it:\n    'e' '/tank/Photos/Immich' '0750' 'immich' 'immich' '-'\n\nWHAT DID NOT WORK: systemd-tmpfiles-setup and -resetup STILL exit 73. I moved\nthe fault rather than removing it:\n\n    before   Detected unsafe path transition /tank/Photos (owned by johnw)\n             -> /tank/Photos/Immich (owned by immich)\n    now      Detected unsafe path transition /tank (owned by johnw)\n             -> /tank/Photos (owned by root)\n\nMY ERROR: systemd refuses to traverse into a directory whose owner differs from\nits parent's unless the parent is root-owned. I applied that rule at the\nchild boundary and never checked the one above it. Making /tank/Photos\nroot-owned satisfied the /tank/Photos -> Immich edge and simultaneously created\na NEW violation on the /tank -> /tank/Photos edge, because /tank is johnw-owned.\nThe chain has to be safe at EVERY edge, not just the one in the error message.\n\nSo the user-visible goals are met -- johnw reaches the Immich directory, the SMB\nshare works, permissions are as decided -- but the original symptom, two units\nexiting 73 on every run, is unchanged.\n\nWHAT REMAINS TO DECIDE. Following the same logic upward means chowning /tank\nitself to root, which is a much larger change to the pool root and not something\nto do on the back of this. The alternatives are to cancel upstream's rule\nentirely (the option originally offered as \"override the rule away\", which\ntouches no ownership and would remove the exit 73 outright), or to accept the\nexit code and document it. Both are John's call; the first is what I should have\nrecommended more strongly given it never needed the chown at all.\n",
+    "created_at": "2026-08-19T19:35:20Z"
   }
 ]
 #+end_src
@@ -2149,14 +2156,14 @@ work to paper over the fault. Still not urgent and still not autonomous to fix
 ]
 #+end_src
 
-* TODO [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
+* DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-i4e
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 01:01]
-:MODIFIED: [2026-08-19 Wed 01:01]
+:MODIFIED: [2026-08-19 Wed 12:21]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2231,6 +2238,85 @@ the room is ABOVE 88 (so demand exists). If the setpoint propagates in that case
 and not otherwise, the no-demand hypothesis is confirmed and the fix is a VTherm
 configuration change rather than anything in this repo.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 26,
+    "issue_id": "nixos-i4e",
+    "author": "johnw",
+    "text": "DEPLOYED 2026-08-19, live in Node-RED. Logic verified; end-to-end path awaits\nthe first real preset transition.\n\nPLACEMENT, per John: the Office tab (cc0a523a4e3698a9), which already holds the\nupstairs eco control -- \"upstairs HVAC to eco\" (set_preset_mode eco on\nclimate.upstairs_vtherm, fed by a \"confirmed absent\" join-wait) and \"upstairs\nexit eco\" (back to comfort, fed by \"office door closed?\" and hello_world). So\neco here is presence-driven, and this sits beside the machinery that drives it.\n\nClimate Comfort was left ENTIRELY ALONE on John's instruction -- it stays\ndisabled and untouched; that is his own in-progress work. Worth recording that\nit contains 47 nodes of adaptive setpoint blending that also write\nclimate.set_temperature to climate.upstairs, so if it is ever re-enabled it and\nthis mirror will both be writing that entity.\n\nTHE THREE NODES, on the enabled Office tab:\n  server-state-changed \"vtherm preset changed\"\n      entity climate.upstairs_vtherm, outputOnlyOnStateChange=false so\n      attribute-level changes are seen at all\n  function \"preset transition -> setpoint\"\n      fires ONLY when preset_mode actually changes; reads the new setpoint\n  api-call-service \"mirror setpoint to Nest\"\n      climate.set_temperature on climate.upstairs, temperature from payload\n\nScoped to transitions rather than every update ON PURPOSE. The VTherm refreshes\nattributes about every 20 seconds, and its auto-regulation legitimately drives\nthe Nest's setpoint up and down between presets (the 79/80/81/82 oscillation\nvisible all day). Mirroring continuously would fight that; mirroring on\ntransitions sets a baseline at each preset change and then gets out of the way.\n\nVERIFIED, by running the ACTUAL DEPLOYED function body against the event shapes\nthis installation really uses (both msg.payload and msg.data, the same\ndefensive pair the tab's own \"stash zone state\" function handles):\n    comfort -> eco   mirrors 88          PASS\n    eco -> comfort   mirrors 80          PASS\n    none -> boost    mirrors 77          PASS\n    same preset      suppressed          PASS   <- does not fight regulation\n    null preset      suppressed          PASS\n    non-numeric sp   suppressed + warn   PASS\n    msg.data shape   handled             PASS\nNode-RED accepted the deploy ({\"ok\":true}) and has logged zero errors since.\n\nNOT YET VERIFIED: the live chain firing against Home Assistant. Both thermostats\nwere sitting in agreement at 80/comfort when this went in, so there was no\ntransition to observe, and I did not manufacture one -- changing the preset on\nan occupied house at midday to prove a point is not a trade I would make\nunasked. The wiring is identical in shape to the tab's existing working nodes.\nThe next real transition (John leaving, or setting eco by hand) will confirm it,\nand the check is simply: VTherm preset changes, Nest temperature follows within\nseconds instead of never.\n\nTO DISABLE: the three nodes are named as above on the Office tab and can be\nremoved or disabled without touching anything else.\n",
+    "created_at": "2026-08-19T19:21:15Z"
+  }
+]
+#+end_src
+
+* TODO [#D] Gitea->GitHub auto-mirror automation does not exist; 3 repos need GitHub repos created
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-jqs
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-08-19 Wed 12:35]
+:MODIFIED: [2026-08-19 Wed 12:35]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+John expects every public Gitea repo to get a GitHub mirror automatically,
+created daily if absent. That automation DOES NOT EXIST and never did. Recorded
+on his instruction NOT to build it now.
+
+WHAT EXISTS, in modules/services/github-gitea-mirror.nix (382 lines, 3 units):
+  github-mirror              GitHub -> Gitea. Discovers GitHub repos and creates
+                             them IN GITEA. Its own option is documented as
+                             "Gitea user to create repositories under" (line 235).
+                             This is the OPPOSITE direction.
+  sync-push-mirrors          POSTs push_mirrors-sync to mirrors that ALREADY
+                             exist. The only POST in the module (line 43-45).
+  update-github-mirror-tokens  token refresh.
+
+So restarting sync-push-mirrors legitimately does nothing for a repo with no
+push mirror -- it iterates repos, finds no mirror to kick, and exits 0. That is
+exactly the "nothing is happening" symptom.
+
+NOTHING in the module creates a GitHub repo, and nothing creates a Gitea push
+mirror. The initial wiring per repo has always been manual; only the ongoing
+syncing is automatic (sync-push-mirrors discovers repos dynamically, so a mirror
+starts being synced with no config change once it exists).
+
+THE CURRENT GAP, measured 2026-08-19 against the Gitea public API (queried
+ANONYMOUSLY -- no token read, and anonymous access returns exactly the public
+set, which is the filter John specified):
+
+    public Gitea repos          180
+      of which pull mirrors     165   already originate on GitHub
+      Gitea-native              15
+        with a push mirror      12
+        WITHOUT                  3   <-- need a GitHub repo created
+
+    icp             updated 2025-11-10   "Code relating to the Internet Compute..."
+    org-agents      updated 2026-08-19   "An implementation of Tinderbox agents"
+    pushme-config   updated 2026-08-12
+
+Self-check: the reverse difference -- push mirrors belonging to something other
+than a public-native repo -- is EMPTY, so 15 = 12 + 3 accounts for everything.
+
+IF THIS IS BUILT LATER, the design question that stopped it is worth keeping:
+creating a public GitHub repo is PUBLISHING, and it is not reversible in any
+meaningful sense (forks, caches, archives outlive a delete). A daily unit that
+auto-creates from "is public in Gitea" fails OPEN -- a repo made public in Gitea
+by mistake is on GitHub by morning. The options considered were: dry-run then
+arm, live with a maintained exclude list (still fails open), or opt-in via a
+Gitea topic (fails closed, but contradicts "every public repo"). John declined
+all of them for now.
+
+Note also that private Gitea repos are outside this count by construction, since
+the enumeration was anonymous.
 
 * DONE [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:
@@ -3065,14 +3151,14 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#D] Matter node 17 (Thread door sensor) drops sessions intermittently, 7+ days, daily count trending up
+* TODO [#D] Matter node 17 (Thread door sensor): one concentrated CASE-failure episode on Aug 16, quiet since
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rsn
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-17 Mon 12:50]
+:MODIFIED: [2026-08-19 Wed 10:53]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -3164,6 +3250,13 @@ HA UI (Settings -> Devices -> Matter).
     "author": "johnw",
     "text": "2026-08-17 health cycle. Trend update, and a correction to how this was being\nmeasured.\n\nMEASUREMENT WAS WRONG. The keyword set previously used to count drops\n(lost/drop/resubscribe/timeout/expire) matches ZERO of the 25,380 matter-server\nlines in the retained window. Any \"node 17 is quiet now\" reading taken from it\nwas an artifact of a dead query, not evidence. The real phrasing is:\n\n    <Node:17> Setup for node failed: Unable to establish CASE session with Node 17\n    <Node:17> Unable to subscribe to Node: ... CHIP Error 0x00000032: Timeout\n    <Node:17> Node setup not completed after 30 minutes, giving up.\n\nWHAT THE CORRECTED QUERY SHOWS, over Aug 11 09:03 - Aug 17 12:43 (the full\nretained journal for this unit):\n\n    total CASE-session failures for node 17 : 20\n    Aug 16                                  : 20\n    every other day                         : 0\n    give-up event                           : Aug 16 02:20:40\n\nSo this is NOT the daily uptrend the issue title describes. It is one\nconcentrated episode on Aug 16 -- including a 30-minute window where the node\nwas unreachable and the controller abandoned setup -- with nothing before it in\nthe window and nothing on Aug 17 so far.\n\nNARROWING EVIDENCE: node 17 is the ONLY node in the fabric with any\n\"Setup for node failed\" occurrences in the window. Zero for every other node.\nThat argues the fault is the device or its own Thread link rather than the\nborder router or the fabric as a whole -- which matters, because the Aqara Hub\nM3 being the sole Thread border router makes fabric-wide explanations tempting\nand, here, wrong.\n\nStill no action taken; John's standing instruction on this issue is to keep\nwatching. Recording the corrected baseline so the next cycle compares against a\nquery that actually matches.\n",
     "created_at": "2026-08-17T19:50:58Z"
+  },
+  {
+    "id": 25,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "Title corrected 2026-08-19 per John. The old one said \"drops sessions\nintermittently, 7+ days, daily count trending up\", which the corrected\nmeasurement contradicts.\n\nThe keyword set originally used to count drops (lost/drop/resubscribe/timeout/\nexpire) matches ZERO of the 25,380 matter-server lines in the retained journal,\nso every \"trend\" reading taken from it was an artifact of a dead query. The real\nphrasing is `<Node:17> Setup for node failed: Unable to establish CASE session`.\n\nMeasured with the correct pattern over the full retained window:\n    total CASE-session failures for node 17 : 20\n    Aug 16                                  : 20\n    every other day                         : 0\n    give-up event                           : Aug 16 02:20:40\n    Aug 17, 18, 19                          : 0\n\nSo: ONE concentrated episode, not a daily uptrend. Node 17 remains the only node\nin the fabric with any \"Setup for node failed\" occurrences, which is why this\nstays open rather than being closed -- the device is still the odd one out even\nwhile quiet, and that points at the device or its own Thread link rather than at\nthe border router.\n\nKept open on John's instruction to keep watching. No action taken.\n",
+    "created_at": "2026-08-19T17:53:07Z"
   }
 ]
 #+end_src

@@ -1878,6 +1878,75 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 ]
 #+end_src
 
+* TODO [#C] Three Google Calendar entries in setup_error, and no alert covers config-entry health
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-fgp
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 14:02]
+:MODIFIED: [2026-08-19 Wed 14:02]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Three Google Calendar config entries are in setup_error, and NOTHING ALERTS ON
+IT. Found 2026-08-19 while tracing unrelated node-red log lines.
+
+THE OUTAGE. Node-RED's "HA Integration Health" flow reports:
+    - jwiegley@positron.ai (google): setup_error
+    - john@usegitai.com    (google): setup_error
+    - john@bia.bahai.org   (google): setup_error
+
+The cause is in the Home Assistant log, dated 2026-08-17 12:46:
+    Error communicating with API: Access token failure: 400,
+    message='Bad Request', url='https://www.googleapis.com/oauth2/v4/token'
+i.e. the OAuth refresh token is being rejected. That is the signature of a
+refresh token that has expired or been revoked, not of a network fault.
+
+STRONGLY SUSPECTED CAUSE, worth checking before re-authenticating: a Google
+OAuth consent screen left in "Testing" publishing status expires its refresh
+tokens every 7 DAYS. This host has been bitten by exactly that before -- it is
+why four rclone cloud-drive remotes were disabled (project_cloud_drive_backup)
+and it is the same weekly-expiry shape as the Schwab token for stock-trader. If
+the Google Cloud project behind these entries is still in Testing, re-auth will
+buy another 7 days and no more; publishing the app (or making it Internal to a
+Workspace org) is the durable fix.
+
+THE MONITORING GAP, which is the part worth fixing here. Nothing in Prometheus
+watches this:
+,  * hass-integration-exporter tracks 12 integrations -- august, cast,
+    enphase_envoy, flume, homekit, lg_thinq, miele, nest, nws, ring, webostv,
+    withings -- and `google` is not among them.
+,  * ADDING google TO THAT LIST WOULD NOT HELP, and I nearly did it before
+    reading the metric's own HELP text: hass_integration_loaded is "1 if the
+    integration appears in Home Assistant's LOADED COMPONENTS, 0 if not". The
+    google COMPONENT is loaded; it is the three config ENTRIES that failed. The
+    metric would report 1 and detect nothing -- a no-op that looks like
+    coverage.
+,  * So the exporter measures the wrong thing for this failure mode. Detecting it
+    needs config-entry state (what Node-RED's flow already reads), not component
+    load. That is true for every integration in the list, not just google: any
+    of the 12 could have a failed entry while reporting loaded=1.
+
+The only thing that noticed was a Node-RED flow writing to the journal, where it
+sat unread for two days.
+
+NOT FIXED, and split by who can do it:
+,  * Re-authenticating the three accounts requires John's Google logins.
+,  * Extending monitoring to config-entry state is real work (a new exporter or a
+    reshaped one) and changes what the 12 existing series mean, so it wants a
+    decision rather than a quiet edit.
+
+Related: the same day (Aug 16) also produced two `Error setting climate.upstairs
+temperature` failures with a heat_cool RANGE payload, and the Nest's own
+google_nest_sdm AuthException. Those have not recurred since, so they look like
+one bad day for Google auth on this host rather than an ongoing fault.
+#+end_example
+
 * DONE [#D] Duplicate calendar notifications when an event is on two calendars
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2170,7 +2239,7 @@ work to paper over the fault. Still not urgent and still not autonomous to fix
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 01:01]
-:MODIFIED: [2026-08-19 Wed 12:55]
+:MODIFIED: [2026-08-19 Wed 14:03]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2263,6 +2332,13 @@ configuration change rather than anything in this repo.
     "author": "johnw",
     "text": "VERIFIED END-TO-END 2026-08-19 12:53, and the verification found the mirror was\nBROKEN. My earlier \"logic verified, awaiting a real transition\" report was\ncorrect about the logic and wrong about the whole.\n\nTHE BUG. The api-call-service node failed every invocation with:\n\n    [error] [api-call-service:mirror setpoint to Nest]\n    ValidationError: \"action\" is required\n\nI had built that node by copying a working sibling THROUGH A FIELD FILTER --\nI printed only the keys I thought mattered (type, domain, service, entityId,\ndata, ...) and the filter did not include \"action\". So I never saw that this\nnode version requires an `action` field, and my node carried domain/service but\nnot `action: \"climate.set_temperature\"`. Dumping a COMPLETE working node showed\nfive further fields I had also dropped: floorId, labelId, debugenabled,\nmustacheAltTags, queue, blockInputOverrides.\n\nThe offline function tests all passed and told me nothing about this, because\nthey exercised the function body in isolation and never touched the node that\nactually calls Home Assistant. Seven green assertions against a chain whose last\nlink was dead.\n\nHOW IT WAS CAUGHT, without changing the thermostat: added a temporary inject\nnode (once=true, fires on deploy) carrying a synthetic preset transition, wired\ninto the existing function. First attempt used temperature=80, equal to the\nNest's current setpoint, so the resulting write would be a no-op -- which also\nmade it UNOBSERVABLE, since Home Assistant records no state change for an\nunchanged value. Re-ran with 81, one degree, inside the routine 79-82 band that\nauto-regulation writes anyway.\n\nPROOF:\n    12:41:22  Nest sp=80\n    12:44:20  Nest sp=80\n    12:46:32  Nest sp=80\n    12:47:32  Nest sp=80\n    12:53:55  Nest sp=81   <- the repaired mirror wrote this\n    node-red ValidationError count after the fix: 0\nSo trigger -> function -> api-call-service -> HA -> Nest setpoint is a working\nchain. The temporary inject was then removed; the tab is back to 51 nodes with\nno leftovers and zero errors.\n\nRESIDUE, stated rather than glossed: the Nest is left at 81 while the VTherm\ntargets 80. That is 1F inside the band auto-regulation drives all day, and the\nnext regulation write or preset transition corrects it.\n\nSTILL NOT OBSERVED: a real user-driven preset transition through the deployed\npath. Everything between the trigger node's output and Home Assistant is now\nproven; what remains unproven is only that server-state-changed fires on a\npreset_mode attribute change, which is its documented behaviour and matches the\nsix sibling nodes on the Climate Comfort tab that use the same pattern.\n",
     "created_at": "2026-08-19T19:55:23Z"
+  },
+  {
+    "id": 30,
+    "issue_id": "nixos-i4e",
+    "author": "johnw",
+    "text": "2026-08-19 13:30: the mirror survived its first REAL preset transition cleanly.\n\n    13:30:07  VTherm went briefly unavailable (preset empty), then none\n    13:30:33  VTherm none -> comfort, sp=80    <- a genuine transition\n    node-red errors naming the mirror nodes in that window: 0\n\nSo the deployed chain handled a real, unsynthesised transition without the\nValidationError that had been failing every invocation before the fix. Note the\nNest was already at 80 (regulation had written it at 13:30:11), so there was no\nvalue change to observe -- this confirms the mirror does not ERROR on a real\ntransition, and the earlier synthetic test is what proves it actually WRITES.\n\nTest residue cleared: the Nest is back under normal regulation (79 at time of\nwriting) rather than stuck at the 81 my injection left.\n\nThree node-red errors did appear in that window and are NOT from this mirror --\nthey are the HA Integration Health flow reporting three Google Calendar config\nentries in setup_error. Filed separately as nixos-fgp.\n",
+    "created_at": "2026-08-19T21:03:02Z"
   }
 ]
 #+end_src

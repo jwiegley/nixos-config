@@ -92,15 +92,17 @@ BOTH HALVES DONE, per John's choice.
    comment now says so, and warns that any future edit to this setting belongs in a
    planned window.
 
-* TODO [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
+* DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-5eo
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-18 Tue 19:46]
-:MODIFIED: [2026-08-18 Tue 23:38]
+:MODIFIED: [2026-08-19 Wed 00:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 00:48]
+:CLOSE_REASON: Fixed by the starship presets compat shim (1b4ae6b7f), verified byte-identical to the pre-breakage config. The host is still blocked, but by the independent nixos-chl.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -189,6 +191,13 @@ this cycle are committed but CANNOT ACTIVATE, and neither can anything else.
     "author": "johnw",
     "text": "THE EVAL HALF IS FIXED (2026-08-18). A second, independent blocker was hiding\nbehind it -- see nixos-tdz.\n\nROOT CAUSE, and it corrects the original diagnosis above. I first wrote that\nnix-config had \"started requiring\" a newer home-manager. Wrong in mechanism: the\nsetting had been in config/johnw.nix since 2026-03-13, five months, while this\nhost built fine. What changed on 2026-08-18 was its FORM. nix-config 66eaf03e\n(last good) hand-rolled it:\n\n    settings = lib.mkMerge [\n      (builtins.fromTOML (builtins.readFile\n         \"${pkgs.starship}/share/starship/presets/nerd-font-symbols.toml\"))\n      { ... } ];\n\nnix-config 7e92da92 (first bad) refactored that into the newer upstream option:\n\n    presets = [ \"nerd-font-symbols\" ];\n\nThat option exists on home-manager MASTER but not on release-25.11, which vulcan\npins. And release-25.11 is frozen -- its tip is still 3ee51fbdac8c from\n2026-05-23, identical to what is pinned here -- so there was nothing to wait for.\n\nAlso established while diagnosing: re-locking does NOT help (main still carries\nthe refactor), and the option is unavailable on the 25.11 branch at any rev.\n\nFIX APPLIED: modules/users/home-manager/starship-presets-compat.nix, wired in as\na home-manager sharedModule. It declares `programs.starship.presets` and\nimplements it exactly as nix-config used to, reading the preset TOML out of the\nstarship package and merging it into settings. Deliberately a behaviour-\npreserving translation rather than a no-op stub -- a stub would evaluate fine\nand silently drop the nerd-font symbols from the prompt.\n\nVERIFIED, and not merely by \"it evaluates\":\n  * eval of the full toplevel now succeeds (exit 0, drvPath produced)\n  * the merged settings carry real preset content -- 59 top-level keys, with\n    aws/buf/bun/c/cpp/cmake/conda/crystal and the rest of the preset's sections\n    all present\n  * johnw's own settings still win the merge (add_newline=false,\n    format=$hostname$directory$character)\n  * DECISIVE CHECK: evaluated the same attribute with nix-config overridden back\n    to 66eaf03e, where the old hand-rolled form applies and the shim is inert,\n    then diffed both settings trees normalised through `jq -S`. IDENTICAL, 59\n    keys each. The shim is an exact reproduction of the pre-breakage config.\n\nWHY A SHIM RATHER THAN THE ALTERNATIVES. Pinning nix-config back would have\ndiscarded a day of unrelated upstream work and would break again on the next\nupdate. Fixing nix-config is the right long-term move but is a separate repo\nwith no local checkout, so it cannot be done or verified from here. Moving\nhome-manager off release-25.11 changes the version for all 14 home-manager users\non a host whose stateVersion is 25.11. The shim unblocks now, preserves\nbehaviour exactly, and carries its own removal instructions.\n\nSTRUCTURAL NOTE: this is the second time in three days that a nix-config API\nadoption has taken this host down completely (nixos-sil was the first, on\n2026-08-15, via rust-overlay). The shared cause is that vulcan consumes\nnix-config with `flake = false`, so nix-config's own input versions never apply\nhere and any newer API it adopts surfaces as an eval error with no local cause.\nWorth a durable fix at some point rather than a third shim.\n",
     "created_at": "2026-08-19T06:38:10Z"
+  },
+  {
+    "id": 20,
+    "issue_id": "nixos-5eo",
+    "author": "johnw",
+    "text": "Closing: the defect this issue names -- evaluation failing on\n`programs.starship.presets` -- is fixed and verified. Commit 1b4ae6b7f,\nmodules/users/home-manager/starship-presets-compat.nix.\n\nThe host STILL cannot complete a switch, but for an unrelated second cause\n(nixos-chl, agnix 0.49.0 against rustc 1.91.1), which was hiding behind this one\nand only became visible once evaluation started succeeding. Keeping this open\nwould conflate two independent faults.\n\nVERIFICATION, beyond \"it evaluates\":\n  * `nix eval` of the full toplevel now returns a drvPath (exit 0), where before\n    it failed at the module system\n  * the merged starship settings carry real preset content -- 59 top-level keys,\n    the preset's own sections (aws, buf, bun, c, cpp, cmake, conda, crystal, ...)\n    all present, so this is not a stub that silently drops the preset\n  * johnw's own settings still win the merge: add_newline=false,\n    format=$hostname$directory$character\n  * DECISIVE: evaluated the same attribute with nix-config overridden back to\n    66eaf03e, where the old hand-rolled form applies and the shim is inert, then\n    diffed both trees through `jq -S`. IDENTICAL, 59 keys each.\n\nRoot cause, corrected from my first reading: the setting was not new. It had\nbeen in nix-config's config/johnw.nix since 2026-03-13. What changed on\n2026-08-18 was its FORM -- 66eaf03e hand-rolled the preset via\nfromTOML/readFile, 7e92da92 refactored it to `presets = [ ... ]`, an option\nhome-manager MASTER has and release-25.11 does not. Ruled out along the way:\nre-locking (main still carries the refactor) and waiting for the 25.11 branch\n(its tip is still the 2026-05-23 rev already pinned here).",
+    "created_at": "2026-08-19T07:48:22Z"
   }
 ]
 #+end_src
@@ -1272,7 +1281,7 @@ countable backlog -- worth doing first, and separately from any deletion.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-18 Tue 23:38]
-:MODIFIED: [2026-08-18 Tue 23:38]
+:MODIFIED: [2026-08-19 Wed 00:47]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1335,6 +1344,20 @@ on this. The running system is healthy and unaffected.
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 19,
+    "issue_id": "nixos-chl",
+    "author": "johnw",
+    "text": "2026-08-19: root-caused precisely. The fix is a small change in nix-config, and\nthe machinery for it ALREADY EXISTS there. No local workaround is clean.\n\nTHE VERSION FACT THAT DECIDES EVERYTHING. `if let` guards (`if_let_guard`,\nRFC 2294) stabilized in Rust 1.95.0. So this needs NO nightly toolchain -- a\nnewer STABLE is sufficient. Measured toolchains:\n\n    vulcan's nixpkgs (25.11)     rustc 1.91.1   <-- what agnix is built with\n    nixpkgs-unstable (an input)  rustc 1.96.1   >= 1.95, would work\n    rust-overlay (an input)      rustc 1.97.1   >= 1.95, would work\n    already realised in the store: 1.96.1, 1.97.0, 1.97.1, 1.99.0-nightly\n\nSo the toolchain is not scarce here; agnix is simply being handed the oldest one.\n\nWHY NIX-CONFIG'S OWN MACHINES DO NOT SEE THIS. overlays/ai/default.nix already\nbuilds a newer platform:\n\n    rustPkgs   = import inputs.nixpkgs { system = \"x86_64-linux\";\n                   overlays = [ inputs.rust-overlay.overlays.default ]; };\n    rust195    = rustPkgs.rust-bin.stable.\"1.95.0\".minimal;\n    rustPlatform195 = prev.makeRustPlatform { cargo = rust195; rustc = rust195; };\n\nPinned at EXACTLY 1.95.0, the if_let_guard version -- so this exact class of\nproblem was already anticipated. But it is unusable here for two reasons:\n\n  1. The whole block is wrapped in\n       lib.optionalAttrs (buildPlatform == \"x86_64-linux\"\n                          && hostPlatform == \"x86_64-linux\")\n     and vulcan is aarch64, so on this host it evaluates to {} -- the machinery\n     is not merely unused, it does not exist.\n\n  2. Even where it does exist it is applied only to `qdrant`\n     (`qdrant = prev.qdrant.override { rustPlatform = rustPlatform195; };`),\n     never to agnix.\n\noverlays/ai/30-agnix.nix uses bare `with prev; rustPlatform.buildRustPackage`,\ni.e. whatever rustc the consuming nixpkgs provides. On nix-config's own targets\nthat is new enough; on vulcan, pinned to 25.11, it is 1.91.1 and the build dies.\nSame structural shape as nixos-5eo: nix-config assumes newer inputs than this\nhost pins.\n\nSUGGESTED UPSTREAM FIX (nix-config, one file): drop the x86_64-only gate on the\nrustPlatform195 block, or extend it to aarch64, and apply rustPlatform195 to\nagnix as it already is to qdrant. 30-agnix.nix would need to take rustPlatform\nas an argument rather than closing over `prev.rustPlatform`.\n\nWorth checking while there: the x86_64 gate means qdrant on aarch64 also falls\nback to nixpkgs' rustc, so the same latent problem may exist for it.\n\nWHY NOT FIXED LOCALLY IN /etc/nixos. Three routes, all bad:\n  * `pkgs.agnix.override { rustPlatform = ...; }` -- IMPOSSIBLE. Verified:\n    pkgs.agnix has NO `.override` attribute at all, because the overlay builds\n    it with `with prev; rustPlatform.buildRustPackage` rather than callPackage,\n    so rustPlatform is closed over rather than being a function argument.\n  * Re-declaring agnix in a local overlay -- would duplicate the upstream\n    package definition and silently drift from it on every upstream change.\n  * Overriding rustPlatform globally -- would rebuild every Rust package on the\n    host to fix one.\n\nCANNOT SIMPLY BE SKIPPED: agnix is in johnw's home.packages (verified, 1 entry),\nso it is a hard dependency of the switch. Dropping it would change John's\ntooling, which is his call rather than a workaround I should apply.\n\nSTATUS: nix-config main is at b95bf839b3fc, identical to the rev pinned here, so\nnothing has moved upstream and a re-lock would not help.\n",
+    "created_at": "2026-08-19T07:47:54Z"
   }
 ]
 #+end_src

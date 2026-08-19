@@ -2371,7 +2371,7 @@ configuration change rather than anything in this repo.
 :LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-08-19 Wed 12:35]
-:MODIFIED: [2026-08-19 Wed 14:33]
+:MODIFIED: [2026-08-19 Wed 16:47]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2428,6 +2428,20 @@ all of them for now.
 
 Note also that private Gitea repos are outside this count by construction, since
 the enumeration was anonymous.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 33,
+    "issue_id": "nixos-jqs",
+    "author": "johnw",
+    "text": "2026-08-19: org-agents is DONE. John created jwiegley/org-agents on GitHub and\nadded the Gitea push mirror; the mirror count went 12 -> 13 and content is\nconfirmed on both sides (GitHub pushed_at 19:32 UTC, same three head commits as\nGitea). Its first sync did leave a sticky failure flag, which cleared on one\nretry -- see nixos-pna for why that took 1h43m of alerting to notice.\n\nThe remaining set from this issue's original enumeration is now TWO, not three:\n\n    pushme-config   still has no GitHub repo (api.github.com -> 404)\n    icp             still has no GitHub repo (api.github.com -> 404)\n\nRe-verified anonymously against the GitHub API today, so the count is current\nrather than inherited from the earlier pass.\n\nIssue remains deferred at John's request; this note is only so the remaining\nscope is accurate whenever it is picked up.\n",
+    "created_at": "2026-08-19T23:47:50Z"
+  }
+]
+#+end_src
 
 * DONE [#D] session-gather re-hashes the whole tree EVERY run (--checksum): ~1h, ~125 GB nightly
 :PROPERTIES:
@@ -3208,6 +3222,72 @@ REMAINING WORK once a patched pushme exists:
 NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system has 3.0.0. Any
 ./build switch will trigger the multi-hour toolchain build. Consider reverting the lock until a
 patched release exists.
+#+end_example
+
+* TODO [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-pna
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 16:47]
+:MODIFIED: [2026-08-19 Wed 16:47]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+A transient push-mirror failure stays FIRING for hours because nothing retries.
+Found 2026-08-19 when GiteaPushMirrorFailing fired for org-agents, the mirror
+John had just created.
+
+WHAT HAPPENED, and it was not a broken mirror:
+    12:29 PDT  John creates jwiegley/org-agents on GitHub and adds the mirror
+    12:32 PDT  Gitea attempts the push; it sets last_error
+    15:03 PDT  GiteaPushMirrorFailing starts firing (for: dwell elapsed)
+    16:45 PDT  I trigger sync-push-mirrors by hand -> failed=0, alert inactive
+Total firing: 414 samples, 22:03-23:46 UTC, about 1h43m.
+
+The content HAD arrived. GitHub's pushed_at was 19:32 UTC and its three most
+recent commits (709c0352, d63079e5, aa6b13aa) are byte-identical to Gitea's, so
+whatever failed at 12:32 did not stop the mirror working. One manual retry
+cleared it.
+
+THE STRUCTURAL PROBLEM. gitea_push_mirror_failed encodes Gitea's `last_error`,
+which is LEVEL-TRIGGERED: Gitea sets it on a rejected push and clears it only on
+a later SUCCESS. So the flag -- and the alert -- persists until something
+retries. And:
+
+,  * sync-push-mirrors HAS NO TIMER. It is a manually-triggered oneshot. Verified:
+    `systemctl list-unit-files sync-push-mirrors.timer` finds nothing, and its
+    only runs today were 12:23 (before the mirror existed) and my 16:45 trigger.
+,  * Gitea's own per-mirror scheduler defaults to an 8 HOUR interval.
+
+So a transient failure can hold this alert for up to 8 hours, and if Gitea's
+scheduler also fails once, indefinitely. The alert is truthful about the stored
+flag while being stale about reality.
+
+SUGGESTED FIX, not applied: give sync-push-mirrors a timer. The full run over
+197 repositories cost 3.76s CPU and finished in seconds, so an hourly or
+2-hourly schedule is cheap, and it would make this class of alert self-healing
+rather than requiring a human to notice and retry.
+
+NOT DONE AUTONOMOUSLY because it adds periodic outbound pushes to 197 remotes on
+a schedule, which is a behaviour change to something that talks to the outside
+world, and the cadence is a judgement call.
+
+A CONSTRAINT WORTH RECORDING for whoever debugs the next one: the actual error
+text CANNOT be safely read. A Gitea push mirror authenticates with credentials
+embedded in remote_address, and last_error quotes that URL back verbatim. The
+exporter deliberately emits neither -- only a boolean and a timestamp -- and
+that is a deliberate safety property, not an oversight. Diagnose by retrying and
+observing the flag, not by fetching the message.
+
+Also corrected while here: gitea_push_mirror_last_update_timestamp_seconds is
+the last push ATTEMPT, not the last success. Its own HELP text says so, and I
+briefly read it the wrong way.
 #+end_example
 
 * DONE [#B] Adopt restored upstream Obr integration

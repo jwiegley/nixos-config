@@ -28,6 +28,11 @@
       # rather than only after the next boot. Self-gates to users that declare
       # quadlet containers. See the file for the NocoBase case that motivated it.
       ./quadlet-daemon-reload.nix
+      # Supplies programs.starship.presets, which nix-config adopted from a newer
+      # Home Manager than this host pins. Without it NOTHING on this host can be
+      # rebuilt -- see the file for the full account. Same class of breakage as
+      # the rust-overlay incident described in the extraSpecialArgs note below.
+      ./starship-presets-compat.nix
     ];
 
     # Pass hostname and inputs to home-manager modules so they can be used

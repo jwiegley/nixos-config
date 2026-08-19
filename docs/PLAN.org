@@ -99,7 +99,7 @@ BOTH HALVES DONE, per John's choice.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-18 Tue 19:46]
-:MODIFIED: [2026-08-18 Tue 20:45]
+:MODIFIED: [2026-08-18 Tue 23:38]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -182,6 +182,13 @@ this cycle are committed but CANNOT ACTIVATE, and neither can anything else.
     "author": "johnw",
     "text": "2026-08-18 later check: STILL BROKEN, and one candidate fix is now ruled out.\n\nnix-config main has advanced since the breakage -- it is now\n6672d2124425028af736b50e3c0086b6a04c8397 (2026-08-19T00:20Z), versus the\naa1b9b89 pinned here. So commits have landed upstream, but they do NOT fix this:\nevaluating vulcan against that current main fails with the identical error.\n\n    The option `home-manager.users.johnw.programs.starship.presets'\n    does not exist.\n\nThat rules out the cheapest possible remedy. `nix flake update nix-config`, or\nany re-lock to main, will NOT unblock the host -- it lands on a rev that still\ncarries the incompatible option. Anyone reaching for a re-lock first should skip\nit.\n\nThe three options in the original description are unchanged, and the proven one\nstill stands: pinning nix-config to 66eaf03ee29d7bb150528707d9fa4755debddfef\nevaluates cleanly (re-verified today, exit 0). Option 1 (fix the `presets` line\nin nix-config) now additionally requires an upstream commit, since main does not\nalready contain the fix.\n\nHost state while blocked: healthy but frozen. 0 failed units, only Watchdog\nfiring, ZFS ONLINE, / at 26%, all scrape targets up, all backups succeeding. The\nonly visible symptom is systemd-tmpfiles-setup/-resetup still exiting 73\n(nixos-g52), whose fix is committed at c678182d1 and waiting on this.\n",
     "created_at": "2026-08-19T03:45:07Z"
+  },
+  {
+    "id": 18,
+    "issue_id": "nixos-5eo",
+    "author": "johnw",
+    "text": "THE EVAL HALF IS FIXED (2026-08-18). A second, independent blocker was hiding\nbehind it -- see nixos-tdz.\n\nROOT CAUSE, and it corrects the original diagnosis above. I first wrote that\nnix-config had \"started requiring\" a newer home-manager. Wrong in mechanism: the\nsetting had been in config/johnw.nix since 2026-03-13, five months, while this\nhost built fine. What changed on 2026-08-18 was its FORM. nix-config 66eaf03e\n(last good) hand-rolled it:\n\n    settings = lib.mkMerge [\n      (builtins.fromTOML (builtins.readFile\n         \"${pkgs.starship}/share/starship/presets/nerd-font-symbols.toml\"))\n      { ... } ];\n\nnix-config 7e92da92 (first bad) refactored that into the newer upstream option:\n\n    presets = [ \"nerd-font-symbols\" ];\n\nThat option exists on home-manager MASTER but not on release-25.11, which vulcan\npins. And release-25.11 is frozen -- its tip is still 3ee51fbdac8c from\n2026-05-23, identical to what is pinned here -- so there was nothing to wait for.\n\nAlso established while diagnosing: re-locking does NOT help (main still carries\nthe refactor), and the option is unavailable on the 25.11 branch at any rev.\n\nFIX APPLIED: modules/users/home-manager/starship-presets-compat.nix, wired in as\na home-manager sharedModule. It declares `programs.starship.presets` and\nimplements it exactly as nix-config used to, reading the preset TOML out of the\nstarship package and merging it into settings. Deliberately a behaviour-\npreserving translation rather than a no-op stub -- a stub would evaluate fine\nand silently drop the nerd-font symbols from the prompt.\n\nVERIFIED, and not merely by \"it evaluates\":\n  * eval of the full toplevel now succeeds (exit 0, drvPath produced)\n  * the merged settings carry real preset content -- 59 top-level keys, with\n    aws/buf/bun/c/cpp/cmake/conda/crystal and the rest of the preset's sections\n    all present\n  * johnw's own settings still win the merge (add_newline=false,\n    format=$hostname$directory$character)\n  * DECISIVE CHECK: evaluated the same attribute with nix-config overridden back\n    to 66eaf03e, where the old hand-rolled form applies and the shim is inert,\n    then diffed both settings trees normalised through `jq -S`. IDENTICAL, 59\n    keys each. The shim is an exact reproduction of the pre-breakage config.\n\nWHY A SHIM RATHER THAN THE ALTERNATIVES. Pinning nix-config back would have\ndiscarded a day of unrelated upstream work and would break again on the next\nupdate. Fixing nix-config is the right long-term move but is a separate repo\nwith no local checkout, so it cannot be done or verified from here. Moving\nhome-manager off release-25.11 changes the version for all 14 home-manager users\non a host whose stateVersion is 25.11. The shim unblocks now, preserves\nbehaviour exactly, and carries its own removal instructions.\n\nSTRUCTURAL NOTE: this is the second time in three days that a nix-config API\nadoption has taken this host down completely (nixos-sil was the first, on\n2026-08-15, via rust-overlay). The shared cause is that vulcan consumes\nnix-config with `flake = false`, so nix-config's own input versions never apply\nhere and any newer API it adopts surfaces as an eval error with no local cause.\nWorth a durable fix at some point rather than a third shim.\n",
+    "created_at": "2026-08-19T06:38:10Z"
   }
 ]
 #+end_src
@@ -1254,6 +1261,80 @@ countable backlog -- worth doing first, and separately from any deletion.
     "author": "johnw",
     "text": "2026-08-18, third inventory pass: the systemd class -- 140 of the 302 checks,\nthe single largest group. Read-only; nothing changed.\n\nRESULT: ZERO real coverage gaps. This class needs no Prometheus work at all.\n\n    distinct units checked by Nagios        138\n    distinct units known to Prometheus      569   (node_systemd_unit_state)\n    ---\n    covered by BOTH                         134\n    nagios-only                               4   <-- none of them real, see below\n    prometheus-only                         435\n\nMethod note: unlike the ping class, no normalization was needed. Both sides name\nunits identically (138/138 and 561/569 carry a .service/.timer/.socket suffix),\nso this is a clean set comparison rather than one at risk of a format artifact.\n\nTHE FOUR APPARENT GAPS ARE ALL DEAD CHECKS, not uncovered services. Every one\nreports LoadState=not-found on this host, and all four are assigned to vulcan\nitself rather than to a remote host:\n\n  copyparty.service              The service is RUNNING and MONITORED -- it just\n                                 has a different unit name. copyparty is an\n                                 nspawn container, so the real unit is\n                                 container@copyparty.service (active/running,\n                                 5 series in node_systemd_unit_state). The\n                                 Nagios check names a unit that never existed.\n\n  critical-services-exporter.service\n  rspamd-scan-mailboxes.service\n  rspamd-scan-mailboxes.timer    Pure dead config. `grep` finds these names in\n                                 exactly ONE file each -- modules/services/\n                                 nagios.nix -- i.e. they exist only as check\n                                 definitions pointing at nothing.\n\nWHY NOBODY NOTICED, and this is the part worth carrying into the migration:\ncheck_systemd RETURNS OK FOR A UNIT THAT DOES NOT EXIST. Proven directly against\nthe deployed plugin:\n\n    check_systemd -u sshd.service        -> exit 0  \"sshd.service: active\"\n    check_systemd -u copyparty.service   -> exit 0  \"copyparty.service: inactive\"\n    check_systemd -u this-unit-cannot-possibly-exist-xyz.service\n                                         -> exit 0  \"...: inactive\"\n\nA fictional unit is reported as OK/inactive. So all 122 check_systemd_service\nchecks are structurally blind to the case \"the thing I monitor is gone\", and any\nservice renamed or removed leaves a check that passes forever. That is exactly\nwhat happened here, and it means Nagios's systemd coverage was weaker than its\ncheck count suggests -- 4 of 138 units were being watched by a check that could\nnot fail.\n\nPrometheus is not automatically better on this axis -- a removed unit loses its\nseries, and SystemdServiceFailed cannot fire on a series that is absent -- but\nthe repo already uses absent() guards for the critical set (CriticalServiceDown\nin health-checks.yaml), which is the correct pattern for it.\n\nRUNNING TOTAL OF TRUE COVERAGE GAPS, unchanged at 8:\n    ping class     7 hosts pinged by Nagios with no blackbox ICMP equivalent\n    https/ssl      1 live vhost with no blackbox probe\n    systemd        0\n\nCLASSES STILL TO AUDIT: check_file_age_tier1 (40), check_podman_container* (9),\ncheck_tcp (6), and ~25 single-instance commands (imap/imaps, smtp, ssh, dns,\nzfs, load/procs/users/disk, qdrant, git-workspace, atd). That is 80 checks left\nof the original 302, with the three largest classes now done.\n",
     "created_at": "2026-08-19T03:47:54Z"
+  }
+]
+#+end_src
+
+* TODO [#B] agnix 0.49.0 fails to build: uses unstable 'if let' guards against rustc 1.91.1
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-chl
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-18 Tue 23:38]
+:MODIFIED: [2026-08-18 Tue 23:38]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+With the starship eval error fixed (nixos-5eo), the switch now gets past
+evaluation and fails during BUILD instead. Second, independent breakage from the
+same day's nix-config updates, and it still blocks every rebuild.
+
+    error[E0658]: `if let` guards are experimental
+    error: could not compile `agnix-core` (lib) due to 1 previous error
+    error: Cannot build '/nix/store/1vf5...-agnix-0.49.0.drv'
+           Reason: builder failed with exit code 101.
+
+THE MISMATCH. agnix 0.49.0 uses `if let` guards in match arms (RFC 2294), which
+are still UNSTABLE in stable Rust. It is being built with rustc 1.91.1 from
+nixpkgs -- confirmed from the derivation's references (rustc-wrapper-1.91.1,
+cargo-1.91.1). So it needs either a nightly toolchain or a newer stable than
+this host's nixpkgs pin provides.
+
+THIS IS A REGRESSION, NOT A LONGSTANDING GAP. The running system contains
+agnix-0.44.0, built successfully. Today's nix-config-ai bump moved it to 0.49.0.
+Older builds are still in the store (0.33.2, a 0.40.0 vendor drv), so this
+package has been building fine here for a long time.
+
+agnix comes from nix-config-ai -- `grep -rn agnix --include='*.nix'` finds
+nothing in /etc/nixos -- so like nixos-5eo the defect is upstream of this repo
+and cannot be fixed or properly verified from here.
+
+OPTIONS, all John's:
+  1. Build agnix with a newer toolchain in nix-config-ai. rust-overlay is
+     already among the inputs (two rust-overlay nodes are present in
+     flake.lock), so the machinery exists; agnix is simply picking up nixpkgs'
+     rustc instead. Correct fix if 0.49.0 is wanted.
+  2. Pin agnix back to 0.44.0, the version currently running and known good.
+     Smallest change, and defers the toolchain question.
+  3. Drop agnix from the AI package set if it is not actively used.
+
+NOT DONE AUTONOMOUSLY: the fix belongs in another repo, and choosing between
+"newer toolchain" and "older package" is a real decision about John's own
+tooling.
+
+CURRENT IMPACT: the host still cannot complete a switch. Everything that has
+been verified and committed this session -- the three alert-rule changes, the
+immich permissions fix (nixos-g52), and the starship shim itself -- is waiting
+on this. The running system is healthy and unaffected.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-chl",
+    "depends_on_id": "nixos-5eo",
+    "type": "discovered-from",
+    "created_at": "2026-08-19T06:38:30.600696894Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
   }
 ]
 #+end_src

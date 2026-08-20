@@ -102,7 +102,6 @@
 
     # Service monitoring
     ../../modules/monitoring/container-health-exporter.nix
-    ../../modules/monitoring/homeassistant-nagios-check.nix
     ../../modules/monitoring/nagios-daily-report.nix
     ../../modules/monitoring/services
 

@@ -18,9 +18,9 @@
 # so any threshold over it is either noisy or blind. This asks the same question Nagios did,
 # of the same endpoint.
 #
-# NO NEW SECRET. It reuses sops.secrets."monitoring/home-assistant-token", already declared
-# in modules/monitoring/homeassistant-nagios-check.nix for the Nagios wrapper. The token is
-# read from its path at runtime and never enters the Nix store.
+# NO NEW SECRET. sops.secrets."monitoring/home-assistant-token" is declared below and read
+# from its path at runtime; it never enters the Nix store. The declaration used to live in
+# modules/monitoring/homeassistant-nagios-check.nix and moved here when Nagios was removed.
 {
   config,
   lib,
@@ -29,9 +29,9 @@
 }:
 
 let
-  # Kept identical to the list the Nagios check has been using so retirement is a like-for-
-  # like swap rather than a silent change of scope
-  # (modules/monitoring/homeassistant-nagios-check.nix, ExecStart -i ...).
+  # This list was inherited verbatim from the Nagios check this exporter replaced, so the
+  # retirement was a like-for-like swap rather than a silent change of scope. Adding to it
+  # is now a deliberate widening, not a restoration.
   integrations = [
     "august"
     "nest"
@@ -188,6 +188,26 @@ let
   };
 in
 {
+  # Sole consumer of this token, so it is declared here. RELOCATED 2026-08-19
+  # from modules/monitoring/homeassistant-nagios-check.nix, which the Nagios
+  # removal deletes; leaving it there would have taken the declaration with it
+  # and broken this exporter.
+  #
+  # owner/group root, NOT nagios: that user ceases to exist in the same removal.
+  # This matters more than it looks -- sops-install-secrets validates EVERY
+  # secret before writing ANY of them, so a single unresolvable owner aborts the
+  # whole run, and because /run/secrets.d is ramfs the next boot would come up
+  # with no secrets at all.
+  #
+  # Not DynamicUser: sops-nix cannot chown to a uid allocated at unit start.
+  # Moving this unit off User=root needs LoadCredential=, which is a separate
+  # change from a removal.
+  sops.secrets."monitoring/home-assistant-token" = {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+  };
+
   systemd.services.hass-integration-exporter = {
     description = "Export Home Assistant integration health to a node-exporter textfile";
     after = [
@@ -198,9 +218,10 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${exporter}/bin/hass-integration-exporter";
-      # Runs as root ONLY to read the SOPS token, which is mode 0400. It is owned by `nagios`
-      # today for the Nagios wrapper; once Nagios is gone, re-own it to a dedicated user and
-      # drop this to DynamicUser.
+      # Runs as root ONLY to read the SOPS token, which is mode 0400 root:root.
+      # Moving to a dedicated user or DynamicUser requires switching to
+      # LoadCredential= first -- sops-nix cannot chown to a uid that does not
+      # exist until the unit starts.
       User = "root";
       Group = "root";
       # Above the 20s curl timeout with room for a slow HA; TimeoutStartSec is ENFORCED and a

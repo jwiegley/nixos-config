@@ -1320,21 +1320,6 @@ let
     }
 
     define command {
-      command_name    check_homeassistant_integrations
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$
-    }
-
-    define command {
-      command_name    check_homeassistant_specific_integration
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -s -w $ARG2$ -c $ARG3$ -i $ARG4$
-    }
-
-    define command {
-      command_name    check_homeassistant_integration_status
-      command_line    /run/current-system/sw/bin/check_homeassistant_integrations_wrapper -H $ARG1$ -I -i $ARG2$
-    }
-
-    define command {
       command_name    check_backup_age
       command_line    ${checkBackupAge} $ARG1$ $ARG2$
     }
@@ -1458,11 +1443,6 @@ let
     define servicegroup {
       servicegroup_name  ssl-certificates
       alias              SSL Certificate Monitoring
-    }
-
-    define servicegroup {
-      servicegroup_name  home-assistant-integrations
-      alias              Home Assistant Integration Monitoring
     }
 
     define servicegroup {
@@ -1968,16 +1948,6 @@ let
     ###############################################################################
     # SERVICES - HOME ASSISTANT
     ###############################################################################
-
-    define service {
-      use                     generic-service
-      host_name               vulcan
-      service_description     Home Assistant - Integration Status
-      check_command           check_homeassistant_integration_status!127.0.0.1:8123!august,nest,ring,enphase_envoy,flume,miele,lg_thinq,cast,withings,webostv,homekit,nws
-      check_interval          5
-      max_check_attempts      2
-      service_groups          home-assistant-integrations
-    }
 
     ###############################################################################
     # AUTO-GENERATED SERVICE CHECKS

@@ -4823,6 +4823,82 @@ needs John's call on whether the capability is worth that instrumentation.
 ]
 #+end_src
 
+* DONE [#C] Replace Restic snapshot dates with a B2 bucket status table
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-yur
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-08-19 Wed 18:28]
+:MODIFIED: [2026-08-19 Wed 18:28]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 18:28]
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+** Close Reason
+
+Done and verified through the deployed path, not a proxy for it.
+
+WHAT CHANGED. modules/lib/resticOperations.nix loses the `snapshots` operation
+entirely (its only consumer was this report section). modules/services/monitoring.nix
+gains `b2Buckets`, derived by parsing config.services.restic.backups[*].repository
+rather than hardcoding a list, and `resticBucketTable`, a writeShellApplication that
+lists each bucket with rclone. logwatch.service gains
+LoadCredential=aws-keys:/run/secrets/aws-keys paired with an empty SetCredential.
+
+VERIFIED, live, via systemd-run with the real LoadCredential and SetCredential
+properties -- the same credential path the deployed unit uses, not rclone with
+env-sourced keys, which is a different code path and the one both agents had
+originally exercised:
+
+    Bucket                   Size on B2  Last Updated
+    jwiegley-Audio              101.5GB  2026-08-19 02:10
+    jwiegley-Backups-Misc       367.9GB  2026-08-19 03:30
+    jwiegley-Databases          110.8GB  2026-08-19 02:51
+    jwiegley-Documents           14.5GB  2026-08-19 04:25
+    jwiegley-Home               270.8GB  2026-08-19 03:54
+    jwiegley-Photos             418.9GB  2026-08-19 04:40
+    jwiegley-Public               8.0GB  2026-08-19 04:10
+    jwiegley-Video              258.2GB  2026-08-19 05:30
+    jwiegley-doc                 42.3GB  2026-08-19 02:30
+    jwiegley-src                 15.7GB  2026-08-19 03:12
+    TOTAL (10 buckets)            1.6TB
+
+exit 0, 16.1s wall, 38.7MB received. Well inside the 180s section budget.
+
+FAILURE PATH VERIFIED TOO, and this mattered more than the happy path. Run with
+the empty SetCredential fallback and no LoadCredential, the section prints
+"ERROR: B2 credentials unavailable -- bucket sizes were not collected." and exits
+1. It does NOT emit a table of zeros. That distinction is the whole point on this
+host: a monitoring path that fails in a way that reads as a clean result is a
+recurring defect class here, and a bucket table silently reporting 0 bytes would
+read as "the backups shrank".
+
+The implementation degrades visibly at every level: per-bucket timeout 60s and
+section budget 180s, with buckets not reached labelled "not reached (section
+budget spent)"; a failed or timed-out listing gives an ERROR row; a bucket that
+lists successfully but is empty gives "EMPTY -- no objects found -- INVESTIGATE",
+with a trailing note that a restic repository is never legitimately empty; and a
+partial total is labelled "INCOMPLETE" rather than presented as the total.
+
+CROSS-CHECKED. A second agent measured all ten buckets independently with
+`rclone size --json` -- a different code path from the `lsf --files-only | awk`
+pipeline the implementation uses -- before it knew the implementation existed.
+Public came to 8,001,422,466 bytes from both. Total ~1.609 TB across ~94k objects.
+
+Worth recording: restic's own restic_repo_size_bytes runs LOW against the real B2
+footprint, by 0.03% to 4.8% depending on the repository. So this table will not
+agree with that metric, and that is expected rather than a bug in either.
+
+Two flags in the script are load-bearing and both were arrived at the hard way:
+--use-server-modtime (without it rclone issues a HEAD per object and the Photos
+listing blows past two minutes; with it the whole run is 16s), and
+RCLONE_CONFIG=/dev/null (johnw's real rclone config is password-encrypted, so a
+bare rclone prompts for a configuration password on stdin -- under logwatch,
+non-interactive, that is a hang, not untidiness).
+
 * DONE [#D] Should office occupancy change the upstairs thermostat at all?
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

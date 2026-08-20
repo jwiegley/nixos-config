@@ -39,8 +39,12 @@ in
         # fire when a failure is handled by `||`, and each command's status is captured
         # individually.
         #
-        # BOTH operations are isolated. The first version of this block guarded only
-        # `check`, leaving the `snapshots` listing carrying the exact bug described above
+        # `check` is the only operation left. A `snapshots` listing lived here too and fed
+        # the "Restic Snapshots" section of the daily logwatch report; both were removed on
+        # 2026-08-19, when that section became a table of B2 bucket sizes read from B2
+        # itself (see modules/services/monitoring.nix). The isolation is still written
+        # per-operation rather than inline, so a second operation added later cannot
+        # silently reacquire the bug: the first version of this block guarded only `check`
         # while these comments claimed the whole script was covered.
         failed_repos=""
 
@@ -237,21 +241,6 @@ in
                      "pruning a possibly-damaged repository can destroy recovery data."
               fi
               ;;
-            snapshots)
-              # Isolated for the same reason as check, and it matters MORE here than the
-              # exit code suggests: this path feeds the "Restic Snapshots" section of the
-              # daily logwatch report, and logwatch IGNORES the script's exit status
-              # entirely -- logwatch.pl runs it as `open(TESTFILE, $Command . " |")` and
-              # never checks close(), emitting whatever reached stdout (stderr is folded in
-              # by its own `2>&1`). So the exit code is invisible downstream and the ONLY
-              # signal is the text. Before this guard a failing repo truncated the section
-              # at that repo with nothing saying the remaining ones were never listed.
-              # The exit status is unchanged from the old behaviour (errexit already
-              # aborted with 1), so nothing downstream regresses.
-              /run/current-system/sw/bin/restic-$fileset snapshots --json \
-                | ${pkgs.jq}/bin/jq -r 'sort_by(.time) | reverse | .[:4][] | .time' \
-                || repo_failed=1
-              ;;
             *)
               echo "Unknown operation: $operation"
               exit 1
@@ -273,8 +262,9 @@ in
         # Publish coverage as metrics, so degradation is ALERTABLE and not just a journal
         # line. restic_integrity_check_success cannot carry this: it is one unlabelled gauge
         # that says only whether the run exited 0, and a run where the budget expired exits 0
-        # having verified almost no data. Only written for `check` -- the `snapshots` path
-        # does no verification and must not overwrite these with zeros.
+        # having verified almost no data. Still guarded on `check` even though that is now
+        # the only operation, so a future read-only operation added to this script cannot
+        # overwrite these counters with zeros.
         #
         # A failed write is reported but does NOT fail the run: refusing to verify backups
         # because a metrics file could not be written is the wrong severity. Persistent
@@ -310,9 +300,9 @@ in
         fi
 
         # Fail LOUDLY and name the repos, so $SERVICE_RESULT reflects reality for the
-        # restic-check timer. Note the NAMES travel by stdout only -- into the journal for
-        # `check`, and into the daily report body for `snapshots`. The Prometheus alert
-        # itself carries just "the check failed" plus a pointer to journalctl, because
+        # restic-check timer. Note the NAMES travel by stdout only, into the journal. The
+        # Prometheus alert itself carries just "the check failed" plus a pointer to
+        # journalctl, because
         # restic_integrity_check_success is a single unlabelled gauge.
         # Unreached repos FAIL the run, and rank above a read-data skip: those repos got no
         # integrity check of any kind this week. Reporting without failing would let "the

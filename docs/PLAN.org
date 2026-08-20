@@ -2838,15 +2838,16 @@ The rule also says explicitly: DO NOT reflexively restart matter-server; the
 ]
 #+end_src
 
-* TODO [#E] nocobase is SIGKILLed by the container updater: shutdown exceeds the 90s stop timeout
+* DONE [#E] nocobase is SIGKILLed by the container updater: shutdown exceeds the 90s stop timeout
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h6j
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 00:49]
-:MODIFIED: [2026-08-20 Thu 00:49]
+:MODIFIED: [2026-08-20 Thu 04:46]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 04:46]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2886,6 +2887,54 @@ not a longer wait.
 
 DISCOVERED-FROM: the 4-hour service-failure scan in the 2026-08-20 health cycle.
 #+end_example
+
+** Close Reason
+
+Diagnosed. Closing as accepted-and-documented rather than fixed, because the fix
+this issue proposed does not work and would have made things worse.
+
+MY ORIGINAL DIAGNOSIS WAS WRONG. I filed this saying "shutdown exceeds
+TimeoutStopUSec=1min 30s". systemd's 90s is never reached. The real clock is the
+IMAGE's own StopTimeout=10, enforced by podman:
+
+  00:27:03  Stopping Podman container nocobase...
+  00:27:13  podman warning: "StopSignal SIGTERM failed to stop container"
+  00:27:14  Main process exited, code=exited, status=137
+
+Exactly 10 seconds, matching podman inspect StopSignal=SIGTERM StopTimeout=10.
+
+WHY NO TIMEOUT VALUE FIXES IT -- the part that makes this won't-fix rather than
+not-yet-fixed. PID 1 in this image is docker-entrypoint.sh with no `trap`. The
+kernel installs no default signal action for PID 1, so a SIGTERM with no handler
+is discarded outright. Nothing is waiting to act on it, so a longer timeout only
+delays the identical SIGKILL and slows every image update.
+
+The script does `exec "$@"` at line 163, which would normally hand PID 1 to the
+app -- but Entrypoint and Cmd are BOTH this same script, so it execs into itself
+and PID 1 stays the shell. Verified with podman top: the real app is five
+processes deep (1 -> node -> sh -> node -> sh -> node -> node /app/nocobase).
+
+`--init` / catatonit does not help either: it forwards SIGTERM to PID 1, which is
+still the trap-less shell.
+
+SCOPE, re-measured: 2 occurrences in 30 days (2026-08-16, 2026-08-20), this
+container only, no other container on the host has ever exited 137. The trigger
+is the daily container updater, which only restarts a container whose image
+actually changed -- hence twice, not thirty times.
+
+RISK, stated honestly rather than dismissed: durable state is in PostgreSQL, but
+there IS one rw bind mount, /var/lib/nocobase -> /app/nocobase/storage (file
+storage). A SIGKILL mid-write could in principle damage a file there. It is
+accepted because the kill lands during a scheduled update rather than under load,
+and because no timeout change reduces that risk -- the process never gets a
+chance to flush either way.
+
+RECORDED IN THE CODE, not just here: modules/users/home-manager/nocobase.nix now
+carries a DO-NOT-ADD-StopTimeout comment with the measurement and the PID-1
+reasoning, next to TimeoutStartSec where someone would reach to "fix" this.
+
+A real fix belongs upstream in the image's entrypoint (trap and forward, or exec
+the app so it becomes PID 1).
 
 * DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:
@@ -3563,6 +3612,88 @@ and not committed to disk or still in the database's internal trash; (b) the sep
 dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Documents; (c) done elsewhere.
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
+
+* TODO [#D] Three WiFi/RF devices degraded together on 08-19/08-20: side-door lock, Ring doorbell, outdoor plug
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ly2
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 04:51]
+:MODIFIED: [2026-08-20 Thu 04:51]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Three RF/WiFi devices changed behaviour within the same 08-19/08-20 window. Filed
+as one issue because three simultaneous coincidences is a worse hypothesis than
+one shared cause, and because the remedy for all three is physical.
+
+1. august-lock-side-door.lan -- ICMP degraded, and WORSENING
+     08-13..08-19  98.2-99.7% every day
+     08-20         89.5% over 24h, 96.6% over 12h, 93.2% over 6h, 59.2% over 1h
+   IoTDeviceChronicallyUnreachable is firing on it (startsAt 2026-08-20T11:44Z).
+   This is NOT the same device as nixos-mn4's august-lock-garage-door.
+
+2. ring-doorbell.lan -- ICMP flat zero for ~38 hours
+     08-13..08-18  100.0% every day
+     then 40.5%, then 0.0%
+   Deliberately unalerted, and correctly so: it is host_group="iot-quiet", which
+   network.yaml:115-120 pins the down-rules away from on purpose, warning that an
+   earlier draft including that group "would have paged on traeger-grill.lan at
+   95.5%. Do not widen this selector." I did not widen it.
+
+3. Matter node 26, the outdoor plug (nixos-h2u) -- relapsed the same night after
+   ~26 hours of quiet, 75 of 75 CASE failures in the hour I checked.
+
+NOT AN OUTAGE -- checked before escalating, because ping is a poor health proxy
+for this device class and the alert's own runbook says so:
+,  * lock.side_door reads state=locked, battery 78, operator "Manual Lock", and has
+    ZERO unavailable transitions in HA over 7 days.
+,  * The august and ring config entries are both state=loaded.
+,  * Ring devices reach HA through Ring's cloud API, not the local address being
+    pinged, so local ICMP silence does not imply the doorbell is dead.
+So all three are RF/reachability degradation, not loss of function. That is why
+this is P3 and not urgent.
+
+FOR JOHN -- PHYSICAL, and deliberately not acted on. All three are radio-side:
+node 26 is WiFi (FeatureMap=1), and the lock and doorbell are battery WiFi. The
+shared-cause candidates are AP/channel/interference changes, or something that
+altered RF conditions around 08-19. Worth checking whether anything moved,
+changed channel, or was added to the network that night.
+
+TWO THINGS I DID NOT DO, on purpose:
+,  * Did not touch the lock or doorbell in any way -- these are security devices.
+,  * Did not widen the iot-quiet alert selector, which is documented as
+    load-bearing with a worked example of what widening breaks.
+
+INSTRUMENT NOTES, both of which bit me here:
+,  * Searching HA entities for 'ring|doorbell' matched "spRINGkler" and
+    "deliveRING". Word-boundary the pattern or the noise reads as a hit.
+,  * probe_success carries host_group as a LABEL, and ring-doorbell.lan is
+    "iot-quiet" while the lock is "iot". A rule scoped to host_group="iot" is
+    structurally incapable of firing for the doorbell -- which looks exactly like
+    a broken rule until you check the label.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-ly2",
+    "depends_on_id": "nixos-h2u",
+    "type": "blocks",
+    "created_at": "2026-08-20T11:51:34.644428646Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
 
 * DONE [#E] august-lock-garage-door: 74.8% ICMP availability but never alerts; device is fine per HA
 :PROPERTIES:

@@ -110,6 +110,38 @@ in
           # NocoBase runs migrations on first boot against an empty schema, which
           # is by far the slowest start. 900s is the original value and is kept.
           TimeoutStartSec = "900";
+
+          # DO NOT add a StopTimeout here expecting to stop the status=137 on
+          # image updates. It will not work, and it will make every update
+          # slower. Diagnosed 2026-08-20 (nixos-h6j).
+          #
+          # What happens: the daily container updater restarts this container
+          # whenever the image changes (twice in the 30 days to 2026-08-20 --
+          # only this container, no other). podman sends SIGTERM, waits the
+          # image's own StopTimeout=10, logs "StopSignal SIGTERM failed to stop
+          # container", then SIGKILLs. Measured on 2026-08-20: stop at 00:27:03,
+          # podman's warning at 00:27:13, exit 137 at 00:27:14 -- exactly 10s.
+          #
+          # systemd's TimeoutStopUSec (90s) is NEVER reached, so raising it does
+          # nothing either. That was this issue's first, wrong diagnosis.
+          #
+          # WHY NO TIMEOUT HELPS: PID 1 in this image is docker-entrypoint.sh
+          # with no `trap`. The kernel gives PID 1 no default signal action, so
+          # a SIGTERM with no installed handler is discarded outright -- waiting
+          # longer just means waiting longer before the same SIGKILL. The script
+          # does `exec "$@"` at line 163, but Entrypoint and Cmd are both this
+          # same script, so it execs into itself and PID 1 stays the shell. The
+          # real app sits five processes deep (1 -> node -> sh -> node -> sh ->
+          # node -> node /app/nocobase).
+          #
+          # `--init` / catatonit does not fix it either: it would forward SIGTERM
+          # to PID 1, which is still the trap-less shell.
+          #
+          # ACCEPTED because the blast radius is small, not because it is tidy.
+          # Durable state is in PostgreSQL; the one rw bind mount is
+          # /var/lib/nocobase (file storage), and the kill lands during a
+          # scheduled update rather than under load. A real fix belongs upstream
+          # in the image's entrypoint.
         };
       };
     }

@@ -124,6 +124,55 @@ let
             echo "hass_integration_loaded{integration=\"$i\"} 0" >> "$TMP"
           fi
         done
+
+        # CONFIG ENTRY STATE -- a DIFFERENT thing from the component load above,
+        # and the reason this block exists (nixos-fgp).
+        #
+        # On 2026-08-17 three Google Calendar config entries sat in setup_error
+        # for two days with a rejected OAuth refresh token, and nothing here
+        # noticed. The obvious repair -- add "google" to the integrations list
+        # above -- would have been a NO-OP that looked like coverage:
+        # hass_integration_loaded reports whether the COMPONENT is in HA's
+        # loaded_components, and the google component was loaded fine. It was the
+        # ENTRIES that failed. Every one of the twelve integrations above has the
+        # same blind spot.
+        #
+        # /api/config/config_entries/entry is a real REST endpoint and the
+        # existing token already authorises it (verified 2026-08-19: HTTP 200, 90
+        # entries). No new secret, no websocket client.
+        #
+        # DELIBERATELY AGGREGATED BY domain+state, not emitted per entry. Entry
+        # titles are account identifiers -- email addresses for the Google
+        # entries -- and a Prometheus label is forever. Domain and state are
+        # enough to alert on and carry no PII. Cardinality is bounded by the
+        # entries that actually exist, ~90 series today.
+        ENTRIES="$(curl -sS --max-time 20 \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              http://127.0.0.1:8123/api/config/config_entries/entry 2>/dev/null || true)"
+
+        # Only emit when the response is the array we expect. A failure here must
+        # not fabricate zeros: absent series read as "unknown" to the alert below,
+        # whereas a zero would read as "everything is healthy".
+        if printf '%s' "$ENTRIES" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+          {
+            echo "# HELP hass_config_entries Home Assistant config entries by integration domain and state."
+            echo "# TYPE hass_config_entries gauge"
+            printf '%s' "$ENTRIES" | jq -r '
+              group_by([.domain, (.state // "unknown")])[]
+              | "hass_config_entries{domain=\"\(.[0].domain)\",state=\"\(.[0].state // "unknown")\"} \(length)"
+            '
+            echo "# HELP hass_config_entries_read 1 if the config-entry listing was read and parsed."
+            echo "# TYPE hass_config_entries_read gauge"
+            echo "hass_config_entries_read 1"
+          } >> "$TMP"
+        else
+          {
+            echo "# HELP hass_config_entries_read 1 if the config-entry listing was read and parsed."
+            echo "# TYPE hass_config_entries_read gauge"
+            echo "hass_config_entries_read 0"
+          } >> "$TMP"
+        fi
       fi
 
       {

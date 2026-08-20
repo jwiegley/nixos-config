@@ -1288,15 +1288,16 @@ countable backlog -- worth doing first, and separately from any deletion.
 ]
 #+end_src
 
-* TODO [#B] agnix 0.49.0 fails to build: uses unstable 'if let' guards against rustc 1.91.1
+* DONE [#B] agnix 0.49.0 fails to build: uses unstable 'if let' guards against rustc 1.91.1
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-chl
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-18 Tue 23:38]
-:MODIFIED: [2026-08-19 Wed 08:46]
+:MODIFIED: [2026-08-19 Wed 18:42]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 18:42]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1344,6 +1345,33 @@ CURRENT IMPACT: the host still cannot complete a switch. Everything that has
 been verified and committed this session -- the three alert-rule changes, the
 immich permissions fix (nixos-g52), and the starship shim itself -- is waiting
 on this. The running system is healthy and unaffected.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Fixed upstream in nix-config (commit 6fb53067) and now verified live on vulcan.
+
+Option 1 from the issue was taken: build agnix with a newer toolchain rather than
+pinning back to 0.44.0. overlays/ai/30-agnix.nix was replaced with a version taking
+{ inherit inputs; } and building against a rustPlatform assembled from the
+rust-overlay input at 1.95.0 -- the release in which if_let_guard (RFC 2294)
+stabilized -- instead of nixpkgs' rustc 1.91.1. Written platform-agnostically, so
+it is not an aarch64-only patch, and proven by building before pushing rather than
+pushing and hoping.
+
+VERIFIED ON THIS HOST, not merely upstream:
+,  * agnix --version reports 0.49.0, from /etc/profiles/per-user/johnw/bin/agnix
+,  * /nix/store/gxxzc9iqn6ljnn0ar42bkvikdcjq676f-agnix-0.49.0 is in the closure of
+    /run/current-system
+,  * its deriver references rust-minimal-1.95.0 and auditable-rust-minimal-1.95.0 --
+    NOT the rustc-wrapper-1.91.1 / cargo-1.91.1 pair named in this issue as the
+    cause. That is the actual proof: "it builds now" alone would not distinguish a
+    real fix from a cached older artifact.
+,  * three full `/etc/nixos/build switch` runs completed on 2026-08-19 with this
+    package in the closure
+
+flake.lock here has nix-config and nix-config-ai at f41587a8, which carries the fix.
 #+end_example
 
 ** Dependencies
@@ -1933,7 +1961,7 @@ Then: enable, /etc/nixos/build switch, and test end to end.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 14:02]
-:MODIFIED: [2026-08-19 Wed 16:20]
+:MODIFIED: [2026-08-19 Wed 18:51]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2012,6 +2040,13 @@ one bad day for Google auth on this host rather than an ongoing fault.
     "author": "johnw",
     "text": "2026-08-19 update. Two things: one entity is DELIBERATELY down, and the four\nnewartisans calendars have a concrete, fixable cause.\n\ncalendar.john_usegitai_com IS INTENTIONAL. John took it down and it stays down.\nIt is NOT a fault and must not be re-reported as one by a future cycle. Nothing\nalerts on it -- no Prometheus rule references HA calendar entity state, and it\nappears nowhere in the repo -- so it needs no silence. The only recurring\nsurface is the Node-RED HA Integration Health flow, which will keep listing it\nin its journal output and does not notify.\n\nTHE FOUR newartisans ICS CALENDARS: filename mismatch against our own publisher.\n\ncalendar.newartisans.com is SELF-HOSTED here -- modules/services/calendar-publisher.nix,\nserving /var/lib/calendar-publisher on localhost:8090 through the cloudflared\n\"data\" tunnel. It is healthy: 8 files published, and calendar_publisher_url_up\nfor cluster.ics reads 1.\n\nThe published filenames are hyphenated; the HA subscriptions are not:\n\n    SERVED (HTTP 200)                          HA ENTITY IMPLIES (HTTP 404)\n    cluster-agency-meetings-retreats.ics       cluster-agency-meetingsretreats.ics\n    subregional-regional-continental.ics       subregional-regionalcontinental.ics\n\nSo the publisher writes \"meetings-retreats\" and \"regional-continental\" while the\nsubscribed URLs have \"meetingsretreats\" and \"regionalcontinental\". The feeds are\nbeing served fine; HA is asking for names that do not exist, and gets 404, hence\nstate=unavailable.\n\nCAVEAT ON HOW THIS WAS DERIVED: entity IDs replace every non-alphanumeric with\nan underscore, so the exact configured URL cannot be read back from them. The\ninference is nonetheless well-supported -- the hyphenated names return 200, the\nun-hyphenated return 404, and precisely those entities are unavailable. Confirm\nagainst the real URLs in the ICS integration's config before editing. (An\nearlier note in this issue recorded a 404 from a reconstructed URL as a\nNON-finding; this is the same reconstruction, but now with the matching 200 on\nthe other side, which is what makes it evidence rather than a guess.)\n\nFIX: point those subscriptions at the hyphenated filenames. That is an edit to\nthe ICS integration entries in the HA UI, not a repo change -- the publisher\nneeds no change, since it is serving correctly.\n\nSTILL OPEN in this issue: the monitoring gap. hass_integration_loaded measures\ncomponent load, not config-entry health, so none of this raised an alert. That\nremains the substantive defect.\n",
     "created_at": "2026-08-19T23:20:08Z"
+  },
+  {
+    "id": 34,
+    "issue_id": "nixos-fgp",
+    "author": "johnw",
+    "text": "Monitoring gap CLOSED and verified. The re-authentication half is John's and stays open.\n\nWHAT WAS BUILT. hass-integration-exporter now also reads\n/api/config/config_entries/entry -- a real REST endpoint the existing long-lived\ntoken already authorises, so no new secret and no websocket client -- and emits\nhass_config_entries{domain,state} plus hass_config_entries_read.\n\nAggregated by domain+state, deliberately NOT per entry: entry titles are account\nidentifiers (email addresses for the Google entries) and a Prometheus label is\nforever. Domain and state are enough to alert on and carry no PII.\n\nThree rules in modules/monitoring/alerts/hass-integrations.yaml:\n  * HomeAssistantConfigEntryFailed    setup_error|migration_error|failed_unload, 15m, warning\n  * HomeAssistantConfigEntryRetrying  setup_retry, 2h, info -- HA retries these itself,\n    so only a persistent one is a fault\n  * HomeAssistantConfigEntryReadFailing  the read's own liveness. Without it, a failed\n    listing makes the series VANISH, which stops the other two evaluating rather than\n    firing -- silent, and the exact shape this issue was filed about.\n\nnot_loaded is excluded on purpose: a disabled entry is not_loaded, seven are\nlegitimately disabled here, and alerting on it would train everyone to ignore the rule.\nThe eight state strings were read out of ConfigEntryState in\nhomeassistant-2025.10.2/config_entries.py rather than assumed, and all eight are\naccounted for in a comment -- including setup_in_progress and unload_in_progress,\nwhich are transient and correctly not alerted.\n\nVERIFIED:\n  * exporter ExecMainStatus=0; 68 hass_config_entries series written\n  * Prometheus scrapes all 68; hass_config_entries_read = 1\n  * all three rules load and, after the post-switch warmup, read health=ok with\n    empty lastError -- checked twice, because immediately after a switch every\n    slow-group rule reads health=unknown and that is warmup, not breakage\n  * the failure query returns zero domains today, which is correct rather than\n    broken: HA currently reports no setup_error entries\n  * not_loaded matches 7 domains and is correctly excluded\n\nINCIDENTALLY RESOLVED, and worth recording: the three google entries this issue was\nfiled about are no longer in setup_error. The live API now shows google with 3 loaded\nand 1 not_loaded -- consistent with John re-authenticating the calendars and\ndeliberately taking john@usegitai.com down. So the outage is over; what remains open\nis whether the Google Cloud OAuth consent screen is still in \"Testing\" publishing\nstatus, which expires refresh tokens every 7 days and would make this recur weekly.\nThat check, and publishing the app if so, is John's.\n",
+    "created_at": "2026-08-20T01:51:50Z"
   }
 ]
 #+end_src

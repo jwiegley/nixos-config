@@ -34,6 +34,100 @@ groups:
             "Reconfigure" or "Re-authenticate" banner, then:
               journalctl -u home-assistant --since "1 hour ago" | grep -i "{{ $labels.integration }}"
 
+      # CONFIG ENTRIES, which is a different failure mode from the alert above and
+      # was completely uncovered until 2026-08-19 (nixos-fgp). Three Google
+      # Calendar entries sat in setup_error for two days with a rejected OAuth
+      # refresh token while the `google` COMPONENT stayed loaded — so
+      # hass_integration_loaded read 1 throughout and nothing fired. Adding
+      # `google` to the exporter's integration list would have changed nothing;
+      # the metric measures component load, not entry health.
+      #
+      # The state strings are not guessed. ConfigEntryState in
+      # homeassistant-2025.10.2/config_entries.py defines exactly eight, and each
+      # is accounted for here:
+      #
+      #   loaded              healthy
+      #   setup_error         alerted below
+      #   migration_error     alerted below
+      #   failed_unload       alerted below
+      #   setup_retry         alerted separately, 2h — HA retries these itself
+      #   not_loaded          NOT alerted, see below
+      #   setup_in_progress   NOT alerted, transient by definition
+      #   unload_in_progress  NOT alerted, transient by definition
+      #
+      # not_loaded is EXCLUDED on purpose. A disabled entry is not_loaded and that
+      # is a normal, chosen state — seven entries are legitimately disabled here
+      # today (bluetooth, bmw_connected_drive, bose, kumo, llama_conversation,
+      # radio_browser, and one google). Alerting on it would produce a permanent
+      # warning that trains everyone to ignore this rule.
+      - alert: HomeAssistantConfigEntryFailed
+        expr: sum by (domain) (hass_config_entries{state=~"setup_error|migration_error|failed_unload"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: home-automation
+          service: home-assistant
+        annotations:
+          summary: "Home Assistant config entry for {{ $labels.domain }} failed to set up"
+          description: |
+            {{ $value }} config entry/entries for `{{ $labels.domain }}` are in a
+            failed state. The integration itself may well be loaded and every
+            other entry for it working, so this will not show up as
+            HomeAssistantIntegrationDown.
+
+            The usual cause is an OAuth refresh token that has expired or been
+            revoked. Before re-authenticating, check whether the provider's OAuth
+            consent screen is still in "Testing" publishing status: that expires
+            refresh tokens every 7 DAYS, and re-auth then buys exactly another
+            week. This host has already been bitten by that twice — the four
+            disabled rclone cloud remotes and the Schwab token for stock-trader.
+            Publishing the app, or making it Internal to a Workspace org, is the
+            durable fix.
+
+            Settings > Devices & Services will show the failing entry with a
+            "Reconfigure" or "Re-authenticate" banner.
+
+      # setup_retry is separated rather than folded in above: HA uses it for
+      # anything it intends to retry on its own, so a short-lived one is normal
+      # operation and only a persistent one is a fault. Hence 2h, not 15m.
+      - alert: HomeAssistantConfigEntryRetrying
+        expr: sum by (domain) (hass_config_entries{state="setup_retry"}) > 0
+        for: 2h
+        labels:
+          severity: info
+          category: home-automation
+          service: home-assistant
+        annotations:
+          summary: "Home Assistant config entry for {{ $labels.domain }} stuck retrying"
+          description: |
+            {{ $value }} config entry/entries for `{{ $labels.domain }}` have been
+            in setup_retry for two hours. HA retries these itself, so a brief
+            occurrence is normal and is not alerted on; two hours means the retry
+            is not succeeding — an unreachable device, a down service, or a
+            credential HA is waiting on.
+
+      # The config-entry listing's own liveness, separate from the API-reachability
+      # signal below. The two fail independently: the exporter can reach /api/config
+      # and still fail on the config_entries endpoint, and in that case the
+      # hass_config_entries series simply vanish. Absent series make the two alerts
+      # above stop evaluating rather than fire — silent, and exactly the shape this
+      # issue was filed about — so the read itself has to be watched.
+      - alert: HomeAssistantConfigEntryReadFailing
+        expr: hass_config_entries_read == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: home-automation
+          service: home-assistant
+        annotations:
+          summary: "Home Assistant config-entry listing cannot be read"
+          description: |
+            The exporter reached Home Assistant but could not read or parse
+            /api/config/config_entries/entry for 30 minutes, so
+            HomeAssistantConfigEntryFailed and HomeAssistantConfigEntryRetrying
+            are blind. Most likely the long-lived token lost admin rights or the
+            endpoint changed shape in an HA upgrade.
+
       # The exporter's own liveness. Without this the alert above degrades silently: if the
       # exporter stops, hass_integration_loaded freezes at its last value (all 1s) and reads
       # as permanently healthy -- the exact self-blinding failure this whole retirement has

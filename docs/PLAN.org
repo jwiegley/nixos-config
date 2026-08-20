@@ -3229,14 +3229,14 @@ configuration change rather than anything in this repo.
 ]
 #+end_src
 
-* TODO [#D] Nest setpoint mirror silently drops writes on API 429: no retry, no catch, output unwired
+* TODO [#D] Nest setpoint mirror silently drops writes on API 429 (no retry/catch); divergence itself is by design
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ii9
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 12:56]
-:MODIFIED: [2026-08-20 Thu 12:56]
+:MODIFIED: [2026-08-20 Thu 15:20]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -3294,6 +3294,54 @@ scrutiny before adding retries to it.
 
 Note the alert threshold is >0 errors/hour, so it fires on a single occurrence and
 self-resolves an hour later. That is working as designed and was left alone.
+#+end_example
+
+** Notes
+
+#+begin_example
+CORRECTION 2026-08-20 15:2x -- one of this issue's two claims was WRONG, and it is
+the one that made the issue look alarming. Correcting before anyone acts on it.
+
+WHAT I GOT WRONG: the issue's "OBSERVABLE CONSEQUENCE" section attributed the
+VTherm/Nest divergence (VTherm 86, Nest 87/88) to dropped mirror writes. It is not
+that. It is the system working exactly as designed.
+
+,  * The +2 offset is DELIBERATE, not drift. Every VTherm change today is followed by
+    the Nest within the same minute at +2: 09:16 80/82, 11:16 86/88, 11:22 80/82,
+    11:47 86/88, 15:08 86/88. The mirror is functioning.
+,  * The 86 is an AWAY SETBACK, correctly applied. The VTherm's presence feature is
+    driven by binary_sensor.office_occupied_debounced_15m
+    (home-assistant.nix:902, delay_off = 00:15:00) which follows the FP300 mmWave.
+    Every 86 today lands EXACTLY 15 minutes after an occupancy 'off', and every
+    return to 80 is immediate on 'on':
+        11:01 off -> 11:16 setpoint 86
+        11:32 off -> 11:47 setpoint 86
+        14:53 off -> 15:08 setpoint 86   (current state)
+        09:16 on  -> 09:16 setpoint 80
+        11:22 on  -> 11:22 setpoint 80
+        13:29 on  -> 13:29 setpoint 80
+    A 13:17->13:29 absence of 12 minutes correctly did NOT trigger the setback,
+    which is the debounce doing precisely what its comment says it exists to do.
+
+So "86 and 88 in the middle of the day" is not a fault at all: it means the office
+has been empty 15+ minutes. John asked about exactly this pair on 2026-08-20 and we
+both set it aside as stale data; it was live, and it was correct.
+
+WHAT REMAINS TRUE, and is still the actual issue: when the mirror DOES fail, the
+write is discarded silently. Verified against flows.json -- the node's output is
+wired to nothing ([[]]), its tab has zero catch nodes and zero subflow instances.
+Three failures in the retained journal:
+  2026-08-20 12:14:49  HomeAssistantError, Google SDM 429 RESOURCE_EXHAUSTED
+  2026-08-19 12:52:04  ValidationError
+  2026-08-19 12:52:45  ValidationError
+On those occasions the Nest keeps its previous setpoint and nothing retries or
+reports. The exposure is real but NARROWER than this issue first claimed: it is a
+missed setback or a missed restore at the moment of a presence transition, not a
+standing divergence.
+
+SEVERITY UNCHANGED at P3, but for a different reason than originally written: not
+"the thermostats are diverging", but "roughly 1 in N presence transitions silently
+fails to reach the Nest, and nothing tells you which".
 #+end_example
 
 * DONE [#D] docs/README.md index describes files and a script the Nagios removal deleted

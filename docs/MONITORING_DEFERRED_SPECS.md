@@ -16,7 +16,7 @@ deploy choreography, noise analysis, and the decisions only the operator can mak
 
 | Item | Verdict | Effort | TL;DR |
 |------|---------|--------|-------|
-| [Nagios's future: retire to a thin ICMP-vantage shell, or keep as-is](#nagios-topology-decision) | NEEDS_USER_DECISION | M — ~6-9h for Option B-lite (port 2 unique signals + decommi | Three alerting stacks coexist on vulcan, and the phase-4 status.dat bridge already surfaces Nagios's verdict (counts) in Alertmanager. A full check-type inventory shows that ~95% of Nagios's 253 live service checks are n |
+| [Nagios's future: retire to a thin ICMP-vantage shell, or keep as-is](#nagios-topology-decision) | **RESOLVED 2026-08-19 — removed entirely** (was NEEDS_USER_DECISION) | M — ~6-9h for Option B-lite (port 2 unique signals + decommi | Three alerting stacks coexist on vulcan, and the phase-4 status.dat bridge already surfaces Nagios's verdict (counts) in Alertmanager. A full check-type inventory shows that ~95% of Nagios's 253 live service checks are n |
 | [Monitoring egress from the OpenClaw & Hermes agent microVMs](#vm-agent-egress) | IMPLEMENT_MODIFIED | M, ~6-8h for Tiers 1+2 (one build/switch). Tier 3 enforcemen | The two autonomous-agent microVMs (openclaw 10.99.0.2 on br-openclaw, hermes 10.99.1.2 on hermes-br0) already have NAT egress with iptables isolation chains AND egress LOG rules — but the LOG lines are kernel priority-6  |
 | [Container Image CVE Scanning (Trivy textfile exporter + severity-floored alerting)](#cve-image-scanning) | IMPLEMENT_MODIFIED | M, ~6-8h (module + alerts + first-scan baseline tuning) | vulcan runs 18 distinct container images (5 root + 13 rootless across 12 lingering users), all on moving tags with zero digest pinning, and nothing scans any of them for CVEs. I recommend a weekly trivy oneshot (trivy 0. |
 | [Config-Drift Auditing (tiered, non-auditd)](#config-drift-auditing) | IMPLEMENT_MODIFIED | M, ~6-8h | The system already has whole-tree file-integrity (AIDE) plus a per-service schema-drift probe (openclaw-config-drift-check), but the two highest-value mutable config artifacts — Home Assistant's hand-edited YAML and Node |
@@ -36,6 +36,17 @@ The full rationale for each lives in its chapter; this is the checklist.
 
 
 **Nagios's future: retire to a thin ICMP-vantage shell, or keep as-is**
+
+> **[ANSWERED 2026-08-19 — all four questions below are closed; no operator input is wanted.]**
+> The web UI was not worth keeping, so Nagios was removed outright rather than reduced to an
+> ICMP shell. The IoT ICMP exclusion stands as deliberate noise-control, with
+> `BlackboxICMPIoTDeviceDown` / `IoTDeviceChronicallyUnreachable`
+> (`modules/monitoring/alerts/network.yaml`) covering the devices that are probed. The HA
+> per-integration check went to Prometheus as a textfile collector
+> (`modules/monitoring/services/hass-integration-exporter.nix`), not to Node-RED. The
+> parent/child UNREACHABLE-vs-DOWN topology model was not reproduced — a gateway outage does
+> fan out to N child alerts, which was accepted.
+
 - PRIMARY: Do you want to keep the Nagios web UI/visual map at all? If you never open https://nagios.vulcan.lan, Option B-lite removes the entire nginx-vhost + htpasswd + fcgiwrap + CGI maintenance surface. If you value the topology map as a human dashboard, choose Option A (status quo) and we change nothing.
 - Should ICMP coverage of the flaky IoT devices (locks, thermostats, sensors — currently commented OUT of blackbox_icmp on purpose) actually be PAGED on, or was their exclusion deliberate noise-control? If deliberate, the only true loss from retiring Nagios is its own un-paged dashboard, and Option B becomes near-free.
 - For the HA per-integration health check (the one genuinely-unique signal): keep it as a tiny standalone textfile collector feeding Prometheus, OR move integration-loaded alerting fully into Node-RED to match the existing HA-alerting policy? Both are cheap; this picks the owning stack.
@@ -110,7 +121,21 @@ The full rationale for each lives in its chapter; this is the checklist.
 
 # Nagios's future: retire to a thin ICMP-vantage shell, or keep as-is
 
-**Verdict:** NEEDS_USER_DECISION · **Effort:** M — ~6-9h for Option B-lite (port 2 unique signals + decommission), or S/0h for Option A status-quo
+> **DECIDED AND EXECUTED — 2026-08-19. Nothing in this chapter is actionable; it is kept as the
+> rationale for the decision.** The operator chose to go further than Option B-lite: Nagios was
+> removed **entirely** — user, group, units, nginx vhost + htpasswd + fcgiwrap + phpfpm pool,
+> the `nagios` flake input, the private `nagios/hosts.nix` topology, ~3.6 GB of state, and also
+> the two pieces this chapter said to keep (`nagios-status-exporter.nix` and
+> `alerts/nagios.yaml`, both already gone since the 2026-07-31 mirror removal). Prometheus +
+> Alertmanager is the only alerting system; Node-RED keeps the Home-Assistant safety logic.
+> The §4 phase plan below was substantially carried out (Phase 1's HA integration exporter
+> shipped as `modules/monitoring/services/hass-integration-exporter.nix`, emitting
+> `hass_integration_loaded` / `hass_integration_check_up` rather than the
+> `homeassistant_*` names sketched below), but every
+> instruction in it — especially the Phase-3 "keep the exporter for now" cutover choreography —
+> is **superseded**. Read §2/§3 for *why*, not for *what to do*.
+
+**Verdict:** ~~NEEDS_USER_DECISION~~ **RESOLVED 2026-08-19 (full removal)** · **Effort as estimated:** M — ~6-9h for Option B-lite (port 2 unique signals + decommission), or S/0h for Option A status-quo
 
 **Key live evidence:** Nagios runs live on vulcan (active, enabled, up since 2026-06-08); status.dat = 253 servicestatus blocks + 24 hoststatus blocks (404KB, nagios:nagios 0664). · Phase-4 bridge is live and fresh in Prometheus: nagios_services_critical_total=1, nagios_hosts_down_total=1, nagios_stale_results_total=0, nagios_status_parse_success=1, run timestamp age 52s. Matches the brief's '1 host down, 1 svc critical'. · The live down items, by CHECK TYPE only (hostname suppressed): 1 HOST in HARD state via check-host-alive (ICMP), 1 SVC in HARD CRITICAL via check_ping (ICMP). Both are pure network-reachability — no application logic. · Prometheus blackbox HAS an icmp_ping module and a blackbox_icmp job with EXACTLY 24 targets, reporting 0 down — yet Nagios's 24 hosts show 1 down. The blackbox_icmp target list (blackbox-monitoring.nix:396-449) comments OUT ~15 IoT devices (locks, nests, rings, sprinkler, vacuum, solar, flume). So Nagios pings devices Prometheus deliberately does not. · Nagios check_command tally (modules/services/nagios.nix + private nagios/hosts.nix = 23 host tuples): check_ssl_cert 34, check_http 12, check_tcp 6, check_systemd_service 4, check_openclaw_plugin 4, check_backup_age 3, plus singletons for zfs/podman/dns/ssh/smtp/imap/git-workspace/homeassistant. · Every non-ICMP check class is duplicated in Prometheus with live series: node_systemd_unit_state=2870, probe_ssl_earliest_cert_expiry=47 (+certificate-exporter.nix), blackbox_https_local=41 targets, container metrics=20, zfs pool=7, openclaw_*=42, backup-ish=113, git_workspace_*=9, aide-metrics.nix=7, atd_*=4, qdrant via blackbox https://qdrant.vulcan.lan.
 
@@ -194,13 +219,17 @@ Deliberately keep Nagios as a redundant watcher.
   homeassistant_integration_check_success 1
   ```
   **Secret-safety:** emit ONLY the `0/1` gauge and the domain label (domain names are public integration identifiers, not secrets). Never write the token, entry IDs, titles, or API response bodies to the textfile. Atomic `tmp+os.replace` into `/var/lib/prometheus-node-exporter-textfiles/homeassistant_integrations.prom`, mode 0644.
-- Timer `OnUnitActiveSec=5min` (HA integrations don't fail-and-recover faster than that; matches the existing Nagios cadence).
+- Timer `OnUnitActiveSec=5min` (HA integrations don't fail-and-recover faster than that; it also matched the Nagios check cadence at the time). *Shipped as specified — `hass-integration-exporter.nix` runs `OnActiveSec=3min` / `OnUnitActiveSec=5min`.*
 - Alert in a new `modules/monitoring/alerts/homeassistant-integrations.yaml` (auto-discovered):
   ```yaml
   - alert: HomeAssistantIntegrationUnloaded
     expr: homeassistant_integration_loaded == 0
-    for: 15m          # baseline: HA reload/restart re-loads integrations in <2min;
-                      # 15m matches NagiosServicesCritical and survives a rebuild-restart
+    for: 15m          # baseline: HA reload/restart re-loads integrations in <2min, so 15m
+                      # survives a rebuild-restart without firing. (It was also chosen to
+                      # match the then-existing NagiosServicesCritical dwell; that anchor is
+                      # gone, the <2min reload measurement is the reason that survives.)
+                      # 15m is what shipped -- see HomeAssistantIntegrationDown in
+                      # modules/monitoring/alerts/hass-integrations.yaml
     labels: { severity: warning }
   - alert: HomeAssistantIntegrationCheckFailed
     expr: homeassistant_integration_check_success == 0
@@ -217,11 +246,15 @@ In `modules/services/blackbox-monitoring.nix` (the `blackbox_icmp` `static_confi
 ```yaml
 - alert: BlackboxICMPHostDown
   expr: probe_success{job="blackbox_icmp"} == 0
-  for: 10m            # baseline: matches NagiosHostsDown for:10m; long enough to ride
-                      # out a single missed ICMP cycle on a sleepy IoT device
+  for: 10m            # baseline: long enough to ride out a single missed ICMP cycle on a
+                      # sleepy IoT device. (It was picked to match NagiosHostsDown's 10m;
+                      # that rule no longer exists. NOT SHIPPED as written -- the IoT ICMP
+                      # coverage that did ship is BlackboxICMPIoTDeviceDown at for: 1h in
+                      # modules/monitoring/alerts/network.yaml, sized for the same reason
+                      # but against a much noisier target set.)
   labels: { severity: warning }
 ```
-**Topology preservation (optional, addresses decision #4):** add an inhibition rule so a gateway/router probe failure suppresses the child-device pages, replicating Nagios's UNREACHABLE-vs-DOWN logic:
+**Topology preservation (optional, addresses decision #4):** add an inhibition rule so a gateway/router probe failure suppresses the child-device pages, replicating the parent/child UNREACHABLE-vs-DOWN distinction Nagios used to provide. *[Not implemented — no such inhibition exists in `modules/services/alertmanager.nix` today, so a gateway outage does fan out. Still a valid idea if the fan-out ever becomes a nuisance:]*
 ```yaml
 # alertmanager inhibit_rules (modules/monitoring/.../alertmanager config)
 - source_matchers: ['alertname="BlackboxICMPHostDown", instance=~"asus-.*|.*-ap.lan"']
@@ -237,10 +270,16 @@ Use the existing `/remove-service` discipline. Files to edit/remove:
 - `hosts/vulcan/default.nix`: drop the imports of `modules/services/nagios.nix`, `modules/monitoring/nagios-daily-report.nix`, and the 4 check modules (`aide-nagios-check.nix`, `homeassistant-nagios-check.nix`, `services/qdrant-nagios.nix`, `services/atd-nagios.nix`). **Keep** `modules/monitoring/services/aide-metrics.nix` and the atd Prometheus path — those are the surviving Prometheus equivalents.
 - nginx: the `nagios.vulcan.lan` vhost, `nagios-htpasswd` service, `services.fcgiwrap.instances.nagios`, and the phpfpm pool all disappear with `nagios.nix`.
 - `docs/ports.txt`: remove any nagios entry (none found in a quick grep, so likely already absent — verify).
-- **Keep for now:** `nagios-status-exporter.nix` and `alerts/nagios.yaml`. They become inert once `nagios.service` is gone (`nagios_status_parse_success` will go to 0 → `NagiosStatusExporterFailed` fires). That firing is your **cutover signal** that the bridge has nothing left to watch — at which point remove the exporter + `nagios.yaml` in a follow-up commit. (Do NOT remove them in the same commit, so a rollback restores the safety net.)
+- ~~**Keep for now:** `nagios-status-exporter.nix` and `alerts/nagios.yaml`. They become inert once `nagios.service` is gone (`nagios_status_parse_success` will go to 0 → `NagiosStatusExporterFailed` fires). That firing is your **cutover signal** that the bridge has nothing left to watch — at which point remove the exporter + `nagios.yaml` in a follow-up commit. (Do NOT remove them in the same commit, so a rollback restores the safety net.)~~ **[STRUCK 2026-08-19 — DO NOT FOLLOW. Both files are already gone: `alerts/nagios.yaml` and `nagios-status-exporter.nix` were deleted with the Nagios↔Prometheus mirror on 2026-07-31, well before the daemon itself. There is no bridge, no cutover signal, and no safety net to stagger; a rollback restores nothing.]**
 - The SOPS secret `monitoring/home-assistant-token` is **retained** — it now feeds the Phase-1 HA exporter, not Nagios.
 
 ### Deploy choreography
+
+> **[SUPERSEDED 2026-08-19 — historical. The removal did not follow this sequence: the bridge
+> and its rules went first (2026-07-31), the daemon and its whole surface last (2026-08-19),
+> and the rollback property below no longer holds because the private `nagios/hosts.nix` flake
+> input was removed too. Retained to show what was planned.]**
+
 1. Commit Phase 1 + Phase 2 (additive only) → `nixos-rebuild switch`. Restart cost: node-exporter picks up the new textfile automatically; blackbox/Prometheus reload scrape config (no service interruption). Verify `homeassistant_integration_loaded` and the new `blackbox_icmp` targets are live and green before proceeding.
 2. After 24h of clean new-rule data, commit Phase 3 (remove Nagios + web stack), keeping exporter+rules. Restart cost: nginx reload (drops the vhost), `nagios.service` stop. Verify `systemctl --failed` is empty.
 3. Once `NagiosStatusExporterFailed` fires (confirming the bridge is watching a dead source), commit the exporter+`nagios.yaml` removal.
@@ -269,6 +308,11 @@ Use the existing `/remove-service` discipline. Files to edit/remove:
 - **Unblocks:** ends the dual-config tax (one stack per new service), shrinks the NixOS attack/maintenance surface, and retires the last `nagios.yaml` dead-rule risk. Closes the three-stack ambiguity down to two (Prometheus infra + Node-RED HA-logic), which is the coherent end-state.
 
 ## 8. Decisions required from the operator
+
+> **[ALL ANSWERED 2026-08-19 — see the chapter banner. The UI was not worth keeping and Nagios
+> was removed outright; the IoT ICMP exclusion stood; the HA integration check went to a
+> Prometheus textfile collector; the parent/child topology model was not reproduced. Kept for
+> the record only — do not bring these questions to the operator again.]**
 
 - **Do you ever open the Nagios web UI / topology map as a human dashboard?** If no → Option B-lite removes the whole CGI/htpasswd/fcgiwrap surface. If yes → Option A and we change nothing.
 - **Should the flaky IoT devices (currently commented out of `blackbox_icmp`) actually be paged on, or was their exclusion deliberate noise-control?** If deliberate, the only real loss from retiring Nagios is its un-paged dashboard, and Option B becomes near-free.
@@ -791,7 +835,7 @@ Everything NOT in the paging tier (fixable CRIT/HIGH on the other 17 images, all
 The vulcan fleet already has two of the three layers a sane config-drift story needs: **AIDE** (whole-tree file integrity, `modules/security/aide.nix`) and a **per-service schema-drift probe** (`openclaw-config-drift-check`, the textfile/SECRET_RE pattern to generalize). What is genuinely missing:
 
 1. The two highest-value *mutable* config artifacts — **Home Assistant's hand-edited YAML** (`/var/lib/hass/{configuration,automations,scripts,scenes}.yaml`) and **Node-RED's `flows.json`** — are covered by **neither** AIDE nor any other signal. Verified: `aide.nix` does not include `/var/lib/hass` or `/var/lib/node-red`.
-2. The AIDE *metrics* layer (`aide-metrics.nix`) **already exists and is imported** (contradicting the brief's "phase 4 skipped it" premise), but it is **buggy** (status=0 while added=15/changed=122/total=0 live) and it **double-runs the full `aide --check`** alongside `aide-nagios-check`.
+2. The AIDE *metrics* layer (`aide-metrics.nix`) **already exists and is imported** (contradicting the brief's "phase 4 skipped it" premise), but it is **buggy** (status=0 while added=15/changed=122/total=0 live) and it **double-runs the full `aide --check`** alongside `aide-nagios-check`. **[BOTH RESOLVED SINCE. The parse bug and the duplicate walk were fixed 2026-07-29: `aide-metrics.nix` no longer runs `aide --check` at all, and every count is emitted by the single walk in `aide-check.service`'s `ExecStart` (`modules/security/aide.nix`). The third walker, `aide-nagios-check.nix`, went with Nagios on 2026-08-19. Read this chapter for the analysis, not for the current state.]**
 3. There is **no gauge for uncommitted edits in `/etc/nixos`** itself.
 
 **Recommendation:** a three-part, tiered add — (A) fix + de-duplicate the existing AIDE metrics and make its alert meaningful; (B) a lightweight **crown-jewel mtime/sha collector** over ~7 named files with deploy-window suppression (generalizing the openclaw pattern); (C) a one-line `/etc/nixos` uncommitted-changes gauge. **Full auditd is explicitly rejected** (it was disabled for noise; this design stays counts-and-timestamps-only). **Cost:** M, ~6-8h, zero new ports, one Prometheus reload, a few oneshot timers.
@@ -859,9 +903,9 @@ Real-time inotify/auditd on `/var/lib/hass` + `/var/lib/node-red` + `/etc`.
 Three independent workstreams; B2 (crown-jewel) is the new capability, B1 (AIDE fix) and B3 (git gauge) are cheap riders.
 
 ### B1 — Fix + de-duplicate AIDE metrics (file: `modules/monitoring/services/aide-metrics.nix`)
-- **De-dup the double-check.** `aide-metrics.nix` runs its own `aide --check` (line 58) *and* is wired as `aide-check.serviceConfig.ExecStartPost` (line 106). Drop the ExecStartPost-triggered standalone walk: have the collector **parse the report `aide-check` already produced** rather than re-walking. Cheapest correct form: have `aide-check.service` write its stdout to a fixed report file (`ExecStart` → wrapper that tees to `/var/lib/aide/last-check.report`), and have `aide-metrics` parse *that file* + `aide_check_status` from the wrapper's exit code captured into a sidecar. Net: **one** `aide --check` per day, not two (or three counting nagios — see note).
+- **De-dup the double-check.** **[DONE 2026-07-29, essentially as recommended: `aide-metrics.nix` no longer runs `aide --check` at all, `aide-check.service`'s `ExecStart` wrapper emits every count from its single walk, and the collector is now an `ExecStartPre` that only handles the metrics the check itself cannot emit. Line numbers below are pre-fix.]** `aide-metrics.nix` runs its own `aide --check` (line 58) *and* is wired as `aide-check.serviceConfig.ExecStartPost` (line 106). Drop the ExecStartPost-triggered standalone walk: have the collector **parse the report `aide-check` already produced** rather than re-walking. Cheapest correct form: have `aide-check.service` write its stdout to a fixed report file (`ExecStart` → wrapper that tees to `/var/lib/aide/last-check.report`), and have `aide-metrics` parse *that file* + `aide_check_status` from the wrapper's exit code captured into a sidecar. Net: **one** `aide --check` per day, not two (or three counting nagios — see note).
 - **Fix the parse + reset-on-OK.** When status==0, force `aide_added_files=0 aide_removed_files=0 aide_changed_files=0`. Fix `aide_total_entries` (the current `grep "Number of entries:"` matches nothing → emits 0). Use a tolerant matcher, or drop `aide_total_entries` entirely (it carries no alerting value).
-- **Note on aide-nagios-check.nix:** it *also* runs `aide --check` (line 37). Either (a) leave it (Nagios path is independent and the brief's "conflict" is really just CPU duplication), or (b) preferred: have the Nagios check read `aide_check_status` from the textfile/Prometheus instead of re-walking. Recommend (b) as a follow-up; not blocking.
+- ~~**Note on aide-nagios-check.nix:** it *also* runs `aide --check` (line 37). Either (a) leave it (Nagios path is independent and the brief's "conflict" is really just CPU duplication), or (b) preferred: have the Nagios check read `aide_check_status` from the textfile/Prometheus instead of re-walking. Recommend (b) as a follow-up; not blocking.~~ **[MOOT — `aide-nagios-check.nix` was removed with Nagios on 2026-08-19. The third walker is gone; see the note on the de-dup item above.]**
 
 ### B2 — Crown-jewel drift collector (NEW)
 
@@ -1044,7 +1088,7 @@ I measured the actual drift live and it is **small and benign**, which is exactl
 **What exists today:**
 - `docs/ports.txt` — 199 lines, **123 distinct registered ports**, format `PORT INTERFACE... [description]` where INTERFACE is one of `0.0.0.0`, `::`, `*`, `127.0.0.1`, `::1`, a specific IP, or the literal `container`. Maintained by hand, with a "Previously seen but not currently listening — verify before reuse" section showing the maintainer already does manual reverse-drift checks.
 - The `/fix-alert`, `/install-service`, `/remove-service` skills reference the registry, and CLAUDE.md mandates updating it, but there is **no automated enforcement**.
-- No Prometheus metric, no textfile collector, no Nagios check touches the listening-socket set.
+- No Prometheus metric and no textfile collector touches the listening-socket set. (Nor did any Nagios check, back when Nagios existed — it was removed 2026-08-19.)
 
 **Live snapshot (2026-06-10 10:06 PDT, `sudo ss -tlnH` / `-ulnH`):**
 - 163 TCP listeners, 173 UDP listeners.
@@ -1081,8 +1125,8 @@ Trade-off: the generic comparator absorbs the postgres-is-wildcard reality for f
 ### Option B — Hardcoded per-service assertions (rejected)
 Write explicit gauges: `postgres_bound_loopback_only`, `alertmanager_bound_loopback_only`, etc. Trade-off: simple exprs, but (1) postgres-loopback-only is *factually wrong* here → instant false fire; (2) doesn't scale (123 ports); (3) duplicates the registry instead of using it; (4) no new-listener detection — the actual gap. **Rejected:** brittle, partially incorrect, and misses the headline use case.
 
-### Option C — Nagios check / on-rebuild assertion only (cheap fallback)
-A Nagios plugin or a `nixos-rebuild`-time assertion that greps `ss` vs ports.txt. Trade-off: no time-series, no Prometheus history, no "fired at 03:14" forensics, and the rebuild-time variant can't see *post-boot* drift (the exact failure mode that motivated `asymmetric-routing-exporter`). **Use only if Option A is deferred again** — but Option A is cheap enough that this isn't worth it.
+### Option C — on-rebuild assertion only (cheap fallback)
+A `nixos-rebuild`-time assertion that greps `ss` vs ports.txt. (As written in 2026-06-10 this option also offered a Nagios plugin; Nagios was removed 2026-08-19, so the assertion is the whole of Option C now.) Trade-off: no time-series, no Prometheus history, no "fired at 03:14" forensics, and the rebuild-time variant can't see *post-boot* drift (the exact failure mode that motivated `asymmetric-routing-exporter`). **Use only if Option A is deferred again** — but Option A is cheap enough that this isn't worth it.
 
 ## 4. Recommended implementation
 
@@ -1218,7 +1262,7 @@ groups:
 - The collector runs `ss -tlnpH` (the `-p` adds process names). **It must NOT emit process command lines, PIDs, or socket peer addresses into the .prom file** — only derived *counts* and (capped) *port numbers + proto*. Port numbers are already public in `docs/ports.txt` (git-tracked), so emitting an offending port number leaks nothing new. Process *names* (sshd-session, uwsgi) are used internally for the ephemeral-classification heuristic but are **never written to the metric** — the .prom file is world-readable (644) under `prometheus:prometheus`.
 - `-p` requires root to see all processes; the module runs `User=root` (like the template) with `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, and `ReadWritePaths=[textfiles-dir]` only. **Alternative:** drop `-p` entirely (we don't write process names anyway) and classify ephemeral purely by the numeric floor — then the collector needs no root and no process introspection at all. **Recommend dropping `-p`** for least privilege; the numeric floor is sufficient (verified: all 29 offenders today are >=32768 except none on the wildcard low-port path). This makes the module runnable as the `prometheus` or a `DynamicUser`.
 - No secrets, tokens, or `/run/secrets` touched. The registry (`ports.txt`) contains no credentials. PostgreSQL/exporter bindings are surfaced as scope-match booleans, never connection strings.
-- The reverse-drift lint reads only registry text + `ss` port numbers — no host-topology leakage beyond what ports.txt already publishes (it does not read `nagios-hosts.nix`).
+- The reverse-drift lint reads only registry text + `ss` port numbers — no host-topology leakage beyond what ports.txt already publishes (it reads no private host-topology file — at the time that meant the gitignored `nagios/hosts.nix`, which was removed along with Nagios on 2026-08-19).
 
 ## 7. Effort & sequencing
 
@@ -1422,7 +1466,7 @@ The shared PostgreSQL 17.10 instance backs 26 user databases and exposes 1,739 a
 - `compute_query_id = auto`, `track_activity_query_size = 1kB`. With pg_stat_statements loaded, `auto` resolves to on, so `queryid` is populated.
 - The **exporter connects `database=postgres`** over the `/run/postgresql` socket as the `postgres` superuser (`runAsLocalSuperUser = true`). `pg_stat_statements` is **cluster-wide** — a single `CREATE EXTENSION` in the `postgres` DB lets the existing single-connection `master: true` custom query read stats for **all 26 DBs**. No `--auto-discover-databases` needed (that flag is deliberately avoided per the frozenxid comment to prevent the ~1077-table cardinality explosion).
 - **Custom-query precedent already in the tree** (`postgres-exporter.nix`): `pgCustomQueries` uses `--extend.query-path` with `master: true` + `cache_seconds: 60`. Its `pg_database_frozenxid_age` emits **exactly 27 series live** (one per DB) — a proven, bounded pattern this spec copies.
-- **Blast radius: 33 reverse-dependent units** (`systemctl list-dependencies --reverse postgresql.service`): immich-server, immich-machine-learning, gitea, home-assistant, budget-board-server, nagios, pgadmin, litellm, plus ~14 `postgresql-*-setup` oneshots and the exporter itself.
+- **Blast radius: 33 reverse-dependent units as of 2026-06-10** (`systemctl list-dependencies --reverse postgresql.service`): immich-server, immich-machine-learning, gitea, home-assistant, budget-board-server, nagios, pgadmin, litellm, plus ~14 `postgresql-*-setup` oneshots and the exporter itself. *(Both `nagios` and `litellm` have since been removed — 2026-08-19 and 2026-08-01 — so re-run the command before relying on this list or the count.)*
 - **41 roles** (`pg_roles`) bound the `rolname` label. **No `pg_stat_statements_*` metrics exist today.**
 - `alerts/database.yaml` (258 lines, auto-discovered) ends with `PostgreSQLExporterScrapeError`; new rules append cleanly. `docs/ports.txt:158` already registers `9187 * :: PostgreSQL Exporter` — **no new port**.
 
@@ -2472,7 +2516,7 @@ The heavyweight standalone idea — a separate authenticated B2 reachability/cre
 | `ResticRepoSizeShrunk` | `storage.yaml:282` | `>0 and < 0.6*avg_over_time(...[14d])` for 6h | bucket emptied / misdirected backup |
 | `ResticIntegrityCheckFailed/Stale` | `local-backup.yaml:63/82` | weekly `restic check` ExecStopPost metrics | bit-rot / corruption |
 
-**The gap, precisely.** Grepping `restic.prom` / `restic_last_check_timestamp` / `restic_metrics` across `alerts/` returns **empty**. `restic.prom` is in neither `TextfileCollectorStaleFast` (allowlist: asymmetric_routing, nodered_safety, container_health, zfs_pool_health, nagios_status) nor `TextfileCollectorStaleDaily` (container_store_size, system_age, pg_dump, technitium_backup, nodered_backup) — see `meta-monitoring.yaml:324/331`. The exclusion comment justifies this as "weekly restic," but the collector runs **every 6 h**, so the file legitimately should never be >~7 h stale. **Nothing currently notices if the collector stops running.**
+**The gap, precisely.** Grepping `restic.prom` / `restic_last_check_timestamp` / `restic_metrics` across `alerts/` returns **empty**. `restic.prom` is in neither `TextfileCollectorStaleFast` nor `TextfileCollectorStaleDaily` — see `modules/monitoring/alerts/meta-monitoring.yaml`. *(Membership as recorded on 2026-06-10 was Fast: asymmetric_routing, nodered_safety, container_health, zfs_pool_health, nagios_status; Daily: container_store_size, system_age, pg_dump, technitium_backup, nodered_backup. Both lists have since changed — `nagios_status` is gone with Nagios, and `atd`, `imapsieve`, `git_workspace`, `aide` and `fts_staleness` have been added — so re-read the file rather than trusting these names or the old line numbers.)* The exclusion comment justifies this as "weekly restic," but the collector runs **every 6 h**, so the file legitimately should never be >~7 h stale. **Nothing currently notices if the collector stops running.**
 
 **Why `SystemdServiceFailed` does NOT backstop this.** The collector wraps each restic call in `if SNAPSHOTS=$(… 2>/dev/null); then … else CHECK_SUCCESS=0 fi` and always reaches the final `mv`/`exit 0`. So a total B2 outage produces `restic_check_success=0` (caught by `ResticCheckFailed`) but the unit exits **success** — `node_systemd_unit_state{name="restic-metrics.service",state="failed"}` never goes to 1. And a *timer death* produces neither a failed unit nor a `=0` metric — just frozen `=1`. That is the silent failure mode.
 

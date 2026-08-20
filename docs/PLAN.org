@@ -92,15 +92,16 @@ BOTH HALVES DONE, per John's choice.
    comment now says so, and warns that any future edit to this setting belongs in a
    planned window.
 
-* TODO [#E] Finish the Nagios documentation sweep (stage 6 of the removal)
+* DONE [#E] Finish the Nagios documentation sweep (stage 6 of the removal)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-0ar
 :LABELS:   []
 :ISSUE_TYPE: docs
 :CREATED:  [2026-08-19 Wed 22:38]
-:MODIFIED: [2026-08-19 Wed 22:38]
+:MODIFIED: [2026-08-19 Wed 23:10]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:10]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -150,6 +151,63 @@ Verification for the whole sweep:
     grep -RIn -i nagios --include='*.nix' /etc/nixos | grep -v '^/etc/nixos/.git'
     grep -RIn -i nagios /etc/nixos/modules/monitoring/alerts /etc/nixos/modules/monitoring/loki-rules
 Both should end empty; docs should end with only deliberately-retained history.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Done. The repository no longer describes Nagios as a live system.
+
+RESULT: zero /nagios/i in any .nix file except one deliberate line recording that the HA
+token is owned by root because that user was removed; zero across modules/monitoring/alerts
+and modules/monitoring/loki-rules. What remains in docs/ is dated historical records
+annotated with [Nagios removed 2026-08-19] rather than rewritten, which is the right
+treatment for an audit trail.
+
+FUNCTIONAL INTEGRITY, proven mechanically rather than by eye. The audit reconstructed each
+modified .nix into a depth-accurate mirror tree and diffed `nix-instantiate --parse`
+output, in which comments do not survive: 18 of 23 modified .nix files are parse-tree
+byte-identical, and the 5 that differ do so only inside string literals that are
+documentation (config-file comments, an annotation description, a README). All 13 modified
+YAMLs load structurally identical except exactly TWO annotation descriptions, both
+authorised. Zero changes to any expr, for:, threshold, label, group interval, target list,
+option value or import. All 240 .nix files in the repo parse. blackbox-monitoring.nix's 78
+probe target strings diff empty.
+
+CORRECTED RATHER THAN STRUCK, which was the point of doing this carefully:
+,  * aide.nix and aide-metrics.nix now cite TextfileCollectorStaleDaily. The old claim that
+    aide was in NEITHER tier was already false before this removal. They also now
+    distinguish aide.prom (on the daily allowlist) from aide_result.prom (not matched by
+    the anchored regex, so it falls to the 14-day backstop) -- a real distinction that a
+    strike-through would have destroyed.
+,  * BlackboxICMPIoTDeviceDown's header was a live instruction that INVERTED on removal:
+    "this mirrors the Nagios coverage, do not remove the Nagios side". It now says the
+    true and opposite thing -- this is the only IoT ping coverage, do not drop it as
+    redundant. Its email-visible annotation lost the false mirror clause and kept
+    "warning-only because these devices sleep by design", which is what tells whoever is
+    woken not to treat a sleeping battery device as an outage.
+,  * open-webui.nix's disabled healthcheck kept its justification, repointed to what
+    actually provides liveness now.
+,  * parked-alerts.nix survives intact with parkedAlertFiles and its assertion.
+
+A MISTAKE I MADE AND THE AUDIT CAUGHT. Sweeping core/system.nix I deleted "# Nagios runs
+podman commands every few seconds to check container health" and left "# Without this,
+generates ~5,800 sudo log entries per day" with no antecedent -- exactly the
+lost-reasoning failure the brief warned against. Repaired: the comment now states the
+surviving driver (root-run container health checks every 30s), and flags that the
+~5,800/day figure was measured against the retired system and should be re-measured before
+anyone decides the rule still earns its keep. The rule was never the problem; its
+justification was.
+
+ALSO FIXED HERE: nixos-eb9, the header claiming TWO textfile cadence tiers when there are
+three. Now names all three plus the scrape-error and coverage backstops, and says why it
+matters -- landing a collector in the wrong tier is how one ends up flapping or silently
+unwatched.
+
+STILL OPEN, filed separately: nixos-zpx (open-webui health rules that can never fire) and
+docs/README.md's index, which now misdescribes five files the sweep edited -- it still
+advertises two documents and a script that no longer exist. That index is a navigation
+surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
@@ -1802,6 +1860,37 @@ Options to consider (none applied yet):
   c) have the unit read its config from the Nix store rather than ~/.config, removing home-manager from the runtime path entirely — the same fix used for the Loki rules and vdirsyncer (see nixos-ye9)
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
+
+* DONE [#E] meta-monitoring.yaml header says two textfile cadence tiers; there are three
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-eb9
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-19 Wed 22:58]
+:MODIFIED: [2026-08-19 Wed 23:10]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:10]
+:CLOSE_REASON: Fixed with the sweep: the header now names all three tiers (fast 30m, hourly 3h, daily 26h) plus TextfileCollectorScrapeError and the 2026-08-15 coverage backstop, and states why the count matters -- the wrong tier means a collector either flaps or is silently unwatched. Verified the file still loads and the build is clean.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+modules/monitoring/alerts/meta-monitoring.yaml lines ~310-317 describe the textfile
+freshness rules as split into TWO cadence groups (fast, daily), "verified live 2026-06-10".
+
+There are now THREE tiers -- Fast 30m, Hourly 3h, Daily 26h -- plus
+TextfileCollectorScrapeError and the 2026-08-15 coverage backstop.
+
+Pre-existing inaccuracy, unrelated to the Nagios removal, found while sweeping Nagios
+citations out of the same file. Left as found deliberately: correcting a group header is
+a different edit from a citation sweep, and mixing them makes the sweep's diff harder to
+audit for functional changes.
+
+Low priority -- it misleads a reader of the file, nothing more. But this header is exactly
+what someone consults before adding a new textfile collector, so a wrong tier count leads
+to a collector landing in the wrong cadence group.
 
 * DONE [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
 :PROPERTIES:
@@ -5342,4 +5431,45 @@ It fires 6+ times a day and acts on climate.upstairs_vtherm.
 
 Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
 earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
+
+* TODO [#D] open-webui container-health rules can never fire: health status is permanently 3
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-zpx
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 22:58]
+:MODIFIED: [2026-08-19 Wed 22:58]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Two of the open-webui container-health rules can never fire, verified live 2026-08-19.
+
+container_health_status{container="open-webui"} is permanently 3, because the image's
+healthCmd is commented out and 3 encodes "no healthcheck configured" (0=healthy,
+1=unhealthy, 2=starting, 3=none). Against that:
+
+  modules/monitoring/alerts/open-webui.yaml:8   ... or container_health_status{...} == 1
+  modules/monitoring/alerts/open-webui.yaml:37  ... > 0 and container_health_status{...} < 3
+
+Line 8's disjunct cannot match, since the value is 3 and never 1. Line 37 cannot match
+either: 3 is not < 3. So the only live coverage for this container is
+container_running == 0 and the absent() guard on line 7 -- which do work, so this is not
+an outage, it is a rule that reads as coverage and catches nothing.
+
+Same dead-metric class the repo remediated in June, when 123 rules were found unfirable
+because of a metric-name mismatch. Worth checking whether OTHER containers with no
+healthcheck have the same shape -- 15 of 17 containers on this host report 3.
+
+FOUND BY: an agent sweeping Nagios comments out of an adjacent file. It correctly did not
+touch open-webui.yaml, which was outside its assigned scope. Verified independently
+before filing rather than taken on report.
+
+NOT FIXED because the right fix is a real decision, not a strike: either drop the two dead
+disjuncts and rely on container_running, or give the image a healthCmd so the existing
+rules become meaningful. The second is better monitoring and a behaviour change to a
+running container.
 

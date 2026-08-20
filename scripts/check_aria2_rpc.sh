@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# Nagios check for aria2 RPC endpoint
-# Tests actual RPC functionality, not just HTTP response
+# Health check for the aria2 RPC endpoint.
+# Tests actual RPC functionality, not just HTTP response.
+#
+# Exit codes follow the monitoring-plugin convention (0/1/2/3) this was
+# originally written against. Since Nagios was removed on 2026-08-19 no unit
+# or timer in this repo runs it; it is a manual probe. Wire it to a textfile
+# collector if it should be scheduled again.
 #
 
 set -euo pipefail
@@ -11,7 +16,7 @@ RPC_URL="${1:-https://aria.vulcan.lan/jsonrpc}"
 SECRET_FILE="/run/secrets/aria2_rpc_secret"
 TIMEOUT=5
 
-# Nagios return codes
+# Monitoring-plugin return codes
 OK=0
 WARNING=1
 CRITICAL=2
@@ -29,7 +34,7 @@ SECRET=$(cat "$SECRET_FILE")
 # Make RPC call
 RESPONSE=$(curl -k -s --max-time "$TIMEOUT" -X POST "$RPC_URL" \
     -H "Content-Type: application/json" \
-    -d "{\"jsonrpc\":\"2.0\",\"method\":\"aria2.getVersion\",\"id\":\"nagios-check\",\"params\":[\"token:$SECRET\"]}" \
+    -d "{\"jsonrpc\":\"2.0\",\"method\":\"aria2.getVersion\",\"id\":\"aria2-rpc-check\",\"params\":[\"token:$SECRET\"]}" \
     2>&1) || {
     echo "CRITICAL: Failed to connect to aria2 RPC endpoint"
     exit $CRITICAL

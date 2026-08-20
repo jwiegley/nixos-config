@@ -11,6 +11,22 @@ rule ships. Two design claims were **corrected** during this pass and are called
 contaminated by 6 parent datasets), and `api_errors_total` **does** exist over a 30-day window (so
 triage M-09's "delete" verdict is reversed).
 
+> **[Nagios removed 2026-08-19.]** This is a dated plan record and is left intact.
+> Everything below that references Nagios — the `nagios/` topology repo, the
+> Nagios↔Prometheus mirror, `nagios_only`/`nagios_mirror_*` metrics, the
+> `NagiosMirrorDivergence` / `NagiosServicesCritical` / `NagiosHostsDown` alerts,
+> and the "auto-mirrored into Nagios" hazard — describes a subsystem that no
+> longer exists on this host; Prometheus + Alertmanager is now the only
+> monitoring system.
+>
+> Two consequences a later reader should not inherit blindly. **(1)** The
+> plan-wide rule that every new `for:` stay **≤ 90 min** (item 9 of the closing
+> notes, and the `for: 6h` → `for: 90m` revision) was justified *solely* by the
+> mirror's clamped `max_check_attempts`. That constraint no longer binds; pick
+> dwell times on their own merits. **(2)** The off-site-copy remedies that talk
+> about giving `secrets/` and `nagios/` real off-host remotes now concern
+> `secrets/` only.
+
 ---
 
 ## 1. Executive summary

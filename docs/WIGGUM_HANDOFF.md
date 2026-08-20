@@ -680,7 +680,8 @@ there. Awaiting the channel choice; config stays `enable = false` so nothing is 
 
 `c00e4993`, whose message describes the M-91 HA exporter, actually contains the OTHER session's
 work: `nagios-mirror.yaml` (+67), `home-assistant-errors.yaml` (+62) and
-`nagios-mirror-divergence.py` (+238), plus an 18-line timing correction of mine. It does NOT
+`nagios-mirror-divergence.py` (+238) [Nagios removed 2026-08-19; the two
+`nagios-mirror*` files no longer exist], plus an 18-line timing correction of mine. It does NOT
 contain the M-91 module or the default.nix import -- those are in `1f99bc63`, which is also in
 history. So the M-91 exporter arrived across two commits and one of them is mislabeled.
 

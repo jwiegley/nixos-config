@@ -15,7 +15,10 @@ in
   # signed by the local step-ca certificate authority
   security.pki.certificates = [ rootCaCert ];
 
-  # Make root CA available for Nagios SSL certificate checks
+  # Make the root CA available as a standalone PEM for consumers that need an
+  # explicit CA-bundle path rather than the system trust store — currently
+  # vane's NODE_EXTRA_CA_CERTS and its read-only container mount
+  # (modules/users/home-manager/vane.nix).
   environment.etc."ssl/certs/vulcan-ca.crt".text = rootCaCert;
 
   services.step-ca = {

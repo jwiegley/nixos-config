@@ -204,7 +204,12 @@ in
 
           # Health check disabled to prevent systemd-logind session spam
           # Each 30s health check creates a session = 3 log lines = ~12,960 lines/day
-          # External monitoring (Nagios) handles health checks instead
+          # Liveness comes from container-health-exporter instead: container_running
+          # and container_restart_count still work without an in-container healthcheck
+          # (container_health_status just reports 3 = "no healthcheck configured").
+          # OpenWebUIContainerDown in modules/monitoring/alerts/open-webui.yaml
+          # reads container_running; ContainerRestarting in
+          # alerts/container-health.yaml reads the restart count.
           # healthCmd = "CMD-SHELL curl -f http://localhost:8084/health || exit 1";
           # healthInterval = "30s";
           # healthTimeout = "10s";

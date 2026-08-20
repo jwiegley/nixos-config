@@ -307,9 +307,15 @@ groups:
   # .prom file stops being rewritten and every metric it produces goes silently
   # FROZEN at its last value (not "absent", not "down" — just stale and wrong).
   #
-  # Files are split into TWO cadence groups by an explicit allowlist (verified
-  # live 2026-06-10 — every listed file is present and within its cadence):
+  # Files are split into THREE cadence tiers by an explicit allowlist (verified
+  # live 2026-06-10 — every listed file is present and within its cadence).
+  #
+  # This header said TWO until 2026-08-19. That was true when written and went
+  # stale when the hourly tier was added. Consult this list before adding a
+  # textfile collector: landing in the wrong tier is how one ends up either
+  # flapping or silently unwatched.
   #   * fast (sub-hourly timers): >30m stale is anomalous.
+  #   * hourly (~1h timers): >3h stale is anomalous.
   #   * daily (24h timers): >26h stale is anomalous.
   # Files NOT listed (weekly restic, ~24h-but-bursty rclone mirrors, hourly
   # schwab, certificates, etc.) are intentionally excluded from the generic rule
@@ -321,10 +327,11 @@ groups:
     rules:
       # Fast-cadence collectors (1-15 min timers).
       #
-      # atd, imapsieve and git_workspace added 2026-07-31 while retiring Nagios. All three
-      # were tier-1 collectors whose freshness NAGIOS ALONE watched -- verified: zero hits
-      # for any of them across every staleness allowlist here before this change. If one
-      # died, its metrics would freeze at their last healthy values and nothing would say so.
+      # atd, imapsieve and git_workspace added 2026-07-31 while consolidating monitoring
+      # onto Prometheus. All three were tier-1 collectors watched only by the check system
+      # retired that day -- verified: zero hits for any of them across every staleness
+      # allowlist here before this change. If one died, its metrics would freeze at their
+      # last healthy values and nothing would say so.
       #
       # Cadences read from the timers, not inferred from a single mtime sample:
       #   atd-exporter.timer                    1 min
@@ -343,7 +350,8 @@ groups:
           summary: "Fast-cadence textfile collector {{ $labels.file }} is stale"
           description: "{{ $labels.file }} has not been rewritten in over 30 minutes (its timer runs every 1-2 min). Every metric this collector produces is now FROZEN at its last value, so any alert reading those metrics is silently stale. Check the corresponding *-exporter oneshot/timer."
 
-      # A textfile that node_exporter cannot PARSE. Added 2026-07-31 while retiring Nagios.
+      # A textfile that node_exporter cannot PARSE. Added 2026-07-31 while consolidating
+      # monitoring onto Prometheus.
       #
       # This is distinct from every staleness rule below. Those compare mtime, so they are
       # satisfied by a file that is being rewritten on schedule. If the writer emits
@@ -364,9 +372,10 @@ groups:
 
       # Catastrophic loss of the textfile directory.
       #
-      # Deliberately a floor, not a per-file check: the file count legitimately varies (53-61
-      # over 30d) as per-run collectors come and go, so a per-file absent() would be noisy.
-      # 45 is well below the 30d minimum of 53, so this only fires if a large fraction of the
+      # Deliberately a floor, not a per-file check: the file count legitimately varies (50-61
+      # over 30d, re-measured 2026-08-19) as per-run collectors come and go, so a per-file
+      # absent() would be noisy.
+      # 45 is well below the 30d minimum of 50, so this only fires if a large fraction of the
       # directory disappears at once -- a wiped state dir, a bad tmpfiles rule, a failed
       # migration. It does NOT catch a single deleted file; that is what the per-tier
       # staleness rules and each exporter's own freshness guard are for.
@@ -378,12 +387,13 @@ groups:
           category: monitoring
         annotations:
           summary: "Textfile collector directory has lost most of its files ({{ $value }} left)"
-          description: "Only {{ $value }} .prom files remain in /var/lib/prometheus-node-exporter-textfiles; the 30d range is 53-61. A large simultaneous loss means the state directory was emptied rather than individual collectors failing. NOTE the documented hazard: a systemd tmpfiles rule using the 'D' directive EMPTIES its directory on every boot/rebuild, which has caused data loss on this host twice."
+          description: "Only {{ $value }} .prom files remain in /var/lib/prometheus-node-exporter-textfiles; the 30d range is 50-61. A large simultaneous loss means the state directory was emptied rather than individual collectors failing. NOTE the documented hazard: a systemd tmpfiles rule using the 'D' directive EMPTIES its directory on every boot/rebuild, which has caused data loss on this host twice."
 
       # Hourly-cadence collectors.
       #
-      # Added 2026-07-31 while retiring Nagios. secrets-perms is SECURITY-relevant and was
-      # watched only by Nagios: secrets-perms.prom feeds exactly one rule,
+      # Added 2026-07-31 while consolidating monitoring onto Prometheus. secrets-perms is
+      # SECURITY-relevant and had been watched only by the retired check system:
+      # secrets-perms.prom feeds exactly one rule,
       # SecretsWorldReadable (security.yaml, secrets_world_readable_count > 0). If the scanner
       # dies the gauge freezes at 0 and that alert becomes silently unfirable -- the failure
       # mode where monitoring reports "no problem" because it stopped looking.
@@ -391,8 +401,8 @@ groups:
       # 3h, not the 30m Fast tier: secrets-perms-exporter.timer is hourly (verified live), so
       # a 30m threshold would false-positive between every run. 3h tolerates two missed runs.
       # prometheus_rule_audit added 2026-07-31 with the dead-rule detector that replaced the
-      # Nagios mirror. A detector with no freshness guard is the exact failure class it
-      # exists to catch, so it guards itself here.
+      # cross-stack mirror's divergence check. A detector with no freshness guard is the
+      # exact failure class it exists to catch, so it guards itself here.
       # hermes_health added 2026-07-31. It is not merely another collector: it produces
       # hermes_vm_uptime_seconds, which GATES the critical HermesApiServerDown rule
       # (`... and ignoring(__name__) hermes_vm_uptime_seconds > 600`, the warmup suppression).
@@ -419,9 +429,10 @@ groups:
 
       # Daily-cadence collectors (~24h timers).
       #
-      # `aide` added 2026-07-31 while retiring Nagios. aide-metrics.nix and security/aide.nix
-      # both state in their own comments that the NAGIOS check was the only watcher of this
-      # collector's freshness. Without it, a dead aide-metrics.timer freezes
+      # `aide` added 2026-07-31 while consolidating monitoring onto Prometheus. Until that
+      # day the freshness of aide.prom was watched only by the retired check system; THIS
+      # rule is now its sole freshness guard, and is the one to cite from aide-metrics.nix
+      # and security/aide.nix. Without it, a dead aide-metrics.timer freezes
       # aide_database_age_seconds at a small value and AIDEDatabaseStale (security.yaml)
       # becomes structurally unfirable. Verified: aide-metrics.timer is OnCalendar daily at
       # 00:00, so the existing 26h threshold fits without adjustment.

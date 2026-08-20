@@ -1,7 +1,7 @@
-# Replacement for the dead-rule detection capability lost when the Nagios<->Prometheus
-# mirror was removed (2026-07-31).
+# Replacement for the dead-rule detection capability lost when the external alert mirror
+# was removed (2026-07-31).
 #
-# The mirror re-evaluated every Prometheus expression through a SECOND, independent
+# That mirror re-evaluated every Prometheus expression through a SECOND, independent
 # scheduler, which is how the 2026-06-09 "123 rules could never fire" defect was caught --
 # rules selecting `systemd_unit_state` when the exporter publishes `node_systemd_unit_state`.
 # Prometheus does not consider that an error: the query is valid, returns no series, and the

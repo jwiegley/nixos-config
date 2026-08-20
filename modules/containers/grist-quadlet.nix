@@ -79,10 +79,10 @@
 #     rules.
 #   * certificate expiry, via the shared nginx cert rules.
 #
-# NO NAGIOS CHECK. Nagios has been being removed from this host since
-# 2026-07-31 by John's explicit decision; adding checks to it now would grow the
-# set that removal has to delete. Confirmed with John on 2026-08-19 before
-# building this.
+# Those three mechanisms are the WHOLE of the coverage, deliberately. Prometheus
+# and Alertmanager are the only monitoring system on this host -- the second,
+# hand-maintained check system was removed on 2026-08-19 -- so there is no
+# per-service check list to add an entry to, and none is wanted.
 let
   cfg = config.services.grist;
 in

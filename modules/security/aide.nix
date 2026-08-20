@@ -260,10 +260,14 @@
       # aide_database_exists / aide_database_age_seconds are DELIBERATELY NOT
       # emitted here: they are the only dead-man for "aide-check never ran at
       # all", so they keep their own independent timer and their own file
-      # (aide.prom, aide-metrics.nix). aide*.prom is in NEITHER
-      # TextfileCollectorStale tier (meta-monitoring.yaml:324,336), so that
-      # independence is the only thing standing between a dead check and silence.
-      # (aide.prom mtime IS watched by nagios-tier1-mirror.nix:263 at 26h/50h.)
+      # (aide.prom, aide-metrics.nix). Staleness coverage, corrected 2026-08-19:
+      # aide.prom IS on the TextfileCollectorStaleDaily allowlist
+      # (meta-monitoring.yaml, >26h) -- it was added there on 2026-07-31, which
+      # is when the old "aide*.prom is in NEITHER tier" claim went stale. THIS
+      # file, aide_result.prom, is still on no tier allowlist and is caught only
+      # by the deliberately loose 14-day TextfileCollectorUnclassifiedStale
+      # backstop. So the independence above is still what stands between a dead
+      # check and silence: 14 days detects a dead collector, not a missed run.
       #
       # COUNTS/BOOLEANS/TIMESTAMPS ONLY in the .prom — never AIDE report lines
       # or paths. The full report still goes to the journal (report_url=stdout,

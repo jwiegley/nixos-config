@@ -719,8 +719,6 @@
           ];
         }
 
-        # Nagios monitoring logs
-
         # ZFS replication logs
         {
           job_name = "zfs-replication";

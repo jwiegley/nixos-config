@@ -582,8 +582,9 @@ groups:
 
       # Freshness guard for the collector the rule above depends on.
       #
-      # Added 2026-07-31 while retiring Nagios, which was the only watcher of this
-      # collector's liveness. HermesFallbackChainTriggered uses increase(...[10m]) > 0, so a
+      # Added 2026-07-31 while consolidating monitoring onto Prometheus; until then the
+      # retired check system was the only watcher of this collector's liveness, so this rule
+      # is now the sole one. HermesFallbackChainTriggered uses increase(...[10m]) > 0, so a
       # DEAD collector reads exactly like a healthy system: the counter stops advancing,
       # increase() returns 0, and the alert can never fire again. That is silent blindness
       # rather than a visible failure, which is the whole reason this guard exists.

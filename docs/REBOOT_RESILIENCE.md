@@ -40,7 +40,7 @@ tells you what to do if it FAILs.
 | Prometheus rules / errors | 536 / 0 |
 | Prometheus targets down | 0 / 145 |
 | Asymmetric routing rules at boot | 2/2 (prio 50, 51), gauge=1 |
-| Nagios services | 826 (incl. 480 Prometheus-rule mirrors) |
+| Nagios services *(stack removed 2026-08-19 — historical row, nothing replaces it)* | 826 (incl. 480 Prometheus-rule mirrors) |
 
 The 15-minute figure from `systemd-analyze time` is **not** boot latency — it is
 background oneshots (`restic-metrics` ~9.5 min of real B2 network round-trips,
@@ -200,16 +200,21 @@ Each entry: **symptom → root cause → fix (file · commit subject) → verify
   See memory `project_alert_dead_metric_remediation`.
 - **Verify (checks 15-18):** 0 rules with `health=err`; ≥10 Loki ruler groups;
   Watchdog firing (= pipeline alive); ≤3 targets down.
-- **Belt-and-suspenders:** the **Nagios mirror** (`docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md`,
-  memory `project_nagios_prometheus_mirror`) re-evaluates the alert rules in
-  `modules/monitoring/{alerts,loki-rules,vm-alerts}/` through Nagios's independent
-  scheduler. The mirror is generated at build time from the same YAML the rulers
-  consume, so a new rule file is auto-mirrored on the next rebuild. Coverage is
-  deliberately *not* total: `nagios-prometheus-mirror.nix` excludes the
-  alertnames `Watchdog`, `ServiceStuckActivating` and `BlackboxICMPIoTDeviceDown`,
-  plus every rule sourced from `alerts/nagios.yaml` (each with a rationale in
-  that file). A tier-3 reconciler alerts if the two stacks disagree; this would
-  catch the dead-rule class on day one for everything inside that universe.
+- **Belt-and-suspenders:** `systemd.services.prometheus-rule-audit`
+  (`modules/monitoring/services/prometheus-rule-audit.nix`, source
+  `scripts/prometheus-rule-audit.py`, hourly timer) re-derives the dead-rule
+  check directly: for every alerting rule it extracts the metric names the expr
+  selects and asserts each has ≥1 series in the TSDB, then flags stale
+  evaluation, `health=err`, and groups whose evaluation exceeds their interval.
+  Results land as textfile metrics (`prometheus_rule_audit.prom`). Until
+  2026-07-31 this job was done as a side effect of a second, independent
+  scheduler — a Nagios mirror that re-evaluated every rule in
+  `modules/monitoring/{alerts,loki-rules,vm-alerts}/` and reconciled the two
+  stacks; that is what caught this class in the first place. The mirror went on
+  2026-07-31 and the rest of Nagios on 2026-08-19; the audit job replaces the
+  mirror's headline capability without standing up a second scheduler. Coverage is now total
+  rather than exclusion-filtered, but it is a periodic audit, not a live
+  cross-check: a rule that goes dead is caught on the next run, not instantly.
 
 ### 2.8 OpenClaw self-heal restart storms at boot
 

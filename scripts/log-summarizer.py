@@ -725,7 +725,8 @@ class AlertHistory:
     queried Prometheus at all, so it had no idea what had actually ALERTED. On 2026-07-28 it
     printed "critical issues: none" on a host that had, in the preceding week, fired 36
     distinct alerts including 12 criticals and four multi-hour outages (copyparty down 22.6h,
-    an unexpected wildcard listener firing 24.7h, a Nagios mirror divergence 21.75h, and a
+    an unexpected wildcard listener firing 24.7h, a Nagios mirror divergence 21.75h [Nagios
+    removed 2026-08-19], and a
     47-restart OpenClaw storm). The report was not wrong about the logs; it was blind to a
     whole plane of evidence.
 

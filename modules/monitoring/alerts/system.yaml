@@ -225,7 +225,7 @@ groups:
 
       # Processes stuck in uninterruptible sleep (D state).
       #
-      # Added 2026-07-31 replacing Nagios's check_local_procs, but deliberately measuring
+      # Added 2026-07-31 replacing the legacy process-count check, but deliberately measuring
       # something sharper. HostLoadHigh above already names D-state IO stalls as its target,
       # yet load15 CONFLATES running and blocked tasks, so a pure IO stall has to push the
       # whole load average past 2x cores before it is visible. node_procs_blocked isolates
@@ -250,7 +250,8 @@ groups:
           summary: "{{ $value | humanize }} processes stuck in uninterruptible sleep on {{ $labels.instance }}"
           description: "Sustained D-state backlog for 10 minutes (30d p99 is 7). Processes in uninterruptible sleep are almost always blocked on storage — check the /tank UAS enclosure first, whose USB bridge is known to hang under load: `dmesg -T | tail`, `zpool status tank`. Unlike HostLoadHigh this does not require the whole load average to rise, so it should fire EARLIER in an IO stall."
 
-      # Runaway process creation. Ported from Nagios check_local_procs (250/400 on RSZDT).
+      # Runaway process creation. Ported from the legacy process-count check, which warned
+      # at 250 and crit'd at 400 processes counted across the R/S/Z/D/T states.
       # Those numbers do not transfer: node_procs_running counts only R-state, a strict
       # subset. Measured instead — 30d p99 = 15, max = 69 — so 120 sits well clear of the
       # observed peak while still catching a fork storm.

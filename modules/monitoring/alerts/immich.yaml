@@ -30,8 +30,8 @@ groups:
       # series exist on either telemetry port (verified against live
       # :9283/:9284 with IMMICH_TELEMETRY_INCLUDE=all), so both rules could
       # never fire. HTTP-level coverage for Immich is now the blackbox vhost
-      # probe of immich.vulcan.lan (nagios-tier1-mirror) plus ImmichAPIDown
-      # below.
+      # probe of immich.vulcan.lan (job blackbox_https_local, declared in
+      # modules/services/blackbox-monitoring.nix) plus ImmichAPIDown below.
 
       # High memory usage (API)
       - alert: ImmichAPIHighMemoryUsage

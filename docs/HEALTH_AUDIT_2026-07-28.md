@@ -5,6 +5,8 @@
 
 **Verdict: DEGRADED.** All 7 domains returned `healthyClaimHolds = false`. 116 findings: **2 critical, 45 warning, 69 info**. 60 sweep findings confirmed, 6 refuted, **34 real problems the sweeps missed** and were caught only by the adversarial pass.
 
+> **[Nagios removed 2026-08-19.]** This is a dated record and is left intact. Findings below that reference Nagios, the `nagios/` topology repo, the Nagios↔Prometheus mirror, `nagios_mirror_*` metrics, or the `NagiosMirrorDivergence` alert describe a subsystem that no longer exists on this host; Prometheus + Alertmanager is now the only monitoring system. The reasoning in those findings still stands on its own — in particular the mirror's structural blind spot to the dead-rule class, which is why a green mirror was never evidence that rules could fire.
+
 
 ---
 

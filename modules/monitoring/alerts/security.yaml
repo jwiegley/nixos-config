@@ -18,9 +18,8 @@ groups:
   # two alertnames differing only in capitalisation, on one condition, which
   # Alertmanager grouping and every human reader will confuse. The surviving
   # rule is config-drift.yaml's `AideChangesDetected`
-  # (`aide_changes_detected == 1`, for: 1h): same fact, the longer dwell that
-  # lets the post-rebuild aide-update re-baseline settle, and it is the one
-  # scripts/nagios-mirror-divergence.py already knows about (lines 197, 255).
+  # (`aide_changes_detected == 1`, for: 1h): same fact, with the longer dwell
+  # that lets the post-rebuild aide-update re-baseline settle.
   # This rule was in any case structurally unfirable: aide_check_status had a
   # 30-day maximum of 0 because the old collector destroyed the exit code with
   # `$(aide --check || true)` followed by `$?`.

@@ -456,7 +456,7 @@ in
 
         # Custom local TLD file to recognize .lan domain
         # This prevents "TLD part is not detected" warnings for internal URLs
-        # like nagios.vulcan.lan
+        # like grafana.vulcan.lan
         url_tld = "$LOCAL_CONFDIR/local.d/maps.d/effective_tld_names.dat";
       '';
 
@@ -674,7 +674,7 @@ in
       # Phishing module configuration - whitelist internal domains
       "phishing.conf".text = ''
         # Phishing module configuration for internal domain whitelisting
-        # Prevents false positives on internal URLs like nagios.vulcan.lan
+        # Prevents false positives on internal URLs like grafana.vulcan.lan
 
         # Keep phishing detection enabled but with local exceptions
         openphish_enabled = false;  # Disable external OpenPhish feed (high resource usage)
@@ -705,7 +705,7 @@ in
         local_mail_whitelist {
           priority = high;
 
-          # Match sender from vulcan.lan or any subdomain (e.g., nagios.vulcan.lan)
+          # Match sender from vulcan.lan or any subdomain (e.g., grafana.vulcan.lan)
           from = "/.*@(.*\\.)?vulcan\\.lan$/i";
 
           # Match recipient in vulcan.lan (local delivery)
@@ -713,7 +713,7 @@ in
 
           apply {
             # Disable URL reputation checks for internal mail
-            # Internal URLs like nagios.vulcan.lan trigger R_SUSPICIOUS_URL false positives
+            # Internal URLs like grafana.vulcan.lan trigger R_SUSPICIOUS_URL false positives
             symbols_disabled = ["R_SUSPICIOUS_URL", "URIBL_BLOCKED"];
           }
         }

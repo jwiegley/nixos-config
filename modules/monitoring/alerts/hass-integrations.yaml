@@ -2,8 +2,9 @@ groups:
   - name: hass_integrations
     interval: 1m
     rules:
-      # The one capability the Nagios retirement audit found genuinely unique: nothing else
-      # deployed can see an individual Home Assistant integration stop working.
+      # The one capability the 2026-07 monitoring-consolidation audit found genuinely
+      # unique: nothing else deployed can see an individual Home Assistant integration
+      # stop working.
       #
       # SystemdServiceFailed on home-assistant.service reads healthy through it, and the
       # hass.vulcan.lan blackbox probe returns 200 through it, because HA itself is fine --

@@ -795,7 +795,7 @@ The feature is complete when:
 | NaviLink outage | `water_domestic_hot_gpm` = 0; that period's hot water shifts into `other` | Auto-resume; mild residual inflation during outage |
 | B-Hyve outage | Per-zone gated GPMs = 0 during the outage; flow shifts into `other` | Auto-resume; documented behavior per user choice |
 | VictoriaMetrics outage | Live HA data continues; Phase 2 falls back to HA Postgres for comparison | Catch-up on VM return |
-| Cross-check service failure | Anomaly email never sent; systemd marks failed; Nagios picks up via existing systemd-check probe | Manual investigation; restart timer |
+| Cross-check service failure | Anomaly email never sent; systemd marks failed; Nagios picks up via existing systemd-check probe [Nagios removed 2026-08-19 — the systemd unit-state alerts in Prometheus now carry this] | Manual investigation; restart timer |
 
 ### Schema evolution
 

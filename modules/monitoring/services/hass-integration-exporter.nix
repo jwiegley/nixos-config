@@ -1,6 +1,7 @@
 # Home Assistant integration health as Prometheus metrics.
 #
-# This is the ONE capability the Nagios retirement audit found to be genuinely unique: no
+# This is the ONE capability the 2026-07 monitoring-consolidation audit found to be
+# genuinely unique: no
 # Prometheus rule anywhere watches whether an HA *integration* is loaded. Disproving queries
 # were run -- {__name__=~".*integration.*"} returns only alertmanager_integrations and
 # grafana_alerting_alertmanager_integrations, and {__name__=~"hass.*|home_assistant.*"}
@@ -15,12 +16,12 @@
 # live but orphaned collector (161 unavailable entities right now, referenced by zero rules),
 # yet it measures entity availability, not config-entry health. Its 30d range is 160-254 with
 # six >50-entity jumps, and an HA restart produces the same signature as an integration drop,
-# so any threshold over it is either noisy or blind. This asks the same question Nagios did,
-# of the same endpoint.
+# so any threshold over it is either noisy or blind. This asks the question the retired
+# check system did, of the same endpoint.
 #
 # NO NEW SECRET. sops.secrets."monitoring/home-assistant-token" is declared below and read
 # from its path at runtime; it never enters the Nix store. The declaration used to live in
-# modules/monitoring/homeassistant-nagios-check.nix and moved here when Nagios was removed.
+# a check module that was deleted, and moved here on 2026-08-19.
 {
   config,
   lib,
@@ -29,7 +30,7 @@
 }:
 
 let
-  # This list was inherited verbatim from the Nagios check this exporter replaced, so the
+  # This list was inherited verbatim from the check this exporter replaced, so the
   # retirement was a like-for-like swap rather than a silent change of scope. Adding to it
   # is now a deliberate widening, not a restoration.
   integrations = [
@@ -189,11 +190,11 @@ let
 in
 {
   # Sole consumer of this token, so it is declared here. RELOCATED 2026-08-19
-  # from modules/monitoring/homeassistant-nagios-check.nix, which the Nagios
-  # removal deletes; leaving it there would have taken the declaration with it
-  # and broken this exporter.
+  # from a check module deleted by the 2026-08-19 monitoring consolidation;
+  # leaving it there would have taken the declaration with it and broken this
+  # exporter.
   #
-  # owner/group root, NOT nagios: that user ceases to exist in the same removal.
+  # owner/group root, NOT nagios: that user was removed on 2026-08-19.
   # This matters more than it looks -- sops-install-secrets validates EVERY
   # secret before writing ANY of them, so a single unresolvable owner aborts the
   # whole run, and because /run/secrets.d is ramfs the next boot would come up
@@ -241,7 +242,7 @@ in
     timerConfig = {
       # OnActiveSec rather than OnBootSec: on a long-uptime host an OnBootSec timer whose
       # moment has already passed never fires again, which left discord-canary-hermes.timer
-      # dead for 27 days. 5 min matches the cadence the Nagios check already ran at.
+      # dead for 27 days. 5 min is the cadence its predecessor already ran at.
       OnActiveSec = "3min";
       OnUnitActiveSec = "5min";
       Unit = "hass-integration-exporter.service";

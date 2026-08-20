@@ -3,18 +3,22 @@
 > **Status (2026-07-27): this is a PROPOSAL, not a description of the running
 > system.** None of the automated monitoring below was ever deployed. What
 > actually exists is `modules/services/email-tester-manual.nix` (imported at
-> `hosts/vulcan/default.nix:121`), whose header states the reason:
-> *"Does NOT include automated monitoring (timer, Prometheus, Nagios) to avoid
-> over-training rspamd on test messages."* It provides only the SOPS secret
+> `hosts/vulcan/default.nix:121`), whose header states the reason: it
+> deliberately omits automated monitoring (timer, exporter, alerting) to avoid
+> over-training rspamd on test messages. It provides only the SOPS secret
 > `email-tester-imap-password` and an `email-tester` wrapper on `PATH`.
 >
 > Concretely, **none of these exist**: `email-tester.service` / `.timer`,
 > `email-tester-exporter`, the `email_tester_*` metrics, the `EmailTester*`
-> alerts, the Nagios `check_email_tester` command, and the four modules the
-> "Import All Modules" step tells you to add (`modules/services/email-tester.nix`,
-> `modules/services/nagios-email-tester-check.nix`,
+> alerts, and the three modules the "Import All Modules" step tells you to add
+> (`modules/services/email-tester.nix`,
 > `modules/services/prometheus-email-tester-exporter.nix`,
 > `modules/monitoring/email-tester-alerts.nix`).
+>
+> **Revised 2026-08-19:** this design originally had a second, parallel arm that
+> ran the same check under Nagios. Nagios was removed from vulcan on 2026-08-19,
+> so that arm has been struck from the design below; Prometheus + Alertmanager is
+> the only monitoring system on this host. Nothing else about the proposal changed.
 >
 > **Working today:** `sudo email-tester` (or `sudo /etc/nixos/scripts/email-tester.py`).
 > Everything from "Complete Setup Guide" onward is a design that would have to be
@@ -31,7 +35,7 @@ sudo email-tester                          # wrapper installed by email-tester-m
 sudo /etc/nixos/scripts/email-tester.py    # equivalent, direct
 ```
 
-**For automated hourly testing with Nagios & Prometheus alerts:**
+**For automated hourly testing with Prometheus alerts:**
 Not implemented — see the status note above. The setup below is the (unbuilt) design.
 
 ---
@@ -64,41 +68,19 @@ imports = [
   # Email tester - hourly automated testing
   ./modules/services/email-tester.nix
 
-  # Nagios integration
-  ./modules/services/nagios-email-tester-check.nix
-
   # Prometheus exporter + alerts
   ./modules/services/prometheus-email-tester-exporter.nix
   ./modules/monitoring/email-tester-alerts.nix
 ];
 ```
 
-### Step 3: Add Nagios Service Check
-
-Add to your Nagios host configuration. The private topology lives in the separate
-`nagios` flake-input repo at `/etc/nixos/nagios/hosts.nix`, imported at
-`modules/services/nagios.nix:537`; there is no `/etc/nixos/nagios-hosts.nix`.
-
-```nix
-{
-  service_description = "Email Pipeline Tests";
-  host_name = "vulcan";
-  check_command = "check_email_tester";
-  check_interval = 60;  # Check every 60 minutes
-  retry_interval = 15;  # Retry every 15 minutes if failed
-  max_check_attempts = 3;
-  notification_interval = 240;  # Notify every 4 hours if still failing
-  notifications_enabled = 1;
-}
-```
-
-### Step 4: Rebuild System
+### Step 3: Rebuild System
 
 ```bash
 sudo nixos-rebuild switch --flake '.#vulcan'
 ```
 
-### Step 5: Verify Everything Works
+### Step 4: Verify Everything Works
 
 #### Check Email Tester Timer
 ```bash
@@ -127,19 +109,6 @@ curl http://localhost:9101/metrics
 # etc.
 ```
 
-#### Check Nagios
-```bash
-# Test the check command manually
-/nix/store/.../check_email_tester
-
-# Should output:
-# OK: Overall: 5/5 tests passed | last_run=...
-
-# Check in Nagios UI
-# https://nagios.vulcan.lan
-# Look for "Email Pipeline Tests" service on vulcan host
-```
-
 #### Check Prometheus Alerts
 ```bash
 # View alert rules in Prometheus UI
@@ -158,13 +127,10 @@ curl http://localhost:9101/metrics
 
 ## What Gets Monitored
 
-### Nagios Checks (Every Hour)
-
-- ✅ Timer is active and running
-- ✅ Last run succeeded
-- ✅ Gets overall pass/fail from test summary
-- 🚨 **CRITICAL** if tests fail
-- ⚠️ **WARNING** if timer inactive or never run
+The three conditions worth watching are: the timer is active and running, the
+last run succeeded, and the overall pass/fail count from the test summary. All
+three are covered by the alert table below — `EmailTesterTimerInactive`,
+`EmailTesterFailed`, and `EmailTesterMultipleFailures` respectively.
 
 ### Prometheus Metrics
 
@@ -235,17 +201,14 @@ grep -A 5 "job_name.*email-tester" /nix/store/*/prometheus.yml
 # Should show email-tester target as UP
 ```
 
-### Nagios Shows UNKNOWN
+### Exporter Reports No Result
 
 ```bash
-# Run check manually
-/nix/store/.../check_email_tester
-
 # Check if service exists
 systemctl list-units | grep email-tester
 
-# Check Nagios can access systemctl
-sudo -u nagios systemctl status email-tester
+# Check the unit's last result
+systemctl show email-tester -p Result -p ExecMainStatus
 ```
 
 ### Tests Keep Failing
@@ -325,9 +288,8 @@ sudo systemctl start email-tester.timer
 the top of this file.)**
 
 ✅ **Email Tester**: Runs every hour automatically
-✅ **Nagios**: Checks service status every hour, alerts on failure
 ✅ **Prometheus**: Scrapes detailed metrics every minute
 ✅ **Alerts**: Fire within 5 minutes of test failure
-✅ **Monitoring**: Both Nagios and Prometheus will notify you
+✅ **Monitoring**: Alertmanager routes the failures to you by email
 
 The complete monitoring stack ensures you'll know immediately if your email pipeline breaks!

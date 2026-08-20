@@ -9,9 +9,10 @@
 >    rspamd-scan-mailboxes systemd service, mbsync-johnw OnSuccess hook"). Mail is
 >    now scanned inline by Rspamd as a **Postfix milter**, not by a 15-minute
 >    polling sweep of the Maildir. `systemctl status rspamd-scan-mailboxes.*` will
->    report "Unit not found". (`modules/services/nagios.nix:958` still lists that
->    timer as a monitored unit — that is a live defect in the Nagios config, not a
->    doc error.)
+>    report "Unit not found". (A monitoring config did still list that timer as a
+>    monitored unit — a live defect at the time, not a doc error. That config was
+>    deleted on 2026-08-19; as of that date nothing in the repo references the
+>    timer.)
 > 2. Sieve pipe scripts moved out of `/usr/local/bin` into
 >    `/var/lib/dovecot/sieve-pipe-bin/` on 2025-11-06 (commit f71f7ec).
 
@@ -25,7 +26,6 @@ Rspamd is an advanced spam filtering system integrated with:
 - **PostgreSQL** (for history and metadata storage)
 - **Prometheus** (metrics collection)
 - **Alertmanager** (health alerting)
-- **Nagios** (service monitoring)
 - **Grafana** (metrics visualization)
 - **Glance** (quick access dashboard)
 
@@ -37,8 +37,7 @@ Rspamd is an advanced spam filtering system integrated with:
 2. **`/etc/nixos/modules/services/rspamd-alerts.nix`** - Prometheus alert rules
 3. **Updated `/etc/nixos/modules/services/dovecot.nix`** - Added Sieve scripts for training
 4. **Updated `/etc/nixos/modules/services/databases.nix`** - PostgreSQL user setup
-5. **Updated `/etc/nixos/modules/services/nagios.nix`** - Service monitoring
-6. **Updated `/etc/nixos/modules/services/glance.nix`** - Dashboard link
+5. **Updated `/etc/nixos/modules/services/glance.nix`** - Dashboard link
 
 ### Data Flow
 
@@ -248,9 +247,6 @@ curl http://localhost:11334/metrics
 # Check Prometheus target
 # Visit: https://prometheus.vulcan.lan/targets
 
-# Check Nagios monitoring
-# Visit: https://nagios.vulcan.lan
-
 # Check Alertmanager (should have no alerts initially)
 # Visit: https://alertmanager.vulcan.lan
 ```
@@ -281,13 +277,20 @@ The following alerts are configured (see `/etc/nixos/modules/services/rspamd-ale
 - **RspamdBayesDatabaseLarge**: >10M tokens in Bayes DB (warning)
 - **RspamdHighRejectionRate**: >50% message rejection (warning)
 
-### Nagios Checks
+### Unit health
 
-- **rspamd.service**: SystemD service health check
-- **rspamd-scan-mailboxes.timer**: still listed as a monitored timer at
-  `modules/services/nagios.nix:958`, but **that unit no longer exists** (removed
-  2025-11-06). The check can only ever report the unit as absent; it should be
-  dropped from the timer list.
+Two distinct signals, deliberately not merged:
+
+- **`RspamdServiceDown`** (above) is `up{job="rspamd"} == 0` — the scrape target,
+  i.e. the controller/exporter, being unreachable. A same-named systemd-state
+  rule was removed from `email-services.yaml` to avoid an alert-name collision;
+  this is the canonical down-signal.
+- **`SystemdServiceFailed`** (`modules/monitoring/alerts/systemd.yaml`) is the
+  generic `node_systemd_unit_state{state="failed"}` rule and covers
+  `rspamd.service` failing along with every other unit.
+
+Prometheus plus Alertmanager is the only monitoring system on this host; there is
+no separate service-monitoring layer.
 
 ## Configuration Files
 

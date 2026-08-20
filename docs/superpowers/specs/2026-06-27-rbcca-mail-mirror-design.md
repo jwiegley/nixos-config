@@ -5,6 +5,10 @@
 > that time. It is NOT maintained and may not describe the current system.
 > Current state: see `docs/README.md`.
 > **Outcome:** implemented (see `modules/users/rbcca.nix`).
+> **[Nagios removed 2026-08-19.]** The "full parity" claim below counted Nagios
+> timer checks as one of its three legs; that leg no longer exists on this host.
+> The promtail scrape and the FTS user list are still real. The record is left
+> intact.
 
 **Date:** 2026-06-27
 **Status:** Implemented and deployed 2026-07-02 (plan:

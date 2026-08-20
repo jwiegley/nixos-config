@@ -3,7 +3,8 @@ groups:
   # UPS / POWER PROTECTION
   # =====================================================================
   # Added 2026-07-29. Before this the UPS was COMPLETELY unmonitored: no exporter, no rule,
-  # no Nagios check. A scan of all ~500 rules for ups/nut/battery/power/apc matched nothing.
+  # no check of any kind. A scan of all ~500 rules for ups/nut/battery/power/apc matched
+  # nothing.
   # The exporter that feeds these rules is modules/monitoring/services/nut-exporter.nix.
   #
   # Baseline measured at authoring time, on mains, so the thresholds below are anchored to

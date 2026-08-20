@@ -122,7 +122,7 @@ let
 
       # Permissive variant of https_2xx_local for vhosts that are alive and
       # correctly TLS-terminated but answer an anonymous GET / with 401/403
-      # (auth-gated apps like Nagios) or 404 (no handler bound at /, like the
+      # (any vhost behind basic auth) or 404 (no handler bound at /, like the
       # Loki API vhost). For these, "auth-gated-but-listening" is the healthy
       # state — the strict module would flap them to probe_success=0 forever
       # and chronically fire HostUnreachable. The cert is still validated
@@ -467,15 +467,16 @@ in
                   "twin-cities.umn.edu"
                   "osuosl.org"
 
-                  # Nagios parity, added 2026-08-19 (nixos-a71). These four
-                  # were pinged by Nagios and by nothing here, found by resolving
-                  # BOTH sides to IPv4 before differencing -- Nagios stores bare
+                  # Added 2026-08-19 (nixos-a71) to close the last ICMP gaps
+                  # found by the coverage audit that preceded retiring the
+                  # legacy check-based monitoring stack: these four were pinged
+                  # there and by nothing here. The audit resolved BOTH sides to
+                  # IPv4 before differencing -- the legacy stack stored bare
                   # addresses while blackbox uses names, so a naive comparison
                   # reports 23 phantom gaps. host_group becomes "local" via the
                   # relabel below, so HostUnreachable owns them exactly as it
-                  # owns the rest of this block -- i.e. the same alerting weight
-                  # Nagios already applied, which is the point of closing the gap
-                  # before Nagios goes.
+                  # owns the rest of this block, which is the alerting weight
+                  # they had before.
                   #
                   # Three are probed BY IP for the same reason TL-WPA8630 above
                   # is: OPNsense registers only the PTR, so the forward name does
@@ -501,11 +502,11 @@ in
               # ICMP for long stretches (low-power radios, deep sleep), so they
               # are carried in their own group and EXCLUDED from the always-on
               # HostUnreachable critical. The warning-only BlackboxICMPIoTDevice
-              # Down alert (network.yaml, for: 1h) covers them and mirrors the
-              # existing Nagios IoT ping coverage (the cross-stack duplication
-              # on this host is intentional). The explicit host_group label here
-              # is authoritative — the relabel_configs "local/dns/backbone"
-              # rules below are guarded so they never overwrite it.
+              # Down alert (network.yaml, for: 1h) covers them, and since
+              # 2026-08-19 it is their ONLY down-coverage on this host. The
+              # explicit host_group label here is authoritative — the
+              # relabel_configs "local/dns/backbone" rules below are guarded so
+              # they never overwrite it.
               {
                 targets = [
                   # "adt-home-security.lan"             # 192.168.3.118
@@ -538,13 +539,14 @@ in
               # ICMP-silent IoT devices (host_group="iot-noping"). These never
               # answer ICMP at all — 0% probe_success since probing began —
               # because they firewall ping outright and/or are battery
-              # deep-sleepers that never surface for an echo request. They are
-              # ALSO absent from Nagios's host list (verified against
-              # status.dat), so nobody has ever successfully pinged them: they
-              # were originally commented out for exactly this reason, not as
-              # Nagios-only coverage. We keep probing them for visibility (so a
-              # newly-reachable device shows up), but they are placed in this
-              # separate group so that BlackboxICMPIoTDeviceDown (network.yaml)
+              # deep-sleepers that never surface for an echo request. They were
+              # ALSO absent from the legacy check-based stack's host list
+              # (verified before it was retired), so nobody has ever
+              # successfully pinged them: they were originally commented out for
+              # exactly this reason, not because their coverage lived elsewhere.
+              # We keep probing them for visibility (so a newly-reachable device
+              # shows up), but they are placed in this separate group so that
+              # BlackboxICMPIoTDeviceDown (network.yaml)
               # deliberately EXCLUDES them — otherwise they would be chronic
               # never-clearing warnings, violating the no-chronic-firing
               # discipline. If one of these ever starts answering ICMP, move it
@@ -810,11 +812,13 @@ in
             static_configs = [
               {
                 targets = [
-                  # Nagios parity, added 2026-08-19 (nixos-a71). The BARE vhost was
-                  # checked by Nagios and by nothing here -- every other target is a
-                  # *.vulcan.lan subdomain. Marginal on its own (nginx failing would
-                  # take the other 39 probes with it) but it is the last item in the
-                  # https/ssl class, so closing it makes that class provably complete.
+                  # Added 2026-08-19 (nixos-a71) by the coverage audit that
+                  # preceded retiring the legacy check-based monitoring stack: the
+                  # BARE vhost was checked there and by nothing here -- every other
+                  # target is a *.vulcan.lan subdomain. Marginal on its own (nginx
+                  # failing would take the other 39 probes with it) but it is the
+                  # last item in the https/ssl class, so closing it makes that class
+                  # provably complete.
                   #
                   # It answers 301, and this module has valid_status_codes: [] i.e.
                   # 2xx only -- safe ONLY because follow_redirects is true and the
@@ -899,13 +903,14 @@ in
           }
 
           # Auth-gated / no-root-handler local vhosts. These are alive and
-          # correctly TLS-terminated but answer an anonymous GET / with 401
-          # (Nagios requires basic auth) or 404 (the Loki API vhost has no
-          # handler at /). The https_2xx_or_auth module treats those as healthy
-          # while still validating the step-ca cert, so HostUnreachable (which
-          # matches job=~"blackbox_.*") only fires on a genuine outage/TLS
-          # failure rather than flapping on the auth challenge. (coverage plan
-          # P1, web-blackbox)
+          # correctly TLS-terminated but answer an anonymous GET / with 404 (the
+          # Loki API vhost has no handler at /) or 401/403 (any vhost put behind
+          # basic auth — none at present, but the module tolerates it so such a
+          # vhost can be added here without flapping). The https_2xx_or_auth
+          # module treats those as healthy while still validating the step-ca
+          # cert, so HostUnreachable (which matches job=~"blackbox_.*") only
+          # fires on a genuine outage/TLS failure rather than flapping on the
+          # auth challenge. (coverage plan P1, web-blackbox)
           {
             job_name = "blackbox_https_auth";
             metrics_path = "/probe";
@@ -1085,25 +1090,26 @@ in
             scrape_timeout = "10s";
           }
 
-          # Protocol-level TCP reachability for the four ports the Nagios
-          # inventory (nixos-a71) showed to be the ONLY genuinely uncovered
-          # checks on this host.
+          # Protocol-level TCP reachability for the four ports that the
+          # 2026-08-19 coverage audit (nixos-a71) found to be the ONLY genuinely
+          # uncovered checks on this host.
           #
-          # The audit compared all 302 native Nagios service checks against
-          # Prometheus, class by class, and everything else already had an
-          # equivalent with WIDER coverage -- 46 ICMP targets against 23
-          # check_ping, 569 systemd units against 140 check_systemd_service*, 41
-          # cert series against 30 check_ssl_cert, and so on. Even the six
-          # check_tcp ports turned out to be redundant: 5432 has the postgres
-          # exporter, 9090 the self-scrape, 3000 grafana, 8123 the hass HTTPS
-          # probe, 443 the 35 https_local probes, 80 the http probe.
+          # That audit compared all 302 service checks of the legacy check-based
+          # monitoring stack against Prometheus, class by class, before retiring
+          # it, and everything else already had an equivalent with WIDER
+          # coverage -- 46 ICMP targets against 23 ping checks, 569 systemd
+          # units against 140 unit checks, 41 cert series against 30 certificate
+          # checks, and so on. Even the six raw TCP port checks turned out to be
+          # redundant: 5432 has the postgres exporter, 9090 the self-scrape,
+          # 3000 grafana, 8123 the hass HTTPS probe, 443 the 35 https_local
+          # probes, 80 the http probe.
           #
           # These four are different. Postfix and Dovecot are richly
           # instrumented -- 222 and 141 series respectively -- but every one of
           # those measures the DAEMON, not whether the port answers. A listener
           # wedged behind a healthy-looking process is exactly what the old
-          # check_imap / check_imaps / check_smtp caught and what nothing here
-          # did. check_ssh had no equivalent at all.
+          # IMAP / IMAPS / SMTP checks caught and what nothing here did. SSH had
+          # no equivalent at all.
           #
           # 127.0.0.1 on purpose: these are services on this host, and using
           # loopback keeps addresses out of the tracked repo. The tcp_connect

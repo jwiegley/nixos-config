@@ -22,10 +22,11 @@ groups:
         # always-on critical.
         # The "iot" devices are covered instead by BlackboxICMPIoTDeviceDown
         # (warning, for: 1h) below. The "iot-noping" devices never answer ICMP
-        # at all (and aren't in Nagios either) and the "iot-quiet" devices are
-        # powered off / deep-asleep for long routine stretches, so those two
-        # groups get NO alert — they are probed for visibility only. Matched
-        # with !~ so all three groups are excluded in one matcher.
+        # at all (they have never been pingable by anything) and the
+        # "iot-quiet" devices are powered off / deep-asleep for long routine
+        # stretches, so those two groups get NO alert — they are probed for
+        # visibility only. Matched with !~ so all three groups are excluded in
+        # one matcher.
         # ALL blackbox_http* jobs excluded 2026-08-01 (widened from the single
         # blackbox_https_public exclusion). This rule is about HOST reachability,
         # but "blackbox_.*" also matched every HTTP vhost probe, so 42 targets
@@ -71,14 +72,15 @@ groups:
       # sleeping up to ~86 min continuously; the prior 10m buffer fired on
       # routine sleep — see git history 2026-06-15).
       #
-      # This intentionally MIRRORS the existing Nagios IoT ping coverage on this
-      # host. The cross-stack duplication (Nagios + Prometheus both pinging the
-      # IoT devices) is deliberate and is NOT a defect to consolidate — do not
-      # remove the Nagios side.
+      # This is now the ONLY IoT ping coverage on the host. It was originally
+      # written as a deliberate mirror of a second check system that pinged the
+      # same devices; that system was removed on 2026-08-19, so the duplication
+      # this comment used to defend no longer exists and nothing else pings
+      # these devices. Do not narrow or drop this rule as "redundant".
       #
       # Scoped to host_group="iot" only — this deliberately ignores two sibling
       # groups defined in blackbox-monitoring.nix: host_group="iot-noping"
-      # (devices that have NEVER answered ICMP, and aren't in Nagios either) and
+      # (devices that have NEVER answered ICMP) and
       # host_group="iot-quiet" (devices like the grill/doorbell that DO answer
       # when awake but are off / deep-asleep for long stretches by design).
       # Both are probed for visibility only and must never alert; keeping this
@@ -92,7 +94,7 @@ groups:
           service: connectivity
         annotations:
           summary: "IoT device {{ $labels.instance }} is not answering ICMP"
-          description: "IoT device {{ $labels.instance }} has not answered ICMP for more than 1 hour (host_group=iot). This mirrors the Nagios IoT ping coverage and is warning-only because these devices sleep by design."
+          description: "IoT device {{ $labels.instance }} has not answered ICMP for more than 1 hour (host_group=iot). Warning-only because these devices sleep by design."
 
       # CHRONIC DEGRADATION, the companion to the rule above. Added 2026-08-16
       # (nixos-mn4) to close a hole neither existing rule can cover.
@@ -320,8 +322,9 @@ groups:
       # being down eventually, in days. HostUnreachable does not apply — its
       # selector is scoped to blackbox_icmp.
       #
-      # These four ports are the last checks the Nagios inventory found with no
-      # Prometheus equivalent. Postfix and Dovecot export 222 and 141 series
+      # These four ports (ssh, smtp, imap, imaps) were the last gap the coverage
+      # inventory found before the legacy check system was removed: it probed
+      # them and Prometheus did not. Postfix and Dovecot export 222 and 141 series
       # between them, but all of those measure the daemon; none answers "does
       # the port accept a connection". 5m rather than the 1m used for web
       # probes: nothing here is user-facing in the way a vhost is, and both mail
@@ -344,9 +347,10 @@ groups:
       # SSL certificate expiry warning (from HTTPS probes)
       #
       # Selector widened 2026-07-31 from job="blackbox_https" to include
-      # blackbox_https_public, as part of retiring Nagios: "ATD SSL Certificate" and the other
-      # native Nagios cert checks go away with it, and blackbox_https carries exactly ONE
-      # series (https://google.com) while the public edge certs live in blackbox_https_public.
+      # blackbox_https_public, as part of consolidating monitoring onto Prometheus: the
+      # legacy check system's own certificate checks went away with it, and blackbox_https
+      # carries exactly ONE series (https://google.com) while the public edge certs live in
+      # blackbox_https_public.
       #
       # WIDENED AGAIN 2026-07-31, same day, correcting the first attempt.
       #

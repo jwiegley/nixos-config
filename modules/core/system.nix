@@ -47,8 +47,12 @@
     polkit.enable = true;
     sudo.wheelNeedsPassword = false;
 
-    # Nagios runs podman commands every few seconds to check container health
-    # Without this, generates ~5,800 sudo log entries per day
+    # Suppresses sudo's syslog chatter from frequent automated container
+    # health checks. The ~5,800 entries/day this once prevented was measured
+    # against the retired check system's polling and is NOT current; the
+    # surviving driver is the root-run health checks noted below, which fire
+    # every 30s per container. Re-measure before deciding this is still
+    # earning its keep -- the original justification is gone, not the rule.
     sudo.extraConfig = ''
       # The !syslog tag prevents sudo from logging to syslog
 

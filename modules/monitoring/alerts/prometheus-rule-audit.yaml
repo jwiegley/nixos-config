@@ -2,7 +2,8 @@ groups:
   - name: prometheus_rule_audit
     interval: 5m
     rules:
-      # Restores the capability lost with the Nagios<->Prometheus mirror on 2026-07-31.
+      # Restores the dead-rule detection lost when the cross-stack mirror and its
+      # divergence reconciler were removed on 2026-07-31.
       #
       # A rule whose expression selects a metric with zero series is VALID PromQL that
       # returns nothing, so Prometheus reports health=ok and the rule sits inactive forever.

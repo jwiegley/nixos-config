@@ -78,8 +78,10 @@
 #     certificate rules. Note wallabag, the closest analogue still deployed, has
 #     no per-service alert file either.
 #
-#   * The Nagios check block. Nagios was retired from this host on 2026-07-31;
-#     Prometheus and Alertmanager are the only monitoring system now.
+#   * The second-check-system block. That hand-maintained check system was
+#     dismantled starting 2026-07-31 and fully removed on 2026-08-19; Prometheus
+#     and Alertmanager are the only monitoring system now, and the coverage above
+#     is all of it.
 #
 #   * The modules/maintenance/timers.nix entry. rootlessContainerUsers is derived
 #     from config.home-manager.users now, so the container image updater picks

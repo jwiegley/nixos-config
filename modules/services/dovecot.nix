@@ -12,7 +12,7 @@ let
   defaultSieveScript = pkgs.writeText "default.sieve" ''
     require ["fileinto", "envelope", "relational", "comparator-i;ascii-numeric"];
 
-    # Never spam-file mail from local senders (monitoring, Nagios, system services)
+    # Never spam-file mail from local senders (monitoring, alerting, system services)
     if address :domain :is "from" "vulcan.lan" {
       stop;
     }

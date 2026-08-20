@@ -5,6 +5,10 @@
 > that time. It is NOT maintained and may not describe the current system.
 > Current state: see `docs/README.md`.
 > **Outcome:** implemented (see `modules/services/vane.nix`).
+> **[Nagios removed 2026-08-19.]** The Nagios rows in the tables below, and the
+> Nagios items in the verification checklist, refer to a system that no longer
+> exists on this host; Prometheus + Alertmanager is now the only monitoring
+> system. The record is left intact.
 
 **Status:** Approved (brainstormed 2026-04-22 with user)
 **Scope:** Rename the existing Perplexica deployment on host `vulcan` to Vane across all NixOS modules, swap the container image, preserve on-disk state, and keep the standalone SearXNG backend intact.

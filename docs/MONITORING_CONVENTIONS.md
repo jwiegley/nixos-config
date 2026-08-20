@@ -33,38 +33,25 @@ house convention for a rule landing before its producer.
 A query against Prometheus proves nothing about a `vm-alerts/` rule. Verify against the TSDB
 the rule will actually be evaluated on.
 
-## 3. `for:` budget — the Nagios mirror caps out at 38 min (critical) / 95 min (warning)
+## 3. `for:` is bounded by the phenomenon and nothing else — the old dwell budget is retired
 
-`nagios-prometheus-mirror.nix:263-271` approximates each rule's `for:` as
+There used to be an external cap. A second scheduler (the Nagios↔Prometheus mirror, removed
+2026-07-31; Nagios itself 2026-08-19) approximated each rule's `for:` as check retries, which
+clamped effective dwell at **38 min for critical / 95 min for warning-info** and could page
+ahead of Prometheus on a long-dwell rule. That is why older write-ups — and older commit
+messages — say "keep `for:` ≤ 35 min on critical, ≤ 90 min on warning/info". Nothing enforces
+that any more, and no rule needs remediating for having breached it (24 did: 4 critical at
+`for: 1h`, 20 warning/info up to `for: 3d`).
 
-    max_check_attempts = clamp(1 + ceil(for_minutes / retry_interval), 1, 20)
+**Prometheus's `for:` is now the only dwell that exists, and it is authoritative.** Size it to
+the phenomenon: long enough that a normal transient cannot fire it, short enough that the
+condition still matters when the page arrives.
 
-with `retry_interval` = **2 m for critical** (`standard-service`) and **5 m for warning/info**
-(`low-priority-service`) — `:256-261`. Time to Nagios HARD state is `(mca - 1) × retry`, so the
-clamp at 20 caps the mirror at **38 min for critical** and **95 min for warning/info**,
-no matter how long `for:` is. Verified in the deployed cfg: `for: 30m → mca 16` (critical,
-unclamped), `for: 1h → mca 13` (warning, unclamped), `for: 1h → mca 20` and `for: 3d → mca 20`
-(both clamped).
-
-**Budget: keep new `for:` ≤ 35 min on `severity: critical`, ≤ 90 min on warning/info.**
-
-Consequence of exceeding it: mirror services in HARD CRITICAL are counted, with no PROM-MIRROR
-exclusion, by `nagios-status-exporter.nix` into `nagios_services_critical_total`, and
-`NagiosServicesCritical` (`alerts/nagios.yaml:42`, `for: 15m`, notifying) pages off that count.
-A critical rule with `for: 2h` therefore pages via Nagios at ~53 min, an hour before Prometheus.
-`check_prom_rule.py:164-170` maps critical → CRITICAL(2), warning → WARNING(1), info → OK(0), so
-info-severity rules are exempt from this path.
-
-Two measured corrections to older write-ups of this constraint:
-
-- The blanket "≤ 90 min" figure is **only safe for warning/info**. Critical is capped at 38 min.
-- The consequence is **not** a `NagiosMirrorDivergence` false alarm. Since 2026-07-29
-  (`scripts/nagios-mirror-divergence.py:177-237`) a *pending* ruler alert counts as agreement,
-  so a long `for:` no longer registers as `nagios_only`. The live consequence is the early
-  Nagios page above, plus a mirror service showing non-OK for hours while Prometheus is quiet.
-
-24 deployed mirrors already breach this (4 critical at `for: 1h`; 20 warning/info up to `for: 3d`,
-which reaches HARD ~69 h early). Not fixed here — do not add more.
+The one rule that survives the budget's retirement: **never shorten a dwell to satisfy something
+other than the phenomenon.** A dwell cut to fit an external constraint trades a false-negative
+problem for a false-positive one, which is the disease the rest of this page warns about. If a
+rule legitimately needs `for: 1h` — `BlackboxICMPIoTDeviceDown` does, because brief trueness
+across many series is normal there — give it `for: 1h`.
 
 ## 4. Every threshold ships with its measured over-threshold fraction
 
@@ -164,31 +151,20 @@ wallpaper within two weeks — that is why permanent-truth detectors are `severi
   hashes are verified, but nothing proves a restored file equals the original. Do not write a
   rule against that metric until something emits it.
 
-## The `for:` budget has a sanctioned escape hatch — use it instead of shortening a dwell
+## A rule is now evaluated exactly once — there is no second opinion
 
-The dwell budget above exists because the Nagios mirror derives
-`max_check_attempts = clamp(1 + ceil(for/retry), 1, 20)`. But a rule that legitimately needs a
-long dwell must NOT be shortened to satisfy it — that trades a false-negative problem for a
-false-positive one, which is the disease this page warns about elsewhere.
+Until 2026-07-31 every rule in `modules/monitoring/{alerts,loki-rules,vm-alerts}/` was
+re-evaluated by a second, independent scheduler, and a tier-3 reconciler alerted when the two
+disagreed. Two consequences of that being gone are worth knowing when you author a rule:
 
-The supported answer is to exclude the rule from the mirror:
-
-- `excludedAlertnames` — `modules/monitoring/services/nagios-prometheus-mirror.nix:131`
-- `excludedFileKeys` — same file, `:136`
-- both are applied by the `keptRules` filter at `:165-166`
-
-An excluded rule keeps its Prometheus behaviour untouched and simply has no mirrored Nagios
-service. The divergence checker skips excluded rules automatically (they are outside its
-universe), so nothing else needs changing.
-
-This is an established pattern, not a workaround: `Watchdog`, `ServiceStuckActivating` and
-`BlackboxICMPIoTDeviceDown` are already excluded — and `BlackboxICMPIoTDeviceDown` is itself a
-`for: 1h` rule, i.e. exactly the case the budget would otherwise forbid.
-`docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md` §2.4 documents the mechanism and generalises the rule
-for when to reach for it: any alert whose expr matches MANY series, where brief trueness is
-normal, cannot be approximated by point sampling plus retries — exclude it rather than
-distorting its dwell.
-
-So the decision order is: (1) is the dwell genuinely needed? (2) if yes and it exceeds the
-budget, exclude the alertname from the mirror. (3) Only shorten a dwell if the shorter value is
-correct on its own merits.
+- **A rule that cannot fire is now invisible to everything except a deliberate audit.** The
+  second scheduler is what caught the 2026-06-09 class where 123 rules referenced metrics that
+  did not exist. `systemd.services.prometheus-rule-audit`
+  (`modules/monitoring/services/prometheus-rule-audit.nix`, source
+  `scripts/prometheus-rule-audit.py`) replaces that capability hourly: it extracts the
+  metric names each expr selects and asserts each has ≥1 series in the TSDB, plus stale
+  evaluation, `health=err` and group-overrun checks. It is the only thing standing between a
+  typo'd metric name and a wall of reassuring green — which is why §1 above is mandatory.
+- **Nothing cross-checks the ruler's own liveness by re-deriving the answer.** That job falls
+  to `Watchdog` (pipeline alive) and the post-reboot harness's rule-health check
+  (`scripts/post-reboot-validation.sh`).

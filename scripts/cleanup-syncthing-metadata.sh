@@ -20,8 +20,9 @@ readonly legacy_uid=237
 readonly legacy_gid=237
 readonly johnw_uid=1000
 readonly johnw_gid=990
-# GID 990 also includes nagios and prometheus. Keep John as payload owner but
-# use root as the Public group so the migration cannot broaden daemon access.
+# GID 990 has daemon members of its own (prometheus). Keep John as payload
+# owner but use root as the Public group so the migration cannot broaden
+# daemon access.
 readonly public_gid=0
 readonly immich_gid=923
 readonly public_root=/tank/Public

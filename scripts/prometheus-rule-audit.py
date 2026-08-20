@@ -3,14 +3,16 @@
 
 WHY THIS EXISTS
 
-Until 2026-07-31 the Nagios<->Prometheus mirror re-evaluated every Prometheus expression
-through a SECOND, independent scheduler. That is what caught the 2026-06-09 defect where 123
-rules could never fire -- the core mistake being a metric named `systemd_unit_state` when the
-exporter actually publishes `node_systemd_unit_state`. A rule selecting a metric that does
-not exist is not an error to Prometheus: the query is valid, it simply returns no series, the
-rule sits `inactive` forever, and the dashboard is a wall of reassuring green.
+Until 2026-07-31 a SECOND, independent scheduler (the Nagios<->Prometheus mirror, removed then;
+Nagios itself followed on 2026-08-19) re-evaluated every Prometheus expression. That is what
+caught the 2026-06-09 defect where 123 rules could never fire -- the core mistake being a metric
+named `systemd_unit_state` when the exporter actually publishes `node_systemd_unit_state`. A
+rule selecting a metric that does not exist is not an error to Prometheus: the query is valid,
+it simply returns no series, the rule sits `inactive` forever, and the dashboard is a wall of
+reassuring green.
 
-Removing the mirror removed that detector. This replaces it without a second scheduler.
+Removing that scheduler removed the detector with it. This script replaces the detector without
+reintroducing a second scheduler, and is now the ONLY thing that catches the dead-rule class.
 
 WHAT IT CHECKS
 

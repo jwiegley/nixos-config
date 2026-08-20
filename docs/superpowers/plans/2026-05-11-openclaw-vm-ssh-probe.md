@@ -966,7 +966,8 @@ git status
 - Updating `openclaw-mcporter-check.service` (the every-5-minute exporter) to
   use the same probe. It currently uses textfile metrics only; extending it
   belongs in a separate plan.
-- Adding a Nagios/Prometheus alert when the SSH probe fails. The nightly
+- Adding a Nagios/Prometheus alert when the SSH probe fails.
+  [Nagios removed 2026-08-19; Prometheus is the only remaining option.] The nightly
   report's existing "issues" header now naturally surfaces probe loss because
   the skipped rows become rare instead of constant.
 - Rewriting the report to deduplicate host vs VM probes for non-blind servers.

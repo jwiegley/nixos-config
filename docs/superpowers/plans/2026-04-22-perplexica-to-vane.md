@@ -5,6 +5,10 @@
 > that time. It is NOT maintained and may not describe the current system.
 > Current state: see `docs/README.md`.
 > **Outcome:** implemented (see `modules/services/vane.nix`).
+> **[Nagios removed 2026-08-19.]** Every step below that edits
+> `modules/services/nagios.nix` or verifies a Nagios check refers to a system that
+> no longer exists on this host; Prometheus + Alertmanager is now the only
+> monitoring system. The record is left intact.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

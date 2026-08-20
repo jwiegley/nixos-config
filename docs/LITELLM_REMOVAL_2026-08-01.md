@@ -206,8 +206,9 @@ After confirming the loop had genuinely stopped (`increase(...[5m]) = 0`,
 | `home-manager-johnw` | `Result=success`, `ExecMainStatus=0`, `NRestarts=0` |
 
 Services active: nginx, rspamd, postfix, dovecot2, prometheus, alertmanager,
-postgresql, home-assistant, grafana, nagios, wyoming-openai,
-qdrant-inference-bridge, stock-trader, hermes-self-heal, openclaw-self-heal.
+postgresql, home-assistant, grafana, nagios [Nagios removed 2026-08-19],
+wyoming-openai, qdrant-inference-bridge, stock-trader, hermes-self-heal,
+openclaw-self-heal.
 
 **Zero critical, zero warning.**
 

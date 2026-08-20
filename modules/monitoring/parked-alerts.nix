@@ -1,22 +1,28 @@
 # SINGLE SOURCE OF TRUTH for alert rule files that are deliberately NOT loaded.
 #
-# Both consumers readDir their rule directories independently:
+# Today exactly one consumer reads this list:
 #
-#   modules/monitoring/services/alerting.nix              -> services.prometheus.ruleFiles
-#   modules/monitoring/services/nagios-prometheus-mirror.nix -> one `define service`
-#                                                               (PROM-MIRROR <alertname>)
-#                                                               per rule
+#   modules/monitoring/services/alerting.nix -> services.prometheus.ruleFiles
 #
-# That duplication is why this file exists. The motivating case: a service was disabled and its
-# rules parked in alerting.nix alone; Prometheus correctly stopped loading them, but the Nagios
-# mirror kept generating `PROM-MIRROR` services from the same yaml, so Nagios went on checking
-# a container that no longer existed. Parking a file in one place and not the other is worse
-# than not parking it at all, because the remaining half looks authoritative.
+# It exists as a shared file, rather than a local list inside alerting.nix, because parking
+# is a property of the RULE FILE, not of one loader. The motivating case: a service was
+# disabled and its rules parked in the Prometheus loader alone, while a second generator
+# doing its own independent readDir over the same directory kept emitting checks for a
+# container that no longer existed. Parking a file in one consumer and not another is worse
+# than not parking it at all, because the remaining half looks authoritative. Any consumer
+# that readDirs one of these rule directories should filter through this list.
 #
-# Keys match `ruleDirs` in nagios-prometheus-mirror.nix. Values are basenames within that
-# directory. alerting.nix consumes `prometheus`; vmalert.nix consumes `vm` if it ever needs to.
-# Both consumers assert that every name listed here actually exists -- a typo would otherwise
-# park nothing and fail silently, which is the same failure in a different disguise.
+# One key per rule directory. Values are basenames within that directory:
+#   prometheus -> modules/monitoring/alerts      readDir'ed by alerting.nix, WHICH READS
+#                                                THIS LIST. Parking works here.
+#   loki       -> modules/monitoring/loki-rules  readDir'ed by modules/services/loki.nix,
+#                                                which does NOT read this list.
+#   vm         -> modules/monitoring/vm-alerts   readDir'ed by vmalert.nix, which does NOT
+#                                                read this list.
+# So a name added under `loki` or `vm` today parks NOTHING -- wire the consumer up in the
+# same change, or the entry is decoration. alerting.nix asserts that every name it reads
+# actually exists; a typo would otherwise park nothing and fail silently, which is the same
+# failure in a different disguise.
 #
 # To re-enable a service, remove its entry here in the SAME change that re-enables the
 # service itself.

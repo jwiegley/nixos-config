@@ -379,7 +379,8 @@ in
         ExecStart = "${workspaceUpdateScript} --archive";
         # Load GitHub token as a systemd credential
         LoadCredential = "github-token:${config.sops.secrets."github-token".path}";
-        # Ensure directory permissions allow monitoring users (prometheus, nagios) to read
+        # Ensure directory permissions allow the prometheus user to read (the
+        # git-workspace exporter walks this tree)
         ExecStartPost = [
           "${pkgs.coreutils}/bin/chmod 750 /var/lib/git-workspace-archive"
           "${pkgs.coreutils}/bin/chmod -R g+rX /var/lib/git-workspace-archive/github"
@@ -395,7 +396,8 @@ in
         # The cost of the cap being too low is not just an incomplete archive: the
         # kill leaves the sync-state file unwritten, so BOTH staleness checks go
         # critical and SystemdServiceFailed fires -- one repack night produced five
-        # alerts across Prometheus and the Nagios mirror.
+        # alerts (at the time, spread across Prometheus and the since-removed
+        # mirror stack).
         #
         # 2h is chosen against the measured repack night (~46 min of completed work
         # plus the unfinished tail), not against the quiet-night figure. Do not tune

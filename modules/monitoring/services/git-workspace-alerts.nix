@@ -98,7 +98,7 @@ let
           service: git-workspace-archive
         annotations:
           summary: "Many git repositories are stale"
-          description: "{{ $value | humanizePercentage }} of repositories ({{ query \"git_workspace_stale_repos_total\" | first | value }}/{{ query \"git_workspace_repos_total\" | first | value }}) haven't been updated in over 3 days. This may indicate inactive upstream repositories or sync issues. Check Nagios for detailed list of stale repos."
+          description: "{{ $value | humanizePercentage }} of repositories ({{ query \"git_workspace_stale_repos_total\" | first | value }}/{{ query \"git_workspace_repos_total\" | first | value }}) haven't been updated in over 3 days. This may indicate inactive upstream repositories or sync issues. For the individual repos, query sort_desc(git_workspace_repo_age_seconds) (the 50 stalest are exported per-repo) or read .stale_repos_detail in /var/lib/git-workspace-archive/.sync-state.json."
 
       # Alert if critical number of repos are stale (>25%) - CRITICAL
       - alert: GitWorkspaceCriticallyManyStaleRepos

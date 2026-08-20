@@ -60,8 +60,9 @@ groups:
       # DIRECTORY also suppresses --delete for the whole run, so the mirror can
       # silently hold stale AND deleted-at-source files. The run still exits 0
       # and still touches .latest (operator decision, option B: freezing .latest
-      # would page the three Nagios "Local Backup:" checks hourly after 8h and
-      # LocalBackupStale above, all off one unreadable file). This rule is the
+      # would page LocalBackupStale above — plus, at the time, three external
+      # "Local Backup:" checks hourly after 8h — all off one unreadable file).
+      # This rule is the
       # partial's OWN signal. It self-resolves on the next clean run (<= 6h)
       # because the gauge is overwritten every run.
       #

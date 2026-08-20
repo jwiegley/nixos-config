@@ -69,8 +69,8 @@ groups:
       # a broken login that only 500s when a user actually tries — which never
       # accumulates burst volume (diagnosed 2026-07-22: a single teable
       # `POST /api/auth/signin` 500 was invisible to every probe and to the
-      # burst rule, because the anonymous blackbox/nagios probes only GET the
-      # root and the burst rule needs >30/2m). Restart storms are 502s; a pure
+      # burst rule, because the anonymous blackbox probes only GET the root and
+      # the burst rule needs >30/2m). Restart storms are 502s; a pure
       # 500 is an application error, steady-state ~0 here — so a sensitive
       # 500-ONLY tier catches real app breakage within ~15m of a few
       # occurrences without re-introducing the 502 restart noise.
@@ -98,7 +98,7 @@ groups:
       # window = 2), but LAN/internet scanners probing the reverse proxy can
       # produce short 401 bursts; the threshold is set well above the observed
       # peak (>60 in 10m, ~30x baseline) so only a sustained credential-stuffing
-      # / scanner storm against a protected vhost (Nagios, etc.) fires it.
+      # / scanner storm against a basic-auth-protected vhost fires it.
       - alert: NginxAuthFailureBurst
         expr: |
           sum(count_over_time({job="nginx-access", status=~"40[13]"}[10m])) > 60

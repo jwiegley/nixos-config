@@ -30,12 +30,16 @@
 # Why the database metrics STAY here, separately: they are the only dead-man for
 # "aide-check never ran at all". If they were folded into the check's emitter
 # they would freeze in lockstep with the very failure they are meant to detect.
-# aide*.prom is in NEITHER TextfileCollectorStale tier
-# (meta-monitoring.yaml:324 fast / :336 daily), so this independent timer is the
-# primary staleness signal; aide.prom's mtime is additionally watched by
-# nagios-tier1-mirror.nix:263 (26h warn / 50h crit), which this daily timer
-# satisfies. Alerts AIDEDatabaseMissing / AIDEDatabaseStale (security.yaml) read
-# these two gauges.
+# Staleness coverage, corrected 2026-08-19: aide.prom -- the file THIS collector
+# writes -- IS on the TextfileCollectorStaleDaily allowlist
+# (meta-monitoring.yaml, >26h). It was added there on 2026-07-31, which is when
+# the old "aide*.prom is in NEITHER tier" claim went stale. The daily timer below
+# is what keeps aide.prom inside that 26h window. aide_result.prom (written by
+# aide-check, modules/security/aide.nix) is still on no tier allowlist and is
+# caught only by the loose 14-day TextfileCollectorUnclassifiedStale backstop, so
+# this collector's independence remains the primary freshness signal for the
+# check itself. Alerts AIDEDatabaseMissing / AIDEDatabaseStale (security.yaml)
+# read these two gauges.
 #
 # Cheap by construction: a stat(2), no filesystem walk, so it is also wired as
 # an ExecStartPre on aide-check.service (see below).

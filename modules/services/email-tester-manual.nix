@@ -6,7 +6,7 @@
 }:
 
 # Email testing script for manual execution
-# Does NOT include automated monitoring (timer, Prometheus, Nagios)
+# Does NOT include automated monitoring (timer, Prometheus metrics, alerting)
 # to avoid over-training rspamd on test messages
 
 {

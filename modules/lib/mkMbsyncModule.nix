@@ -25,7 +25,11 @@
       # Health-check staleness thresholds (seconds). Defaults suit a 15min
       # timer; accounts with slower cadence MUST scale these (2026-07-03
       # audit: assembly syncs 1x/day but inherited 1h/4h and sat CRITICAL
-      # ~20h of every day). Keep in step with nagios-tier1-mirror values.
+      # ~20h of every day). These feed only the mbsync-<name>-health-check
+      # unit's journal verdict — its 0/1/2 exit is covered by
+      # SuccessExitStatus, so it never fails the unit. The rule that actually
+      # alerts is MbsyncStale in modules/monitoring/alerts/health-checks.yaml,
+      # which carries its own thresholds; scale both together.
       healthWarningAge ? 3600,
       healthCriticalAge ? 14400,
       logLevel ? "info",

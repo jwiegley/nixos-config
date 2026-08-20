@@ -49,7 +49,7 @@ groups:
       # So it was not a monitor, it was the appearance of one: a chat-error alert
       # structurally incapable of alerting on a chat error, for its entire existence. Found
       # by scripts/prometheus-rule-audit.py, added the same day to replace the dead-rule
-      # detection that the retired Nagios mirror used to provide.
+      # detection that the retired cross-stack mirror used to provide.
       #
       # Deleted rather than repaired because its premise is gone too: it was written for
       # an Anthropic->Responses adapter misorder bug in the retired LLM proxy, now removed

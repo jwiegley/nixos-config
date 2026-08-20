@@ -65,6 +65,7 @@ Optional: router `allowed_fails`/cooldown to quiet future hera outages.
    mask-clobberer suspected in copyparty startup — see backlog.)
 3. **11 frozen Nagios SSL CRITs force-rechecked** — 24h-interval checks had
    frozen pre-reboot state (the known deploy-race/freeze class).
+   [Nagios removed 2026-08-19; this whole check class no longer exists.]
 4. **openspeedtest user manager (user@944) restarted** — cleared
    cgroup-delegation failed-scope backlog; probe clean after.
 5. **Stale `claude-mem-worker` johnw user unit removed** (plugin uninstalled

@@ -274,8 +274,9 @@ let
       #
       # Handling (operator decision 2026-08-04, option B): the run still exits 0
       # and .latest is still touched -- rc 23 must not page SystemdServiceFailed,
-      # and the three Nagios "Local Backup:" checks read .latest directly with an
-      # 8h CRITICAL + hourly re-notify, so freezing it would turn one unreadable
+      # and .latest is what feeds local_backup_last_success_timestamp and hence
+      # the 8h LocalBackupStale critical / 7h LocalBackupAging warning
+      # (alerts/local-backup.yaml), so freezing it would turn one unreadable
       # file into a recurring page. Instead the partial gets its OWN signal:
       #   * .lastclean is touched only on rc 0/24 -> feeds
       #     local_backup_last_clean_success_timestamp and the 26h
@@ -295,8 +296,8 @@ let
           log "Successfully backed up ${backup.name}"
         fi
 
-        # Touch timestamp file to indicate the backup RAN (0/23/24). Nagios and
-        # the cadence alerts read this; outcome is tracked separately below.
+        # Touch timestamp file to indicate the backup RAN (0/23/24). The
+        # cadence alerts read this; outcome is tracked separately below.
         ${pkgs.coreutils}/bin/touch "${backupBaseDir}/.${backup.name}.latest"
 
         if [[ $rc -ne 23 ]]; then
@@ -413,10 +414,10 @@ in
     # traverse only, so a service can stat a specific timestamp file such as
     # Machines/Vulcan/.etc.latest without being able to list the tree.
     #
-    # RELOCATED here 2026-08-19 from modules/services/nagios.nix, which was the
-    # SOLE declarative assertion of this mode and which the Nagios removal
-    # deletes. It belongs in this module because local-backup is what writes the
-    # timestamp files the mode exists to protect.
+    # RELOCATED here 2026-08-19 from the legacy monitoring module deleted that
+    # day, which until then held the SOLE declarative assertion of this mode. It
+    # belongs in this module because local-backup is what writes the timestamp
+    # files the mode exists to protect.
     #
     # `z` adjusts an existing path and never creates or deletes. Deliberately
     # not `Z` (recursive -- would rewrite ownership across every backup tree)
@@ -427,7 +428,7 @@ in
 
   # Orders the rule above after the ZFS mount. `wants`, not `requires`, so a
   # configuration switch is not blocked when the mount unit is unavailable.
-  # Also relocated from nagios.nix.
+  # Also relocated from that module on 2026-08-19.
   systemd.services.systemd-tmpfiles-resetup = {
     after = [ "tank-Backups.mount" ];
     wants = [ "tank-Backups.mount" ];
@@ -439,7 +440,7 @@ in
       # Local Backup System
 
       ## Overview
-      Hourly backups of critical system directories to /tank/Backups/Machines/Vulcan using rsync.
+      4x-daily backups of critical system directories to /tank/Backups/Machines/Vulcan using rsync.
 
       ## Backed Up Directories
       ${lib.concatMapStringsSep "\n" (
@@ -447,8 +448,12 @@ in
       ) backupSources}
 
       ## Timestamp Files
-      After each successful backup, a timestamp file is created:
+      After each run that COMPLETED (rsync exit 0, 23 or 24) a `.latest` file is touched:
       ${lib.concatMapStringsSep "\n" (backup: "- ${backupBaseDir}/.${backup.name}.latest") backupSources}
+
+      A `.lastclean` companion beside each of those is touched only on a CLEAN
+      pass (rsync exit 0 or 24), so "did it run" and "did it work" are separate
+      signals. See the rsync exit-code comment in modules/services/local-backup.nix.
 
       ## Monitoring
 
@@ -456,10 +461,12 @@ in
       Metrics are exported via node_exporter textfile collector:
       - Metric: local_backup_last_success_timestamp{backup="<name>"}
       - Location: ${metricsFile}
-      - Alert: Fires if backup is older than 4 hours
-
-      ### Nagios Checks
-      Nagios monitors timestamp file ages and alerts if older than 4 hours.
+      - Alerts (modules/monitoring/alerts/local-backup.yaml):
+        - LocalBackupAging   - warning if the backup last RAN over 7 hours ago
+        - LocalBackupStale   - critical if it last RAN over 8 hours ago
+        - LocalBackupMissing - critical if a metric series disappears entirely
+        - LocalBackupNoCleanSuccess - critical if no CLEAN run in 26 hours
+        - LocalBackupPartialTransfer - warning on an rsync exit code of 23
 
       ## Manual Operations
 
@@ -493,9 +500,9 @@ in
       ```
 
       ## Schedule
-      - Runs every hour on the hour
+      - Runs 4x daily at 00:00, 06:00, 12:00 and 18:00
       - Persistent: Runs missed backups after system boot
-      - Randomized delay: Up to 5 minutes to prevent resource contention
+      - Randomized delay: Up to 15 minutes to prevent resource contention
 
       ## Safety Features
       - Only runs if /tank is mounted (ConditionPathIsMountPoint)

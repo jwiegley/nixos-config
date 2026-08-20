@@ -82,8 +82,10 @@ in
 
       timerInterval = "1day";
 
-      # 1x/day cadence: 26h warn / 50h crit, matching the nagios-tier1-mirror
-      # values (the 1h/4h defaults left this CRITICAL ~20h of every day).
+      # 1x/day cadence: 26h warn / 50h crit (the 1h/4h defaults left this
+      # CRITICAL ~20h of every day). MbsyncStale in
+      # modules/monitoring/alerts/health-checks.yaml carries its own
+      # assembly-specific staleness threshold; change the two together.
       healthWarningAge = 93600;
       healthCriticalAge = 180000;
 

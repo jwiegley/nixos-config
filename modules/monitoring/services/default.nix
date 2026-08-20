@@ -23,7 +23,6 @@
     ./vmalert.nix # alerting on the VictoriaMetrics TSDB (HA-pushed series)
     ./system-age-exporter.nix # is-the-system-being-patched gauges
     # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
-    # KEPT: this is the REVERSE direction (Nagios state INTO Prometheus), not a mirror.
     ./prometheus-rule-audit.nix # dead-rule detector
     ./hass-integration-exporter.nix # HA config-entry + integration health
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput

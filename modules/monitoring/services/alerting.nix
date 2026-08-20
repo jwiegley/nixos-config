@@ -11,9 +11,10 @@ let
 
   # Alert files deliberately PARKED out of the rule set. A parked file stays on disk, so
   # re-enabling it is a one-line change rather than a git revert, but Prometheus never loads
-  # it. The list is shared with nagios-prometheus-mirror.nix, which does its own independent
-  # readDir over the same directory -- parking here alone would leave Nagios still generating
-  # a `PROM-MIRROR <alertname>` service per rule. See the file for that history.
+  # it. The list lives in its own file because parking is a property of the rule file, not of
+  # this loader: any other consumer that readDirs modules/monitoring/alerts must filter
+  # through the same list, or the half that ignores it goes on acting on a parked rule. This
+  # loader is the only consumer today. See parked-alerts.nix for that history.
   parkedAlertFiles = (import ../parked-alerts.nix).prometheus;
 
   # Auto-discover all .yaml alert files in the alerts directory, minus the parked ones

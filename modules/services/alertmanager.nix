@@ -476,8 +476,9 @@
         # devices all hang off the IoT-subnet network gear (the ASUS
         # router/AP/mesh-node). If that gateway itself goes unreachable, EVERY
         # downstream IoT device will fail its ICMP probe at once — that is a
-        # single root-cause event, not N independent device failures. This
-        # mirrors the Nagios parent/child host-dependency behaviour.
+        # single root-cause event, not N independent device failures. This is
+        # the classic parent/child host-dependency pattern, expressed here as an
+        # Alertmanager inhibition rule.
         #
         # source: HostUnreachable firing for the gateway/AP/router instances
         # (those infra hosts live in host_group="local", so a gateway outage

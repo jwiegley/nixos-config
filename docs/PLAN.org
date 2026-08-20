@@ -3229,15 +3229,16 @@ configuration change rather than anything in this repo.
 ]
 #+end_src
 
-* TODO [#D] Nest setpoint mirror silently drops writes on API 429 (no retry/catch); divergence itself is by design
+* DONE [#D] Nest setpoint mirror silently drops writes on API 429 (no retry/catch); divergence itself is by design
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ii9
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 12:56]
-:MODIFIED: [2026-08-20 Thu 15:20]
+:MODIFIED: [2026-08-20 Thu 15:27]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 15:27]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3342,6 +3343,72 @@ standing divergence.
 SEVERITY UNCHANGED at P3, but for a different reason than originally written: not
 "the thermostats are diverging", but "roughly 1 in N presence transitions silently
 fails to reach the Nest, and nothing tells you which".
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Implemented option 2 (bounded retry WITH a freshness check) at John's direction
+2026-08-20.
+
+WHAT WAS BUILT -- 5 nodes added to the Office tab, wired as:
+  catch "catch Nest mirror failure"   scope=[ccf5d02161b0136d], i.e. the mirror node only
+    -> function "nest mirror retry gate"      bounded at MAX=3; increments msg.retryCount,
+                                              node.warn + give up beyond that
+    -> delay "wait 60s (rate-limit backoff)"  60s; SDM quotas are per-minute
+    -> api-current-state "re-read VTherm setpoint"  reads climate.upstairs_vtherm
+    -> function "rebuild fresh setpoint"      THE FRESHNESS CHECK
+    -> back into the mirror node (a further failure re-enters the catch, bounded by the gate)
+
+WHY THE FRESHNESS CHECK IS THE WHOLE POINT: the retry does NOT replay the setpoint
+captured when the call failed. By the time it runs (60s+) presence may have flipped,
+and re-applying a stale value would actively fight the VTherm -- you walk back into
+the office, the retry lands, and it re-applies the away setback you just cancelled.
+It re-reads the VTherm's CURRENT setpoint instead: if that changed, the newer value
+is the right one to send; if not, it is a faithful retry. That was the tradeoff John
+chose between, and it is the reason this is not a plain retry.
+
+HOW IT WAS APPLIED: by editing /var/lib/node-red/flows.json directly and restarting
+node-red. The admin API was NOT used -- adminAuth reads its bearer token from
+/run/secrets/node-red/api-tokens, and reading anything under /run/secrets is
+forbidden on this host. flows.json had not been touched since 2026-08-19 12:54, so
+there were no pending UI edits to clobber. A timestamped backup was taken first.
+
+SCHEMAS COPIED, NOT INVENTED: catch/delay/api-current-state node JSON was taken from
+existing working nodes of the same type in the same flows.json rather than written
+from memory, because these are plugin-specific and version-sensitive
+(node-red-contrib-home-assistant-websocket v7, api-current-state version 3).
+
+VERIFIED:
+,  * JSON parses; 424 nodes; zero duplicate ids; every wire target resolves.
+,  * Graph traced end to end; catch scope is exactly the mirror node; the ORIGINAL
+    path (function c04ec2fa32b125ea -> mirror) is unchanged.
+,  * node-red restarted clean: ActiveState=active, Result=success, "Started flows",
+    ZERO error lines, no "missing type" warnings.
+,  * All 5 nodes still present after node-red's own startup write.
+,  * msg.data.attributes shape confirmed BY PRECEDENT, not assumption: the existing
+    "read OpenUV state" -> "compute window" pair uses the same node type and reads
+    msg.data / data.attributes. Optional chaining (?.) already appears in this
+    flow's function nodes, so the syntax is supported by the runtime in use.
+,  * Setpoints unchanged across the restart (VTherm 86 / Nest 88), so the change
+    caused no stray writes.
+,  * Captured in the backup mirror: /tank/Backups/NodeRED/flows.json now 353,954
+    bytes containing the new node (node-red-backup.service, Result=success).
+
+NOT VERIFIED, stated plainly: the retry path has NOT been exercised end to end,
+because doing so requires a genuine Google SDM 429 and I will not manufacture one.
+What is verified is that it loads, wires correctly, and cannot fire spuriously (it
+is reachable ONLY through a catch scoped to a single node). Both function nodes call
+node.warn on their failure branches, so a malfunctioning retry surfaces through the
+existing NodeRedFlowErrors alert rather than silently -- which is a strict
+improvement on the previous state, where the failure was silent by construction.
+
+STILL OPEN, and deliberately not chased here: the +2 offset between VTherm and Nest
+is NOT produced by this mirror, which sends the VTherm setpoint 1:1
+(msg.payload = { temperature: sp }). Several other nodes also write
+climate.upstairs -- "Set HVAC Temp", "Turn on HVAC", "Set HVAC Mode", each targeting
+five climate entities at once. One of those is the likelier source. Worth a separate
+look; it is cosmetic rather than harmful, and this retry does not depend on it.
 #+end_example
 
 * DONE [#D] docs/README.md index describes files and a script the Nagios removal deleted

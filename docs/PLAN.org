@@ -339,15 +339,16 @@ against 1 file / 2751 bytes / 1 pull error before.
 :ORIGINAL_SIZE: 0
 :END:
 
-* TODO [#D] Verify Grist documents are captured by local-backup after the first post-deploy run
+* DONE [#D] Verify Grist documents are captured by local-backup after the first post-deploy run
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-60x
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-19 Wed 20:45]
-:MODIFIED: [2026-08-19 Wed 20:45]
+:MODIFIED: [2026-08-19 Wed 22:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 22:53]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -387,6 +388,40 @@ COVERAGE THIS DOES AND DOES NOT GIVE:
 
 If the verification finds the tree absent, THEN there is real work; until the timer has
 fired, there is nothing to fix.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Verified. The Grist document IS captured, and no configuration change was needed.
+
+    /tank/Backups/Machines/Vulcan/var/lib/grist/docs/v6KZyemq6YWDk7d9YctjvM.grist
+    180224 bytes -- byte-identical to the source at /var/lib/grist/docs/
+
+Rather than wait for the 00:06 timer, local-backup was triggered by hand. The mirror
+directory did not exist before that run and does now, which is the direct evidence that
+the wholesale /var sweep picks this path up.
+
+THIS CONFIRMS THE CORRECTION IN THE ISSUE BODY. I had told John during the Grist deploy
+that /var/lib/grist "has not been picked up by local-backup" and implied it needed wiring.
+It did not: local-backup sweeps /var wholesale and no exclusion matches that path. The only
+true part was that the timer had not fired since Grist was deployed.
+
+COVERAGE THIS GIVES, stated precisely so it is not over-read:
+,  * The document now sits on tank/Backups, which carries ZFS snapshots (1428 of them), so
+    it has snapshot retention from here on.
+,  * NO OFFSITE COPY. "Machines" is in backupExcludes in modules/storage/backups.nix, so
+    this mirror is deliberately not pushed to B2. That is the same posture as every other
+    service on this host except NodeRED. A total loss of /tank still loses the document.
+    Whether Grist deserves the NodeRED treatment is John's call, not a health-cycle one.
+,  * The window is up to 24 hours: the mirror is nightly, not continuous. A document created
+    and lost inside one day is not covered by anything.
+
+A note on reading local-backup's own status: the unit reports `activating` while rsync is
+still working through /var even though Result=success and ExecMainStatus=0 are already set,
+and .latest means "ran" while .lastclean means "worked". Do not treat either marker or the
+active-state alone as proof a specific path was copied -- check for the file, which is what
+was done here.
 #+end_example
 
 * DONE [#E] etterminal aborts at UserTerminalHandler.cpp:107 on ENOENT (87% of sessions; harmless)
@@ -2737,7 +2772,7 @@ configuration change rather than anything in this repo.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 20:45]
-:MODIFIED: [2026-08-19 Wed 20:45]
+:MODIFIED: [2026-08-19 Wed 22:53]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2788,6 +2823,20 @@ BudgetBoardDatabaseConnectionFailed joins the unit state against the blackbox pr
 a sustained failure would be caught. This issue is about the underlying fragility, not a
 monitoring gap.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 39,
+    "issue_id": "nixos-jhl",
+    "author": "johnw",
+    "text": "2026-08-19: the fix this issue proposes as \"option 3\" is ALREADY IN PLACE, which weakens\nits own leading hypothesis. Recording before anyone implements something redundant.\n\nmodules/containers/budgetboard-quadlet.nix already has, on the server unit:\n  * an ExecStartPre that POLLS pg_isready in a 60-iteration loop rather than a one-shot\n    check -- the same idiom every DB-dependent container here uses\n  * Restart = \"always\" with RestartSec = 15s\n\nSo budget-board does not start until PostgreSQL is accepting connections, and the\n\"reconnect races a restarting PostgreSQL\" story does not fit as cleanly as the issue body\nsuggests: the failure happens AFTER pg_isready has already succeeded. Something in the\nconnection path after the port answers is taking the GSSAPI branch, not simply an\nunavailable server.\n\nWHAT THIS MEANS FOR THE CANDIDATE FIXES:\n  * Option 3 (order after postgresql) -- already done, no work available.\n  * Option 2 (ship krb5 in the image) -- still requires forking or layering upstream.\n  * Option 1 (tell Npgsql not to attempt GSSAPI) -- still the most likely real fix, but\n    NOT reachable from here as things stand. BudgetBoard is configured through discrete\n    POSTGRES_HOST / PORT / DATABASE / USER environment variables plus a password injected\n    from SOPS into a generated env file; there is no full connection string to add an\n    Npgsql option to. Exposing one means an application-side or image-side change.\n\nSTILL NOT URGENT: 10 occurrences in the whole journal, self-healing in ~80 seconds via\nRestart=always, and BudgetBoardDatabaseConnectionFailed already covers a sustained outage.\n\nNEXT STEP for whoever picks this up: correlate the exact failure timestamps against\npostgresql.service restart times before assuming the trigger. If they do not line up, the\nrebuild-restart theory is wrong and the cause is elsewhere entirely.\n",
+    "created_at": "2026-08-20T05:53:34Z"
+  }
+]
+#+end_src
 
 * DEFER [#D] Gitea->GitHub auto-mirror automation does not exist; 3 repos need GitHub repos created
 :PROPERTIES:

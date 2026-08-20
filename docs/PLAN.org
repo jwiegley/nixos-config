@@ -210,15 +210,16 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
-* TODO [#B] 569 ZFS snapshots destroyed by a zfs-prune-snapshots m/M unit confusion; PG backup history cut to ~24h
+* DONE [#B] 569 ZFS snapshots destroyed by a zfs-prune-snapshots m/M unit confusion; PG backup history cut to ~24h
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-2ys
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 12:57]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 12:57]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -266,6 +267,43 @@ more than 7 days inside an hour -- impossible through normal aging.
 FOR JOHN, and the only reason this stays open: nothing here is recoverable and nothing
 further is actionable by me. Worth knowing (a) the m/M trap, since the same keystroke
 would do it again, and (b) that PG's recovery depth is thin until ~2026-09-18.
+
+** Close Reason
+
+Closing: the loss is unrecoverable, the monitoring gap it exposed is fixed and
+verified, and recovery is measurably on track. Nothing further is actionable.
+
+RECOVERY VERIFIED 2026-08-20, one day on. tank/Backups/PostgreSQL snapshot mix:
+  25 hourly (rolling, capped by the archival template)
+   2 daily   <- was 1 the day after the prune; this is the accumulation
+   1 weekly, 1 monthly, 1 yearly
+sanoid last ran 2 minutes before the check with Result=success. Total count reads
+flat at 30 and oldest still reads Aug 19 11:00, which looks like no progress and is
+not: hourlies roll at a fixed cap while dailies accumulate one per day, and the
+oldest cannot move until the Aug 19 daily itself ages out at 30 days. Counting by
+retention CLASS is the instrument that shows progress; counting snapshots is not.
+
+Full archival depth (30 daily / 8 weekly / 12 monthly) returns ~2026-09-18.
+
+THE DURABLE FIX IS SHIPPED (commit 08e1470cf). Nothing was watching history depth,
+only recency -- ZFSSnapshotStale reads the NEWEST snapshot and is one series per
+POOL, so a 569-snapshot deletion was invisible while sanoid's next hourly kept the
+gauge healthy. Added zfs_oldest_snapshot_timestamp_seconds and zfs_snapshot_count
+per dataset (60 datasets scraped) plus ZFSSnapshotHistoryTruncated, firing when the
+oldest snapshot jumps forward >7d inside an hour, which aging cannot do. Rule reads
+health=ok with empty lastError and its metric returns 60 series, so it is not a dead
+rule. It cannot be proven to FIRE without destroying snapshots, which I did not do.
+
+THE TRAP IS RECORDED WHERE IT WILL BE READ, not just here: the alert's own
+description tells whoever it wakes that in zfs-prune-snapshots `m` means MINUTES and
+`M` means MONTHS, and that `1m` prunes everything older than sixty seconds.
+
+RESIDUAL RISK, stated plainly rather than closed over: until ~2026-09-18 the
+PostgreSQL mirror's recoverable history is shallower than designed, and it has no
+second layer -- it is a single live rsync mirror, excluded from the B2 restic repo
+(backups.nix:134), with ZFS snapshots as its only history. A data-loss event needing
+a restore older than the current depth would not be servable. That is a known and
+now-monitored exposure, not an open task.
 
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
@@ -2261,15 +2299,16 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 ]
 #+end_src
 
-* TODO [#E] Verify journal retention actually reaches 30 days after the SystemMaxUse 2G->12G fix
+* DEFER [#E] Verify journal retention actually reaches 30 days after the SystemMaxUse 2G->12G fix
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-f9i
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-20 Thu 08:47]
-:MODIFIED: [2026-08-20 Thu 08:47]
+:MODIFIED: [2026-08-20 Thu 12:57]
 :CREATED_BY: johnw
+:DEFERRED: [2026-09-19 Sat 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2316,6 +2355,20 @@ retention, not onset. The unit has existed since 2025-11-06.
 
 DISCOVERED-FROM: chasing two fetchmail-good socket errors in the 2026-08-20 health
 cycle, which turned out to be benign and self-recovering.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 47,
+    "issue_id": "nixos-f9i",
+    "author": "johnw",
+    "text": "Not verifiable before 2026-09-19 by construction: raising SystemMaxUse does not restore vacuumed data, so the window only grows forward from 2026-08-20. Deferred to the date the check becomes meaningful rather than sitting in the ready list as false actionable work.",
+    "created_at": "2026-08-20T19:57:45Z"
+  }
+]
+#+end_src
 
 * DONE [#C] Install Grist behind nginx with PostgreSQL and Redis
 :PROPERTIES:
@@ -3175,6 +3228,73 @@ configuration change rather than anything in this repo.
   }
 ]
 #+end_src
+
+* TODO [#D] Nest setpoint mirror silently drops writes on API 429: no retry, no catch, output unwired
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ii9
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 12:56]
+:MODIFIED: [2026-08-20 Thu 12:56]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+The Node-RED node that mirrors the Upstairs VTherm setpoint onto the Nest fails
+intermittently, and when it fails the setpoint write is LOST -- not retried, not
+caught, not surfaced anywhere except one log line.
+
+FOUND BY: alert NodeRedFlowErrors firing 2026-08-20T19:30Z. The alert did its job;
+this is what was behind it.
+
+TWO DISTINCT FAILURE CLASSES on [api-call-service:mirror setpoint to Nest], across
+the whole retained journal (3 errors on this node):
+
+  2026-08-20 12:14:49  HomeAssistantError -- Google SDM API returned
+      "Too Many Requests response from API (429): RESOURCE_EXHAUSTED (429): Rate limited"
+      while setting climate.upstairs to {'temperature': 25.0}. Google's SDM API has
+      hard per-project quotas; the write was rejected outright.
+  2026-08-19 12:52:04 and 12:52:45  ValidationError (x2)
+
+Per-day error counts for the node's tab over 7 days: 0,2,0,0,1,5,1 -- intermittent,
+not constant, which is why it has not been obvious.
+
+WHY THE FAILURE IS SILENT -- this is the actual defect, verified against flows.json:
+,  * the node's wires are [[]] -- its output is connected to NOTHING
+,  * its tab (Office) has ZERO catch nodes
+,  * its tab has ZERO subflow instances, so the repo's existing "act until observed"
+    retry subflow is not in the path
+So a 429 throws, nothing handles it, and the intended setpoint is discarded. The
+VTherm believes it pushed a value the Nest never received.
+
+OBSERVABLE CONSEQUENCE: the two thermostats diverge and stay diverged until some
+later write succeeds. From HA's recorder on 2026-08-19: at 14:53 the VTherm read 86
+while the Nest read 87; at 21:03 the Nest read 88 with no corresponding VTherm
+change. John noticed exactly this divergence and asked about it on 2026-08-20.
+
+INCIDENTAL, NOT ASSERTED AS A BUG: the node lives on the *Office* tab while
+targeting climate.upstairs. That may be deliberate placement, but it is worth a
+glance -- a node whose name, tab and target disagree is hard to find when it breaks.
+
+NOT FIXED, and deliberately so. This is HVAC behaviour and the fix is a real design
+choice, not a strike:
+,  * a bounded catch -> delay -> retry would ride out a 429, but a retry that lands
+    minutes later re-applies a setpoint the schedule may have already superseded;
+,  * the repo's existing retry subflow exists precisely for this shape, but adding it
+    changes when and how the Nest is commanded;
+,  * rate-limit backoff might belong upstream of the node instead, since hammering a
+    quota-limited API is what produced the 429 in the first place.
+Also relevant: prior experience on this host is that eco-preset writes should be
+routed to the VTherm and never to the Nest, so the mirror direction itself deserves
+scrutiny before adding retries to it.
+
+Note the alert threshold is >0 errors/hour, so it fires on a single occurrence and
+self-resolves an hour later. That is working as designed and was left alone.
+#+end_example
 
 * DONE [#D] docs/README.md index describes files and a script the Nagios removal deleted
 :PROPERTIES:
@@ -5237,15 +5357,16 @@ Standing note for future health cycles: openproject ranking high in a
 'journalctl -p 3' sweep is EXPECTED and benign. Do not re-investigate it.
 #+end_example
 
-* TODO [#D] Node-RED event logging ran away Aug 4-10: 12.08M rows / 3.96GB, below every alert threshold
+* DONE [#D] Node-RED event logging ran away Aug 4-10: 12.08M rows / 3.96GB, below every alert threshold
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-t88
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 13:01]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 13:01]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -5258,6 +5379,55 @@ COMMAND: sudo -u postgres psql -qAtX -d nodered_events -c "select to_char(ts,'YY
 VERIFIER: Independently reproduced. (1) INSTRUMENT: direct SQL against public.msg_events_2026_08, not journald/Prometheus/regex, so none of this host's documented instrument traps apply. My re-run returned byte-identical daily counts (Aug 4=623,133; Aug 5=1,706,987; Aug 6=2,081,824; Aug 7=2,082,095; Aug 8=2,081,618; Aug 9=1,753,315; Aug 10=1,569,849; Aug 11=15,659; then 13,301-17,620/day through Aug 20). Contributor breakdown reproduced exactly (chronos-repeat 'repeat', api-current-state 'Check State', api-call-service 'Perform Action' at 345,260 each; server-events call_service and function 'mirror notify -> persistent' at 345,341). Sizes verified: msg_events_2026_08 = 3963 MB total relation / 12,079,884 rows (slightly above the reported 12,076,366 because baseline inserts continue); msg_events_2026_07 = 501,326 rows / 163 MB; nodered_events DB = 4204 MB. Positive controls: the July partition returns a sane small nonzero for a comparable full-month window, and the error-count probe returns 53 for August (nonzero), so a zero from it would have been meaningful.
 
 (2) NOT ALREADY KNOWN. I traced the loop to node ids <tab>-10650db548d5da66 across tabs 46c722b4b729c4c4, baaed203968dfd8d, 93dd1999f70f45c5, 2a858d6ad567a73d - the four 'Act until observed' subflow instances driving the outdoor/patio plug switches. That made 'this is really the deferred MatterNodeSessionFailures on node 26 (outdoor plug)' the strongest refutation, so I tested it: over Aug 4-10 those nodes logged 40 errors out o
+
+** Close Reason
+
+Closing the monitoring half, which is what was actionable. The runaway itself ended
+on its own on 2026-08-10 and the data is aging out; what mattered was that seven
+days of 130x-normal writes produced NO alert at all.
+
+WHY NOTHING FIRED: the only size rule is PostgreSQLDatabaseLarge at 20 GiB, and
+nodered_events peaked at 4.2 GB. Size answers "is it too big"; it cannot answer "did
+something just change". A 130x rate anomaly never came near an absolute threshold.
+
+FIXED: added PostgreSQLDatabaseGrowthSpike --
+  deriv(pg_database_size_bytes[6h]) * 86400 / 1024 / 1024 > 100, for: 2h
+
+THRESHOLD SIZED BY REPLAY over 30 days of retained data, not guessed:
+  nodered_events quiet baseline   +4..+5 MB/day, flat for 3 weeks either side
+  nodered_events during 08-04..10 +205/+445/+681/+682/+681/+682/+453 MB/day
+  busiest DB on the host, quiet   mailarchiver 7.6 MB/day, then nodered 5.4,
+                                  hass 1.5, everything else <=0.7
+So 100 MB/day sits ~13x above the busiest legitimate baseline and ~6.8x below the
+observed fault. That separation is why one generic rule works instead of a
+per-database threshold.
+
+deriv() not increase(): pg_database_size_bytes is a gauge that also DROPS -- it fell
+134 MB on 2026-08-01 when a monthly partition aged out -- and deriv fits a slope
+rather than assuming monotonicity. A partition drop gives a negative slope and
+cannot trip a > threshold.
+
+VERIFIED BY REPLAYING THE RULE AGAINST REAL HISTORY, which is stronger than "the
+rule loads":
+  2026-08-02 12:00  0 series firing   (before the burst)
+  2026-08-06 12:00  1 series firing   nodered_events
+  2026-08-08 12:00  1 series firing   nodered_events
+  2026-08-11 12:00  0 series firing   (after it stopped)
+  2026-08-16 12:00  0 series firing   (quiet baseline)
+True positive across the fault window, true negative either side.
+
+ALSO VERIFIED LIVE after switch: rule health=ok with empty lastError in group
+database_alerts (30s interval), state=inactive, and the underlying metric has 30d of
+history for 32 databases so it is not a dead rule. It first read health=unknown with
+an empty lastError, which is this host's documented post-restart warmup signature; I
+polled until it settled to ok rather than reporting the unknown as fine.
+
+NOT DONE, and deliberately left: the CAUSE is not fixed. The burst came from a
+chronos-repeat loop ('repeat' -> 'Check State' -> 'Perform Action' at ~4 events/sec,
+345,260 events each on 08-06) whose stop semantics were never confirmed, and nothing
+in the config records why it stopped. That is a Node-RED flow change, so it is
+John's call, and the alert now catches a recurrence within two hours instead of
+seven days. Space will not return until the partition ages out of the >30d rotation.
 
 * DONE [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation
 :PROPERTIES:

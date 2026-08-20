@@ -284,6 +284,64 @@ groups:
           summary: "PostgreSQL database unexpectedly large"
           description: "Database {{ $labels.datname }} is {{ $value | humanize1024 }}B (warn at 20 GiB, sustained 6h; largest monitored DB is normally ~8 GiB). Investigate unexpected growth — a runaway table, missing purge/retention, or bloat."
 
+      # GROWTH RATE, which the absolute-size rule above structurally cannot catch.
+      #
+      # nodered_events ran away 2026-08-04..10 (nixos-t88): 12.08M rows / 3.96 GB,
+      # roughly 2 million events a day against a 14k/day baseline, from a repeat
+      # loop firing ~4 events/sec. Nothing alerted for SEVEN DAYS, because the only
+      # size rule is the 20 GiB cap above and the database peaked at 4.2 GB -- a
+      # 130x rate anomaly that never came close to an absolute threshold. Size
+      # answers "is it too big"; it cannot answer "did something just change".
+      #
+      # THRESHOLD SIZED BY REPLAY over 30 days of retained pg_database_size_bytes,
+      # not guessed. Daily deltas for nodered_events were a flat +4..+5 MB/day for
+      # the three weeks either side of the burst, and +205/+445/+681/+682/+681/
+      # +682/+453 MB/day during it. Across ALL databases in the quiet window the
+      # busiest is mailarchiver at 7.6 MB/day, then nodered_events at 5.4, then
+      # hass at 1.5, everything else at or below 0.7. So 100 MB/day sits ~13x above
+      # the busiest legitimate baseline and ~6.8x below the observed fault: wide
+      # separation in both directions, which is why this can be one generic rule
+      # rather than a per-database threshold.
+      #
+      # deriv() rather than increase(): pg_database_size_bytes is a gauge that also
+      # DROPS (nodered_events fell 134 MB on 2026-08-01 when a monthly partition
+      # aged out), and deriv fits a slope instead of assuming monotonicity. A
+      # partition drop yields a negative slope, which cannot trip a > threshold.
+      #
+      # for: 2h because a legitimate bulk import or restore can briefly exceed this
+      # and is not worth waking anyone; the real event ran for seven days, so 2h
+      # costs nothing in detection latency against the shape this exists to catch.
+      - alert: PostgreSQLDatabaseGrowthSpike
+        expr: deriv(pg_database_size_bytes[6h]) * 86400 / 1024 / 1024 > 100
+        for: 2h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL database {{ $labels.datname }} is growing abnormally fast"
+          description: |
+            `{{ $labels.datname }}` is growing at {{ $value | printf "%.0f" }} MB/day,
+            sustained for 2 hours. Normal for every database on this host is under
+            8 MB/day.
+
+            This is a RATE alert and says nothing about absolute size — the database
+            may still be small. That is the point: the 2026-08-04 Node-RED runaway
+            wrote 12 million rows over seven days and never tripped the 20 GiB size
+            rule, because 4 GB is not large, it is just wrong.
+
+            Find what is writing:
+              sudo -u postgres psql -qAtX -d {{ $labels.datname }} -c \
+                "select schemaname, relname, pg_size_pretty(pg_total_relation_size(relid)) \
+                 from pg_catalog.pg_statio_user_tables order by pg_total_relation_size(relid) desc limit 10;"
+
+            For nodered_events specifically, group msg_events by node_name to find the
+            offending flow — last time it was a chronos-repeat loop whose stop
+            semantics were never confirmed.
+
+            Note space is not reclaimed when the writing stops: partitions drop on a
+            >30d rotation, so the size stays elevated for a month afterwards.
+
       # Exporter self-health. pg_exporter_last_scrape_error == 1 means the
       # postgres-exporter could not complete its scrape (baseline 0); the
       # PostgreSQLDown rule (up==0) only catches a total scrape failure, this

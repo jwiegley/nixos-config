@@ -138,6 +138,54 @@ let
 
             done < <(zpool list -H -o name 2>/dev/null)
 
+            # SNAPSHOT HISTORY DEPTH, per dataset. Added 2026-08-20 after a
+            # 569-snapshot mass deletion went completely undetected.
+            #
+            # zfs_newest_snapshot_timestamp_seconds above cannot see this class of
+            # fault, structurally: it reports only the NEWEST snapshot, and it is a
+            # single per-POOL series. On 2026-08-19 an interactive
+            # `zfs-prune-snapshots 1m ...` destroyed every snapshot older than 60
+            # seconds across 8 datasets -- `m` means MINUTES in that tool, `M` means
+            # months -- taking tank/Backups/PostgreSQL from 30-daily/8-weekly/12-monthly
+            # retention down to ~24 hours. sanoid immediately took a fresh hourly
+            # snapshot, so the newest-snapshot gauge stayed perfectly healthy
+            # throughout and ZFSSnapshotStale never fired. Nothing on this host was
+            # watching history DEPTH, only recency.
+            #
+            # That mattered because modules/services/postgresql-backup.nix:12 states
+            # ZFS snapshots are the ONLY history layer for the PG mirror -- dated
+            # tarballs were deliberately removed, and PostgreSQL is in
+            # backupExcludes for the B2 restic repo.
+            #
+            # One `zfs list` covers every dataset in every pool (measured 0.66s for
+            # 3912 snapshots across 60 datasets), so this is emitted once outside the
+            # per-pool loop rather than per-pool.
+            # Grouped into one redirect deliberately: writeShellApplication treats
+            # lint warnings as build errors, and four consecutive individual
+            # `>> "$TEMP_FILE"` appends trip SC2129.
+            #
+            # Do not begin a comment line here with the word "shellcheck" — a
+            # comment starting `# shellcheck ...` is parsed as a DIRECTIVE, and an
+            # earlier version of this very note failed the build with SC1072/SC1073.
+            {
+              echo "# HELP zfs_oldest_snapshot_timestamp_seconds Creation time of the OLDEST snapshot of this dataset (history depth; 0 if none)"
+              echo "# TYPE zfs_oldest_snapshot_timestamp_seconds gauge"
+              echo "# HELP zfs_snapshot_count Number of snapshots currently existing for this dataset"
+              echo "# TYPE zfs_snapshot_count gauge"
+              zfs list -t snapshot -H -p -o name,creation -s creation 2>/dev/null | awk -F'\t' '
+                {
+                  ds = $1; sub(/@.*/, "", ds)
+                  if (!(ds in oldest)) oldest[ds] = $2   # input sorted ascending, so first seen is oldest
+                  count[ds]++
+                }
+                END {
+                  for (d in oldest) {
+                    printf "zfs_oldest_snapshot_timestamp_seconds{dataset=\"%s\"} %s\n", d, oldest[d]
+                    printf "zfs_snapshot_count{dataset=\"%s\"} %d\n", d, count[d]
+                  }
+                }'
+            } >> "$TEMP_FILE"
+
             # Collector liveness: record when this run finished so a stalled or
             # crashed collector (no fresh textfile) is detectable even while the
             # last-written values look healthy. Emitted once (no pool label).

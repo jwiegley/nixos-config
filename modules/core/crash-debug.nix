@@ -94,6 +94,19 @@
   services.rsyslogd = {
     enable = true;
     defaultConfig = ''
+      # File ownership/mode MUST come before the actions below.
+      #
+      # rsyslog applies these legacy $-directives only to actions defined AFTER
+      # them. They used to live in extraConfig, which NixOS appends BELOW this
+      # block, so they applied to nothing and all four files were created 0644
+      # by umask instead of 0640. kern.log/syslog/daemon.log only ever read 0640
+      # because logrotate's `create 0640 root root` recreated them; auth.log had
+      # no logrotate stanza (added 2026-08-20) and so sat world-readable at 0644
+      # from 2025-11-24 onward. Moving these three lines up is the actual fix.
+      $FileOwner root
+      $FileGroup root
+      $FileCreateMode 0640
+
       # Log kernel messages to kern.log
       kern.*                          /var/log/kern.log
 
@@ -110,10 +123,9 @@
       *.emerg                         :omusrmsg:*
     '';
     extraConfig = ''
-      # Ensure kern.log directory exists and set proper ownership
-      $FileOwner root
-      $FileGroup root
-      $FileCreateMode 0640
+      # $FileOwner/$FileGroup/$FileCreateMode deliberately moved into
+      # defaultConfig above -- see the note there. Anything left here is appended
+      # BELOW the file actions and therefore applies to no action at all.
       $DirCreateMode 0755
       $Umask 0022
     '';
@@ -291,9 +303,42 @@
   # --------------------------------------------------------------------------
   # Log Rotation for Traditional Log Files
   # --------------------------------------------------------------------------
+  # NOTE ON postrotate, corrected 2026-08-20. Every stanza below used to run
+  # `systemctl reload rsyslog`, which was a guaranteed no-op twice over: there is
+  # no rsyslog.service on this host (LoadState=not-found -- the unit is
+  # syslog.service), and syslog.service reports CanReload=no, so even the correct
+  # name could not have worked. `2>/dev/null || true` swallowed both failures.
+  #
+  # The consequence was not cosmetic: rsyslogd kept writing to the rotated-away
+  # inodes, so /var/log/syslog.1 reached 5.6 GB and daemon.log.1 3.7 GB while the
+  # live files sat at 0 bytes -- and `notifempty` then skips the empty live file
+  # forever, so those two could never rotate again. Sending SIGHUP is what makes
+  # rsyslog reopen its files; it is the documented mechanism and works on a unit
+  # that cannot reload.
+  #
+  # Verify after changing: rotate, then confirm rsyslogd's open fds point at the
+  # live files rather than the .1 ones:
+  #   sudo ls -l /proc/$(pgrep -x rsyslogd)/fd | grep /var/log
   services.logrotate = {
     enable = true;
     settings = {
+      # Rotate auth.log. ADDED 2026-08-20: this was the one rsyslog target with no
+      # stanza at all, so it never rotated and never got recreated at 0640. It had
+      # grown to 1.8 GB / 15.3M lines since 2025-11-24 at mode 0644, readable by
+      # every local account -- it carries sudo command lines and sshd source
+      # addresses. Note the sibling comment below: daemon.log hit this same bug and
+      # was fixed; auth.log was missed in that pass.
+      "/var/log/auth.log" = {
+        rotate = 7;
+        frequency = "weekly";
+        compress = true;
+        delaycompress = true;
+        missingok = true;
+        notifempty = true;
+        create = "0640 root root";
+        postrotate = "systemctl kill -s HUP syslog.service 2>/dev/null || true";
+      };
+
       # Rotate kern.log specifically
       "/var/log/kern.log" = {
         rotate = 7;
@@ -303,7 +348,7 @@
         missingok = true;
         notifempty = true;
         create = "0640 root root";
-        postrotate = "systemctl reload rsyslog 2>/dev/null || true";
+        postrotate = "systemctl kill -s HUP syslog.service 2>/dev/null || true";
       };
 
       # Rotate syslog
@@ -315,7 +360,7 @@
         missingok = true;
         notifempty = true;
         create = "0640 root root";
-        postrotate = "systemctl reload rsyslog 2>/dev/null || true";
+        postrotate = "systemctl kill -s HUP syslog.service 2>/dev/null || true";
       };
 
       # Rotate daemon.log — rsyslog routes daemon.* here.
@@ -328,7 +373,7 @@
         missingok = true;
         notifempty = true;
         create = "0640 root root";
-        postrotate = "systemctl reload rsyslog 2>/dev/null || true";
+        postrotate = "systemctl kill -s HUP syslog.service 2>/dev/null || true";
       };
     };
   };

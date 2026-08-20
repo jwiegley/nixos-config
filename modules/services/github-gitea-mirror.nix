@@ -403,7 +403,20 @@ in
       description = "Retry Gitea push mirrors so a transient failure self-heals";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-0/2:00:00";
+        # Every 2 hours. Written as a bare time spec on purpose.
+        #
+        # This was "*-*-0/2:00:00" from 2026-08-19 until 2026-08-20, which systemd
+        # parses as DATE "*-*-0/2" plus TIME "00:00" -- i.e. day-of-month 0/2. Days
+        # start at 1, so 0 is out of range and the whole unit was rejected with
+        # LoadState=bad-setting. It never fired once, silently disarming the very
+        # self-heal this timer exists to provide. `systemctl list-timers` showed it
+        # with dashes in every column, which is easy to read past.
+        #
+        # Verify after any change to this line -- a bad OnCalendar fails at LOAD
+        # time, not at build time, so the rebuild succeeds either way:
+        #   systemctl show sync-push-mirrors.timer -p LoadState --value   # -> loaded
+        #   systemd-analyze calendar '0/2:00:00'                          # -> parses
+        OnCalendar = "0/2:00:00";
         Persistent = true;
         RandomizedDelaySec = "10min";
         Unit = "sync-push-mirrors.service";

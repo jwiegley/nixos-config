@@ -210,6 +210,63 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
+* TODO [#B] 569 ZFS snapshots destroyed by a zfs-prune-snapshots m/M unit confusion; PG backup history cut to ~24h
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-2ys
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 11:13]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+On 2026-08-19 at 10:22 PDT, 569 ZFS snapshots were destroyed across 8 datasets by a
+single interactive command. tank/Backups/PostgreSQL went from 30-daily/8-weekly/
+12-monthly retention to ~24 hours of history. The snapshots are unrecoverable.
+
+WHAT RAN: `sudo zfs-prune-snapshots 1m tank/Backups/PostgreSQL tank/Backups/TechnitiumDNS
+tank/Home tank/Models/oMLX tank/Pictures tank/Video tank/work/positron`, from an
+interactive TTY (pts/6, PWD=/tank/Backups/Contracts/Positron/nfs), no -n dry-run.
+
+THE TRAP: in zfs-prune-snapshots 1.5.0, the suffix `m` means MINUTES and `M` means
+MONTHS (source line 207: `m) seconds=$((num * 60))`). So `1m` pruned everything older
+than SIXTY SECONDS, not one month. Confirmed by snapshots taken 22 minutes earlier
+being destroyed.
+
+PER-DATASET DESTROY COUNTS from zpool history (on-disk pool metadata, immune to
+journal rotation): Video 78, Video/Zoom 76, Pictures 76, Home 76, TechnitiumDNS 75,
+Models/oMLX 69, work/positron 65, Backups/PostgreSQL 54.
+
+WHY POSTGRESQL IS THE SHARP ONE: modules/services/postgresql-backup.nix:12 states ZFS
+snapshots are the ONLY history layer -- dated tarballs were deliberately removed. And
+modules/storage/backups.nix:134 puts "PostgreSQL" in backupExcludes, so it is NOT in
+the B2 restic repo either. So for ~24h of wall time the PG mirror had no recoverable
+history beyond the live copy. Depth is rebuilding at one snapshot per hour and will
+reach full archival depth ~30 days from 2026-08-19.
+
+NOT SANOID: the destroyed set includes an autosnap_..._yearly snapshot only 3 weeks
+old, which the archival template (5 yearly / 12 monthly) would never expire. 569
+destroys in 7 minutes confined to exactly the named datasets is not a retention pass.
+Controls confirm retention is healthy elsewhere: tank/Backups/Git 75 snapshots back to
+2025-11-11, tank/Documents 77 back to 2025-03-25.
+
+MONITORING GAP -- FIXED 2026-08-20, and this is the durable part. Nothing detected
+this for over a day. ZFSSnapshotStale tests only the age of the NEWEST snapshot, and
+zfs_newest_snapshot_timestamp_seconds is one series PER POOL, so it structurally
+cannot see history loss: sanoid took a fresh hourly snapshot minutes after the prune
+and the gauge never twitched. Added zfs_oldest_snapshot_timestamp_seconds and
+zfs_snapshot_count per dataset (60 datasets, verified scraped) plus alert
+ZFSSnapshotHistoryTruncated, which fires when the oldest snapshot jumps forward by
+more than 7 days inside an hour -- impossible through normal aging.
+
+FOR JOHN, and the only reason this stays open: nothing here is recoverable and nothing
+further is actionable by me. Worth knowing (a) the m/M trap, since the same keystroke
+would do it again, and (b) that PG's recovery depth is thin until ~2026-09-18.
+
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -4388,6 +4445,75 @@ of CPU and finished in seconds.
 VERIFIED after /etc/nixos/build switch: sync-push-mirrors.timer is present and
 enabled, Persistent=yes, RandomizedDelayUSec=10min.
 
+* TODO [#E] Five small monitoring/housekeeping gaps: dead image-age collector, orphaned litellm stores, unmonitored prune timer and redis-grist
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-qmf
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 11:13]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Five separate monitoring/housekeeping gaps found by the 2026-08-20 sweep, all INFO,
+all adversarially verified. Grouped because each is small and they share a theme:
+things that stopped being watched after a service was removed, or were never watched.
+
+
+### [info] dmesg ring buffer retains only ~34 minutes because ForwardToKMsg=yes floods it with userspace journal records
+
+EVIDENCE: The kernel ring buffer spans only 10:02:05 to 10:35:51 (~34 min, 627 lines, 134,920 bytes, kernel-default size with no log_buf_len on /proc/cmdline). The content is overwhelmingly userspace: `dmesg -x` shows facility `user:notice` (92) and `user:err` (86), and line prefixes are podman/sudo/redis/matter-server/openproject — only 1 line is an audit record, so this is not audit noise. Cause is ForwardToKMsg=yes at /etc/nixos/modules/core/crash-debug.nix:78, whose comment reads 'Forward kernel messages to kmsg for dmesg visibility' — that is inverted: ForwardToKMsg pushes journal (userspace) records INTO kmsg; kernel messages already originate there. Net effect is the opposite of the stated intent — zero usb/scsi/uas/xhci lines survive in the ring buffer. This matters on a host with a documented USB/UAS enclosure bridge-hang failure mode, where `dmesg` is the first-reflex tool and the diagno
+
+COMMAND: sudo dmesg -T | head -1; sudo dmesg -T | tail -1; sudo dmesg -x | grep -oE '^[a-z]+ +:[a-z]+' | sort | uniq -c; grep -rn ForwardToKMsg /etc/nixos
+
+### [info] /var/lib/containers/litellm holds 3.0G under an unallocated UID with no user manager left to prune it, contradicting the documented "prune timer handles them" assumption
+
+EVIDENCE: `getent passwd litellm` -> NO SUCH USER; `getent passwd 948` and `getent group 939` both unallocated; `find /var/lib/containers -maxdepth 1 -type d -printf '%u:%g %f\n'` prints "948:939 litellm" while every other entry resolves to a real name; `stat -c '%U:%G'` -> UNKNOWN:UNKNOWN. `du -sh /var/lib/containers/litellm` = 3.0G of 30G total. There is no linger entry for litellm and 0 litellm systemd units remain, so the cleanup was otherwise thorough. The gap is structural: podman-image-prune is a `systemd --user` timer inside the user's own manager (modules/users/home-manager/rootless-podman-image-prune.nix), so once the account and its linger are gone the timer can never run again and that 3.0G is unreclaimable by any scheduled job. The residue memory explicitly files "Dangling podman images — a weekly home-manager prune timer handles them" under "Apparent residue that is HARMLESS — do not
+
+COMMAND: getent passwd litellm; getent passwd 948; getent group 939; sudo find /var/lib/containers -maxdepth 1 -mindepth 1 -type d -printf '%u:%g %f\n' | sort; sudo du -sh /var/lib/containers/litellm
+
+### [info] container_image_local_age_days has never emitted a single sample — podman's .Created format is unparseable by date -d, so image-age monitoring is silently blind
+
+EVIDENCE: The staleness exporter declares the gauge (container-image-staleness-exporter.nix:154-155 HELP/TYPE, :209 the emit) but /var/lib/prometheus-node-exporter-textfiles/container_image_staleness.prom contains exactly 2 matching lines — the HELP and TYPE headers — and ZERO sample lines (`grep -m5 '^container_image_local_age_days'` → no match). count(container_image_local_age_days) = 0 now and count(count_over_time(...[30d])) = 0, and the metric name is absent from Prometheus's __name__ index entirely (while litellm_* names dead since 2026-08-01 are still indexed), so it has never been written. Root cause proven: `podman image inspect ghcr.io/home-assistant-libs/python-matter-server:stable --format '{{.Created}}'` returns `2025-08-14 08:01:41.197445042 +0000 UTC`, and `date -d` on that string exits 1 (GNU date cannot take a trailing ' UTC' after an explicit '+0000'), so the `if [[ -n "$created_
+
+COMMAND: C=$(sudo podman image inspect ghcr.io/home-assistant-libs/python-matter-server:stable --format '{{.Created}}'); echo "[$C]"; date -d "$C" +%s; echo rc=$?; date -d "2026-07-15T09:22:31Z" +%s; sudo grep -c container_image_
+
+### [info] Orphaned 2.73 GiB podman store for the removed litellm user, unpruned and still publishing a phantom metric 19 days after service removal
+
+EVIDENCE: /var/lib/containers/litellm is 2,932,285,153 bytes (2.73 GiB) and `ls -la /var/lib/containers/` shows it owned by unresolved numeric uid 948 / gid 939 (every other store resolves to a live name); `getent passwd litellm` returns nothing. Its mtime is Aug 1, matching the 2026-08-01 LiteLLM removal. container_store_size_bytes{user="litellm"} is still live at 2.73 GiB, and query_range over 30d shows it climbing 1.094 → 2.787 GiB through 08-01 then flat at 2.731 GiB ever since — i.e. the exporter's runtime glob over /var/lib/containers keeps reporting disk for a service that no longer exists. Nothing will reclaim it: the weekly prune is a home-manager systemd --user timer installed per rootless user (rootless-podman-image-prune.nix:38 keys on home.homeDirectory), so deleting the user deleted its pruner along with it. Linger was correctly cleaned (`ls /var/lib/systemd/linger/` has no litellm),
+
+COMMAND: sudo du -sb /var/lib/containers/litellm; sudo ls -la /var/lib/containers/ | grep litellm; getent passwd litellm; curl -s http://localhost:9090/api/v1/query --data-urlencode 'query=container_store_size_bytes{user="litellm
+
+### [info] ContainerPruneStale's documented absent() arm does not exist, so a rootless prune timer that stops emitting is unmonitored
+
+EVIDENCE: container-health.yaml:80-84 comments that container_image_prune_last_trigger_seconds 'is only emitted for users whose timer exists AND has fired at least once, so a never-fired timer shows up as absent — caught by the absent() arm below', but `grep -n 'absent' modules/monitoring/alerts/container-health.yaml` returns exactly one line — line 82, the comment itself. There is no absent() rule anywhere in the file. The single ContainerPruneStale expr is `time() - container_image_prune_last_trigger_seconds > 9*24*3600`, which by construction cannot fire on a series that has vanished. This is not hypothetical coverage loss: the metric currently has 10 series while /var/lib/containers holds 12 non-root stores, and the litellm case above is a live example of a store whose prune series disappeared with zero alerting. The remaining gap-check, ContainerStoreSizeHigh, only trips at 60 GiB, so a store
+
+COMMAND: grep -n "absent\|PruneStale\|prune_last_trigger" /etc/nixos/modules/monitoring/alerts/container-health.yaml; grep -rc "absent(" /etc/nixos/modules/monitoring/alerts/*.yaml | grep -v ':0'
+
+### [info] redis-grist is the only Redis instance with zero monitoring coverage: absent from both the redis-multi scrape targets and the systemd backstop alert
+
+EVIDENCE: 7 Redis units are active (gitea, grist, immich, openproject, rspamd, searxng, speedtest-tracker). Prometheus `count(redis_up)` returns 7 series, but the distinct instances are redis://127.0.0.1:{6381,6383,6386,6387}, unix:///run/redis-{gitea,immich}/redis.sock, and job="redis" localhost:9121 (which duplicates rspamd via -redis.addr). There is no series for grist on 6388, even though `ss -tlnp` shows 0.0.0.0:6388 LISTEN and the unit is active. modules/monitoring/services/redis-exporter.nix lists six redis-multi targets and its own comment claims 'All five TCP-listening instances are reachable on 127.0.0.1' while enumerating only four (6383, 6386, 6381, 6387) — grist (6388, declared in modules/containers/grist-quadlet.nix:137) is the missed fifth. The documented backstop is also scoped past it: alerts/redis.yaml:152 matches `redis-(gitea|immich)\.service` only, and no alert file mentions g
+
+COMMAND: curl -s http://127.0.0.1:9090/api/v1/query?query=redis_up; /run/current-system/sw/bin/ss -tlnp | grep -E ':6388|:6381|:6383|:6386|:6387'; grep -rn 'grist' /etc/nixos/modules/monitoring/alerts/*.yaml; curl -s 'http://127.
+
+
+NONE FIXED THIS CYCLE -- scope control, not difficulty. The cycle already shipped the
+timer fix, the auth.log rotation/permission fix and the ZFS snapshot-depth monitoring,
+and each of these deserves its own verification rather than being swept in.
+
+The two litellm items are the same root cause seen twice (an orphaned per-user podman
+store and home directory left behind by the 2026-08-01 service removal, ~5.7G total,
+under a UID with no user manager left to prune it). The image-age collector emitting
+NOTHING is the most interesting of the five: podman's .Created format is unparseable
+by `date -d`, so container_image_local_age_days has never produced a single sample and
+image-age monitoring has been silently blind since it was written.
+#+end_example
+
 * DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -4405,6 +4531,56 @@ enabled, Persistent=yes, RandomizedDelayUSec=10min.
 :END:
 
 Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
+
+* TODO [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-r1n
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 11:13]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+### Postfix serves a TLS cert expiring in 34 days; postfix-cert-renewal has been renewing the wrong directory for ~11 months while reporting success
+
+EVIDENCE: Postfix reads its chain from /var/lib/postfix-certs/smtp.vulcan.lan.fullchain.crt (postconf -h smtpd_tls_chain_files). Those files have mtime Sep 23 2025 and are owned johnw:users, not root. Live on the wire, ports 25, 587 and 465 all present CN=smtp.vulcan.lan with notAfter=Sep 23 19:32:38 2026 -- 34 days out; Prometheus agrees (certificate_days_until_expiry{name="smtp.vulcan.lan"}=34). Meanwhile postfix-cert-renewal.service (Result=success, ExecMainStatus=0, last triggered Sat 2026-08-01 04:11:14) execs /etc/nixos/certs/postfix-cert-renew.sh, whose POSTFIX_CERT_DIR="/etc/postfix/certs" -- a different directory. /etc/postfix/certs/{mail,smtp,imap}.crt are indeed fresh (mtime Aug 1 04:11) but nothing references them. The script has no expiry threshold guard, so it renews unconditionally into the orphan path every month. Dovecot is the control: dovecot-cert-renew.sh sets DOVECOT_CERT_DIR="/var/lib/dovecot-certs", those files updated Aug 1 04:38, and ports 993/143 serve notAfter=Aug 1 2027. Next postfix timer run is Sep 1 and will again miss; the cert dies Sep 23, taking submission/smtps TLS with it.
+
+COMMAND: sudo postconf -h smtpd_tls_chain_files; sudo ls -la /var/lib/postfix-certs/; grep -nE 'CERT_DIR=' /etc/nixos/certs/postfix-cert-renew.sh; echo | timeout 8 openssl s_client -connect 127.0.0.1:587 -starttls smtp 2>/dev/null | openssl x509 -noout -subject -enddate
+
+VERIFIER: Fully reproduced with four independent instruments that agree, and it survives all four refutation questions.
+
+INSTRUMENT SOUNDNESS (Q1): Not an artifact. (a) `sudo postconf -n | grep -iE 'certs|\.crt'` shows the ONLY cert path in postfix's live config is `smtpd_tls_chain_files = /var/lib/postfix-certs/smtp.vulcan.lan.{key,fullchain.crt}`; `/etc/postfix/certs` appears nowhere in the running config (smtp_tls_CAfile is the nss-cacert store path). (b) On disk, /var/lib/postfix-certs/* are all mtime Sep 23 2025 owned johnw:users, and `openssl x509` gives subject=CN=smtp.vulcan.lan, notAfter=Sep 23 19:32:38 2026. /etc/postfix/certs/smtp.crt is mtime Aug 1 04:11 with subject=CN=smtp.vulcan.lan, O=Vulcan Mail Services, notAfter=Aug 1 11:11:14 2027. (c) On the wire, ports 25, 587 and 465 each return subject=CN=smtp.vulcan.lan with NO O= component and notAfter=Sep 23 2026 -- the differing subject DN between the two files is a discriminating fingerprint, so the wire is unambiguously serving the 2025 file, not the Aug 2026 one. (d) Prometheus: certificate_days_until_expiry{name="smtp.vulcan.lan", path="/var/lib/postfix-certs/smtp.vulcan.lan.crt"} = 34. No journal retention, TSDB-choice, regex
+
+### The bare vulcan.lan vhost certificate expires in 33 days and no unit or timer renews it
+
+EVIDENCE: /var/lib/nginx-certs/vulcan.lan.crt expires Sep 23 10:03:26 2026 (33 days; certificate_days_until_expiry{name="vulcan.lan"}=33) and backs a live TLS vhost -- the generated nginx.conf has server_name vulcan.lan vulcan on listen 443 ssl with ssl_certificate /var/lib/nginx-certs/vulcan.lan.crt, and openssl s_client -servername vulcan.lan returns subject=CN=vulcan.lan. The renewal script's DOMAINS array does not contain it, and its own header states vulcan.lan is not renewed there and has no automatic renewal. A repo-wide grep for a renewer found only modules/services/web.nix (the vhost that consumes it) and CERTIFICATES.md; the certificates.nix hit is step-ca's own dnsNames list, not a renewer. Two other live vhosts share this class with more runway: changes.vulcan.lan (71 days) and mailarchiver.vulcan.lan (87 days), both with real server_name blocks and no renewer. The generic CertificateExpiringSoon rule (<=30 days) will start firing for vulcan.lan in about 3 days, but firing does not fix it since no automation exists to renew it.
+
+COMMAND: cd /var/lib/nginx-certs && for f in *.crt; do end=$(sudo openssl x509 -in "$f" -noout -enddate | cut -d= -f2); echo $(( ($(date -d "$end" +%s)-$(date +%s))/86400 )) "$f"; done | sort -n | head; sed -n '1,20p' /etc/nixos/certs/renew-nginx-certs.sh
+
+VERIFIER: REPRODUCED — could not refute. Evidence is direct openssl, immune to this host's documented instrument traps (no journal retention, no TSDB, no post-switch reset).
+
+1. INSTRUMENT SOUND. openssl x509 -enddate on /var/lib/nginx-certs/vulcan.lan.crt => Sep 23 10:03:26 2026 GMT = 33 days. openssl s_client -connect 127.0.0.1:443 -servername vulcan.lan => subject=CN=vulcan.lan, same notAfter, so it backs a LIVE vhost. Generated nginx.conf (/nix/store/bg5dy1h0iab4nm12fn59zyk5fjcyp9s3-nginx.conf:1337-1340) has server_name vulcan.lan vulcan on listen 443 ssl with that cert.
+
+NEGATIVE CLAIM POSITIVE-CONTROLLED (the part I tried hardest to break):
+ - nginx-cert-renewal.timer (OnCalendar=*-*-01 03:30) -> nginx-cert-renewal.service -> store wrapper that literally execs /etc/nixos/certs/renew-nginx-certs.sh. So the deployed unit runs the EXACT repo file read; no "store copy has a different DOMAINS list" escape hatch. That array has no vulcan.lan.
+ - systemctl list-unit-files | grep -i cert shows seven per-service *-certificate.service units (atd, budgetboard, glances, grafana, qdrant, speedtest-tracker, victoriametrics); none for the bare host.
+ - Grep positive control: grep for grafana.vulcan.l
+
+
+BOTH NEED JOHN: certificate issuance is explicitly his call on this host -- the
+standing instruction is to ask rather than generate. I have not run
+renew-certificate.sh and will not. The renewal AUTOMATION defect (postfix renewing
+the wrong directory while reporting success) is fixable from the repo once John has
+decided how he wants the certs issued.
+
+DEADLINES ARE REAL AND CLOSE: 33 and 34 days from 2026-08-20.
+#+end_example
 
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:
@@ -4997,6 +5173,28 @@ nobody is misled into thinking this is handled.
 Standing note for future health cycles: openproject ranking high in a
 'journalctl -p 3' sweep is EXPECTED and benign. Do not re-investigate it.
 #+end_example
+
+* TODO [#D] Node-RED event logging ran away Aug 4-10: 12.08M rows / 3.96GB, below every alert threshold
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-t88
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 11:13]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+EVIDENCE: Daily row counts in nodered_events.public.msg_events_2026_08: Aug 1-3 at 10,205-14,156/day, then Aug 4 = 623,133, Aug 5 = 1,706,987, Aug 6 = 2,081,824, Aug 7 = 2,082,095, Aug 8 = 2,081,618, Aug 9 = 1,753,315, Aug 10 = 1,569,849, then Aug 11 = 15,659 and back to a 13,301-17,620/day baseline through Aug 20. The partition now holds 12,076,366 rows at 3963 MB versus msg_events_2026_07 at 501,326 rows / 163 MB for a full month. Top contributors on a burst day (Aug 6) were a tight repeat loop at ~4 events/sec: chronos-repeat 'repeat', api-current-state 'Check State' and api-call-service 'Perform Action' at 345,260 events each, plus function 'mirror notify → persistent' and server-events call_service at 345,341 each. This inflates the nightly pg_dump — /tank/Backups/PostgreSQL/db/nodered_events is 3.8G apparent, second only to mailarchiver — and it went unnoticed because the only size alert is pg_database_size_bytes > 20GB (alerts/database.yaml:277) and the database sits at 4204 MB. The burst stopped on its own; nothing in the config records a fix, so the loop's stop semantics remain unconfirmed. Space will not be reclaimed until the partition ages out of the 'drop >30d' rotation (node-red-event-logger-rotate.timer, last ran successfully today 03:30).
+
+COMMAND: sudo -u postgres psql -qAtX -d nodered_events -c "select to_char(ts,'YYYY-MM-DD'), count(*) from public.msg_events_2026_08 group by 1 order by 1;"; sudo -u postgres psql -qAtX -d nodered_events -c "select hook, node_type, node_name, count(*) from public.msg_events_2026_08 where ts >= '2026-08-06' and ts < '2026-08-07' group by 1,2,3 order by 4 desc limit 8;"
+
+VERIFIER: Independently reproduced. (1) INSTRUMENT: direct SQL against public.msg_events_2026_08, not journald/Prometheus/regex, so none of this host's documented instrument traps apply. My re-run returned byte-identical daily counts (Aug 4=623,133; Aug 5=1,706,987; Aug 6=2,081,824; Aug 7=2,082,095; Aug 8=2,081,618; Aug 9=1,753,315; Aug 10=1,569,849; Aug 11=15,659; then 13,301-17,620/day through Aug 20). Contributor breakdown reproduced exactly (chronos-repeat 'repeat', api-current-state 'Check State', api-call-service 'Perform Action' at 345,260 each; server-events call_service and function 'mirror notify -> persistent' at 345,341). Sizes verified: msg_events_2026_08 = 3963 MB total relation / 12,079,884 rows (slightly above the reported 12,076,366 because baseline inserts continue); msg_events_2026_07 = 501,326 rows / 163 MB; nodered_events DB = 4204 MB. Positive controls: the July partition returns a sane small nonzero for a comparable full-month window, and the error-count probe returns 53 for August (nonzero), so a zero from it would have been meaningful.
+
+(2) NOT ALREADY KNOWN. I traced the loop to node ids <tab>-10650db548d5da66 across tabs 46c722b4b729c4c4, baaed203968dfd8d, 93dd1999f70f45c5, 2a858d6ad567a73d - the four 'Act until observed' subflow instances driving the outdoor/patio plug switches. That made 'this is really the deferred MatterNodeSessionFailures on node 26 (outdoor plug)' the strongest refutation, so I tested it: over Aug 4-10 those nodes logged 40 errors out o
 
 * DONE [#D] nix-config mirror race: resolved by John (gitea sole writer), pending clean-window confirmation
 :PROPERTIES:

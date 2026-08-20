@@ -233,6 +233,61 @@ groups:
           summary: "ZFS pool {{ $labels.pool }} has no recent snapshots"
           description: "The newest snapshot under pool {{ $labels.pool }} is over 6 hours old (last: {{ $value | humanizeDuration }} ago). Sanoid (sanoid.timer, hourly) may have stopped taking snapshots — check systemctl status sanoid.timer and journalctl -u sanoid."
 
+      # SNAPSHOT HISTORY LOSS, which the rule above structurally cannot see.
+      #
+      # ZFSSnapshotStale watches only the NEWEST snapshot, per POOL. On 2026-08-19 an
+      # interactive `zfs-prune-snapshots 1m <7 datasets>` destroyed 569 snapshots --
+      # `m` is MINUTES in that tool, `M` is months, so it pruned everything older than
+      # 60 seconds. tank/Backups/PostgreSQL went from 30-daily/8-weekly/12-monthly
+      # retention to ~24 hours. sanoid took a fresh hourly snapshot minutes later, so
+      # the newest-snapshot gauge never so much as twitched and nothing fired for over
+      # a day. Recency and depth are different properties and need different rules.
+      #
+      # WHY A JUMP AND NOT A THRESHOLD: absolute depth cannot be thresholded here,
+      # because a legitimately new dataset has shallow history and would alert forever
+      # (the dead-rule-by-permanent-firing failure mode this repo keeps hitting). Under
+      # normal retention the oldest snapshot creeps forward by roughly one interval per
+      # interval; only a destructive prune moves it forward by weeks at once. 7 days of
+      # movement inside 1 hour cannot happen through aging.
+      #
+      # for: 10m, not 0m: sanoid's own retention pass legitimately destroys the oldest
+      # snapshots, and a dataset whose retention window genuinely rolls over at an
+      # hourly/daily boundary can show a brief step. 10m clears that without hiding a
+      # real event, which stays true for hours.
+      - alert: ZFSSnapshotHistoryTruncated
+        expr: increase(zfs_oldest_snapshot_timestamp_seconds[1h]) > 7 * 86400
+        for: 10m
+        labels:
+          severity: critical
+          category: storage
+          service: zfs
+        annotations:
+          summary: "ZFS dataset {{ $labels.dataset }} lost snapshot history"
+          description: |
+            The OLDEST snapshot of `{{ $labels.dataset }}` jumped forward by
+            {{ $value | humanizeDuration }} within one hour. Normal retention ages the
+            oldest snapshot forward slowly; a jump this large means snapshots were
+            destroyed, not expired.
+
+            This is the one ZFS failure mode that looks perfectly healthy from every
+            other angle: the pool is ONLINE, the newest snapshot is fresh, and
+            ZFSSnapshotStale stays silent, because only the DEPTH of history changed.
+
+            Check what was destroyed and by whom — zpool history is on-disk pool
+            metadata and survives journal rotation:
+              sudo zpool history tank | grep destroy | tail -50
+              zfs list -t snapshot -r {{ $labels.dataset }} -o name,creation -s creation | head
+
+            If this was a `zfs-prune-snapshots` invocation, check the unit suffix:
+            in that tool `m` means MINUTES and `M` means MONTHS, so `1m` prunes
+            everything older than sixty seconds. That exact confusion cost 569
+            snapshots across 8 datasets on 2026-08-19.
+
+            Destroyed snapshots cannot be recovered. What matters now is whether the
+            dataset had another history layer: tank/Backups/PostgreSQL does NOT — it
+            is a single live rsync mirror, excluded from the B2 restic repo, with ZFS
+            snapshots as its only history.
+
       # Collector liveness. The zfs-pool-health-metrics timer runs every 2min; if
       # the textfile stops being refreshed every other ZFS rule above goes quietly
       # stale (last value frozen, never "firing"). >15m = several missed runs.

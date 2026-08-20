@@ -120,7 +120,7 @@ external-facing services tunnel out via Cloudflare.
   SearXNG, OpenProject, and Speedtest Tracker.
 - **Qdrant** (native): vector database at `qdrant.vulcan.lan`; paired with
   `qdrant-inference-bridge` (translates Qdrant inference to OpenAI-compatible
-  endpoints) and a Nagios health check.
+  endpoints).
 - **Mosquitto** (native): MQTT broker for Home Assistant and HASS.Agent.
 
 ### Monitoring, Logging & Alerting
@@ -135,8 +135,6 @@ external-facing services tunnel out via Cloudflare.
   community dashboards and a custom DNS-query-logs board.
 - **Loki + Promtail** (native): log aggregation/shipping at `loki.vulcan.lan`
   and `promtail.vulcan.lan`.
-- **Nagios** (native): classic host/service monitor at `nagios.vulcan.lan` with
-  daily HTML reports and discovery scripts for HA, AIDE, Qdrant, and atd.
 - **Glances** (native): live system view at `glances.vulcan.lan`.
 - **Blackbox monitoring** (native): HTTP / ICMP probes for local, DNS, and
   external host groups.
@@ -172,7 +170,7 @@ external-facing services tunnel out via Cloudflare.
   CA-trust-store integration so all system services trust the local CA.
 - **SOPS-Nix** (native, activation-time): age-encrypted secrets decrypted into
   `/run/secrets/` at activation.
-- **AIDE** (native, scheduled): file-system integrity baseline with both Nagios
+- **AIDE** (native, scheduled): file-system integrity baseline with both Prometheus
   and Prometheus integration.
 - **Security hardening** (native): kernel sysctls, module blacklists (including
   AF_ALG to mitigate CVE-2026-31431), and systemd unit hardening.
@@ -241,7 +239,7 @@ external-facing services tunnel out via Cloudflare.
   `vdirsyncer.vulcan.lan`, paired with alerts.
 - **atd web UI** (native): web front-end for `at`-job submission at
   `atd.vulcan.lan`, split across the `atd`, `atd-web`, and `atd-nginx` modules,
-  with its own exporter, alert rules, and Nagios checks.
+  with its own exporter and alert rules.
 
 ### Backup & Disaster Recovery
 
@@ -573,7 +571,6 @@ Two levels deep, as of 2026-07-27 (per-directory `.nix` counts in parentheses):
 │   │                              #   alerts/ (51 Prometheus rule YAMLs),
 │   │                              #   loki-rules/ (10), vm-alerts/ (3),
 │   │                              #   dashboards/, grafana-dashboards/,
-│   │                              #   nagios-plugins/, scripts/
 │   ├── users/        (25)         # johnw, assembly, bia, nasimw, rbcca,
 │   │                              #   container-users-dedicated, home-manager/ (19)
 │   ├── containers/   (22)         # quadlet.nix, copyparty-container.nix,
@@ -605,7 +602,6 @@ Two levels deep, as of 2026-07-27 (per-directory `.nix` counts in parentheses):
 ├── CLAUDE.md · SECURITY.md
 └── (separate, gitignored git repos consumed as flake inputs)
     ├── secrets/secrets.yaml       # SOPS-encrypted secrets  (input `secrets`)
-    ├── nagios/hosts.nix           # private Nagios topology (input `nagios`)
     └── firmware/                  # Apple firmware blobs    (input `firmware`)
 ```
 
@@ -772,7 +768,7 @@ Flake inputs (see `flake.nix` for current pin rationales):
 - `stock-trader`: pinned to Gitea tag `v0.2.0` (`flake = false`)
 - `git-scripts`, `org-jw`, `una`, `sizes`, `pushme`,
   `sacramento-cluster-ics`: personal tooling and data repos
-- `secrets`, `nagios`, `firmware`: local, gitignored data repos
+- `secrets`, `firmware`: local, gitignored data repos
   (`git+file:///etc/nixos/...`, all `flake = false`)
 
 Add new inputs in `flake.nix`:

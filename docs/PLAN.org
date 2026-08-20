@@ -92,6 +92,66 @@ BOTH HALVES DONE, per John's choice.
    comment now says so, and warns that any future edit to this setting belongs in a
    planned window.
 
+* TODO [#E] Finish the Nagios documentation sweep (stage 6 of the removal)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-0ar
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-19 Wed 22:38]
+:MODIFIED: [2026-08-19 Wed 22:38]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Stage 6 of the Nagios removal (nixos-a71) is PARTIALLY done. The functional removal is
+complete and verified; what remains is prose.
+
+DONE, because a stale mention in these actively misleads:
+,  * CLAUDE.md -- the service URL, the nagios/ entry in the repo tree, and the Important
+    Files pointer to a module that no longer exists. This one mattered most: CLAUDE.md is
+    loaded into every session, so a stale entry misleads every future run.
+,  * README.md -- 7 mentions, now 0
+,  * docs/COLD_REBOOT_CHECKLIST.md -- the reboot runbook step, now 0
+,  * docs/README.md -- index entries for the two spec documents, both deleted
+,  * docs/NAGIOS_PROMETHEUS_MIRROR_SPEC.md and docs/HOME_ASSISTANT_NAGIOS_MONITORING.md
+    -- deleted outright
+
+REMAINING, none of it load-bearing:
+,  * ~23 .nix files with comment-only mentions. Several are not simple strikes and need
+    CORRECTING, because the reasoning around them is still valid and only the Nagios
+    citation is stale:
+      - modules/security/aide.nix and modules/monitoring/services/aide-metrics.nix claim
+        aide is "in NEITHER TextfileCollectorStale tier". That was ALREADY false before
+        this removal -- aide is in TextfileCollectorStaleDaily. Repoint, do not delete.
+      - modules/monitoring/services/alerting.nix references sharing parkedAlertFiles with
+        a mirror module deleted on 2026-07-31. Keep parkedAlertFiles and the assertion.
+      - modules/services/blackbox-monitoring.nix has ~9 comments sitting directly above
+        targets that must SURVIVE. Rewrite the prose; touch no target list.
+      - modules/monitoring/alerts/meta-monitoring.yaml annotation says the 30d textfile
+        range is 53-61; measured today it is 50-61 with a threshold floor of 45.
+,  * ~13 alert/loki YAML files with comment mentions
+,  * ~9 scripts
+,  * docs/MONITORING_CONVENTIONS.md (14), docs/MONITORING_COVERAGE_PLAN.md (65),
+    docs/MONITORING_DEFERRED_SPECS.md (56), docs/REBOOT_RESILIENCE.md (6), plus dated
+    historical audits.
+
+  docs/MONITORING_DEFERRED_SPECS.md:240 is a LIVE INSTRUCTION that now contradicts
+  reality -- "Keep for now: nagios-status-exporter.nix and alerts/nagios.yaml... Do NOT
+  remove them in the same commit". Both are gone. Strike it before it misleads someone.
+
+For dated historical records (HEALTH_AUDIT_2026-07-28, POST_REBOOT_AUDIT_2026-07-03 and
+similar) prefer a bracketed "[Nagios removed 2026-08-19]" note over rewriting history.
+
+Verification for the whole sweep:
+    grep -RIn -i nagios --include='*.nix' /etc/nixos | grep -v '^/etc/nixos/.git'
+    grep -RIn -i nagios /etc/nixos/modules/monitoring/alerts /etc/nixos/modules/monitoring/loki-rules
+Both should end empty; docs should end with only deliberately-retained history.
+#+end_example
+
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1229,15 +1289,16 @@ pre-filter .tmp leftovers in the destination (~3.4G from 2026-06-26), which John
 has been asked about and which are not part of this issue.
 #+end_example
 
-* TODO [#C] Nagios removal is half done: mirror gone, 302 native checks and 36 .nix files remain
+* DONE [#C] Nagios removal is half done: mirror gone, 302 native checks and 36 .nix files remain
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-a71
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 20:49]
-:MODIFIED: [2026-08-19 Wed 19:12]
+:MODIFIED: [2026-08-19 Wed 22:38]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 22:38]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1295,6 +1356,62 @@ distinct check name, diff that set against the Prometheus rule set to produce
 the genuine gap list, and treat cross-host checks as their own sub-problem.
 That inventory is safe to produce autonomously and would turn this into a
 countable backlog -- worth doing first, and separately from any deletion.
+
+** Close Reason
+
+#+begin_example
+Nagios is removed. John approved proceeding on 2026-08-19 after the coverage precondition
+he attached on 2026-07-31 was verified satisfied.
+
+EXECUTED IN SIX STAGES, each built, switched, verified and committed separately so any one
+could be reverted alone:
+
+  1. Prometheus-side watchers. Rules 489->482, nagios-named rules 7->0, textfile series
+     51->50 (floor 45), no rule expression mentions nagios. Done FIRST so every later
+     stage was alert-quiet while Nagios degraded and died.
+  2. Relocated sops.secrets."monitoring/home-assistant-token" to its sole surviving
+     consumer, re-owned root:root, and deleted the HA Nagios check. This had to precede
+     stage 4: sops-install-secrets validates EVERY secret before writing ANY, and
+     /run/secrets.d is ramfs, so one unresolvable owner aborts the run and the next boot
+     comes up with no secrets at all.
+  3. Satellite modules and orphans -- 8 files. nagios-tier1-mirror.nix was checked rather
+     than trusted, because the comment above its import argued it was load-bearing; it is
+     390 non-comment lines declaring nothing but Nagios object definitions.
+  4. The core: nagios.nix, the daily report, the flake input, and the nagios user/group.
+     Relocated the `z /tank/Backups 0711 johnw johnw -` rule and its mount ordering into
+     local-backup.nix first -- nagios.nix was the SOLE declarative assertion of that mode.
+  5. On-disk state, with John's explicit approval: /var/lib/nagios (3.6 GB), /var/log/nagios
+     (19 MB), the shredded htpasswd bcrypt hash, the orphaned certificate and key, the run
+     directory and the timer stamps.
+  6. Documentation -- the operational surfaces only. The remainder is nixos-0ar.
+
+FINAL VERIFICATION:
+,  * nagios user and group both gone; 0 units, 0 unit files
+,  * ZERO files under /var /etc /home /run owned by the removed uid 11 or gid 966
+,  * 67 secrets present -- exactly one fewer than before, that one being
+    nagios-admin-password
+,  * /tank/Backups still johnw:johnw 711, with the rule now deployed from local-backup.nix
+,  * 0 active Prometheus targets matching the vhost; certificate exporter emits no nagios
+    series after the cert files were removed
+,  * 0 failed units; only the Watchdog deadman firing
+,  * hass-integration-exporter, the one capability that was genuinely Nagios-unique, still
+    exits 0 and writes 68 config-entry and 12 integration series
+
+WHAT REPLACED IT: the 2026-08-19 audit diffed all 302 native checks class-by-class and
+found Prometheus watching more in every class -- 46 ICMP targets vs 23 check_ping, 569
+systemd units vs 140 check_systemd_service*, 41 cert series vs 30 check_ssl_cert. The one
+real gap (ssh 22, imap 143, imaps 993, submission 587) was closed beforehand with a
+blackbox_tcp job and a TCPServiceDown rule.
+
+A MISTAKE WORTH RECORDING: in stage 2 a regex using `(?:[^\n]*\n)*?` before an anchor
+matched across intervening `define service` blocks and cut 57KB instead of 1.2KB. The byte
+count caught it and it was reverted from git immediately. Every later block removal
+asserted a maximum line count before cutting -- a guard that would have refused the bad
+match outright. Related: `grep -c 'define service'` reports 90 rather than 73 because it
+also matches `define servicegroup`.
+
+Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional.
+#+end_example
 
 ** Comments
 

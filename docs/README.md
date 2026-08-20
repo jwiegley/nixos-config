@@ -120,9 +120,7 @@ Two consequences worth acting on before any deletion pass:
 
 | Document | What it covers / who needs it | Status |
 |---|---|---|
-| [NAGIOS_PROMETHEUS_MIRROR_SPEC.md](NAGIOS_PROMETHEUS_MIRROR_SPEC.md) | **SUPERSEDED 2026-07-31** — the generated per-rule mirror (tier 2) and the divergence reconciler are gone; only the hand-curated tier-1 freshness mirror survives. Design history. | current |
 | [HOME_ASSISTANT_ALERTING.md](HOME_ASSISTANT_ALERTING.md) | Why the 23 Prometheus `homeassistant_*` alert rules could never fire (HA pushes to VictoriaMetrics and is never scraped into Prometheus), what replaced them in Node-RED, and the original rule intent kept as an implementation reference. | current |
-| [HOME_ASSISTANT_NAGIOS_MONITORING.md](HOME_ASSISTANT_NAGIOS_MONITORING.md) | Setting up and running `check_homeassistant_integrations` — thresholds, exit codes, token provisioning, usage examples, and the explicit limits of what the script can see. For Nagios/HA integration-health work. | current |
 | [TECHNITIUM_DNS_MONITORING_SETUP.md](TECHNITIUM_DNS_MONITORING_SETUP.md) | One-time setup for the Technitium DNS exporter on `localhost:9274`: building the container image locally because none is published, generating the API token, and wiring Prometheus, Grafana and Alertmanager. | current |
 | [MAC_STUDIO_POWER_MONITORING.md](MAC_STUDIO_POWER_MONITORING.md) | How Apple Silicon SMC power, current and temperature sensors reach Prometheus through `macsmc_hwmon`, the full metric list, the Grafana dashboard, and example queries. Reference for anyone touching power telemetry on this hardware. | current |
 | [OPNSENSE-EXPORTER-SETUP.md](OPNSENSE-EXPORTER-SETUP.md) | Deploying the OPNsense Prometheus exporter as a Podman quadlet on `localhost:9273` — API key provisioning, SOPS wiring, verification, and the exact series it collects. | current |

@@ -41,7 +41,7 @@ a fix whose *cold-boot* behavior is still unproven:
 | 11 | Monitoring stack active; Prometheus rules `health=err == 0`; Loki ruler ≥ 10 groups; **Watchdog firing** | **31512a2 (findings D/E/F)** + the broader dead-metric / coverage sweeps. `health=err == 0` proves no rule references a non-existent metric (the `systemd_unit_state` → `node_systemd_unit_state` class of bug). Watchdog **firing is good** — its *absence* means the alert pipeline died. |
 | 12 | Prometheus targets: ≤ 3 down | Coverage sweep added many exporters/probes; a clean boot should bring them all up. |
 | 13 | PostgreSQL active; `shared_preload_libraries` includes `pg_stat_statements` | Validates the PG config persisted across the restart. |
-| 14 | node-red / nagios / home-assistant active | (baseline app health.) |
+| 14 | node-red / home-assistant active | (baseline app health.) |
 | 15 | All 9 monitoring exporter timers active | **31512a2 / Phase 3–4 coverage** — confirms the timer fleet armed at boot. |
 | 16 | Boot timing (`systemd-analyze time` + `blame`) | Informational only — not a gate. |
 

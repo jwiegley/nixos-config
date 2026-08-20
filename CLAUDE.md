@@ -365,7 +365,6 @@ sudo ss -tunlp | grep :PORT_NUMBER
 **Monitoring**
 - Grafana: https://grafana.vulcan.lan
 - Prometheus: https://prometheus.vulcan.lan
-- Nagios: https://nagios.vulcan.lan
 
 **Email**
 ```bash
@@ -412,8 +411,6 @@ files at the repo root are `flake.nix` and `models.nix`; the host configuration 
 ├── docs/                    # Additional documentation
 ├── secrets/                 # SOPS store — SEPARATE git repo, flake input `secrets`
 │   └── secrets.yaml         #   (gitignored by this repo)
-└── nagios/                  # SEPARATE git repo, flake input `nagios`
-    └── hosts.nix            #   Private network topology (gitignored by this repo)
 ```
 
 ## Troubleshooting
@@ -438,8 +435,6 @@ journalctl -u <service> -f  # View logs
 
 ## Important Files
 
-- `/etc/nixos/nagios/hosts.nix` - Private network topology (separate git repo, flake
-  input `nagios`; imported at `modules/services/nagios.nix` as `nagios.outPath + "/hosts.nix"`)
 - `/etc/nixos/secrets/secrets.yaml` - SOPS-encrypted secrets (separate git repo,
   flake input `secrets`; excluded from this repo by `.gitignore`)
 - `/etc/nixos/hosts/vulcan/default.nix` - The host configuration (there is no `configuration.nix`)

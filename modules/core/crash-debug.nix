@@ -24,9 +24,37 @@
       # Compress journal files to save disk space
       Compress=yes
 
-      # Set reasonable size limits
-      # SystemMaxUse: Maximum disk space for journal files
-      SystemMaxUse=2G
+      # SystemMaxUse: Maximum disk space for journal files.
+      #
+      # 12G, raised from 2G on 2026-08-20 because 2G silently defeated this
+      # block's whole purpose. MEASURED before changing: the journal sat at 1.9G
+      # against the 2G cap, and the oldest entry for every busy system unit was
+      # 2026-08-14 15:05 -- sshd, postgresql and fetchmail-good all began there,
+      # despite those units running for months. Effective retention was ~6 DAYS
+      # against the MaxRetentionSec=30day declared below, an ~80% shortfall, and
+      # MaxFileSec=1month was equally moot with 48M files rotating several times
+      # a day.
+      #
+      # The size cap always wins over the time cap in journald: it vacuums the
+      # oldest files as soon as the total exceeds SystemMaxUse, whatever
+      # MaxRetentionSec says. So the two settings were quietly contradicting each
+      # other and the smaller one governed.
+      #
+      # 12G is sized from the observed high-water rate: 1.9G over the 6 retained
+      # days is ~317 MB/day, and that window INCLUDES the 08-14..08-17
+      # matter-server storm, so it is a busy-period figure rather than a quiet
+      # one. 30 days at that rate is ~9.5G; 12G leaves headroom without pretending
+      # to more precision than a 6-day sample supports.
+      #
+      # Safe against a full disk regardless of this number: SystemKeepFree=10G
+      # below is the real guard, and journald honours it ahead of SystemMaxUse.
+      # / has 1.2T free at 27% used, so 12G is ~1% of free space.
+      #
+      # Why this matters beyond tidiness: this host's whole retrospective-analysis
+      # practice -- "did this alert fire last week", "when did this unit start
+      # failing" -- reads the journal. At 6 days those questions silently return
+      # an empty or truncated answer that looks exactly like a clean result.
+      SystemMaxUse=12G
 
       # SystemKeepFree: Minimum free space to maintain
       SystemKeepFree=10G

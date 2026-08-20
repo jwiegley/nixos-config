@@ -2204,6 +2204,62 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 ]
 #+end_src
 
+* TODO [#E] Verify journal retention actually reaches 30 days after the SystemMaxUse 2G->12G fix
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-f9i
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-20 Thu 08:47]
+:MODIFIED: [2026-08-20 Thu 08:47]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Follow-up to the SystemMaxUse fix applied 2026-08-20. The change is verified; the
+OUTCOME cannot be verified for 30 days, and this issue exists so that gap does not
+quietly become an assumption.
+
+WHAT WAS WRONG: modules/core/crash-debug.nix declared MaxRetentionSec=30day and
+MaxFileSec=1month, but also SystemMaxUse=2G. journald vacuums on size before time,
+so the 2G cap governed and the time settings were dead letters. Measured before
+changing: journal at 1.9G against the 2G cap, and the oldest entry for every busy
+system unit was 2026-08-14 15:05 -- sshd, postgresql and fetchmail-good all began
+exactly there despite running for months. Effective retention ~6 days against 30
+declared, an ~80% shortfall.
+
+FIXED: SystemMaxUse=2G -> 12G, sized from the observed ~317 MB/day (1.9G over 6
+days, a window that INCLUDES the 08-14..08-17 matter-server storm, so a busy-period
+rate rather than a quiet one). 30 days at that rate is ~9.5G.
+
+VERIFIED NOW, from journald's own accounting rather than the config file:
+  "System Journal (...) is 1.9G, max 12G, 10G free."
+journald restarted cleanly (Result=success) and no longer reports the cap as
+binding.
+
+NOT VERIFIED, and cannot be until ~2026-09-19: that retention actually reaches 30
+days. Raising the cap does not restore already-vacuumed data -- everything before
+2026-08-14 is permanently gone -- so the window grows forward from today only.
+
+CHECK ON OR AFTER 2026-09-19:
+  sudo journalctl -u sshd.service -o short-iso --no-pager -q | head -1
+  sudo journalctl --disk-usage
+Expect the oldest sshd entry to be ~30 days old and usage below 12G. If usage is
+pinned at 12G with retention under 30 days, the daily rate is higher than measured
+and the cap needs raising again -- or the noisy unit needs finding first.
+
+WHY THIS MATTERED MORE THAN A TIDINESS FIX: this host's retrospective practice
+leans on the journal -- "when did this unit start failing", "did this alert fire
+last week". At 6 days those questions return truncated answers that look exactly
+like clean results. It bit me directly in this cycle: I read fetchmail-good's
+failures as beginning on 08-15 with "nothing in the 29 days before", which was
+retention, not onset. The unit has existed since 2025-11-06.
+
+DISCOVERED-FROM: chasing two fetchmail-good socket errors in the 2026-08-20 health
+cycle, which turned out to be benign and self-recovering.
+
 * DONE [#C] Install Grist behind nginx with PostgreSQL and Redis
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3620,7 +3676,7 @@ repo will not shrink for ~7 days (--keep-daily 7).
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 04:51]
-:MODIFIED: [2026-08-20 Thu 04:51]
+:MODIFIED: [2026-08-20 Thu 08:47]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -3686,8 +3742,8 @@ INSTRUMENT NOTES, both of which bit me here:
   {
     "issue_id": "nixos-ly2",
     "depends_on_id": "nixos-h2u",
-    "type": "blocks",
-    "created_at": "2026-08-20T11:51:34.644428646Z",
+    "type": "related",
+    "created_at": "2026-08-20T15:47:43.188401277Z",
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""
@@ -3811,7 +3867,7 @@ visible; it does not decide that.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 16:50]
-:MODIFIED: [2026-08-19 Wed 23:56]
+:MODIFIED: [2026-08-20 Thu 08:47]
 :CREATED_BY: johnw
 :FINISHED: [2026-08-19 Wed 23:56]
 :SOURCE_REPO: nixos
@@ -3910,8 +3966,8 @@ that is where the mass is, not CASE.
   {
     "issue_id": "nixos-mqk",
     "depends_on_id": "nixos-h2u",
-    "type": "blocks",
-    "created_at": "2026-08-20T06:56:05.597186723Z",
+    "type": "related",
+    "created_at": "2026-08-20T15:47:52.086700925Z",
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""

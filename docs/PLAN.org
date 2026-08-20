@@ -2762,7 +2762,7 @@ VERIFIED:
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-15 Sat 09:04]
+:MODIFIED: [2026-08-19 Wed 23:56]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2783,43 +2783,41 @@ Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
 ** Notes
 
-2026-08-14 20:40 -- THIRD OBSERVED SYMPTOM: failed service calls in Node-RED.
-John reported this repeating:
+2026-08-19 OBSERVATION: the plug's matter-server error traffic has COLLAPSED, and
+this issue turns out to have been the dominant source of matter-server log volume
+all along.
 
-    HomeAssistantError: src/protocols/secure_channel/CASESession.cpp:594:
-    CHIP Error 0x00000032: Timeout
-    source: {id: 93dd1999f70f45c5-3bcb451b88c7cc7a, type: api-call-service,
-             name: "Perform Action"}
+Node 0x1A = 26 = the outdoor plug, error lines per calendar day:
+  08-14  1577    08-17   782
+  08-15  2231    08-18     0
+  08-16  1872    08-19     9
 
-Traced it: the composite id is <flow>-<node>. 93dd1999f70f45c5 is a subflow
-INSTANCE named "Turn on Patio Lights" on the Home tab; 3bcb451b88c7cc7a is the
-api-call-service inside subflow 862be551b633e122, calling switch.turn_on. That
-instance's env sets EntityID = switch.smart_outdoor_plug_switch_2 -- this very
-plug. Same subflow also drives "Turn off Patio Lights"; the Outdoor Lights pair
-inherit their entity.
+Against a whole-unit total of 3485/4787/4181/2351/613/799 on the same days, node 26
+was roughly HALF of everything matter-server logged, and the unit-wide ~83% decline
+that nixos-mqk was tracking is essentially this line going quiet. mqk has been
+closed and pointed here; it was measuring this issue from the log-volume side.
 
-So it is the SAME root cause reaching the automation layer, not a new fault:
-link drops -> matter-server cannot establish a CASE session -> switch.turn_on
-times out -> the Node-RED node throws.
+THE PLUG IS ALIVE, not gone -- checked first, because zero errors and a dead device
+are indistinguishable in the log. switch.smart_outdoor_plug_switch_1 and _2 are both
+in HA's recorder with state=off, last written 23:01 today, hours after the errors
+stopped. So this is the plug no longer failing, not the plug no longer present.
 
-IT IS ALREADY SELF-HEALING. Subflow 862be551b633e122 contains exactly the
-act-until-observed machinery: chronos-repeat, an api-current-state "Check State",
-and a catch node named "catch Matter timeout -> sto[p]" -- written specifically
-for this error. The recorder confirms the outcome: the plug was off through
-19:16 and came on at 20:00, with repeats at 20:03, 20:08 and 20:11. No light
-failed.
+WHAT THIS DOES NOT ESTABLISH: why. Nothing was changed on this device or on the
+WiFi path by me, and matter-server has not restarted since 2026-08-10 15:19:03
+(NRestarts=0), so it is not a fresh process logging less. An unexplained remission
+is not a fix, and the user-visible symptoms this issue was actually filed for --
+late turn-off and failed Node-RED service calls -- are not measured by error-line
+counts at all.
 
-INSTRUMENT NOTE for future cycles: `journalctl -u node-red` shows ZERO
-CASESession errors. That is not evidence of absence -- Node-RED surfaces node
-errors to the debug sidebar and to catch nodes, not to the journal, unless a
-catch node explicitly forwards them. Use the debug pane or a catch node, not the
-journal, to count these.
+LEFT OPEN DELIBERATELY. The right test is behavioural, not log-volume: does the plug
+now turn off on schedule, and do the Node-RED service calls to it still fail? That
+needs a few days of normal operation to answer, and it is John's call whether the
+current quiet is worth trusting.
 
-CORRECTION to my earlier framing on this issue. I described the impact as
-"telemetry only, plus a late 11pm turn-off". That understated it: service calls
-are genuinely failing and being retried, so the automation layer is doing real
-work to paper over the fault. Still not urgent and still not autonomous to fix
--- the remedy remains the AP-side signal check -- but it is more than cosmetic.
+Also worth recording for contrast: node 17 (nixos-rsn, the Thread door sensor) went
+the OPPOSITE way over the same window, from 0-30/day up to 51 today. Different
+transport -- node 26 is WiFi FeatureMap=1, node 17 is Thread FeatureMap=2 -- so
+whatever changed did not move both, which argues against a single fabric-wide cause.
 
 ** Comments
 
@@ -3621,15 +3619,16 @@ reports it locked with zero unavailable entries), so the options remain fixing i
 radio/position or reclassifying it as iot-noping. The rule makes the decay
 visible; it does not decide that.
 
-* TODO [#E] Baseline: matter-server emits ~4000 error-priority log lines per day
+* DONE [#E] Baseline: matter-server emits ~4000 error-priority log lines per day
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-mqk
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 16:50]
-:MODIFIED: [2026-08-19 Wed 19:15]
+:MODIFIED: [2026-08-19 Wed 23:56]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:56]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3670,6 +3669,70 @@ Deliberately left alone because turning down error-level logging on the Matter
 fabric could hide the next real fault, and the Aqara Hub M3 being the sole
 Thread border router already makes this fabric a single point of failure worth
 over-observing rather than under-observing.
+
+** Close Reason
+
+Baseline established, re-measured a third time, and -- more usefully -- ATTRIBUTED.
+Closing because the deliverable was the baseline, and the number this issue is
+named for is no longer current or independent.
+
+CORRECTED SERIES (calendar days, local):
+  08-14  3485    08-17  2351
+  08-15  4787    08-18   613
+  08-16  4181    08-19   799
+Sums to 16222, matching the independent 7d total exactly.
+
+These do not match the earlier comment's day -1/-2 figures (1388/1428) because that
+pass used rolling 24h windows and this one uses calendar days. Different instrument,
+not a contradiction -- worth recording so the next reader does not treat it as one.
+
+THE REAL FINDING: this was never an independent issue. Breaking the lines down by
+peer node id shows node 0x1A = 26 = the outdoor plug is the dominant driver, and
+total volume tracks its collapse almost exactly:
+
+  date     node17  node26  node0   total
+  08-14        14    1577    546    3485
+  08-15         7    2231    760    4787
+  08-16        30    1872    664    4181
+  08-17         0     782    291    2351
+  08-18         3       0      6     613
+  08-19        51       9     73     799
+
+So "matter-server emits ~4000 error lines/day" was, in substance, a measurement of
+the outdoor plug flapping -- i.e. of nixos-h2u seen from the log-volume side. The
+~83% decline is node 26 going quiet, not a general improvement in matter-server.
+
+NOT A DEVICE LOSS, checked because a quiet log is exactly what a dead device looks
+like: both nodes are alive in HA's recorder. switch.smart_outdoor_plug_switch_1/2
+wrote state at 23:01 today, and the door sensors at 19:26 (the HA restart). Neither
+reads unavailable.
+
+INSTRUMENT NOTE, and I walked into it before catching it: node references are
+`peer <000000000000001A` with NO closing bracket. My first pattern required one and
+returned a confident zero for EVERY node on every day -- including days that
+demonstrably had thousands of hits. Positive-control the pattern against a known-busy
+day before believing any zero here. This is the same trap recorded on nixos-rsn,
+which I re-hit despite having written the warning.
+
+Remaining volume is dominated by "Subscription Liveness timeout" (530 of 799 today),
+a different class from the CASE failures -- if anyone wants to reduce this further,
+that is where the mass is, not CASE.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-mqk",
+    "depends_on_id": "nixos-h2u",
+    "type": "blocks",
+    "created_at": "2026-08-20T06:56:05.597186723Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
 
 ** Comments
 
@@ -4097,14 +4160,14 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#D] Matter node 17 (Thread door sensor): one concentrated CASE-failure episode on Aug 16, quiet since
+* TODO [#D] Matter node 17 (Thread door sensor): recurring CASE-failure episodes, Aug 16 and Aug 19
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rsn
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-19 Wed 19:15]
+:MODIFIED: [2026-08-19 Wed 23:57]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -4162,6 +4225,55 @@ this host is that it does not help and the 2026-08-10 storm began at a restart.
 Mapping node 17 to a room needs HA's device registry under /var/lib/hass/.storage,
 which is on the forbidden-read list, so John will need to match the serial in the
 HA UI (Settings -> Devices -> Matter).
+
+** Notes
+
+2026-08-19 RE-MEASUREMENT: "quiet since" IS NO LONGER TRUE. There is a second,
+LARGER episode today.
+
+Node 17 (peer <0000000000000011, Aqara Door and Window Sensor P2, Thread):
+
+  08-14  14      08-17   0
+  08-15   7      08-18   3
+  08-16  30      08-19  51   <- today, 70% larger than the Aug 16 episode
+
+All 51 of today's lines are the same signature as before: "CASESession timed out
+while...". Not a new fault class.
+
+SHAPE: light morning scatter then a sustained evening block.
+  06:00  3    07:00  5    09:00  1
+  18:00  9    19:00 12    20:00 10    21:00 11
+Last event 21:36:44; quiet for 2h19m at time of writing. So this reads as episodic
+in the same way Aug 16 did, not as a permanent degradation.
+
+The 18:00-21:00 block is NOT explained by my rebuilds. It starts at 18:00, well
+before the 19:22:50 build that restarted HA and PostgreSQL, and continues past it
+to 21:36.
+
+THE DEVICE IS NOT GONE, which was the first thing worth ruling out because a quiet
+node and a dead node look identical in the log: binary_sensor.front_door_door is
+present in HA's recorder with state=off, last written 19:26 (the HA restart). It
+does not read unavailable. Door sensors only write on change, so no rows since
+midnight is expected, not suspicious.
+
+STILL NOT ACTING, and this is why: node 17 is Thread, and per the fabric topology
+the Aqara Hub M3 is the only Thread border router on this fabric -- a single point
+of failure whose remedy is physical. Restarting matter-server is explicitly the
+wrong move. Two episodes three days apart, both self-clearing, with the device
+still reporting, is evidence for a flaky border-router path rather than anything
+fixable from this repo.
+
+FOR JOHN: if a third episode lands, the border router is the thing to look at
+physically -- placement, power, or interference -- not the sensor and not the
+server. Worth knowing that node 26 (the outdoor plug, nixos-h2u) went the OTHER
+way over the same window, collapsing from ~1900/day to single digits, so whatever
+changed on the fabric did not affect both nodes the same way. They are different
+transports: node 26 is WiFi, node 17 is Thread.
+
+INSTRUMENT: I re-hit the exact trap this issue warns about. The real format is
+`peer <0000000000000011` with NO closing bracket; my pattern required one and
+returned zero for every node on every day. Positive-control against a known-busy
+day before trusting a zero.
 
 ** Dependencies
 

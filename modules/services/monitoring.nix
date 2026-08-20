@@ -66,6 +66,8 @@ let
     runtimeInputs = with pkgs; [
       coreutils
       gawk
+      gnugrep
+      gnused
       rclone
     ];
     text = ''
@@ -157,6 +159,36 @@ let
         printf '%-24s %10s  %s\n' "$1" "$2" "$3"
       }
 
+      # rclone's stderr is CAPTURED, not discarded. It used to go to /dev/null,
+      # which cost nothing on the happy path and everything on the one that
+      # matters: a review run saw jwiegley-src report 6.5GB against a true
+      # 15.7GB, with the newest-object time moving BACKWARD -- the signature of
+      # a listing that stopped partway through the key space, since restic
+      # writes index/ and snapshots/ objects last and they sort after data/.
+      # That row was entirely plausible on its face. It was not reproducible and
+      # may have been an artifact of that run's stubbed rclone, so it is NOT
+      # recorded here as a live bug.
+      #
+      # What is recorded is that the guards below cannot catch it: `-eq 0` and
+      # the numeric-shape test detect total failure, not partial. A byte-count
+      # floor would only be a guess, so no threshold is imposed. Keeping stderr
+      # is the cheap half of the fix -- it makes the next occurrence
+      # DIAGNOSABLE instead of invisible, with no false positives.
+      errfile=$(mktemp)
+      trap 'rm -f "$errfile"' EXIT
+
+      # Last non-blank stderr line, appended to an anomalous row. Truncated, and
+      # anything shaped like a credential assignment is scrubbed first: this text
+      # is emailed, and rclone is not obliged to keep secrets out of its errors.
+      why_suffix() {
+        local why
+        why=$(sed -E 's/((key|secret|token|password)[A-Za-z_]*[[:space:]]*[=:][[:space:]]*)[^[:space:],;]+/\1[REDACTED]/Ig' \
+                "$errfile" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 || true)
+        if [ -n "$why" ]; then
+          printf ' [%.160s]' "$why"
+        fi
+      }
+
       bucket_row() {
         local bucket="$1" endpoint="$2"
         local remaining cap out bytes newest
@@ -191,10 +223,26 @@ let
         # string context. An unset awk variable is both "" and 0, and the
         # timestamps begin with digits, so leaving it implicit invites a
         # numeric comparison on the first row.
+        # --time-format is pinned rather than left to rclone's default. Two
+        # things depend on the exact rendering and neither is obvious: the
+        # column is sliced positionally (''${newest:0:16}), and the awk
+        # comparison below relies on lexicographic order matching chronological
+        # order. Both hold for this layout and both break silently if an rclone
+        # release ever changes the default -- one renders garbage, the other
+        # picks the wrong "newest". Asserting the format costs nothing.
+        #
+        # These times are LOCAL, and so is the OnCalendar of every restic timer
+        # in modules/storage/backups.nix, so the column and the schedule are
+        # directly comparable -- as of 2026-08-19 all ten rows land within
+        # minutes of their configured time. Said explicitly because a UTC/local
+        # mix-up has already caused one bad incident reconstruction on this
+        # host; do not "normalise" this to UTC without changing that too.
+        : >"$errfile"
         if out=$(timeout "$cap" rclone lsf \
                    ":s3,provider=Other,env_auth=true,endpoint=''${endpoint}:''${bucket}" \
                    --recursive --files-only --use-server-modtime \
-                   --format st --separator '|' 2>/dev/null \
+                   --format st --separator '|' \
+                   --time-format '2006-01-02 15:04:05' 2>"$errfile" \
                  | awk -F'|' '
                      { bytes += $1; if ($2 "" > newest "") newest = $2 }
                      END { printf "%d|%s\n", bytes, (newest == "" ? "(empty)" : newest) }
@@ -229,7 +277,7 @@ let
           # repo with zero objects means the backup is gone.
           if [ "$bytes" -eq 0 ]; then
             empty_buckets="$empty_buckets $bucket"
-            row "$bucket" "EMPTY" "no objects found -- INVESTIGATE"
+            row "$bucket" "EMPTY" "no objects found -- INVESTIGATE$(why_suffix)"
             return 0
           fi
 
@@ -240,7 +288,7 @@ let
           row "$bucket" "$(fmt_size "$bytes")" "''${newest:0:16}"
         else
           unreported="$unreported $bucket"
-          row "$bucket" "ERROR" "B2 listing failed or timed out"
+          row "$bucket" "ERROR" "B2 listing failed or timed out$(why_suffix)"
         fi
       }
 

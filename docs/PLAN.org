@@ -2361,15 +2361,16 @@ VERIFIED END TO END:
 ,  * 0 failed units afterwards
 #+end_example
 
-* TODO [#C] Three Google Calendar entries in setup_error, and no alert covers config-entry health
+* DEFER [#C] Three Google Calendar entries in setup_error, and no alert covers config-entry health
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-fgp
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 14:02]
-:MODIFIED: [2026-08-19 Wed 23:50]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2489,6 +2490,13 @@ rather than sitting unnoticed for two days.
     "author": "johnw",
     "text": "2026-08-19: the \"Testing publishing status\" hypothesis in this issue is NOT SUPPORTED by\nthe evidence, and should not be acted on. Recording that before anyone does the work it\nimplies.\n\nTHE HYPOTHESIS. This issue asserts as STRONGLY SUSPECTED that the Google Cloud OAuth\nconsent screen is in \"Testing\" publishing status, which expires refresh tokens every 7\nDAYS, and that publishing the app is therefore the durable fix. That was a reasonable\nguess -- this host has been bitten by exactly that shape twice (the four disabled rclone\ncloud remotes, and the Schwab token for stock-trader).\n\nWHAT THE DATA SAYS. Token-refresh failures in the home-assistant journal, per week:\n\n    week -1: 18      <-- the episode this issue was filed about\n    week -2:  0\n    week -3:  0\n    week -4:  0\n    week -5:  0\n    week -6:  0\n\nThe journal reaches back to 2026-07-11 and the calendar entities have existed since at\nleast 2026-07-20 in the recorder. A 7-day token expiry over four-plus weeks of operation\nwould have produced a failure episode roughly EVERY WEEK -- four or five of them. There is\nexactly one, and it is the most recent. Those quiet weeks were themselves running on\nrefresh tokens; under Testing they could not have survived.\n\nSo this reads as a ONE-OFF invalidation -- a revoked or reset credential, a Google-side\nevent, a password or security change -- not a structural weekly expiry.\n\nWHAT IS NOT YET RULED OUT, stated plainly: the re-authentication happened around day -3,\nso if the project WERE in Testing the next expiry would fall around 2026-08-24. The\nfalsification rests on the four clean weeks BEFORE the episode, not on the days since.\nIf a fresh episode appears on or about 2026-08-24, this conclusion is wrong and Testing\nbecomes the leading explanation again.\n\nCURRENT STATE: google shows 3 loaded, 1 not_loaded. The not_loaded one is\njohn@usegitai.com, which John deliberately took down and wants left down. Zero entries in\nsetup_error. The outage this issue was filed about is over.\n\nWHAT CHANGED THAT MATTERS MORE THAN THE CAUSE. The monitoring gap is closed (see the\nprevious comment): hass_config_entries{domain,state} plus HomeAssistantConfigEntryFailed\nnow watch config-entry health directly. If this recurs -- from Testing expiry or anything\nelse -- it fires in 15 minutes instead of sitting unread in the journal for two days,\nwhich is what actually made the original incident bad.\n\nRECOMMENDATION: do not publish the app on the strength of this issue's original guess.\nWait and see whether ~2026-08-24 produces a repeat. The alert will now tell you.\n",
     "created_at": "2026-08-20T03:58:54Z"
+  },
+  {
+    "id": 43,
+    "issue_id": "nixos-fgp",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
   }
 ]
 #+end_src
@@ -2811,15 +2819,16 @@ VERIFIED:
 ]
 #+end_src
 
-* TODO [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
+* DEFER [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2u
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-20 Thu 00:49]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2890,6 +2899,13 @@ The rule also says explicitly: DO NOT reflexively restart matter-server; the
     "author": "johnw",
     "text": "2026-08-15 -- ALERT CONFIRMED IT, AND THE NODE IS NOW PINNED EXACTLY.\n\nMatterNodeSessionFailures (the Loki rule added for this issue) is firing, so the\ndetector built for this fault works. Following its own embedded runbook:\n\n  - 2038 CASE timeouts in 24h, steady at 85-113/hour with no gaps. Not a burst,\n    not diurnal. Baseline on this host is zero.\n  - Last 2h: 203 failures, and EVERY ONE names the same peer, 0x1A. There is no\n    second failing node. The remaining ids in the log are node 0 (the unknown/\n    placeholder peer in EM retransmission lines), not a real device.\n\nMapped the peer via the matter-server WebSocket API (get_nodes, port 5580).\n6 nodes on the fabric; node 26 = 0x1A = TP-Link Smart Outdoor Plug. The other\nfive are Aqara (3 door/window sensors, the Hub M3, an FP300 presence sensor) and\nnone of them appear in the failure lines.\n\nTRANSPORT CONFIRMED FROM THE DEVICE, not inferred: node 26's NetworkCommissioning\nFeatureMap (attribute 0/49/65532) is 1, i.e. WiFi. Thread is bit 1 and is unset.\nThis independently confirms the earlier correction in this issue and definitively\nrules out the Aqara Hub M3 border router -- it is not in this device's path at\nall, so no amount of Thread/border-router work can affect this.\n\nTWO NEW OBSERVATIONS worth keeping:\n\n1. matter-server reports available=True for node 26 while its CASE sessions have\n   been failing continuously for over 24h. So the availability flag is NOT a\n   usable health signal for this fault -- it reads clean while the device is\n   effectively unreachable. Anything gating on it would see nothing wrong. This\n   is why the alert had to be built on the log stream instead.\n\n2. node 26's last_interview is 2026-04-26. It has not been re-interviewed in\n   ~3.5 months, far longer than any other node's activity in the logs.\n\nSTILL NOT AUTONOMOUS, and the reason is unchanged: every remaining step is\nphysical or AP-side. What is needed is the plug's WiFi signal/RSSI at its actual\noutdoor location, which AP and band it is associated with, and whether its DHCP\nlease is stable -- plus whatever changed around 2026-08-10, which is when this\nstarted. Restarting matter-server remains explicitly wrong here: the 2026-08-10\nrestart is what began the storm.\n",
     "created_at": "2026-08-15T16:04:56Z"
+  },
+  {
+    "id": 41,
+    "issue_id": "nixos-h2u",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
   }
 ]
 #+end_src
@@ -3166,15 +3182,16 @@ The KB total is deliberately written as ~3,730 rather than exact: PLAN.org is re
 VERIFIED: every markdown link in the index resolves (checked by script over all relative, ../ and superpowers/ targets); the only remaining Nagios mentions are the 8 that correctly describe it as removed.
 #+end_example
 
-* TODO [#D] budget-board-server dies on rebuilds: libgssapi_krb5.so.2 missing from the image
+* DEFER [#D] budget-board-server dies on rebuilds: libgssapi_krb5.so.2 missing from the image
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-jhl
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 20:45]
-:MODIFIED: [2026-08-19 Wed 22:53]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3235,6 +3252,13 @@ monitoring gap.
     "author": "johnw",
     "text": "2026-08-19: the fix this issue proposes as \"option 3\" is ALREADY IN PLACE, which weakens\nits own leading hypothesis. Recording before anyone implements something redundant.\n\nmodules/containers/budgetboard-quadlet.nix already has, on the server unit:\n  * an ExecStartPre that POLLS pg_isready in a 60-iteration loop rather than a one-shot\n    check -- the same idiom every DB-dependent container here uses\n  * Restart = \"always\" with RestartSec = 15s\n\nSo budget-board does not start until PostgreSQL is accepting connections, and the\n\"reconnect races a restarting PostgreSQL\" story does not fit as cleanly as the issue body\nsuggests: the failure happens AFTER pg_isready has already succeeded. Something in the\nconnection path after the port answers is taking the GSSAPI branch, not simply an\nunavailable server.\n\nWHAT THIS MEANS FOR THE CANDIDATE FIXES:\n  * Option 3 (order after postgresql) -- already done, no work available.\n  * Option 2 (ship krb5 in the image) -- still requires forking or layering upstream.\n  * Option 1 (tell Npgsql not to attempt GSSAPI) -- still the most likely real fix, but\n    NOT reachable from here as things stand. BudgetBoard is configured through discrete\n    POSTGRES_HOST / PORT / DATABASE / USER environment variables plus a password injected\n    from SOPS into a generated env file; there is no full connection string to add an\n    Npgsql option to. Exposing one means an application-side or image-side change.\n\nSTILL NOT URGENT: 10 occurrences in the whole journal, self-healing in ~80 seconds via\nRestart=always, and BudgetBoardDatabaseConnectionFailed already covers a sustained outage.\n\nNEXT STEP for whoever picks this up: correlate the exact failure timestamps against\npostgresql.service restart times before assuming the trigger. If they do not line up, the\nrebuild-restart theory is wrong and the cause is elsewhere entirely.\n",
     "created_at": "2026-08-20T05:53:34Z"
+  },
+  {
+    "id": 44,
+    "issue_id": "nixos-jhl",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
   }
 ]
 #+end_src
@@ -3669,15 +3693,16 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
-* TODO [#D] Three WiFi/RF devices degraded together on 08-19/08-20: side-door lock, Ring doorbell, outdoor plug
+* DEFER [#D] Three WiFi/RF devices degraded together on 08-19/08-20: side-door lock, Ring doorbell, outdoor plug
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ly2
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 04:51]
-:MODIFIED: [2026-08-20 Thu 08:47]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3747,6 +3772,20 @@ INSTRUMENT NOTES, both of which bit me here:
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 40,
+    "issue_id": "nixos-ly2",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
   }
 ]
 #+end_src
@@ -4401,15 +4440,16 @@ become reachable from it the moment it exists.
 Do not work this autonomously. It spans vulcan and OPNsense, stands up a new coordination server,
 and replaces working WireGuard connectivity — John should be present.
 
-* TODO [#D] Matter node 17 (Thread door sensor): recurring CASE-failure episodes, Aug 16 and Aug 19
+* DEFER [#D] Matter node 17 (Thread door sensor): recurring CASE-failure episodes, Aug 16 and Aug 19
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rsn
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-19 Wed 23:57]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -4563,6 +4603,13 @@ day before trusting a zero.
     "author": "johnw",
     "text": "2026-08-19 re-measurement: still quiet. Four failure lines in the whole of the last\neight days, all on day -4 (2026-08-15/16, the known episode). Days -1, -2, -3 and\n-5 through -8 are all ZERO. Nothing new since.\n\nA NOTE ON THE INSTRUMENT, because I got this wrong three times before getting it\nright, and the wrong answers were each plausible:\n\n  1. `grep -ciE 'node.*17.*(fail|unreach)'` reported 44 hits in 24 hours and 2639\n     in 7 days -- which would have read as an ongoing, worsening problem. Every one\n     was a substring artifact: `.*17.*` matches 117, 170, timestamps, session ids.\n  2. Tightening to `\\bnode[ _]?17\\b|<17>` returned ZERO for all seven days --\n     including the day of a KNOWN episode. Zero on a day something demonstrably\n     happened is not a clean result, it is a broken instrument, and that is what\n     stopped me reporting \"resolved\".\n  3. The reason is that matter-server writes node ids as zero-padded HEX:\n     `Node: <0000000000000011>`. Node 17 decimal is 0x11. A decimal pattern cannot\n     match it, and `Node: <[0-9]+>` fails too because the field is 16 digits wide.\n\nThe correct pattern is `Node: <0*11\\b`. Anyone re-checking this issue should use it;\nsearching for \"17\" in these logs is meaningless in either direction.\n\nIncidental, from the same extraction: node 0x00 accounts for 2502 of the ~2536 node\nreferences in 7 days, so the overwhelming majority of matter-server's error lines\ncarry no real node id at all. That is relevant to nixos-mqk -- most of that volume\nis not attributable to any specific device.\n",
     "created_at": "2026-08-20T02:15:25Z"
+  },
+  {
+    "id": 42,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
   }
 ]
 #+end_src
@@ -5940,15 +5987,16 @@ It fires 6+ times a day and acts on climate.upstairs_vtherm.
 Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
 earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
 
-* TODO [#D] Alert Notifier drops iPhone pushes when HA is unreachable instead of retrying
+* DEFER [#D] Alert Notifier drops iPhone pushes when HA is unreachable instead of retrying
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-zpm
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 23:50]
-:MODIFIED: [2026-08-19 Wed 23:50]
+:MODIFIED: [2026-08-20 Thu 10:32]
 :CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -5971,6 +6019,20 @@ PROPOSED FIX, needs John because it changes notification behaviour: this repo al
 Worth deciding rather than assuming: a retry that outlives the restart could also deliver a stale alert minutes late, which for a transient 'WebServiceDown (+12 more)' during a rebuild may be noise. A bounded retry with a freshness check is probably the right shape.
 
 DISCOVERED-FROM: investigating three Node-RED errors John reported, which turned out to be ordinary restart fallout from my own 19:22:50 build.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 45,
+    "issue_id": "nixos-zpm",
+    "author": "johnw",
+    "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
+    "created_at": "2026-08-20T17:32:09Z"
+  }
+]
+#+end_src
 
 * DONE [#D] open-webui container-health rules can never fire: health status is permanently 3
 :PROPERTIES:

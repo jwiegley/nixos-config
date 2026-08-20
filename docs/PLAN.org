@@ -3049,7 +3049,7 @@ visible; it does not decide that.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 16:50]
-:MODIFIED: [2026-08-17 Mon 16:50]
+:MODIFIED: [2026-08-19 Wed 19:15]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -3091,6 +3091,20 @@ Deliberately left alone because turning down error-level logging on the Matter
 fabric could hide the next real fault, and the Aqara Hub M3 being the sole
 Thread border router already makes this fabric a single point of failure worth
 over-observing rather than under-observing.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 37,
+    "issue_id": "nixos-mqk",
+    "author": "johnw",
+    "text": "2026-08-19 re-measurement: the baseline has DROPPED by ~84%, and not because of a\nrestart.\n\n    day -4: 8696 lines\n    day -3: 5914\n    day -2: 1428\n    day -1: 1388\n\nThe ~4000/day figure this issue recorded sits between day -3 and day -2, so the\ndecline is real and recent rather than a measurement difference.\n\nTwo things rule out the obvious explanations:\n  * matter-server has NOT restarted -- ActiveEnterTimestamp is 2026-08-10 15:19:03\n    and NRestarts=0. So this is not a fresh process logging less, and not a\n    rebuild-induced reset.\n  * total lines == error-priority lines on every single day. That is not 100% of\n    matter-server's output being errors; it is the known conmon behaviour where a\n    container's stderr is tagged err priority wholesale. So the drop is a drop in\n    real output, not a change in how it is classified.\n\nAlso worth recording for whoever picks this up: of ~2536 node references in the last\n7 days, 2502 are node 0x00 -- i.e. the great majority of these lines carry no real\nnode id and cannot be attributed to any particular device. Chasing this per-device\nwill not work. See the instrument note on nixos-rsn: ids are zero-padded HEX, so\ngrepping for a decimal node number silently matches nothing.\n\nCause of the decline is not established. Not investigated further because this is a\nP4 baseline task and the trend is in the right direction; re-measure before acting.\n",
+    "created_at": "2026-08-20T02:15:25Z"
+  }
+]
+#+end_src
 
 * DONE [#E] mbsync transient Gmail timeouts raise critical pages (rbcca + bia, ~9/10d)
 :PROPERTIES:
@@ -3511,7 +3525,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-19 Wed 10:53]
+:MODIFIED: [2026-08-19 Wed 19:15]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -3610,6 +3624,13 @@ HA UI (Settings -> Devices -> Matter).
     "author": "johnw",
     "text": "Title corrected 2026-08-19 per John. The old one said \"drops sessions\nintermittently, 7+ days, daily count trending up\", which the corrected\nmeasurement contradicts.\n\nThe keyword set originally used to count drops (lost/drop/resubscribe/timeout/\nexpire) matches ZERO of the 25,380 matter-server lines in the retained journal,\nso every \"trend\" reading taken from it was an artifact of a dead query. The real\nphrasing is `<Node:17> Setup for node failed: Unable to establish CASE session`.\n\nMeasured with the correct pattern over the full retained window:\n    total CASE-session failures for node 17 : 20\n    Aug 16                                  : 20\n    every other day                         : 0\n    give-up event                           : Aug 16 02:20:40\n    Aug 17, 18, 19                          : 0\n\nSo: ONE concentrated episode, not a daily uptrend. Node 17 remains the only node\nin the fabric with any \"Setup for node failed\" occurrences, which is why this\nstays open rather than being closed -- the device is still the odd one out even\nwhile quiet, and that points at the device or its own Thread link rather than at\nthe border router.\n\nKept open on John's instruction to keep watching. No action taken.\n",
     "created_at": "2026-08-19T17:53:07Z"
+  },
+  {
+    "id": 36,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "2026-08-19 re-measurement: still quiet. Four failure lines in the whole of the last\neight days, all on day -4 (2026-08-15/16, the known episode). Days -1, -2, -3 and\n-5 through -8 are all ZERO. Nothing new since.\n\nA NOTE ON THE INSTRUMENT, because I got this wrong three times before getting it\nright, and the wrong answers were each plausible:\n\n  1. `grep -ciE 'node.*17.*(fail|unreach)'` reported 44 hits in 24 hours and 2639\n     in 7 days -- which would have read as an ongoing, worsening problem. Every one\n     was a substring artifact: `.*17.*` matches 117, 170, timestamps, session ids.\n  2. Tightening to `\\bnode[ _]?17\\b|<17>` returned ZERO for all seven days --\n     including the day of a KNOWN episode. Zero on a day something demonstrably\n     happened is not a clean result, it is a broken instrument, and that is what\n     stopped me reporting \"resolved\".\n  3. The reason is that matter-server writes node ids as zero-padded HEX:\n     `Node: <0000000000000011>`. Node 17 decimal is 0x11. A decimal pattern cannot\n     match it, and `Node: <[0-9]+>` fails too because the field is 16 digits wide.\n\nThe correct pattern is `Node: <0*11\\b`. Anyone re-checking this issue should use it;\nsearching for \"17\" in these logs is meaningless in either direction.\n\nIncidental, from the same extraction: node 0x00 accounts for 2502 of the ~2536 node\nreferences in 7 days, so the overwhelming majority of matter-server's error lines\ncarry no real node id at all. That is relevant to nixos-mqk -- most of that volume\nis not attributable to any specific device.\n",
+    "created_at": "2026-08-20T02:15:25Z"
   }
 ]
 #+end_src

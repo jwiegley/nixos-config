@@ -119,11 +119,9 @@ in
             # single-household install.
             GRIST_SINGLE_ORG = "vulcan";
 
-            # GRIST_DEFAULT_EMAIL IS DELIBERATELY NOT SET YET. Read this before
-            # uncommenting it -- deploying it out of order makes things worse,
-            # not better, and does so with a delay that hides the cause.
-            #
-            #     # GRIST_DEFAULT_EMAIL = "johnw@vulcan.lan";
+            # The install's default user. SET ONLY AFTER the ownership grant
+            # below was done -- the order is load-bearing, and deploying this
+            # first makes things worse rather than better.
             #
             # WHAT WENT WRONG. Omitting it at first deploy is what caused the
             # "Access denied". setUpSingleOrg() creates the single org with
@@ -149,15 +147,18 @@ in
             # door: AppSettings puts process.env ahead of the DB-stored envVars,
             # so /admin can no longer override it back.
             #
-            # THE CORRECT ORDER (2026-08-19):
+            # THE ORDER THAT WAS FOLLOWED (2026-08-19), and must be followed
+            # again if this install is ever rebuilt from empty:
             #   1. In a browser, as you@example.com, add johnw@vulcan.lan as an
-            #      Owner of the vulcan site via Share > Manage users. That goes
-            #      through the app, so group_groups inheritance reaches the
-            #      workspace and the existing document and the Redis doc-access
-            #      cache is invalidated.
+            #      Owner of the vulcan site via Share > Manage users. Doing it
+            #      through the app is what makes group_groups inheritance reach
+            #      the workspace and the existing document and invalidates the
+            #      Redis doc-access cache; a direct SQL insert does neither.
             #   2. Verify: SELECT user_id FROM group_users WHERE group_id=19;
-            #      must return both 5 and 6.
-            #   3. ONLY THEN uncomment the line above and rebuild.
+            #      must return both 5 and 6. It returned 5,6, and the owners
+            #      group was confirmed to reach workspace 3 and the one existing
+            #      document by inheritance.
+            #   3. ONLY THEN set the line below and rebuild.
             #
             # SECURITY PROPERTY, once it is set. No auth provider is configured
             # -- no GRIST_OIDC_*, no SAML, no forward auth -- so grist-core
@@ -166,6 +167,7 @@ in
             # identity string, not a credential. Acceptable while the vhost is
             # LAN-only and trusted; putting this behind the public edge without
             # a real auth provider first would hand admin to the internet.
+            GRIST_DEFAULT_EMAIL = "johnw@vulcan.lan";
 
             # Home database on the host PostgreSQL.
             TYPEORM_TYPE = "postgres";

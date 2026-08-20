@@ -539,7 +539,6 @@ timers=(
   dovecot-fts-staleness-check
   asymmetric-routing-exporter
   restic-metrics
-  nagios-status-exporter
 )
 timer_bad=""
 for t in "${timers[@]}"; do

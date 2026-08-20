@@ -24,13 +24,8 @@
     ./system-age-exporter.nix # is-the-system-being-patched gauges
     # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
     # KEPT: this is the REVERSE direction (Nagios state INTO Prometheus), not a mirror.
-    # Nagios still exists after the 2026-07-31 de-duplication, so this bridge must too --
-    # without it, 5 of the 7 rules in alerts/nagios.yaml lose their only input and a Nagios
-    # CRITICAL on a check unique to Nagios would be invisible to Alertmanager.
-    ./nagios-status-exporter.nix # Nagios status.dat aggregate counts bridge
-    ./prometheus-rule-audit.nix # dead-rule detector; replaces the removed Nagios mirror
-    ./hass-integration-exporter.nix # HA config-entry health; the one Nagios-unique check
-    # ./nagios-mirror-divergence.nix REMOVED 2026-07-31 with the tier-2 mirror it reconciled.
+    ./prometheus-rule-audit.nix # dead-rule detector
+    ./hass-integration-exporter.nix # HA config-entry + integration health
     ./speedtest-results-exporter.nix # speedtest RESULT freshness/throughput
     # Deferred-spec implementations (docs/MONITORING_DEFERRED_SPECS.md)
     ./container-cve-exporter.nix # trivy CVE scan of running images

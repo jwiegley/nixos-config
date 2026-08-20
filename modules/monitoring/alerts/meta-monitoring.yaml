@@ -334,7 +334,7 @@ groups:
       # the same tolerance the existing members get.
       - alert: TextfileCollectorStaleFast
         expr: |
-          time() - node_textfile_mtime_seconds{file=~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status|atd|imapsieve|git_workspace)\\.prom"} > 1800
+          time() - node_textfile_mtime_seconds{file=~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|atd|imapsieve|git_workspace)\\.prom"} > 1800
         for: 30m
         labels:
           severity: warning
@@ -467,7 +467,7 @@ groups:
       # automatically, because the tiers and this rule partition the same set.
       - alert: TextfileCollectorUnclassifiedStale
         expr: |
-          time() - node_textfile_mtime_seconds{file!~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|nagios_status|atd|imapsieve|git_workspace|secrets-perms|prometheus_rule_audit|hermes_health|container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide|fts_staleness)\\.prom"} > 1209600
+          time() - node_textfile_mtime_seconds{file!~".*/(asymmetric_routing|nodered_safety|container_health|zfs_pool_health|atd|imapsieve|git_workspace|secrets-perms|prometheus_rule_audit|hermes_health|container_store_size|system_age|pg_dump|technitium_backup|nodered_backup|aide|fts_staleness)\\.prom"} > 1209600
         for: 1h
         labels:
           severity: warning

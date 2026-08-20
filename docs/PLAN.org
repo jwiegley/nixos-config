@@ -1878,6 +1878,54 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 ]
 #+end_src
 
+* DOING [#C] Install Grist behind nginx with PostgreSQL and Redis
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-fg5
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-08-19 Wed 18:05]
+:MODIFIED: [2026-08-19 Wed 18:05]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Install Grist (gristlabs/grist-core) as a rootless quadlet container, integrated
+with the host's PostgreSQL and Redis, behind nginx+TLS at grist.vulcan.lan.
+
+All configuration is written and evaluates on BOTH paths (verified with
+nix eval + extendModules):
+  - disabled: grist absent from home-manager.users, so the container-health
+    exporter and the container image updater correctly ignore it
+  - enabled: nginx vhost, redis 6388, both SOPS secrets with correct
+    owner/mode/path, firewall on podman0, tmpfiles (d/Z, never D),
+    postgresql-grist-setup unit, Glance tile, blackbox target
+
+Files: modules/containers/grist-quadlet.nix (new, system side + enable switch),
+modules/users/home-manager/grist.nix (new, quadlet), plus edits to
+databases.nix, quadlet.nix, glance.nix, blackbox-monitoring.nix,
+certs/renew-nginx-certs.sh, docs/ports.txt, hosts/vulcan/default.nix.
+
+Deliberately NOT built: no Grafana dashboard and no Nagios check. Grist exposes
+no Prometheus endpoint (gristlabs/grist-core#671 is an open feature request), and
+Nagios is being removed from this host. Coverage is container_health_status +
+blackbox HTTPS + cert expiry. Storage is a plain /var/lib directory by John's
+choice, so no Samba share and no ZFS snapshots.
+
+BLOCKED on two things only John can do:
+  1. Two SOPS keys in secrets.yaml: grist-db-password and grist-secrets
+     (env file with GRIST_SESSION_SECRET and TYPEORM_PASSWORD; TYPEORM_PASSWORD
+     must equal grist-db-password).
+  2. Issuing the TLS certificate for grist.vulcan.lan. Nginx refuses to start
+     when a vhost references a certificate that does not exist, so this must
+     happen before the switch that flips services.grist.enable = true.
+
+Then: enable, /etc/nixos/build switch, and test end to end.
+#+end_example
+
 * TODO [#C] Three Google Calendar entries in setup_error, and no alert covers config-entry health
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1998,15 +2046,16 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
-* TODO [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
+* DONE [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-g52
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-17 Mon 12:48]
-:MODIFIED: [2026-08-19 Wed 12:35]
+:MODIFIED: [2026-08-19 Wed 18:13]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 18:13]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2070,6 +2119,54 @@ THE OPTIONS:
 
 DO NOT act without John: options 1 and 2 both change permissions or ownership
 semantics on a data directory that is also a network share.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Fixed and verified live. The first attempt (2026-08-18, chown /tank/Photos to root)
+was wrong twice over and both errors are now corrected.
+
+WHAT WAS WRONG WITH IT. systemd's rule (chase.c, unsafe_transition) is: a step is
+safe iff the parent is root-owned OR parent and child share an owner. It applies to
+EVERY edge, and to the final component too -- not just intermediate ones, which is
+what I had assumed. So making /tank/Photos root-owned only moved the failure up:
+"unsafe path transition /tank (owned by johnw) -> /tank/Photos (owned by root)".
+With /tank owned by johnw and the media directory owned by immich, no ownership for
+/tank/Photos satisfies both edges. The change also locked its own rule out: `z
+/tank/Photos` could no longer run once /tank/Photos was root-owned, so it was
+unappliable from then on. And it cost johnw the write bit on his own photo
+directory (verified: `test -w /tank/Photos` failed as johnw).
+
+THE FIX.
+  1. Dropped upstream's tmpfiles entry entirely --
+     systemd.tmpfiles.settings.immich."/tank/Photos/Immich" = lib.mkForce { }.
+     No rule below /tank/Photos means no canonicalization through it.
+  2. Replaced its guarantee with a root-privileged ExecStartPre on immich-server
+     (chown immich:immich + chmod 0750), which does not canonicalize, so the
+     drift protection is kept rather than quietly dropped.
+  3. Reverted /tank/Photos to johnw:immich 2750, both in the rule and on disk
+     (the on-disk chown was needed by hand because the rule had locked itself out).
+
+NOT DONE, and left for John: chown root /tank would make every rule in the chain
+work and is the other real fix, but /tank is the pool mountpoint, its ownership is
+on-disk state no module declares, and taking it from johnw changes who can create
+at the top of the pool. That is his call, not a side effect of an Immich fix.
+
+VERIFIED after /etc/nixos/build switch:
+,  * systemd-tmpfiles-resetup: ExecMainStatus=0, Result=success, no unsafe/fail
+    lines in its journal for that run (was 73 on every run for months)
+,  * `systemd-tmpfiles --dry-run --create --boot` exits 0 with no failures, which
+    is what proves the next boot is clean without rebooting to find out
+,  * systemd-tmpfiles-setup still reads 73, and that is stale, not unfixed: it is a
+    boot-only unit whose InactiveExitTimestamp is 2026-07-03 11:37:53, the current
+    boot. It clears at the next boot.
+,  * /etc/tmpfiles.d/immich.conf renders empty; no tmpfiles rule mentions
+    /tank/Photos/Immich anywhere
+,  * /tank/Photos johnw:immich 2750, /tank/Photos/Immich immich:immich 0750
+,  * johnw can write /tank/Photos again and traverse /tank/Photos/Immich
+,  * immich-server active, ExecMainStatus=0, both ExecStartPre lines present in the
+    deployed unit
 #+end_example
 
 ** Comments

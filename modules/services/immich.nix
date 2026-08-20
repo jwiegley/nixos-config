@@ -198,7 +198,39 @@ in
   # systemd refuses to traverse into a directory whose owner differs from its
   # parent's unless that parent is root-owned. That is a deliberate hardening,
   # not a bug in systemd, so the fix has to satisfy it rather than work around
-  # it. Making the PARENT root-owned is what makes the transition safe.
+  # it.
+  #
+  # THE FIRST ATTEMPT AT THAT WAS WRONG, and this is the correction (2026-08-19).
+  # Making /tank/Photos root-owned did make the Photos -> Immich edge legal, but
+  # tmpfiles checks EVERY edge in the chain, and it simply moved the failure one
+  # level up:
+  #
+  #     Detected unsafe path transition /tank (owned by johnw) ->
+  #     /tank/Photos (owned by root) during canonicalization of tank/Photos/Immich.
+  #
+  # systemd's actual rule (src/basic/chase.c, unsafe_transition) is: a step is
+  # safe iff the PARENT is root-owned, or parent and child have the SAME owner.
+  # Apply that to this chain with /tank owned by johnw and the media directory
+  # owned by immich, and no assignment for /tank/Photos satisfies both edges:
+  #
+  #     Photos=johnw -> Photos->Immich  unsafe (johnw -> immich)
+  #     Photos=root  -> /tank->Photos   unsafe (johnw -> root)
+  #     Photos=immich-> /tank->Photos   unsafe (johnw -> immich)
+  #
+  # So while /tank itself is owned by johnw, a tmpfiles rule on any path BELOW
+  # /tank/Photos can never run. Only two things would actually fix it:
+  #
+  #   A. chown root /tank -- makes the first edge safe and every rule work. NOT
+  #      done: /tank is the pool mountpoint, its ownership is on-disk state that
+  #      no module declares, and taking it away from johnw changes who can
+  #      create things at the top of the pool. That is John's call, not a
+  #      side effect of an Immich fix.
+  #   B. stop tmpfiles from chasing that path at all, and enforce the permission
+  #      somewhere that does not canonicalize. That is what is done below.
+  #
+  # Note that part 1's rule on /tank/Photos itself is unaffected either way: the
+  # unsafe-transition check applies to intermediate components, and /tank/Photos
+  # is that rule's final component.
   #
   # WHY THE MODE IS 0750 AND NOT UPSTREAM'S 0700. /tank/Photos/Immich is also
   # exported over SMB as [tank-Photos-Immich] with `valid users = johnw
@@ -214,27 +246,54 @@ in
   # privacy intent is preserved -- only the group bit is restored, and the group
   # has exactly one non-service member.
   #
-  # THE THREE PARTS ARE INTERDEPENDENT. Do not apply one without the others:
-  #   1. parent root:immich  -> makes the tmpfiles transition legal
-  #   2. child mode 0750     -> restores group access the parent change relies on
-  #   3. johnw in immich     -> REQUIRED, and not merely for the share: once the
-  #      parent is root-owned, johnw is no longer its owner, and group immich is
-  #      his only remaining path into his own photo directory (2750, group r-x).
-  #      Applying part 1 alone would lock him out of /tank/Photos.
+  # THE PARTS ARE INTERDEPENDENT. Do not apply one without the others:
+  #   1. parent johnw:immich -> johnw owns his own photo directory and can
+  #      create in it; group immich gets r-x so the service can descend
+  #   2. no tmpfiles rule below /tank/Photos, plus the ExecStartPre that
+  #      replaces it -> the permission is still enforced, without the chase
+  #   3. child mode 0750     -> group access for the SMB share
+  #   4. johnw in immich     -> the share's other half, and how johnw reads the
+  #      media directory itself (0750 immich:immich, group r-x)
 
   # Part 1. Non-recursive: `z` adjusts an existing path's mode/ownership and
   # never creates or deletes. Deliberately NOT `Z` (recursive -- would rewrite
   # ownership across the whole photo library) and emphatically not `D`, which
   # EMPTIES its target and has caused data loss on this host twice.
   # The setgid bit is retained so new entries keep inheriting group immich.
+  #
+  # johnw, not root. This briefly WAS `root immich` (2026-08-18), on the theory
+  # that a root-owned parent legalised the tmpfiles transition. It did not --
+  # see the correction above -- and it cost something real: at 2750 with root as
+  # owner, johnw had no write bit on his own photo directory and could no longer
+  # create folders in it. Verified before reverting: `test -w /tank/Photos` as
+  # johnw failed. Do not "tidy" this back to root.
   systemd.tmpfiles.rules = [
-    "z /tank/Photos 2750 root immich -"
+    "z /tank/Photos 2750 johnw immich -"
   ];
 
-  # Part 2. Override only the mode of upstream's entry, keeping its path, user,
-  # group and `e` type. mkForce is needed because the immich module sets this
-  # same attribute unconditionally.
-  systemd.tmpfiles.settings.immich."/tank/Photos/Immich".e.mode = lib.mkForce "0750";
+  # Part 2. Drop upstream's `e /tank/Photos/Immich ...` entry entirely. An empty
+  # attrset emits no rule for the path, which is the point: the rule cannot
+  # succeed here (see option B above) and its only effect was to make
+  # systemd-tmpfiles-setup and -resetup exit 73 on every boot and every rebuild,
+  # where -- because Result stays `success` -- it was invisible to
+  # `systemctl --failed` and quietly polluted the one signal that would have
+  # shown a REAL tmpfiles failure.
+  #
+  # mkForce is needed because the immich module sets this path unconditionally.
+  systemd.tmpfiles.settings.immich."/tank/Photos/Immich" = lib.mkForce { };
+
+  # Part 2b. What upstream's entry was for, done where no canonicalization
+  # happens. `+` runs this as root, outside the unit's sandbox, so it works even
+  # if ownership has drifted away from immich; chmod/chown are idempotent and
+  # this is a no-op in the normal case.
+  #
+  # 0750 rather than upstream's 0700 for the SMB reason documented above. This
+  # is the drift protection the dropped tmpfiles rule used to provide -- it is
+  # not redundant just because the mode happens to be right today.
+  systemd.services.immich-server.serviceConfig.ExecStartPre = [
+    "+${pkgs.coreutils}/bin/chown immich:immich /tank/Photos/Immich"
+    "+${pkgs.coreutils}/bin/chmod 0750 /tank/Photos/Immich"
+  ];
 
   # Part 3. See the interdependence note above -- this is what keeps johnw able
   # to reach /tank/Photos at all after part 1, and what makes the SMB share

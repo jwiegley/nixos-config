@@ -613,8 +613,28 @@ let
         # CHROME_FLAGS increases V8 heap for MathJax-heavy sites like ncatlab
         # --network=host: Required because the job runner runs as a system service,
         # not a user service, so pasta/slirp4netns can't create their sandboxed
-        # network namespaces. Host networking is fine since zimit only needs
-        # outbound internet access for crawling.
+        # network namespaces.
+        #
+        # "Host networking is fine since zimit only needs outbound internet access"
+        # was the original justification and it is INCOMPLETE — corrected 2026-08-20.
+        # Host networking is not one-way: the container's own listeners bind the
+        # host's interfaces too. Measured during a live crawl, this container binds
+        # BOTH 0.0.0.0 and [::] on:
+        #   6379  redis-server  browsertrix's crawl-state store, no auth
+        #   6099  Xvfb          the X server behind headless Chrome
+        # An unauthenticated Redis on a wildcard address is the classic RCE vector
+        # (CONFIG SET dir + dbfilename to write arbitrary files), so this is worth
+        # knowing about even though it is currently contained.
+        #
+        # IT IS CONTAINED BY THE HOST FIREWALL, verified rather than assumed: neither
+        # port has an accept rule anywhere in iptables, NETAVARK_INPUT accepts only
+        # DNS from 10.88.0.0/16 and so cannot bypass, and the nixos-fw chain
+        # terminates in nixos-fw-log-refuse. Both ports are registered in
+        # docs/ports.txt as TRANSIENT so the port-drift exporter stops flagging them
+        # on every crawl.
+        #
+        # If this ever moves to a rootless user service, prefer a real network
+        # namespace over --network=host and this whole exposure disappears.
         if podman run --rm \
           --network=host \
           -v "$job_work_dir:/output" \

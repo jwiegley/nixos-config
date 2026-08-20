@@ -2442,6 +2442,63 @@ cycle, which turned out to be benign and self-recovering.
 ]
 #+end_src
 
+* TODO [#E] Hung Zimit crawl is undetected: ServiceStuckActivating excluded, and no progress-based detector exists
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-fdi
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-20 Thu 16:51]
+:MODIFIED: [2026-08-20 Thu 16:51]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+A Zimit crawl that HANGS WHILE RUNNING is now undetected. This is a gap I opened
+deliberately on 2026-08-20 and is recorded here rather than left implicit.
+
+WHAT CHANGED: zimit-job-runner was excluded from ServiceStuckActivating
+(alerts/systemd.yaml). It is a Type=oneshot that runs an entire crawl synchronously,
+so it sits in `activating` for the whole job and tripped the 15m threshold on every
+normal run. Measured across 22 completed jobs, legitimate durations span 26 MINUTES
+to 43 DAYS (ocean-of-lights, 1039.32h), and TimeoutStartSec is already 4w2d, so
+month-long crawls are tolerated by design. An alert firing for the entire duration of
+every crawl is noise, and noise is what trains people to ignore a rule.
+
+WHY NOTHING ELSE COVERS IT -- checked, not assumed:
+  ZimitJobsFailed  fires on the failed-jobs counter; a hung job has not failed.
+  ZimitJobsStuck   fires on zimit_jobs_pending > 0 for 24h. That is a QUEUE that
+                   will not drain. A hung RUNNING job has pending=0 and running=1,
+                   so this rule cannot see it.
+  TimeoutStartSec  4w2d. It would eventually fail the unit, but 30 days is not
+                   detection.
+
+WHY I DID NOT JUST PICK A DURATION THRESHOLD: the legitimate range admits none.
+26 minutes to 43 days is a ~2400x spread, and the longest legitimate crawl exceeds
+the unit timeout. Any threshold either fires on real crawls or never fires at all.
+Inventing one would have produced exactly the kind of unjustifiable rule this repo
+keeps having to remediate.
+
+THE RIGHT SIGNAL IS PROGRESS, NOT DURATION. The runner logs continuously while
+crawling -- measured live during the llm-primer job at ~280 lines per rolling 2
+minutes, and browsertrix emits structured JSON with context "crawlStatus" /
+"pageStatus" on every page. A crawl that stops advancing stops logging, while a
+healthy multi-day crawl keeps logging throughout. So the detector wants to be either:
+  (a) a textfile collector exporting last-progress-timestamp for the running job,
+      alerting when now - last_progress > ~30m while zimit_jobs_running > 0; or
+  (b) a Loki rule over {unit="zimit-job-runner.service"} counting crawl-progress
+      lines in a window and alerting on zero while a job is running. This host
+      already runs Loki rules for exactly this shape (matter-fabric.yaml).
+(b) is cheaper -- no new exporter, and the logs already reach Loki -- but note the
+matter-fabric precedent's warnings: Loki-ruler alerts never appear in Prometheus's
+ALERTS series, so verify with loki_prometheus_notifications_sent_total instead.
+
+NOT URGENT: a hung crawl wastes time and a container, it does not lose data or
+degrade the host. Filed so the exclusion is not silently mistaken for coverage --
+the comment in alerts/systemd.yaml says the same and points here.
+
 * DONE [#C] Install Grist behind nginx with PostgreSQL and Redis
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

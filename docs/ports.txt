@@ -66,6 +66,8 @@
 6386 127.0.0.1 Redis - SearXNG
 6387 127.0.0.1 Redis - Speedtest Tracker
 6388 0.0.0.0 Redis - Grist (session/state store; binds 0.0.0.0 so the rootless container can reach it at 10.88.0.1, firewalled to podman0 only)
+6099 0.0.0.0 :: Xvfb inside the Zimit crawl container - TRANSIENT, only while a crawl runs
+6379 0.0.0.0 :: Redis inside the Zimit crawl container (browsertrix crawl state) - TRANSIENT, only while a crawl runs
 
 # Web Applications (localhost only, proxied via nginx)
 844 127.0.0.1 Node-RED privileged internal HTTP

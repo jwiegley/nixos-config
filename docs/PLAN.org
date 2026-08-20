@@ -4532,15 +4532,16 @@ image-age monitoring has been silently blind since it was written.
 
 Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
 
-* DOING [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
+* DEFER [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-r1n
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 12:16]
+:MODIFIED: [2026-08-20 Thu 12:54]
 :CREATED_BY: johnw
+:DEFERRED: [2026-09-02 Wed 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -4581,6 +4582,68 @@ decided how he wants the certs issued.
 
 DEADLINES ARE REAL AND CLOSE: 33 and 34 days from 2026-08-20.
 #+end_example
+
+** Notes
+
+#+begin_example
+2026-08-20: automation FIXED and committed (113cdb0a6). John's decision: do NOT
+issue certificates now; let the 2026-09-01 timers do it. Deferred to 2026-09-02 to
+verify the outcome rather than assume it.
+
+WHY WAITING IS SAFE -- checked, not assumed. The old script could not fail loudly:
+it wrote to an orphan directory and exited 0 every time, for ~11 months. The rewrite
+inverts that. It now (a) refuses to start if `postconf -h smtpd_tls_chain_files`
+disagrees with its target directory, and (b) after reloading, compares the on-disk
+notAfter against what port 587 actually presents, exiting nonzero on mismatch.
+
+A nonzero exit fails postfix-cert-renewal.service, and that unit IS visible to the
+alerting: node_systemd_unit_state{name="postfix-cert-renewal.service",state="failed"}
+exists as a live series (value 0 today), and SystemdServiceFailed selects
+{state="failed",name=~".*\\.service"} with for:1m. Same for nginx-cert-renewal.
+So a bad Sep 1 run pages within a minute, with 22 days of runway before the Sep 23
+expiries. That is the whole basis for deferring rather than forcing it now.
+
+VERIFY ON OR AFTER 2026-09-02:
+  # postfix -- the served cert must move from Sep 23 2026 to ~Sep 2027
+  echo | openssl s_client -connect 127.0.0.1:587 -starttls smtp 2>/dev/null \
+    | openssl x509 -noout -subject -enddate
+  # the monitored leaf must move WITH it (this is the half that could silently lag)
+  sudo openssl x509 -in /var/lib/postfix-certs/smtp.vulcan.lan.crt -noout -enddate
+  # the four newly-covered nginx vhosts
+  curl -s --data-urlencode 'query=certificate_days_until_expiry{name=~"vulcan.lan|changes.vulcan.lan|mailarchiver.vulcan.lan|chat.vulcan.lan"}' \
+    http://127.0.0.1:9090/api/v1/query
+  systemctl show postfix-cert-renewal.service -p Result --value   # expect success
+  systemctl show nginx-cert-renewal.service  -p Result --value    # expect success
+
+WHAT WOULD MEAN IT IS STILL WRONG: the wire still reading Sep 23 2026, OR the wire
+updating while smtp.vulcan.lan.crt does not. The second is the subtle one -- postfix
+serves *.fullchain.crt while certificate-exporter.nix reads *.crt, and
+renew-certificate.sh writes only one cert file, so a naive fix updates the served
+cert and leaves the MONITORED one stale. The script extracts the leaf explicitly to
+prevent that; confirm both dates match.
+
+TWO THINGS FOUND AND DELIBERATELY LEFT (not part of this issue, no deadline):
+,  * atd.vulcan.lan (89d) and budget.vulcan.lan (71d) are renewed by their own
+,    *-certificate units, which are activation-time oneshots with RemainAfterExit --
+    both last ran at the 2026-07-03 boot. They renew on REBOOT, not on a schedule.
+,  * Five certs persist with no live vhost (llama-swap, copyparty, notebook,
+    syncthing, openclaw), and teable is the mirror image: still in DOMAINS and
+    renewed monthly with nothing serving it.
+#+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 46,
+    "issue_id": "nixos-r1n",
+    "author": "johnw",
+    "text": "Automation fixed and pushed; John chose to let the 2026-09-01 timers issue rather than running renewal by hand. Deferred to the day after so the outcome is verified rather than assumed. A failed Sep 1 run now pages within a minute (SystemdServiceFailed sees both units), with 22 days of runway before the Sep 23 expiries.",
+    "created_at": "2026-08-20T19:54:16Z"
+  }
+]
+#+end_src
 
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:

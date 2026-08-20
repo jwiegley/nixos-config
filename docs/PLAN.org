@@ -2762,7 +2762,7 @@ VERIFIED:
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-19 Wed 23:56]
+:MODIFIED: [2026-08-20 Thu 00:49]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2783,41 +2783,46 @@ Alert MatterNodeSessionFailures (Loki, added 2026-08-11) now fires on this.
 
 ** Notes
 
-2026-08-19 OBSERVATION: the plug's matter-server error traffic has COLLAPSED, and
-this issue turns out to have been the dominant source of matter-server log volume
-all along.
+#+begin_example
+2026-08-20 00:5x — THE REMISSION IS OVER. MatterNodeSessionFailures is firing
+again and node 26 is the sole cause.
 
-Node 0x1A = 26 = the outdoor plug, error lines per calendar day:
-  08-14  1577    08-17   782
-  08-15  2231    08-18     0
-  08-16  1872    08-19     9
+Yesterday I recorded this plug's errors collapsing to ~0 and said explicitly that
+an unexplained remission is not a fix. That held for about 26 hours.
 
-Against a whole-unit total of 3485/4787/4181/2351/613/799 on the same days, node 26
-was roughly HALF of everything matter-server logged, and the unit-wide ~83% decline
-that nixos-mqk was tracking is essentially this line going quiet. mqk has been
-closed and pointed here; it was measuring this issue from the log-volume side.
+  last-hour peer breakdown: 75 of 75 failures are peer <000000000000001A = node 26.
+  Node 17 contributes zero this hour.
 
-THE PLUG IS ALIVE, not gone -- checked first, because zero errors and a dead device
-are indistinguishable in the log. switch.smart_outdoor_plug_switch_1 and _2 are both
-in HA's recorder with state=off, last written 23:01 today, hours after the errors
-stopped. So this is the plug no longer failing, not the plug no longer present.
+CASESession timeouts per hour, most recent:
+  08-19 21:00  15     08-19 22:00   0
+  08-19 23:00  21     08-20 00:00  54
+Alert startsAt 2026-08-20T07:14:12Z (00:14 PDT).
 
-WHAT THIS DOES NOT ESTABLISH: why. Nothing was changed on this device or on the
-WiFi path by me, and matter-server has not restarted since 2026-08-10 15:19:03
-(NRestarts=0), so it is not a fresh process logging less. An unexplained remission
-is not a fix, and the user-visible symptoms this issue was actually filed for --
-late turn-off and failed Node-RED service calls -- are not measured by error-line
-counts at all.
+Per calendar day, node 26 specifically:
+  08-14 1577   08-15 2231   08-16 1872   08-17 782   08-18 0   08-19 21   08-20 54+
 
-LEFT OPEN DELIBERATELY. The right test is behavioural, not log-volume: does the plug
-now turn off on schedule, and do the Node-RED service calls to it still fail? That
-needs a few days of normal operation to answer, and it is John's call whether the
-current quiet is worth trusting.
+So the pattern is episodic with multi-day gaps, not a steady fault and not a
+monotonic recovery. Any future claim that this is "fixed" needs to outlast a
+gap of at least 2 days to mean anything, because 08-18/08-19 looked like a fix
+and was not.
 
-Also worth recording for contrast: node 17 (nixos-rsn, the Thread door sensor) went
-the OPPOSITE way over the same window, from 0-30/day up to 51 today. Different
-transport -- node 26 is WiFi FeatureMap=1, node 17 is Thread FeatureMap=2 -- so
-whatever changed did not move both, which argues against a single fabric-wide cause.
+THE DETECTOR IS SOUND — I checked before trusting it, and my first two attempts
+to check were themselves broken:
+,  * Prometheus ALERTS showed no samples in 8 days, which I briefly read as "never
+    fired". Wrong instrument: this is a LOKI ruler rule and its alerts never enter
+    Prometheus's ALERTS series at all.
+,  * The alertmanager journal showed zero mentions. Also useless -- that journal
+    has zero lines total in 8 days, so it cannot answer any question.
+,  * The instrument that works: loki_prometheus_notifications_sent_total shows the
+    ruler sending 685-783 notifications/day across 08-13..08-17, and replaying the
+    rule expression against Loki puts 107 of 124 hourly buckets over threshold at
+    63-95/h. The rule has been doing its job correctly the whole time.
+
+STILL JOHN'S CALL. Node 26 is WiFi (FeatureMap=1), so per the rule's own runbook
+this points at signal strength, AP association or DHCP -- physical-world causes.
+The rule also says explicitly: DO NOT reflexively restart matter-server; the
+2026-08-10 flap storm began at the moment of a restart.
+#+end_example
 
 ** Comments
 
@@ -2832,6 +2837,55 @@ whatever changed did not move both, which argues against a single fabric-wide ca
   }
 ]
 #+end_src
+
+* TODO [#E] nocobase is SIGKILLed by the container updater: shutdown exceeds the 90s stop timeout
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-h6j
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 00:49]
+:MODIFIED: [2026-08-20 Thu 00:49]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+nocobase is SIGKILLed (status=137) by the daily container updater whenever its
+image actually changes, because its shutdown exceeds TimeoutStopUSec=1min 30s.
+
+MEASURED over 30 days of journal:
+  containers exiting 137: nocobase only -- 2 occurrences, no other container ever
+  dates: 2026-08-16 and 2026-08-20 00:27:14
+  trigger both times: "Update and restart Podman containers"
+    (modules/maintenance/timers.nix, OnCalendar=daily). The updater runs daily
+    but only restarts a container whose image changed, which is why this is
+    twice in 30 days and not thirty.
+
+RULED OUT, because 137 is ambiguous and the obvious reading is wrong here:
+,  * NOT an OOM kill -- zero out-of-memory/oom-kill/oom_reaper entries in the
+    window, and MemoryMax=infinity against MemoryPeak=795MB.
+,  * NOT a crash -- it restarts in the same second and comes back healthy.
+
+CURRENT STATE IS FINE: active/running since 00:27:14, Result=success,
+NRestarts=0, https://nocobase.vulcan.lan/ returns 200.
+
+WHY IT IS STILL WORTH FIXING, at low priority:
+  1. Every occurrence writes a genuine "Failed with result exit-code" record. A
+     recurring benign failure is how a real one gets ignored.
+  2. An ungraceful kill of a Node app mid-write is a small but real risk. The
+     durable state is in PostgreSQL, which is why this is P4 and not higher.
+
+NOT FIXED, because raising TimeoutStopUSec is treating the symptom without
+knowing why nocobase needs >90s to stop -- and 90s is already generous. The
+question to answer first is what it is doing during shutdown. If the answer is
+"nothing, it just ignores SIGTERM", the fix is upstream or a STOPSIGNAL override,
+not a longer wait.
+
+DISCOVERED-FROM: the 4-hour service-failure scan in the 2026-08-20 health cycle.
+#+end_example
 
 * DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:

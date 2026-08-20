@@ -1,7 +1,17 @@
-# Matter fabric session-failure detection. Loki ruler rule — needs an L+ symlink
-# in modules/services/loki.nix (loki-rules/*.yaml are NOT auto-discovered).
-# Deleting this file without its L+ line, or vice versa, has TWICE silently
-# killed ALL log-based alerting on this host; change both together.
+# Matter fabric session-failure detection. Loki ruler rule.
+#
+# DEPLOYMENT (corrected 2026-08-20): this file is picked up automatically.
+# modules/services/loki.nix:146-152 readDir's this whole directory and generates
+# one L+ line per .yaml, so dropping a file in here is sufficient. This header
+# used to say the opposite — that a hand-written L+ line was required and that
+# omitting it had twice killed all log alerting. That was true of the OLD
+# hand-maintained list; it is exactly why the list was derived instead, and
+# loki.nix:137-140 records the change. Following the old instruction now would
+# have you maintain a line that does not exist.
+#
+# The one real gotcha survives and is NOT the symlink: the file must be
+# `git add`ed. Flakes only see tracked files, so an untracked rule is invisible
+# to readDir and silently will not deploy (loki.nix:142-143).
 #
 # WHY A LOG RULE AND NOT A METRIC:
 # matter-server stays healthy as a systemd unit while individual Matter nodes
@@ -24,6 +34,21 @@
 # >20/h therefore sits far above noise and far below the fault, and cannot
 # become a dead rule (the failure mode this repo keeps hitting — see
 # project_alert_dead_metric_remediation).
+#
+# VALIDATED IN PRODUCTION 2026-08-20, so do not "fix" this rule on suspicion.
+# Replaying the expression below against Loki over the preceding 7 days puts
+# 107 of 124 hourly buckets above the threshold, at 63-95/h, across 08-13..08-17
+# — and loki_prometheus_notifications_sent_total shows the ruler sending 685-783
+# notifications/day through that window. The detector fired for days, exactly as
+# designed. It went quiet 08-18/08-19 when the fault remitted and fired again on
+# 08-20 when it returned.
+#
+# CHECKING THIS YOURSELF: Prometheus's ALERTS series CANNOT answer it. Loki-ruler
+# alerts never appear there, so `ALERTS{alertname="MatterNodeSessionFailures"}`
+# returns empty whether the rule has fired continuously or never — a broken
+# instrument that reads as a clean result. Nor can the alertmanager journal: it
+# carries zero lines here. Use loki_prometheus_notifications_sent_total, or
+# replay the expression against Loki's own query_range.
 #
 # SCOPE: this is deliberately FABRIC-WIDE, not per-device. The peer node id is
 # in the message body, not a label, and promoting it to a label would add

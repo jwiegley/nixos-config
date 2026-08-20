@@ -119,6 +119,54 @@ in
             # single-household install.
             GRIST_SINGLE_ORG = "vulcan";
 
+            # GRIST_DEFAULT_EMAIL IS DELIBERATELY NOT SET YET. Read this before
+            # uncommenting it -- deploying it out of order makes things worse,
+            # not better, and does so with a delay that hides the cause.
+            #
+            #     # GRIST_DEFAULT_EMAIL = "johnw@vulcan.lan";
+            #
+            # WHAT WENT WRONG. Omitting it at first deploy is what caused the
+            # "Access denied". setUpSingleOrg() creates the single org with
+            # getAdminEmail() || getDefaultEmail(); with neither set, grist-core
+            # used its built-in placeholder you@example.com and made it the sole
+            # member of the org's owners group. johnw got a Personal org of his
+            # own and NO membership in "vulcan", while GRIST_SINGLE_ORG forces
+            # every request onto that site.
+            #
+            # WHY SETTING IT DOES NOT FIX THAT. Ownership is assigned ONLY in
+            # setUpSingleOrg's `catch (organization not found)` branch, i.e.
+            # once, at creation. With org 3 already present that path is a no-op
+            # lookup forever, and nothing reconciles env -> ACLs at boot. Install
+            # -admin status confers no bypass either: PATCH /api/orgs/:id/access
+            # uses a plain scope check.
+            #
+            # WHY IT IS ACTIVELY HARMFUL RIGHT NOW. With no auth provider,
+            # minimal login resolves every request to this address. Today that
+            # is you@example.com -- the one account that IS an org owner, and
+            # therefore the only working way in. Setting this flips minimal
+            # login to johnw@vulcan.lan, who has zero membership, turning a
+            # partly-working site into a fully-denied one. It is also a one-way
+            # door: AppSettings puts process.env ahead of the DB-stored envVars,
+            # so /admin can no longer override it back.
+            #
+            # THE CORRECT ORDER (2026-08-19):
+            #   1. In a browser, as you@example.com, add johnw@vulcan.lan as an
+            #      Owner of the vulcan site via Share > Manage users. That goes
+            #      through the app, so group_groups inheritance reaches the
+            #      workspace and the existing document and the Redis doc-access
+            #      cache is invalidated.
+            #   2. Verify: SELECT user_id FROM group_users WHERE group_id=19;
+            #      must return both 5 and 6.
+            #   3. ONLY THEN uncomment the line above and rebuild.
+            #
+            # SECURITY PROPERTY, once it is set. No auth provider is configured
+            # -- no GRIST_OIDC_*, no SAML, no forward auth -- so grist-core
+            # treats every request as this user. Anyone who can reach
+            # grist.vulcan.lan is that account, with full admin. It is an
+            # identity string, not a credential. Acceptable while the vhost is
+            # LAN-only and trusted; putting this behind the public edge without
+            # a real auth provider first would hand admin to the internet.
+
             # Home database on the host PostgreSQL.
             TYPEORM_TYPE = "postgres";
             TYPEORM_HOST = "10.88.0.1";

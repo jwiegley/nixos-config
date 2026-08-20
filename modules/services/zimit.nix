@@ -1013,6 +1013,50 @@ in
       "podman.socket"
     ];
 
+    # Do not run unless the datasets this writes to are actually mounted.
+    # Added 2026-08-20, after the llm-primer job (a03d993b) died with
+    #   mkdir: cannot create directory '/tank/Archives/work/a03d993b': Permission denied
+    # and zimit-progress-monitor then swept it as "Orphaned".
+    #
+    # /tank/Archives/ZIM and /tank/Archives/work are each their OWN ZFS dataset, not
+    # plain directories under tank/Archives. This unit declared NO mount dependency
+    # at all -- the tank-Archives-ZIM.mount after/wants further down this file
+    # belongs to kiwix-serve, not to the runner -- so it was free to fire while
+    # either dataset was unmounted.
+    #
+    # What prevented that from being much worse is worth writing down, because it
+    # looks like the bug and is in fact the safety net: the directory SHADOWED
+    # beneath the /tank/Archives/work mountpoint is root:root 0755, so an unmounted
+    # run fails loudly with EACCES rather than silently writing a multi-GB crawl into
+    # the parent dataset on the root pool. Do NOT "fix" this by making that shadowed
+    # directory zimit-writable -- that trades a loud failure for silent data
+    # misplacement and a filled root pool.
+    #
+    # RequiresMountsFor gives ORDERING, and on this host that is all it gives.
+    # Verified after deploying it: `systemctl show -p After` gains
+    # tank-Archives-work.mount and tank-Archives-ZIM.mount, but `-p Requires` still
+    # lists only -.mount, and both mount units report RequiredBy=0 for this service.
+    # These ZFS mounts are materialised from the runtime mount table rather than
+    # fstab, so systemd orders against them but will not treat them as hard
+    # requirements. Ordering alone does NOT stop the unit starting unmounted.
+    #
+    # ConditionPathIsMountPoint is what actually enforces it, and it fails in the
+    # better direction: an unmet condition SKIPS the unit (recorded as
+    # condition-failed, not failed), so the pending job simply waits for the next
+    # 5-minute timer instead of being executed against an unwritable path and then
+    # swept as "Orphaned" by zimit-progress-monitor. Failing loudly was already
+    # guaranteed by the root-owned shadow directory; this makes it not fail at all.
+    unitConfig = {
+      RequiresMountsFor = [
+        workDir
+        zimDir
+      ];
+      ConditionPathIsMountPoint = [
+        workDir
+        zimDir
+      ];
+    };
+
     path = with pkgs; [
       podman
       jq

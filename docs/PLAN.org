@@ -1650,6 +1650,78 @@ Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional
 ]
 #+end_src
 
+* DONE [#D] Zimit job runner had no mount dependency on its ZFS datasets; llm-primer failed with EACCES
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-cgk
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 16:07]
+:MODIFIED: [2026-08-20 Thu 16:07]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 16:07]
+:CLOSE_REASON: Fixed and verified in the same cycle; full analysis in the description. RequiresMountsFor + ConditionPathIsMountPoint deployed and confirmed in the generated unit file; llm-primer re-ran and is crawling; ZimitJobsFailed cleared.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The llm-primer job (a03d993b, https://actionbridge.io/en-US/llmtutorial) did not fail
+on its own merits. The job runner could not create its working directory:
+
+  14:55:06  Processing job: a03d993b
+  14:55:06  Running Zimit for https://actionbridge.io/en-US/llmtutorial
+  14:55:06  mkdir: cannot create directory '/tank/Archives/work/a03d993b': Permission denied
+  14:55:06  Main process exited, code=exited, status=1/FAILURE
+
+zimit-progress-monitor then swept the job with "Orphaned: job-runner exited before
+completion". That message describes the symptom, not the cause, and sent me looking
+at the crawl first -- the crawl never started.
+
+ROOT CAUSE: /tank/Archives/work and /tank/Archives/ZIM are each their OWN ZFS
+dataset, and zimit-job-runner declared NO mount dependency on either. The
+tank-Archives-ZIM.mount after/wants in this same module belongs to kiwix-serve, not
+to the runner, which is easy to misread as coverage. So the runner was free to fire
+while a dataset was unmounted, at which point /tank/Archives/work resolves to the
+directory SHADOWED beneath the mountpoint -- proven to be root:root 0755 -- which the
+zimit user cannot write to. Hence EACCES rather than EROFS or ENOSPC.
+
+THE SHADOW PERMISSIONS ARE THE SAFETY NET, NOT THE BUG. It is tempting to "fix" this
+by chowning the shadowed directory to zimit. That would be much worse: an unmounted
+run would then silently write a multi-GB crawl into the parent dataset on the root
+pool instead of failing. The loud failure was correct behaviour. Recorded in the
+module so nobody reverses it.
+
+FIXED with two directives, because the obvious one is not sufficient on this host:
+  RequiresMountsFor        gives ORDERING only here. Verified after deploying it:
+                           After= gained tank-Archives-work.mount and
+                           tank-Archives-ZIM.mount, but Requires= still listed only
+                           -.mount and both mount units reported RequiredBy=0 for
+                           this service. These ZFS mounts come from the runtime mount
+                           table rather than fstab, so systemd orders against them but
+                           will not treat them as hard requirements. Ordering alone
+                           does not prevent an unmounted start.
+  ConditionPathIsMountPoint  is what actually enforces it, and it fails in the better
+                           direction: an unmet condition SKIPS the unit rather than
+                           failing it, so a pending job waits for the next 5-minute
+                           timer instead of being run against an unwritable path and
+                           then marked failed.
+Both confirmed present in the generated unit file. Note `systemctl show -p
+ConditionPathIsMountPoint` returns EMPTY even when the condition is set -- systemd
+does not expose conditions under that property name, so read `systemctl cat` instead.
+That empty output is a broken instrument, not a missing directive.
+
+NOT ESTABLISHED: what unmounted the dataset at 14:55. tank-Archives-work.mount reports
+continuously active since 2026-07-03 and never cycled in the window; nothing in the
+14:54-14:55 journal touches /tank/Archives; zpool events retained nothing. This is the
+only such failure in the whole retained journal. The fix makes the trigger moot -- an
+unmounted state now skips rather than fails -- so I did not chase it further, but it
+is unexplained rather than ruled out.
+
+OUTCOME: the job re-ran and is crawling normally. /tank/Archives/work/a03d993b exists,
+job status=running since 2026-08-20T23:00:25Z, the container is up, and ZimitJobsFailed
+has cleared.
+
 * DONE [#B] agnix 0.49.0 fails to build: uses unstable 'if let' guards against rustc 1.91.1
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

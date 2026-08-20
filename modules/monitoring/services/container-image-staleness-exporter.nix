@@ -200,7 +200,21 @@ in
 
             # Local build age (best-effort; emitted whenever .Created parses).
             local created age_days
-            created=$($pcmd image inspect "$image" --format '{{.Created}}' 2>/dev/null || echo "")
+            # Ask podman for RFC3339 rather than its default rendering. `{{.Created}}`
+            # emits Go's native time.Time string -- "2025-08-14 08:01:41.197445042
+            # +0000 UTC" -- and GNU date REFUSES that: it will not accept a trailing
+            # " UTC" after an explicit "+0000" numeric offset. `date -d` exited 1 on
+            # every image, so the guard below never passed and
+            # container_image_local_age_days had NEVER emitted a single sample since
+            # the exporter was written. The metric name was absent from Prometheus's
+            # __name__ index entirely, which is how it was finally spotted.
+            #
+            # Formatting on podman's side rather than stripping " UTC" in shell,
+            # because that survives podman changing its default rendering again.
+            # Verified 2026-08-20 against all 11 images this exporter actually
+            # inspects (it enumerates running containers, so dangling <none> images
+            # never reach it): 11/11 parse, ages 1-317 days.
+            created=$($pcmd image inspect "$image" --format '{{.Created.Format "2006-01-02T15:04:05Z07:00"}}' 2>/dev/null || echo "")
             if [[ -n "$created" ]]; then
               local created_epoch
               created_epoch=$($DATE -d "$created" +%s 2>/dev/null || echo "")

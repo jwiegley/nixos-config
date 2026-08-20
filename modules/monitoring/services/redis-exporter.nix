@@ -9,9 +9,19 @@
   # Redis exporter for multiple Redis instances.
   # Primary -redis.addr target (job="redis"): rspamd (127.0.0.1:6381).
   # Multi-target /scrape probes (job="redis-multi"): openproject(6383),
-  # searxng(6386), rspamd(6381), speedtest-tracker(6387), plus the
+  # searxng(6386), rspamd(6381), speedtest-tracker(6387), grist(6388), plus the
   # two UNIX-socket instances gitea + immich (via unix:// targets — see below).
   # The systemd-unit-state alert for the socket pair is kept as a backstop.
+  #
+  # KEEP THIS LIST IN STEP WITH THE ACTUAL INSTANCES. Until 2026-08-20 this header
+  # claimed "all five TCP-listening instances" while enumerating four, and grist
+  # (6388) had been listening since 2026-08-19 with no coverage anywhere. The cheap
+  # check, which does not rely on this comment being true:
+  #   /run/current-system/sw/bin/ss -tlnp | grep -oE ':63[0-9]{2}' | sort -u
+  #   curl -s 'http://127.0.0.1:9090/api/v1/query?query=count(redis_up)'
+  # A TCP port in the first list with no matching target here is an uncovered
+  # instance. Note `ss` is shadowed by a user script on this host -- use the
+  # absolute path above.
 
   services.prometheus.exporters.redis = {
     enable = true;
@@ -104,6 +114,15 @@
             "redis://127.0.0.1:6386" # searxng (allkeys-lru, maxmemory 64mb)
             "redis://127.0.0.1:6381" # rspamd (noeviction; Bayes/fuzzy backend, RDB-persisted)
             "redis://127.0.0.1:6387" # speedtest-tracker (allkeys-lru, maxmemory 64mb)
+            # grist. ADDED 2026-08-20: this instance was declared in
+            # modules/containers/grist-quadlet.nix:137 when Grist was installed on
+            # 2026-08-19 and was never added here, so it was the only Redis on the
+            # host with NO coverage at all -- absent from these probes AND from the
+            # systemd backstop in alerts/redis.yaml, which matches only
+            # redis-(gitea|immich). It binds 0.0.0.0 rather than loopback because the
+            # Grist container reaches the host on the pinned bridge address; the
+            # firewall opens 6388 on podman0 only.
+            "redis://127.0.0.1:6388" # grist (allkeys-lru, maxmemory 128mb; sessions)
             "unix:///run/redis-gitea/redis.sock" # gitea sessions/cache (socket; needs redis-gitea group)
             "unix:///run/redis-immich/redis.sock" # immich queue/session store (socket; needs redis-immich group)
           ];

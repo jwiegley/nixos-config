@@ -79,7 +79,7 @@ groups:
       # (rootless-podman-image-prune.nix); >9d since last trigger means a missed
       # window (cadence + slack). container_image_prune_last_trigger_seconds is only
       # emitted for users whose timer exists AND has fired at least once, so a
-      # never-fired timer shows up as absent — caught by the absent() arm below.
+      # never-fired timer shows up as absent — caught by ContainerPruneMissing below.
       - alert: ContainerPruneStale
         expr: time() - container_image_prune_last_trigger_seconds > 9 * 24 * 3600
         for: 1h
@@ -88,6 +88,60 @@ groups:
         annotations:
           summary: "Rootless image-prune for {{ $labels.user }} is stale"
           description: "podman-image-prune.timer for user {{ $labels.user }} last fired {{ $value | humanizeDuration }} ago (weekly cadence) — dangling images may be accumulating"
+
+      # The absent arm the comment above promised. Until 2026-08-20 it did not
+      # exist: grepping this file for "absent" matched exactly ONE line -- the
+      # comment claiming the rule was here. ContainerPruneStale is a
+      # time()-since-last-fire test and by construction cannot fire on a series that
+      # never appeared, so a rootless user added without the prune module was
+      # completely unmonitored.
+      #
+      # Why not literal absent(): absent() returns 1 only when a selector matches
+      # NOTHING at all, so it cannot find one missing user among ten. The set
+      # difference is the right operator.
+      #
+      # SCOPED ON container_running, NOT container_store_size_bytes, and that is
+      # load-bearing. Keying on the store metric was tried first and produced two
+      # false positives: `root`, whose images are pruned by
+      # virtualisation.podman.autoPrune rather than a per-user timer; and
+      # `technitium-dns-exporter`, which has a /var/lib/containers home but runs its
+      # container as a SYSTEM container -- its module header says so, because it uses
+      # a locally-built image that cannot be shared into a rootless store, and its
+      # directory is 376K of home rather than a populated overlay. Keying on
+      # container_running{user!="root"} asks the question that actually matters: who
+      # runs rootless containers, and does each have a pruner.
+      #
+      # Verified 2026-08-20: scans 10 rootless users, returns 0 gaps. Preventive by
+      # design -- it exists to catch the documented CONTAINER_USERS/ROOTLESS_USERS
+      # drift where a user is added to one list and not the other.
+      - alert: ContainerPruneMissing
+        expr: |
+          count by (user) (container_running{user!="root"})
+          unless on(user) container_image_prune_last_trigger_seconds
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rootless user {{ $labels.user }} has containers but no image-prune timer"
+          description: |
+            User `{{ $labels.user }}` is running rootless containers but reports no
+            container_image_prune_last_trigger_seconds, so its overlay store is never
+            pruned and grows without bound. ContainerPruneStale cannot see this — it
+            measures the age of a timestamp that does not exist.
+
+            Usual cause: the user was added to the container/quadlet list but not to
+            home-manager.users, so it never received
+            modules/users/home-manager/rootless-podman-image-prune.nix. That timer is
+            a `systemd --user` unit inside the user's own manager.
+
+            Check:
+              sudo -u {{ $labels.user }} XDG_RUNTIME_DIR=/run/user/$(id -u {{ $labels.user }}) \
+                systemctl --user list-timers podman-image-prune.timer
+
+            Fix this BEFORE the account is ever removed. Deleting a rootless user
+            deletes its pruner with it, and the orphaned store then cannot be
+            reclaimed by any scheduled job — which is exactly how the removed litellm
+            user left 2.73 GiB behind under an unresolvable uid.
 
       # The prune unit's last run reported a non-success Result (failed/timeout/
       # exit-code). 0 == success; only ==1 fires.

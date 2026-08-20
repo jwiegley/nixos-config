@@ -74,8 +74,25 @@
       # Forward to syslog for additional logging redundancy
       ForwardToSyslog=yes
 
-      # Forward kernel messages to kmsg for dmesg visibility
-      ForwardToKMsg=yes
+      # ForwardToKMsg=no, corrected 2026-08-20. It was =yes, commented "Forward
+      # kernel messages to kmsg for dmesg visibility", which is backwards in a way
+      # that defeated this module's own purpose.
+      #
+      # ForwardToKMsg pushes JOURNAL (userspace) records INTO the kernel ring
+      # buffer. Kernel messages already originate there; nothing needs forwarding to
+      # make them visible to dmesg. What the setting actually did was flood a
+      # fixed-size ring buffer with podman/sudo/redis/matter-server chatter:
+      # measured before the change, `dmesg` spanned only ~34 MINUTES (627 lines,
+      # 134,920 bytes, default buffer size, no log_buf_len on the cmdline), and
+      # `dmesg -x` showed facility user:notice 92 / user:err 86 with exactly ONE
+      # audit record. Zero usb/scsi/uas/xhci lines survived.
+      #
+      # That is the whole cost: this host has a documented USB/UAS enclosure
+      # bridge-hang failure mode where dmesg is the first-reflex diagnostic, and the
+      # ring buffer was holding half an hour of the wrong data. Kernel messages are
+      # still journalled either way (journalctl -k), and ForwardToSyslog above is
+      # untouched, so nothing is lost by turning this off.
+      ForwardToKMsg=no
 
       # Rate limiting: Allow high burst for capturing crash events
       # These are per-service limits

@@ -4565,15 +4565,16 @@ of CPU and finished in seconds.
 VERIFIED after /etc/nixos/build switch: sync-push-mirrors.timer is present and
 enabled, Persistent=yes, RandomizedDelayUSec=10min.
 
-* TODO [#E] Five small monitoring/housekeeping gaps: dead image-age collector, orphaned litellm stores, unmonitored prune timer and redis-grist
+* DONE [#E] Five small monitoring/housekeeping gaps: dead image-age collector, orphaned litellm stores, unmonitored prune timer and redis-grist
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-qmf
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 14:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 14:48]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -4633,6 +4634,69 @@ NOTHING is the most interesting of the five: podman's .Created format is unparse
 by `date -d`, so container_image_local_age_days has never produced a single sample and
 image-age monitoring has been silently blind since it was written.
 #+end_example
+
+** Close Reason
+
+All five closed. Four fixed in config, one resolved by deletion at John's explicit
+direction. Each verified empirically rather than by rebuild-succeeded.
+
+1. ForwardToKMsg=yes -> no (crash-debug.nix). The setting was commented "Forward
+   kernel messages to kmsg for dmesg visibility", which is backwards: it pushes
+   JOURNAL records INTO the ring buffer, and kernel messages already originate
+   there. Before: dmesg spanned ~34 minutes with facility user:notice 92 / user:err
+   86 and ZERO usb/scsi/uas/xhci lines -- on a host whose documented failure mode is
+   a USB/UAS enclosure bridge hang where dmesg is the first-reflex tool.
+   VERIFIED by injecting a userspace record with `logger` and confirming it does NOT
+   reach kmsg (0 hits, dmesg line count unchanged at 702). Pre-existing userspace
+   lines remain until the fixed-size buffer cycles them out; kernel messages are
+   still journalled (journalctl -k) and ForwardToSyslog is untouched.
+
+2+3. /var/lib/containers/litellm DELETED -- 2.73 GiB, 60,468 files, owned by
+   unresolvable uid 948:gid 939. John authorised this explicitly. Pre-flight checked
+   first, and the mount check is the one that mattered: no litellm user, uid 948
+   unallocated, 0 linger entries, 0 systemd units, 0 mount entries under the path,
+   no open file handles (lsof), no repo references. /var went 27% -> 26% and every
+   remaining container store now resolves to a real user -- no UNKNOWN:UNKNOWN.
+   The phantom metric cleared too: container_store_size.prom went from 13 series
+   including litellm to 12 with zero litellm lines.
+
+4. container_image_local_age_days had NEVER emitted a sample. podman renders
+   .Created as Go's native time.Time string ("2025-08-14 08:01:41.197445042 +0000
+   UTC") and GNU date refuses a trailing " UTC" after an explicit "+0000", so the
+   guard never passed. Fixed by asking podman for RFC3339 via
+   {{.Created.Format "2006-01-02T15:04:05Z07:00"}} rather than stripping the suffix
+   in shell, so it survives podman changing its rendering again.
+   VERIFIED: 0 sample lines before, 15 after. matter-server reads 371 days and
+   wallabag 317 -- real drift the metric existed to show and never did.
+   Positive-controlled first against every image the exporter actually inspects
+   (it enumerates running containers, so dangling <none> images never reach it):
+   11/11 parsed.
+
+5. ContainerPruneMissing added -- the absent arm the comment had promised for who
+   knows how long. Grepping the file for "absent" matched exactly one line: the
+   comment claiming the rule existed. ContainerPruneStale is a time()-since-last-fire
+   test and cannot fire on a series that never appeared.
+   NOT literal absent(), which returns 1 only when a selector matches nothing at all
+   and so cannot find one missing user among ten; the set difference is the right
+   operator.
+   SCOPED ON container_running, NOT container_store_size_bytes -- I tried the store
+   metric first and it produced two FALSE POSITIVES: `root` (pruned by
+   virtualisation.podman.autoPrune, not a per-user timer) and
+   `technitium-dns-exporter`, which has a /var/lib/containers home but runs its
+   container as a SYSTEM container per its own module header, its directory being
+   376K of home rather than a populated overlay. Keying on
+   container_running{user!="root"} asks the question that matters.
+   VERIFIED: scans 10 rootless users, 0 gaps, health=ok. Preventive by design --
+   it catches the documented CONTAINER_USERS/ROOTLESS_USERS drift, which is exactly
+   how litellm's pruner vanished with its account and left 2.73 GiB behind.
+
+6. redis-grist (6388) added to the redis-multi targets. MY OWN GAP: I declared that
+   instance in grist-quadlet.nix on 2026-08-19 and never added it here, leaving it
+   the only Redis on the host with no coverage at all -- absent from these probes
+   AND from the systemd backstop, which matches only redis-(gitea|immich).
+   VERIFIED: redis_up went from 7 series to 8, with redis://127.0.0.1:6388 at up=1.
+   Replaced the header's stale claim ("all five TCP-listening instances" while
+   listing four) with the command that re-derives coverage instead.
 
 * DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:

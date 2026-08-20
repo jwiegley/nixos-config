@@ -1913,15 +1913,16 @@ would NOT catch the case where the unit succeeds while transferring nothing.
 ]
 #+end_src
 
-* DOING [#C] Install Grist behind nginx with PostgreSQL and Redis
+* DONE [#C] Install Grist behind nginx with PostgreSQL and Redis
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-fg5
 :LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-08-19 Wed 18:05]
-:MODIFIED: [2026-08-19 Wed 18:05]
+:MODIFIED: [2026-08-19 Wed 19:35]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 19:35]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1959,6 +1960,58 @@ BLOCKED on two things only John can do:
      happen before the switch that flips services.grist.enable = true.
 
 Then: enable, /etc/nixos/build switch, and test end to end.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Deployed and working. John added both SOPS keys and issued the certificate on
+2026-08-19; enabling it surfaced two real defects, both now fixed.
+
+DEFECT 1: the PostgreSQL ROLE was never declared. postgresql-grist-setup only SETS
+a password; it failed outright with `role "grist" does not exist`. mkPostgresUserSetup
+had been copied from NocoBase without its counterpart entries in
+services.postgresql.ensureDatabases / ensureUsers. Both now added, gated the same way.
+
+DEFECT 2, the more interesting one: the container wrote to /var/lib/grist as
+subuid 2394760, not as grist(899). Rootless podman maps container uid 0 to the
+invoking host user, so an image running as root lands files as that user with no
+configuration -- which is why /var/lib/nocobase is cleanly owned by nocobase(945)
+and this never came up before. Grist's image drops to uid 1000, and 1000 maps into
+the SUBUID range instead (grist's base 2393760 + 1000).
+
+That was NOT cosmetic. The `Z /var/lib/grist 0750 grist grist` rule recursively
+chowns the tree back to 899 on every boot and every rebuild, and at 0750 the subuid
+then has no access at all -- Grist would have silently lost write access to its own
+documents at the next activation, days later, with nothing connecting cause to
+effect. Confirmed by running `systemd-tmpfiles --create --prefix=/var/lib/grist` by
+hand and watching it rewrite 2394760 -> 899.
+
+Fixed by correcting the MAPPING rather than dropping the tmpfiles rule:
+podmanArgs = [ "--userns=keep-id:uid=1000,gid=1000" ]. On-disk ownership now matches
+what every other service here assumes, and the directory stays administrable as grist.
+
+Also removed: home.sessionVariables.PODMAN_USERNS = "keep-id", copied from the other
+container users. home.sessionVariables goes into the shell profile and is NOT
+inherited by systemd user units, so it never affected any of these containers. It is
+a no-op that reads like configuration.
+
+VERIFIED END TO END:
+,  * https://grist.vulcan.lan -> 302 -> 200, <title>Loading... - Grist</title>, landing
+    on /o/vulcan/boot, so GRIST_SINGLE_ORG is in effect
+,  * PostgreSQL: 25 tables created by Grist's own migrations in the grist database --
+    which is what proves the container authenticated, not merely that a role exists
+,  * Redis 6388: 8 keys, so the session store is live rather than falling back to a
+    container-local SQLite file
+,  * blackbox probe probe_success=1; container_running=1, container_restart_count=0,
+    container_health_status=3 (= "none", no HEALTHCHECK in the image; 15 of 17
+    containers here read 3, and ContainerUnhealthy fires on == 1, so this does not
+    false-alarm)
+,  * Glance tile present in the live /run/glance/glance.yaml next to NocoBase
+,  * write path proven, not assumed: touching a file inside the container shows
+    1000:1000 in-container and 899:891 on the host, and it survives a tmpfiles run
+    unchanged
+,  * 0 failed units afterwards
 #+end_example
 
 * TODO [#C] Three Google Calendar entries in setup_error, and no alert covers config-entry health

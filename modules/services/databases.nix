@@ -224,6 +224,11 @@ in
         "wallabag"
       ]
       ++ lib.optional config.services.nocobase.enable "nocobase"
+      # Grist's HOME database only -- orgs, workspaces, users, ACLs. The
+      # spreadsheet documents are SQLite files under /var/lib/grist and are not
+      # in PostgreSQL, so this database being intact does not mean the documents
+      # are.
+      ++ lib.optional config.services.grist.enable "grist"
       ++ [
         "budgetboard"
         "gitea"
@@ -240,6 +245,16 @@ in
       ]
       ++ lib.optional config.services.nocobase.enable {
         name = "nocobase";
+        ensureDBOwnership = true;
+      }
+      # Creates the ROLE. postgresql-grist-setup only sets its password, and
+      # fails outright with `role "grist" does not exist` if this is missing --
+      # which is exactly what happened on the first attempt to enable Grist,
+      # because the setup service was added without its counterpart here.
+      # ensureDBOwnership requires the database name to equal the user name;
+      # both are "grist".
+      ++ lib.optional config.services.grist.enable {
+        name = "grist";
         ensureDBOwnership = true;
       }
       ++ [

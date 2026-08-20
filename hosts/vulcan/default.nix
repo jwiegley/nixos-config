@@ -345,6 +345,13 @@
   # the certificate as described there.
   services.nocobase.enable = true;
 
+  # Grist. Both preconditions met on 2026-08-19: grist-db-password and
+  # grist-secrets exist in secrets.yaml, and grist.vulcan.lan.crt/.key are
+  # issued (CN=grist.vulcan.lan, SAN matches, valid to 2027-08-20). Turning this
+  # on before either would fail the whole activation, not just this service --
+  # see the contract at the top of modules/containers/grist-quadlet.nix.
+  services.grist.enable = true;
+
   # This option defines the first version of NixOS you have installed on this
   # particular machine, and is used to maintain compatibility with application
   # data (e.g. databases) created on older NixOS versions.

@@ -56,9 +56,11 @@ in
       home.username = "grist";
       home.homeDirectory = "/var/lib/containers/grist";
 
-      home.sessionVariables = {
-        PODMAN_USERNS = "keep-id";
-      };
+      # NOTE: no PODMAN_USERNS here, unlike the other container users on this
+      # host. home.sessionVariables is written into the shell profile and is NOT
+      # inherited by systemd user units, so setting it there never affected any
+      # of these containers -- it is a no-op that reads like configuration. The
+      # real mapping is set with --userns below.
 
       home.file.".keep".text = "";
 
@@ -79,6 +81,31 @@ in
           image = "docker.io/gristlabs/grist:latest";
           publishPorts = [ "127.0.0.1:8484:8484/tcp" ];
           networks = [ "slirp4netns:allow_host_loopback=true" ];
+
+          # Map the container's uid/gid 1000 onto the HOST grist user, so files
+          # written into /persist are owned by grist(899) on disk.
+          #
+          # WHY THIS IS NEEDED HERE AND NOT FOR NOCOBASE OR WALLABAG. Rootless
+          # podman maps container uid 0 to the invoking host user, so an image
+          # that runs as root lands its files on the host as that user with no
+          # extra configuration -- which is why /var/lib/nocobase is cleanly
+          # owned by nocobase(945). Grist's image drops to uid 1000, and 1000
+          # maps into the user's SUBUID range instead: /var/lib/grist ended up
+          # owned by 2394760 (= grist's subuid base 2393760 + 1000).
+          #
+          # That is not cosmetic. The `Z /var/lib/grist 0750 grist grist` rule in
+          # modules/containers/grist-quadlet.nix recursively chowns the tree back
+          # to grist(899) on EVERY boot and every rebuild, and at 0750 the subuid
+          # then has no access at all -- so Grist would lose write access to its
+          # own documents at the next activation. Verified by running
+          # `systemd-tmpfiles --create --prefix=/var/lib/grist` by hand: it
+          # rewrote 2394760 -> 899 exactly as predicted.
+          #
+          # Fixing the mapping is the right half to change rather than dropping
+          # the tmpfiles rule: on-disk ownership then matches what every other
+          # service here assumes, and the data directory stays administrable as
+          # the grist user.
+          podmanArgs = [ "--userns=keep-id:uid=1000,gid=1000" ];
 
           # Non-secret configuration only. GRIST_SESSION_SECRET and
           # TYPEORM_PASSWORD arrive via environmentFiles.

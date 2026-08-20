@@ -81,7 +81,6 @@
     ../../modules/services/model-config.nix
     ../../modules/services/monitoring.nix
     ../../modules/services/mosquitto.nix
-    ../../modules/services/nagios.nix
     ../../modules/services/network-services.nix
     ../../modules/services/node-red.nix
     ../../modules/services/nut.nix
@@ -101,7 +100,6 @@
 
     # Service monitoring
     ../../modules/monitoring/container-health-exporter.nix
-    ../../modules/monitoring/nagios-daily-report.nix
     ../../modules/monitoring/services
 
     # Email testing script (manual use only)

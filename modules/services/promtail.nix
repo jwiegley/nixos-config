@@ -720,19 +720,6 @@
         }
 
         # Nagios monitoring logs
-        {
-          job_name = "nagios";
-          static_configs = [
-            {
-              targets = [ "localhost" ];
-              labels = {
-                job = "nagios";
-                host = "vulcan";
-                __path__ = "/var/log/nagios/nagios.log";
-              };
-            }
-          ];
-        }
 
         # ZFS replication logs
         {

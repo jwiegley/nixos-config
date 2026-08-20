@@ -311,10 +311,9 @@ let
         </div>
 
         <div class="footer">
-            <p>Auto-refreshes every 30 seconds | Monitored by Prometheus & Nagios</p>
+            <p>Auto-refreshes every 30 seconds | Monitored by Prometheus</p>
             <p><a href="https://grafana.vulcan.lan">View Metrics in Grafana</a> |
-               <a href="https://prometheus.vulcan.lan">Prometheus</a> |
-               <a href="https://nagios.vulcan.lan">Nagios</a></p>
+               <a href="https://prometheus.vulcan.lan">Prometheus</a></p>
         </div>
     </body>
     </html>"""

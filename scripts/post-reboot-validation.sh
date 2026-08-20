@@ -510,16 +510,16 @@ else
 fi
 
 # ===========================================================================
-# (n) node-red, nagios, home-assistant active.
+# (n) node-red, home-assistant active.
 # ===========================================================================
-check "node-red / nagios / home-assistant active"
+check "node-red / home-assistant active"
 app_bad=""
-for s in node-red nagios home-assistant; do
+for s in node-red home-assistant; do
   st=$(active_state "$s")
   [ "$st" = "active" ] || app_bad+="$s($st) "
 done
 if [ -z "$app_bad" ]; then
-  pass "node-red nagios home-assistant all active"
+  pass "node-red home-assistant all active"
 elif in_boot_window; then
   warn "not active yet: $app_bad(boot window)"
 else

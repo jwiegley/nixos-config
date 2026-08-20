@@ -408,7 +408,30 @@ in
   # Ensure metrics directory exists with proper permissions
   systemd.tmpfiles.rules = [
     "d ${metricsDir} 1777 prometheus prometheus -"
+
+    # /tank/Backups must stay 0711: owner (johnw) full access, group and other
+    # traverse only, so a service can stat a specific timestamp file such as
+    # Machines/Vulcan/.etc.latest without being able to list the tree.
+    #
+    # RELOCATED here 2026-08-19 from modules/services/nagios.nix, which was the
+    # SOLE declarative assertion of this mode and which the Nagios removal
+    # deletes. It belongs in this module because local-backup is what writes the
+    # timestamp files the mode exists to protect.
+    #
+    # `z` adjusts an existing path and never creates or deletes. Deliberately
+    # not `Z` (recursive -- would rewrite ownership across every backup tree)
+    # and emphatically not `D`, which EMPTIES its target and has caused data
+    # loss on this host twice.
+    "z /tank/Backups 0711 johnw johnw -"
   ];
+
+  # Orders the rule above after the ZFS mount. `wants`, not `requires`, so a
+  # configuration switch is not blocked when the mount unit is unavailable.
+  # Also relocated from nagios.nix.
+  systemd.services.systemd-tmpfiles-resetup = {
+    after = [ "tank-Backups.mount" ];
+    wants = [ "tank-Backups.mount" ];
+  };
 
   # Documentation
   environment.etc."local-backup/README.md" = {

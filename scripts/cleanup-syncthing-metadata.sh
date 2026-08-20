@@ -128,7 +128,7 @@ assert_identity_and_host() {
     die "root GID changed"
   [[ "$(getent group immich | cut -d: -f3)" == "$immich_gid" ]] ||
     die "immich GID changed"
-  for service in nagios prometheus; do
+  for service in prometheus; do
     for group_id in $(id -G "$service"); do
       [[ "$group_id" != "$public_gid" ]] ||
         die "$service unexpectedly belongs to the Public destination group"

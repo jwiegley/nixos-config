@@ -252,10 +252,6 @@ with lib;
                           url = "https://alertmanager.vulcan.lan";
                         }
                         {
-                          title = "Nagios";
-                          url = "https://nagios.vulcan.lan";
-                        }
-                        {
                           title = "Rspamd";
                           url = "https://rspamd.vulcan.lan";
                         }

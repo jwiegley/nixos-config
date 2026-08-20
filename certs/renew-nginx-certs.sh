@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Nginx certificate renewal script using the general renew-certificate.sh
-# This script renews certificates for the 37 hosts hardcoded in DOMAINS below.
+# This script renews certificates for the 36 hosts hardcoded in DOMAINS below.
 # That is a SUBSET of the vhosts nginx serves out of /var/lib/nginx-certs: as of
 # 2026-07-27 atd, budget, changes, chat, llama-swap, mailarchiver, shlink,
 # shlink-api and vulcan.lan are NOT renewed here. atd and budget have their own
@@ -32,7 +32,6 @@ DOMAINS=(
     "immich.vulcan.lan"
     "jellyfin.vulcan.lan"
     "loki.vulcan.lan"
-    "nagios.vulcan.lan"
     "nodered.vulcan.lan"
     "openproject.vulcan.lan"
     "postgres.vulcan.lan"

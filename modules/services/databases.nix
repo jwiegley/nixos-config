@@ -188,7 +188,7 @@ in
         # changing it requires a full `systemctl restart postgresql.service`,
         # which bounces ~26 user databases and the 33 reverse-dependent units
         # (immich-server, immich-machine-learning, gitea, home-assistant,
-        # budget-board-server, nagios, pgadmin, + ~14
+        # budget-board-server, pgadmin, + ~14
         # postgresql-*-setup oneshots). A `nixos-rebuild switch` only RELOADS
         # PostgreSQL on a settings change — it does NOT restart it — so the
         # library does not actually load until an EXPLICIT restart. Fold that
@@ -618,10 +618,6 @@ in
     StartLimitBurst = 30;
   };
   systemd.services.home-assistant.unitConfig = {
-    StartLimitIntervalSec = "10min";
-    StartLimitBurst = 30;
-  };
-  systemd.services.nagios.unitConfig = {
     StartLimitIntervalSec = "10min";
     StartLimitBurst = 30;
   };

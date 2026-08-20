@@ -47,13 +47,10 @@
     polkit.enable = true;
     sudo.wheelNeedsPassword = false;
 
-    # Suppress sudo logging for nagios health checks
     # Nagios runs podman commands every few seconds to check container health
     # Without this, generates ~5,800 sudo log entries per day
     sudo.extraConfig = ''
-      # Disable syslog logging for nagios user
       # The !syslog tag prevents sudo from logging to syslog
-      Defaults:nagios !syslog
 
       # Also disable for root running container health checks (systemd watchdog)
       # These run every 30 seconds per container

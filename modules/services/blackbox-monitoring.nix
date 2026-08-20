@@ -915,7 +915,6 @@ in
             static_configs = [
               {
                 targets = [
-                  "https://nagios.vulcan.lan"
                   "https://loki.vulcan.lan"
                 ];
               }

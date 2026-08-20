@@ -378,5 +378,36 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
     };
+
+    # Retry timer (nixos-pna, cadence chosen by John 2026-08-19).
+    #
+    # WHY THIS EXISTS. gitea_push_mirror_failed encodes Gitea's `last_error`,
+    # which is LEVEL-triggered: Gitea sets it on a rejected push and clears it
+    # only on a later SUCCESS. Nothing was retrying -- this service was a
+    # manually-triggered oneshot -- and Gitea's own per-mirror scheduler defaults
+    # to 8 HOURS. So a transient failure held GiteaPushMirrorFailing until a
+    # human noticed and ran this by hand, which is exactly what happened on
+    # 2026-08-19: the alert fired for 1h43m over a mirror whose content had in
+    # fact arrived at GitHub eleven minutes after it was created.
+    #
+    # Two hours bounds that to ~2h instead of 8h-or-forever. The cost is small
+    # and measured, not assumed: a full run over 197 repositories took 3.76s of
+    # CPU and finished in seconds.
+    #
+    # Persistent = true so a retry missed while the host was down happens on the
+    # next boot rather than waiting for the next even-numbered hour -- a mirror
+    # left failing across a reboot is precisely the case this is for.
+    # RandomizedDelaySec keeps 197 outbound pushes off the hour boundary shared
+    # with every other timer on this host.
+    systemd.timers.sync-push-mirrors = {
+      description = "Retry Gitea push mirrors so a transient failure self-heals";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "*-*-0/2:00:00";
+        Persistent = true;
+        RandomizedDelaySec = "10min";
+        Unit = "sync-push-mirrors.service";
+      };
+    };
   };
 }

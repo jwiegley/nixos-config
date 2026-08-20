@@ -1086,6 +1086,68 @@ in
             scrape_timeout = "10s";
           }
 
+          # Protocol-level TCP reachability for the four ports the Nagios
+          # inventory (nixos-a71) showed to be the ONLY genuinely uncovered
+          # checks on this host.
+          #
+          # The audit compared all 302 native Nagios service checks against
+          # Prometheus, class by class, and everything else already had an
+          # equivalent with WIDER coverage -- 46 ICMP targets against 23
+          # check_ping, 569 systemd units against 140 check_systemd_service*, 41
+          # cert series against 30 check_ssl_cert, and so on. Even the six
+          # check_tcp ports turned out to be redundant: 5432 has the postgres
+          # exporter, 9090 the self-scrape, 3000 grafana, 8123 the hass HTTPS
+          # probe, 443 the 35 https_local probes, 80 the http probe.
+          #
+          # These four are different. Postfix and Dovecot are richly
+          # instrumented -- 222 and 141 series respectively -- but every one of
+          # those measures the DAEMON, not whether the port answers. A listener
+          # wedged behind a healthy-looking process is exactly what the old
+          # check_imap / check_imaps / check_smtp caught and what nothing here
+          # did. check_ssh had no equivalent at all.
+          #
+          # 127.0.0.1 on purpose: these are services on this host, and using
+          # loopback keeps addresses out of the tracked repo. The tcp_connect
+          # module has existed in this file since before this job did; it simply
+          # had no scrape job pointing at it.
+          {
+            job_name = "blackbox_tcp";
+            metrics_path = "/probe";
+            params = {
+              module = [ "tcp_connect" ];
+            };
+            static_configs = [
+              {
+                targets = [
+                  "127.0.0.1:22" # sshd
+                  "127.0.0.1:143" # dovecot imap
+                  "127.0.0.1:993" # dovecot imaps
+                  "127.0.0.1:587" # postfix submission
+                ];
+              }
+            ];
+            relabel_configs = [
+              {
+                source_labels = [ "__address__" ];
+                target_label = "__param_target";
+              }
+              {
+                source_labels = [ "__param_target" ];
+                target_label = "instance";
+              }
+              {
+                target_label = "__address__";
+                replacement = "localhost:${toString config.services.prometheus.exporters.blackbox.port}";
+              }
+              {
+                target_label = "probe_type";
+                replacement = "tcp";
+              }
+            ];
+            scrape_interval = "60s";
+            scrape_timeout = "10s";
+          }
+
           # Internal-zone DNS resolution correctness (probes the local
           # Technitium resolver at 127.0.0.1 for vulcan.lan -> expected A record)
           {

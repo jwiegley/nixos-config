@@ -1186,7 +1186,7 @@ has been asked about and which are not part of this issue.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-17 Mon 20:49]
-:MODIFIED: [2026-08-19 Wed 12:46]
+:MODIFIED: [2026-08-19 Wed 19:12]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1284,6 +1284,13 @@ countable backlog -- worth doing first, and separately from any deletion.
     "author": "johnw",
     "text": "GAPS CLOSED 2026-08-19, deployed and verified. The precondition John attached to\nremoving Nagios -- a Prometheus equivalent for every native check -- is now met.\n\nWHAT WAS ADDED (modules/services/blackbox-monitoring.nix):\n  * 4 ICMP targets, joining host_group \"local\" via the existing relabel, so\n    HostUnreachable owns them exactly as it owns the rest of that block. That is\n    the same alerting weight Nagios already applied, which is the point.\n    3 are probed BY IP, following the documented TL-WPA8630 precedent in the\n    same file: OPNsense registers only the PTR, so the forward name does not\n    resolve and a name-based probe fails even when the device is up.\n  * 1 HTTPS target, the BARE vulcan.lan vhost. Marginal alone -- nginx failing\n    would take the other 39 probes with it -- but it was the last item in the\n    https/ssl class.\n\nVERIFIED AFTER THE SWITCH:\n    blackbox_icmp targets        42 -> 46\n    blackbox_https_local         34 -> 35\n    probe_success{https://vulcan.lan} = 1\n    local ICMP targets UP 11, DOWN 0\n    ICMP gap re-run: 7 -> 3      vhost gap re-run: 1 -> 0\n\nTHE HEADLINE NUMBER WAS WRONG AND IS NOW CORRECTED. I reported \"8 gaps (7 hosts\n+ 1 vhost)\". Resolving the 7 properly showed only 4 were real:\n    1  127.0.0.1 -- reverse-resolves to localhost. That is THIS HOST, already\n       probed as vulcan.lan. Never a gap; my IPv4 normalisation turned vulcan's\n       own loopback entry into an apparent missing target.\n    2  *.local -- mDNS names. avahi resolves them; unicast DNS returns nothing.\n       A probe works only while Prometheus runs on this host, and a sleeping\n       device would page HostUnreachable as CRITICAL. Deliberately not added.\n    4  genuinely missing -> added.\nSo the real gap was 5 (4 hosts + 1 vhost), not 8.\n\nALSO CORRECTED: I previously called 3 non-resolving blackbox targets a bug\n(\"monitoring nothing, sitting there silently\"). They are not. nest-downstairs\nand nest-family-room are host_group=iot-noping, a group whose own comment says\nthese devices NEVER ANSWER ICMP; ring-doorbell is iot-quiet, which the alert\nrules say MUST NEVER ALERT. They are intentional entries in groups built for\nexactly that behaviour, and no rule fires on them.\n\nREMAINING, all intentional and documented in the module: localhost and the two\nmDNS names. Whether to probe the mDNS pair is a judgement about alert noise vs\ncoverage that belongs to John, not a defect.\n\nNEXT: the staged removal John chose -- alert rules, then systemd units, then the\n36 .nix files, with a switch and health check between each stage.\n",
     "created_at": "2026-08-19T19:46:03Z"
+  },
+  {
+    "id": 35,
+    "issue_id": "nixos-a71",
+    "author": "johnw",
+    "text": "2026-08-19: inventory diff re-run at John's request, BEFORE any deletion. Read-only.\nResult: the coverage precondition is met, with one gap found and now closed.\n\nTHE INVENTORY TODAY: 302 native service checks (down from 320 on 2026-08-17),\ncollapsing into 31 distinct check commands. Six commands are 79% of the volume:\ncheck_systemd_service 122, check_file_age_tier1 40, check_ssl_cert 29,\ncheck_ping 23, check_https_vhost 23, check_systemd_service_conditional 17.\n\nCLASS-BY-CLASS DIFF against live Prometheus. Prometheus watches MORE in every class:\n\n    nagios class (count)              prometheus side\n    check_ping (23)                   46  blackbox_icmp targets\n    check_https_vhost/http/https (35) 41  blackbox http+https probe series\n    check_ssl_cert + external (30)    41  probe_ssl_earliest_cert_expiry\n    check_systemd_service* (140)     569  distinct units in node_systemd_unit_state\n    check_file_age + backup_age (43)  51  node_textfile_mtime_seconds\n    check_podman_container* (9)       16  container_health_status\n    check_zfs_pool (1)                 7  node_zfs_zpool_state\n\ncheck_tcp (6) looked like a gap and is NOT one. Each port already has a better\nsignal: 5432 the postgres exporter, 9090 the Prometheus self-scrape, 3000 grafana,\n8123 the hass HTTPS probe, 443 the 35 https_local probes, 80 the http probe.\n\nThe long tail of 17 single-instance commands is covered too: dns 11 series,\nqdrant 1, load/disk/procs/users via node_exporter, git_workspace 9, atd 4,\nhomeassistant_integration_status 12.\n\nTHE ONE REAL GAP, now closed: check_ssh (22), check_imap (143), check_imaps (993)\nand check_smtp (587) had NO Prometheus equivalent. Postfix and Dovecot export 222\nand 141 series respectively, but every one of those measures the DAEMON -- none\nanswers \"does the port accept a connection\", which is what a wedged or unbound\nlistener behind a healthy-looking process breaks, and exactly what those four\nNagios checks were for.\n\nClosed by adding a blackbox_tcp scrape job over those four ports on 127.0.0.1\n(loopback deliberately, so no addresses enter the tracked repo) plus a TCPServiceDown\nrule at 5m. The tcp_connect prober module already existed in blackbox-monitoring.nix\nand simply had no job pointing at it.\n\nThe alert rule is not optional here: ProbeTargetChronicallyFailing would have been\nthe only rule matching the new job, and it is a 1-week average below 0.98 -- days to\nnotice an ssh listener down. HostUnreachable does not apply, being scoped to\nblackbox_icmp. A job with no acute rule would have been coverage that reads as\ncoverage and catches nothing.\n\nVERIFIED: all four probes return probe_success=1; the TCPServiceDown selector sees\nexactly 4 series; the rule loads with health=ok and empty lastError after warmup.\n\nSO: nothing in the 302 native checks is now uncovered. Deletion is unblocked and\nremains John's call -- it was not begun.\n",
+    "created_at": "2026-08-20T02:12:42Z"
   }
 ]
 #+end_src
@@ -3356,15 +3363,16 @@ NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system
 patched release exists.
 #+end_example
 
-* TODO [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
+* DONE [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-pna
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 16:47]
-:MODIFIED: [2026-08-19 Wed 16:47]
+:MODIFIED: [2026-08-19 Wed 19:12]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 19:12]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3421,6 +3429,28 @@ Also corrected while here: gitea_push_mirror_last_update_timestamp_seconds is
 the last push ATTEMPT, not the last success. Its own HELP text says so, and I
 briefly read it the wrong way.
 #+end_example
+
+** Close Reason
+
+Fixed and verified. Cadence chosen by John on 2026-08-19: every 2 hours.
+
+sync-push-mirrors now has a timer -- OnCalendar *-*-0/2:00:00, Persistent=true,
+RandomizedDelaySec=10min. Persistent so a retry missed while the host was down
+happens at the next boot rather than waiting for the next even hour, which is
+exactly the case this is for; the randomised delay keeps 197 outbound pushes off
+the hour boundary shared with every other timer here.
+
+This bounds the failure window to ~2h. Before, nothing retried at all: the service
+was a manually-triggered oneshot, and Gitea's own per-mirror scheduler defaults to
+8 HOURS, so a transient failure held GiteaPushMirrorFailing until a human noticed.
+On 2026-08-19 that meant 1h43m of firing over a mirror whose content had in fact
+reached GitHub eleven minutes after it was created.
+
+Cost is measured rather than assumed: a full run over 197 repositories took 3.76s
+of CPU and finished in seconds.
+
+VERIFIED after /etc/nixos/build switch: sync-push-mirrors.timer is present and
+enabled, Persistent=yes, RandomizedDelayUSec=10min.
 
 * DONE [#B] Adopt restored upstream Obr integration
 :PROPERTIES:

@@ -310,6 +310,37 @@ groups:
           summary: "Web service {{ $labels.instance }} is down"
           description: "HTTP/HTTPS probe to {{ $labels.instance }} has been failing for more than 1 minute."
 
+      # Protocol-level TCP reachability, added 2026-08-19 with the blackbox_tcp
+      # job (nixos-a71). Without this rule the new job would be metrics without
+      # an alert — coverage that reads as coverage and catches nothing, which is
+      # the failure shape this host keeps finding.
+      #
+      # Only ProbeTargetChronicallyFailing would otherwise match it, and that is
+      # a 1-week average below 0.98: it would notice an ssh or IMAP listener
+      # being down eventually, in days. HostUnreachable does not apply — its
+      # selector is scoped to blackbox_icmp.
+      #
+      # These four ports are the last checks the Nagios inventory found with no
+      # Prometheus equivalent. Postfix and Dovecot export 222 and 141 series
+      # between them, but all of those measure the daemon; none answers "does
+      # the port accept a connection". 5m rather than the 1m used for web
+      # probes: nothing here is user-facing in the way a vhost is, and both mail
+      # daemons are restarted by rebuilds.
+      - alert: TCPServiceDown
+        expr: probe_success{job="blackbox_tcp"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+          service: tcp
+        annotations:
+          summary: "TCP service {{ $labels.instance }} is not accepting connections"
+          description: |
+            The TCP connect probe to {{ $labels.instance }} has failed for 5
+            minutes. The owning daemon may still be running and exporting
+            healthy metrics — this rule exists precisely to catch a wedged or
+            unbound listener behind a process that looks fine.
+
       # SSL certificate expiry warning (from HTTPS probes)
       #
       # Selector widened 2026-07-31 from job="blackbox_https" to include

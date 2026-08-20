@@ -2312,7 +2312,7 @@ VERIFIED END TO END:
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 14:02]
-:MODIFIED: [2026-08-19 Wed 20:58]
+:MODIFIED: [2026-08-19 Wed 23:50]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2373,6 +2373,34 @@ temperature` failures with a heat_cool RANGE payload, and the Nest's own
 google_nest_sdm AuthException. Those have not recurred since, so they look like
 one bad day for Google auth on this host rather than an ongoing fault.
 #+end_example
+
+** Notes
+
+OBSERVATION 2026-08-19 23:50, not a close: the setup_error entries are GONE.
+
+hass_config_entries has been emitting since 18:48 today, and over its whole life
+there have been ZERO entries in setup_error, migration_error or failed_unload. The
+only non-loaded states are the seven legitimately disabled entries (bluetooth,
+bmw_connected_drive, bose, kumo, llama_conversation, radio_browser, one google)
+plus four setup_in_progress samples at 19:28 that are HA restarting after my build
+-- transient by definition and correctly not alerted on.
+
+So the three Google Calendar entries recovered before the metric existed,
+consistent with John having re-authenticated. HomeAssistantConfigEntryFailed has
+never fired: no ALERTS samples in 24h, which for this rule means it has had nothing
+to fire about, not that it is broken (it read health=ok with empty lastError when
+deployed).
+
+LEAVING OPEN DELIBERATELY. The symptom is gone; the question the issue exists for
+is not. If the Google Cloud OAuth consent screen is still in Testing publishing
+status, re-auth buys exactly 7 days and these entries return around 2026-08-24.
+That date is the falsification test: silence through it means the app is published
+or Internal and this is genuinely closed; a recurrence means the durable fix is the
+publishing-status change, not another re-auth.
+
+The monitoring half of this issue is done and now covers the recurrence
+automatically -- which is the whole reason a recurrence would be visible this time
+rather than sitting unnoticed for two days.
 
 ** Comments
 
@@ -5558,6 +5586,38 @@ It fires 6+ times a day and acts on climate.upstairs_vtherm.
 
 Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
 earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
+
+* TODO [#D] Alert Notifier drops iPhone pushes when HA is unreachable instead of retrying
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-zpm
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 23:50]
+:MODIFIED: [2026-08-19 Wed 23:50]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The 'notify iphone' api-call-service node on the Alert Notifier tab fails with NoConnectionError whenever the Home Assistant websocket is down, and the message is DROPPED rather than queued or retried.
+
+MEASURED from nodered_events.msg_events (retention floor 2026-06-30, so ~7 weeks):
+  all-time  905 notifications, 9 failed = 0.99%
+  2026-07-03   93 total,  6 failed   <- the cold-reboot day
+  2026-08-04   42 total,  1 failed
+  2026-08-19    6 total,  2 failed   <- a nixos-rebuild switch
+
+The failures are not random: they cluster exactly on reboots and rebuilds, i.e. precisely when the host is most likely to be generating alerts worth seeing. Today's two were CRITICAL SystemdServiceFailed and CRITICAL WebServiceDown, dropped 32s after a switch started.
+
+NOT AN OUTAGE, and deliberately filed at P3 rather than higher: Alertmanager carries 3 email_configs of its own, so the email path is INDEPENDENT of Node-RED and Home Assistant entirely. Nothing went unnotified -- the iPhone push is a secondary, lower-latency channel. Verified via /api/v2/status receiver list.
+
+PROPOSED FIX, needs John because it changes notification behaviour: this repo already has an 'act until observed' retry subflow built for exactly this shape. Wrapping the notify call in it -- or a catch -> delay -> retry with a bounded attempt count -- would ride out the ~3 minute window where HA is restarting. Note that subflow edits need a full POST /flows, not a partial deploy.
+
+Worth deciding rather than assuming: a retry that outlives the restart could also deliver a stale alert minutes late, which for a transient 'WebServiceDown (+12 more)' during a rebuild may be noise. A bounded retry with a freshness check is probably the right shape.
+
+DISCOVERED-FROM: investigating three Node-RED errors John reported, which turned out to be ordinary restart fallout from my own 19:22:50 build.
 
 * DONE [#D] open-webui container-health rules can never fire: health status is permanently 3
 :PROPERTIES:

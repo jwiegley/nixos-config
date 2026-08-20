@@ -4532,14 +4532,14 @@ image-age monitoring has been silently blind since it was written.
 
 Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
 
-* TODO [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
+* DOING [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-r1n
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 11:13]
+:MODIFIED: [2026-08-20 Thu 12:16]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos

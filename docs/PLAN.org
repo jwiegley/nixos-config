@@ -2663,6 +2663,70 @@ blocked by this same fault, not by a missing device entry.
 Remaining: 1 file (2751 bytes) still converging, JumpDesktop/Viewer/Servers/...,
 with 0 pull errors.
 
+* DONE [#E] session-gather.nix cites docs/SESSION_GATHER.md, which does not exist
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-h1t
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-19 Wed 23:19]
+:MODIFIED: [2026-08-19 Wed 23:28]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:28]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+modules/services/session-gather.nix:24 ends its permissions comment with 'See docs/SESSION_GATHER.md.' No such file exists in the tree, and git log shows it was never committed.
+
+This matters more than a typo because of what the comment is about: it explains that the service has read access to the configured homes and nothing else, and defers the detail to a document that isn't there. The reader who most needs the detail -- someone widening that access -- gets a dead end.
+
+Unlike the repo's two other unresolvable docs/ citations, this one is NOT annotated at the citation site. docs/README.md:338-344 asserts that every dangling docs/ citation is annotated where it is cited; this is the counterexample.
+
+Fix is a decision, not a strike: either write the document, or fold the durable sentence into the comment and drop the pointer. The second is what docs/README.md:93-95 recommends for exactly this shape.
+
+DISCOVERED-FROM: re-measuring the docs/ citation survey while fixing nixos-iwh.
+
+** Close Reason
+
+#+begin_example
+Fixed by dropping the pointer, not by writing the document.
+
+The SECURITY comment at modules/services/session-gather.nix:21-24 already carried the entire contract it was deferring: dedicated ~/.ssh/id_rsync key, authorized_keys forced to 'rrsync -ro <home>', read-only, one subtree, no pty, no agent forwarding, and the blast radius stated outright. There was no durable sentence left in the missing document to rescue -- writing it would have duplicated the comment. docs/README.md:93-95 recommends exactly this resolution for this shape.
+
+While there I added the one fact the comment was missing and that a reader widening this access actually needs: the forced command is enforced on the SOURCE host, so a change to this module cannot widen the confinement and a change to a source host's authorized_keys can.
+
+TRAP HIT AND FIXED: my first version of the annotation wrote the missing path literally, which made the repo's docs-citation grep match my own prose -- recreating the phantom citation the comment exists to record. Reworded to name the document without spelling the path, and said so in the comment so the next person does not undo it.
+
+VERIFIED:
+,  * the citation survey now returns exactly ONE unresolvable docs/ path,
+    docs/deploy/freshness-rollout-runbook.md, which is annotated at its citation
+    site as living in the upstream stock-trader repo. The repo's invariant that no
+    unresolvable docs/ citation is silent is true again.
+,  * counts moved with the fix: 84 lines over 22 distinct paths, down from 85/23.
+    docs/README.md was updated in the same commit, and both numbers re-measured.
+,  * ./build switch produced store path zck9f8y7wdrkrjv56jl6mh8071ljffw2, byte-identical
+    to the build before this edit -- comments do not survive into the derivation, so an
+    identical hash is proof the change is documentation-only.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-h1t",
+    "depends_on_id": "nixos-iwh",
+    "type": "discovered-from",
+    "created_at": "2026-08-20T06:19:13.354973152Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * TODO [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2853,6 +2917,69 @@ configuration change rather than anything in this repo.
   }
 ]
 #+end_src
+
+* DONE [#D] docs/README.md index describes files and a script the Nagios removal deleted
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-iwh
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-19 Wed 23:19]
+:MODIFIED: [2026-08-19 Wed 23:26]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:26]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The docs index was compiled 2026-07-27 and re-surveyed 2026-07-30. The 2026-08-19 Nagios removal and the doc sweep after it invalidated parts of it, and an index that sends a reader to a missing file is worse than no index.
+
+VERIFIED WRONG (each checked against the tree today):
+
+1. Line 81 names `NAGIOS_PROMETHEUS_MIRROR_SPEC` as DURABLE REFERENCE with '8 citations across 6 files (incl. scripts/check_prom_rule.py)'. Both the document and that script were deleted. This is the LAST reference to either anywhere in the repo -- everything else was swept.
+
+2. Line 130 describes MONITORING_CONVENTIONS.md as documenting 'the for: budget the Nagios mirror imposes and its sanctioned escape hatch'. The sweep rewrote that section to past tense: the cap was REMOVED. A reader following the index goes looking for a live constraint that no longer exists.
+
+3. Line 159 describes RSPAMD_SETUP.md as covering 'Prometheus/Alertmanager/Nagios/Grafana'. That file now has zero Nagios mentions.
+
+4. Line 284 marks CLAUDE.md needs-review for 'one dangling reference ... imports @./.taskmaster/CLAUDE.md'. No taskmaster line exists in CLAUDE.md today.
+
+5. Counts stale: header says 97 files / 2 non-markdown; actual is 98 / 3 (PLAN.org arrived with obr and is indexed nowhere). Size says 3,352 KB, actual 3,724 KB. Citation survey says 25 distinct paths over 98 lines; actual is 23 over 85.
+
+6. Two root documents are absent from the index entirely: LITELLM_REMOVAL_2026-08-01.md and PLAINTEXT_EXPOSURE_AUDIT_2026-08-02.md.
+
+7. Lines 338-344 say two Nix-cited docs paths dangle and both are annotated at the citation site. Neither half holds now: modules/core/memory-limits.nix no longer cites OOM_ANALYSIS_2025-11-12.md at all, and a NEW unannotated dangle appeared -- see the discovered-from issue.
+
+FOUND BY: the read-only audit agent at the end of the Nagios doc sweep, which correctly flagged docs/README.md as outside every sweeper's assigned scope.
+
+** Close Reason
+
+#+begin_example
+Index reconciled against the tree and every numeric claim re-measured.
+
+FIXED, in order of how badly each would have misled a reader:
+  1. Dropped NAGIOS_PROMETHEUS_MIRROR_SPEC from the DURABLE REFERENCE row and recorded that it, scripts/check_prom_rule.py and Nagios itself went together on 2026-08-19. This was the last reference to either anywhere in the repo.
+  2. MONITORING_CONVENTIONS row: the 'for: budget the Nagios mirror imposes' is now described as a constraint that has LIFTED, since the doc sweep rewrote that section to past tense. A reader was being sent to look for a live cap that no longer exists.
+  3. RSPAMD_SETUP row: dropped Nagios from its integration list (that file now has zero mentions).
+  4. CLAUDE.md row: needs-review -> current. The .taskmaster dangle it flagged is gone; the file closes with the obr block now.
+  5. Indexed the two missing root documents, LITELLM_REMOVAL_2026-08-01 and PLAINTEXT_EXPOSURE_AUDIT_2026-08-02, and added PLAN.org to the authoritative-documents table -- it is the obr surface and was catalogued nowhere.
+  6. Rewrote the dangling-citation paragraph. Its claim that every dangle is annotated at its citation site no longer held: OOM_ANALYSIS lost its citation entirely, and a NEW silent dangle appeared (nixos-h1t).
+
+RE-MEASURED, all 14 numeric claims now verified against the tree by script:
+  98 files / 52 root .md / 43 superpowers / 3 non-markdown / 10 .md outside docs
+  23 root files with a status banner (was 24) and 29 without
+  85 citation lines over 23 distinct paths (was 98/25); 35 are ports.txt
+  9 CLAUDE.md docs/ lines, all resolving
+  4 superpowers files cited on 5 lines (was 6) -- openclaw-hardening and the
+  OpenClaw self-heal design lost their citations when OpenClaw was removed
+
+Also caught that the root .md count is 52 on both survey dates BY COINCIDENCE -- two Nagios docs deleted, two newer files taking their place -- and said so in the header, because an unchanged total reads as an unchanged tree.
+
+The KB total is deliberately written as ~3,730 rather than exact: PLAN.org is rewritten by obr sync and grows with every issue filed, so a precise figure is stale within the day. That was the one claim that failed re-measurement twice.
+
+VERIFIED: every markdown link in the index resolves (checked by script over all relative, ../ and superpowers/ targets); the only remaining Nagios mentions are the 8 that correctly describe it as removed.
+#+end_example
 
 * TODO [#D] budget-board-server dies on rebuilds: libgssapi_krb5.so.2 missing from the image
 :PROPERTIES:
@@ -5432,15 +5559,16 @@ It fires 6+ times a day and acts on climate.upstairs_vtherm.
 Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
 earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
 
-* TODO [#D] open-webui container-health rules can never fire: health status is permanently 3
+* DONE [#D] open-webui container-health rules can never fire: health status is permanently 3
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-zpx
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-19 Wed 22:58]
-:MODIFIED: [2026-08-19 Wed 22:58]
+:MODIFIED: [2026-08-19 Wed 23:26]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-19 Wed 23:26]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -5472,4 +5600,26 @@ NOT FIXED because the right fix is a real decision, not a strike: either drop th
 disjuncts and rely on container_running, or give the image a healthCmd so the existing
 rules become meaningful. The second is better monitoring and a behaviour change to a
 running container.
+
+** Close Reason
+
+#+begin_example
+Fixed, and the premise the issue was filed on turned out to be wrong in a way that made the fix easier.
+
+I filed this saying the right fix was 'a real decision': drop the dead disjuncts, or give the image a healthCmd so the rules become meaningful. modules/users/home-manager/open-webui.nix:205-217 settles it -- the healthCmd is not missing, it is DELIBERATELY DISABLED and left commented out in place, because each 30s check created a systemd-logind session, 3 log lines a time, ~12,960 lines/day. So the second alternative was already decided against, with a measured reason. That collapses the fork into mechanical alignment.
+
+DONE:
+,  * removed the 'or container_health_status{...} == 1' disjunct from OpenWebUIContainerDown
+,  * deleted OpenWebUIUnhealthy entirely ('> 0 and < 3' against a value pinned at 3)
+,  * rewrote OpenWebUIContainerDown's description, which claimed to cover 'down or unhealthy'
+,  * added a file header stating why there is no health rule, and a back-reference in the quadlet saying re-enabling healthCmd is a TWO-FILE change
+
+VERIFIED live after switch, not from the source:
+,  * running Prometheus now loads 3 open_webui rules, all health=ok, lastError empty
+,  * OpenWebUIUnhealthy: 0 occurrences in /api/v1/rules
+,  * instrument checked too -- container_running{open-webui}=1 with 172,639 samples over 30d, so the surviving disjunct is a proven series, not a fresh one
+,  * the full OpenWebUIContainerDown expr evaluates status=success, empty result (correct: container is up)
+
+CHECKED THE WIDER CLAIM: the issue asked whether other containers share this shape. They do not. The generic rules in alerts/container-health.yaml select {name!=""}, and container_health_status carries BOTH a container and a name label -- 17 series match now, 24 over 30d. Those rules are live; they simply only ever match the 2 containers that define a healthcheck (budget-board-client/server). Correct behaviour, not a defect. open-webui.yaml was the only file with dead health rules.
+#+end_example
 

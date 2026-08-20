@@ -1,3 +1,31 @@
+# THERE IS DELIBERATELY NO HEALTH-CHECK-BASED RULE IN THIS FILE.
+#
+# modules/users/home-manager/open-webui.nix:205-217 disables the container's
+# healthCmd on purpose: each 30s check created a systemd-logind session, three
+# log lines a time, ~12,960 lines/day. The healthCmd/healthInterval/healthTimeout
+# /healthStartPeriod/healthRetries block is left commented out there rather than
+# deleted, so the decision stays visible at the place it applies.
+#
+# The consequence for alerting is that container_health_status{container="open-webui"}
+# is permanently 3 -- podman's encoding for "no healthcheck configured"
+# (0=healthy, 1=unhealthy, 2=starting, 3=none). Verified live 2026-08-19: 15 of
+# the 17 containers on this host read 3; only budget-board-client and
+# budget-board-server define a healthcheck.
+#
+# Two rules here used to read that gauge and could not fire (nixos-zpx):
+#   * an `or container_health_status{...} == 1` disjunct on OpenWebUIContainerDown
+#     below -- the value is 3, never 1;
+#   * an OpenWebUIUnhealthy alert, `> 0 and < 3` -- 3 is not < 3.
+# Both were removed 2026-08-19. They read as coverage and caught nothing, which
+# is the same dead-rule class this repo remediated in June when 123 rules were
+# found unfirable. Liveness here comes from container_running and the absent()
+# guard below, plus ContainerRestarting in alerts/container-health.yaml.
+#
+# IF YOU RE-ENABLE the healthCmd in that quadlet, restore health-based alerting
+# here at the same time -- the generic `== 1` / `== 2` rules in
+# alerts/container-health.yaml are matched on {name!=""} and WILL start covering
+# this container automatically, so check whether a per-service rule is still wanted
+# before re-adding one.
 groups:
   - name: open_webui
     interval: 60s
@@ -5,7 +33,6 @@ groups:
       - alert: OpenWebUIContainerDown
         expr: |
           absent(container_health_status{container="open-webui"})
-          or container_health_status{container="open-webui"} == 1
           or container_running{container="open-webui"} == 0
         for: 5m
         labels:
@@ -14,7 +41,10 @@ groups:
         annotations:
           summary: "Open WebUI container is down"
           description: |
-            The Open WebUI container has been down or unhealthy for more than 5 minutes.
+            The Open WebUI container has not been running for more than 5 minutes,
+            or the container-health exporter has stopped publishing it at all.
+            This says nothing about whether the app inside is healthy — the
+            container defines no healthcheck, deliberately; see this file's header.
 
             Check container status: sudo -u open-webui podman ps -a
             Check container logs: sudo -u open-webui podman logs open-webui
@@ -32,21 +62,6 @@ groups:
           description: |
             Open WebUI container is using {{ $value | humanize1024 }}B of resident memory (threshold 4GiB).
             The container runs without a memory limit; investigate a possible leak or heavy load.
-
-      - alert: OpenWebUIUnhealthy
-        expr: container_health_status{container="open-webui"} > 0 and container_health_status{container="open-webui"} < 3
-        for: 3m
-        labels:
-          severity: warning
-          component: open-webui
-        annotations:
-          summary: "Open WebUI health check is failing"
-          description: |
-            The Open WebUI container health check has been failing for 3 minutes.
-            The container may be starting up or experiencing issues.
-
-            Check health status: sudo -u open-webui podman healthcheck run open-webui
-            Check container logs: sudo -u open-webui podman logs --tail 100 open-webui
 
       - alert: OpenWebUICertificateExpiringSoon
         expr: |

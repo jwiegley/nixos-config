@@ -21,7 +21,15 @@
 # SECURITY. The identity is ~/.ssh/id_rsync, a dedicated key whose authorized_keys
 # entry on each source host is forced to `rrsync -ro <home>` -- read-only, confined
 # to one subtree, no pty, no agent forwarding. A compromise of this key yields
-# read access to the configured homes and nothing else. See docs/SESSION_GATHER.md.
+# read access to the configured homes and nothing else. That forced command is the
+# whole of the confinement: it is enforced on the SOURCE host, not here, so a change
+# to this module cannot widen it and a change to a source host's authorized_keys can.
+# This paragraph used to close with a pointer to a SESSION_GATHER document under
+# docs/, which has never existed in this tree or in git history (nixos-h1t). The
+# pointer was dropped rather than the document written, because the contract above
+# is already the whole of it. Deliberately not written as a path here: the repo's
+# docs-citation survey greps for `docs/<name>.md`, and naming it would recreate the
+# same dangle this comment exists to record.
 let
   user = "johnw";
   home = "/home/${user}";

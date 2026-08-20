@@ -210,6 +210,15 @@ in
           # OpenWebUIContainerDown in modules/monitoring/alerts/open-webui.yaml
           # reads container_running; ContainerRestarting in
           # alerts/container-health.yaml reads the restart count.
+          #
+          # RE-ENABLING THESE IS A TWO-FILE CHANGE. Until 2026-08-19 the alert
+          # file also carried an OpenWebUIUnhealthy rule and a
+          # `container_health_status == 1` disjunct, both written as if this
+          # block were live; with the gauge pinned at 3 neither could ever fire,
+          # so both were removed (nixos-zpx). Uncomment the five lines below and
+          # the health signal comes back -- but the alerting does not come back
+          # with it, so restore it deliberately. See that file's header, which
+          # states what to check first.
           # healthCmd = "CMD-SHELL curl -f http://localhost:8084/health || exit 1";
           # healthInterval = "30s";
           # healthTimeout = "10s";

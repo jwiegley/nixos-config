@@ -26,7 +26,6 @@
     ../../modules/security/hardening.nix
     ../../modules/security/aide.nix
     ../../modules/security/root-ssh-gitea.nix
-    ../../modules/monitoring/aide-nagios-check.nix
 
     # User management
     ../../modules/users/johnw.nix
@@ -135,7 +134,6 @@
     ../../modules/services/atd-nginx.nix
     ../../modules/monitoring/services/atd-exporter.nix
     ../../modules/monitoring/services/atd-alerts.nix
-    ../../modules/monitoring/services/atd-nagios.nix
     ../../modules/services/zimit.nix
     ../../modules/services/hermes-nightly-report.nix
     ../../modules/services/open-source-secretary.nix
@@ -146,21 +144,7 @@
     ../../modules/services/hermes-self-heal.nix
     ../../modules/services/qdrant.nix
     ../../modules/services/qdrant-inference-bridge.nix
-    ../../modules/monitoring/services/qdrant-nagios.nix
     ../../modules/services/voice-assistant.nix
-    # nagios-prometheus-mirror.nix REMOVED 2026-07-31 -- the operator is undoing the
-    # Nagios/Prometheus duplication. That module generated one `PROM-MIRROR <alertname>`
-    # Nagios service per Prometheus rule (499 of them, i.e. 60% of Nagios's entire service
-    # set) purely so each stack could re-check the other. It is duplication by construction,
-    # so it is the first thing to go.
-    #
-    # nagios-tier1-mirror.nix DELIBERATELY KEPT despite the name: it is NOT generated
-    # mirror machinery. Of its hand-curated services, several textfile collectors have no
-    # Prometheus equivalent at all (atd, imapsieve, git_workspace, fts_staleness); the two
-    # openclaw_* ones went with OpenClaw on 2026-08-03. Deleting it would drop real coverage, and would
-    # also move the native check count 339 -> 255, breaking the acceptance invariant that
-    # this change leaves native checks untouched.
-    ../../modules/monitoring/services/nagios-tier1-mirror.nix
 
     # Containers
     ../../modules/containers/default.nix

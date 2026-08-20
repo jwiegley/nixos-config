@@ -284,6 +284,13 @@ with lib;
                         title = "NocoBase";
                         url = "https://nocobase.vulcan.lan";
                       }
+                      # Same gate, same reason: services.grist.enable stays off
+                      # until its two SOPS keys exist, and an ungated tile would
+                      # 502 until then.
+                      ++ optional config.services.grist.enable {
+                        title = "Grist";
+                        url = "https://grist.vulcan.lan";
+                      }
                       ++ [
                         {
                           title = "BudgetBoard";

@@ -39,6 +39,24 @@ in
         dependentService = "podman-nocobase.service";
       })
     )
+    # Grist (2026-08-19). Gated on services.grist.enable, and structured exactly
+    # like the NocoBase entry above for the same reason: `imports` is static, so
+    # the entry is always present and wraps its own config in mkIf, and
+    # secretPath is the LITERAL /run/secrets path rather than the
+    # config.sops.secrets attribute, which only exists while the gate is on.
+    #
+    # Grist keeps only its HOME database here -- orgs, workspaces, users, ACLs.
+    # The spreadsheets themselves are SQLite files under /var/lib/grist, so a
+    # PostgreSQL backup alone does NOT capture Grist documents.
+    (
+      { lib, ... }:
+      lib.mkIf config.services.grist.enable (mkPostgresUserSetup {
+        user = "grist";
+        database = "grist";
+        secretPath = "/run/secrets/grist-db-password";
+        dependentService = "podman-grist.service";
+      })
+    )
     (mkPostgresUserSetup {
       user = "rspamd";
       database = "rspamd";

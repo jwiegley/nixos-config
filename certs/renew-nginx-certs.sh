@@ -24,6 +24,7 @@ DOMAINS=(
     "dns.vulcan.lan"
     "gitea.vulcan.lan"
     "glance.vulcan.lan"
+    "grist.vulcan.lan"
     "glances.vulcan.lan"
     "grafana.vulcan.lan"
     "hass.vulcan.lan"

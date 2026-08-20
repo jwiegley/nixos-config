@@ -45,6 +45,7 @@
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
     ../../modules/users/home-manager/nocobase.nix
+    ../../modules/users/home-manager/grist.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
     # technitium-dns-exporter: Reverted to system-level container (uses localhost image)

@@ -11,6 +11,10 @@
     ./budgetboard-quadlet.nix
     ./changedetection-quadlet.nix
     ./mailarchiver-quadlet.nix
+    # Declares services.grist.enable, OFF until its SOPS keys exist. Imported
+    # unconditionally so the option itself is always defined -- databases.nix
+    # reads config.services.grist.enable and would fail on an undefined option.
+    ./grist-quadlet.nix
     # Declares services.nocobase.enable, which is OFF until its SOPS keys exist.
     # Imported unconditionally so the option itself is always defined.
     ./nocobase-quadlet.nix

@@ -121,11 +121,19 @@ in
     # Using the host Redis instead is what John asked for, and it means session
     # state survives a container image roll.
     #
-    # bind 0.0.0.0 + protected-mode no matches every other per-service Redis
-    # here (openproject 6383, speedtest-tracker 6387, searxng 6386): the podman
-    # bridge is not loopback, so the container cannot reach a loopback-bound
-    # Redis. Exposure is limited by the firewall block below, which opens 6388
-    # ONLY on podman0 -- it is not reachable from the LAN.
+    # bind 0.0.0.0, not 127.0.0.1, because this container reaches the host by
+    # the pinned bridge address 10.88.0.1 (see the REDIS_URL note in
+    # modules/users/home-manager/grist.nix) and a loopback-bound Redis is not
+    # reachable there. openproject (6383) binds 0.0.0.0 for the same reason.
+    #
+    # The other per-service instances here -- searxng 6386, speedtest-tracker
+    # 6387 -- bind 127.0.0.1 instead, and that is NOT an inconsistency to
+    # "fix": they address the host as host.containers.internal, which under
+    # slirp4netns lands on the host's loopback. This service deliberately does
+    # not use that name; it is what caused the 2026-07-03 boot race.
+    #
+    # Exposure is limited by the firewall block below, which opens 6388 ONLY on
+    # podman0 -- it is not reachable from the LAN.
     services.redis.servers.grist = {
       enable = true;
       port = 6388;

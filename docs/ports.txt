@@ -65,6 +65,7 @@
 6383 127.0.0.1 Redis - OpenProject
 6386 127.0.0.1 Redis - SearXNG
 6387 127.0.0.1 Redis - Speedtest Tracker
+6388 0.0.0.0 Redis - Grist (session/state store; binds 0.0.0.0 so the rootless container can reach it at 10.88.0.1, firewalled to podman0 only)
 
 # Web Applications (localhost only, proxied via nginx)
 844 127.0.0.1 Node-RED privileged internal HTTP
@@ -96,6 +97,7 @@
 7359 0.0.0.0 :: Jellyfin client auto-discovery (UDP broadcast listener)
 8096 0.0.0.0 Jellyfin (user johnw, host networking)
 8123 127.0.0.1 Home Assistant
+8484 127.0.0.1 Grist - grist.vulcan.lan (collaborative spreadsheet, rootless quadlet)
 8180 127.0.0.1 OpenProject web interface
 8234 127.0.0.1 Stock Trader web service - trader.vulcan.lan (uvicorn FastAPI)
 8384 127.0.0.1 Syncthing administration GUI

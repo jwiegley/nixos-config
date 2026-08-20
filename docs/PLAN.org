@@ -279,6 +279,56 @@ against 1 file / 2751 bytes / 1 pull error before.
 :ORIGINAL_SIZE: 0
 :END:
 
+* TODO [#D] Verify Grist documents are captured by local-backup after the first post-deploy run
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-60x
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-19 Wed 20:45]
+:MODIFIED: [2026-08-19 Wed 20:45]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Confirm that Grist's documents are actually captured by the local backup, after the
+first local-backup run following the 2026-08-19 deploy.
+
+WHY THIS NEEDS CHECKING RATHER THAN ASSUMING. Grist keeps its spreadsheets as SQLite
+files under /var/lib/grist; only the home database (orgs, users, ACLs) is in PostgreSQL.
+So the PostgreSQL backup being healthy says NOTHING about whether the documents are
+safe, and there is now one real document.
+
+I told John during the deploy that /var/lib/grist "has not been picked up by
+local-backup" and implied it needed wiring. That was misleading. local-backup sweeps
+/var WHOLESALE, and there is no exclusion matching /var/lib/grist -- verified by grepping
+the exclusion list. So it should be captured automatically at the next run with no
+configuration change at all. What was true is only that the run had not happened yet:
+Grist was deployed around 19:20 and the timer next fires 2026-08-20 00:06.
+
+WHAT TO VERIFY after that run:
+,  * /tank/Backups/Machines/Vulcan/var/lib/grist exists and contains the docs/ tree
+,  * the .grist document file is present and non-zero
+,  * local-backup's own result for that run was clean (note that rc23 is NOT benign here
+    -- .latest means "ran", .lastclean means "worked")
+
+COVERAGE THIS DOES AND DOES NOT GIVE:
+,  * tank/Backups has ZFS snapshots (1428 of them), so once mirrored the documents get
+    snapshot retention.
+,  * NO OFFSITE COPY. "Machines" is in backupExcludes in modules/storage/backups.nix, so
+    the mirror is deliberately not pushed to B2. That is consistent with every other
+    service on this host -- NodeRED is the single exception -- so it is a known posture
+    rather than a defect, but it means a total loss of /tank loses the Grist documents.
+    Whether Grist deserves the NodeRED treatment is John's call, not a health-cycle
+    decision.
+
+If the verification finds the tree absent, THEN there is real work; until the timer has
+fired, there is nothing to fix.
+#+end_example
+
 * DONE [#E] etterminal aborts at UserTerminalHandler.cpp:107 on ENOENT (87% of sessions; harmless)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2555,6 +2605,65 @@ configuration change rather than anything in this repo.
   }
 ]
 #+end_src
+
+* TODO [#D] budget-board-server dies on rebuilds: libgssapi_krb5.so.2 missing from the image
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-jhl
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-19 Wed 20:45]
+:MODIFIED: [2026-08-19 Wed 20:45]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+budget-board-server.service exits during rebuilds with:
+
+    Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
+
+It is NOT currently broken -- the service is active, Result=success, and it self-heals.
+Found during the 2026-08-19 health cycle by scanning the last 4 hours for units that
+entered a failed state, which is a class `systemctl --failed` cannot show after the fact.
+
+SHAPE OF THE FAILURE. 10 occurrences in the whole journal, clustered in two bursts:
+6 on 2026-08-15 and 4 on 2026-08-19. Both days had several `/etc/nixos/build switch`
+runs. The one today was at 19:25:00, between two Grist switches; the unit came back
+at 19:26:20, 80 seconds later, and has NRestarts=0 since.
+
+WHY IT SELF-HEALS: Restart=always. That is the only thing standing between this and a
+real outage -- if a burst ever exceeded StartLimitBurst the service would stay down.
+
+WHERE THE LIBRARY IS MISSING. ExecStart is podman, so this is a container: the missing
+libgssapi_krb5.so.2 is inside the IMAGE, not on the host. LD_LIBRARY_PATH is not set on
+the unit, so there is no host-side shim involved.
+
+MOST LIKELY MECHANISM, not yet proven: budget-board uses Npgsql to reach the host
+PostgreSQL. A rebuild restarts PostgreSQL; the reconnect path attempts GSSAPI/Kerberos
+negotiation, hits the absent library, and the process exits. That would explain both the
+clustering around switches and why it works fine the rest of the time -- the GSSAPI path
+is only taken during renegotiation. Worth confirming by correlating the exact timestamps
+against postgresql.service restarts before acting.
+
+CANDIDATE FIXES, none applied:
+  1. Add a connection-string option to stop Npgsql attempting GSSAPI. Cheapest and
+     entirely on our side of the boundary -- but see the caveat below.
+  2. Ship krb5 in the image. Not possible without forking or layering the upstream image.
+  3. Order budget-board-server after postgresql.service so it does not reconnect
+     mid-restart. Treats the trigger rather than the cause, and races are still possible.
+
+NOT DONE AUTONOMOUSLY: option 1 means editing the database connection string, which on
+this host is likely SOPS-managed, and touching secrets is John's call. Option 2 changes
+what image we run. Neither is a health-cycle change.
+
+There IS already an alert for the resulting outage shape --
+BudgetBoardDatabaseConnectionFailed joins the unit state against the blackbox probe -- so
+a sustained failure would be caught. This issue is about the underlying fragility, not a
+monitoring gap.
+#+end_example
 
 * DEFER [#D] Gitea->GitHub auto-mirror automation does not exist; 3 repos need GitHub repos created
 :PROPERTIES:

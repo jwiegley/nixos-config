@@ -452,6 +452,48 @@ let
       # TYPE zimit_archives_size_bytes gauge
       zimit_archives_size_bytes {total_size}
       """
+
+          # PROGRESS FRESHNESS for running jobs (nixos-fdi).
+          #
+          # A crawl that HANGS while running was undetected: ZimitJobsStuck watches
+          # zimit_jobs_pending, which is a queue that will not drain, and a hung
+          # running job has pending=0. ServiceStuckActivating cannot help either --
+          # the runner is a oneshot that sits in `activating` for the whole crawl, so
+          # it was excluded after firing on every normal run.
+          #
+          # Duration is not a usable signal here: across 22 completed jobs legitimate
+          # crawls ran from 26 MINUTES to 43 DAYS, so no threshold separates healthy
+          # from hung. PROGRESS does separate them. The runner tees the crawl's output
+          # to $WORK_DIR/<job_id>/zimit.log, so that file's mtime advances continuously
+          # while pages are being fetched and stops dead when the crawl wedges.
+          # Measured on a live crawl: mtime advanced 13s over a 12s sample and read 0s
+          # old, against a 390G archive job that had been running for hours.
+          #
+          # Emitted only for RUNNING jobs, so the series disappears when nothing is
+          # crawling and the paired alert cannot fire against an idle host.
+          progress_lines = []
+          now_ts = datetime.now().timestamp()
+          for j in jobs:
+              if j.get("status") != "running":
+                  continue
+              job_id = j.get("id") or ""
+              log_path = WORK_DIR / job_id / "zimit.log"
+              try:
+                  age = now_ts - log_path.stat().st_mtime
+              except OSError:
+                  continue
+              progress_lines.append(
+                  'zimit_running_job_log_age_seconds{job_id="%s",name="%s"} %d'
+                  % (job_id, j.get("name", ""), age)
+              )
+          if progress_lines:
+              metrics_output += (
+                  "# HELP zimit_running_job_log_age_seconds Seconds since the running job's crawl log was last written\n"
+                  "# TYPE zimit_running_job_log_age_seconds gauge\n"
+                  + "\n".join(progress_lines)
+                  + "\n"
+              )
+
           return metrics_output, 200, {"Content-Type": "text/plain"}
 
       if __name__ == "__main__":

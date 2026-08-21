@@ -49,3 +49,57 @@ groups:
             Inspect service: systemctl status zimit
             Check running jobs: zimit_jobs_running gauge
             View logs: journalctl -u zimit --since "24 hours ago"
+
+      # A crawl that HANGS WHILE RUNNING — the gap ZimitJobsStuck cannot see.
+      #
+      # ZimitJobsStuck watches zimit_jobs_pending, i.e. a queue that will not drain;
+      # a hung RUNNING job has pending=0 and running=1, so it is invisible there.
+      # ServiceStuckActivating cannot cover it either: zimit-job-runner is a oneshot
+      # that sits in `activating` for the whole crawl, so it fired on every normal
+      # run and was excluded (alerts/systemd.yaml).
+      #
+      # DURATION IS NOT A USABLE SIGNAL and was deliberately not used: across 22
+      # completed jobs legitimate crawls ran from 26 MINUTES to 43 DAYS, and
+      # TimeoutStartSec is already 4w2d. No duration threshold separates healthy
+      # from hung. PROGRESS does. The runner tees crawl output to
+      # $WORK_DIR/<job_id>/zimit.log, whose mtime advances while pages are being
+      # fetched and stops dead when the crawl wedges; the web UI exports that as
+      # zimit_running_job_log_age_seconds, emitted ONLY for running jobs, so this
+      # rule cannot fire against an idle host.
+      #
+      # THRESHOLD SIZED BY REPLAY over three real crawl logs, not guessed — and the
+      # first sample alone would have been badly wrong:
+      #   a03d993b (live, 14,483 lines)   median 0.17s   max   7.8s
+      #   9c70095e (109,127 lines)        median 0.11s   max  89.9s
+      #   1d03bff6 (549,120 lines)        median 0.02s   max 180.0s
+      # The 89.9s and 180.0s maxima recur as EXACT repeated values, which is the
+      # fingerprint of browsertrix page timeouts rather than random stalls — so a
+      # healthy crawl genuinely goes three minutes without writing. 1800s is 10x the
+      # worst observed gap across ~673,000 log lines, which leaves room for a longer
+      # timeout on some future site while still catching a hang within the half hour
+      # rather than never.
+      - alert: ZimitCrawlStalled
+        expr: zimit_running_job_log_age_seconds > 1800
+        for: 5m
+        labels:
+          severity: warning
+          category: logs
+          service: zimit
+        annotations:
+          summary: "Zimit crawl {{ $labels.name }} has stopped making progress"
+          description: |
+            The running Zimit job `{{ $labels.name }}` ({{ $labels.job_id }}) has not
+            written to its crawl log for {{ $value | humanizeDuration }}. Healthy
+            crawls write continuously — the longest gap observed across three real
+            crawl logs was 180s, and that was a page timeout.
+
+            The job will NOT fail on its own: TimeoutStartSec is 4w2d, so a wedged
+            crawl can occupy the runner for a month and block every queued job behind
+            it.
+
+            Look at what it was doing last:
+              sudo tail -20 /tank/Archives/work/{{ $labels.job_id }}/zimit.log
+              sudo podman ps --filter ancestor=localhost/zimit:arm64
+
+            If it is genuinely wedged, stopping zimit-job-runner releases the queue;
+            zimit-progress-monitor will then mark the job failed as "Orphaned".

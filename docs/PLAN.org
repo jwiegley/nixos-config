@@ -2523,15 +2523,16 @@ cycle, which turned out to be benign and self-recovering.
 ]
 #+end_src
 
-* TODO [#E] Hung Zimit crawl is undetected: ServiceStuckActivating excluded, and no progress-based detector exists
+* DONE [#E] Hung Zimit crawl is undetected: ServiceStuckActivating excluded, and no progress-based detector exists
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-fdi
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-20 Thu 16:51]
-:MODIFIED: [2026-08-20 Thu 16:51]
+:MODIFIED: [2026-08-20 Thu 17:51]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 17:51]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2579,6 +2580,56 @@ ALERTS series, so verify with loki_prometheus_notifications_sent_total instead.
 NOT URGENT: a hung crawl wastes time and a container, it does not lose data or
 degrade the host. Filed so the exclusion is not silently mistaken for coverage --
 the comment in alerts/systemd.yaml says the same and points here.
+
+** Close Reason
+
+#+begin_example
+Implemented a progress-based detector, which is what this issue said was needed.
+
+WHAT WAS BUILT:
+,  * zimit_running_job_log_age_seconds{job_id,name} — new gauge on the web UI's
+    /metrics endpoint. The runner tees crawl output to
+    $WORK_DIR/<job_id>/zimit.log, so that file's mtime advances while pages are
+    being fetched and stops dead when a crawl wedges.
+,  * ZimitCrawlStalled — alerts/zimit.yaml, expr
+    zimit_running_job_log_age_seconds > 1800, for: 5m.
+
+EMITTED ONLY FOR RUNNING JOBS, deliberately. The series vanishes when nothing is
+crawling, so the rule cannot fire against an idle host and needs no join against
+zimit_jobs_running.
+
+THRESHOLD SIZED BY REPLAY over three real crawl logs, and THE FIRST SAMPLE ALONE
+WOULD HAVE BEEN BADLY WRONG:
+    a03d993b (live,  14,483 lines)   median 0.17s   max   7.8s
+    9c70095e (     109,127 lines)    median 0.11s   max  89.9s
+    1d03bff6 (     549,120 lines)    median 0.02s   max 180.0s
+Sampling only the live crawl suggested healthy gaps never exceed ~8s. Two more
+logs showed real gaps up to 180s -- and the 89.9s/180.0s maxima recur as EXACT
+repeated values across hundreds of thousands of lines, which is the fingerprint of
+browsertrix page timeouts rather than random stalls. So a healthy crawl genuinely
+goes three minutes without writing. 1800s is 10x the worst observed gap across
+~673,000 lines: wide enough for a longer timeout on some future site, tight enough
+to catch a hang within the half hour instead of never.
+
+WHY NOT DURATION, restated because it is the trap: legitimate crawls run 26
+MINUTES to 43 DAYS and TimeoutStartSec is 4w2d, so no duration threshold separates
+healthy from hung. That is why ServiceStuckActivating had to be excluded rather
+than retuned.
+
+VERIFIED against the live llm-primer crawl:
+,  * endpoint emits zimit_running_job_log_age_seconds{job_id="a03d993b",
+    name="llm-primer"} 0
+,  * Prometheus scrapes it: 1 series
+,  * rule reads health=ok, lastError empty, state=inactive
+,  * NOT a dead rule -- positive-controlled: with an always-true threshold (> -1)
+    the expression returns 1 series, and at the real threshold (> 1800) it
+    correctly returns 0 while the crawl is progressing.
+,  * zimit-web-ui stayed active across the change.
+
+NOT VERIFIED, and it cannot be without wedging a real crawl: that the alert fires
+on an actual hang. What is verified is that the metric tracks real progress, the
+comparison mechanics work, and the rule cannot fire spuriously.
+#+end_example
 
 * DONE [#C] Install Grist behind nginx with PostgreSQL and Redis
 :PROPERTIES:

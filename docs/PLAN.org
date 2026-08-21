@@ -4639,6 +4639,80 @@ INSTRUMENT NOTES, both of which bit me here:
 ]
 #+end_src
 
+* DONE [#E] Explain GitWorkspaceMetricCollectionSlow's noon firing: two collectors share one metric and one file
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-mfh
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-21 Fri 12:48]
+:MODIFIED: [2026-08-21 Fri 12:48]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-21 Fri 12:48]
+:CLOSE_REASON: Explained and documented in the alert's own comment. The noon clustering is git-workspace-metrics-slow's 12:00 run (the other spike is its 00:45 run); fast runs every 15 min at ~0s and both write the same metric into the same textfile. Not retuned: it is severity info, fires for a real event, and a failed slow run is already covered by GitWorkspaceMetricsCollectionFailed. Verified comment-only — expr still '> 180', for 600s, health=ok.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Resolves the "unexplained noon clustering" left open in nixos-bkf. It is not a
+fault: two collectors share one metric name and one output file.
+
+  git-workspace-metrics-fast   OnUnitActiveUSec=15min -> 96 runs/day, duration ~0s
+  git-workspace-metrics-slow   OnCalendar 00:45 and 12:00 -> 2 runs/day, up to 572s
+
+Both write git_workspace_scrape_duration_seconds into the SAME textfile
+(git_workspace.prom), each ending in an atomic mv that replaces the other's output.
+So the gauge reads ~0 almost always and spikes twice daily when the thorough pass
+runs, which is exactly the distribution measured over 30d: median 0.0s, p99 2.0s,
+max 572s, ~334 one-minute samples above the 180s threshold, clustering at 12:00
+(28 samples) and 00:00-01:00 (4). My earlier hypothesis -- contention with the
+nightly ~600-repo git-workspace-archive sweep -- was wrong and is now properly
+explained.
+
+THE SAME SHARED FILE HAS A SECOND CONSEQUENCE, and this one is already known and
+handled: the slow collector's per-repo metrics survive only until the next fast run
+15 minutes later. Measured: git_workspace_repo_age_seconds is present 113 of 10,080
+minutes over 7 days (1.1%) and is absent right now. git-workspace-alerts.nix:120-125
+documents this and GitWorkspaceRepoStale reads
+max_over_time(git_workspace_repo_age_seconds[24h]) rather than an instantaneous
+value. VERIFIED that workaround still works: instantaneous count is absent, the 24h
+window recovers 50 series, and the threshold comparison returns 0 (no repo is more
+than 14 days stale). That rule is NOT dead.
+
+NOT RETUNED, deliberately. GitWorkspaceMetricCollectionSlow is severity: info, it
+fires for a real and explainable event, and the obvious fix -- labelling the metric
+by collector -- is awkward precisely because the two share one file, so only one
+collector's series exists at any instant. A genuinely FAILED slow run is already
+covered by GitWorkspaceMetricsCollectionFailed, since both collectors emit
+git_workspace_scrape_success. Changing behaviour here would trade a small,
+explainable info alert for a more fragile rule.
+
+WHAT WAS DONE: documented it in the alert's own comment, including the measured
+distribution and the twice-daily schedule, so the next reader does not spend a
+cycle rediscovering it. I spent parts of two cycles on this; the comment previously
+said only "Alert if high scrape duration (collection taking too long)".
+
+VERIFIED comment-only: after the switch the rule still reads
+expr git_workspace_scrape_duration_seconds > 180, for 600s, health=ok,
+state=inactive, and the sibling rule still recovers its 50 series.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-mfh",
+    "depends_on_id": "nixos-bkf",
+    "type": "related",
+    "created_at": "2026-08-21T19:48:52.013820134Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DONE [#E] august-lock-garage-door: 74.8% ICMP availability but never alerts; device is fine per HA
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

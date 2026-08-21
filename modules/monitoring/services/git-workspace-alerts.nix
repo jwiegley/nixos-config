@@ -172,6 +172,31 @@ let
           description: "The number of failed repository syncs has been increasing over the past 6 hours. This may indicate a developing issue with GitHub connectivity, API rate limits, or repository problems. Monitor for escalation."
 
       # Alert if high scrape duration (collection taking too long)
+      #
+      # EXPECT THIS TO FIRE AROUND 00:45 AND 12:00 EVERY DAY. That is the slow
+      # collector doing its job, not a fault, and it cost two health cycles to
+      # rediscover — hence this note.
+      #
+      # TWO collectors write git_workspace_scrape_duration_seconds under the SAME
+      # metric name, into the SAME textfile (git_workspace.prom), each with an
+      # atomic mv that replaces the other's output:
+      #   git-workspace-metrics-fast   every 15 min (96 runs/day), duration ~0s
+      #   git-workspace-metrics-slow   00:45 and 12:00 daily,      duration to 572s
+      # So the gauge is ~0 almost always and spikes twice a day when the thorough
+      # pass runs. Measured over 30d: median 0.0s, p99 2.0s, max 572s, with ~334
+      # one-minute samples above the 180s threshold and the slow samples clustering
+      # at 12:00 (28) and 00:00-01:00 (4).
+      #
+      # NOT retuned or scoped, deliberately. It is severity: info, it fires for a
+      # real and explainable event, and the alternative — labelling the metric by
+      # collector — is awkward precisely because the two share one file, so only one
+      # collector's series exists at any moment. A genuinely FAILED slow run is
+      # already caught by GitWorkspaceMetricsCollectionFailed, since both collectors
+      # emit git_workspace_scrape_success.
+      #
+      # Same shared-file behaviour is why git_workspace_repo_age_seconds is present
+      # only ~1.1% of the time; see the note above that rule, which handles it with
+      # max_over_time([24h]) rather than an instantaneous read.
       - alert: GitWorkspaceMetricCollectionSlow
         expr: git_workspace_scrape_duration_seconds > 180
         for: 10m

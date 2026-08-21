@@ -6589,6 +6589,71 @@ John changed the node to {"preset_mode": "comfort"} on 2026-08-11 ~15:45 (confir
 Not yet proven: the node has not fired since. Confirm the next firing leaves it comfort/80 and the
 Nest stops dropping to 75.
 
+* DONE [#E] Verified: textfile-collector staleness tiers cover all 50 collectors exactly
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-voq
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-21 Fri 16:46]
+:MODIFIED: [2026-08-21 Fri 16:46]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-21 Fri 16:46]
+:CLOSE_REASON: Verification complete; no defect. 17 classified + 33 backstopped = 50 total, every collector covered by exactly one tier, oldest 5.5d against a 14d backstop, all six rules inactive/healthy. Recorded chiefly for the three instrument errors documented in the description — especially truncating a 304-char expression at 300 chars, which turned a 14-day threshold into an apparent 120-second one.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Verification, not a defect: the textfile-collector staleness scheme is complete.
+Recorded so a future cycle does not redo it, and because getting to that answer
+took three instrument errors of mine that each produced a confident, alarming,
+WRONG result.
+
+THE SCHEME, thresholds read in full:
+  TextfileCollectorStaleFast          1800s   (0.5h)   7 collectors
+  TextfileCollectorStaleHourly       10800s   (3h)     3 collectors
+  TextfileCollectorStaleDaily        93600s   (26h)    7 collectors
+  TextfileCollectorUnclassifiedStale 1209600s (14d)   33 collectors (backstop)
+  TextfileCollectorMassLoss          count(node_textfile_mtime_seconds) < 45
+  TextfileCollectorScrapeError       node_textfile_scrape_error > 0
+
+COVERAGE IS EXACT: 17 explicitly classified + 33 caught by the backstop = 50 =
+total collectors reporting mtime. Every collector is covered by exactly one tier.
+Oldest collector on the host is 5.5 days (container_cve) against a 14-day
+backstop. All six rules read state=inactive, health=ok.
+
+The design is deliberate and sound: tight thresholds for collectors whose cadence
+matters, and a loose 14-day backstop so an ABANDONED collector is still caught
+without demanding that all 50 be individually classified.
+
+THREE INSTRUMENT ERRORS I MADE, all worth knowing because each looked like a real
+finding:
+
+1. REGEX ESCAPING. I hand-retyped the rule's expression from the API's JSON, where
+   the regex appears as `\\.prom`. That JSON escaping represents `\.prom`; passing
+   `\\.prom` through to Prometheus means "backslash followed by any char", which
+   matches nothing, so the NEGATIVE match `!~` became true for every series. Result:
+   28 phantom "uncovered" collectors. Take the expression verbatim from the API,
+   never retype it.
+
+2. TRUNCATION -- the worst of the three. I printed the expression with [:300]. The
+   expression is 304 characters. The four characters I cut were "9600" off the end
+   of "1209600", so I read the threshold as 120 SECONDS instead of 14 DAYS. That
+   single truncation turned a correct, well-designed rule into an apparent
+   catastrophe: 28 collectors "far past" a 2-minute threshold with the rule
+   somehow not firing. Never truncate an expression you are about to reason about.
+
+3. NAIVE PARSING. Extracting the collector list with `\(([^)]*)\)` matched the
+   empty parens of `time()` first and returned one blank name. Harmless here only
+   because I had already spotted error 2.
+
+The through-line: every one of these made a HEALTHY system look broken, which is
+the opposite of the usual failure mode on this host (a broken instrument reading
+clean). Both directions are worth guarding against.
+
+NOTHING CHANGED. No configuration was modified; there is nothing here to fix.
+
 * DONE [#D] Two alert rules apply rate() to a 0/1 gauge and can never fire
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

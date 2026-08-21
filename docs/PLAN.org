@@ -1999,6 +1999,87 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
+* DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-dhm
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 17:29]
+:MODIFIED: [2026-08-20 Thu 17:29]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 17:29]
+:CLOSE_REASON: Fixed and verified end to end; full analysis in the description. ga fsck now reports 25 ok / 0 failures, new crawl output is handed to johnw automatically, and the tmpfiles declaration matches reality so a future switch cannot silently revert it.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+`ga fsck` in /tank/Archives failed on 8 of 25 files with
+"setFileMode: permission denied (Operation not permitted)", plus a trailing
+"SQLite3 returned ErrorReadOnly ... attempt to write a readonly database".
+
+ROOT CAUSE. The error is EPERM ("Operation not permitted"), NOT EACCES
+("Permission denied") -- different failures, and the distinction is the whole
+diagnosis. chmod() requires OWNERSHIP of the file. Group write is irrelevant: the
+kernel returns EPERM to a non-owner however permissive the mode. Proven in a
+controlled test on a zimit:johnw 664 file:
+    as johnw, write  -> succeeded (group write works)
+    as johnw, chmod  -> rc=1, "Operation not permitted"
+    as johnw, chmod on a file he OWNS -> rc=0   (so the test discriminates)
+The tree is zimit:johnw throughout, so johnw can read and write every object but
+can chmod none of them.
+
+WHY fsck NEEDED TO CHMOD AT ALL -- the precise trigger, narrower than "wrong
+owner". git-annex keeps objects read-only (444, dirs 555). The earlier ownership
+work left them at 775, so fsck tried to REPAIR the mode, and repair needs
+ownership. Confirmed decisively: setting ONE object back to 444 and its directory
+to 555, changing no ownership at all, made fsck pass on that file immediately.
+Only 24 files and 8 directories were affected, not the whole 390G annex.
+
+The sqlite error is the same cause downstream: git-annex could not thaw its own
+fsck database.
+
+WHAT DID NOT WORK, recorded so it is not retried: annex.freezecontent-command and
+annex.thawcontent-command set to no-ops. git-annex 10.20251114 still calls
+setFileMode directly on the fsck repair path, and the failure was identical. Both
+settings were reverted. annex.crippledfilesystem was NOT tried -- it converts the
+repo to unlocked mode, which is a large and risky change to a 390G locked annex.
+
+FIXED IN THREE PARTS:
+ 1. Mode repair (immediate). Restored 444/555 across .git/annex/objects. `ga fsck`
+    now reports 25 files ok, 0 failures, no sqlite error.
+ 2. Handoff chown (durable). The runner does `mv "$zim" "$ZIM_DIR/"` as zimit, so
+    every NEW archive arrived owned by zimit -- and johnw cannot annex those at
+    all. Verified in a throwaway repo: `git annex add` on a zimit-owned file
+    rc=1, on a johnw-owned file rc=0. Added a root-prefixed ExecStopPost that
+    chowns real (non-symlink) *.zim in ZIM_DIR to johnw:zimit 644. Group stays
+    zimit and mode 644 because kiwix-serve runs as zimit and must still read them
+    -- confirmed johnw:zimit 644 is readable by zimit while 640 is not, so the
+    group bit is doing real work. Symlinks are skipped so already-annexed entries
+    are untouched. It runs on every invocation including no-op polls, so a missed
+    handoff self-heals.
+ 3. tmpfiles alignment. The rule declared `d ZIM 0755 zimit zimit` while the live
+    directory was 0775 zimit:johnw -- a hand-applied fix the declaration would
+    revert on any switch where tmpfiles re-applied ownership, silently removing
+    the group write johnw needs to create annex symlinks. Now declares
+    0775 zimit johnw, matching reality.
+
+VERIFIED END TO END: handoff test file went zimit:zimit 644 -> johnw:zimit 644,
+an existing annexed symlink was left untouched, johnw then annexed the test file
+successfully, and the test artefacts were dropped and removed leaving `git status`
+clean and 0 objects with a wrong mode. After the final switch the tmpfiles rule
+and reality agree, both johnw and zimit can write ZIM_DIR, and `ga fsck` reports
+25 ok / 0 failures.
+
+WHY NOT SIMPLY CHOWN EVERYTHING TO johnw: that was tried before this issue and
+broke Zimit, because ZIM_DIR itself became johnw-owned and zimit -- which is not
+in group johnw -- lost the write access it needs to `mv` finished crawls in. The
+fix above keeps zimit owning the directory and moves only the FILES after they
+land.
+#+end_example
+
 * DONE [#C] restartUnits races home-manager: pushme runs with stale config during a switch
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

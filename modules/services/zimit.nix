@@ -1224,7 +1224,17 @@ in
   systemd.tmpfiles.rules = [
     "d ${jobQueueDir} 0750 zimit zimit -"
     "d ${jobQueueDir}/jobs 0750 zimit zimit -"
-    "d ${zimDir} 0755 zimit zimit -"
+    # zimDir is SHARED with johnw, who runs git-annex over /tank/Archives.
+    # Declared 0775 zimit:johnw rather than 0755 zimit:zimit, and the group-write
+    # bit is load-bearing: annexing a ZIM replaces the file with a symlink into
+    # .git/annex/objects, which needs write permission on THIS directory. At
+    # 0755 zimit:zimit johnw gets only other r-x and `git annex add` fails.
+    #
+    # This previously declared 0755 zimit:zimit while the live directory was
+    # 0775 zimit:johnw — a hand-applied fix the declaration would silently revert
+    # on any switch where tmpfiles re-applied ownership. Matching them removes the
+    # trap instead of relying on it never firing.
+    "d ${zimDir} 0775 zimit johnw -"
     "d ${workDir} 0755 zimit zimit -"
     "d /var/lib/nginx 0755 nginx nginx -"
   ];
@@ -1278,6 +1288,38 @@ in
   # Use ExecStopPost with "+" prefix to run as root, since zimit-job-runner runs
   # as the unprivileged "zimit" user and cannot start system-level services.
   systemd.services.zimit-job-runner.serviceConfig.ExecStopPost = [
+    # Hand finished ZIM files to johnw so git-annex can manage them.
+    #
+    # WHY: /tank/Archives is a git-annex repository that johnw operates, and
+    # git-annex must chmod() its objects to freeze/thaw them. chmod requires
+    # OWNERSHIP -- group write is irrelevant, and the kernel returns EPERM
+    # ("Operation not permitted", not EACCES) to a non-owner. The runner writes
+    # finished ZIMs as `zimit` (see the `mv "$zim" "$ZIM_DIR/"` above), so without
+    # this step every new archive arrives in a form johnw cannot annex:
+    # `git annex add` on a zimit-owned file fails, verified 2026-08-20 in a
+    # throwaway repo (rc=1 for a zimit-owned file, rc=0 for a johnw-owned one).
+    #
+    # Group stays `zimit` and mode 644 so kiwix-serve -- which runs as zimit --
+    # can still read them; confirmed a johnw:zimit 644 file is readable by zimit
+    # while 640 is not, so the group bit is doing real work here.
+    #
+    # Symlinks are skipped: once johnw has run `git annex add`, the entry in ZIM/
+    # becomes a symlink into .git/annex/objects and must not be touched.
+    #
+    # Runs on every runner invocation, including the 5-minute no-op polls. That is
+    # deliberate and cheap -- the loop is a glob over one directory and skips files
+    # already owned by johnw, so it self-heals a missed handoff rather than only
+    # working on the one run that produced a file.
+    "+${pkgs.writeShellScript "zimit-zim-handoff" ''
+      shopt -s nullglob
+      for f in ${zimDir}/*.zim; do
+        [ -f "$f" ] || continue
+        [ -L "$f" ] && continue
+        [ "$(${pkgs.coreutils}/bin/stat -c '%U' "$f")" = "johnw" ] && continue
+        ${pkgs.coreutils}/bin/chown johnw:zimit "$f"
+        ${pkgs.coreutils}/bin/chmod 644 "$f"
+      done
+    ''}"
     "+${pkgs.systemd}/bin/systemctl start --no-block kiwix-url-map-generator.service"
   ];
 

@@ -1787,6 +1787,76 @@ Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional
 ]
 #+end_src
 
+* DONE [#E] Threshold audit: 77 of 484 rules checked mechanically; method must account for for: clause
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-bkf
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-21 Fri 08:47]
+:MODIFIED: [2026-08-21 Fri 08:48]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-21 Fri 08:48]
+:CLOSE_REASON: Audit run; no new defects found. Two of the four flagged rules were false alarms from the method ignoring the for: clause, and both are correctly tuned. The one genuine recurrence (GitWorkspaceMetricCollectionSlow) reflects a real slow exporter rather than a bad threshold and was left alone; its noon clustering is recorded as unexplained. Method limitations and two of my own instrument errors are written into the description for the next run.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Systematic check of alert thresholds against their metrics' observed 30-day ranges,
+prompted by the ResticNoRecentSnapshot finding (nixos-3yx), where a threshold sat
+inside the normal operating band and produced four spurious events in a month.
+
+METHOD AND ITS COVERAGE, stated honestly: for every alert rule of the simple form
+`metric{...} OP constant`, compare the constant against max_over_time (for `>`) of
+the same selector over 30d. That form covers 77 of 484 rules; the other 407 are
+compound expressions (and/or/absent/multi-line) the mechanical pass cannot parse.
+So this is a PARTIAL audit and should not be read as "all thresholds checked".
+
+RESULT: no new defects. Four rules had an observed max at or above their threshold,
+and on investigation two were false alarms of my own making and two are correct.
+
+THE METHOD'S FLAW, which is the main thing worth keeping: it IGNORES THE `for:`
+CLAUSE. A threshold that looks dangerously tight against the raw maximum is
+perfectly safe when `for:` filters transient excursions. Two of the four:
+  DNSProbeLatencyHigh   thr 1s, max 5s -- but only 7 five-minute samples above 1s
+                        in 30d and `for: 900s`, so a spike must persist 15 minutes.
+                        Never fired. Correct.
+  PowerOffSensitiveGroupMultipleDown  thr >=2, max 3 -- but only 6 one-minute
+                        samples at/above 2 in 30d against `for: 600s`, needing 10
+                        consecutive minutes. Never fired. Correct, and this one
+                        matters: a real power loss takes the group down for far
+                        longer than six minutes, so the `for:` is doing exactly the
+                        discrimination it was written for.
+Any future run of this audit must join the threshold against `for:` before calling
+a rule tight.
+
+TWO INSTRUMENT ERRORS I MADE, recorded because both produced confident wrong answers:
+ 1. I "verified" the power-off rule with query_range at step=900 and got max=1.0,
+    concluding the mechanical pass was wrong. It was not: max_over_time([30d])
+    inspects every raw sample and correctly reported 3, while a 15-minute step
+    simply stepped over a 6-minute excursion. I doubted the RIGHT tool. This is the
+    same sampling-step trap as the ALERTS step=3600 problem in nixos-3yx, in the
+    opposite direction.
+ 2. Twice I queried a metric name that did not exist (power_off_sensitive_device_up,
+    git_workspace_metric_collection_duration_seconds) and got clean zeros. A
+    nonexistent metric returns "0 samples", which is indistinguishable from a
+    healthy result. Always take the metric name from the rule's own expr.
+
+ONE OPEN OBSERVATION, not a defect and not fixed:
+GitWorkspaceMetricCollectionSlow (git_workspace_scrape_duration_seconds > 180,
+for 600s) fires genuinely. The exporter is normally instant -- median 0.0s, p99
+2.0s -- but has a heavy tail to 572s, and spends ~334 one-minute samples above 180s
+per 30 days, firing roughly 180 minutes a month. That is a real slow exporter, not
+a threshold artifact, so the rule was left alone.
+  I hypothesised contention with the nightly ~600-repo git-workspace-archive sweep
+  and REFUTED it: the slow samples cluster at 12:00 (28 samples) rather than 00:00
+  (4). Something around noon slows this exporter and I do not know what. Low
+  severity -- a slow scrape means briefly stale metrics, nothing more -- but it is
+  unexplained rather than explained away.
+#+end_example
+
 * DONE [#D] Zimit job runner had no mount dependency on its ZFS datasets; llm-primer failed with EACCES
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

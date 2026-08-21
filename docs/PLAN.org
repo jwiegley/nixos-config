@@ -210,6 +210,78 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
+* DONE [#C] git-annex sync fails with SQLite ErrorReadOnly: annex databases were zimit-owned at 0644
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-1d0
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-20 Thu 19:19]
+:MODIFIED: [2026-08-20 Thu 19:19]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-20 Thu 19:19]
+:CLOSE_REASON: Fixed by chowning /tank/Archives/.git to johnw; full analysis in the description. git annex sync now completes cleanly, fsck reports 25 ok / 0 failures, and kiwix-serve still reads all sampled ZIMs through their symlinks.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+`git-annex sync` failed with "SQLite3 returned ErrorReadOnly ... attempt to write a
+readonly database" on .git/annex/fsck/<uuid>/fsckdb/db. Same root cause as the fsck
+failure (nixos-dhm), different file: the annex DATABASES, not the objects.
+
+WHY THE EARLIER FIX DID NOT COVER IT. nixos-dhm repaired the modes of
+.git/annex/objects, which was enough for fsck. It did not touch the sqlite
+databases, and those fail for a stricter reason:
+
+  .git/annex/fsck/<uuid>/fsckdb/db   was zimit:johnw 0644
+  .git/annex/reposize/db/db          was johnw:johnw 0644  <- worked fine
+
+At 0644 the group has READ only, so johnw could not write the fsck db at all. And
+he could not chmod it writable either, because chmod requires OWNERSHIP. The
+reposize db has identical 0644 permissions and works, purely because johnw owns it
+and git-annex can thaw it. That contrast is the proof: it is ownership, not mode.
+
+Mode repair would NOT have been a durable fix here the way it was for objects.
+git-annex actively freezes and thaws these databases on every write, so any mode I
+set would be re-frozen and then un-thawable on the next run.
+
+FIXED: chown -R johnw:johnw /tank/Archives/.git
+
+That is the correct ownership rather than a workaround — the repository metadata
+belongs to the operator. Verified zimit has no claim on it before acting: the only
+git/annex references in the zimit module are comments I wrote, and .git is absent
+from zimit-job-runner's ReadWritePaths (/var/lib/zimit /tank/Archives/ZIM
+/tank/Archives/work), so the runner literally cannot write there. 740 of 759
+inodes were zimit-owned; 0 remain.
+
+REGRESSION-TESTED, because kiwix-serve runs AS zimit and reads ZIMs by following
+symlinks into .git/annex/objects:
+,  * zimit read 6/6 sampled ZIMs through their symlinks after the chown
+,  * kiwix-serve stayed active/running
+  This works because objects are mode 444 and their directories 555, so "other"
+  retains r-x regardless of owner.
+
+VERIFIED:
+,  * `git annex sync` now completes: "recording state in git", "nothing to commit,
+    working tree clean", ok — no sqlite error.
+,  * `git annex fsck --fast`: 25 files ok, 0 failures.
+,  * All annex databases now uniformly johnw:johnw.
+,  * Object modes unchanged by the chown: 25 at 444, 0 wrong.
+
+DURABLE: nothing re-applies ownership under .git. The two tmpfiles rules cover only
+ZIM and work; the handoff ExecStopPost touches only ZIM_DIR/*.zim. Pre-change
+ownership of all 759 inodes was recorded to scratch before acting, so the operation
+is precisely reversible.
+
+RECORDED IN THE CODE: modules/services/zimit.nix now states the full ownership
+contract for /tank/Archives in one place, including an explicit "do not chown -R
+this tree to a single user" with what breaks in each direction — making it all
+johnw breaks the crawler, making it all zimit breaks git-annex. Both have now
+happened.
+#+end_example
+
 * DONE [#B] 569 ZFS snapshots destroyed by a zfs-prune-snapshots m/M unit confusion; PG backup history cut to ~24h
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

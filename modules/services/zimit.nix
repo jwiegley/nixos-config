@@ -1332,6 +1332,30 @@ in
   systemd.services.zimit-job-runner.serviceConfig.ExecStopPost = [
     # Hand finished ZIM files to johnw so git-annex can manage them.
     #
+    # THE OWNERSHIP CONTRACT for /tank/Archives, in one place, because getting it
+    # wrong has broken things in BOTH directions already:
+    #
+    #   /tank/Archives/.git      johnw:johnw   — git-annex repo metadata, objects
+    #                                            and its sqlite databases. zimit has
+    #                                            no business here and cannot reach it
+    #                                            anyway: .git is absent from the
+    #                                            runner's ReadWritePaths.
+    #   /tank/Archives/ZIM       zimit:johnw   — the handoff point. zimit owns the
+    #                            0775            DIRECTORY so it can mv crawls in;
+    #                                            johnw needs group write to replace
+    #                                            files with annex symlinks.
+    #   ZIM/*.zim (real files)   johnw:zimit   — chowned by the step below, so
+    #                            0644            git-annex can take ownership of them.
+    #   ZIM/*.zim (symlinks)     untouched     — already annexed; do not chown.
+    #   /tank/Archives/work      zimit:zimit   — zimit's private scratch.
+    #
+    # DO NOT `chown -R` this tree to a single user. Making it all johnw breaks the
+    # crawler (zimit loses write on ZIM and cannot land finished archives); making
+    # it all zimit breaks git-annex, because chmod requires OWNERSHIP and git-annex
+    # freezes/thaws both its objects and its sqlite databases — a non-owner gets
+    # EPERM, which surfaces as "setFileMode: permission denied" on fsck and
+    # "SQLite3 returned ErrorReadOnly" on sync. Both have happened.
+    #
     # WHY: /tank/Archives is a git-annex repository that johnw operates, and
     # git-annex must chmod() its objects to freeze/thaw them. chmod requires
     # OWNERSHIP -- group write is irrelevant, and the kernel returns EPERM

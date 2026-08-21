@@ -2092,6 +2092,86 @@ Implementation note: the obvious form 'iptables ! -i a ! -i b ...' is IMPOSSIBLE
 
 Verified post-switch: guard at position 3 ahead of hermes-isolate and all port accepts, v4 and v6 both present, exactly one jump (no stacking across restarts), refuse rule at 0 packets/0 bytes after 45s while the RETURN rules matched real inbound traffic, zero failed units.
 
+* DEFER [#D] august-lock-garage-door chronically at ~87% ICMP: works fine in HA, needs John's physical-or-reclassify decision
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-cnc
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-21 Fri 10:08]
+:MODIFIED: [2026-08-21 Fri 10:08]
+:CREATED_BY: johnw
+:DEFERRED: [2026-11-18 Wed 09:00]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+IoTDeviceChronicallyUnreachable fires periodically for august-lock-garage-door.lan
+and there is no open issue for anyone to act on. nixos-mn4 built the rule that
+detects this and closed 2026-08-16 leaving "the underlying device question is
+unchanged and still John's" -- but left nothing open, so the alert recurs pointing
+at a closed ticket.
+
+THE DEVICE IS NOT BROKEN, checked rather than assumed, and this is why it is a
+decision rather than a repair:
+  lock.garage  state=locked, and ZERO unavailable transitions in HA over 7 days.
+So it locks, reports, and never drops out of Home Assistant. Only ICMP is degraded.
+
+ICMP availability, remarkably stable rather than decaying:
+  1h 86.7%   24h 89.3%   7d 87.8%   30d 87.0%
+Siblings for contrast: side-door 96.8%/24h, front-door 99.2%/24h. So this is a
+property of this one lock's radio or position, not a fabric-wide condition.
+
+ACTUAL ALERT BEHAVIOUR, which is milder than nixos-mn4 predicted: it fired 1050
+minutes over the last 7 days (~10% of the week), not the "almost continuously" that
+issue expected from 497 of 720 qualifying hours. The `for: 30m` plus the 24h
+averaging window smooth it considerably. Worth recording because mn4's own caution
+was "if this ever becomes a permanent fixture for several devices at once it has
+stopped being a control" -- it has not: exactly ONE device is under the 0.9
+threshold right now, so the control is still meaningful.
+
+FOR JOHN -- the same two options nixos-mn4 framed, unchanged:
+  (a) Physical: move or re-seat the lock / improve its radio path. It is a
+      security device, so I will not touch it.
+  (b) Reclassify it host_group="iot-noping" (or accept it as chronic), which
+      silences the alert for this device without weakening it for others.
+Choosing (b) is a real loss of visibility on a lock, which is exactly why it is
+not mine to decide.
+
+Filed and deferred to match the other physical/RF items (nixos-ly2, h2u, rsn) so
+they surface together rather than one at a time.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-cnc",
+    "depends_on_id": "nixos-mn4",
+    "type": "related",
+    "created_at": "2026-08-21T17:08:20.802187549Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 48,
+    "issue_id": "nixos-cnc",
+    "author": "johnw",
+    "text": "Deferred to match the other physical/RF items (ly2, h2u, rsn) at John's standing direction not to work these until they become obviously bad. Safe to defer: the lock demonstrably works (locked, zero unavailable transitions in 7d) and IoTDeviceChronicallyUnreachable keeps firing on it, so a genuine deterioration stays visible rather than silent.",
+    "created_at": "2026-08-21T17:08:21Z"
+  }
+]
+#+end_src
+
 * DONE [#D] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -4460,7 +4540,7 @@ repo will not shrink for ~7 days (--keep-daily 7).
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 04:51]
-:MODIFIED: [2026-08-20 Thu 10:32]
+:MODIFIED: [2026-08-21 Fri 10:08]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -4529,6 +4609,15 @@ INSTRUMENT NOTES, both of which bit me here:
     "depends_on_id": "nixos-h2u",
     "type": "related",
     "created_at": "2026-08-20T15:47:43.188401277Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  },
+  {
+    "issue_id": "nixos-ly2",
+    "depends_on_id": "nixos-mn4",
+    "type": "related",
+    "created_at": "2026-08-21T17:08:04.890436918Z",
     "created_by": "johnw",
     "metadata": "{}",
     "thread_id": ""

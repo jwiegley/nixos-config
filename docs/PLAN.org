@@ -377,6 +377,71 @@ second layer -- it is a single live rsync mirror, excluded from the B2 restic re
 a restore older than the current depth would not be servable. That is a known and
 now-monitored exposure, not an open task.
 
+* DONE [#D] ResticNoRecentSnapshot fired 4 times in 30 days on merely-slow backups: 30h threshold inside the normal band
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-3yx
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-21 Fri 04:48]
+:MODIFIED: [2026-08-21 Fri 04:48]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-21 Fri 04:48]
+:CLOSE_REASON: Retuned 30h -> 40h, chosen by replaying candidate thresholds against 30 days of real data: 30h breached 5 fifteen-minute samples, 36h/40h/48h breached zero. 40h keeps 9.8h of headroom above the worst observed normal (30.2h) while staying ~8h below the ~48h a genuinely missed daily run reaches. Verified live: health=ok, expr shows 144000, selects all 10 repositories, and an always-true threshold returns 10 series so the comparison is not dead.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+ResticNoRecentSnapshot's 30h threshold sat INSIDE the normal operating band and
+produced four spurious events in 30 days, every one for a backup that was slow
+rather than failed.
+
+FOUND BY: a proactive check during an otherwise-empty cycle. Nothing was firing;
+this is a rule that had been quietly skating its own edge for at least a month.
+
+THE OLD RATIONALE WAS REASONED, NOT MEASURED. Its comment derived 30h from the
+intended schedule -- "backups run daily at 02:00, metrics every 6h, so 30h leaves
+a 2h buffer". Reality does not match: the repos back up in SEQUENCE, so a slow run
+pushes every repo behind it and peak age drifts well past 26h.
+
+MEASURED over 30 days:
+  worst observed peak age    30.2h (Home) -- ABOVE the 30h threshold
+  weekly peaks               29.8 / 26.8 / 28.8 / 29.8 / 27.8 h
+  current spread             23.2h (Video) to 26.6h (Audio) across 10 repos
+The peaks oscillate and do NOT trend upward, so this is a threshold that was always
+too tight rather than a symptom being silenced -- worth distinguishing before
+raising any alert threshold.
+
+IT DID NOT STAY QUIET. Over the same 30 days ResticNoRecentSnapshot:
+  FIRED   Home     07-24 10:00, ~1h
+  pending Audio    08-06 08:15
+  pending doc      08-07 08:30
+  pending Backups  08-11 09:30
+Only the `for: 10m` kept the other three from paging.
+
+INSTRUMENT NOTE, because it nearly hid this: my first ALERTS query used step=3600
+and returned only ResticRepositorySizeGrowing, i.e. "never fired". At step=1800 the
+Home firing appeared, and at step=900 all four events did. A query_range step wider
+than the event silently drops it -- so "no ALERTS samples" is only meaningful at a
+step finer than the alert's own lifetime.
+
+FIXED: threshold 108000s -> 144000s (30h -> 40h), chosen by replay rather than
+judgement. Counting breaching 15-minute samples over 30d:
+  30h -> 5 breaches     36h -> 0     40h -> 0     48h -> 0
+Anything from 36h up removes the noise. 40h is the balance point: 9.8h above the
+worst observed normal, and ~8h BELOW the ~48h a genuinely missed daily run reaches
+before its next attempt, so a real failure is still caught with time to act. 48h
+would only catch it at the boundary.
+
+VERIFIED after switch: rule health=ok, lastError empty, state=inactive, expr shows
+144000. NOT a dead rule -- it selects all 10 repositories, and an always-true
+threshold (> 0) returns 10 series, so the comparison mechanics work.
+
+NOT VERIFIED, and cannot be without a real failed backup: that it fires on an
+actual miss. What is verified is that it no longer fires on normal operation and
+that the metric and comparison are live.
+
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

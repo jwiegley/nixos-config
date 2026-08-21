@@ -314,13 +314,35 @@ groups:
           summary: "Restic repository check failed"
           description: "Restic check for repository {{ $labels.repository }} has failed"
 
-      # Alert threshold: 30 hours (108000s)
-      # Rationale: Backups run daily at 02:00, metrics collection runs every 6 hours.
-      # The 30h threshold prevents false alerts during the ~40min window each day
-      # when metrics are stale (between 28h mark and next metrics collection at 06:39).
-      # With 30h threshold, there's a 2h buffer before alerting on actual failures.
+      # Alert threshold: 40 hours (144000s), raised from 30h on 2026-08-21.
+      #
+      # The old 30h was derived from the intended schedule ("backups run daily at
+      # 02:00, metrics every 6h, so 30h leaves a 2h buffer"). Reality does not match
+      # that reasoning: the repos are backed up in sequence, so a slow run pushes
+      # every repo behind it, and observed peak age drifts well past 26h.
+      #
+      # MEASURED over 30 days, which is what the old rationale lacked:
+      #   worst observed peak age   30.2h  (Home) — ABOVE the old 30h threshold
+      #   typical weekly peaks      26.8h - 29.8h, oscillating, NOT trending upward
+      # So the old threshold sat inside the normal operating band and was only kept
+      # quiet by its `for: 10m`. It did not stay quiet: over the same 30 days
+      # ResticNoRecentSnapshot FIRED once (Home, ~1h on 07-24) and went pending three
+      # more times (Audio 08-06, doc 08-07, Backups 08-11) — four spurious events in
+      # a month, every one for a backup that was merely slow rather than failed.
+      #
+      # THRESHOLD CHOSEN BY REPLAY, counting breaching 15-minute samples over 30d:
+      #   30h -> 5 breaches (the false positives above)
+      #   36h -> 0     40h -> 0     48h -> 0
+      # Anything at or above 36h removes the noise. 40h is the balance point: 9.8h
+      # above the worst observed normal, and still ~8h BELOW the ~48h a genuinely
+      # missed daily run would reach before its next attempt, so a real failure is
+      # caught with time to act. 48h would only catch it at the boundary.
+      #
+      # The slip is stable, not degrading (weekly peaks 29.8/26.8/28.8/29.8/27.8h
+      # over four weeks), so this is a threshold that was always too tight rather
+      # than a symptom being silenced.
       - alert: ResticNoRecentSnapshot
-        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 108000
+        expr: (time() - restic_last_snapshot_timestamp_seconds{repository!=""}) > 144000
         for: 10m
         labels:
           severity: warning
@@ -328,7 +350,7 @@ groups:
           service: restic
         annotations:
           summary: "Restic repository has no recent snapshots"
-          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 30 hours (last: {{ $value | humanizeDuration }} ago)"
+          description: "Repository {{ $labels.repository }} hasn't had a snapshot in over 40 hours (last: {{ $value | humanizeDuration }} ago). Backups are daily and run in sequence, so normal peak age reaches ~30h; 40h means a run was actually missed, not merely slow."
 
       - alert: ResticNoSnapshots
         expr: restic_snapshots_total{repository!=""} == 0

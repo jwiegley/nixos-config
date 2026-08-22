@@ -7336,6 +7336,31 @@ his call and not an obvious defect to be repaired.
 ]
 #+end_src
 
+* TODO [#C] Adding any new restic backup spuriously fires BackupNotRunRecently until its first run completes
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ycp
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-22 Sat 14:07]
+:MODIFIED: [2026-08-22 Sat 14:07]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+Found 2026-08-22 while adding /tank/Machines. Within minutes of deploying the new backup, BackupNotRunRecently fired with 'Backup Machines last ran 20687d 21h ago' -- the epoch-0 signature (time() - 0), same shape as the previously-seen '20628d'.
+
+CAUSE: backup_last_run_timestamp_seconds is 0 for a unit that has never COMPLETED. A newly added backup is in exactly that state from deploy until its first run finishes, which for a large dataset is hours. The rule is (time() - backup_last_run_timestamp_seconds) > 129600, for 5m, so it fires almost immediately and is guaranteed noise for every future backup addition.
+
+NOTE the label trap: this alert carries backup="Machines" from the backup-status exporter, whereas restic-metrics emits repository="Machines". A silence scoped to one does NOT cover the other; I had to create a second silence.
+
+POSSIBLE FIXES (needs a judgement call, hence not done autonomously):
+ a) have the exporter omit the series entirely for a unit with no completion timestamp, so absent() semantics apply rather than a false 1970 reading;
+ b) add 'and backup_last_run_timestamp_seconds > 0' to the rule, which keeps a genuinely stuck new backup invisible;
+ c) leave it and silence on each addition.
+(a) looks right -- a metric asserting 'last ran in 1970' is worse than no metric -- but it changes exporter semantics that other rules may rely on, so it deserves a deliberate decision.
+
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

@@ -6,6 +6,38 @@
 }:
 
 let
+  # Every S3-backed restic repository, DERIVED from services.restic.backups
+  # rather than listed by hand.
+  #
+  # This replaced a hardcoded REPOSITORIES array on 2026-08-22. That array was
+  # the known-bad pattern in this repo, and modules/services/monitoring.nix:40
+  # already cites it by name as "the cautionary tale": "Public" was simply
+  # missing from it, so that repo had zero B2-side coverage — no snapshot
+  # freshness, no check, no size sanity — until a census caught it in 2026-06-09.
+  # Adding /tank/Machines would have re-armed exactly that trap, so the list is
+  # now computed and the drift is structurally impossible.
+  #
+  # The attribute names are unchanged by this (verified: Audio, Backups,
+  # Databases, Documents, Home, Machines, Photos, Public, Video, doc, src), so
+  # the repository="..." label on every metric keeps its existing values and no
+  # alert rule or dashboard needs touching.
+  #
+  # Taking the URL straight from the backup also retires the old name->bucket
+  # `case` statement: the only special case, Backups -> jwiegley-Backups-Misc,
+  # is already spelled out in that backup's own `repository`, so the mapping had
+  # been a second place to get the same fact wrong.
+  resticRepos = lib.filterAttrs (
+    _name: b: b.repository != null && lib.hasPrefix "s3:" b.repository
+  ) config.services.restic.backups;
+
+  # Emitted on one line apiece: a multi-line interpolation would not be subject
+  # to the '' string's indentation stripping and would misalign the generated
+  # script against the literal body around it.
+  repoNamesBash = lib.concatMapStringsSep " " (n: ''"${n}"'') (lib.attrNames resticRepos);
+  repoUrlsBash = lib.concatMapStringsSep " " (n: ''["${n}"]="${resticRepos.${n}.repository}"'') (
+    lib.attrNames resticRepos
+  );
+
   # Shared restic metrics collection script
   # Used by both CLI tool and systemd service
   resticMetricsScript = pkgs.writeShellScript "collect-restic-metrics" ''
@@ -14,26 +46,13 @@ let
 
             OUTPUT_FILE="/var/lib/prometheus-node-exporter-textfiles/restic.prom"
             TEMP_FILE="$OUTPUT_FILE.$$"
-            S3_BASE="s3:s3.us-west-001.backblazeb2.com"
 
-            # Keep in lockstep with services.restic.backups in
-            # modules/storage/backups.nix. "Public" was missing here (census
-            # 2026-06-09) so the offsite B2 'Public' repo had zero B2-side
-            # coverage — no snapshot freshness, no check, no size sanity. Each
-            # name maps to bucket jwiegley-<name> (Backups -> Backups-Misc, see
-            # the case below); Public uses the default mapping (jwiegley-Public).
-            REPOSITORIES=(
-              "Audio"
-              "Backups"
-              "Databases"
-              "Documents"
-              "Home"
-              "Photos"
-              "Public"
-              "Video"
-              "doc"
-              "src"
-            )
+            # Both generated from services.restic.backups at build time; see the
+            # note by resticRepos above. REPO_NAMES fixes the iteration order
+            # (Nix attribute order is sorted, a bash associative array's is not)
+            # so the generated .prom file stays byte-stable between runs.
+            REPO_NAMES=( ${repoNamesBash} )
+            declare -A REPO_URLS=( ${repoUrlsBash} )
 
             if [ -f /run/secrets/aws-keys ]; then
               source /run/secrets/aws-keys
@@ -68,21 +87,11 @@ let
     # TYPE restic_scrape_duration_seconds gauge
     HEADER
 
-            for repo in "''${REPOSITORIES[@]}"; do
+            for repo in "''${REPO_NAMES[@]}"; do
               START_TIME=$(date +%s)
               echo "Checking repository: $repo" >&2
 
-              # Map repository name to bucket name (Backups uses Backups-Misc)
-              case "$repo" in
-                "Backups")
-                  BUCKET="Backups-Misc"
-                  ;;
-                *)
-                  BUCKET="$repo"
-                  ;;
-              esac
-
-              REPO_URL="$S3_BASE/jwiegley-$BUCKET"
+              REPO_URL="''${REPO_URLS[$repo]}"
               CHECK_SUCCESS=0
               SNAPSHOT_COUNT=0
               REPO_SIZE=0

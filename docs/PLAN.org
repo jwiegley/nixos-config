@@ -6070,6 +6070,34 @@ alert. That is correct behaviour and should not be suppressed. Verify the diff
 against the sha256 baseline (not the .backup), then re-baseline.
 #+end_example
 
+* DOING [#B] Deploy and verify /tank/Machines restic backup to B2
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-s4v
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-22 Sat 11:48]
+:MODIFIED: [2026-08-22 Sat 14:05]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+DEPLOYED AND VERIFIED 2026-08-22, except the first upload which is still running.
+
+modules/storage/backups.nix: mkBackup Machines at 06:20 against jwiegley-Machines.
+modules/monitoring/services/restic-metrics.nix: repo list now DERIVED from services.restic.backups instead of a hardcoded array that omitted Machines (and had previously omitted Public); this also retired the redundant name->bucket case statement, since Backups->Backups-Misc is already in that backup's own repository URL.
+
+EVIDENCE:
+ - unit+timer loaded, next run Sun 06:20, same zfs.target/tank.mount guards as its siblings, no slot collision (Video 05:30 is the previous last).
+ - CREDENTIALS PROVEN: 'created restic repository b29f5b6ecb at s3:...jwiegley-Machines'. The two preceding 'repository does not exist' lines are the expected pre-init probe.
+ - COLLECTOR: after the refactor it emits 11 repos (was 10), all ten pre-existing repository= labels unchanged, Machines check_success=1. Ran under the deployed script (ExecStart hash matches; 0 occurrences of the old REPOSITORIES array).
+ - No unit timeouts that could kill a 192G run (TimeoutStartUSec=infinity, matching Video).
+
+REMAINING (time-based only): the 192G first upload is in flight (started 13:55, CPU-busy, no errors). When it lands, confirm restic_snapshots_total{repository="Machines"} > 0 and REMOVE Alertmanager silence 35134f64 (scoped repository=Machines, expires 2026-08-24 01:45), which exists only because an empty bucket makes ResticCheckFailed/ResticNoSnapshots fire spuriously.
+#+end_example
+
 * DONE [#C] Restore NocoBase for evaluation: wired and building, blocked on two SOPS keys
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -6192,6 +6220,32 @@ certs/renew-nginx-certs.sh, but that timer is monthly and next due 2026-09-01, s
 nginx would have refused to start referencing a missing cert. Issued with the
 documented script at 644/600 nginx:nginx.
 #+end_example
+
+* DONE [#D] IoTDeviceChronicallyUnreachable summary inverted its own value
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-sdt
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-22 Sat 14:05]
+:MODIFIED: [2026-08-22 Sat 14:05]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 14:05]
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+** Close Reason
+
+FIXED and verified live in modules/monitoring/alerts/network.yaml.
+
+The expr is avg_over_time(probe_success[24h]) < 0.9, so $value is the SUCCESS rate. The summary rendered it as 'is chronically unreachable (85.86% over 24h)', which parses as 86% DOWN when it actually means 86% UP. For the garage door lock that made a device answering ~87% of pings look like one offline nearly all day. The description immediately below always had it right ('answered only ...'); only the summary was wrong, so this is a pure wording fix with NO change to expr, threshold, severity or dwell.
+
+New text: 'IoT device {{ $labels.instance }} answered only {{ $value | humanizePercentage }} of pings over 24h (below the 90% threshold)'.
+
+VERIFIED after ./build switch: Prometheus /api/v1/rules reports the rule health=ok, lastError=none, carrying the new summary; grep for the old wording returns 0; 485 rules loaded with 29 health=unknown, all with EMPTY lastError, i.e. post-reload warmup rather than breakage.
+
+Found while triaging the firing alert. The firing itself is expected and documented (nixos-mn4); the device decision remains John's and is tracked in nixos-cnc.
 
 * DONE [#B] flake.lock update 2026-08-15 07:49 left the system unbuildable: nix-config needs an undeclared rust-overlay input
 :PROPERTIES:

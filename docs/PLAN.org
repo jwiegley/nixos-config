@@ -507,6 +507,95 @@ matters and it is correct.
 ALSO CHECKED CLEAN THIS CYCLE: 144/144 Prometheus scrape targets up with none ever
 down in 30 days; all 10 restic repositories pass restic_check_success.
 
+* DONE [#E] Correction: the 407 'unaudited' compound rules ARE covered — prometheus-rule-audit checks all 484
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-514
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-22 Sat 04:45]
+:MODIFIED: [2026-08-22 Sat 04:46]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 04:46]
+:CLOSE_REASON: Correction recorded. prometheus-rule-audit covers all 484 rules continuously (checked 8 min ago, up=1, rules_checked=484 matching the live count) with 0 dead, 0 stale, 0 error, 0 group overruns. All 5 dormant rules verified individually as correctly classified — including GrafanaLoginFailureBurst, which has 0 samples in 90d but 1 within 365d and is genuinely dormant rather than dead. The two audits are complementary: metric-existence across all 484, threshold-sanity across the 77 simple ones.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+CORRECTION to nixos-bkf, which implied a coverage gap that does not exist.
+
+nixos-bkf recorded a threshold audit covering "77 of 484 rules... the other 407 are
+compound expressions the mechanical pass cannot parse", and framed that as a partial
+audit. For the THRESHOLD dimension that is accurate. But it reads as though 407
+rules are unexamined, and for the dimension that matters most on this host -- can a
+rule fire at all -- they are not.
+
+modules/monitoring/services/prometheus-rule-audit.nix already audits ALL of them,
+continuously, and I did not know it existed before building my own partial version.
+Measured this cycle:
+  prometheus_rule_audit_up                      1
+  last run                                      8.2 minutes ago
+  rules_checked_total                           484   <- equals the rules actually
+                                                         loaded, so no truncation
+  dead_rules_total                              0
+  stale_rules_total                             0
+  error_rules_total                             0
+  group_overrun_total                           0
+  dormant_rules_total                           5     (explicitly informational)
+
+It distinguishes DEAD (selects a metric the TSDB has NEVER seen -- the 123-rule
+failure class this repo remediated) from DORMANT (metric known to the TSDB, no
+series right now -- on-demand counters). That distinction is the whole point and it
+is drawn correctly.
+
+VERIFIED THE CLASSIFICATION RATHER THAN TRUSTING IT, on all five dormant rules:
+  ZimitCrawlStalled            zimit_running_job_log_age_seconds -- present in 31 of
+                               31 samples across the llm-primer crawl window
+                               (08-20 18:14 to 08-21 09:14) and absent since. Live
+                               when it can be, dormant otherwise: exactly as I built
+                               it. Direct proof that dormant != dead.
+  GitWorkspaceRepoStale        git_workspace_repo_age_seconds -- 101 samples in 30d,
+                               absent now (the shared-textfile behaviour documented
+                               in nixos-mfh).
+  StockTraderStaleQuotesRejected  1 sample in 30d.
+  PrometheusRuleCannotFire     25 samples in 30d (the audit's own metric).
+  GrafanaLoginFailureBurst     the interesting one. ZERO samples in 30d AND 90d,
+                               which looked like a misclassification -- but the name
+                               IS in the __name__ index and there is 1 sample within
+                               365d. A Grafana failed-login counter only materialises
+                               when someone actually fails a login. Dormant is
+                               correct; dead would have been wrong.
+
+SO: the alert surface is fully and continuously audited for dead rules, 0 exist, and
+the two audits are complementary rather than overlapping --
+  prometheus-rule-audit : does the metric exist?          all 484 rules
+  the nixos-bkf pass    : is the threshold inside normal?  77 simple rules
+Only the second is partial, and only in the sense that thresholds cannot be checked
+mechanically on compound expressions.
+
+LESSON WORTH KEEPING: I built a mechanical rule audit without first checking whether
+the repo already had one. It did, and a better one. Check modules/monitoring/services/
+for existing collectors before writing an ad-hoc equivalent.
+
+No configuration changed; nothing here is a defect.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-514",
+    "depends_on_id": "nixos-bkf",
+    "type": "related",
+    "created_at": "2026-08-22T11:46:10.490080617Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

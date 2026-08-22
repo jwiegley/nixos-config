@@ -442,6 +442,71 @@ NOT VERIFIED, and cannot be without a real failed backup: that it fires on an
 actual miss. What is verified is that it no longer fires on normal operation and
 that the metric and comparison are live.
 
+* DONE [#E] restic_last_check_timestamp_seconds HELP text claims it is an integrity-check time; it is the collector pass time
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-4ti
+:LABELS:   []
+:ISSUE_TYPE: docs
+:CREATED:  [2026-08-21 Fri 20:51]
+:MODIFIED: [2026-08-21 Fri 20:51]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-21 Fri 20:51]
+:CLOSE_REASON: HELP text corrected to state it is the collector pass time, not an integrity check. Verified the deployed script carries it, and that all three restic rules stay health=ok/inactive. No monitoring defect existed — ResticMetricsStale uses the metric correctly and documents it as a collector-freshness guard, and integrity-check age is separately guarded by ResticIntegrityCheckStale at 8 days (currently 4.6 days). The metric name is left alone deliberately: renaming would break that rule and any dashboard for a cosmetic gain.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+restic_last_check_timestamp_seconds is NOT a check timestamp. Its HELP text said
+"Timestamp of the last check operation"; it actually records the restic-metrics
+COLLECTOR PASS time. The name says the same wrong thing.
+
+HOW IT MISLEADS, measured live -- the two metrics differ by two orders of magnitude:
+  restic_last_check_timestamp_seconds        0.8 h old   (collector pass)
+  restic_integrity_check_timestamp_seconds 110.1 h old   (the real `restic check`)
+Reading the first one, all 10 repositories appear to have been integrity-checked
+minutes ago. They were checked 4.6 days ago, on the weekly Monday 06:30 timer, and
+restic-check.service's own last exit (2026-08-17 06:43:58) agrees with the SECOND
+metric, not the first.
+
+restic-metrics.nix:171 writes $TIMESTAMP -- the collector's per-repo run time --
+into it, so the value is correct for what it is and only the documentation lied.
+
+NO MONITORING DEFECT, checked before assuming one. The single rule that reads this
+metric is ResticMetricsStale (storage.yaml:539), and it is entirely correct: its
+comment states it is "its dedicated freshness guard" for restic.prom, sizes 8h as
+"6h cadence + ~2h grace", explains why max() collapses the per-repo series, and its
+summary reads "last collector pass". Whoever wrote it knew exactly what the metric
+contains. Integrity-check AGE is separately and correctly guarded by
+ResticIntegrityCheckStale (local-backup.yaml:144) at 8 days against
+restic_integrity_check_timestamp_seconds -- currently 4.6 days, within threshold.
+
+So the fix is documentation only: corrected the HELP string to say
+"Timestamp of the last restic-metrics COLLECTOR PASS for this repository (NOT a
+restic integrity check)". The metric name itself is left alone deliberately --
+renaming it would break ResticMetricsStale and any dashboard, for a cosmetic gain.
+
+WHY IT WAS WORTH FIXING: this cost me a real detour. Seeing "0.0 days since last
+integrity check" for all 10 repos while the weekly check timer had last run four
+days earlier read as either a broken timer or a lying metric, and the HELP text
+actively pointed the wrong way. A future reader with a genuine backup concern would
+be misled at exactly the wrong moment.
+
+VERIFIED: the deployed collector script
+(/nix/store/y3yh07ji91318rmn1jyxc736r5a6pihg-collect-restic-metrics) carries the
+corrected HELP; ResticMetricsStale, ResticIntegrityCheckStale and ResticCheckFailed
+all read health=ok/state=inactive after the switch; and the two ages remain
+correctly distinct at 0.8h vs 110.1h.
+
+NOTE the textfile itself still shows the old HELP until restic-metrics completes
+its current pass -- it queries B2 across 10 repositories and legitimately takes
+minutes (6h cadence, 8h alert threshold). The deployed script is the artifact that
+matters and it is correct.
+
+ALSO CHECKED CLEAN THIS CYCLE: 144/144 Prometheus scrape targets up with none ever
+down in 30 days; all 10 restic repositories pass restic_check_success.
+
 * DONE [#B] P1: host cannot be rebuilt -- nix-config sets a starship option home-manager 25.11 lacks
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

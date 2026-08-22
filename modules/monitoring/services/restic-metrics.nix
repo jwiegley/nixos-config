@@ -62,7 +62,7 @@ let
     # TYPE restic_unique_size_bytes gauge
     # HELP restic_last_snapshot_timestamp_seconds Timestamp of the most recent snapshot
     # TYPE restic_last_snapshot_timestamp_seconds gauge
-    # HELP restic_last_check_timestamp_seconds Timestamp of the last check operation
+    # HELP restic_last_check_timestamp_seconds Timestamp of the last restic-metrics COLLECTOR PASS for this repository (NOT a restic integrity check)
     # TYPE restic_last_check_timestamp_seconds gauge
     # HELP restic_scrape_duration_seconds Time taken to collect metrics for this repository
     # TYPE restic_scrape_duration_seconds gauge

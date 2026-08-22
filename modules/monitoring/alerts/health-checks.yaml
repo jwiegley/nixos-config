@@ -72,15 +72,46 @@ groups:
           summary: "Backup service {{ $labels.backup }} has failed"
           description: "The backup service for {{ $labels.backup }} is in failed state and needs attention"
 
+      # Split into two rules on 2026-08-22. These are two genuinely different
+      # conditions that were being reported as one, and the shared wording made the
+      # second one unreadable.
+      #
+      # health-check-exporters.nix emits backup_last_run_timestamp_seconds=0 for a
+      # unit that has never started, and that zero is DELIBERATE -- its comment says
+      # "correctly yields 0 so a never-run backup still alerts". So the zero must keep
+      # alerting; what was wrong was only how it read. Subtracting 0 from time() gives
+      # ~56 years, so adding /tank/Machines duly produced "Backup Machines last ran
+      # 20687d 21h 1m 0s ago" -- nonsense as a description of a backup that had simply
+      # not run yet.
+      #
+      # The guard below is not a new idea: BackupLastRunFailed immediately after this
+      # already carries the identical `and backup_last_run_timestamp_seconds > 0` for
+      # exactly this reason.
+      #
+      # Coverage is preserved rather than reduced, verified against history: over the
+      # window Machines sat at 0 (19:51-21:01 UTC on 2026-08-22, 15 samples) the old
+      # rule went pending at 19:51 and fired 19:56-21:01, and
+      # `backup_last_run_timestamp_seconds == 0` matches that same window exactly.
+      # BackupNeverRun keeps the 5m dwell, so the timing is unchanged as well.
       - alert: BackupNotRunRecently
-        expr: (time() - backup_last_run_timestamp_seconds) > 129600
+        expr: (time() - backup_last_run_timestamp_seconds) > 129600 and backup_last_run_timestamp_seconds > 0
         for: 5m
         labels:
           severity: warning
           component: backup
         annotations:
           summary: "Backup {{ $labels.backup }} hasn't run in over 36 hours"
-          description: "The backup {{ $labels.backup }} last ran {{ $value | humanizeDuration }} ago (expected daily)"
+          description: "The backup {{ $labels.backup }} last ran {{ $value | humanizeDuration }} ago (expected daily). This rule covers backups that HAVE run at least once; one that has never run is reported by BackupNeverRun instead."
+
+      - alert: BackupNeverRun
+        expr: backup_last_run_timestamp_seconds == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup {{ $labels.backup }} has never completed a run"
+          description: "No completion timestamp has ever been recorded for backup {{ $labels.backup }}, so it has not run since it was defined. For a backup that was JUST added this is expected until its first scheduled run -- either wait for the timer or start restic-backups-{{ $labels.backup }}.service by hand. If it persists past the first scheduled window then the timer or the unit is broken; check 'systemctl list-timers' and the unit's status."
 
       - alert: BackupLastRunFailed
         expr: backup_last_run_success == 0 and backup_last_run_timestamp_seconds > 0

@@ -6070,15 +6070,16 @@ alert. That is correct behaviour and should not be suppressed. Verify the diff
 against the sha256 baseline (not the .backup), then re-baseline.
 #+end_example
 
-* DOING [#B] Deploy and verify /tank/Machines restic backup to B2
+* DONE [#B] Deploy and verify /tank/Machines restic backup to B2
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-s4v
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-22 Sat 11:48]
-:MODIFIED: [2026-08-22 Sat 14:05]
+:MODIFIED: [2026-08-22 Sat 16:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 16:53]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -6097,6 +6098,20 @@ EVIDENCE:
 
 REMAINING (time-based only): the 192G first upload is in flight (started 13:55, CPU-busy, no errors). When it lands, confirm restic_snapshots_total{repository="Machines"} > 0 and REMOVE Alertmanager silence 35134f64 (scoped repository=Machines, expires 2026-08-24 01:45), which exists only because an empty bucket makes ResticCheckFailed/ResticNoSnapshots fire spuriously.
 #+end_example
+
+** Close Reason
+
+COMPLETE and verified end to end.
+
+First backup ran 2026-08-22 13:55:35 -> 14:42:49 (47:14): 'processed 3545 files, 262.864 GiB', 'Added to the repository: 216.633 GiB (164.508 GiB stored)', 'snapshot 25a7e932 saved', unit Result=success ExecMainStatus=0. The 262.9 GiB logical vs the 192G du reported is ZFS compression on disk, not a discrepancy.
+
+MONITORING CONFIRMS IT INDEPENDENTLY: restic_snapshots_total{repository=Machines}=1, restic_repo_size_bytes=176628661582 (~164.5 GiB, matching restic's own 'stored' figure), restic_check_success=1, and freshness reads 174 min against the 40h threshold.
+
+One number looked wrong and was checked rather than assumed: restic_last_snapshot_timestamp_seconds=1787432135 is 13:55:35, the backup's START, not its 14:42:50 completion. That is correct restic semantics -- snapshot.Time is stamped when the backup begins -- so there is no defect.
+
+Both Alertmanager silences (35134f64 repository=Machines, 766d78e5 backup=Machines) have been expired, and nothing fired afterwards; a brief ResticNoSnapshots was stale Alertmanager state, cleared within 30s, with Prometheus showing activeAlerts=0 and the expression matching nothing throughout.
+
+Collector refactor verified live in the same pass: 11 repos where there were 10, all ten pre-existing repository= labels unchanged.
 
 * DONE [#C] Restore NocoBase for evaluation: wired and building, blocked on two SOPS keys
 :PROPERTIES:
@@ -7336,15 +7351,16 @@ his call and not an obvious defect to be repaired.
 ]
 #+end_src
 
-* TODO [#C] Adding any new restic backup spuriously fires BackupNotRunRecently until its first run completes
+* DONE [#C] Adding any new restic backup spuriously fires BackupNotRunRecently until its first run completes
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ycp
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-22 Sat 14:07]
-:MODIFIED: [2026-08-22 Sat 14:07]
+:MODIFIED: [2026-08-22 Sat 16:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 16:53]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -7360,6 +7376,23 @@ POSSIBLE FIXES (needs a judgement call, hence not done autonomously):
  b) add 'and backup_last_run_timestamp_seconds > 0' to the rule, which keeps a genuinely stuck new backup invisible;
  c) leave it and silence on each addition.
 (a) looks right -- a metric asserting 'last ran in 1970' is worse than no metric -- but it changes exporter semantics that other rules may rely on, so it deserves a deliberate decision.
+
+** Close Reason
+
+FIXED by splitting the rule, and my original framing of this issue was wrong.
+
+I filed it assuming the exporter's epoch-0 was a defect. It is not. health-check-exporters.nix:78-79 documents the zero as DELIBERATE -- 'All three are n/a only for a unit that has genuinely never started, which correctly yields 0 so a never-run backup still alerts.' Both fixes I proposed last cycle (omit the series, or guard the rule with > 0 alone) would have defeated that intent and made a backup that never runs silent. The alert firing was CORRECT; only its rendering was nonsense: 'Backup Machines last ran 20687d 21h 1m 0s ago'.
+
+So the conflated rule was split into two, in modules/monitoring/alerts/health-checks.yaml:
+  BackupNotRunRecently  (time() - backup_last_run_timestamp_seconds) > 129600 and backup_last_run_timestamp_seconds > 0
+  BackupNeverRun        backup_last_run_timestamp_seconds == 0        [new, 5m dwell, warning]
+The guard is not novel: BackupLastRunFailed immediately below already carried the identical '> 0' for this same reason.
+
+COVERAGE PRESERVED, verified against history rather than argued: over the window Machines sat at 0 (19:51-21:01 UTC, 15 samples) the old rule went pending 19:51 and fired 19:56-21:01, and 'backup_last_run_timestamp_seconds == 0' matches that window exactly. The 5m dwell is kept, so timing is unchanged too.
+
+VERIFIED after switch: both rules health=ok, lastError=none, evaluated at 16:50:50 with 0 active alerts (correct -- all 11 tracked backups have run and none is stale); 486 rules loaded, up from 485; no rule in health=err.
+
+NOT CHANGED, and left as John's call if he ever wants it: a newly added backup still alerts within 5m rather than getting a grace period until its first scheduled run. That is the pre-existing behaviour and the exporter's stated intent, so I preserved it rather than quietly introducing a grace window.
 
 * DONE [#B] Audit what else reads /etc/nixos at runtime (0700 on modules/)
 :PROPERTIES:

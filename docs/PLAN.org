@@ -1119,6 +1119,75 @@ privileges is John's call and he has been asked.
 ]
 #+end_src
 
+* DONE [#E] Verified: all 24 PostgreSQL dumps are structurally restorable, with data files and roles
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-7fp
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-22 Sat 00:46]
+:MODIFIED: [2026-08-22 Sat 00:46]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 00:46]
+:CLOSE_REASON: Verification complete; no defect. 24 live DBs / 24 dump dirs with exact correspondence, pg_restore --list succeeds on all 24, zero zero-byte data files across the whole mirror, all toc.dat from one nightly pass (2026-08-21 02:00-02:05), and globals.sql carries 24 CREATE ROLE statements. The negative control discriminates (corrupt dump -> rc=1, 'did not find magic string'). Does not prove a full restore succeeds — that needs a scratch instance — and the issue says so.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+First structural validation of the PostgreSQL backup mirror. Everything passes.
+Recorded because "the backup job exited 0" had never been distinguished from "the
+backup is a usable artifact", and because the method is reusable.
+
+COVERAGE IS EXACT: 24 live databases, 24 dump directories, 0 live DBs without a
+dump, 0 dump dirs without a live DB.
+
+ALL 24 DUMPS ARE STRUCTURALLY READABLE: pg_restore --list succeeds on every one
+(it parses toc.dat and restores nothing). Sample TOC sizes: gitea 1114 entries,
+grist 217, mailarchiver 151, hass 93, postgres 3.
+
+THE CONTROL DISCRIMINATES, which is what makes the above mean anything. A
+deliberately corrupted dump directory gives rc=1 and "pg_restore: error: did not
+find magic string in file header" with 0 usable lines, while a real dump gives
+rc=0 and 216 lines. Without that control, "pg_restore --list succeeded" would be
+an untested assertion.
+
+PER-TABLE DATA FILES BACK THE TOC. pg_restore --list only reads toc.dat, so a dump
+could parse cleanly while its data files were missing or truncated. Checked
+separately: every sampled dump has data files present, and across ALL 24 dumps
+there are ZERO zero-byte *.dat* files. TOC counts exceed data-file counts by design
+-- the TOC includes schema objects (indexes, constraints, functions) while data
+files exist only for tables holding rows (gitea 1114 TOC vs 113 data files).
+
+FRESH AND FROM ONE PASS: all 24 toc.dat files are dated 2026-08-21 between 02:00
+and 02:05, i.e. a single nightly run rather than a patchwork of stale leftovers.
+
+ROLES ARE CAPTURED: globals.sql present, 6087 bytes, 24 CREATE ROLE statements. A
+restore without it would produce databases nobody can log into.
+
+WHAT THIS DOES NOT PROVE, stated plainly: that a full restore succeeds. That needs
+a scratch PostgreSQL instance and a real pg_restore, which is a heavier and more
+invasive test. What is established is that the artifacts exist for every database,
+parse, carry non-empty data, come from one recent pass, and are accompanied by the
+role definitions.
+
+MY OWN ERROR, recorded because it is the second occurrence in two cycles: I first
+listed the dump directories sorted ascending and cut the output at 20 lines, which
+hid the four LARGEST databases (mailarchiver, nodered_events, org, immich) and made
+it look as though they were not backed up at all. They are -- 16.2 GB, 3.9 GB,
+2.9 GB and 1.2 GB respectively. `head` on a sorted list has now produced a false
+alarm twice; sort descending or print the whole thing.
+
+Also worth knowing for future size comparisons: `du -sh` reports ZFS disk usage
+while `du -sb` reports apparent size, and on this compressed pool they differ by
+several times (hass: 259 MB on disk, 1201 MB apparent). Neither is wrong; they
+answer different questions.
+
+ALSO CHECKED CLEAN: last cycle's pending restic-metrics pass completed
+(Result=success, 20:59:16) and the corrected HELP string is now in the live
+textfile, with the two ages correctly distinct at 3.8h (collector) vs 114.0h
+(integrity check).
+
 * DONE [#D] Nagios PING check on b-hyve-sprinkler flaps while the device is healthy
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

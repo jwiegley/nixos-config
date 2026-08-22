@@ -164,7 +164,14 @@ groups:
           category: network
           service: connectivity
         annotations:
-          summary: "IoT device {{ $labels.instance }} is chronically unreachable ({{ $value | humanizePercentage }} over 24h)"
+          # $value is the SUCCESS rate (the expr is `... < 0.9`), so it must never be
+          # phrased as though it were the failure rate. The old summary read
+          # "is chronically unreachable (85.86% over 24h)", which parses as 86% DOWN
+          # when it actually means 86% UP -- an inversion that made a lock answering
+          # ~87% of pings look like a lock that was offline almost all day. The
+          # description below always had it right ("answered only ..."); this now
+          # matches it.
+          summary: "IoT device {{ $labels.instance }} answered only {{ $value | humanizePercentage }} of pings over 24h (below the 90% threshold)"
           description: "IoT device {{ $labels.instance }} answered only {{ $value | humanizePercentage }} of ICMP probes over the last 24 hours, against a healthy-peer baseline above 95%. This is DEGRADATION rather than death: BlackboxICMPIoTDeviceDown needs a continuous hour at zero and will not fire for a device that flaps in bursts of minutes. Check the device's radio/signal and, before assuming it is broken, check whether it still WORKS -- ping is a poor health proxy for this class of device, and Home Assistant is the better instrument (the garage lock that motivated this rule reported 'locked' with zero unavailable entries while answering only 75% of pings). If ICMP is simply not meaningful for this device, move it to host_group=iot-noping rather than raising this threshold."
 
       # High latency warning for ICMP probes

@@ -166,7 +166,8 @@ in
   # mkBackup { path = "Desktop"; }
   # mkBackup { path = "Documents"; }
   # mkBackup { path = "Downloads"; }
-  # mkBackup { path = "Machines"; }
+  # Machines: no longer excluded — added below on 2026-08-22 at John's request,
+  # once he created the jwiegley-Machines bucket.
   # mkBackup { path = "Models"; }
   # mkBackup { path = "Movies"; }
   # mkBackup { path = "Music"; }
@@ -181,9 +182,16 @@ in
     # prometheus-monitoring.nix in this repo)
   };
 
-  # Staggered start times (20-min spacing from 02:10) so the nine restic jobs
+  # Staggered start times (~20-min spacing from 02:10) so the restic jobs below
   # don't hammer the USB tank enclosure simultaneously. postgresql-backup keeps
-  # 02:00 to itself; the heavy datasets (Photos, Video) run last with extra gaps.
+  # 02:00 to itself; the heavy datasets (Photos, Video, Machines) run last with
+  # extra gaps.
+  #
+  # Deliberately no count here. This comment read "the nine restic jobs" while
+  # there were already ten, and adding Machines made eleven — a hand-maintained
+  # tally in a comment goes stale the first time someone adds a dataset. Count the
+  # mkBackup call sites, or ask systemd:
+  #   systemctl list-timers 'restic-backups-*'
   services.restic.backups = lib.mkMerge [
     (mkBackup {
       name = "Audio";
@@ -262,6 +270,24 @@ in
         # intended location was not known.
         "Sessions"
       ];
+    })
+    # Machines: 192G of VM bundles (.vmwarevm, .utm, .tar.xz), 27 top-level entries.
+    # Added 2026-08-22 at John's request against the jwiegley-Machines bucket he
+    # created; the default bucket = name gives exactly that, so no bucket override.
+    #
+    # 06:20 puts it AFTER Video (05:30), the current last slot, with the same
+    # ~50-minute gap Video gets after Photos. The staggering exists because
+    # concurrent multi-bay reads hung the OWC USB bridge on 2026-06-02, and this is
+    # another heavy dataset — it should not overlap the other heavy ones.
+    #
+    # NO EXCLUDES, deliberately. The obvious candidates are transient VM state, but
+    # measured before deciding: *.vmem 12 files, *.vmss 6, *.vmsn 8, *.log 33,
+    # *.lck 0 — together well under a gigabyte against 192G. Excluding them would
+    # save nothing measurable while risking the omission of a suspended VM's resume
+    # state, so everything is backed up.
+    (mkBackup {
+      name = "Machines";
+      time = "06:20:00";
     })
     (mkBackup {
       name = "Public";

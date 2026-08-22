@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1787344822,
-        "narHash": "sha256-TVzxiLbglk0RUNrQEpzzvxaUuNR0b/KGuhylS4YJ8vU=",
+        "lastModified": 1787360339,
+        "narHash": "sha256-qj75ig4oh1zHqqWgWYtVTnhopFTSpnF3O1LbGwGlilk=",
         "ref": "refs/heads/main",
-        "rev": "2b20ef28275549710e41bc522e066d1c49f7cb90",
-        "revCount": 3393,
+        "rev": "752357cef837baecaf7b5545909a3ee468677a91",
+        "revCount": 3394,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2271,11 +2271,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1787344822,
-        "narHash": "sha256-TVzxiLbglk0RUNrQEpzzvxaUuNR0b/KGuhylS4YJ8vU=",
+        "lastModified": 1787360339,
+        "narHash": "sha256-qj75ig4oh1zHqqWgWYtVTnhopFTSpnF3O1LbGwGlilk=",
         "ref": "refs/heads/main",
-        "rev": "2b20ef28275549710e41bc522e066d1c49f7cb90",
-        "revCount": 3393,
+        "rev": "752357cef837baecaf7b5545909a3ee468677a91",
+        "revCount": 3394,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

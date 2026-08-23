@@ -5439,15 +5439,16 @@ Post-rebuild AIDE database update" during this switch, but aide.db's mtime did n
 move until I ran aide-update by hand. Worth a look if AideChangesDetected latches
 again after a future rebuild.
 
-* DOING [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
+* DONE [#C] pushme 3.1.0: land the patch, bump the input, re-arm the timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-nyr
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-11 Tue 16:39]
-:MODIFIED: [2026-08-12 Wed 00:11]
+:MODIFIED: [2026-08-23 Sun 00:50]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-23 Sun 00:50]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -5494,6 +5495,26 @@ REMAINING WORK once a patched pushme exists:
 NOTE: flake.lock currently pins pushme 4b977a2f (3.1.0) while the running system has 3.0.0. Any
 ./build switch will trigger the multi-hour toolchain build. Consider reverting the lock until a
 patched release exists.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+COMPLETE and verified in production. The issue text was badly stale: it still read 'BLOCKED ... NEXT STEP IS JOHN'S', but the block is gone and every remaining item is done.
+
+THE BLOCK IS GONE. flake.lock no longer pins 4b977a2f (the version-bump-only tree); it pins ff4d79aa260a, and that revision DOES carry the patch. Counted with the same markers the issue used, and positive-controlled so a zero would have been trustworthy (pushme 101, rsync 136 occurrences):
+  SshOptions 19 in 4 files (was 0), CheckRemoteDirectory 6 in 4 (was 0), exitWith 3, RunResult 3, hostSshOptions 2 (all were 0).
+pushme-exe-pushme-3.1.0 is already built in the store, so the feared multi-hour ghc-9.10.3 toolchain build has already happened -- that warning in the issue is also stale.
+
+THE SIX REMAINING ITEMS:
+ 1. Exit codes confirmed FROM SOURCE, Main.hs runResultExitCode: RunUsageError -> 2, TransferError -> 1, TransferWarning and TransferSuccess -> 0. This matches the module's comment exactly, including the deliberate choice to treat a warning as success because it maps to rsync 23/24 (partial transfer, vanished files) which are routine when mirroring a live home directory. NOTE ON MY OWN PROBE: running the binary with a bogus flag exits 1, not 2, but that is optparse-applicative's argument-parse failure, which happens before pushme's RunResult logic; it does not contradict the mapping. The 'verify --help exposes SshOptions/CheckRemoteDirectory' phrasing in the checklist was based on a wrong premise -- both are CONFIG-SCHEMA fields (config.schema.yaml:63-70), not CLI flags, so --help correctly never mentions them.
+ 2. SshOptions is on the andoria alias in the module.
+ 3. Destination is /tank/Backups/Contracts/Positron/nfs, not /tank/work/positron.
+ 4. Timer carries wantedBy = [timers.target] and is active. The 'pair' framing is superseded: restartUnits on the sops secret is deliberately ABSENT, documented with two observed failures -- sops-nix restarting the unit in a separate systemd transaction so the home-manager ordering does not constrain it (a stale destination with rsync --delete), and Type=oneshot blocking switch-to-configuration for up to TimeoutStartSec=12h while holding the build lock.
+ 5. Log-grep guard replaced by a plain exec. Verified in the DEPLOYED unit script, not just the source: 0 grep-guard occurrences, 1 exec.
+ 6. Live sync verified: hourly timer, last run 00:04:43 -> 00:16:42 exit 0 Result=success, with '[INFO] andoria done' every hour through the night. Destination exists with 35 top-level entries, mtime 2026-08-22 22:26, 876G under /tank/Backups/Contracts.
+
+No configuration change was needed; the work had been done and simply never verified or closed.
 #+end_example
 
 * DONE [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer

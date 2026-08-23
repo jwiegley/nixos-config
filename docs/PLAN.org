@@ -4000,6 +4000,44 @@ configuration change rather than anything in this repo.
 ]
 #+end_src
 
+* TODO [#A] DATA LOSS: Databases and Home restic repos lost all but the newest snapshot on 2026-08-22
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-i94
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-22 Sat 20:52]
+:MODIFIED: [2026-08-22 Sat 20:52]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+NEEDS JOHN. Cause is OFF-HOST; I have put a reversible hold on the two timers and taken no other action.
+
+WHAT HAPPENED: between 08:51 and 14:05 PDT on 2026-08-22, jwiegley-Databases went from 17 snapshots to 1, and jwiegley-Home from 16 to 1. In both repos the sole survivor is that morning's own backup (Databases 02:50, Home 03:50); every older snapshot is gone.
+
+EVIDENCE IT IS REAL, NOT A MEASUREMENT BUG (this was my first hypothesis, since I refactored the collector the same day, and I disproved it):
+ - restic_restore_size_bytes{Databases} fell 1383.7 -> 82.1 GiB, a factor of 16.9, exactly matching 17 snapshots -> 1. A count-only bug cannot move restore_size.
+ - restic_unique_size_bytes fell 170.3 -> 74.7 GiB, so unique CONTENT is gone, not just an index entry.
+ - restic_repo_size_bytes: Databases 97.9 -> 53.3 GiB, Home 240.7 -> 58.2 GiB.
+ - I diffed the old and new collector scripts in the nix store (y3yh07ji... vs i1hy4pp...). The only changes are the repo list and the URL lookup, and the resulting URLs are BYTE-IDENTICAL for both repos. The collector queried exactly what it always did.
+ - check_success=1 throughout, and the other 9 repos are unaffected and normal.
+
+WHAT DID NOT DO IT: no restic unit ran against either repo in the window. Last runs were restic-backups-Databases 02:52:34 and restic-backups-Home 03:54:46, and each logged 'Applying Policy: keep 7 daily, 5 weekly, 12 monthly, 3 yearly' with 'keep 17 snapshots: remove 1' and 'keep 16 snapshots: remove 1'. That policy cannot reduce a repo to one snapshot, and the daily logs show a rock-steady 17/16 every day from 08-15 through 08-22. Only restic-backups-Machines (a different repo) and the read-only, --no-lock metrics collector ran in the window.
+
+So something deleted them SERVER-SIDE or from another client: a B2 lifecycle rule on those two buckets, a manual forget/prune elsewhere, or B2-side action. Only John can check the B2 account.
+
+TIME-CRITICAL, WHICH IS WHY I ACTED: tonight's runs (02:52 and 03:54) execute 'forget --prune'. Prune permanently deletes data no surviving snapshot references, which is now the entire contents of the 16 and 15 lost snapshots. That would destroy any chance of recovery via B2 file versions. I therefore ran 'systemctl stop' on restic-backups-Databases.timer and restic-backups-Home.timer -- a hold, not a config change, reversible with 'systemctl start'. The other 9 timers are untouched and still scheduled.
+
+CAVEAT ON THE HOLD: a nixos-rebuild switch WILL re-arm those timers, because the stop is runtime-only. If you rebuild before deciding, stop them again or the prune runs.
+
+COST OF THE HOLD: those two get no offsite backup until released. Local fallback is thin for exactly these: tank/Home and tank/Backups/PostgreSQL each hold 33 ZFS snapshots but only back to Aug 19, i.e. 3 days. The offsite repo was the deep history.
+
+SUGGESTED NEXT STEPS (John's call): check B2 for lifecycle rules on jwiegley-Databases and jwiegley-Home and whether hidden/older file versions still exist; decide whether to attempt recovery before allowing any prune; then release the timers.
+#+end_example
+
 * DONE [#D] Nest setpoint mirror silently drops writes on API 429 (no retry/catch); divergence itself is by design
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

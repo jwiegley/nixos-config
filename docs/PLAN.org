@@ -4000,15 +4000,16 @@ configuration change rather than anything in this repo.
 ]
 #+end_src
 
-* TODO [#A] DATA LOSS: Databases and Home restic repos lost all but the newest snapshot on 2026-08-22
+* DONE [#A] DATA LOSS: Databases and Home restic repos lost all but the newest snapshot on 2026-08-22
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-i94
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-22 Sat 20:52]
-:MODIFIED: [2026-08-22 Sat 20:52]
+:MODIFIED: [2026-08-22 Sat 22:05]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-22 Sat 22:05]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -4037,6 +4038,18 @@ COST OF THE HOLD: those two get no offsite backup until released. Local fallback
 
 SUGGESTED NEXT STEPS (John's call): check B2 for lifecycle rules on jwiegley-Databases and jwiegley-Home and whether hidden/older file versions still exist; decide whether to attempt recovery before allowing any prune; then release the timers.
 #+end_example
+
+** Close Reason
+
+NOT A FAULT — John trimmed these two restic repos deliberately on 2026-08-22. Closing as expected behaviour.
+
+My diagnosis of WHAT happened was correct: jwiegley-Databases went 17 snapshots -> 1 and jwiegley-Home 16 -> 1, with restore_size collapsing 1383.7 -> 82.1 GiB (factor 16.9, matching 17 -> 1) and unique content dropping 170.3 -> 74.7 GiB. My conclusion that it originated off-host was also right, in that nothing on vulcan did it. I was wrong to escalate it as data loss without considering deliberate operator action as a candidate cause alongside lifecycle rules and stray clients.
+
+HOLD RELEASED: restic-backups-Databases.timer and restic-backups-Home.timer were stopped to prevent tonight's forget --prune from permanently deleting the unreferenced data. Both restarted and verified active, next runs 02:50 and 03:50; all 11 restic timers armed. No config was ever changed and no repo was touched.
+
+FOLLOW-ON HANDLED: ResticRepoSizeShrunk compares against a 14-day average that still carries the pre-trim sizes, so it would keep firing until those samples age out — measured ~3.5 days for Databases and ~11.1 days for Home. Silence 5470ae8c covers alertname=ResticRepoSizeShrunk with repository=~'Databases|Home' for 12 days, after which the average reflects the new baseline. If it fires again after that expiry, it is worth a real look.
+
+Also self-inflicted and resolved: BackupTimerInactive fired because the backup-status-exporter (15-min cadence) sampled while the timers were held. A forced exporter run put backup_timer_active back to 1 for both; the rule group evaluates every 300s so it clears on the following evaluation.
 
 * DONE [#D] Nest setpoint mirror silently drops writes on API 429 (no retry/catch); divergence itself is by design
 :PROPERTIES:

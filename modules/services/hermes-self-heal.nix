@@ -28,6 +28,28 @@ in
     users.users.${user} = {
       isSystemUser = true;
       group = user;
+      # Read-only access to the Hermes state tree via supplementary group
+      # membership, mirroring hermes-log-reader in hermes-fallback-counter.nix.
+      #
+      # REQUIRED, not cosmetic. probe_clear() -- the daemon's ONLY oracle for
+      # "has the agent recovered" -- reads the Discord heartbeat stamp at
+      # /var/lib/hermes/.hermes/logs/discord_ws_heartbeat. Every directory on
+      # that path is drwxrws--- hermes:hermes, so without this the read raises
+      # OSError, _heartbeat_age() returns None, and probe_clear() returns False
+      # UNCONDITIONALLY.
+      #
+      # The consequence was silent and total: no remediation could ever be
+      # confirmed, so every incident ran its actions out and then latched as
+      # stuck, and reconcile_orphans() could never release one. The evidence is
+      # unambiguous -- the most recent incident ever marked resolved is
+      # 2026-08-05T03:21:39Z, which is the same day probe_clear was rewritten to
+      # use passive signals (it previously read hermes_mcp_ask_hermes_ok out of
+      # the health textfile, which this user CAN read). So self-heal had been
+      # unable to close an incident for three weeks.
+      #
+      # Fixed by group membership rather than by loosening the heartbeat's
+      # permissions, per the file-permission rules in CLAUDE.md.
+      extraGroups = [ "hermes" ];
       home = "/var/lib/hermes-self-heal";
       createHome = true;
       homeMode = "0700";

@@ -5531,6 +5531,37 @@ THE SIX REMAINING ITEMS:
 No configuration change was needed; the work had been done and simply never verified or closed.
 #+end_example
 
+* DONE [#B] hermes-heal could not read the Discord heartbeat, so self-heal could never resolve an incident
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ots
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-26 Wed 12:59]
+:MODIFIED: [2026-08-26 Wed 12:59]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-26 Wed 12:59]
+:CLOSE_REASON: Fixed and verified end to end; HermesSelfHealStuck no longer firing. Evidence in the description: hermes-heal now carries group 932(hermes), can read the heartbeat, and after the required daemon restart (a switch alone leaves the running process with its original groups) it resolved the latched incident on its first tick -- stuck gauge 1 -> 0 in both the textfile and Prometheus, incident status=resolved, incidents.json written for the first time since 10:41.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+FIXED and verified 2026-08-26. Found while triaging a critical HermesSelfHealStuck alert.
+
+SYMPTOM: the self-heal daemon marked an incident stuck and would take no further action. It had correctly SKIPPED its restart_microvm action, noting 'upstream model DeepSeek-V4-Flash-0731-oQ8e-mtp not serving (gateway HTTP 404); restarting the VM cannot fix an upstream fault' -- good judgement, and a separate bug (see the models.nix fix in b968ad654).
+
+THE REAL DEFECT, found because the incident would not clear even after the upstream was fixed and the VM had restarted: the daemon runs as hermes-heal, which was in NO supplementary groups. probe_clear() -- its ONLY oracle for 'has the agent recovered' -- reads the Discord heartbeat at /var/lib/hermes/.hermes/logs/discord_ws_heartbeat, and every directory on that path is drwxrws--- hermes:hermes. The read therefore raised OSError, _heartbeat_age() returned None, and probe_clear() returned False UNCONDITIONALLY.
+
+CONSEQUENCE, silent and total: no remediation could ever be confirmed, so every incident exhausted its actions and latched as stuck, and reconcile_orphans() could never release one.
+
+HOW LONG: the most recent incident ever marked resolved is 2026-08-05T03:21:39Z -- the same day probe_clear was rewritten to use passive signals. It previously read hermes_mcp_ask_hermes_ok from the health textfile, which hermes-heal CAN read; the rewrite (made to stop synthetic ACK probes polluting John's message history) swapped in a file the daemon had no access to. So self-heal had been unable to close an incident for three weeks while appearing to run normally -- its heartbeat textfile was updating on schedule the whole time.
+
+WHY IT WAS HARD TO SEE: running the daemon's own predicates as root returns probe_clear=True and reconcile_orphans()=1, because root bypasses the permission. The bug only appears when the check runs as hermes-heal.
+
+FIX: extraGroups = [ "hermes" ] on the hermes-heal user in modules/services/hermes-self-heal.nix, mirroring hermes-log-reader in hermes-fallback-counter.nix. Group membership rather than loosening the heartbeat's permissions, per CLAUDE.md.
+
+VERIFIED END TO END: after the switch, id hermes-heal shows 900(hermes-heal),932(hermes) and 'sudo -u hermes-heal test -r' on the heartbeat succeeds. A switch alone was NOT enough -- the running process keeps the groups it started with (/proc/PID/status showed 'Groups: 900'), so the daemon needed a restart; after it, 'Groups: 900 932'. On its very first tick it resolved the incident: hermes_self_heal_stuck_incidents went 1 -> 0 in both the textfile and Prometheus, the incident moved to status=resolved, and incidents.json was written for the first time since 10:41.
+
 * DONE [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

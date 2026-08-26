@@ -2619,6 +2619,41 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
+* TODO [#D] In-VM hang detector probes /v1/capabilities with an invalid API key, 4300 warnings/day
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-dnx
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-26 Wed 16:01]
+:MODIFIED: [2026-08-26 Wed 16:01]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+PRE-EXISTING, NOT URGENT, and it needs John because the fix involves an API key.
+
+FOUND 2026-08-26 while confirming Hermes health after the self-heal fixes. hermes/.hermes/logs/errors.log carries a WARNING every ~20 seconds:
+  gateway.platforms.api_server: API server rejected invalid API key: remote='127.0.0.1' peer_ip='127.0.0.1' method='GET' path='/v1/capabilities' user_agent='cur...'
+
+VOLUME: ~4,300/day, sustained. 10,069 in the current errors.log (first 2026-08-24 14:46) and 10,479 in errors.log.1 covering 08-22..08-24, so it has been running at that rate for at least five days and predates every change made today.
+
+WHO: the caller is inside the VM, uses curl, and hits /v1/capabilities on a 20s cadence. That matches hermes-hang-capture in modules/services/hermes-vm.nix:1316 -- 'Probes the local api_server every 20s; after 3 consecutive non-responses ... writes per-thread scheduler state + kernel stacks'. The host-side hermes-health-check is NOT the culprit: it is Python, not curl, and it succeeds (hermes_api_server_ok = 1).
+
+SEVERITY IS LOW, and the reason is worth stating rather than assuming. The detector's job is liveness, and a 401 still proves the HTTP server answered -- a genuinely frozen gateway would not respond at all. Checked rather than inferred: /var/lib/hermes/.hermes/diag/ holds 6 captures whose newest is 2026-07-03, so the detector is NOT misfiring and has not been triggered by these 401s. The safety net still works.
+
+WHAT IT ACTUALLY COSTS:
+ - ~4,300 spurious WARNING lines/day, which is most of errors.log (2 MB and rotating).
+ - Real authentication failures would be indistinguishable in that noise.
+ - The probe does not verify what it appears to verify: it is credentialed in form but not in fact, so nobody would notice if the key handling regressed further.
+
+FIX (John's call, since it touches a key): give the hang detector the API key the api_server expects, or -- if liveness is genuinely all it needs -- point it at an unauthenticated endpoint or have it accept 401 explicitly and stop sending a credential it does not have. The second option is arguably cleaner: it makes the probe's intent honest instead of leaving a permanently-failing credential in place.
+
+NOTE: I did not attempt to read, compare or stage any key material.
+#+end_example
+
 * DONE [#E] meta-monitoring.yaml header says two textfile cadence tiers; there are three
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

@@ -4962,6 +4962,33 @@ INSTRUMENT NOTES, both of which bit me here:
 ]
 #+end_src
 
+* TODO [#C] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-m90
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-26 Wed 16:44]
+:MODIFIED: [2026-08-26 Wed 16:44]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+OBSERVATION, not yet a confirmed defect. Recorded so it is not rediscovered from scratch.
+
+microvm@hermes.service logged "Failed with result 'timeout'" on stop during BOTH restarts on 2026-08-26 (10:35:08 and 12:45:08), each time hitting TimeoutStopUSec=2min 30s before the VM was killed and restarted. It recovered immediately on both occasions -- active/running within ~14s of the failure line -- so nothing was left broken.
+
+RATE: 2 of the 6 VM starts in the preceding 7 days timed out, and both are today's. The four earlier restarts did not.
+
+LIKELY BENIGN EXPLANATION, untested: both timeouts were stopping a VM whose upstream model was returning HTTP 404 (see nixos-ots and the models.nix fix in b968ad654). An agent wedged on a dead upstream plausibly does not respond to SIGTERM promptly. If that is the cause, the next restart -- the first with a working upstream -- should stop cleanly.
+
+WHY IT IS WORTH TRACKING ANYWAY: the cost is real and lands on every rebuild. A switch that touches the Hermes units waits the full 2m30s for the VM to stop, which is most of the switch's wall-clock time.
+
+TO CONFIRM OR CLEAR: on the next microvm@hermes restart, check whether the stop completes cleanly:
+  journalctl -u microvm@hermes.service | grep -E "stop-sigterm|Failed with result"
+Two consecutive clean stops with a healthy upstream closes this. A timeout with a healthy upstream means the shutdown path itself is slow and TimeoutStopUSec or the guest's shutdown handling deserves a look.
+
 * DONE [#E] Explain GitWorkspaceMetricCollectionSlow's noon firing: two collectors share one metric and one file
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

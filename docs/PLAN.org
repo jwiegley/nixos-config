@@ -5764,7 +5764,7 @@ Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direc
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-20 Thu 11:13]
-:MODIFIED: [2026-08-20 Thu 12:54]
+:MODIFIED: [2026-08-25 Tue 23:03]
 :CREATED_BY: johnw
 :DEFERRED: [2026-09-02 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -5806,6 +5806,85 @@ the wrong directory while reporting success) is fixable from the repo once John 
 decided how he wants the certs issued.
 
 DEADLINES ARE REAL AND CLOSE: 33 and 34 days from 2026-08-20.
+
+,** Notes
+
+2026-08-20: automation FIXED and committed (113cdb0a6). John's decision: do NOT
+issue certificates now; let the 2026-09-01 timers do it. Deferred to 2026-09-02 to
+verify the outcome rather than assume it.
+
+WHY WAITING IS SAFE -- checked, not assumed. The old script could not fail loudly:
+it wrote to an orphan directory and exited 0 every time, for ~11 months. The rewrite
+inverts that. It now (a) refuses to start if `postconf -h smtpd_tls_chain_files`
+disagrees with its target directory, and (b) after reloading, compares the on-disk
+notAfter against what port 587 actually presents, exiting nonzero on mismatch.
+
+A nonzero exit fails postfix-cert-renewal.service, and that unit IS visible to the
+alerting: node_systemd_unit_state{name="postfix-cert-renewal.service",state="failed"}
+exists as a live series (value 0 today), and SystemdServiceFailed selects
+{state="failed",name=~".*\\.service"} with for:1m. Same for nginx-cert-renewal.
+So a bad Sep 1 run pages within a minute, with 22 days of runway before the Sep 23
+expiries. That is the whole basis for deferring rather than forcing it now.
+
+VERIFY ON OR AFTER 2026-09-02:
+  # postfix -- the served cert must move from Sep 23 2026 to ~Sep 2027
+  echo | openssl s_client -connect 127.0.0.1:587 -starttls smtp 2>/dev/null \
+    | openssl x509 -noout -subject -enddate
+  # the monitored leaf must move WITH it (this is the half that could silently lag)
+  sudo openssl x509 -in /var/lib/postfix-certs/smtp.vulcan.lan.crt -noout -enddate
+  # the four newly-covered nginx vhosts
+  curl -s --data-urlencode 'query=certificate_days_until_expiry{name=~"vulcan.lan|changes.vulcan.lan|mailarchiver.vulcan.lan|chat.vulcan.lan"}' \
+    http://127.0.0.1:9090/api/v1/query
+  systemctl show postfix-cert-renewal.service -p Result --value   # expect success
+  systemctl show nginx-cert-renewal.service  -p Result --value    # expect success
+
+WHAT WOULD MEAN IT IS STILL WRONG: the wire still reading Sep 23 2026, OR the wire
+updating while smtp.vulcan.lan.crt does not. The second is the subtle one -- postfix
+serves *.fullchain.crt while certificate-exporter.nix reads *.crt, and
+renew-certificate.sh writes only one cert file, so a naive fix updates the served
+cert and leaves the MONITORED one stale. The script extracts the leaf explicitly to
+prevent that; confirm both dates match.
+
+TWO THINGS FOUND AND DELIBERATELY LEFT (not part of this issue, no deadline):
+,,  * atd.vulcan.lan (89d) and budget.vulcan.lan (71d) are renewed by their own
+,,    *-certificate units, which are activation-time oneshots with RemainAfterExit --
+    both last ran at the 2026-07-03 boot. They renew on REBOOT, not on a schedule.
+,,  * Five certs persist with no live vhost (llama-swap, copyparty, notebook,
+    syncthing, openclaw), and teable is the mirror image: still in DOMAINS and
+    renewed monthly with nothing serving it.
+
+,** Comments
+
+[
+  {
+    "id": 46,
+--- VERIFICATION 2026-08-25 (still deferred; no action taken) ---
+
+CertificateExpiringSoon began firing for both certs (28 days each, expiry ~Sep 22-23). That is
+expected at the <=30d threshold and does NOT mean the deferral is unsafe: BOTH defects described
+above are already fixed and live.
+
+ - postfix: certs/postfix-cert-renew.sh now sets POSTFIX_CERT_DIR="/var/lib/postfix-certs", which
+   matches what postfix actually loads (postconf -h smtpd_tls_chain_files ->
+   /var/lib/postfix-certs/smtp.vulcan.lan.{key,fullchain.crt}). The orphan /etc/postfix/certs
+   target is gone.
+ - nginx: "vulcan.lan" is now in the DOMAINS array of certs/renew-nginx-certs.sh at line 86 (array
+   spans 38-90). Checked with an exact-quoted pattern plus a negative control, because line 84 of
+   that script warns vulcan.lan is a suffix of every other entry and must not be grepped loosely.
+
+Both landed in 113cdb0a6 (2026-08-20), an ancestor of HEAD, and certs/ is clean.
+
+NO REBUILD NEEDED: the units run thin 373-byte store wrappers that exec
+/etc/nixos/certs/renew-nginx-certs.sh and /etc/nixos/certs/postfix-cert-renew.sh directly, so the
+timers pick up the repo files at run time.
+
+TIMELINE: nginx-cert-renewal fires 2026-09-01 03:47:46, postfix-cert-renewal 04:27:20 -- ~22 days
+before expiry. The 2026-09-02 deferral is correctly placed to verify the run, not to pre-empt it.
+
+CHECK ON SEP 2: certificate_days_until_expiry for smtp.vulcan.lan and vulcan.lan jumped to ~365;
+/var/lib/postfix-certs/* have fresh mtimes and root ownership (they were johnw:users, mtime Sep 23
+2025); and the wire agrees -- subject DN is the discriminating fingerprint, since the old file has
+no O= component while a freshly issued one carries O=Vulcan Mail Services.
 #+end_example
 
 ** Notes

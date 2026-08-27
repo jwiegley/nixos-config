@@ -2619,14 +2619,14 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
-* TODO [#D] In-VM hang detector probes /v1/capabilities with an invalid API key, 4300 warnings/day
+* TODO [#E] In-VM hang detector probes /v1/capabilities with an invalid API key, 4300 warnings/day
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-dnx
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-26 Wed 16:01]
-:MODIFIED: [2026-08-26 Wed 16:01]
+:MODIFIED: [2026-08-26 Wed 18:12]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
@@ -2653,6 +2653,20 @@ FIX (John's call, since it touches a key): give the hang detector the API key th
 
 NOTE: I did not attempt to read, compare or stage any key material.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 51,
+    "issue_id": "nixos-dnx",
+    "author": "johnw",
+    "text": "CORRECTION 2026-08-26: I filed this on a wrong premise. The absent API key is DELIBERATE and documented, not a misconfiguration.\n\nscripts/hermes-hang-capture.sh states the design outright:\n  'Liveness model: ANY HTTP response (even 401 Unauthorized) proves the event loop is alive and accepting connections, so it counts as healthy. Only a timeout / connection refusal -- curl reports http_code 000 -- counts as a miss. That is exactly the signature of a frozen loop, and means we never need the API_SERVER_KEY here.'\n\nAnd the code matches the comment: the probe is a bare\n  curl -s -o /dev/null -m 5 -w '%{http_code}' \"$PROBE_URL\"\nwith no Authorization header at all, and the miss test is\n  if [ -n \"$code\" ] && [ \"$code\" != \"000\" ]  -> healthy\nSo a 401 resets the failure counter, exactly as intended. The detector sends no credential BY DESIGN because it only needs to know the event loop answers.\n\nWHAT I GOT WRONG: I described the probe as 'credentialed in form but not in fact', said it 'does not verify what it appears to verify', and concluded the fix was John's because it touches an API key. All three are incorrect. No key is needed, none is sent, and nothing about key handling is broken. I inferred a misconfiguration from the server-side log message ('rejected invalid API key') without reading the client that produces it.\n\nWHAT REMAINS TRUE, and is the whole of the issue: the api_server logs every unauthenticated request at WARNING, so a deliberately anonymous liveness probe every 20s produces ~4,300 WARNING lines/day and dominates errors.log. That is a SERVER-SIDE LOGGING concern, not a defect in the detector, and it does not need John or any secret.\n\nREVISED FIX OPTIONS (no key involved):\n a) have the api_server log unauthenticated /v1/capabilities requests at DEBUG, or rate-limit that warning;\n b) give the detector an unauthenticated health endpoint to probe instead;\n c) accept the noise and filter it where errors.log is consumed.\n(a) is upstream in the hermes-agent gateway, so (b) or (c) may be more practical here.\n\nRe-prioritised to P4: pure log hygiene, no functional impact. The detector works correctly and, per the diag directory, has not misfired since 2026-07-03.",
+    "created_at": "2026-08-27T01:12:58Z"
+  }
+]
+#+end_src
 
 * DONE [#E] meta-monitoring.yaml header says two textfile cadence tiers; there are three
 :PROPERTIES:

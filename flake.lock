@@ -2180,11 +2180,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1787801184,
-        "narHash": "sha256-5kNSIBFFcDTFbsm18NrgYl15FqPCYl1KaSOCEXKMHIg=",
+        "lastModified": 1787814832,
+        "narHash": "sha256-xxPCzswSCZ63GYBfesxRJsWuj7Mk9YcAaHDb8X1tbjk=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "fa4b5ffa9007ef847df52351575c25b733da85f4",
+        "rev": "be0eff8f6e0dd4f0edb15e80be8fab107f4768fa",
         "type": "github"
       },
       "original": {
@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1787805562,
-        "narHash": "sha256-hc/h00MBnyI6OvjyM3LvgZMTw7BdCjhE67kmYsfVSE0=",
+        "lastModified": 1787828789,
+        "narHash": "sha256-4Rig0zaFFqtixZxvH2fIrktv6jFJs/MvtRVpBSgdjJU=",
         "ref": "refs/heads/main",
-        "rev": "9ae08a97dca4d2025e9625500705bb6f84a52fc4",
-        "revCount": 3471,
+        "rev": "db57b15de4cb4853e50d20a48e0c86b275118907",
+        "revCount": 3480,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2272,11 +2272,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1787805562,
-        "narHash": "sha256-hc/h00MBnyI6OvjyM3LvgZMTw7BdCjhE67kmYsfVSE0=",
+        "lastModified": 1787828789,
+        "narHash": "sha256-4Rig0zaFFqtixZxvH2fIrktv6jFJs/MvtRVpBSgdjJU=",
         "ref": "refs/heads/main",
-        "rev": "9ae08a97dca4d2025e9625500705bb6f84a52fc4",
-        "revCount": 3471,
+        "rev": "db57b15de4cb4853e50d20a48e0c86b275118907",
+        "revCount": 3480,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3026,11 +3026,11 @@
     "pi-mcp-adapter": {
       "flake": false,
       "locked": {
-        "lastModified": 1787446800,
-        "narHash": "sha256-GRbhymazgB4zD1QHp5FuJPiVjlYHsCbKiM3293UnkBc=",
+        "lastModified": 1787786190,
+        "narHash": "sha256-xmF39gRGbI7b4UNA8HHz/rBunZ2b/2ph8NPV+piyyuY=",
         "owner": "nicobailon",
         "repo": "pi-mcp-adapter",
-        "rev": "6c08147f7a3c6eba670fa8fb73e1fe68a7ab471f",
+        "rev": "34f4c2c902b392a449a5b9f725664d515fc4f2d0",
         "type": "github"
       },
       "original": {
@@ -3058,11 +3058,11 @@
     "pi-quiet": {
       "flake": false,
       "locked": {
-        "lastModified": 1787750942,
-        "narHash": "sha256-P4gr+mwPsxHAuntdqUbigkwBG8iIP3En/QPDZj5tI3g=",
+        "lastModified": 1787815500,
+        "narHash": "sha256-ONIhYGH2sWGlqngxPdIZGatu5JFtR6Xdw1oVtRtWvF0=",
         "owner": "zenspc",
         "repo": "pi-extensions",
-        "rev": "3a8169cef9e0b281230ce34db03824934c61a9ae",
+        "rev": "cb5c6333c30e18b45912f59d42a5c4af68e8ea2e",
         "type": "github"
       },
       "original": {

@@ -170,6 +170,24 @@ in
         User = "root";
         StandardOutput = "journal";
         StandardError = "journal";
+
+        # The validator reports severity through its exit code:
+        #   0 = all certificates healthy
+        #   1 = one or more inside the 30-day warning window
+        #   2 = expired, critical (<7d), or unreadable
+        #
+        # Treat 1 as success. A warning is the script working correctly, not the
+        # unit breaking, and it is already reported by the CertificateExpiringSoon
+        # Prometheus alert. Without this the unit failed EVERY DAY from the moment
+        # any of ~47 certificates crossed 30 days until it was renewed -- ten
+        # consecutive days for nginx/vulcan.lan in August 2026 (clean 08-21/22,
+        # then 'exit-code' 08-23 onward). That is duplicate signalling on the one
+        # channel that is supposed to mean "this unit is broken", and it lands in
+        # the routine failed-units sweep, buying an investigation each time.
+        #
+        # Exit 2 is deliberately NOT included: a genuinely expired or unreadable
+        # certificate must still fail the unit loudly.
+        SuccessExitStatus = "1";
       };
       path = with pkgs; [
         openssl

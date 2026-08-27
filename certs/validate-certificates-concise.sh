@@ -14,6 +14,12 @@ total_certs=0
 expired_certs=0
 critical_certs=0
 warning_certs=0
+# Certificates that could not be parsed at all. Tracked separately because until
+# 2026-08-27 the two `return 1` paths below (CORRUPTED OR INVALID, DATE PARSE
+# ERROR) appended to attention_required but incremented NOTHING, so a genuinely
+# unreadable certificate produced exit 0 whenever the others were healthy -- the
+# report printed the problem while the exit status said everything was fine.
+invalid_certs=0
 ok_certs=0
 declare -a attention_required=()
 
@@ -43,12 +49,14 @@ check_certificate_status() {
     # Calculate days until expiration (protect against parsing failures)
     local end_date=$(openssl x509 -in "$cert_path" -noout -enddate 2>/dev/null | cut -d= -f2)
     if [[ -z "$end_date" ]]; then
+        invalid_certs=$((invalid_certs + 1))
         attention_required+=("✗ $cert_name: CORRUPTED OR INVALID")
         return 1
     fi
 
     local end_epoch=$(date -d "$end_date" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$end_date" +%s 2>/dev/null)
     if [[ -z "$end_epoch" ]]; then
+        invalid_certs=$((invalid_certs + 1))
         attention_required+=("✗ $cert_name: DATE PARSE ERROR")
         return 1
     fi
@@ -110,6 +118,9 @@ fi
 if [[ $expired_certs -gt 0 ]]; then
     echo "  ✗ Expired: $expired_certs certificates"
 fi
+if [[ $invalid_certs -gt 0 ]]; then
+    echo "  ✗ Unreadable: $invalid_certs certificates"
+fi
 
 # Only show attention required section if there are issues
 if [[ ${#attention_required[@]} -gt 0 ]]; then
@@ -121,7 +132,17 @@ if [[ ${#attention_required[@]} -gt 0 ]]; then
 fi
 
 # Exit with appropriate code
-if [[ $expired_certs -gt 0 || $critical_certs -gt 0 ]]; then
+# Exit codes are severity-separated ON PURPOSE, and the unit relies on it:
+#   2 = a certificate is expired, critical (<7d), or unreadable -> a real fault
+#   1 = one or more certificates are inside the 30-day warning window
+#   0 = everything healthy
+# systemd is configured with SuccessExitStatus=1 so a warning does NOT mark the
+# unit failed. Before that, this unit failed EVERY DAY from the moment any of the
+# ~47 certificates crossed 30 days until it was renewed -- ten consecutive days
+# for vulcan.lan in August 2026 -- duplicating the CertificateExpiringSoon alert
+# on a channel that is supposed to mean "this unit is broken". Exit 2 still fails
+# the unit, so genuine faults remain loud.
+if [[ $expired_certs -gt 0 || $critical_certs -gt 0 || $invalid_certs -gt 0 ]]; then
     exit 2
 elif [[ $warning_certs -gt 0 ]]; then
     exit 1

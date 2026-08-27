@@ -210,15 +210,16 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
-* TODO [#E] certificate-validation exits 1 and fails daily whenever any cert is inside its 30-day window
+* DONE [#E] certificate-validation exits 1 and fails daily whenever any cert is inside its 30-day window
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-19n
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-27 Thu 08:45]
-:MODIFIED: [2026-08-27 Thu 08:45]
+:MODIFIED: [2026-08-27 Thu 15:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-27 Thu 15:53]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -244,6 +245,27 @@ WHY IT MATTERS AT ALL: the condition is already covered properly by the Certific
 CARE REQUIRED IF FIXING -- do NOT simply add SuccessExitStatus=1. The script very likely uses exit 1 for genuine faults as well (unreadable cert, parse failure, missing file), and conflating "a cert is expiring soon" with "validation itself broke" would hide the second. The right shape is a distinct exit code per outcome, e.g. 0 = all valid, 1 = validation error, 2 = warnings present, with SuccessExitStatus=2. That needs a read of certs/ or scripts/ to confirm the current code paths before touching anything.
 
 NOT ACTED ON: it self-resolves at the Sep 1 renewal, and the fix needs the exit-code audit above rather than a quick suppression.
+
+** Close Reason
+
+#+begin_example
+FIXED and verified 2026-08-27, and the investigation found a SECOND, more serious bug than the one filed.
+
+THE FILED ISSUE: certificate-validation.service exited 1 whenever any certificate sat inside the 30-day window, so systemd recorded a unit failure every day from 08-23 (when nginx/vulcan.lan crossed 30 days) until renewal. Duplicate signalling on the channel that means 'this unit is broken'.
+
+FIX: SuccessExitStatus=1 in modules/services/certificate-automation.nix. The script already had clean severity-separated exit codes -- 2 = expired/critical, 1 = warning, 0 = healthy -- so my earlier worry that 'exit 1 probably also covers genuine faults' was simply wrong; I had not read the script. Exit 2 is deliberately NOT in SuccessExitStatus, so a real fault still fails the unit loudly.
+
+THE BUG I FOUND WHILE READING IT: the CORRUPTED OR INVALID and DATE PARSE ERROR paths appended to attention_required and then 'return 1' WITHOUT incrementing any counter. Since the exit condition only tested expired_certs/critical_certs/warning_certs, an unreadable certificate produced EXIT 0 whenever the others were healthy -- the report printed the problem in 'Attention Required' while the exit status said everything was fine. Silent false negative, and the opposite failure from the noisy one being fixed.
+
+Added an invalid_certs counter, incremented on both paths, reported as 'Unreadable: N certificates', and included in the exit-2 condition so an unparseable certificate is now a hard fault.
+
+VERIFIED:
+ - Script run live: exit 1 with 46 valid / 1 warning (nginx/vulcan.lan, 26 days), bash -n clean.
+ - Exit logic positive-controlled: unreadable -> 2, all-healthy -> 0.
+ - After the switch: SuccessExitStatus=1 applied; the unit ran with ExecMainStatus=1 and Result=success, with ZERO 'Failed with result' lines where it had logged one daily since 08-23.
+
+Note the resulting state is Result=success with ExecMainStatus=1, which is normally the signature of a masked failure. Here it is intentional and documented in both the script and the unit.
+#+end_example
 
 * DONE [#C] git-annex sync fails with SQLite ErrorReadOnly: annex databases were zimit-owned at 0644
 :PROPERTIES:

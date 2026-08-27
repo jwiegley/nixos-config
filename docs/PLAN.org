@@ -5048,14 +5048,14 @@ INSTRUMENT NOTES, both of which bit me here:
 ]
 #+end_src
 
-* TODO [#D] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
+* TODO [#C] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-m90
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-26 Wed 16:44]
-:MODIFIED: [2026-08-26 Wed 22:00]
+:MODIFIED: [2026-08-27 Thu 15:49]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
@@ -5074,6 +5074,20 @@ WHY IT IS WORTH TRACKING ANYWAY: the cost is real and lands on every rebuild. A 
 TO CONFIRM OR CLEAR: on the next microvm@hermes restart, check whether the stop completes cleanly:
   journalctl -u microvm@hermes.service | grep -E "stop-sigterm|Failed with result"
 Two consecutive clean stops with a healthy upstream closes this. A timeout with a healthy upstream means the shutdown path itself is slow and TimeoutStopUSec or the guest's shutdown handling deserves a look.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 52,
+    "issue_id": "nixos-m90",
+    "author": "johnw",
+    "text": "HYPOTHESIS REFUTED 2026-08-27 by direct test. This is a real shutdown-path defect, not fallout from the dead upstream.\n\nI predicted the two 08-26 timeouts were benign, caused by stopping a VM whose upstream model was returning HTTP 404, and that a restart with a healthy upstream would stop cleanly. So I ran that test.\n\nMETHOD: confirmed the upstream first -- POST to the gateway with DeepSeek-V4-Flash-0731-MXFP4-MLX returned HTTP 200 -- then 'systemctl restart microvm@hermes.service'.\n\nRESULT: it timed out again, identically.\n  15:44:53  Stopping MicroVM 'hermes'...\n  15:47:23  microvm@hermes.service: Stopping timed out. Terminating.\n  15:47:24  microvm@hermes.service: Failed with result 'timeout'.\n  15:47:24  Stopped MicroVM 'hermes'.\nExactly TimeoutStopUSec=2min 30s, with a healthy upstream. That kills the benign explanation: the guest does not respond to shutdown within 2.5 minutes regardless of upstream state, and systemd has to terminate it.\n\nSO THE RATE IS NOW 3 OF 3 tested restarts, not 2 of 6 -- the four earlier clean starts in the 7-day window were boots or starts, not stops.\n\nTWO CONSEQUENCES, both observed live:\n 1. Every switch that touches the Hermes units pays a flat 2m30s, which is most of that switch's wall clock.\n 2. The unit transits through ActiveState=failed / Result=timeout before restarting. systemd DID complete the restart on its own (VM active again at 15:47:30, six seconds after the stop finished), but any observer sampling in that window sees a failed unit -- and a switch would clear it, which is exactly the pattern that hides this.\n\nNOT INVESTIGATED FURTHER YET. Likely candidates, in order: the guest's own systemd shutdown running long (a service inside with a large TimeoutStopSec), microvm.nix's shutdown mechanism not delivering ACPI powerdown, or the qemu process ignoring SIGTERM. The next step is to watch the GUEST's shutdown, not the host's -- host-side logs only show that nothing happened for 150s.\n\nCOST OF THIS TEST: Hermes was down about 2.5 minutes. Verified fully healthy afterwards -- api_server_ok=1, discord heartbeat 1.8s old, MCP SSE ok, Qdrant reachable, 0 stuck incidents.\n\nRaised P3 -> P2: confirmed reproducible, with a measurable cost on every rebuild.",
+    "created_at": "2026-08-27T22:49:55Z"
+  }
+]
+#+end_src
 
 * DONE [#E] Explain GitWorkspaceMetricCollectionSlow's noon firing: two collectors share one metric and one file
 :PROPERTIES:
@@ -6142,15 +6156,16 @@ TWO THINGS FOUND AND DELIBERATELY LEFT (not part of this issue, no deadline):
 ]
 #+end_src
 
-* TODO [#C] Changing sockpuppetbrowser.service silently takes changedetection down and leaves it down
+* DONE [#C] Changing sockpuppetbrowser.service silently takes changedetection down and leaves it down
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-rqc
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-27 Thu 04:46]
-:MODIFIED: [2026-08-27 Thu 04:46]
+:MODIFIED: [2026-08-27 Thu 15:49]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-27 Thu 15:49]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -6176,6 +6191,18 @@ ALTERNATIVES WORTH WEIGHING: relax Requires= to Wants= so changedetection is nev
 INTERIM MITIGATION: after any switch that touches modules/users/home-manager/changedetection.nix, check
   systemctl --user -M changedetection@ status changedetection.service
 or simply confirm https://changes.vulcan.lan returns 200.
+
+** Close Reason
+
+FIXED and proven 2026-08-27. Requires= -> Wants= on changedetection.service in modules/users/home-manager/changedetection.nix, keeping After= so boot ordering is unchanged.
+
+WHY Wants= IS THE RIGHT STRENGTH, not a weakening: the browser is not a startup dependency. changedetection reaches it per-fetch over PLAYWRIGHT_DRIVER_URL=ws://10.0.2.2:3008, so it starts and serves its UI with the browser absent; only JS-rendered fetches fail until it returns, and those retry on schedule. Requires= was buying stop-propagation nobody wanted.
+
+PROVEN, not inferred. Restarting sockpuppetbrowser -- the exact action that caused the 3h58m outage this morning -- left changedetection's ActiveEnterTimestamp UNCHANGED at 15:44:04 while the browser cycled to 15:44:20, with https://changes.vulcan.lan returning 200 throughout. Before the fix that same action stopped changedetection and left it stopped.
+
+Also verified the deploy itself was safe: only changedetection.service changed, so home-manager restarted it alone and did not touch sockpuppetbrowser (still up since 00:47:55) -- no cascade during activation. And this time I checked BOTH units after the switch, which is the step whose omission caused the outage.
+
+Upholds= (systemd 258 supports it) was considered and rejected: it would keep Requires= and auto-restart the casualty, papering over the cascade instead of preventing it, and would make changedetection impossible to stop for maintenance while the browser runs.
 
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:

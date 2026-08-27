@@ -70,7 +70,32 @@
             "network-online.target"
             "sockpuppetbrowser.service"
           ];
-          Requires = [ "sockpuppetbrowser.service" ];
+          # Wants=, NOT Requires=. Requires propagates a STOP: when
+          # sockpuppetbrowser.service is stopped, systemd stops this unit too --
+          # and nothing ever starts it again, because Restart= covers unexpected
+          # process exits and not deliberate stops, and WantedBy=default.target
+          # only fires at target activation.
+          #
+          # That cost a real outage on 2026-08-27. Editing sockpuppetbrowser.service
+          # (to add SuccessExitStatus=143) made home-manager restart it during
+          # activation; this unit was stopped as a dependency casualty at 00:46:14,
+          # the browser returned at 00:47:55, and changedetection stayed down until
+          # 04:44 -- 3h58m, with ChangeDetectionAppDown, ChangeDetectionHTTPSProbeFailed
+          # and WebServiceDown all firing. Any future edit to that unit would have
+          # done the same thing.
+          #
+          # Wants= is the correct strength here because the browser is NOT a startup
+          # dependency: the app reaches it per-fetch over
+          # PLAYWRIGHT_DRIVER_URL=ws://10.0.2.2:3008, so it starts and serves its UI
+          # with the browser absent, and only JS-rendered fetches fail until it is
+          # back -- which they retry on schedule anyway. After= is kept, so ordering
+          # at boot is unchanged; only the stop propagation is dropped.
+          #
+          # Upholds= (systemd 258 has it) was the alternative, keeping Requires= and
+          # auto-restarting this unit. Rejected: it papers over the cascade rather
+          # than preventing it, and it would make changedetection impossible to stop
+          # for maintenance while the browser runs.
+          Wants = [ "sockpuppetbrowser.service" ];
           StartLimitIntervalSec = "300";
           StartLimitBurst = "5";
         };

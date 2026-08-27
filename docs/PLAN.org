@@ -6107,6 +6107,41 @@ TWO THINGS FOUND AND DELIBERATELY LEFT (not part of this issue, no deadline):
 ]
 #+end_src
 
+* TODO [#C] Changing sockpuppetbrowser.service silently takes changedetection down and leaves it down
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-rqc
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-27 Thu 04:46]
+:MODIFIED: [2026-08-27 Thu 04:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+CAUSED BY ME on 2026-08-27, and it cost a ~4 hour outage of a monitored service. Immediate problem fixed; the underlying trap is NOT fixed and will recur.
+
+WHAT HAPPENED: I deployed a SuccessExitStatus fix to sockpuppetbrowser.service (commit 9cc464423). Because that changed the unit, the home-manager activation during ./build switch restarted it. changedetection.service has Requires=sockpuppetbrowser.service, so it was stopped as a dependency casualty at 00:46:14. sockpuppetbrowser came back at 00:47:55. changedetection did not, and stayed down until I started it at 04:44:14 -- 3h58m, during which ChangeDetectionAppDown, ChangeDetectionHTTPSProbeFailed and WebServiceDown were all firing CRITICAL.
+
+WHY IT DID NOT COME BACK, confirmed from the live unit rather than assumed:
+  Restart=always          -- only covers UNEXPECTED process exits, not a deliberate stop
+  WantedBy=default.target -- only starts it when the target is activated
+  UpheldBy=               -- empty, so nothing continuously ensures it runs
+A dependency-cascade stop is a deliberate stop. Nothing in that set restarts one.
+
+SO THE TRAP IS GENERAL: any future edit to sockpuppetbrowser.service takes changedetection down and leaves it down, silently, until something notices. It is not specific to my change.
+
+MY PROCESS FAILURE, which is the more useful lesson: after the switch I verified the unit I had CHANGED (sockpuppetbrowser: active/running, SuccessExitStatus=143 applied, SIGTERM path now clean) and never checked the unit that DEPENDS on it. Verifying the thing you touched is not the same as verifying the blast radius of touching it. The alerts caught it, but only on the next 4-hourly sweep.
+
+CANDIDATE FIX (not applied, deliberately): Upholds= on sockpuppetbrowser pointing at changedetection.service. systemd 254+ supports it and it exists for exactly this -- "while A is active, keep B active". Deploying it is itself another edit to sockpuppetbrowser.service, which would again stop changedetection during activation; with Upholds in place systemd should bring it straight back, so the deploy doubles as the test. I did not do this at 05:00 unattended, having already caused one outage on these units tonight.
+
+ALTERNATIVES WORTH WEIGHING: relax Requires= to Wants= so changedetection is never stopped by the browser cycling (weaker ordering guarantee, but changedetection tolerates the browser being briefly absent); or accept the coupling and add a post-switch check. Upholds looks cleanest but the choice is John's.
+
+INTERIM MITIGATION: after any switch that touches modules/users/home-manager/changedetection.nix, check
+  systemctl --user -M changedetection@ status changedetection.service
+or simply confirm https://changes.vulcan.lan returns 200.
+
 * DEFER [#E] Headscale for John's own private network (replacing WireGuard) — DEFERRED
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

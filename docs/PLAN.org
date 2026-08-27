@@ -210,6 +210,41 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
+* TODO [#E] certificate-validation exits 1 and fails daily whenever any cert is inside its 30-day window
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-19n
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-27 Thu 08:45]
+:MODIFIED: [2026-08-27 Thu 08:45]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+NOT URGENT and it self-resolves on 2026-09-01, but it is STRUCTURAL rather than a one-off, which is why it is worth recording.
+
+BEHAVIOUR: certificate-validation.service exits 1 whenever its sweep finds any certificate needing attention, and systemd therefore records "Failed with result 'exit-code'". Today's run reported exactly that:
+  Certificate Status Summary:
+    ✓ Valid: 46 certificates
+    ⚠ Warning (30d): 1 certificates
+  Attention Required:
+    ⚠ nginx/vulcan.lan: expires in 26 days
+  certificate-validation.service: Main process exited, code=exited, status=1/FAILURE
+
+The unit did its job perfectly. It is the exit status that turns a successful report into a unit failure.
+
+IT IS ALREADY A STREAK: clean on 08-21 and 08-22, then 'exit-code' on 08-23, 08-24, 08-25, 08-26 and 08-27. The transition on 08-23 is the day vulcan.lan crossed the 30-day threshold, which is also when CertificateExpiringSoon began firing (2026-08-23T11:36). It will keep failing daily until the Sep 1 renewal -- about ten consecutive days.
+
+WHY IT RECURS STRUCTURALLY: this host holds 47 certificates. Every time ANY of them enters its 30-day window, this unit fails daily until that certificate is renewed. So the pattern repeats indefinitely, not just for vulcan.lan.
+
+WHY IT MATTERS AT ALL: the condition is already covered properly by the CertificateExpiringSoon Prometheus alert, so the unit failure is duplicate signalling on a channel (systemd unit state) that is meant to mean "this unit is broken". It lands in the routine "any service failures in the last N hours" sweep and buys an investigation each time. Ten days of daily false failures is exactly how an operator learns to skim past failed units.
+
+CARE REQUIRED IF FIXING -- do NOT simply add SuccessExitStatus=1. The script very likely uses exit 1 for genuine faults as well (unreadable cert, parse failure, missing file), and conflating "a cert is expiring soon" with "validation itself broke" would hide the second. The right shape is a distinct exit code per outcome, e.g. 0 = all valid, 1 = validation error, 2 = warnings present, with SuccessExitStatus=2. That needs a read of certs/ or scripts/ to confirm the current code paths before touching anything.
+
+NOT ACTED ON: it self-resolves at the Sep 1 renewal, and the fix needs the exit-code audit above rather than a quick suppression.
+
 * DONE [#C] git-annex sync fails with SQLite ErrorReadOnly: annex databases were zimit-owned at 0644
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

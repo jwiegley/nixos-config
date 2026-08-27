@@ -2713,15 +2713,16 @@ Options to consider (none applied yet):
 
 Option (c) is the structural one and matches how two other silent failures on this host were resolved.
 
-* TODO [#E] In-VM hang detector probes /v1/capabilities with an invalid API key, 4300 warnings/day
+* DONE [#E] In-VM hang detector probes /v1/capabilities with an invalid API key, 4300 warnings/day
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-dnx
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-26 Wed 16:01]
-:MODIFIED: [2026-08-26 Wed 18:12]
+:MODIFIED: [2026-08-27 Thu 16:01]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-27 Thu 16:01]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -2747,6 +2748,23 @@ FIX (John's call, since it touches a key): give the hang detector the API key th
 
 NOTE: I did not attempt to read, compare or stage any key material.
 #+end_example
+
+** Close Reason
+
+FIXED and verified 2026-08-27. Pointed the in-VM hang detector at /health instead of /v1/capabilities, via HANG_PROBE_URL in modules/services/hermes-vm.nix.
+
+WHY THIS IS THE RIGHT FIX rather than adding a credential: the detector sends no API key BY DESIGN -- scripts/hermes-hang-capture.sh documents that any HTTP response, 401 included, proves the event loop is alive, 'which means we never need the API_SERVER_KEY here'. That reasoning is correct and unchanged. The problem was purely that the api_server logs every unauthenticated request at WARNING, so a 20-second anonymous probe wrote ~4,300 lines/day and dominated errors.log, where a genuine authentication failure would have been indistinguishable from the noise.
+
+LIVENESS IS NOT WEAKENED. /health and /v1/capabilities are served by the same api_server on the same port in the same process, so a frozen event loop stops answering both. The detector's forensic capture path, thresholds and 20s cadence are untouched.
+
+MEASURED BEFORE CHANGING ANYTHING, with a control:
+  3 requests to /health           -> 0 new 'rejected invalid API key' lines
+  3 requests to /v1/capabilities  -> exactly 3 new lines
+The control matters: without it, zero could have meant the counter was broken rather than the endpoint being quiet.
+
+VERIFIED AFTER DEPLOY: rejections were 3890 before the switch and 3899 immediately after (probes still running on the old config during activation), then 3899 again 90 seconds later -- 0 new in a window that previously produced 4-5. hermes_api_server_ok=1 and the Discord heartbeat present afterwards.
+
+COST: the change is in the VM config, so the switch restarted the Hermes VM and paid the ~2m30s stop timeout tracked in nixos-m90.
 
 ** Comments
 

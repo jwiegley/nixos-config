@@ -1330,6 +1330,22 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "hermes-agent.service" ];
     environment = {
+      # Probe /health, NOT /v1/capabilities. Both are served by the same
+      # api_server on the same port, so a frozen event loop stops answering
+      # either and the liveness signal is unchanged -- but /health needs no
+      # credential, while /v1/capabilities does.
+      #
+      # The detector deliberately sends no API key (see the liveness model in
+      # scripts/hermes-hang-capture.sh: any HTTP response, 401 included, proves
+      # the loop is alive, "which means we never need the API_SERVER_KEY here").
+      # That reasoning is sound, but the api_server logs every unauthenticated
+      # request as WARNING "rejected invalid API key", so a 20-second probe wrote
+      # ~4,300 warnings a day and dominated errors.log -- burying any genuine
+      # authentication failure in noise.
+      #
+      # Measured before changing it, with a control: 3 requests to /health added
+      # 0 rejection lines; 3 requests to /v1/capabilities added exactly 3.
+      HANG_PROBE_URL = "http://127.0.0.1:8080/health";
       HANG_PROBE_INTERVAL = "20";
       HANG_FAIL_THRESHOLD = "3";
       HANG_DIAG_DIR = "${stateDir}/.hermes/diag";

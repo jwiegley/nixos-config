@@ -4976,14 +4976,14 @@ INSTRUMENT NOTES, both of which bit me here:
 ]
 #+end_src
 
-* TODO [#C] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
+* TODO [#D] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-m90
 :LABELS:   []
-:ISSUE_TYPE: task
+:ISSUE_TYPE: bug
 :CREATED:  [2026-08-26 Wed 16:44]
-:MODIFIED: [2026-08-26 Wed 16:44]
+:MODIFIED: [2026-08-26 Wed 22:00]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0

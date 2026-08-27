@@ -110,6 +110,27 @@
           Restart = "always";
           RestartSec = "10s";
           TimeoutStartSec = "300";
+
+          # 143 is 128+15, i.e. the container exited on the SIGTERM that podman
+          # sends to stop it -- a NORMAL shutdown. Without this, every ordinary
+          # stop is recorded as `Failed with result 'exit-code'`, which showed up
+          # in the journal on 08-21, 08-22, 08-24, 08-26 and 08-27, each time
+          # alongside the nightly podman activity around 00:04. The unit is
+          # healthy immediately afterwards (Restart=always brings it straight
+          # back), so the entry is pure noise -- but it is noise in exactly the
+          # "any service failures in the last 4 hours" check, so it costs a real
+          # investigation every time someone looks.
+          #
+          # This does NOT hide a crash. A crashing browser dies on its own signal
+          # (SIGSEGV -> 139, SIGABRT -> 134) or a nonzero application code, none of
+          # which are 143, and liveness is covered by the port probe rather than by
+          # the exit status.
+          #
+          # Deliberately NOT applied to nocobase, which exits 137 (128+9, SIGKILL).
+          # That is podman giving up after the stop timeout because the image's PID 1
+          # is a trap-less shell that never forwards SIGTERM, so 137 records a
+          # genuinely ungraceful shutdown and should stay visible.
+          SuccessExitStatus = "143";
         };
       };
     };

@@ -1508,6 +1508,43 @@ mechanism (weekly GC, daily check) rather than measured across weeks. The next
 collection on 08-24 is the real test -- if AideChangesDetected does not fire that
 morning, this is confirmed.
 
+* DONE [#E] sockpuppetbrowser logged a nightly false failure: SIGTERM exit 143 counted as exit-code failure
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-8jj
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-27 Thu 00:48]
+:MODIFIED: [2026-08-27 Thu 00:48]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-27 Thu 00:48]
+:CLOSE_REASON: Fixed and verified; see description. SuccessExitStatus=143 deployed, and a direct SIGTERM to MainPID -- the path that actually produced the nightly failure -- now yields Result=success with zero 'Failed with result' lines.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+FIXED and verified 2026-08-27.
+
+SYMPTOM: sockpuppetbrowser.service (rootless quadlet under the changedetection user) logged
+  Main process exited, code=exited, status=143/n/a
+  Failed with result 'exit-code'
+on 08-21, 08-22, 08-24, 08-26 and 08-27, each time alongside the nightly podman activity around 00:04. The service was healthy immediately afterwards -- Restart=always brings it straight back -- so nothing was ever broken.
+
+CAUSE: 143 is 128+15, i.e. the container exiting on the SIGTERM podman sends to stop it. KillSignal=15 and SuccessExitStatus was EMPTY, so systemd classified a completely normal shutdown as a failure.
+
+COST: it is noise in exactly the "any service failures in the last 4 hours" sweep, so it triggers a fresh investigation every time anyone looks. It cost one this cycle.
+
+FIX: SuccessExitStatus = "143" in the unit's serviceConfig, in modules/users/home-manager/changedetection.nix.
+
+VERIFICATION -- and the first attempt did NOT prove anything, which is worth recording. `systemctl --user restart` goes through podman stop, a clean ExecStop path that logs "Stopped Podman container" with no "Main process exited" line at all. It is green whether or not the fix is present, so it never exercised the failing path. The real test was sending SIGTERM directly to MainPID, which is what actually produces exit 143:
+  before: Main process exited, code=exited, status=143  +  Failed with result 'exit-code'
+  after:  Scheduled restart job, restart counter is at 1;  Result=success;  0 'Failed with result' lines
+Unit active/running throughout.
+
+NOT A MASKED CRASH: a crashing browser dies on its own signal (SIGSEGV -> 139, SIGABRT -> 134) or a nonzero application code, none of which are 143, and liveness is covered by the port probe rather than the exit status.
+
+DELIBERATELY NOT APPLIED TO nocobase, which fails the same nights with 137 (128+9, SIGKILL). That is podman giving up after the stop timeout because the image's PID 1 is a trap-less shell that never forwards SIGTERM. 137 records a genuinely ungraceful shutdown and should stay visible.
+
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -7314,6 +7351,21 @@ particular should be John's call rather than a cleanup.
   }
 ]
 #+end_src
+
+* DONE [#D] SCRATCH obr flag-interaction test — delete me
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-wu7
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-26 Wed 22:23]
+:MODIFIED: [2026-08-26 Wed 22:24]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-26 Wed 22:24]
+:CLOSE_REASON: Scratch issue for reproducing obr flag behaviour; no longer needed.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
 
 * DONE [#D] rclone-cloud-backup passes --track-renames to copy, logging ERROR every run
 :PROPERTIES:

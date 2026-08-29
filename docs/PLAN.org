@@ -210,15 +210,17 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
-* TODO [#C] nix flake update breaks build: pi-coding-agent 0.84.3 vitest sourcemap error
+* DONE [#C] nix flake update breaks build: pi-coding-agent 0.84.3 vitest sourcemap error
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-0zi
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-28 Fri 22:46]
-:MODIFIED: [2026-08-28 Fri 22:46]
+:MODIFIED: [2026-08-29 Sat 12:58]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-29 Sat 12:58]
+:CLOSE_REASON: Fixed upstream in nix-config a6ad28de: pi-coding-agent 0.84.3 -> 0.84.4. Verified on vulcan 2026-08-29: the source-build output ssn7yyla...-pi-coding-agent-source-build-0.84.4 is realised, its vitest log shows all test files passing with no unhandled sourcemap error, agent-cat-pi-extension-0.1.0 is in the running closure, and the system toplevel (223rwbwx...) evaluates and is running from the updated lock. flake.lock no longer needs the 943c8e75 workaround pin.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -6301,7 +6303,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-20 Thu 10:32]
+:MODIFIED: [2026-08-29 Sat 12:56]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -6464,6 +6466,13 @@ day before trusting a zero.
     "author": "johnw",
     "text": "Deferred at John's direction 2026-08-20: he does not want any of these worked until they become obviously bad problems. Date is a placeholder for review, not a prediction -- the real trigger is the alerting, not the calendar.\n\nWHICH OF THESE WILL SHOUT ON THEIR OWN (checked rather than assumed):\n  ly2/h2u  MatterNodeSessionFailures (Loki) is firing NOW and will keep firing.\n  ly2      IoTDeviceChronicallyUnreachable covers the side-door lock.\n  rsn      same Matter rule covers node 17 if it storms again.\n  fgp      HomeAssistantConfigEntryFailed now covers recurrence -- that alert was\n           the actual deliverable and is deployed and healthy.\n  jhl      BudgetBoardDatabaseConnectionFailed catches the sustained-outage shape.\n\nWHICH WILL NOT -- deferring these two means accepting silence:\n  ly2 (doorbell half)  host_group=iot-quiet is deliberately excluded from every\n      down-rule, so the Ring doorbell going permanently dead looks identical to it\n      sleeping. It has been at 0% for ~40h already.\n  zpm  nothing alerts on a dropped push. The failure is invisible by construction;\n      the email path is what actually carries the alert.\n\nNot re-raising any of this unless an alert fires or the shape changes materially.",
     "created_at": "2026-08-20T17:32:09Z"
+  },
+  {
+    "id": 53,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "UPDATE 2026-08-29 (health cycle): the single-node diagnosis in this issue no longer holds. It is now THREE Thread nodes failing at near-identical rates, including two this issue explicitly cited as healthy evidence for ruling out the border router.\n\nCASE timeouts per node, last 24h, vs what this issue recorded over 48h on Aug 15-16:\n\n  node  6  Thread P2 sensor        was 1      now 612\n  node 17  Thread P2 door sensor   was ramp   now 613\n  node 25  Thread FP300 presence   was 0      now 663\n  node 18  Thread P2 sensor        was 0      now  12\n  node 24  Hub M3 (Ethernet)       was 10     now   3\n  node 26  WiFi outdoor plug       --         now   0\n\nFleet-wide volume: 122/h, 1883/24h, 9168/7d. Sustained, not a spike, with a brief\nquiet spell 1-2 days ago (28 in 24h) that let the alert resolve before re-firing.\n\nWHAT THIS DOES AND DOES NOT SHOW. The reasoning here was 'three of four Thread\nchildren are fine, so this points at node 17 specifically'. Two of those three\n(6 and 25) are now failing as hard as 17, so that inference is dead. But this is\nNOT a clean border-router-down signature either: node 18 is also a Thread child\nof the same Hub M3 and is nearly clean at 12, and the Hub M3 itself (node 24,\nEthernet) is clean at 3. A failed border router would take all four children.\n\nSo the shape is a PARTIAL mesh fault -- three children unreachable, one child and\nthe router fine. Worth checking whether 6/17/25 share a mesh route or parent, or\nsit in one RF region, rather than assuming either 'one bad sensor' or 'hub down'.\nPhysical investigation; per project_matter_fabric_topology do NOT restart\nmatter-server (it is healthy, up since Aug 10, 0 restarts).\n\nDEFERRAL: currently 2026-11-18, set when this looked like one flaky sensor. That\nrationale is gone and MatterNodeSessionFailures is actively firing to\nAlertmanager. Recommend un-deferring -- operator's call.",
+    "created_at": "2026-08-29T19:56:09Z"
   }
 ]
 #+end_src

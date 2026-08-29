@@ -2180,11 +2180,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1787841814,
-        "narHash": "sha256-cAY2KaZSqc5lW9hYHWgnVL1Z/K49p9eKPxbJ8jEla0Y=",
+        "lastModified": 1787976978,
+        "narHash": "sha256-OIkMTbUJV1NGAKcU0vBjAbgr8vDnqCCAn67vgT3CB+Q=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "f18e879662c83037f9c8d6ff1965058eb194e0d1",
+        "rev": "a213a4b8e48bc5cc2211a5d89be2dba8a98bddb6",
         "type": "github"
       },
       "original": {
@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1787966336,
-        "narHash": "sha256-yPCA5Rswfs73IioXZmRuGbQ/vZqqwxN5LJwg/3ECoHo=",
+        "lastModified": 1788025492,
+        "narHash": "sha256-PM1zM8CWdOLSvW9Zllve28NHlW38naw9n6VIp/uXYvA=",
         "ref": "refs/heads/main",
-        "rev": "943c8e75fda8364fcfa4dd90cf15046ac9be6dc6",
-        "revCount": 3499,
+        "rev": "a6ad28de9176fdb9f7e0c0a88cf6b428b0324f77",
+        "revCount": 3507,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2262,6 +2262,7 @@
         ],
         "npm-cache-nixpkgs": "npm-cache-nixpkgs",
         "pal-mcp-server": "pal-mcp-server",
+        "pi": "pi",
         "pi-btw": "pi-btw",
         "pi-mcp-adapter": "pi-mcp-adapter",
         "pi-openai-server-compaction": "pi-openai-server-compaction",
@@ -2272,11 +2273,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1787966336,
-        "narHash": "sha256-yPCA5Rswfs73IioXZmRuGbQ/vZqqwxN5LJwg/3ECoHo=",
+        "lastModified": 1788025492,
+        "narHash": "sha256-PM1zM8CWdOLSvW9Zllve28NHlW38naw9n6VIp/uXYvA=",
         "ref": "refs/heads/main",
-        "rev": "943c8e75fda8364fcfa4dd90cf15046ac9be6dc6",
-        "revCount": 3499,
+        "rev": "a6ad28de9176fdb9f7e0c0a88cf6b428b0324f77",
+        "revCount": 3507,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3003,6 +3004,23 @@
       "original": {
         "owner": "jwiegley",
         "repo": "pal-mcp-server",
+        "type": "github"
+      }
+    },
+    "pi": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788023431,
+        "narHash": "sha256-W2JvLs0LOlfG++rmP/JgaM5KHIo0jTt18UeDRKZBf6I=",
+        "owner": "jwiegley",
+        "repo": "pi",
+        "rev": "9491864fe026284561a2920988ba6a3969c2bc3c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jwiegley",
+        "repo": "pi",
+        "rev": "9491864fe026284561a2920988ba6a3969c2bc3c",
         "type": "github"
       }
     },

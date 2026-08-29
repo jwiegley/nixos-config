@@ -21,12 +21,20 @@ groups:
             # WARNING: the two CHIP filters below strip 100% of matter-server's error
             # volume (17,283 lines over 7d, ZERO residual, measured 2026-07-29), so a
             # GREEN SystemdJournalHighErrorRate must NEVER be read as Matter is healthy.
-            # Matter has exactly one alert -- MatterServerDown in alerts/container-health.yaml
-            # -- and it only covers liveness; nothing watches CHIP subscription churn.
-            # Baseline for whoever writes that churn rule (Loki, 21d in 6h buckets):
-            # CHIP_ERROR min 99 / median 184 / max 485; broad error pattern min 198 /
-            # median 344 / max 926. A 120-per-6h threshold fires permanently; to stay
-            # quiet at baseline a rule must clear ~500 (CHIP_ERROR) or ~930 (broad).
+            # That part is unchanged. What follows it was corrected on 2026-08-29:
+            # Matter now has TWO alerts, not one, and the churn gap this comment used
+            # to describe has since been closed --
+            #   MatterServerDown        (alerts/container-health.yaml) -- liveness only
+            #   MatterNodeSessionFailures (loki-rules/matter-fabric.yaml) -- CASE session
+            #     timeouts, >20/h sustained 15m, i.e. exactly the session churn that the
+            #     original comment said nothing watched. It was firing when this was
+            #     corrected, so it is demonstrably live rather than theoretical.
+            # Do not write a third rule from the baselines below without checking those
+            # two first. The baselines remain valid if a BROADER churn rule is ever
+            # wanted (Loki, 21d in 6h buckets): CHIP_ERROR min 99 / median 184 / max 485;
+            # broad error pattern min 198 / median 344 / max 926. A 120-per-6h threshold
+            # fires permanently; to stay quiet at baseline a rule must clear ~500
+            # (CHIP_ERROR) or ~930 (broad).
             != "CHIP_ERROR"
             != "Subscription failed with CHIP"
             != "SearxEngineAccessDeniedException"

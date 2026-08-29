@@ -83,14 +83,30 @@ in
     # any two devices, which means not deciding in advance what is interesting.
     mqttTopic = "#";
 
-    # Home Assistant's discovery tree is configuration, not telemetry: retained,
-    # large, and republished on every device announce. Without this, one AWTRIX
-    # discovery document becomes a burst of meaningless series on every
-    # reconnect, against a hard ceiling of MAX_METRICS (default 2000) after
-    # which the exporter stops registering new ones. Note this also hides any
-    # HASS.Agent state topic published under that tree; narrow the pattern if a
-    # sensor you expected turns out to be missing.
-    mqttIgnoredTopics = [ "homeassistant/#" ];
+    # These patterns are fnmatch GLOBS, not MQTT topic filters -- the exporter
+    # matches with fnmatch.fnmatch(topic, pattern) (main.py:474). In fnmatch `#`
+    # is an ORDINARY CHARACTER, so the MQTT-style "homeassistant/#" matches only
+    # a topic literally named that and silently filters nothing. Use `*`, which
+    # in fnmatch spans `/` and so covers the whole subtree.
+    #
+    # What is dropped and why -- these are retained CONFIGURATION documents that
+    # the exporter faithfully flattens into one metric per JSON field:
+    #
+    #   homeassistant/*  -- MQTT discovery documents plus HASS.Agent attribute
+    #     blobs. Republished on every device announce, so they also churn.
+    #   awtrixNG/state/capabilities -- the device's GPIO pin map (matrix, RTC and
+    #     strapping pins). A static hardware description that cannot change
+    #     without new hardware, and on its own the single largest source here.
+    #
+    # Together these were 246 of 452 series. The remaining state/device,
+    # state/settings and state/audio topics are kept: they are small, and they
+    # carry the real telemetry (uptime, heap, RSSI, battery, temperature) mixed
+    # in with the settings. The ceiling to stay under is MAX_METRICS (default
+    # 2000), past which the exporter stops registering new metrics entirely.
+    mqttIgnoredTopics = [
+      "homeassistant/*"
+      "awtrixNG/state/capabilities"
+    ];
 
     prometheusPrefix = "mqtt_";
 

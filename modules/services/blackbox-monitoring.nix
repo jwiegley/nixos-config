@@ -510,6 +510,16 @@ in
               {
                 targets = [
                   # "adt-home-security.lan"             # 192.168.3.118
+                  # Ulanzi TC001 running AWTRIX NG. It sits in this group for the
+                  # SEVERITY (warning-only) rather than the rationale above: it is
+                  # mains-powered and always-on, not a sleepy battery radio, so it
+                  # should answer ICMP essentially all the time.
+                  #
+                  # That makes IoTDeviceChronicallyUnreachable (<90% over 24h) a
+                  # real signal here rather than the expected noise it is for the
+                  # door locks -- if this one drops below 90% something is actually
+                  # wrong with its Wi-Fi or power, and it is worth looking at.
+                  "awtrix.lan"
                   "august-lock-front-door.lan" # 192.168.3.12
                   "august-lock-garage-door.lan" # 192.168.3.14
                   "august-lock-side-door.lan" # 192.168.3.173

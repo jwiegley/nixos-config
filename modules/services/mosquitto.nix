@@ -84,6 +84,16 @@
               "read homeassistant/status" # HA birth/will, to re-announce
             ];
           };
+
+          # Prometheus MQTT exporter. READ-ONLY on purpose: an exporter observes,
+          # it never publishes, so `read #` is the whole requirement. This is the
+          # widest read grant on the broker and that is deliberate -- the point of
+          # the exporter is to see traffic between any two devices, which means it
+          # cannot be scoped to a subtree without blinding it.
+          mqtt-exporter = {
+            passwordFile = config.sops.secrets."mqtt/exporter-password".path;
+            acl = [ "read #" ];
+          };
         };
 
         settings = {

@@ -155,6 +155,7 @@
 9080 127.0.0.1 Promtail
 9100 * :: Node Exporter
 9113 127.0.0.1 Nginx Exporter
+9114 127.0.0.1 Prometheus MQTT exporter (mqtt-exporter, payload->metrics)
 9115 * :: Blackbox Exporter
 9121 127.0.0.1 Redis Exporter
 9134 * :: ZFS Exporter

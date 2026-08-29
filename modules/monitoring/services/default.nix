@@ -58,6 +58,7 @@
     ./aria2-alerts.nix
     ./qdrant-exporter.nix
     ./stock-trader-exporter.nix
+    ./mqtt-exporter.nix
 
     # Infrastructure monitoring
     ./certificate-exporter.nix

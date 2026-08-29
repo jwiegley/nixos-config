@@ -34,9 +34,23 @@ in
   # Monitors Podman container health status and exposes metrics for alerting
   #
   # Metrics exposed:
-  # - container_health_status{name="<container>"} = 0 (healthy) | 1 (unhealthy) | 2 (starting)
+  # - container_health_status{name="<container>"} = 0 (healthy) | 1 (unhealthy)
+  #     | 2 (starting) | 3 (none: the image declares no HEALTHCHECK)
   # - container_running{name="<container>"} = 0 (stopped) | 1 (running)
   # - container_restart_count{name="<container>"} = number of restarts
+  #
+  # 3 is the value to expect, not an edge case: as of 2026-08-29, 15 of the 17
+  # containers report it, because most images here ship no HEALTHCHECK. Two
+  # consequences follow. `container_health_status == 0` is NOT "all is well"
+  # across the fleet -- it is true only of the containers that can answer the
+  # question at all. And the ContainerUnhealthy/ContainerStarting rules in
+  # alerts/container-health.yaml, which key on == 1 and == 2, are structurally
+  # unable to fire for those 15; `container_running` and the blackbox HTTP
+  # probes are what actually cover them.
+  #
+  # Read this scale carefully when querying by hand: `!= 1` looks like it means
+  # "not unhealthy" but matches every container including the healthy ones,
+  # since 0, 2 and 3 all satisfy it.
 
   # Create a script that checks container health and outputs Prometheus metrics
   systemd.services.container-health-exporter = {

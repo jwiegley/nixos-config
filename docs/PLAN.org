@@ -210,6 +210,22 @@ advertises two documents and a script that no longer exist. That index is a navi
 surface, so a wrong entry sends someone to a missing file; worth its own pass.
 #+end_example
 
+* TODO [#C] nix flake update breaks build: pi-coding-agent 0.84.3 vitest sourcemap error
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-0zi
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-28 Fri 22:46]
+:MODIFIED: [2026-08-28 Fri 22:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Running 'nix flake update' moves nix-config and nix-config-ai from 943c8e75 to 448d3b18, which pulls pi-coding-agent 0.84.3. Its vitest suite dies with 'SyntaxError: Unexpected token, not valid JSON' in convert-source-map/index.js:83 via extractSourcemapFromFile -- vitest tries to parse a sourcemap comment out of what appears to be a binary file. All 574 tests PASS; it is the unhandled error that fails the test file, and so the derivation. The failure cascades: pi-coding-agent-source-build-0.84.3 -> agent-cat-pi-extension-0.1.0 -> home-manager-path -> user-environment -> etc -> nixos-system-vulcan, so the whole switch fails. Neither package is referenced from /etc/nixos; both arrive via the nix-config/nix-config-ai inputs (git+ssh://gitea/johnw/nix-config). WORKAROUND IN PLACE 2026-08-28: flake.lock reverted to 943c8e75 for both inputs, with only the 'secrets' input re-locked. This means the tree is pinned to older nix-config until fixed upstream. Real fix belongs in the nix-config repo: either exclude the binary fixture from vitest's sourcemap scan, or set doCheck=false for pi-coding-agent.
+
 * DONE [#E] certificate-validation exits 1 and fails daily whenever any cert is inside its 30-day window
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

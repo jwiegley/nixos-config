@@ -6303,7 +6303,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-29 Sat 20:46]
+:MODIFIED: [2026-08-30 Sun 08:45]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -6480,6 +6480,13 @@ day before trusting a zero.
     "author": "johnw",
     "text": "UPDATE 2026-08-29 20:50 (same day, 8h later): ESCALATING, and the last piece of\nevidence against border-router involvement is now gone.\n\nCASE timeouts per node, 24h, at 12:50 -> at 20:50:\n  node  6   612 -> 914\n  node 17   613 -> 922\n  node 25   663 -> 992\n  node 18    12 -> 145      <-- 12x in eight hours\n  node 24     3 ->   0      (Hub M3, Ethernet side)\n\nNode 18 was the fourth Thread child, cited in the original description as healthy\nevidence for 'three of four Thread children are fine, so this points at node 17\nspecifically'. It is no longer fine. ALL FOUR Thread children are now failing,\nwhile the Hub M3's own Ethernet-side session count is zero. That is consistent\nwith the hub's THREAD/mesh side degrading while the box itself stays reachable --\nwhich is precisely the border-router scenario this issue ruled out on 08-16 and\nthat I also argued against this morning on the strength of node 18 being clean.\n\nA SECOND log signature appeared ~24h ago, distinct from the CASE timeouts:\n  WARNING [matter_server.server.device_controller] <Node:N> Setup for node failed:\n  Unable to establish CASE session with Node N\n1465 occurrences in 24h vs 2 in the preceding 7 days. Per node: 25=492, 17=454,\n6=453, 18=66 -- same ordering as the timeouts, node 18 lagging.\n\nSIDE EFFECT worth knowing: these warnings carry no CHIP_ERROR tag, so they pass\nboth CHIP filters in loki-rules/systemd-errors.yaml and match on the word\n'failed'. SystemdJournalHighErrorRate is now firing with matter-server as its\nSOLE contributor (14 of 14 lines in the 10m window) -- i.e. it is currently a\nduplicate alarm for this same fault, not an independent problem.\n\nmatter-server remains healthy: active since Aug 10, 0 restarts. Do NOT restart it.",
     "created_at": "2026-08-30T03:46:49Z"
+  },
+  {
+    "id": 55,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "UPDATE 2026-08-30 08:43: node 18 has reached FULL PARITY. All four Thread children\nnow fail at the same per-hour rate.\n\nMeasured directly as a rate over 4h (not inferred from 24h totals, which lag\nbecause node 18 started later):\n\n  node  6   39.5/h\n  node 17   39.5/h\n  node 18   39.2/h     <-- was 0/h on 08-16, 12/24h yesterday morning\n  node 25   42.5/h\n  node 24    0.0/h     <-- Hub M3, Ethernet side, still exactly zero\n\nConfirmed at 1h granularity too: 39 / 40 / 39 / 42 per hour.\n\nThis is the strongest form of the shared-cause signature. Four devices of\ndifferent types (three Aqara P2 door/window sensors, one FP300 presence sensor),\ncommissioned at different times, sitting in different rooms, do not converge on\nan identical 39-42/h failure rate by coincidence. They share exactly one thing:\nthe Thread mesh reached through the Aqara Hub M3.\n\nThe original reasoning in this issue -- 'three of four Thread children are fine,\nso this points at node 17 specifically' -- is now fully inverted. Zero of four\nare fine. Meanwhile the Hub M3's own Ethernet-side session count has been a clean\n0 across every measurement, which is why this reads as the hub's THREAD RADIO or\nits mesh role degrading rather than the hub being down.\n\nTrajectory of node 18's 24h count, for the record: 12 -> 145 -> 291 -> 447 -> 604\nover roughly 24 hours, while nodes 6/17/25 plateaued flat at 944/946/1024. The\nplateau is consistent with those three having saturated their retry ceiling.\n\nSuggested next physical step: power-cycle or inspect the Aqara Hub M3, and check\nwhether it still advertises as a Thread border router. matter-server remains\nhealthy (active since Aug 10, 0 restarts) -- do NOT restart it.",
+    "created_at": "2026-08-30T15:45:33Z"
   }
 ]
 #+end_src

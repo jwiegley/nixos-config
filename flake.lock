@@ -2180,11 +2180,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1787976978,
-        "narHash": "sha256-OIkMTbUJV1NGAKcU0vBjAbgr8vDnqCCAn67vgT3CB+Q=",
+        "lastModified": 1788051928,
+        "narHash": "sha256-kECfUc0gWhv1DV9ms16cfeKfhGaPpIn/LAIzzbjYShU=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "a213a4b8e48bc5cc2211a5d89be2dba8a98bddb6",
+        "rev": "65ca78376903260aec548a63faadb59bb6599ef8",
         "type": "github"
       },
       "original": {
@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1788040389,
-        "narHash": "sha256-lUytHSolbG1tjDNOSoaoWqbE9zr1wVU90y4u1sRZFg8=",
+        "lastModified": 1788063219,
+        "narHash": "sha256-VUuaG9HNhWFeBz7VHU9Qm6QQA2bB300rPPuGGQ4Zw9M=",
         "ref": "refs/heads/main",
-        "rev": "633ce1f1d84ecb807efde164d856039ede3100f8",
-        "revCount": 3519,
+        "rev": "9b2ad4ddf4972b5ccbf9a802a7499fee64418a44",
+        "revCount": 3523,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2273,11 +2273,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1788040389,
-        "narHash": "sha256-lUytHSolbG1tjDNOSoaoWqbE9zr1wVU90y4u1sRZFg8=",
+        "lastModified": 1788063219,
+        "narHash": "sha256-VUuaG9HNhWFeBz7VHU9Qm6QQA2bB300rPPuGGQ4Zw9M=",
         "ref": "refs/heads/main",
-        "rev": "633ce1f1d84ecb807efde164d856039ede3100f8",
-        "revCount": 3519,
+        "rev": "9b2ad4ddf4972b5ccbf9a802a7499fee64418a44",
+        "revCount": 3523,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },

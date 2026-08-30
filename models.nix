@@ -44,7 +44,8 @@
     # into restartTriggers, so its field shape still matters -- a changed shape
     # changes the trigger hash and restarts the VM.
     reasoning = {
-      name = "DeepSeek-V4-Flash-0731-MXFP4-MLX";
+      # name = "DeepSeek-V4-Flash-0731-MXFP4-MLX";
+      name = "GLM-5.3-Flash-MLX-oQ4-MTP";
       maxSeconds = 3600;
       initialDelay = 5;
       maxDelay = 60;

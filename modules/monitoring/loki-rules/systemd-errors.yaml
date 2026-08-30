@@ -18,10 +18,23 @@ groups:
             != "max retries"
             != "Temporary failure in name resolution"
             != "No Sieve errors"
-            # WARNING: the two CHIP filters below strip 100% of matter-server's error
-            # volume (17,283 lines over 7d, ZERO residual, measured 2026-07-29), so a
+            # WARNING: the two CHIP filters below stripped 100% of matter-server's error
+            # volume when measured 2026-07-29 (17,283 lines over 7d, ZERO residual), so a
             # GREEN SystemdJournalHighErrorRate must NEVER be read as Matter is healthy.
-            # That part is unchanged. What follows it was corrected on 2026-08-29:
+            # The "must never be read as healthy" half stands. The "zero residual" half
+            # EXPIRED 2026-08-29, when matter-server began emitting
+            #   WARNING [matter_server.server.device_controller] <Node:N> Setup for node
+            #   failed: Unable to establish CASE session with Node N
+            # It carries no CHIP_ERROR tag, so it passes BOTH filters and matches this
+            # rule on the bare word "failed". Measured 20:50 that day: 1465 in 24h vs 2
+            # in the preceding 7 days, and 14 of the 14 lines in the firing 10m window --
+            # matter-server is now the SOLE driver of this alert, making it a duplicate
+            # alarm for the fabric fault MatterNodeSessionFailures already reports.
+            # Adding a third filter would restore this rule's intent but would also give
+            # up the only fabric signal that is not Matter-specific; left deliberately
+            # unfiltered pending an operator decision.
+            #
+            # Also corrected on 2026-08-29:
             # Matter now has TWO alerts, not one, and the churn gap this comment used
             # to describe has since been closed --
             #   MatterServerDown        (alerts/container-health.yaml) -- liveness only

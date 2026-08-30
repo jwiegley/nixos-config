@@ -157,3 +157,79 @@ groups:
         annotations:
           summary: "The Home Assistant integration exporter cannot read the HA API"
           description: "The exporter ran but could not fetch or parse /api/config — HA down, the token rejected, or the API shape changed. No per-integration series are being published while this is true, so integration health is UNKNOWN rather than good."
+
+      # ---------------------------------------------------------------------
+      # ALARM PANEL SILENCE (added 2026-08-30 after a two-day undetected outage)
+      #
+      # The alarmdotcom integration froze 2026-08-28 00:39 -> 2026-08-30 11:44.
+      # The panel held `armed_night` the whole time, so Home Assistant displayed
+      # the house as armed while nothing was updating, and it surfaced only
+      # because the operator noticed by eye.
+      #
+      # EVERY CHEAPER SIGNAL WAS TESTED AGAINST THIS INCIDENT AND NONE MOVE:
+      #   hass_config_entries{domain="alarmdotcom"}  stayed state="loaded"
+      #   the entity state                           never became `unavailable`
+      #   integration logs                           ZERO lines in 7 days
+      #   last_reported (REST)                       equals last_changed here;
+      #                                              only 59 of 1292 entities
+      #                                              advance it at all
+      #   homeassistant.update_entity                HTTP 200, refreshes nothing
+      # So time-since-last-state-change is not the elegant signal, it is the
+      # ONLY one that moves. Do not "improve" this into a config-entry or
+      # availability check without re-testing against those measurements.
+      #
+      # THRESHOLD IS MEASURED, NOT GUESSED. 97 transitions over the 30-day
+      # recorder window: p50 4.9h, p90 13.8h, p95 15.1h, p99 47.1h, max 68.2h.
+      # Counting how many NORMAL gaps each threshold would have fired on:
+      #   24h -> 3    30h -> 3    36h -> 3    48h -> 1    60h -> 1    72h -> 0
+      # 48h is chosen because it is strictly better than 60h -- same single
+      # false positive, detects 12h sooner. 72h is clean but would not have
+      # fired during this 58h outage at all, which defeats the purpose.
+      #
+      # EXPECT ROUGHLY ONE FALSE POSITIVE A MONTH, during travel or any spell
+      # where nobody arms or disarms for two days. That is the accepted cost of
+      # covering a security blind spot; it is a warning, not a page. The fix
+      # that would remove it is gating on a presence signal (fire only when
+      # someone is home) -- deliberately NOT done here, because it couples a
+      # security alert to the presence stack that has already produced two
+      # false-arm incidents of its own.
+      - alert: AlarmPanelStale
+        expr: hass_entity_seconds_since_change{entity_id="alarm_control_panel.panel"} > 172800
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+          service: home-assistant
+        annotations:
+          summary: "Alarm panel has not changed state in over 48 hours"
+          description: |
+            alarm_control_panel.panel last changed {{ $value | humanizeDuration }} ago.
+            The displayed state may be frozen rather than current -- during the
+            2026-08-28 outage it read `armed_night` for two days while the
+            integration was dead, so do NOT trust the panel state in the UI
+            until this is resolved.
+
+            Check in this order:
+              1. Settings > Devices & Services > Alarm.com > Reload. That alone
+                 fixed the 2026-08-28 incident.
+              2. Compare the UI state against the physical panel. They diverged
+                 last time.
+              3. journalctl -u home-assistant.service | grep -i alarmdotcom
+                 Expect NOTHING -- this integration fails silently, so an empty
+                 result is consistent with failure, not with health.
+
+            If nobody has armed or disarmed for two days (travel), this is the
+            known false positive; see the comment above this rule.
+
+      # Companion dead-man. Without it, an entity deleted from the registry takes
+      # its own staleness series with it, and a vanished series reads as healthy.
+      - alert: AlarmPanelEntityMissing
+        expr: hass_entity_present{entity_id="alarm_control_panel.panel"} == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: security
+          service: home-assistant
+        annotations:
+          summary: "The alarm panel entity has disappeared from Home Assistant"
+          description: "alarm_control_panel.panel is no longer present in the recorder. The entity was removed, renamed, or the integration was deleted -- AlarmPanelStale cannot fire while this is true."

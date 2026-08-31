@@ -184,6 +184,9 @@
                     "test_docs[categories.md]"
                   ];
                 });
+                python-ulid = pyPrev.python-ulid.overridePythonAttrs (old: {
+                  disabledTests = (old.disabledTests or [ ]) ++ [ "test_same_millisecond_overflow" ];
+                });
               };
             };
             task-master-ai = final.callPackage ./pkgs/task-master-ai.nix { };

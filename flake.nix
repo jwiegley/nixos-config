@@ -171,6 +171,9 @@
           (_final: _prev: {
             gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
           })
+          (final: _prev: {
+            task-master-ai = final.callPackage ./pkgs/task-master-ai.nix { };
+          })
           inputs.nix-config-ai.overlays.tools
           (import ./overlays inputs system)
         ];
@@ -381,7 +384,9 @@
               == toString inputs.nixpkgs-user.outPath;
             assert toString inputs.nixpkgs.outPath != toString inputs.nixpkgs-user.outPath;
             assert builtins.elem userPkgs.ripgrep vulcanConfig.environment.systemPackages;
+            assert builtins.elem userPkgs.task-master-ai vulcanConfig.environment.systemPackages;
             assert !builtins.elem vulcan.pkgs.ripgrep vulcanConfig.environment.systemPackages;
+            assert !builtins.elem vulcan.pkgs.task-master-ai vulcanConfig.environment.systemPackages;
             assert pkgs.lib.hasInfix "nix flake update --flake /etc/nixos nix-config nix-config-ai pi"
               buildSource;
             pkgs.runCommand "vulcan-input-policy-check" { } "touch $out";

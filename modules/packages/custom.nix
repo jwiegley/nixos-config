@@ -1,7 +1,5 @@
 {
-  config,
   lib,
-  pkgs,
   userPkgs,
   ...
 }:
@@ -124,8 +122,6 @@ in
     ])
     ++ [
       userPkgs.dovecot-fts-flatcurve
-      # The current Hera-line task-master-ai package omits its npm lockfile; retain
-      # the stable build until upstream restores a reproducible dependency closure.
-      pkgs.task-master-ai
+      userPkgs.task-master-ai
     ];
 }

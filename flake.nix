@@ -175,8 +175,8 @@
             glances = prev.glances.overridePythonAttrs (old: {
               disabledTests = (old.disabledTests or [ ]) ++ [ "test_phys_core_returns_int" ];
             });
-            python312Packages = prev.python312Packages.overrideScope (
-              _pyFinal: pyPrev: {
+            python312 = prev.python312.override {
+              packageOverrides = _pyFinal: pyPrev: {
                 inline-snapshot = pyPrev.inline-snapshot.overridePythonAttrs (old: {
                   disabledTests = (old.disabledTests or [ ]) ++ [
                     "test_docs[code_generation.md]"
@@ -184,8 +184,8 @@
                     "test_docs[categories.md]"
                   ];
                 });
-              }
-            );
+              };
+            };
             task-master-ai = final.callPackage ./pkgs/task-master-ai.nix { };
           })
           inputs.nix-config-ai.overlays.tools

@@ -648,6 +648,84 @@ in
     (builtins.toJSON { agent = models.llm.reasoning; })
   ];
 
+  # Replace microvm.nix's ExecStop with a QMP system_powerdown.
+  #
+  # WHAT IS BROKEN. Upstream's bin/microvm-shutdown sends a QMP
+  # `input-send-event` simulating Ctrl-Alt-Del. That has NEVER worked on
+  # headless aarch64: lib/runners/qemu.nix emits `-device i8042` only inside
+  # `lib.optionals (system == "x86_64-linux")`, and the aarch64 branch adds no
+  # input device at all (upstream commit c14833d8, 2023-06-16). With no input
+  # handler QEMU rejects the event outright --
+  #   {"error":{"class":"GenericError","desc":"Input handler not found for event type key"}}
+  # -- so the guest never learns to stop, upstream's socket-poll loop blocks
+  # forever, and systemd SIGKILLs at TimeoutSec=150. Deterministic, not flaky:
+  # four of four stops on 2026-08-30 took exactly 2m30s.
+  #
+  # Known upstream (issue #380; PR #381 proposes exactly this fix) and unmerged
+  # for 13 months. Their CI is ubuntu-latest only, so the aarch64 gap is
+  # structurally invisible to it -- do not expect a flake bump to fix this.
+  #
+  # WHY system_powerdown WORKS HERE. The usual objection is "that needs ACPI,
+  # which a microVM lacks". True, and irrelevant: on `-M virt` with direct
+  # kernel boot and NO firmware, QEMU creates the ACPI GED only
+  # `if (has_ged && aarch64 && firmware_loaded)` (hw/arm/virt.c). We load no
+  # firmware, so virt_powerdown_req takes the other path and pulses a PL061
+  # GPIO into the `/gpio-keys/poweroff` DT node carrying `linux,code =
+  # KEY_POWER`. Every link is BUILT IN to the guest kernel -- CONFIG_GPIO_PL061,
+  # CONFIG_KEYBOARD_GPIO, CONFIG_INPUT_EVDEV -- and systemd-logind (running,
+  # HandlePowerKey=poweroff by default, not overridden here) does the rest.
+  #
+  # WHY NOT JUST ADD A KEYBOARD. `usb-kbd` refuses to boot without a USB
+  # controller ("No 'usb-bus' bus found"; `-M virt,usb=on` does not help), so it
+  # costs qemu-xhci too. `virtio-keyboard-pci` is a single flag and does work at
+  # the QMP layer, but virtio_input is a LOADABLE MODULE in this guest rather
+  # than built in, and virtio_input_send() returns success even when no guest
+  # driver is bound -- QMP would report success whether or not the keypress
+  # landed. A silent failure in the shutdown path is the one thing worth
+  # avoiding here. The GPIO route uses only built-ins.
+  #
+  # NO FALLBACK, ON PURPOSE. If the guest ever ignores the power button we
+  # degrade to exactly today's 2m30s SIGKILL -- no worse, and visibly so. A
+  # `{"execute":"quit"}` fallback would hide that regression behind a
+  # clean-looking stop.
+  #
+  # Structure mirrors upstream's script (early exit when the socket is already
+  # gone, then poll until QEMU stops accepting connections) so the ONLY
+  # behavioural difference is the QMP verb.
+  # THE EMPTY FIRST ELEMENT IS LOAD-BEARING -- do not "simplify" it away.
+  # `microvm@` (the template, where microvm.nix sets ExecStop) and
+  # `microvm@hermes` (this instance) are DIFFERENT units to NixOS, so there is no
+  # module-level definition to override and lib.mkForce accomplishes nothing
+  # here. NixOS emits this as a drop-in, and systemd ACCUMULATES ExecStop=
+  # directives across a unit and its drop-ins. Setting a single value therefore
+  # appends: measured 2026-08-30, `systemctl show` listed BOTH upstream's
+  # microvm-shutdown and this script, ran the broken one first, and still took
+  # the full 2m30s. An empty ExecStop= resets the list, which is the documented
+  # systemd idiom; NixOS renders a list as repeated directives, so `[ "" script ]`
+  # emits `ExecStop=` followed by `ExecStop=<script>`.
+  systemd.services."microvm@hermes".serviceConfig.ExecStop = [
+    ""
+    (pkgs.writeShellScript "hermes-microvm-powerdown" ''
+      # Relative path is safe: the unit sets WorkingDirectory=/var/lib/microvms/hermes.
+      if [ ! -S hermes-vm.sock ]; then
+        exit 0
+      fi
+
+      (
+        echo '{"execute":"qmp_capabilities"}'
+        echo '{"execute":"system_powerdown"}'
+      ) | ${pkgs.socat}/bin/socat STDIO UNIX:hermes-vm.sock,shut-none
+
+      # QEMU stops accepting QMP connections once it exits, so a failing connect
+      # is the signal the guest is really gone. QAPI documents that
+      # system_powerdown RETURNING does not mean the guest acted, which is
+      # precisely why the wait is on the socket rather than on the reply.
+      while ${pkgs.socat}/bin/socat -u /dev/null UNIX:hermes-vm.sock 2>/dev/null; do
+        ${pkgs.coreutils}/bin/sleep 1
+      done
+    '')
+  ];
+
   # ---- microvm.nix declaration ----
   microvm.vms.hermes = {
     autostart = true;

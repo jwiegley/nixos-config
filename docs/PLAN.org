@@ -5106,15 +5106,17 @@ INSTRUMENT NOTES, both of which bit me here:
 ]
 #+end_src
 
-* TODO [#C] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
+* DONE [#C] microvm@hermes hit the 2m30s stop timeout on both of today's restarts
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-m90
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-26 Wed 16:44]
-:MODIFIED: [2026-08-30 Sun 20:45]
+:MODIFIED: [2026-08-30 Sun 22:29]
 :CREATED_BY: johnw
+:FINISHED: [2026-08-30 Sun 22:29]
+:CLOSE_REASON: Fixed and verified 2026-08-30 (commit 3a3da5591). Root cause: microvm.nix sends a QMP input-send-event (Ctrl-Alt-Del) to stop the VM, but emits -device i8042 only for x86_64-linux; the aarch64 branch adds no input device, so QEMU rejected the event ('Input handler not found for event type key') and the guest never learned to stop. Replaced the instance's ExecStop with a QMP system_powerdown, which on -M virt with direct-kernel boot and no firmware is delivered over a PL061 GPIO into /gpio-keys/poweroff (KEY_POWER) -- all built into the guest kernel, handled by logind's default HandlePowerKey=poweroff. Measured: stop went from 150s (SIGKILL at TimeoutSec) to 3.0s, Result=success, and the guest journal reaches 'System Power Off' rather than being killed. The empty first ExecStop element is required: microvm@ and microvm@hermes are different units, so mkForce does nothing and systemd accumulates ExecStop= across drop-ins -- the first attempt ran both scripts and still took 2m30s.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:

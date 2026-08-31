@@ -2,6 +2,7 @@
   config,
   lib,
   inputs,
+  pkgs,
   utils,
   ...
 }:
@@ -23,6 +24,19 @@
     # gap left by the root-level virtualisation.podman.autoPrune which never sees
     # per-user rootless stores. See ./rootless-podman-image-prune.nix.
     sharedModules = [
+      {
+        nixpkgs = {
+          config.allowUnfree = true;
+          overlays = [
+            inputs.nix-config-ai.overlays.default
+            (_final: _prev: {
+              gogcli = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.gogcli;
+            })
+            inputs.nix-config-ai.overlays.tools
+            (import ../../../overlays inputs pkgs.system)
+          ];
+        };
+      }
       ./rootless-podman-image-prune.nix
       # Reloads the user manager after quadlet-nix writes a .container file, so a
       # newly introduced container gets a real unit on the switch that creates it

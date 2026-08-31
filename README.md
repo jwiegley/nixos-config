@@ -758,7 +758,7 @@ Flake inputs (see `flake.nix` for current pin rationales):
 - `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for
   Home Assistant and other packages needing newer versions
 - `nixos-apple-silicon`: Apple hardware support (pinned for ZFS/kernel compat)
-- `home-manager`: current upstream, using `nixpkgs-user` for user environments
+- `home-manager`: `release-25.11` system module, using `nixpkgs-user` for user environments
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
 - `quadlet-nix`: Podman container integration

@@ -36,8 +36,10 @@
       url = "github:SEIAROTg/quadlet-nix";
     };
 
+    # Keep the NixOS module release-compatible with the stable core; its user
+    # package set still follows nixpkgs-user below rather than the system package set.
     home-manager = {
-      url = "github:nix-community/home-manager";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs-user";
     };
 

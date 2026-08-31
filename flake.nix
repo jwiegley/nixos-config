@@ -1,5 +1,6 @@
 {
   inputs = {
+    # The NixOS module graph and the base operating system stay on the stable release.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nixos-apple-silicon = {
@@ -36,8 +37,8 @@
     };
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
-      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs-user";
     };
 
     nixos-logwatch = {
@@ -47,8 +48,19 @@
 
     nix-config-ai = {
       url = "git+ssh://gitea/johnw/nix-config?dir=config/ai";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pi.follows = "pi";
     };
+
+    # The portable configuration consumes this source. The build driver refreshes it before
+    # each normal Vulcan rebuild rather than retaining the portable flake's pinned Pi lock.
+    pi = {
+      url = "github:jwiegley/pi";
+      flake = false;
+    };
+
+    # User-facing packages follow the same nixpkgs input as Hera through the
+    # portable AI configuration. Keep this distinct from the stable system input.
+    nixpkgs-user.follows = "nix-config-ai/nixpkgs";
 
     llm-agents.follows = "nix-config-ai/llm-agents";
 
@@ -148,7 +160,9 @@
       # Pkgs with the local overlay applied — used to expose in-repo
       # packages (e.g. hermes-mcp) at the flake's top level so they can
       # be built standalone with `nix build .#<name>`.
-      pkgs = import inputs.nixpkgs {
+      # Standalone applications and flake checks use the same package set as Hera.
+      # The NixOS configuration below deliberately continues to use inputs.nixpkgs.
+      pkgs = import inputs.nixpkgs-user {
         inherit system;
         overlays = [
           inputs.nix-config-ai.overlays.default
@@ -165,7 +179,7 @@
       # nixfmt-tree = treefmt pre-configured with nixfmt: walks the git tree
       # itself, so it works with `nix fmt` on Nix >= 2.24 (which no longer
       # passes the tree root as an argument — bare nixfmt would read stdin).
-      formatter.aarch64-linux = inputs.nixpkgs.legacyPackages."${system}".nixfmt-tree;
+      formatter.aarch64-linux = pkgs.nixfmt-tree;
 
       packages.${system} = {
         hermes-mcp = pkgs.callPackage ./pkgs/hermes-mcp { };
@@ -299,7 +313,9 @@
       checks.${system} =
         let
           helpers = import ./tests/checks.nix { inherit pkgs; };
-          vulcanConfig = inputs.self.nixosConfigurations.vulcan.config;
+          vulcan = inputs.self.nixosConfigurations.vulcan;
+          vulcanConfig = vulcan.config;
+          buildSource = builtins.readFile ./build;
           sessionGatherSshConfig = pkgs.writeText "session-gather-ssh-config" (
             vulcanConfig.home-manager.users.johnw.xdg.configFile."sessions/ssh_config".text
           );
@@ -354,6 +370,16 @@
           );
         in
         {
+          vulcan-input-policy =
+            assert toString vulcan.pkgs.path == toString inputs.nixpkgs.outPath;
+            assert vulcanConfig.home-manager.useGlobalPkgs == false;
+            assert
+              toString vulcanConfig.home-manager.extraSpecialArgs.inputs.nixpkgs.outPath
+              == toString inputs.nixpkgs-user.outPath;
+            assert toString inputs.nixpkgs.outPath != toString inputs.nixpkgs-user.outPath;
+            assert pkgs.lib.hasInfix "nix flake update --flake /etc/nixos nix-config nix-config-ai pi"
+              buildSource;
+            pkgs.runCommand "vulcan-input-policy-check" { } "touch $out";
           session-gather-ssh-config =
             pkgs.runCommand "session-gather-ssh-config-check"
               {

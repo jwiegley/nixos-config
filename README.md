@@ -753,18 +753,20 @@ Many services follow similar patterns:
 
 Flake inputs (see `flake.nix` for current pin rationales):
 
-- `nixpkgs`: `nixos-25.11` — the system channel
+- `nixpkgs`: `nixos-25.11` — stable NixOS module graph and core operating system
+- `nixpkgs-user`: follows `nix-config-ai/nixpkgs` — Hera-aligned Home Manager and standalone app packages
 - `nixpkgs-unstable`: pinned to rev `241313f4` (2026-07-19) for
   Home Assistant and other packages needing newer versions
 - `nixos-apple-silicon`: Apple hardware support (pinned for ZFS/kernel compat)
-- `home-manager`: `release-25.11`, user environment management
+- `home-manager`: current upstream, using `nixpkgs-user` for user environments
 - `sops-nix`: Secrets management
 - `nixos-logwatch`: Log monitoring
 - `quadlet-nix`: Podman container integration
 - `microvm`: the Hermes microVM
 - `hermes-agent`: Hermes agent source (pinned to rev `c47b9d12`; the `hermes-agent`
   input in `flake.nix` carries the reason)
-- `nix-config-ai`, `nix-config`, `llm-agents`: shared AI / home-manager config
+- `nix-config-ai`, `nix-config`, `llm-agents`: shared AI / home-manager config; normal `./build` refreshes
+  both shared source inputs and the top-level `pi` source before evaluation
 - `stock-trader`: pinned to Gitea tag `v0.2.0` (`flake = false`)
 - `git-scripts`, `org-jw`, `una`, `sizes`, `pushme`,
   `sacramento-cluster-ics`: personal tooling and data repos
@@ -801,21 +803,17 @@ system.stateVersion = "25.11";
 ### Channel & Version
 
 - **NixOS Version**: 25.11
-- **nixpkgs Channel**: `nixos-25.11` (with a secondary `nixpkgs-unstable` input for
-  select packages — currently *pinned* to rev `241313f4`, 2026-07-19, not floating)
+- **Core nixpkgs Channel**: `nixos-25.11`; `nixpkgs-user` follows the portable AI input
+  for the same user-package line as Hera. `nixpkgs-unstable` remains a separately pinned
+  compatibility input for select packages.
 - **System Architecture**: aarch64-linux
 
 ### Flake Lock
 
-The `flake.lock` file pins all input versions for reproducibility. Update with:
-
-```bash
-# Update all inputs
-nix flake update
-
-# Update specific input
-nix flake lock --update-input nixpkgs
-```
+The `flake.lock` file records the resolution used by an invocation. Normal `./build` refreshes
+`nix-config`, `nix-config-ai`, and `pi` while holding the build lock, then evaluates the result;
+do not bypass the driver for a normal system build. The stable core `nixpkgs` input remains
+deliberately unchanged by that refresh.
 
 ## 🤝 Contributing
 

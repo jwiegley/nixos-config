@@ -8,8 +8,9 @@
 
 {
   home-manager = {
-    # Use the same nixpkgs as the system
-    useGlobalPkgs = true;
+    # User profiles intentionally follow nix-config-ai's nixpkgs, the same line as Hera.
+    # The NixOS module graph itself remains on the stable system nixpkgs input.
+    useGlobalPkgs = false;
 
     # Install packages to /etc/profiles instead of ~/.nix-profile
     useUserPackages = true;
@@ -52,15 +53,10 @@
     # 2026-08-15 (nixos-sil): NOTHING could be rebuilt, and the cause was
     # invisible from this repo because nothing here had changed.
     #
-    # DIRECTION IS DELIBERATE and inverted from upstream's. Upstream writes
-    # `rootInputs // portableInputs`, letting the portable set WIN. That is
-    # wrong here: nix-config-ai's inputSet carries its own `nixpkgs`, which
-    # tracks nixpkgs-unstable, while this host is pinned to 25.11 -- so
-    # upstream's ordering would silently switch the channel for any module
-    # reading inputs.nixpkgs. Writing it as `inputSet // inputs` makes the
-    # portable inputs fill GAPS only and keeps vulcan's own inputs winning
-    # every collision. Verified live: the inputSet supplies 14 names, of which
-    # nixpkgs and llm-agents are also declared here and must not be shadowed.
+    # Match upstream's `rootInputs // portableInputs` direction: portable
+    # nixpkgs must win inside Home Manager so shared user configuration and
+    # packages follow Hera's line. System modules retain the stable input from
+    # the outer NixOS evaluation and never receive this argument set.
     #
     # Measured exposure at the time of writing (nixos-czc): only `obr` carries
     # an assertion in the shared config, and it is declared here, so this is
@@ -69,7 +65,7 @@
     # host down first.
     extraSpecialArgs = {
       hostname = config.networking.hostName;
-      inputs = inputs.nix-config-ai.lib.inputSet // inputs;
+      inputs = inputs // inputs.nix-config-ai.lib.inputSet;
     };
   };
 

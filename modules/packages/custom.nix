@@ -2,15 +2,16 @@
   config,
   lib,
   pkgs,
+  userPkgs,
   ...
 }:
 
 let
-  dh = pkgs.stdenv.mkDerivation rec {
+  dh = userPkgs.stdenv.mkDerivation rec {
     name = "dh-${version}";
     version = "1.0";
 
-    src = pkgs.writeTextFile {
+    src = userPkgs.writeTextFile {
       name = "dh.sh";
       text = ''
         #!/usr/bin/env bash
@@ -55,7 +56,7 @@ let
   };
 
   linkdups =
-    with pkgs;
+    with userPkgs;
     stdenv.mkDerivation rec {
       name = "linkdups-${version}";
       version = "1.3";
@@ -87,7 +88,7 @@ let
 in
 {
   environment.systemPackages =
-    (with pkgs; [
+    (with userPkgs; [
       b3sum
       bun
       btop
@@ -123,6 +124,6 @@ in
       zfs-prune-snapshots
     ])
     ++ [
-      pkgs.dovecot-fts-flatcurve
+      userPkgs.dovecot-fts-flatcurve
     ];
 }

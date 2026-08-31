@@ -164,7 +164,7 @@
       # be built standalone with `nix build .#<name>`.
       # Standalone applications and flake checks use the same package set as Hera.
       # The NixOS configuration below deliberately continues to use inputs.nixpkgs.
-      pkgs = import inputs.nixpkgs-user {
+      userPkgs = import inputs.nixpkgs-user {
         inherit system;
         overlays = [
           inputs.nix-config-ai.overlays.default
@@ -176,16 +176,17 @@
         ];
         config.allowUnfree = true;
       };
+      pkgs = userPkgs;
     in
     {
       # nixfmt-tree = treefmt pre-configured with nixfmt: walks the git tree
       # itself, so it works with `nix fmt` on Nix >= 2.24 (which no longer
       # passes the tree root as an argument — bare nixfmt would read stdin).
-      formatter.aarch64-linux = pkgs.nixfmt-tree;
+      formatter.aarch64-linux = userPkgs.nixfmt-tree;
 
       packages.${system} = {
-        hermes-mcp = pkgs.callPackage ./pkgs/hermes-mcp { };
-        open-source-secretary = pkgs.callPackage ./pkgs/open-source-secretary { };
+        hermes-mcp = userPkgs.callPackage ./pkgs/hermes-mcp { };
+        open-source-secretary = userPkgs.callPackage ./pkgs/open-source-secretary { };
       };
 
       # `nix run .#water-attribution-check` — validate the generated
@@ -286,7 +287,7 @@
       nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
-          inherit system inputs;
+          inherit system inputs userPkgs;
           inherit (inputs) firmware secrets;
         };
         modules = [
@@ -379,6 +380,8 @@
               toString vulcanConfig.home-manager.extraSpecialArgs.inputs.nixpkgs.outPath
               == toString inputs.nixpkgs-user.outPath;
             assert toString inputs.nixpkgs.outPath != toString inputs.nixpkgs-user.outPath;
+            assert builtins.elem userPkgs.ripgrep vulcanConfig.environment.systemPackages;
+            assert !builtins.elem vulcan.pkgs.ripgrep vulcanConfig.environment.systemPackages;
             assert pkgs.lib.hasInfix "nix flake update --flake /etc/nixos nix-config nix-config-ai pi"
               buildSource;
             pkgs.runCommand "vulcan-input-policy-check" { } "touch $out";

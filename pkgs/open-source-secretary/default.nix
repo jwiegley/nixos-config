@@ -26,7 +26,7 @@ python312Packages.buildPythonApplication {
     pytestCheckHook
     responses
   ];
-  pytestFlagsArray = [ "tests/" ];
+  pytestFlags = [ "tests/" ];
 
   meta = with lib; {
     description = "Daily GitHub/Gitea issue+PR triage report via Hermes Agent";

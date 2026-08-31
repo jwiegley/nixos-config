@@ -30,7 +30,7 @@ python312Packages.buildPythonApplication {
     respx
   ];
 
-  pytestFlagsArray = [ "tests/" ];
+  pytestFlags = [ "tests/" ];
 
   meta = with lib; {
     description = "MCP server bridging OpenClaw to Hermes Agent";

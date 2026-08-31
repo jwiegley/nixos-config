@@ -3212,6 +3212,24 @@ cycle, which turned out to be benign and self-recovering.
 ]
 #+end_src
 
+* DONE [#B] Enable Vulcan Pi access to oMLX Hera and OpenRouter
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-fbg
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-08-31 Mon 00:53]
+:MODIFIED: [2026-08-31 Mon 04:04]
+:CREATED_BY: johnw
+:FINISHED: [2026-08-31 Mon 04:04]
+:CLOSE_REASON: Built Vulcan candidate with refreshed nix-config/Pi and provider-free omlx-hera/OpenRouter artifacts; no activation or credentials.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Advance paired nix-config inputs, register remote omlx-hera in Vulcan Pi, preserve native OpenRouter, authenticate without embedding credentials, build, switch, and verify provider-free inventory.
+
 * DONE [#E] Hung Zimit crawl is undetected: ServiceStuckActivating excluded, and no progress-based detector exists
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

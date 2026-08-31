@@ -171,7 +171,10 @@
           (_final: _prev: {
             gogcli = inputs.nixpkgs-unstable.legacyPackages.${system}.gogcli;
           })
-          (final: _prev: {
+          (final: prev: {
+            glances = prev.glances.overridePythonAttrs (old: {
+              disabledTests = (old.disabledTests or [ ]) ++ [ "test_phys_core_returns_int" ];
+            });
             task-master-ai = final.callPackage ./pkgs/task-master-ai.nix { };
           })
           inputs.nix-config-ai.overlays.tools

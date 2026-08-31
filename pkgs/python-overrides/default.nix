@@ -18,5 +18,6 @@ in
 {
   claude-agent-sdk = callPackage ./claude-agent-sdk.nix { };
   fredapi = callPackage ./fredapi.nix { };
+  pandas-ta = callPackage ./pandas-ta.nix { };
   vaderSentiment = callPackage ./vaderSentiment.nix { };
 }

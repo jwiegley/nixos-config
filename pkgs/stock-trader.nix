@@ -59,7 +59,6 @@ let
       pandas
       numpy
       scipy
-      pandas-ta
 
       # Options analytics — comes from the existing vulcan overlay's
       # pythonPackagesExtensions (overlays/default.nix), which adds
@@ -88,7 +87,7 @@ let
       rich
       typer
     ]
-    # Pip-only overrides (claude-agent-sdk, fredapi, vaderSentiment).
+    # Pip-only overrides (claude-agent-sdk, fredapi, pandas-ta, vaderSentiment).
     ++ builtins.attrValues pythonOverrides
   );
 

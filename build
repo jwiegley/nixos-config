@@ -60,10 +60,11 @@ SUBCOMMAND=''
 declare -a PASSTHRU=()
 
 SAW_DOUBLE_DASH=0
+REFRESH_FLAKE_INPUTS=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --) shift; SAW_DOUBLE_DASH=1; CMD=("$@"); break ;;
+    --) shift; SAW_DOUBLE_DASH=1; REFRESH_FLAKE_INPUTS=0; CMD=("$@"); break ;;
     --wait-seconds) WAIT_SECONDS="${2:?--wait-seconds needs a value}"; shift 2 ;;
     --no-stale-seize) STALE_SEIZE=0; shift ;;
     --flake) FLAKE="${2:?--flake needs a value}"; shift 2 ;;
@@ -235,6 +236,23 @@ acquire_or_die() {
   return 1
 }
 
+# ---- input refresh ------------------------------------------------------------------------
+# Flake locks are resolution caches, not a desired version pin for the shared Pi
+# configuration. Refresh the two source trees and Pi's nested input immediately before
+# every ordinary Vulcan rebuild. The build lock already serializes this mutation with the
+# following evaluation. Direct commands (`build -- …`) are intentionally exempt: callers
+# may use them to inspect or maintain another flake without modifying this one.
+refresh_flake_inputs() {
+  [[ ${REFRESH_FLAKE_INPUTS} -eq 1 ]] || return 0
+  if ! nix flake update --flake /etc/nixos nix-config nix-config-ai nix-config-ai/pi; then
+    say "input refresh failed; refusing to evaluate stale nix-config or Pi"
+    return 1
+  fi
+  local nix_config_rev pi_rev
+  nix_config_rev=$(jq -r '.nodes["nix-config"].locked.rev' /etc/nixos/flake.lock)
+  pi_rev=$(jq -r '.nodes.pi.locked.rev' /etc/nixos/flake.lock)
+  log "INPUT REFRESHED: nix-config=${nix_config_rev}; pi=${pi_rev}"
+}
 # ---- run ----------------------------------------------------------------------------------
 
 init_log
@@ -253,6 +271,7 @@ for sig in INT TERM HUP QUIT; do
 done
 
 acquire_or_die || exit 75
+refresh_flake_inputs || exit 1
 
 log "BUILD STARTED: ${CMD[*]}"
 start_epoch=$(date +%s)

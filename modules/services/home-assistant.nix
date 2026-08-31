@@ -364,12 +364,10 @@ in
     # Custom components: those from pkgs.home-assistant-custom-components (nixpkgs
     # plus overlays/default.nix) and the derivations defined in the let block above
     customComponents = with pkgs.home-assistant-custom-components; [
-      # HACS with manifest check disabled
-      # Fix for manifestCheckPhase error on aarch64 (Asahi)
-      # Issue: frontend manifest.json files are incorrectly validated as HA component manifests
-      (hacs.overrideAttrs (oldAttrs: {
-        doInstallCheck = false;
-      }))
+      # HACS ships nested frontend manifests which are not HA component manifests.
+      (hacs.overrideAttrs {
+        dontCheckManifest = true;
+      })
       intellicenter # Pentair IntelliCenter integration
       spook # Spook - powerful toolbox for Home Assistant (services, templates, repairs)
       waste_collection_schedule # Garbage/recycling collection schedule tracking

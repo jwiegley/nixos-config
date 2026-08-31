@@ -2,6 +2,8 @@
   config,
   lib,
   pkgs,
+  userPkgs,
+  utils,
   ...
 }:
 
@@ -50,104 +52,6 @@
     ../../modules/users/home-manager/vane.nix
     ../../modules/users/home-manager/speedtest-tracker.nix
 
-    # Services
-    ../../modules/services/alertmanager.nix
-    ../../modules/services/blackbox-monitoring.nix
-    ../../modules/services/certificate-automation.nix
-    ../../modules/services/certificates.nix
-    ../../modules/services/cleanup.nix
-    ../../modules/services/cloudflare-tunnels.nix
-    ../../modules/services/databases.nix
-    ../../modules/services/dirscan-share-config.nix
-    ../../modules/services/dirscan-share.nix
-    ../../modules/services/dovecot-archive.nix
-    ../../modules/services/dovecot-imapsieve-monitor.nix
-    ../../modules/services/dovecot-fts-monitor.nix
-    ../../modules/services/dovecot.nix
-    ../../modules/services/eternal-terminal.nix
-    ../../modules/services/gitea-actions-runner.nix
-    ../../modules/services/gitea.nix
-    ../../modules/services/github-gitea-mirror.nix
-    ../../modules/services/flume-data.nix
-    ../../modules/services/grafana.nix
-    ../../modules/services/home-assistant-metric-trick.nix
-    ../../modules/services/home-assistant.nix
-    ../../modules/services/home-assistant-water-attribution.nix
-    ../../modules/services/immich.nix
-    ../../modules/services/local-backup.nix
-    ../../modules/services/loki.nix
-    ../../modules/services/media.nix
-    ../../modules/services/model-config.nix
-    ../../modules/services/monitoring.nix
-    ../../modules/services/mosquitto.nix
-    ../../modules/services/network-services.nix
-    ../../modules/services/node-red.nix
-    ../../modules/services/nut.nix
-    ../../modules/services/node-red-backup.nix
-    ../../modules/services/node-red-event-logger.nix
-    ../../modules/services/pgadmin.nix
-    ../../modules/services/postfix.nix
-    ../../modules/services/postgresql-backup.nix
-    ../../modules/services/promtail.nix
-    ../../modules/services/rclone-cloud-backup.nix
-    ../../modules/services/rspamd-alerts.nix
-    ../../modules/services/rspamd.nix
-    ../../modules/services/service-reliability.nix
-    ../../modules/services/stock-trader.nix
-    ../../modules/services/technitium-dns-backup.nix
-    ../../modules/services/web.nix
-
-    # Service monitoring
-    ../../modules/monitoring/container-health-exporter.nix
-    ../../modules/monitoring/services
-
-    # Email testing script (manual use only)
-    # Note: Automated monitoring disabled to avoid over-training rspamd
-    ../../modules/services/email-tester-manual.nix
-    ../../modules/services/imapdedup.nix
-    ../../modules/services/mbsync.nix
-    ../../modules/services/fetchmail.nix
-    ../../modules/services/fetchmail-alerts.nix
-    ../../modules/services/radicale.nix
-    ../../modules/services/calendar-publisher.nix
-    ../../modules/monitoring/services/calendar-publisher-health.nix
-    ../../modules/services/vdirsyncer.nix
-    ../../modules/services/dns.nix
-    ../../modules/services/glance.nix
-    ../../modules/services/glances.nix
-    ../../modules/services/searxng.nix
-    ../../modules/services/vane.nix
-    ../../modules/services/vane-llm-shim.nix
-    ../../modules/monitoring/services/copyparty-exporter.nix
-    ../../modules/monitoring/services/hermes-fallback-counter.nix
-    ../../modules/services/nginx-default-vhost.nix
-    ../../modules/services/hera-llm-proxy.nix
-    ../../modules/services/syncthing.nix
-    ../../modules/services/pushme-positron.nix
-    ../../modules/services/session-gather.nix
-    ../../modules/services/aria2.nix
-    ../../modules/services/atd.nix
-    ../../modules/services/atd-web.nix
-    ../../modules/services/atd-nginx.nix
-    ../../modules/monitoring/services/atd-exporter.nix
-    ../../modules/monitoring/services/atd-alerts.nix
-    ../../modules/services/zimit.nix
-    ../../modules/services/hermes-nightly-report.nix
-    ../../modules/services/open-source-secretary.nix
-    ../../modules/services/hermes-microvm.nix
-    ../../modules/services/hermes-mcp.nix
-    ../../modules/services/drafts-mcp.nix
-    ../../modules/services/drafts-mcp-self-heal.nix
-    ../../modules/services/hermes-self-heal.nix
-    ../../modules/services/qdrant.nix
-    ../../modules/services/qdrant-inference-bridge.nix
-    ../../modules/services/voice-assistant.nix
-
-    # Containers
-    ../../modules/containers/default.nix
-    ../../modules/containers/matter-server-quadlet.nix
-    ../../modules/containers/openproject-quadlet.nix
-
     # Maintenance
     ../../modules/maintenance/timers.nix
 
@@ -160,8 +64,8 @@
     ../../modules/storage/hd-idle.nix
     ../../modules/storage/backups.nix
     ../../modules/storage/backup-monitoring.nix
-    ../../modules/services/samba.nix
-  ];
+  ]
+  ++ (import ./application-modules.nix { inherit userPkgs utils; });
 
   # GitHub to Gitea mirroring service
   services.github-gitea-mirror = {

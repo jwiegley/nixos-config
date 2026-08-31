@@ -25,8 +25,8 @@
 #     host.containers.internal. The latter is what caused the 2026-07-03 boot
 #     race on this host, where rootless containers froze a stale bridge address
 #     into /etc/hosts and every DB client hit pg_hba's reject catch-all. See the
-#     long note in modules/containers/quadlet.nix. wallabag and nocobase both
-#     reach PostgreSQL this way.
+#     long note in modules/containers/quadlet.nix. wallabag reaches PostgreSQL
+#     this way too.
 #
 #   * PostgreSQL's JIT used to have to be disabled for Grist -- every cell
 #     operation took seconds with it on. Grist >= 1.5.0 disables JIT itself on
@@ -85,11 +85,12 @@ in
           # Map the container's uid/gid 1000 onto the HOST grist user, so files
           # written into /persist are owned by grist(899) on disk.
           #
-          # WHY THIS IS NEEDED HERE AND NOT FOR NOCOBASE OR WALLABAG. Rootless
-          # podman maps container uid 0 to the invoking host user, so an image
-          # that runs as root lands its files on the host as that user with no
-          # extra configuration -- which is why /var/lib/nocobase is cleanly
-          # owned by nocobase(945). Grist's image drops to uid 1000, and 1000
+          # WHY THIS IS NEEDED HERE AND NOT FOR WALLABAG. Rootless podman maps
+          # container uid 0 to the invoking host user, so an image that runs as
+          # root lands its files on the host as that user with no extra
+          # configuration -- which was also true of nocobase (removed
+          # 2026-08-31), whose /var/lib/nocobase was cleanly owned by
+          # nocobase(945). Grist's image drops to uid 1000, and 1000
           # maps into the user's SUBUID range instead: /var/lib/grist ended up
           # owned by 2394760 (= grist's subuid base 2393760 + 1000).
           #

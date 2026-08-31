@@ -151,10 +151,13 @@
           # which are 143, and liveness is covered by the port probe rather than by
           # the exit status.
           #
-          # Deliberately NOT applied to nocobase, which exits 137 (128+9, SIGKILL).
-          # That is podman giving up after the stop timeout because the image's PID 1
-          # is a trap-less shell that never forwards SIGTERM, so 137 records a
-          # genuinely ungraceful shutdown and should stay visible.
+          # Deliberately NOT applied blanket-wide across containers. The
+          # counter-example was nocobase (removed 2026-08-31), which exited 137
+          # (128+9, SIGKILL) -- podman giving up after the stop timeout because
+          # that image's PID 1 was a trap-less shell that never forwarded
+          # SIGTERM. A 137 records a genuinely ungraceful shutdown and must stay
+          # visible, so whitelisting an exit code is per-service and only ever
+          # for a code that means a CLEAN stop.
           SuccessExitStatus = "143";
         };
       };

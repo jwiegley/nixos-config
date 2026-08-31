@@ -21,29 +21,14 @@ in
       secretPath = config.sops.secrets."budgetboard/database-password".path;
       dependentService = "podman-budget-board-server.service";
     })
-    # NocoBase (evaluation, restored 2026-08-15). Gated on services.nocobase.enable.
-    #
-    # `imports` is static, so this entry is always present and instead wraps its
-    # own config in mkIf. secretPath is the literal /run/secrets path rather than
-    # config.sops.secrets."nocobase-db-password".path on purpose: that attribute
-    # only exists when the secret is declared, which is itself gated, so reading
-    # it here would force evaluation and fail while NocoBase is off. The literal
-    # is the sops default path for a secret with no `path=` override, which is
-    # exactly how modules/containers/nocobase-quadlet.nix declares it.
-    (
-      { lib, ... }:
-      lib.mkIf config.services.nocobase.enable (mkPostgresUserSetup {
-        user = "nocobase";
-        database = "nocobase";
-        secretPath = "/run/secrets/nocobase-db-password";
-        dependentService = "podman-nocobase.service";
-      })
-    )
-    # Grist (2026-08-19). Gated on services.grist.enable, and structured exactly
-    # like the NocoBase entry above for the same reason: `imports` is static, so
+    # Grist (2026-08-19). Gated on services.grist.enable. `imports` is static, so
     # the entry is always present and wraps its own config in mkIf, and
     # secretPath is the LITERAL /run/secrets path rather than the
-    # config.sops.secrets attribute, which only exists while the gate is on.
+    # config.sops.secrets attribute, which only exists while the gate is on --
+    # reading the attribute here would force evaluation and fail while the gate
+    # is off. (This shape was originally shared with a NocoBase entry, removed
+    # 2026-08-31; the reasoning is reproduced here so it no longer depends on a
+    # sibling that is gone.)
     #
     # Grist keeps only its HOME database here -- orgs, workspaces, users, ACLs.
     # The spreadsheets themselves are SQLite files under /var/lib/grist, so a
@@ -223,7 +208,6 @@ in
         "open_webui"
         "wallabag"
       ]
-      ++ lib.optional config.services.nocobase.enable "nocobase"
       # Grist's HOME database only -- orgs, workspaces, users, ACLs. The
       # spreadsheet documents are SQLite files under /var/lib/grist and are not
       # in PostgreSQL, so this database being intact does not mean the documents
@@ -243,10 +227,6 @@ in
         { name = "johnw"; }
         { name = "wallabag"; }
       ]
-      ++ lib.optional config.services.nocobase.enable {
-        name = "nocobase";
-        ensureDBOwnership = true;
-      }
       # Creates the ROLE. postgresql-grist-setup only sets its password, and
       # fails outright with `role "grist" does not exist` if this is missing --
       # which is exactly what happened on the first attempt to enable Grist,

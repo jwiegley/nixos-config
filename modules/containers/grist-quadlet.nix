@@ -17,8 +17,8 @@
 # There is no nixpkgs package and no NixOS module for Grist -- verified 2026-08-19
 # against nixpkgs unstable, which returns nothing for either `grist` package or
 # option. Upstream ships an official image and that is the supported path, so this
-# follows the rootless-quadlet pattern already used here by NocoBase, Wallabag,
-# OpenProject and others rather than packaging grist-core by hand.
+# follows the rootless-quadlet pattern already used here by Wallabag, OpenProject
+# and others rather than packaging grist-core by hand.
 #
 # ---------------------------------------------------------------------------
 # WHY THIS IS OFF BY DEFAULT
@@ -26,7 +26,8 @@
 # sops-nix fails ACTIVATION for a declared secret whose key is absent from
 # secrets.yaml -- not just the one service, the whole rebuild. So the secrets
 # below are declared inside this `mkIf`, and the switch stays off until the keys
-# exist. This is the same contract NocoBase uses and the same reason.
+# exist. NocoBase established this contract for the same reason; it was removed
+# 2026-08-31, so this module is now the reference implementation of it.
 #
 # To turn it on:
 #
@@ -73,7 +74,9 @@
 #     container_health_status / container_running / container_restart_count,
 #     which ContainerDown, ContainerUnhealthy, ContainerRestarting,
 #     ContainerCPUSaturated and ContainerImageOutdated already act on. Verified
-#     empirically: nocobase appears in that metric today purely by existing.
+#     empirically 2026-08-19 against nocobase, which appeared in that metric
+#     purely by existing. NocoBase was removed 2026-08-31; the mechanism is
+#     unchanged, since it keys on the container rather than on any one service.
 #   * the blackbox_https_local target added in
 #     modules/services/blackbox-monitoring.nix, covered by the generic probe
 #     rules.
@@ -95,7 +98,8 @@ in
     # Container user.
     #
     # Declared HERE rather than in modules/users/container-users-dedicated.nix
-    # for the same reason NocoBase is: this must be gated, and that file assigns
+    # for the reason NocoBase was before its 2026-08-31 removal: this must be
+    # gated, and that file assigns
     # one literal `users = { ... }` attrset, where a nested lib.mkIf is not a
     # definition boundary -- the module system would hand the submodule a raw
     # { _type = "if"; } and fail. Definitions merge with that file either way.

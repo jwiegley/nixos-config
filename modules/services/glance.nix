@@ -275,12 +275,7 @@ with lib;
                         }
                       ]
                       # Gated so the dashboard does not advertise a tile that
-                      # 502s while services.nocobase.enable is false.
-                      ++ optional config.services.nocobase.enable {
-                        title = "NocoBase";
-                        url = "https://nocobase.vulcan.lan";
-                      }
-                      # Same gate, same reason: services.grist.enable stays off
+                      # 502s while services.grist.enable is false.
                       # until its two SOPS keys exist, and an ungated tile would
                       # 502 until then.
                       ++ optional config.services.grist.enable {

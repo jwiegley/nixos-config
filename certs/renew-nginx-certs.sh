@@ -61,12 +61,6 @@ DOMAINS=(
     "trader.vulcan.lan"
     "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"
-    # nocobase: restored 2026-08-15. Listed even while services.nocobase.enable
-    # is false so the certificate is provisioned ahead of the vhost -- nginx
-    # refuses to start if it references a certificate that does not exist. This
-    # script creates as well as renews (renew-certificate.sh only checks current
-    # expiry "if it exists"), so an unissued domain is handled, not an error.
-    "nocobase.vulcan.lan"
     "wallabag.vulcan.lan"
     "zimit.vulcan.lan"
     "kiwix.vulcan.lan"

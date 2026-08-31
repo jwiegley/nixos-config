@@ -846,8 +846,7 @@ in
                 ]
                 # Gated: probing a vhost that does not exist would return
                 # probe_success=0 forever and fire the generic probe alerts.
-                ++ lib.optional config.services.nocobase.enable "https://nocobase.vulcan.lan"
-                # Grist, gated for the same reason. Grist exposes NO Prometheus
+                # Grist exposes NO Prometheus
                 # metrics -- upstream gristlabs/grist-core#671 is still an open
                 # feature request -- so this probe plus container_health_status
                 # is the whole of its monitoring, and there is deliberately no

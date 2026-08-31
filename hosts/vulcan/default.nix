@@ -43,7 +43,6 @@
     ../../modules/users/home-manager/mailarchiver.nix
     ../../modules/users/home-manager/open-webui.nix
     ../../modules/users/home-manager/openproject.nix
-    ../../modules/users/home-manager/nocobase.nix
     ../../modules/users/home-manager/grist.nix
     ../../modules/users/home-manager/wallabag.nix
     ../../modules/users/home-manager/opnsense-exporter.nix
@@ -314,17 +313,15 @@
   # (gated GPM sensors, integration totals, weekly/monthly cycles).
   services.flume-data.enable = true;
 
-  # NocoBase low-code platform, restored 2026-08-15 for evaluation (it was
-  # removed 2026-03-14 in f40e2ac01). Everything is wired -- container, user,
-  # database, nginx vhost, blackbox probe, certificate renewal, dashboard link.
+  # NocoBase was removed 2026-08-31 (evaluation concluded: the features needed
+  # here are behind the paid tier). This is its SECOND removal -- it was also
+  # removed 2026-03-14 in f40e2ac01 and restored 2026-08-15. If a third
+  # evaluation ever happens, both prior removals are in the git history rather
+  # than carried as dead config here.
   #
-  # OFF until its two SOPS keys exist, because sops-nix fails activation for a
-  # declared secret whose key is absent, which would break EVERY rebuild on this
-  # host rather than just this service. Add nocobase-db-password and
-  # nocobase-secrets (exact contents documented at the top of
-  # modules/containers/nocobase-quadlet.nix), then flip this to true and issue
-  # the certificate as described there.
-  services.nocobase.enable = true;
+  # Its SOPS keys (nocobase-db-password, nocobase-secrets) are deliberately NOT
+  # touched by that removal -- secret deletion is the operator's, and sops-nix
+  # ignores keys nothing declares.
 
   # Grist. Both preconditions met on 2026-08-19: grist-db-password and
   # grist-secrets exist in secrets.yaml, and grist.vulcan.lan.crt/.key are

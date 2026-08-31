@@ -2222,11 +2222,11 @@
         "spectrum": "spectrum"
       },
       "locked": {
-        "lastModified": 1787834973,
-        "narHash": "sha256-bY2y5jQ17MQxt1N/jc8luDB98Pyf+FRY2igGWeXnS28=",
+        "lastModified": 1788055725,
+        "narHash": "sha256-yBTPSlzoS29StLUpEyQpivSkhwRVki/wzB335/62CO8=",
         "owner": "astro",
         "repo": "microvm.nix",
-        "rev": "ea57aebfb6016d9f091af7576a97dcf1aaa71fa1",
+        "rev": "174e28de151e069a95d03c86dd174c3b71bdfba7",
         "type": "github"
       },
       "original": {
@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1788174102,
-        "narHash": "sha256-UzxZLI0tf7Any/IS9gLSYJryh3Wj3y6NHlVtiKOHYkE=",
+        "lastModified": 1788196347,
+        "narHash": "sha256-vH+NWxn6q+OEeiq1T0zAR8LFYCAnZKWIwZFfrQzTT0k=",
         "ref": "refs/heads/main",
-        "rev": "1ad38038539be6722ca4016624ac69356fe2e7dc",
-        "revCount": 3543,
+        "rev": "9daba0ea166a893edd525b1fc9557b833e41dc63",
+        "revCount": 3547,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2273,11 +2273,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1788174102,
-        "narHash": "sha256-UzxZLI0tf7Any/IS9gLSYJryh3Wj3y6NHlVtiKOHYkE=",
+        "lastModified": 1788196347,
+        "narHash": "sha256-vH+NWxn6q+OEeiq1T0zAR8LFYCAnZKWIwZFfrQzTT0k=",
         "ref": "refs/heads/main",
-        "rev": "1ad38038539be6722ca4016624ac69356fe2e7dc",
-        "revCount": 3543,
+        "rev": "9daba0ea166a893edd525b1fc9557b833e41dc63",
+        "revCount": 3547,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3345,11 +3345,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1787981999,
-        "narHash": "sha256-jZ+614zclkZeXCejMGM/aaBrkr4U7mHZ3tSkwQ6enxs=",
+        "lastModified": 1788197435,
+        "narHash": "sha256-zIGwEDbtnW0Yr3BVtEmhPJKCSgO1T1STcrfzrlnfEx0=",
         "ref": "refs/heads/main",
-        "rev": "ce7289ede739f7da012cef0e28da392ddf2c137d",
-        "revCount": 167,
+        "rev": "1e0f9ea2ad2e4b85bd30e6a4ae12a2b3f0ff541e",
+        "revCount": 168,
         "type": "git",
         "url": "file:///etc/nixos/secrets"
       },

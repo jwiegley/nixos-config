@@ -117,7 +117,6 @@ in
       ripgrep
       socat
       sops
-      task-master-ai
       tcpdump
       traceroute
       tree
@@ -125,5 +124,8 @@ in
     ])
     ++ [
       userPkgs.dovecot-fts-flatcurve
+      # The current Hera-line task-master-ai package omits its npm lockfile; retain
+      # the stable build until upstream restores a reproducible dependency closure.
+      pkgs.task-master-ai
     ];
 }

@@ -6694,7 +6694,7 @@ and replaces working WireGuard connectivity — John should be present.
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-16 Sun 04:46]
-:MODIFIED: [2026-08-31 Mon 16:44]
+:MODIFIED: [2026-09-01 Tue 12:45]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -6906,6 +6906,13 @@ day before trusting a zero.
     "author": "johnw",
     "text": "FIRMWARE UPDATE DID NOT FIX IT, and matter-server has now ABANDONED the four\nsensors. 2026-08-31 16:45, ~80 min after the update to 4.5.70_0011 and ~33 min\nafter the operator restarted the hub.\n\nSTATE:\n  entities            38 of 38 still unavailable (unchanged from baseline)\n  nodes 6/17/18/25    ZERO CASE failures in 15 min -- but also ZERO ATTEMPTS.\n                      matter-server logs no reference to any of the four across\n                      a 20-minute window. It has stopped retrying them.\n  node 26 (WiFi plug) the ONLY node still being worked, and churning hard:\n                      33 CASE timeouts, 22 retransmission failures, 11\n                      re-subscription failures, 5 liveness timeouts in 20 min\n  mesh                all five still advertise _matter._tcp\n  hub (node 24)       healthy, 2 BR advertisements, zero failures\n\nDO NOT READ THE CLEARED ALERT AS PROGRESS. SystemdJournalHighErrorRate went\ninactive this cycle purely because total error volume fell -- and it fell because\nmatter-server gave up on four of six nodes. Fewer errors from doing less work is\nnot improvement. This is the same 'absence of failures is not success' trap that\nthe zero-CASE-failure reading nearly produced.\n\nCONSEQUENCE: the four sensors will NOT self-recover. Nothing is retrying them.\n\nFIRMWARE HYPOTHESIS: weakened. Moving to 4.5.70_0011 and rebooting the hub\nchanged nothing about HA's path. Either the Aug 20 firmware theory was wrong, or\nwhatever it changed is not undone by moving forward a version.\n\nCONFOUND TO CLEAR FIRST: the office presence sensor (FP300, node 25) is now\nmissing from the AQARA APP too -- the only device in that state. That is a\ndevice-level fault independent of Home Assistant and should be resolved on the\nAqara side before drawing further conclusions from the remaining three.\n\nTALLY OF FAILED THEORIES so far, so none is retried: border-router radio (hub\npower-cycle, no effect); spatial/office clustering (withdrawn, all four behave\nalike); matter-server session state (13-minute transient, then worse); IPv6\nrouting to the mesh prefix (route verified present and matching); hub firmware\n(this one).",
     "created_at": "2026-08-31T23:44:41Z"
+  },
+  {
+    "id": 66,
+    "issue_id": "nixos-rsn",
+    "author": "johnw",
+    "text": "JOURNAL IMPACT QUANTIFIED 2026-09-01. This failure is now the largest single\nerror source on the host and has begun tripping a second alert.\n\nmatter-server.service emitted 11,792 err-priority journal lines in 24h -- the top\nsource by a wide margin (next: speedtest-tracker 4371, openproject 1827, both of\nwhich are the known benign container-stderr-is-err-priority pattern).\n\nExactly HALF of those, 5896, are BLANK lines: the service writes an empty\nerr-priority entry after every real message, so each log line costs two journal\nentries. The 5896 real messages break down as:\n    2526  CHIP_ERROR [chip.native.SC]  CASESession timed out waiting for a response\n    1888  CHIP_ERROR [chip.native.EM]  Msg Retransmission\n     664  CHIP_ERROR [chip.native.DMG] Failed to establish CASE for re-subscription\n     371  CHIP_ERROR [chip.native.DMG] Subscription Liveness timeout\n      78  WARNING device_controller       Setup for node failed\nAll are the established signature of this issue, not a new fault.\n\nCONSEQUENCE: SystemdJournalHighErrorRate started firing on 2026-09-01. Its trigger\nwas a spike from an unrelated failed switch, but the sustained baseline that keeps\nit near threshold is this. Two follow-on effects worth noting: the alert is\nsupposed to mean 'something is newly wrong', and a permanent ~17 errors/minute\nfloor erodes that; and 24h of journal is being consumed at roughly double the\nnecessary rate.\n\nDeliberately NOT filing the blank-line doubling as its own issue -- it is a\nsymptom multiplier, not an independent defect. Fixing the Matter failure removes\nboth halves. If this issue stays open long-term, suppressing the blank lines\nwould be worth revisiting purely to restore the journal alert's signal.",
+    "created_at": "2026-09-01T19:45:28Z"
   }
 ]
 #+end_src

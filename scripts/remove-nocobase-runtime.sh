@@ -41,7 +41,14 @@ DATA_DIR="/var/lib/nocobase"
 CONTAINER_HOME="/var/lib/containers/nocobase"
 SECRETS_RUNDIR="/run/secrets-nocobase"
 CERT_DIR="/var/lib/nginx-certs"
-DUMP_DIR="/tank/Backups/PostgreSQL/removed-services"
+# OUTSIDE /tank/Backups/PostgreSQL on purpose. That path is the destination of an
+# `rsync -a --delete` mirror published nightly by postgresql-backup.service. A
+# root-owned directory there has no counterpart in the staging tree, so --delete
+# tries to unlink it as the postgres user, fails with EACCES, and takes the whole
+# backup down rc23 -- observed 2026-09-01 02:11, the first nightly run after this
+# script was applied. A final dump must not live inside a mirror that is
+# continuously pruned to match a source it will never appear in.
+DUMP_DIR="/tank/Backups/removed-services"
 
 red()  { printf '\033[31m%s\033[0m\n' "$*"; }
 grn()  { printf '\033[32m%s\033[0m\n' "$*"; }

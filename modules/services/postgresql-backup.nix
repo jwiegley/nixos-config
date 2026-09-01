@@ -160,8 +160,23 @@ let
     # re-copy it, un-sharing all blocks; --checksum compares content hashes and
     # re-copies ONLY genuinely changed tables. --exclude=/.staging keeps rsync
     # from recursing into / deleting its own source tree under the live root.
+    #
+    # --exclude=/removed-services protects operator archives parked in the mirror
+    # root. These have no counterpart in staging, so --delete tries to unlink them;
+    # when the directory is root-owned (as scripts/remove-nocobase-runtime.sh used
+    # to create it) the unit runs as postgres, cannot write that directory, and the
+    # WHOLE BACKUP fails rc23 -- which is what happened on 2026-09-01 02:11, the
+    # first nightly run after the NocoBase removal. Note the tempting fix is wrong:
+    # chown-ing the directory to postgres would let rsync succeed by DELETING the
+    # final dump the removal deliberately preserved.
+    #
+    # The removal script now writes outside this mirror root, so this exclude is
+    # belt-and-braces for the existing archive and any future stray. Anything
+    # parked here is unmanaged: it is retained by ZFS snapshots like the rest of
+    # the dataset, but never mirrored, checksummed or pruned.
     log "Publishing staging mirror to ${backupDir}"
-    ${pkgs.rsync}/bin/rsync -a --delete --checksum --exclude=/.staging "$staging/" "${backupDir}/"
+    ${pkgs.rsync}/bin/rsync -a --delete --checksum \
+      --exclude=/.staging --exclude=/removed-services "$staging/" "${backupDir}/"
 
     # Drop staging now that the mirror is published.
     ${pkgs.coreutils}/bin/rm -rf "$staging"

@@ -7339,6 +7339,61 @@ Standing note for future health cycles: openproject ranking high in a
 'journalctl -p 3' sweep is EXPECTED and benign. Do not re-investigate it.
 #+end_example
 
+* TODO [#B] Running PostgreSQL is unstable 17.11/glibc-2.42; config specifies stable 17.10/glibc-2.40
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-t5w
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-01 Tue 05:31]
+:MODIFIED: [2026-09-01 Tue 05:31]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+Left over from the nixos-7bp userPkgs routing regression. The routing is fixed
+and the CONFIG is correct, but the running server was never restarted onto it.
+
+  running process : /nix/store/71vrayh2...-postgresql-17.11/bin/postgres
+                    maps glibc-2.42-84, started 2026-08-31 20:58:10
+  live unit says  : postgresql-and-plugins-17.10  (stable, glibc 2.40)
+  restartIfChanged: true, stopIfChanged: true, NeedDaemonReload: no
+
+None of the three switches on 2026-09-01 restarted postgresql -- it never
+appeared in any switch's stop/start list despite the unit's ExecStart changing
+from 17.11 to 17.10. Mechanism not yet established.
+
+CONSEQUENCE: 23 of 23 non-template databases report a collation version
+mismatch, recorded 2.40 vs actual 2.42, and pg_dump logs a WARNING + HINT for
+each on every nightly backup:
+  SRP budgetboard db flume-data gitea grist hass immich mailarchiver metabase
+  monica nextcloud nodered_events open_webui openproject org paperless postgres
+  ragflow rspamd speedtest_tracker vanna wallabag
+
+Indexes were built under glibc 2.40 collation; the server has been serving and
+writing under 2.42 since 2026-08-31 20:58 (~8h). PostgreSQL derives the glibc
+collation version from the library version string, not from actual locale data,
+so a mismatch flags a POSSIBLE ordering change rather than proving one -- no
+known locale-data overhaul landed between 2.40 and 2.42 (the historically
+disruptive one was 2.28). Risk is therefore low but not zero for text indexes.
+
+RESOLUTION -- restart postgresql so it runs the configured stable 17.10/glibc
+2.40 binary. That makes recorded and actual agree again at 2.40 with no REINDEX,
+because it returns the server to the collation the indexes were built under.
+
+DO NOT run ALTER DATABASE ... REFRESH COLLATION VERSION. That rubber-stamps 2.42
+as authoritative while leaving indexes built under 2.40 marked valid, converting
+a visible warning into a silent inconsistency.
+
+The restart is also a PostgreSQL minor DOWNGRADE 17.11 -> 17.10. Safe on-disk
+(minor releases never change catalog or page format), but it is a downgrade.
+
+NEEDS OPERATOR DECISION: a postgresql restart takes down every DB-backed service
+-- hass, gitea, immich, grist, wallabag, nextcloud, openproject, mailarchiver,
+metabase, paperless, open-webui and more. Not taken unilaterally. Until then the
+system is functioning normally; this is a consistency issue, not an outage.
+
 * DONE [#D] Node-RED event logging ran away Aug 4-10: 12.08M rows / 3.96GB, below every alert threshold
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

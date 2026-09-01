@@ -1580,6 +1580,19 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
+* TODO [#C] Away-lockdown should not auto-arm when there is positive evidence someone is home
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-802
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-01 Tue 14:48]
+:MODIFIED: [2026-09-01 Tue 14:48]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
 * DONE [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -4182,14 +4195,14 @@ VERIFIED:
 ]
 #+end_src
 
-* TODO [#B] zone.home is set to placeholder Sacramento city-centre coords 9.3km from the house, so no GPS tracker can ever report home
+* TODO [#D] zone.home is set to placeholder Sacramento city-centre coords 9.3km from the house, so no GPS tracker can ever report home
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2a
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 12:00]
-:MODIFIED: [2026-09-01 Tue 12:00]
+:MODIFIED: [2026-09-01 Tue 14:48]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
@@ -4247,6 +4260,20 @@ sensors sit 'unavailable' and the GPS tracker updates only ~5x/day instead of
 continuously. Fixing the zone alone leaves presence updating far too slowly to be
 the primary source; both changes are needed for real redundancy.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 67,
+    "issue_id": "nixos-h2a",
+    "author": "johnw",
+    "text": "OPERATOR DECISION 2026-09-01: not pursuing this. John wants WiFi-network\npresence only, not GPS geofencing, and the data supports that choice.\n\nI had implied the WiFi tracker was chronically unreliable. That was wrong, and\nchecking the full recorder window disproves it. Every long not_home gap on\ndevice_tracker.opnsense_john_iphone except one is daytime or evening -- genuine\nabsences (08-30 11:00 2.9h, 08-27 18:25 2.3h, 08-26 13:11 2.3h, 08-23 18:20 2.4h,\n08-21 19:22 1.5h, 08-17 20:16 2.0h, plus two multi-day trips). The 08-31 20:56 ->\n09-01 07:09 overnight drop is the ONLY overnight gap in 29 days. WiFi presence has\nbeen working as the operator said.\n\nZone.home therefore stays misplaced by design-decision, not oversight. Impact of\nleaving it wrong is small: 9.3 km shifts sunrise/sunset by well under a minute, and\nno automation here is zone-based. The one real consequence is that HA's person\nentity falls back to GPS when the stationary tracker reports not_home, and that\nfallback can never say 'home' -- so there is no passive safety net under the WiFi\ntracker. That is now an accepted trade-off rather than a bug.\n\nDowngraded P1 -> P3. The implementation is preserved in git stash@{0} ('wip:\nsops-sourced HA coordinates') if this is ever revisited; note it also needs the\nSOPS values re-encrypted as strings (they are currently sops_type=float, which\nsops-nix rejects -- that is what caused the ~6 minute HA outage at 12:29-12:35).\n\nSuperseded by the occupancy-evidence guard, which fixes the false arming WITHIN\nthe WiFi-only model.",
+    "created_at": "2026-09-01T21:48:11Z"
+  }
+]
+#+end_src
 
 * DEFER [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
 :PROPERTIES:

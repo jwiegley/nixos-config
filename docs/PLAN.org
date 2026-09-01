@@ -2616,7 +2616,7 @@ Verified post-switch: guard at position 3 ahead of hermes-isolate and all port a
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-21 Fri 10:08]
-:MODIFIED: [2026-09-01 Tue 00:53]
+:MODIFIED: [2026-09-01 Tue 12:00]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -2663,6 +2663,15 @@ they surface together rather than one at a time.
 
 #+begin_src json
 [
+  {
+    "issue_id": "nixos-cnc",
+    "depends_on_id": "nixos-h2a",
+    "type": "blocks",
+    "created_at": "2026-09-01T19:00:42.181959498Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  },
   {
     "issue_id": "nixos-cnc",
     "depends_on_id": "nixos-mn4",
@@ -4172,6 +4181,72 @@ VERIFIED:
   }
 ]
 #+end_src
+
+* TODO [#B] zone.home is set to placeholder Sacramento city-centre coords 9.3km from the house, so no GPS tracker can ever report home
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-h2a
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-01 Tue 12:00]
+:MODIFIED: [2026-09-01 Tue 12:00]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+THE ROOT CAUSE BEHIND THREE FALSE ALARM ARMINGS (2026-06-26, 2026-07-01, 2026-09-01).
+
+modules/services/home-assistant.nix generates /var/lib/hass/secrets.yaml from an
+activation-script heredoc carrying HARDCODED placeholder coordinates, under its own
+comments: 'Location coordinates for Sacramento, CA area' and 'Update with your actual
+coordinates if needed'. They were never updated. configuration.yaml resolves
+zone.home via !secret latitude/longitude, so zone.home sits on the generic city
+centre point -- measured distance from zone.home centre to that literal pair is
+exactly 0 m -- while the house is ~9.3 km away. zone.home radius is 200 m.
+
+CONSEQUENCE: no GPS-sourced device_tracker can ever be inside the home zone.
+Measured, current, distance from zone.home (accuracy in brackets):
+    johns_iphone_17_pro  9316 m  [10 m]
+    johns_mac_studio     9316 m  [20 m]
+    ipad_pro             9318 m  [ 7 m]
+    clio_2 (car)         9301 m  [35 m]
+    nasims_iphone        8060 m  [3712 m]
+Across the full 29-day recorder window NO gps-source tracker has EVER reported
+'home'; every entity that reports 'home' is router-sourced. johns_mac_studio is a
+stationary desktop that cannot leave the house and is not_home in 27 of 27 rows.
+clio_2 is a Renault reporting its own GNSS, independent of Apple's WiFi location
+database, and agrees with the Apple devices to within ~15 m -- which rules out the
+competing explanation that a stale WiFi-geolocation entry is displacing the devices.
+The devices are right; the zone is wrong.
+
+WHY THIS MATTERS BEYOND A COSMETIC BADGE: it silently removes all redundancy from
+presence. person.john_wiegley can only ever be held 'home' by the single flap-prone
+OPNsense router tracker, so one iPhone WiFi power-save drop flips whole-house
+presence. That is the exact mechanism of all three false armings. It also means the
+fix recommended on 2026-07-01 -- 'add the Companion GPS device_tracker to
+person.john_wiegley' -- could never have worked, because the GPS tracker cannot
+report home while the zone is misplaced. That recommendation should be considered
+superseded by this issue.
+
+FIX REQUIRES OPERATOR ACTION (a new SOPS secret; not created unilaterally):
+  1. operator adds home-assistant/latitude and home-assistant/longitude (and
+     optionally elevation) to secrets.yaml with the ACTUAL house coordinates.
+     They belong in SOPS rather than the heredoc because this .nix file is tracked
+     in git and a home address should not be committed in plaintext.
+  2. change the activation script to render those from sops placeholders instead of
+     the hardcoded pair.
+  3. after rebuild, verify every gps tracker flips to 'home' with the same distance
+     query, and that binary_sensor.anyone_home survives a deliberate router-tracker
+     drop.
+
+SEPARATE, COMPOUNDING, PHONE-SIDE ISSUE: sensor.john_wiegleys_iphone_location_permission
+reads 'Authorized when in use', not 'Always'. ~17 location/motion-dependent Companion
+sensors sit 'unavailable' and the GPS tracker updates only ~5x/day instead of
+continuously. Fixing the zone alone leaves presence updating far too slowly to be
+the primary source; both changes are needed for real redundancy.
+#+end_example
 
 * DEFER [#D] Outdoor plug WiFi flapping: works, but late turn-off + failed Node-RED service calls
 :PROPERTIES:

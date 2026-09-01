@@ -7346,7 +7346,7 @@ Standing note for future health cycles: openproject ranking high in a
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 05:31]
-:MODIFIED: [2026-09-01 Tue 05:31]
+:MODIFIED: [2026-09-01 Tue 08:45]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
@@ -7393,6 +7393,20 @@ NEEDS OPERATOR DECISION: a postgresql restart takes down every DB-backed service
 -- hass, gitea, immich, grist, wallabag, nextcloud, openproject, mailarchiver,
 metabase, paperless, open-webui and more. Not taken unilaterally. Until then the
 system is functioning normally; this is a consistency issue, not an outage.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 65,
+    "issue_id": "nixos-t5w",
+    "author": "johnw",
+    "text": "MECHANISM ESTABLISHED 2026-09-01. It was the FAILED switch, not the rollback.\n\nJournal, 2026-08-31:\n  20:57:49  Starting [systemd-run] .../switch-to-configuration switch\n  20:58:00  Stopped PostgreSQL Server            (was 17.10, from gen 2610)\n  20:58:10  Starting PostgreSQL Server...\n  20:58:11  LOG: starting PostgreSQL 17.11       (gen 2611, unstable)\n  20:58:44  nixos-rebuild-switch-to-configuration.service:\n              Main process exited, code=exited, status=4/NOPERMISSION\n\nSo the failed switch restarted postgres onto gen 2611's 17.11 and THEN aborted\n(exit 4 -- the dovecot/gitea-runner/hermes-mcp unit failures). Generation table:\n  2609 10:27  17.10     2612 00:45  17.10\n  2610 10:31  17.10     2613 00:56  17.10\n  2611 20:27  17.11     2614 04:48  17.10\n\nBecause the switch failed, /run/current-system never advanced to 2611. The\nrollback to 2610 therefore diffed 2610-against-2610, saw no change to\npostgresql.service, and did not restart it. Every generation since agrees on\n17.10, so no later switch has ever seen a change either. Confirmed by SQL:\nSHOW server_version = 17.11 while the live unit's ExecStart resolves to\npostgresql-and-plugins-17.10.\n\nGENERAL HAZARD, worth remembering beyond this incident: switch-to-configuration\ndecides restarts by diffing the OUTGOING generation against the incoming one,\nnot by comparing declared state against RUNNING state. A switch that dies partway\ncan therefore leave a service running a binary from a generation that is then\nabandoned, and NixOS will never self-correct -- the divergence is invisible to\nevery subsequent switch.\n\nBLAST RADIUS MEASURED, and it is exactly one service. Compared every running\nprocess's /proc/PID/exe against the 5857-path closure of /run/current-system:\npostgresql-17.11 is the only system binary outside it. The other three hits\n(emacs-nox-30.2, claude-code-2.1.219, claude-code-2.1.226) are user-profile\nbinaries and legitimately not in the system closure.\n\nResolution is unchanged: restart postgresql. Still needs the operator decision\nrecorded above.",
+    "created_at": "2026-09-01T15:45:41Z"
+  }
+]
+#+end_src
 
 * DONE [#D] Node-RED event logging ran away Aug 4-10: 12.08M rows / 3.96GB, below every alert threshold
 :PROPERTIES:

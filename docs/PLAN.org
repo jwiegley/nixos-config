@@ -3907,6 +3907,66 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
+* TODO [#B] Build driver force-refreshes pi every rebuild, so any jwiegley/pi commit breaks Vulcan until nix-config-ai catches up
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-g3l
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-01 Tue 16:49]
+:MODIFIED: [2026-09-01 Tue 16:49]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Blocked the operator's routine 'nix flake update && nixos-rebuild switch' on
+2026-09-01 with an opaque error:
+  error: string '"94c965e85..."' is not equal to string '"74bf9ae3c..."'
+
+TWO POLICIES IN DIRECT CONFLICT.
+  1. /etc/nixos/build:247 force-refreshes pi to HEAD before EVERY ordinary
+     rebuild: nix flake update --flake /etc/nixos nix-config nix-config-ai pi.
+     flake.nix:409 asserts that exact command string is present, so it is a
+     deliberate, enforced policy rather than an accident.
+  2. nix-config-ai pins pi to one exact revision (config/ai/flake.nix:34) and
+     packages/pi-source-build.nix:31 enforces it:
+        assert source.source.args.rev == piSource.rev;
+     That assert is CORRECT and should stay -- npmDepsHash for
+     pi-coding-agent-source-build is computed against that specific tree, so
+     building with any other pi tree would use a dependency set the hash was
+     never computed for.
+
+CONSEQUENCE: the moment any commit lands in jwiegley/pi, every Vulcan rebuild
+fails until nix-config-ai bumps its pin. This is not a rare edge -- pi is an
+actively developed repo. On 2026-09-01 pi moved to 74bf9ae while nix-config-ai
+b675e30 (committed the same day) bumped only agent-browser, leaving its pi pin at
+94c965e.
+
+Holding pi back in flake.lock does NOT work: the driver re-advances it on the next
+invocation. Verified -- a hand-held lock was silently overwritten by the very next
+./build run.
+
+CURRENT WORKAROUND, which works but is not a fix:
+    sudo /etc/nixos/build -- nixos-rebuild switch --flake /etc/nixos#vulcan
+The '--' form holds the build lock but skips the refresh (build:67 sets
+REFRESH_FLAKE_INPUTS=0), which is exactly the documented exemption. It requires
+pi to be held back in flake.lock by hand first.
+
+OPTIONS, for the operator to choose between:
+  a. Keep the coupling and always bump nix-config-ai's pi pin + npmDepsHash in the
+     same change that lands a pi commit. Correct, but makes two repos lockstep.
+  b. Drop pi from the driver's refresh list, letting nix-config-ai's own pin govern
+     and removing 'follows'. Rebuilds stop breaking; pi advances deliberately.
+  c. Add a --no-refresh flag to the driver so the escape hatch does not require the
+     '--' form and a hand-edited lock.
+Recommend (b) or (c); (a) is the status quo that just cost an afternoon.
+
+Discovered while diagnosing the operator's failed update; not fixed, because the
+choice is a policy decision about how pi should advance.
+#+end_example
+
 * DONE [#D] systemd-tmpfiles exits 73 every run: unsafe path transition on the Immich media directory
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

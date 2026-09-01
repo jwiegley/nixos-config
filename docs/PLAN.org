@@ -2,6 +2,41 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
+* TODO [#C] hermes-mcp fails to start: Starlette removed the on_startup argument
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-04y
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-31 Mon 21:11]
+:MODIFIED: [2026-08-31 Mon 21:11]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Surfaced by the same 2026-08-31 flake update (generation 2611).
+
+SYMPTOM: hermes-mcp.service exits 1 on every start, 41 restarts before the
+rollback.
+  File ".../hermes_mcp/server.py", line NNN, in build_app
+      return Starlette(
+  TypeError: Starlette.__init__() got an unexpected keyword argument 'on_startup'
+
+CAUSE: the flake update bumped Starlette to a version that removed the deprecated
+on_startup/on_shutdown constructor arguments. hermes-mcp 0.2.0 still passes
+on_startup.
+
+FIX: migrate build_app() to Starlette's lifespan API -- an async context manager
+passed as Starlette(lifespan=...) -- instead of on_startup. This is our own
+package (pkgs/), so the change is ours to make rather than an upstream wait.
+
+BLAST RADIUS: the Hermes MCP SSE bridge. HermesMcpBridgeDown fires while it is
+out. Hermes itself and its microVM are unaffected.
+
+WORKAROUND IN PLACE: rolled back to generation 2610 with the older Starlette.
+
 * DONE [#D] PostgreSQL cache-hit dips below 85% in bursts; the rule aggregates all databases so one busy DB masks which
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -858,6 +893,74 @@ against 1 file / 2751 bytes / 1 pull error before.
 :ORIGINAL_SIZE: 0
 :END:
 
+* DOING [#C] gitea-runner fails 203/EXEC: act_runner binary renamed to gitea-runner in 3.1.0
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-5v4
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-31 Mon 21:11]
+:MODIFIED: [2026-08-31 Mon 23:36]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Surfaced by 'nix flake update && nixos-rebuild switch' on 2026-08-31 20:27 (generation 2611), which failed with exit 4.
+
+SYMPTOM: gitea-runner-org\x2dbuilder.service exits 203/EXEC immediately.
+  ExecStart=/nix/store/1hswpq...-gitea-actions-runner-3.1.0/bin/act_runner daemon --config ...
+  Main process exited, code=exited, status=203/EXEC
+
+CAUSE: 203/EXEC means the ExecStart binary cannot be executed. Verified directly --
+that path does NOT exist. Listing the package's bin/ shows exactly one binary:
+
+  bin: gitea-runner
+
+So gitea-actions-runner 3.1.0 RENAMED the binary from act_runner to gitea-runner,
+and whatever generates the unit still calls the old name.
+
+TO DETERMINE: whether the stale name comes from the nixpkgs
+services.gitea-actions-runner module or from our own configuration, and whether
+this is already fixed upstream. If upstream, the fix may just be a newer nixpkgs;
+if ours, point ExecStart at bin/gitea-runner.
+
+BLAST RADIUS: CI runner only. No user-facing service depends on it.
+
+WORKAROUND IN PLACE: system rolled back to generation 2610, where the older
+package still ships act_runner.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-5v4",
+    "depends_on_id": "nixos-7bp",
+    "type": "blocks",
+    "created_at": "2026-09-01T06:36:16.151747431Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 62,
+    "issue_id": "nixos-5v4",
+    "author": "johnw",
+    "text": "ROOT CAUSE CORRECTED 2026-08-31. Same cause as nixos-crb.\n\nstable nixos-25.11 gitea-actions-runner is 0.2.13 and DOES ship bin/act_runner\n(verified: /nix/store/87q5skzq...-gitea-actions-runner-0.2.13/bin/act_runner),\nwhich is exactly what the stable module hardcodes. Package and module are\nconsistent within stable; there is no nixpkgs bug.\n\nThe 3.1.0 came from userPkgs (nixpkgs-unstable) via commit 89754f599, which\nroutes gitea-actions-runner.nix through the unstable set. Mixing unstable's\n3.1.0 binary (renamed gitea-runner) with stable's module gave 203/EXEC.\n\nThe act_runner compatibility symlink I added to overlays/default.nix has been\nREVERTED -- it papered over the version mixing and its comment recorded a wrong\nnixpkgs pin (174eb786, a transitive node, not root's). Correct fix is to route\nthis module back to the stable package set.",
+    "created_at": "2026-09-01T06:35:55Z"
+  }
+]
+#+end_src
+
 * DONE [#D] Verify Grist documents are captured by local-backup after the first post-deploy run
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1282,6 +1385,65 @@ privileges is John's call and he has been asked.
   }
 ]
 #+end_src
+
+* TODO [#A] Blanket userPkgs routing moves 85 core service modules off the stable nixpkgs pin
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-7bp
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-08-31 Mon 23:36]
+:MODIFIED: [2026-08-31 Mon 23:36]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+Commit 89754f599 ('Route Vulcan application modules through user nixpkgs',
+2026-08-31, refs nixos-fbg) wraps EVERY module in
+hosts/vulcan/application-modules.nix with 'pkgs = userPkgs'. userPkgs is built
+from inputs.nixpkgs-user, which follows nix-config-ai/nixpkgs =
+github:NixOS/nixpkgs/nixpkgs-unstable (locked e8be7818).
+
+That silently moved 89 service modules -- including dovecot, gitea, gitea-
+actions-runner, postfix, samba, databases, step-ca -- off the stable
+nixos-25.11 pin. Operator intent (stated 2026-08-31) is that only home-manager
+environments and services that genuinely need bleeding edge use unstable.
+
+MEASURED BLAST RADIUS. Of ~54 real packages these modules reference, 45 differ
+between stable+overlays and userPkgs, including:
+  glibc     2.40      -> 2.42          systemd    258.7 -> 261.2
+  zfs       2.3.7     -> 2.4.4         postgresql 17.10 -> 18.6 (major)
+  python3   3.13.12   -> 3.14.7        dovecot    2.3.21.1 -> 2.4.5
+  dovecot_pigeonhole 0.5.21.1 -> 2.4.5 gitea-actions-runner 0.2.13 -> 3.1.0
+  step-ca   0.29.0    -> 0.30.2        step-cli   0.28.6 -> 0.30.6
+  samba     4.22.10   -> 4.23.10       eternal-terminal 6.2.11 -> 7.0.0
+  openssh   10.3p1    -> 10.5p1        podman     5.7.0 -> 5.8.6
+Packages showing the same version still DIFFER by store path because they are
+rebuilt against unstable's stdenv/glibc.
+
+Two failures already caused (generation 2611, 2026-08-31): dovecot ExecStartPre
+ABI mismatch (nixos-crb, 30 min mail outage, 44 messages queued) and
+gitea-runner 203/EXEC (nixos-5v4). The NixOS modules themselves still come from
+stable, so every one of these is a module/package version mix.
+
+THE ROUTING BUYS ALMOST NOTHING. nixpkgs.overlays on the nixosConfiguration
+(flake.nix:321-329) already applies nix-config-ai.overlays.default and .tools,
+so the ordinary module-system pkgs ALREADY provides all 100 overlay attributes
+(84 default + 16 tools). Scanning all 89 modules for references to those
+attributes finds only 4 that use any:
+  rclone-cloud-backup.nix (git-ai), pushme-positron.nix (git-ai),
+  hera-llm-proxy.nix (llama-swap, omlx), drafts-mcp.nix (drafts-mcp-server)
+and even those 4 would still resolve on stable+overlays. The only thing
+userPkgs adds is the unstable BASE.
+
+PROPOSED FIX: invert the default in application-modules.nix -- modules use the
+module-system pkgs (stable + overlays); an explicit small allowlist opts into
+userPkgs. Verify before moving back: stock-trader.nix (see 80d82bbbb 'Restore
+stock-trader pandas-ta on user nixpkgs'), home-assistant.nix, vane.nix,
+qdrant.nix, hermes-mcp.nix -- these may depend on unstable python.
+
+Blocks nixos-crb and nixos-5v4; both are symptoms.
 
 * DONE [#E] Verified: all 24 PostgreSQL dumps are structurally restorable, with data files and roles
 :PROPERTIES:
@@ -2503,6 +2665,91 @@ they surface together rather than one at a time.
     "author": "johnw",
     "text": "Deferred to match the other physical/RF items (ly2, h2u, rsn) at John's standing direction not to work these until they become obviously bad. Safe to defer: the lock demonstrably works (locked, zero unavailable transitions in 7d) and IoTDeviceChronicallyUnreachable keeps firing on it, so a genuine deterioration stays visible rather than silent.",
     "created_at": "2026-08-21T17:08:21Z"
+  }
+]
+#+end_src
+
+* TODO [#B] Dovecot 2.4 migration: NixOS module rewritten, 2.3-style config no longer valid
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-crb
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-08-31 Mon 21:11]
+:MODIFIED: [2026-08-31 Mon 23:36]
+:CREATED_BY: johnw
+:DEFERRED: [2026-10-01 Thu 09:00]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+THIS ONE TOOK MAIL DOWN. Surfaced by the same 2026-08-31 flake update
+(generation 2611). Mail was unavailable 20:28-20:58 and postfix queued 44
+messages / 855 KB before the rollback restored it.
+
+SYMPTOM: dovecot.service fails in ExecStartPre, five restarts, then 'Start
+request repeated too quickly'.
+  doveconf: Fatal: Error in configuration file /etc/dovecot/dovecot.conf line 1:
+  The first setting must be dovecot_config_version
+
+CAUSE: nixpkgs has rewritten the NixOS Dovecot module for Dovecot 2.4. Confirmed
+by evaluation: services.dovecot2.package now errors with 'can no longer be used
+since it's been removed'. The new module supports dovecot_config_version
+(nixos/modules/services/mail/dovecot.nix). The generated /etc/dovecot/dovecot.conf
+is still 2.3-style (starts 'base_dir = /run/dovecot2', no version line), and a
+2.4 doveconf rejects it.
+
+NOTE THE CLOSURE CARRIES BOTH: dovecot-2.3.21.1 (what the unit's ExecStart used)
+AND dovecot-2.4.5 + dovecot-pigeonhole-2.4.5 (pulled in by the new module).
+pkgs.dovecot=2.3.21.1 and pkgs.dovecot_pigeonhole=0.5.21.1 remain a consistent
+2.3 pair, so the mismatch is between the module and the package set.
+
+WHY THIS IS NOT A QUICK FIX. 2.4 is a config-language change, not a version bump,
+and modules/services/dovecot.nix carries a lot that has to survive it:
+,  * sieve scripts (default.sieve, process-good.sieve) compiled with sievec
+,  * imapsieve + rspamd retraining integration
+,  * FTS indexing
+,  * LMTP delivery from postfix (mail delivery depends on this working)
+,  * per-user mail location under /var/mail
+
+REQUIREMENTS BEFORE ATTEMPTING:
+  1. Back up the mail spool first. This is live mail.
+  2. Have a rollback plan and expect several iterations.
+  3. Do it ALONE, not bundled with other upgrades -- bundling is what produced
+     the three-way failure on 2026-08-31.
+
+BLOCKS: 'nix flake update' cannot be deployed until this is resolved, since any
+update that carries the new module breaks mail on switch.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-crb",
+    "depends_on_id": "nixos-7bp",
+    "type": "blocks",
+    "created_at": "2026-09-01T06:36:15.879906337Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 61,
+    "issue_id": "nixos-crb",
+    "author": "johnw",
+    "text": "DIAGNOSIS CORRECTED 2026-08-31 — this is NOT a Dovecot 2.4 migration.\n\nThe stable nixpkgs module was never rewritten for 2.4. Checked directly at\n$nixpkgs/nixos/modules/services/mail/dovecot.nix (nixos-25.11 @ b6018f87):\nzero occurrences of dovecot_config_version, still emits base_dir. It is the\n2.3-style generator. (The 'package option removed' error is real but unrelated:\nmkRemovedOptionModule at line 275.)\n\nREAL CAUSE: commit 89754f599 'Route Vulcan application modules through user\nnixpkgs' routes all 89 modules in hosts/vulcan/application-modules.nix through\nuserPkgs, which is nixpkgs-user -> nix-config-ai/nixpkgs -> nixpkgs-UNSTABLE.\nSo modules/services/dovecot.nix got unstable's dovecot_pigeonhole 2.4.5 instead\nof stable's 0.5.21.1, while the nixpkgs module kept generating 2.3 config and\nrunning stable dovecot 2.3.21.1. dovecot.nix:611 hardcodes\n${pkgs.dovecot_pigeonhole}/bin/sievec inside systemd.services.dovecot.preStart\n-- which is exactly the ExecStartPre that failed.\n\nPROVEN synthetically (no live mail config touched): 2.4.5 sievec against a\n2.3-style config exits 81, 'Module is for different ABI version\n2.3.ABIv21(2.3.21.1) (we have 2.4.ABIv5)'. Stable 0.5.21.1 sievec exits 0 on\nidentical inputs.\n\nFIX is one line -- stop routing dovecot.nix through userPkgs -- not a migration.\nThe sieve/imapsieve/rspamd work described below is not required.",
+    "created_at": "2026-09-01T06:35:54Z"
   }
 ]
 #+end_src

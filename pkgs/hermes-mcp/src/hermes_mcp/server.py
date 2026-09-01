@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from mcp.server.lowlevel import Server
@@ -200,20 +202,29 @@ def build_app(cfg: Config) -> Starlette:
         async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
             await server.run(streams[0], streams[1], server.create_initialization_options())
 
-    async def startup() -> None:
+    # Lifespan rather than on_startup=/on_shutdown=. Starlette removed those two
+    # arguments in 1.0; nixos-25.11 ships 0.47.2, where they still work but are
+    # deprecated. This service spent 2026-08-31 failing to start because a package
+    # routing bug (nixos-7bp) briefly built it against starlette 1.3.1, where
+    # passing on_startup is a TypeError. The routing is fixed, but the deprecated
+    # call was a live tripwire for any future starlette bump, so it is gone.
+    # asynccontextmanager lifespan has been supported since 0.26, so this form
+    # works on both the current pin and 1.x.
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
         await store.init()
         logger.info("hermes-mcp ready: db=%s upstream=%s", cfg.db_path, cfg.hermes_api_url)
-
-    async def shutdown() -> None:
-        await client.aclose()
+        try:
+            yield
+        finally:
+            await client.aclose()
 
     return Starlette(
         routes=[
             Route("/sse", endpoint=handle_sse),
             Mount("/messages/", app=sse.handle_post_message),
         ],
-        on_startup=[startup],
-        on_shutdown=[shutdown],
+        lifespan=lifespan,
     )
 
 

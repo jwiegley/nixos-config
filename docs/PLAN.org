@@ -2,15 +2,17 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
-* TODO [#D] hermes-mcp fails to start: Starlette removed the on_startup argument
+* DONE [#D] hermes-mcp fails to start: Starlette removed the on_startup argument
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-04y
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-31 Mon 21:11]
-:MODIFIED: [2026-09-01 Tue 00:48]
+:MODIFIED: [2026-09-01 Tue 00:57]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 00:57]
+:CLOSE_REASON: Migrated build_app() from on_startup=/on_shutdown= to an asynccontextmanager lifespan (works on both the pinned starlette 0.47.2 and 1.x, so the deprecation tripwire is gone). Also added the missing pytestCheckHook: nativeCheckInputs listed pytest/pytest-asyncio/respx and pytestFlags was set, but with no hook nixpkgs ran no check phase and the three test modules had never executed. Tests now run in-build: 20 passed. Deployed and verified -- hermes-mcp active, NRestarts=0, /sse returns HTTP 200.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2614,7 +2616,7 @@ Verified post-switch: guard at position 3 ahead of hermes-isolate and all port a
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-21 Fri 10:08]
-:MODIFIED: [2026-08-21 Fri 10:08]
+:MODIFIED: [2026-09-01 Tue 00:53]
 :CREATED_BY: johnw
 :DEFERRED: [2026-11-18 Wed 09:00]
 :SOURCE_REPO: nixos
@@ -2683,6 +2685,13 @@ they surface together rather than one at a time.
     "author": "johnw",
     "text": "Deferred to match the other physical/RF items (ly2, h2u, rsn) at John's standing direction not to work these until they become obviously bad. Safe to defer: the lock demonstrably works (locked, zero unavailable transitions in 7d) and IoTDeviceChronicallyUnreachable keeps firing on it, so a genuine deterioration stays visible rather than silent.",
     "created_at": "2026-08-21T17:08:21Z"
+  },
+  {
+    "id": 64,
+    "issue_id": "nixos-cnc",
+    "author": "johnw",
+    "text": "Trend update 2026-09-01: the degradation is monotonic, not flat.\n  14d avg 90.00%  ->  7d 89.09%  ->  3d 88.35%  ->  24h 87.17%\nSteady decline rather than intermittent flapping, which fits a weakening battery\nor worsening RF path rather than interference. Still below the 90% IoTDevice-\nChronicallyUnreachable threshold and still firing. HA function unaffected, so the\nphysical-or-reclassify decision stands.",
+    "created_at": "2026-09-01T07:53:59Z"
   }
 ]
 #+end_src

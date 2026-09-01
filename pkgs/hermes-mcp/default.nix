@@ -24,8 +24,13 @@ python312Packages.buildPythonApplication {
     anyio
   ];
 
+  # pytestCheckHook is what actually invokes pytest. Without it nixpkgs runs no
+  # check phase at all: pytest/pytest-asyncio/respx are merely present in the
+  # build environment and `pytestFlags` is inert, so the three test modules under
+  # tests/ silently never ran. Verified on 2026-09-01 by listing the executed
+  # phases -- there was no checkPhase between installPhase and fixupPhase.
   nativeCheckInputs = with python312Packages; [
-    pytest
+    pytestCheckHook
     pytest-asyncio
     respx
   ];

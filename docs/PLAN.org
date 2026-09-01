@@ -6085,6 +6085,19 @@ FIX: extraGroups = [ "hermes" ] on the hermes-heal user in modules/services/herm
 
 VERIFIED END TO END: after the switch, id hermes-heal shows 900(hermes-heal),932(hermes) and 'sudo -u hermes-heal test -r' on the heartbeat succeeds. A switch alone was NOT enough -- the running process keeps the groups it started with (/proc/PID/status showed 'Groups: 900'), so the daemon needed a restart; after it, 'Groups: 900 932'. On its very first tick it resolved the incident: hermes_self_heal_stuck_incidents went 1 -> 0 in both the textfile and Prometheus, the incident moved to status=resolved, and incidents.json was written for the first time since 10:41.
 
+* TODO [#C] No detection for services running binaries outside the current system closure
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-p4b
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-01 Tue 08:45]
+:MODIFIED: [2026-09-01 Tue 08:45]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
 * DONE [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

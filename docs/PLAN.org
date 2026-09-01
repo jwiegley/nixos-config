@@ -2,14 +2,14 @@
 #+SEQ_TODO: TODO DOING DRAFT WAIT DEFER NOTE | DONE CANCELED
 #+ISSUE_PREFIX: nixos
 
-* TODO [#C] hermes-mcp fails to start: Starlette removed the on_startup argument
+* TODO [#D] hermes-mcp fails to start: Starlette removed the on_startup argument
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-04y
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-31 Mon 21:11]
-:MODIFIED: [2026-08-31 Mon 21:11]
+:MODIFIED: [2026-09-01 Tue 00:48]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -36,6 +36,20 @@ BLAST RADIUS: the Hermes MCP SSE bridge. HermesMcpBridgeDown fires while it is
 out. Hermes itself and its microVM are unaffected.
 
 WORKAROUND IN PLACE: rolled back to generation 2610 with the older Starlette.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 63,
+    "issue_id": "nixos-04y",
+    "author": "johnw",
+    "text": "NOT A CODE BUG -- same root cause as nixos-7bp. Resolved 2026-09-01 without touching hermes-mcp.\n\nhermes-mcp.nix was one of the 89 modules routed through userPkgs, so it built\nagainst unstable's starlette 1.3.1, which removed the on_startup argument.\nStable nixos-25.11 has starlette 0.47.2, where on_startup is still supported.\nWith the routing reverted the service starts clean: NRestarts=0, SubState=running,\nGET /sse returns HTTP 200, listening on 9081.\n\nREMAINING (why this stays open, downgraded): on_startup is deprecated upstream and\nWILL break whenever hermes-mcp moves to starlette >= 1.0. Migrating build_app() to\nthe lifespan API is still worth doing as forward-compat work -- it is simply no\nlonger urgent or load-bearing.",
+    "created_at": "2026-09-01T07:48:19Z"
+  }
+]
+#+end_src
 
 * DONE [#D] PostgreSQL cache-hit dips below 85% in bursts; the rule aggregates all databases so one busy DB masks which
 :PROPERTIES:
@@ -893,15 +907,17 @@ against 1 file / 2751 bytes / 1 pull error before.
 :ORIGINAL_SIZE: 0
 :END:
 
-* DOING [#C] gitea-runner fails 203/EXEC: act_runner binary renamed to gitea-runner in 3.1.0
+* DONE [#C] gitea-runner fails 203/EXEC: act_runner binary renamed to gitea-runner in 3.1.0
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-5v4
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-31 Mon 21:11]
-:MODIFIED: [2026-08-31 Mon 23:36]
+:MODIFIED: [2026-09-01 Tue 00:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 00:48]
+:CLOSE_REASON: Caused by the userPkgs routing (nixos-7bp), not an upstream nixpkgs bug. Stable 0.2.13 ships bin/act_runner exactly as the stable module expects. ExecStart now resolves to an act_runner that exists; unit active. The overlay symlink shim was reverted as the wrong fix.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -1386,15 +1402,17 @@ privileges is John's call and he has been asked.
 ]
 #+end_src
 
-* TODO [#A] Blanket userPkgs routing moves 85 core service modules off the stable nixpkgs pin
+* DONE [#A] Blanket userPkgs routing moves 85 core service modules off the stable nixpkgs pin
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-7bp
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-08-31 Mon 23:36]
-:MODIFIED: [2026-08-31 Mon 23:36]
+:MODIFIED: [2026-09-01 Tue 00:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 00:48]
+:CLOSE_REASON: Inverted the default in hosts/vulcan/application-modules.nix: modules now get the stable module-system pkgs unless named in needsUserPkgs, which is empty. Full ./build build succeeds with an empty allowlist; dovecot-2.4.5 is absent from the closure and core services are back on stable (postgresql 17.10, step-ca 0.29.0, zfs 2.3.7, samba 4.22.10, systemd 258.7). Switched 2026-09-01, zero failed units. Commit 01e1dcfa1.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -2669,15 +2687,17 @@ they surface together rather than one at a time.
 ]
 #+end_src
 
-* TODO [#B] Dovecot 2.4 migration: NixOS module rewritten, 2.3-style config no longer valid
+* DONE [#B] Dovecot 2.4 migration: NixOS module rewritten, 2.3-style config no longer valid
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-crb
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-08-31 Mon 21:11]
-:MODIFIED: [2026-08-31 Mon 23:36]
+:MODIFIED: [2026-09-01 Tue 00:48]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 00:48]
+:CLOSE_REASON: Not a Dovecot 2.4 migration -- the stable module was never rewritten. Caused by the userPkgs routing (nixos-7bp) handing dovecot.nix unstable pigeonhole 2.4.5. Fixed by reverting the routing; dovecot units now reference only dovecot-2.3.21.1 + pigeonhole-0.5.21.1, service active with NRestarts=0 and IMAP answering on 143. No migration work required.
 :DEFERRED: [2026-10-01 Thu 09:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos

@@ -2919,15 +2919,17 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
-* TODO [#C] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
+* DONE [#C] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-d3b
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-01 Tue 23:34]
-:MODIFIED: [2026-09-01 Tue 23:34]
+:MODIFIED: [2026-09-02 Wed 00:08]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-02 Wed 00:08]
+:CLOSE_REASON: Fixed and deployed 2026-09-02. Built vchord 1.1.1 and pgvector 0.8.6 from the unstable sources against the STABLE postgresql_17 via .override { postgresql = ...; }, so no cross-version ABI assumption is involved -- option (a) as recommended, and the ABI fallback was not needed. Key correction found during implementation: services.postgresql.package.withPackages and services.postgresql.extensions ACCUMULATE into one buildEnv, so the first attempt collided on lib/vector.so with pgvector 0.8.2 and 0.8.6 both present; pgvector is now supplied once, cluster-wide, from databases.nix (it backs sherlock too), and immich.nix contributes only vectorchord. Verified: pg_available_extensions shows vector 0.8.6/0.8.6 and vchord 1.1.1/1.1.1, immich-server active NRestarts=0 on port 2283, /api/server/ping returns pong, https://immich.vulcan.lan returns 200, zero failed units.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:

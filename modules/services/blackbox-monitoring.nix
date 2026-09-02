@@ -435,7 +435,7 @@ in
                 targets = [
                   "vulcan.lan" # 192.168.1.2
                   "hera.lan" # 192.168.1.3
-                  # "clio.lan"                          # 192.168.1.5
+                  # "clio.lan"                          # 192.168.1.39
 
                   "asus-bq16-pro-ap.lan" # 192.168.3.2
                   "asus-bq16-pro-node.lan" # 192.168.3.3

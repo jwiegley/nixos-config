@@ -244,8 +244,8 @@ acquire_or_die() {
 # may use them to inspect or maintain another flake without modifying this one.
 refresh_flake_inputs() {
   [[ ${REFRESH_FLAKE_INPUTS} -eq 1 ]] || return 0
-  if ! nix flake update --flake /etc/nixos nix-config nix-config-ai pi; then
-    say "input refresh failed; refusing to evaluate stale nix-config or Pi"
+  if ! nix flake update --flake /etc/nixos nix-config nix-config-ai pi obr; then
+    say "input refresh failed; refusing to evaluate stale nix-config or Pi or obr"
     return 1
   fi
   local nix_config_rev pi_rev

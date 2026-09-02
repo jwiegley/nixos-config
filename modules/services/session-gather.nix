@@ -48,12 +48,12 @@ in
     Host hera
       HostName hera.lan
 
-    # Clio moves between the LAN (192.168.1.5) and the VPN (10.6.0.2). Automated
+    # Clio moves between the LAN (192.168.1.39) and the VPN (10.6.0.2). Automated
     # gathering is wanted ONLY on the LAN address, so the address is pinned here
     # rather than resolved: off-LAN, the connection simply fails instead of
     # pulling a large tree over the tunnel. Do not replace this with a name.
     Host clio
-      HostName 192.168.1.5
+      HostName 192.168.1.39
 
     Host vps
       HostName vps-b30dd5a8.vps.ovh.ca

@@ -2919,6 +2919,19 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
+* TODO [#C] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-d3b
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-01 Tue 23:34]
+:MODIFIED: [2026-09-01 Tue 23:34]
+:CREATED_BY: johnw
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
 * DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

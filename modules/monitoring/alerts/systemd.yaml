@@ -264,3 +264,75 @@ groups:
         annotations:
           summary: "Certificate authority service is down"
           description: "step-ca service is not active on {{ $labels.instance }}, TLS certificates cannot be issued or renewed"
+
+      # Units stranded on an abandoned generation.
+      #
+      # switch-to-configuration restarts units by diffing the OUTGOING generation
+      # against the incoming one; it never compares declared state against RUNNING
+      # state. A switch that dies partway can leave a unit executing a binary from a
+      # generation that is then abandoned, and because every later generation agrees
+      # with its predecessor, no later switch ever sees a change. The drift is
+      # permanent until someone restarts the unit by hand.
+      #
+      # THRESHOLD is > 0 because the healthy value is exactly zero -- this is a latch,
+      # not a rate, so there is no fraction to tune. Measured over the only window that
+      # exists (the collector shipped 2026-09-01): the sole occurrence to date is
+      # postgresql.service on 2026-08-31, stranded on postgresql-17.11/glibc-2.42 by a
+      # switch that exited 4, which persisted ~24h across roughly eight subsequent
+      # switches. Steady state on this host is 0 stale units.
+      #
+      # DWELL is 30m against an hourly collector, i.e. two consecutive bad samples. A
+      # switch legitimately puts a unit briefly out of closure while it is being
+      # restarted, and a shorter dwell would alert on every rebuild.
+      #
+      # This is NOT a subset of SystemdServiceFailed and does not re-add a per-service
+      # failed-state clone: the unit here is active and healthy by every existing
+      # measure -- scraping, probing, serving traffic. It is running the wrong code,
+      # which no liveness check can see.
+      - alert: ServiceRunningStaleBinary
+        expr: closure_drift_stale_units > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "{{ $value | printf \"%.0f\" }} service(s) running a binary outside the current system closure"
+          description: |
+            One or more running services execute a store path that is not in the
+            closure of /run/current-system, so they are running code from a generation
+            this system no longer declares. They will keep doing so indefinitely: a
+            rebuild cannot fix it, because switch-to-configuration compares generations
+            to each other and never notices that a process disagrees with both.
+
+            The service is NOT unhealthy in any way the other rules can detect. It is
+            active, passing probes and serving traffic; only its binary is wrong. The
+            2026-08-31 case ran a mismatched PostgreSQL for ~24h while reporting a
+            collation-version mismatch on all 23 databases.
+
+            Identify the units with closure_drift_stale_unit, which carries `unit` and
+            `package` labels. The fix is a targeted `systemctl restart <unit>`; there is
+            no need to rebuild. Time it deliberately -- the blast radius depends on the
+            service, and restarting PostgreSQL took down 13 dependent units.
+
+      # Collector work-floor. closure_drift_exporter_success only proves the unit
+      # exited; these prove it actually inspected something. A run that enumerated no
+      # services, or resolved an empty closure, would report zero stale units and look
+      # perfectly healthy while measuring nothing at all -- the exact false-negative
+      # this collector was written to eliminate, reintroduced one level up.
+      - alert: ClosureDriftExporterVacuous
+        expr: closure_drift_exporter_success == 0 or closure_drift_units_checked == 0 or closure_drift_closure_paths == 0
+        for: 90m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Closure-drift collector is not measuring anything"
+          description: |
+            The closure-drift collector either failed outright, inspected zero running
+            services, or resolved an empty system closure. In all three cases
+            closure_drift_stale_units reads 0, which is indistinguishable from a healthy
+            host, so ServiceRunningStaleBinary is silently unable to fire.
+
+            Check: systemctl status closure-drift-exporter, then run it by hand. The
+            usual causes are nix-store failing to resolve /run/current-system and the
+            unit losing the privileges it needs to readlink /proc/<pid>/exe.

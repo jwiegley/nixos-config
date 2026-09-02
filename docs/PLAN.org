@@ -1580,15 +1580,16 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#B] Away-lockdown should not auto-arm when there is positive evidence someone is home
+* DONE [#B] Away-lockdown should not auto-arm when there is positive evidence someone is home
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-802
 :LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-09-01 Tue 14:48]
-:MODIFIED: [2026-09-02 Wed 13:54]
+:MODIFIED: [2026-09-02 Wed 15:34]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-02 Wed 15:34]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -1638,6 +1639,14 @@ anyone-home re-check), 2026-07-01 (WiFi power-save flap, dwell raised 5 -> 15 mi
 presence alone'.
 
 Needs operator approval before touching the alarm flow.
+
+** Close Reason
+
+Closed 2026-09-02 at the operator's direction: John does not want these changes made. Not implemented, and not deferred -- declined.
+
+Recording the accepted trade-off so a future session does not re-propose it as a discovery: the Away tab continues to arm on presence alone. binary_sensor.anyone_home remains the single input to both the 15-minute dwell and the live 'anyone home?' re-check, so a persistently-wrong presence signal (as opposed to a brief flap, which the existing guards do absorb) can still drive arm + lock + HVAC eco + water heater away with no second opinion. The manual-disarm evidence already present in the recorder stays unused.
+
+This was the third occurrence of the class (2026-06-26, 2026-07-01, 2026-09-01). If it recurs, this issue is the prior analysis -- reopen rather than re-derive it.
 
 * DONE [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
 :PROPERTIES:

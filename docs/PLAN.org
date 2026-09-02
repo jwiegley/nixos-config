@@ -7523,15 +7523,17 @@ Standing note for future health cycles: openproject ranking high in a
 'journalctl -p 3' sweep is EXPECTED and benign. Do not re-investigate it.
 #+end_example
 
-* TODO [#B] Running PostgreSQL is unstable 17.11/glibc-2.42; config specifies stable 17.10/glibc-2.40
+* DONE [#B] Running PostgreSQL is unstable 17.11/glibc-2.42; config specifies stable 17.10/glibc-2.40
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-t5w
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 05:31]
-:MODIFIED: [2026-09-01 Tue 08:45]
+:MODIFIED: [2026-09-01 Tue 20:47]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 20:47]
+:CLOSE_REASON: Restarted postgresql 2026-09-01 20:46:46 with operator approval. Converged onto the configured stable build: SHOW server_version now 17.10 (was 17.11), running binary postgresql-17.10 linked against glibc-2.40 (was glibc-2.42). Collation mismatches went 23 -> 0 with NO reindex, exactly as predicted -- returning the server to the collation its indexes were built under is what resolves it, which is why REFRESH COLLATION VERSION was the wrong move. All 13 dependent units recovered (immich-server took ~90s); the one transient failure was a podman healthcheck one-shot (Result=success, the <64-hex>-<hex> pattern this repo's own alert rules already exclude), cleared with reset-failed. 72 client connections re-established. Zero failed units. The out-of-closure scan now returns empty: every running service executes current-generation code.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:

@@ -48,13 +48,45 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # DELIBERATELY NOT `inputs.pi.follows = "pi"`. Removed 2026-09-01 because that
+    # single line made every system update fail.
+    #
+    # nix-config-ai pins Pi to one exact revision (config/ai/flake.nix) and enforces it
+    # in packages/pi-source-build.nix:
+    #     assert source.source.args.rev == piSource.rev;
+    # That assert is CORRECT and must not be worked around: npmDepsHash for
+    # pi-coding-agent-source-build is a fixed-output hash computed against that specific
+    # Pi tree, so feeding in any other tree would build against a dependency set the hash
+    # was never computed for.
+    #
+    # Meanwhile the build driver force-refreshes `pi` to HEAD before EVERY ordinary
+    # rebuild (build: `nix flake update --flake /etc/nixos nix-config nix-config-ai pi`,
+    # itself asserted in the input-policy check below). With the `follows` in place those
+    # two policies were in direct conflict: the driver kept handing nix-config-ai a Pi
+    # revision its hash catalog had never seen, so ANY commit to jwiegley/pi broke every
+    # rebuild with an opaque message --
+    #     error: string '"94c965e8..."' is not equal to string '"74bf9ae3..."'
+    # -- until nix-config-ai bumped its pin. Pi moved three times on 2026-09-01 alone
+    # (94c965e -> 74bf9ae -> 37864ad), so this was not a rare edge case; it made routine
+    # `nix flake update && nixos-rebuild switch` impossible. Holding pi back in flake.lock
+    # did not help either: the driver re-advanced it on the very next invocation.
+    #
+    # Dropping the `follows` lets nix-config-ai use its own pinned, hash-matched Pi. The
+    # pin and the hash then live together in the one repo that can correctly change them
+    # as a pair, which is where that decision belongs.
+    #
+    # VERIFIED to change nothing about the built system: with the follows removed, the
+    # evaluated system.build.toplevel drvPath is
+    # /nix/store/j32iwr2lrykyjs64rp06xc34d1qmsrql-... which is bit-identical to the
+    # deriver of the then-running /run/current-system. It also evaluates cleanly with
+    # `pi` overridden to 74bf9ae, the revision that previously broke it.
     nix-config-ai = {
       url = "git+ssh://gitea/johnw/nix-config?dir=config/ai";
-      inputs.pi.follows = "pi";
     };
 
-    # The portable configuration consumes this source. The build driver refreshes it before
-    # each normal Vulcan rebuild rather than retaining the portable flake's pinned Pi lock.
+    # Retained only so the build driver's refresh list stays valid; nothing consumes this
+    # input any more (the `follows` above was its sole consumer). It is therefore now inert
+    # -- its revision cannot affect the built system.
     pi = {
       url = "github:jwiegley/pi";
       flake = false;

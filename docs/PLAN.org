@@ -6249,15 +6249,17 @@ FIX: extraGroups = [ "hermes" ] on the hermes-heal user in modules/services/herm
 
 VERIFIED END TO END: after the switch, id hermes-heal shows 900(hermes-heal),932(hermes) and 'sudo -u hermes-heal test -r' on the heartbeat succeeds. A switch alone was NOT enough -- the running process keeps the groups it started with (/proc/PID/status showed 'Groups: 900'), so the daemon needed a restart; after it, 'Groups: 900 932'. On its very first tick it resolved the incident: hermes_self_heal_stuck_incidents went 1 -> 0 in both the textfile and Prometheus, the incident moved to status=resolved, and incidents.json was written for the first time since 10:41.
 
-* TODO [#C] No detection for services running binaries outside the current system closure
+* DONE [#C] No detection for services running binaries outside the current system closure
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-p4b
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-01 Tue 08:45]
-:MODIFIED: [2026-09-01 Tue 08:45]
+:MODIFIED: [2026-09-01 Tue 23:29]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 23:29]
+:CLOSE_REASON: Implemented and deployed 2026-09-01 in b3d087bc4. New textfile collector scripts/closure-drift-exporter.py + modules/monitoring/services/closure-drift-exporter.nix takes the closure of /run/current-system (nix-store -q --requisites, 0.19s for ~5855 paths) and reports any running system service whose /proc/<MainPID>/exe store path is absent from it. Hourly timer. Alerts ServiceRunningStaleBinary (warning, for:30m) and ClosureDriftExporterVacuous (work-floor guard) added to systemd.yaml; closure_drift.prom registered in meta-monitoring.yaml's Hourly staleness tier and in the catch-all exclusion, since those regexes partition. Verified with a POSITIVE CONTROL rather than a green reading: pointed at generation 2346 it correctly flags syncthing.service/syncthing-2.1.3, so the comparison provably detects drift. Metrics scrape into Prometheus; both rules load health=ok. Would have caught nixos-t5w within one scrape interval instead of ~24h.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:

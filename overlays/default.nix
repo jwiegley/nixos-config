@@ -314,6 +314,50 @@ in
   # sacramento-cluster-ics — Google Sheet → RFC 5545 .ics files
   sac-cluster-ics = inputs.sacramento-cluster-ics.packages.${system}.default;
 
+  # PostgreSQL extensions taken from the unstable pin but BUILT AGAINST
+  # THE STABLE postgresql_17 that actually runs here.
+  #
+  # WHY THESE EXIST. Immich runs `ALTER EXTENSION ... UPDATE` on startup, so it
+  # migrates its own catalog to the newest versions the running server offers. While
+  # nixos-7bp had postgres on the unstable 17.11 build (2026-08-31 20:58 -> 2026-09-01
+  # 20:46) it upgraded the immich database to vchord 1.1.1 and vector 0.8.6. Restoring
+  # the stable binaries left the CATALOG ahead of the .so files, and immich refuses to
+  # start:
+  #     The database currently has VectorChord 1.1.1 activated, but the Postgres
+  #     instance only has 0.5.3 available.
+  # Postgres itself starts fine -- an extension only fails when something loads it --
+  # which is why the restart looked clean and immich broke minutes later.
+  #
+  # That is the residue of the routing regression that could NOT be undone by fixing
+  # the routing: swapping which binaries run is reversible, letting an application
+  # migrate a database is not.
+  #
+  # WHY `.override { postgresql = ...; }` RATHER THAN THE WHOLE UNSTABLE PACKAGE.
+  # Taking unstable's prebuilt extension would link it against unstable's 17.11. Same
+  # PG major, so it would very likely load -- but "very likely" is not a property to
+  # rely on for a photo library. Overriding rebuilds the newer sources against the
+  # exact postgresql this host runs, so there is no ABI question left to be wrong about.
+  #
+  # THESE ARE NOT WIRED IN BY THE OVERLAY. postgresql.withPackages closes over the
+  # package's own fixpoint, so replacing `postgresql_17.pkgs` here would not reach it.
+  # pgvector_0_8_6 is installed cluster-wide by modules/services/databases.nix (it backs
+  # more than Immich -- sherlock's entry_embeddings uses it too); vectorchord_1_1_1 is
+  # added by modules/services/immich.nix. They must be supplied from exactly ONE place
+  # each: services.postgresql.package.withPackages and services.postgresql.extensions
+  # ACCUMULATE into one buildEnv, so listing a package in both yields
+  # "two given paths contain a conflicting subpath" on lib/vector.so.
+  #
+  # RETIRE THESE when nixos-25.11 ships vchord >= 1.1.1 and pgvector >= 0.8.6, or when
+  # the host moves to a nixpkgs that does. They are a catch-up shim, not a preference
+  # for newer extensions.
+  vectorchord_1_1_1 =
+    inputs.nixpkgs-user.legacyPackages.${system}.postgresql_17.pkgs.vectorchord.override
+      { postgresql = final.postgresql_17; };
+
+  pgvector_0_8_6 = inputs.nixpkgs-user.legacyPackages.${system}.postgresql_17.pkgs.pgvector.override {
+    postgresql = final.postgresql_17;
+  };
+
   # mcp-server-sequential-thinking: nix-config overrideAttrs's a base nixpkgs
   # package that this channel lacks, so take it from nixpkgs-unstable (which
   # has it), the same way JupyterLab/Immich pull newer packages from unstable.

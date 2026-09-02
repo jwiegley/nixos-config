@@ -74,6 +74,42 @@ in
     settings = null;
   };
 
+  # Pin the two PostgreSQL extensions to versions matching what is ALREADY ACTIVATED
+  # in the immich database, rather than what nixos-25.11 happens to ship.
+  #
+  # The upstream immich module declares `extensions = ps: [ ps.pgvector ps.vectorchord ]`,
+  # which resolves against the stable postgresql's own package set -- pgvector 0.8.2 and
+  # vchord 0.5.3. The immich database is at vector 0.8.6 and vchord 1.1.1, because immich
+  # runs `ALTER EXTENSION ... UPDATE` on startup and did so during the ~24h that nixos-7bp
+  # had postgres on the unstable 17.11 build. A catalog ahead of its .so files makes
+  # immich exit immediately (obr nixos-d3b):
+  #
+  #     The database currently has VectorChord 1.1.1 activated, but the Postgres
+  #     instance only has 0.5.3 available.
+  #
+  # Postgres itself is unaffected -- an extension is only loaded on use -- which is why
+  # the 2026-09-01 restart onto stable looked clean and immich failed minutes later.
+  #
+  # mkForce rather than an added definition: `extensions` is types.functionTo, whose
+  # definitions CONCATENATE. Adding ours would put pgvector 0.8.2 and 0.8.6 into the same
+  # buildEnv, colliding on identical filenames. Replacing is safe here because the
+  # upstream immich module is the only contributor on this host -- verified with
+  # `grep -rn 'postgresql.extensions' modules hosts`, which finds nothing else.
+  #
+  # `_ps` is ignored on purpose: bypassing the stable package set these names would
+  # otherwise resolve to is the entire point.
+  #
+  # RETIRE THIS once nixpkgs ships vchord >= 1.1.1 and pgvector >= 0.8.6, at which point
+  # `ps.vectorchord` is correct again. The builds live in overlays/default.nix and compile
+  # the newer sources against THIS postgresql, so no cross-version ABI assumption is
+  # involved.
+  # ONLY vectorchord here. pgvector is supplied cluster-wide by
+  # modules/services/databases.nix via services.postgresql.package.withPackages, and the
+  # two mechanisms ACCUMULATE into one buildEnv -- listing pgvector in both fails the
+  # build with "two given paths contain a conflicting subpath" on lib/vector.so, which is
+  # exactly how the first attempt at this fix broke on 2026-09-02.
+  services.postgresql.extensions = lib.mkForce (_ps: [ pkgs.vectorchord_1_1_1 ]);
+
   # Ensure Immich service waits for ZFS mount
   systemd.services.immich-server = {
     after = [

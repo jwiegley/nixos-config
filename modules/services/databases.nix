@@ -77,7 +77,22 @@ in
       enable = true;
       enableTCPIP = true;
 
-      package = pkgs.postgresql_17.withPackages (p: [ p.pgvector ]);
+      # pgvector is cluster-wide, not Immich-specific (sherlock's entry_embeddings uses
+      # it too), so it is installed here rather than through an application module.
+      #
+      # PINNED TO 0.8.6 rather than `p.pgvector` (0.8.2 on nixos-25.11) because the
+      # immich database already has `vector` at 0.8.6 in its catalog: immich runs
+      # `ALTER EXTENSION ... UPDATE` on startup and did so during the ~24h that nixos-7bp
+      # left postgres on the unstable 17.11 build. A catalog ahead of its .so files makes
+      # immich refuse to start (obr nixos-d3b). The build in overlays/default.nix compiles
+      # the newer source against THIS postgresql, so no cross-version ABI assumption is
+      # involved.
+      #
+      # Supply each extension from exactly ONE place. This `withPackages` and
+      # `services.postgresql.extensions` ACCUMULATE into a single buildEnv, so also
+      # listing pgvector in immich.nix's extensions override produces
+      # "two given paths contain a conflicting subpath" on lib/vector.so.
+      package = pkgs.postgresql_17.withPackages (_p: [ pkgs.pgvector_0_8_6 ]);
 
       settings = {
         port = 5432;

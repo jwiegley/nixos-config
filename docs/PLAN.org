@@ -3907,15 +3907,17 @@ Left as-is because the action is IDEMPOTENT: both paths call light.turn_on with 
 
 IF THIS CHANGES: attaching anything non-idempotent to that chain (a TTS announcement, a counter, a toggle, a notification to a phone) will double-fire. At that point the fix is a gate keyed on event summary + start time, or a filter on one of the two ha-events-calendar nodes (they have an unused 'filter' field). The duplication is in the calendar data, not the flows — each node is correctly watching its own calendar.
 
-* TODO [#B] Build driver force-refreshes pi every rebuild, so any jwiegley/pi commit breaks Vulcan until nix-config-ai catches up
+* DONE [#B] Build driver force-refreshes pi every rebuild, so any jwiegley/pi commit breaks Vulcan until nix-config-ai catches up
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-g3l
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 16:49]
-:MODIFIED: [2026-09-01 Tue 16:49]
+:MODIFIED: [2026-09-01 Tue 20:30]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-01 Tue 20:30]
+:CLOSE_REASON: Fixed in e0a397f46 by removing inputs.pi.follows = "pi" from nix-config-ai. Option (b) of the three recorded. nix-config-ai now uses its own pinned, hash-matched Pi, so the driver's force-refresh of the (now inert) top-level pi input can no longer break rebuilds. Proven: evaluates cleanly with pi at 74bf9ae (the revision that broke it), a full ./build build succeeds with pi refreshed to HEAD, and the resulting drvPath was bit-identical to the running system's deriver, so nothing about the build changed. ./build switch now completes normally; system on generation with zero failed units.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:

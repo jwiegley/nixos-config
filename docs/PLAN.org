@@ -1580,18 +1580,64 @@ byte-identical to miele-dishwasher's. nagios.service active, nagios_services_cri
 
 Rationale recorded in the commit and inline in hosts.nix: when the check went HARD CRITICAL the device answered 3/3 pings from vulcan with ARP state REACHABLE, Home Assistant had live data from it via the B-Hyve cloud integration, and nagios' own last_time_ok was 14.5 minutes earlier. 629 NagiosServicesCritical samples in 7 days. 60% loss still catches a real outage, which presents as 100%.
 
-* TODO [#C] Away-lockdown should not auto-arm when there is positive evidence someone is home
+* TODO [#B] Away-lockdown should not auto-arm when there is positive evidence someone is home
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-802
 :LABELS:   []
-:ISSUE_TYPE: task
+:ISSUE_TYPE: feature
 :CREATED:  [2026-09-01 Tue 14:48]
-:MODIFIED: [2026-09-01 Tue 14:48]
+:MODIFIED: [2026-09-02 Wed 13:54]
 :CREATED_BY: johnw
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
+
+Fixes the 2026-09-01 07:07 false arming WITHOUT changing the presence model. The
+operator uses WiFi-network presence deliberately and does not want geofencing, so
+the fix must not depend on a second tracker or on GPS.
+
+THE GAP. The Node-RED Away tab arms on presence alone. Both existing safeguards --
+the 15-minute dwell on 'Nasim leaves 15min' and the live 'anyone home?' re-check --
+consult only binary_sensor.anyone_home. When that single signal is wrong nothing
+else is asked, and an irreversible physical action proceeds: arm + lock doors +
+HVAC to eco + water heater away.
+
+WHY THE EXISTING GUARDS DID NOT HELP. Both worked exactly as designed on
+2026-09-01. They are built to absorb a BRIEF flap; John's presence was not
+flapping, it was persistently wrong for 10h11m (phone genuinely off WiFi
+20:56 -> 07:09), so a live re-check simply re-read the same bad value. Adding a
+third presence-derived check would fail the same way.
+
+THE UNUSED EVIDENCE, from that morning's own recorder history:
+  06:30:16  alarm_control_panel.panel -> disarmed     (a human, at the panel)
+  06:30:28  binary_sensor.side_door_door -> on        (a human, opening a door)
+  07:07:08  ADT Arm Away                              (37 minutes later)
+A manual disarm is the strongest occupancy proof available: a person stood at the
+panel and entered a code. Arming away 37 minutes after one should require a
+departure signal far better than a single phone leaving WiFi.
+
+PROPOSED. Add a gate on the Away tab between 'anyone home?' and 'lockdown out'
+that halts when the panel was manually disarmed within the last N hours (N=2 or 3
+to start). Route the suppressed branch to the existing iPhone push so suppression
+is visible rather than silent -- the pattern the 2026-06-26 fix established with
+'arm-away suppressed -> push'.
+
+NOT weakening the arm path in general: a real departure after a manual disarm
+still arms, just on better evidence than one WiFi dropout. The vacuum path and the
+manual/bedtime Lockdown trigger are untouched, as they were by the 2026-06-26 gate.
+
+WHY NOT MOTION. Recent interior motion is the natural second signal and is NOT
+usable: the Aqara/Matter sensors are all unavailable under nixos-rsn, which is
+exactly why the 06:25-07:08 window contains one door event and nothing else.
+Revisit if Matter is restored.
+
+THIRD OCCURRENCE of this class: 2026-06-26 (blip + rebuild restart, fixed with the
+anyone-home re-check), 2026-07-01 (WiFi power-save flap, dwell raised 5 -> 15 min),
+2026-09-01. Each fix addressed the previous mechanism; none addressed 'arm on
+presence alone'.
+
+Needs operator approval before touching the alarm flow.
 
 * DONE [#E] SSH -R 8317 forward collides between overlapping sessions: 13 journal errors/day
 :PROPERTIES:
@@ -2919,20 +2965,46 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
-* DONE [#C] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
+* DONE [#B] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-d3b
 :LABELS:   []
-:ISSUE_TYPE: task
+:ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 23:34]
-:MODIFIED: [2026-09-02 Wed 00:08]
+:MODIFIED: [2026-09-02 Wed 13:54]
 :CREATED_BY: johnw
 :FINISHED: [2026-09-02 Wed 00:08]
 :CLOSE_REASON: Fixed and deployed 2026-09-02. Built vchord 1.1.1 and pgvector 0.8.6 from the unstable sources against the STABLE postgresql_17 via .override { postgresql = ...; }, so no cross-version ABI assumption is involved -- option (a) as recommended, and the ABI fallback was not needed. Key correction found during implementation: services.postgresql.package.withPackages and services.postgresql.extensions ACCUMULATE into one buildEnv, so the first attempt collided on lib/vector.so with pgvector 0.8.2 and 0.8.6 both present; pgvector is now supplied once, cluster-wide, from databases.nix (it backs sherlock too), and immich.nix contributes only vectorchord. Verified: pg_available_extensions shows vector 0.8.6/0.8.6 and vchord 1.1.1/1.1.1, immich-server active NRestarts=0 on port 2283, /api/server/ping returns pong, https://immich.vulcan.lan returns 200, zero failed units.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
+
+FIXED 2026-09-02 in 98ee8ee5c. Delayed fallout of nixos-7bp, surfaced by the nixos-t5w
+postgres restart.
+
+immich-server crash-looped: 'The database currently has VectorChord 1.1.1 activated, but
+the Postgres instance only has 0.5.3 available.' Immich runs ALTER EXTENSION ... UPDATE on
+startup, so during the ~24h that postgres ran the unstable 17.11 build it migrated the
+immich database to vchord 1.1.1 and vector 0.8.6. Restoring the stable binaries left the
+CATALOG ahead of the .so files. Postgres itself was unaffected -- an extension only loads
+on use -- which is why the restart looked clean and immich failed minutes later. This is
+the part of the routing regression that fixing the routing could not undo: swapping which
+binaries run is reversible; letting an application migrate a database is not.
+
+FIX. Build both extensions from the unstable sources but AGAINST the stable postgresql_17
+via .override { postgresql = ...; }, so no cross-version ABI assumption is involved.
+
+KEY CORRECTION found during implementation: services.postgresql.package.withPackages and
+services.postgresql.extensions ACCUMULATE into one buildEnv. The first attempt listed
+pgvector in both and failed with 'two given paths contain a conflicting subpath' on
+lib/vector.so (0.8.2 vs 0.8.6). pgvector is now supplied once, cluster-wide, from
+databases.nix (sherlock's entry_embeddings uses it too); immich.nix contributes only
+vectorchord.
+
+Follow-up scan found immich was the ONLY database left ahead of its binaries by that
+window; org sits at vector 0.8.2 against 0.8.6 available, which is the safe direction and
+verified working.
 
 * DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
 :PROPERTIES:
@@ -6271,13 +6343,41 @@ VERIFIED END TO END: after the switch, id hermes-heal shows 900(hermes-heal),932
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-01 Tue 08:45]
-:MODIFIED: [2026-09-01 Tue 23:29]
+:MODIFIED: [2026-09-02 Wed 13:54]
 :CREATED_BY: johnw
 :FINISHED: [2026-09-01 Tue 23:29]
 :CLOSE_REASON: Implemented and deployed 2026-09-01 in b3d087bc4. New textfile collector scripts/closure-drift-exporter.py + modules/monitoring/services/closure-drift-exporter.nix takes the closure of /run/current-system (nix-store -q --requisites, 0.19s for ~5855 paths) and reports any running system service whose /proc/<MainPID>/exe store path is absent from it. Hourly timer. Alerts ServiceRunningStaleBinary (warning, for:30m) and ClosureDriftExporterVacuous (work-floor guard) added to systemd.yaml; closure_drift.prom registered in meta-monitoring.yaml's Hourly staleness tier and in the catch-all exclusion, since those regexes partition. Verified with a POSITIVE CONTROL rather than a green reading: pointed at generation 2346 it correctly flags syncthing.service/syncthing-2.1.3, so the comparison provably detects drift. Metrics scrape into Prometheus; both rules load health=ok. Would have caught nixos-t5w within one scrape interval instead of ~24h.
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
+
+SHIPPED 2026-09-01 in b3d087bc4. See modules/monitoring/services/closure-drift-exporter.nix
+and scripts/closure-drift-exporter.py.
+
+THE GAP. switch-to-configuration decides restarts by diffing the OUTGOING generation
+against the incoming one; it never compares declared state against RUNNING state. A
+switch that dies partway leaves a unit executing a binary from a generation that is then
+abandoned, and because every later generation agrees with its predecessor, no later
+switch sees a change. Permanent and silent until someone restarts the unit by hand.
+
+No liveness check can see it: the unit is active, scraping, probing green and serving
+traffic. It is only running the wrong code. nixos-t5w went ~24h and roughly eight
+switches undetected, found by accident while chasing unrelated pg_dump warnings.
+
+IMPLEMENTATION. nix-store -q --requisites /run/current-system (0.19s, ~5855 paths), then
+/proc/<MainPID>/exe per running system service, reporting any store path absent from that
+set. Hourly. Metrics: closure_drift_stale_units, closure_drift_stale_unit{unit,package},
+closure_drift_units_checked, closure_drift_closure_paths, plus success + run-timestamp.
+Alerts ServiceRunningStaleBinary (warning, for:30m) and ClosureDriftExporterVacuous
+(work-floor: a run that inspected nothing would report 0 stale and look healthy).
+
+Scope: system services only -- user-profile binaries (emacs, claude-code) are legitimately
+outside the system closure. Blind spot: only MainPID's exe, so an interpreter-backed
+service shows drift only if the interpreter itself moved.
+
+Positive-controlled rather than trusted: pointed at generation 2346 it correctly flags
+syncthing.service/syncthing-2.1.3. A first attempt against generation 2618 found nothing
+because that shares nearly its whole closure -- too weak a control, worth remembering.
 
 * DONE [#D] Push-mirror failures stay alerting for hours: sync-push-mirrors has no timer
 :PROPERTIES:

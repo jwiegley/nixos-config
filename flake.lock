@@ -2181,11 +2181,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1788299412,
-        "narHash": "sha256-yxWlYf5LfJJa0AkyCE3qRuYO9KvXbF/fDcIJE7eOWSE=",
+        "lastModified": 1788319308,
+        "narHash": "sha256-r7iTjwvO80DqELsdcDSk5iqRA/rxQYs9fSiFWevPeZg=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "a8f30a640faaa61eba952b7e87fa90dcd5dd195b",
+        "rev": "f45c8827235ca49c49ec7e477db01973295ae67a",
         "type": "github"
       },
       "original": {
@@ -2239,11 +2239,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1788309756,
-        "narHash": "sha256-65g3xVJO6l55TyqvIv97GzsmLZE8zqpGHCtCUmbolDE=",
+        "lastModified": 1788330294,
+        "narHash": "sha256-hew/tHKXnDwl5dyUyrfu2SaId7PpgACmiiqxgKEqBjs=",
         "ref": "refs/heads/main",
-        "rev": "74204b3ad392da188a11bf75fccb6c8b9cc386cb",
-        "revCount": 3577,
+        "rev": "4197ab1e76321504329668700f97fec27f8df6b9",
+        "revCount": 3582,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2272,11 +2272,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1788309756,
-        "narHash": "sha256-65g3xVJO6l55TyqvIv97GzsmLZE8zqpGHCtCUmbolDE=",
+        "lastModified": 1788330294,
+        "narHash": "sha256-hew/tHKXnDwl5dyUyrfu2SaId7PpgACmiiqxgKEqBjs=",
         "ref": "refs/heads/main",
-        "rev": "74204b3ad392da188a11bf75fccb6c8b9cc386cb",
-        "revCount": 3577,
+        "rev": "4197ab1e76321504329668700f97fec27f8df6b9",
+        "revCount": 3582,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3025,17 +3025,17 @@
     "pi": {
       "flake": false,
       "locked": {
-        "lastModified": 1788303531,
+        "lastModified": 1788318417,
         "narHash": "sha256-CkdMY9itrTX8CTmcEEi/KHcMDEK6QXjDBN3CaxArnek=",
         "owner": "jwiegley",
         "repo": "pi",
-        "rev": "74bf9ae3cb0dfc2aa5b364c13224622cf037d9e5",
+        "rev": "37864ad59cf9fb533caf39f3214fbaae02c4e985",
         "type": "github"
       },
       "original": {
         "owner": "jwiegley",
         "repo": "pi",
-        "rev": "74bf9ae3cb0dfc2aa5b364c13224622cf037d9e5",
+        "rev": "37864ad59cf9fb533caf39f3214fbaae02c4e985",
         "type": "github"
       }
     },

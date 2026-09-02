@@ -29,8 +29,8 @@ let
   devices = {
     hera = {
       id = "MDOPNSZ-WLGJBFD-4YUV4S3-QEUZGWP-TLIRRVK-ZXFJ7Q2-IJ3FRBO-ZQVRPAD";
-      addresses = [ "tcp://192.168.1.4:${toString syncPort}" ];
-      allowedNetworks = [ "192.168.1.4/32" ];
+      addresses = [ "tcp://192.168.1.3:${toString syncPort}" ];
+      allowedNetworks = [ "192.168.1.3/32" ];
       autoAcceptFolders = false;
       introducer = false;
       untrusted = false;
@@ -150,7 +150,7 @@ in
       ) folders;
       options = {
         listenAddresses = [ "tcp://192.168.1.2:${toString syncPort}" ];
-        alwaysLocalNets = [ "192.168.1.4/32" ];
+        alwaysLocalNets = [ "192.168.1.3/32" ];
         reconnectionIntervalS = 5;
         globalAnnounceEnabled = false;
         globalAnnounceServers = [ ];

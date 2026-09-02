@@ -12,7 +12,7 @@ let
     local = [
       "192.168.1.1" # Router/Gateway
       "192.168.1.2" # Vulcan
-      "192.168.1.4" # Hera
+      "192.168.1.3" # Hera
     ];
 
     # DNS servers
@@ -434,7 +434,7 @@ in
               {
                 targets = [
                   "vulcan.lan" # 192.168.1.2
-                  "hera.lan" # 192.168.1.4
+                  "hera.lan" # 192.168.1.3
                   # "clio.lan"                          # 192.168.1.5
 
                   "asus-bq16-pro-ap.lan" # 192.168.3.2

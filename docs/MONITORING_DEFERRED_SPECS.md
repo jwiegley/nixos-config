@@ -2086,7 +2086,7 @@ vulcan e2e probe ─POST /v1/chat/completions─▶ Hermes VM api_server (10.99.
                                               llama-swap router on HERA (hera.lan:8080)  ◀── THE GAP
 ```
 
-- **hera.lan = 192.168.1.4.** Port 8080 is open and serves an OpenAI-compatible API. Live blackbox test through the **existing** module:
+- **hera.lan = 192.168.1.3.** Port 8080 is open and serves an OpenAI-compatible API. Live blackbox test through the **existing** module:
   `curl localhost:9115/probe?module=http_2xx&target=http://hera.lan:8080/v1/models` → `probe_success 1`, `probe_http_status_code 200`, `probe_duration_seconds 0.0017`.
 - **It is unauthenticated**: a bare `curl -s -o /dev/null -w '%{http_code}' http://hera.lan:8080/v1/models` returns `200` with no token. (For contrast, hera:8000 → 401, hera:5000 → 403 — those are auth-gated and not the right target.)
 - **Server identity confirmed**: the `/v1/models` JSON reports `owned_by: llama-swap` across 30 models (8 Qwen-family), 2714 bytes. This is the llama-swap instance LiteLLM's `hera/*` catalog entries point at.

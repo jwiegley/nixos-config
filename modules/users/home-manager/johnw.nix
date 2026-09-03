@@ -22,9 +22,41 @@
         inherit hostname inputs pkgs;
         isClientMachine = false;
       };
+
+      # AI harnesses this server does not run.
+      harnesses = [
+        "codex"
+        "gemini"
+        "gemini-cli"
+        "google-gemini-cli"
+        "droid"
+        "factory-cli"
+      ];
+      isHarness =
+        package:
+        let
+          name = package.name or "";
+        in
+        lib.any (harness: name == harness || lib.hasPrefix "${harness}-" name) harnesses;
     in
     {
-      imports = [ "${inputs.nix-config}/config/johnw.nix" ];
+      imports = [
+        "${inputs.nix-config}/config/johnw.nix"
+
+        # The harnesses do not all come from packages.package-list: config/ai.nix
+        # adds codex and droid through its own home.packages definition, and
+        # hard-asserts that both packages exist, so there is no upstream knob to
+        # switch them off. They therefore have to be filtered out of the *merged*
+        # list. Doing that with mkForce on this module's own definition would
+        # discard every other module's contribution as well -- which is exactly
+        # what dropped agent-deck, obr, plasma-wiki, git, man, starship, pi and
+        # the language servers on 2026-09-03. An `apply` runs after the merge
+        # instead, so every other definition still lands in the profile.
+        #
+        # home.packages declares no `apply` of its own, so this declaration
+        # merges with home-manager's rather than colliding with it.
+        { options.home.packages = lib.mkOption { apply = lib.filter (package: !isHarness package); }; }
+      ];
 
       home = {
         # NixOS-specific settings
@@ -34,24 +66,11 @@
         # Override EDITOR to vim on headless NixOS hosts
         sessionVariables.EDITOR = "vim";
 
-        # NixOS-specific packages: shared cross-platform list + NixOS extras
-        # Replace shared unfiltered package list for this server.
-        packages = lib.mkForce (
-          lib.filter (
-            package:
-            let
-              name = package.name;
-              harnesses = [
-                "codex"
-                "gemini"
-                "gemini-cli"
-                "google-gemini-cli"
-                "droid"
-                "factory-cli"
-              ];
-            in
-            !lib.any (harness: name == harness || lib.hasPrefix "${harness}-" name) harnesses
-          ) packages.package-list
+        # NixOS-specific packages: shared cross-platform list + NixOS extras.
+        # Merged with the shared modules' own contributions; the harness filter
+        # is applied to the merged result by the option declaration above.
+        packages =
+          packages.package-list
           ++ (with pkgs; [
             # Development tools
             apacheHttpd
@@ -60,8 +79,7 @@
             nodejs
             python3
             uv
-          ])
-        );
+          ]);
       };
 
       programs = {

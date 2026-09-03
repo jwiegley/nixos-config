@@ -5,6 +5,7 @@
 
 {
   inputs,
+  lib,
   ...
 }:
 
@@ -34,8 +35,23 @@
         sessionVariables.EDITOR = "vim";
 
         # NixOS-specific packages: shared cross-platform list + NixOS extras
-        packages =
-          packages.package-list
+        # Replace shared unfiltered package list for this server.
+        packages = lib.mkForce (
+          lib.filter (
+            package:
+            let
+              name = package.name;
+              harnesses = [
+                "codex"
+                "gemini"
+                "gemini-cli"
+                "google-gemini-cli"
+                "droid"
+                "factory-cli"
+              ];
+            in
+            !lib.any (harness: name == harness || lib.hasPrefix "${harness}-" name) harnesses
+          ) packages.package-list
           ++ (with pkgs; [
             # Development tools
             apacheHttpd
@@ -44,10 +60,8 @@
             nodejs
             python3
             uv
-
-            # AI tools (droid/factory needs vips)
-            vips
-          ]);
+          ])
+        );
       };
 
       programs = {

@@ -4353,15 +4353,16 @@ VERIFIED:
 ]
 #+end_src
 
-* TODO [#D] zone.home is set to placeholder Sacramento city-centre coords 9.3km from the house, so no GPS tracker can ever report home
+* DONE [#D] zone.home is set to placeholder Sacramento city-centre coords 9.3km from the house, so no GPS tracker can ever report home
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-h2a
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-01 Tue 12:00]
-:MODIFIED: [2026-09-01 Tue 14:48]
+:MODIFIED: [2026-09-03 Thu 09:46]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-03 Thu 09:46]
 :SOURCE_REPO: .
 :ORIGINAL_SIZE: 0
 :END:
@@ -4418,6 +4419,14 @@ sensors sit 'unavailable' and the GPS tracker updates only ~5x/day instead of
 continuously. Fixing the zone alone leaves presence updating far too slowly to be
 the primary source; both changes are needed for real redundancy.
 #+end_example
+
+** Close Reason
+
+Fixed and deployed 2026-09-03 in c3ed05c14. zone.home now takes latitude/longitude from SOPS (as STRINGS -- sops-install-secrets does a hard val.(string) assertion at main.go:335, so the float-typed values that existed until 09-03 failed with the misleading 'the value of key home-assistant is not a string', naming the parent rather than the leaf). The hardcoded Sacramento city-centre placeholder in the preStart heredoc is gone, and latitude/longitude are fail-closed since silently writing a wrong default is what hid this for months.
+
+Verified after switch, in the order that matters: /run/secrets/home-assistant/{latitude,longitude} materialise as 0400 hass:hass BEFORE trusting the fail-closed path -- that check was skipped on 2026-09-01 and cost a ~6 minute HA outage. Then measured distance from the new zone: ipad_pro 4m, johns_iphone_17_pro 8m, johns_mac_studio 9m, clio_2 19m, all inside the 200m radius and all reporting 'home', against ~9.3km outside before. johns_iphone_17_pro reports 'home' for the first time in the recorder's history (0 'home' states older than one hour, against 33 all-'not_home' rows spanning 08-03..09-01).
+
+Does NOT change the presence model: person.john_wiegley is still held home by the OPNsense WiFi tracker by preference, which is the operator's deliberate choice. What it adds is that the GPS fallback can no longer assert a false 'not_home' when the WiFi tracker drops -- which is the condition that produced the 2026-09-01 07:07 false arming.
 
 ** Comments
 

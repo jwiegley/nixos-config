@@ -9,6 +9,46 @@ let
   publishDir = "/var/lib/calendar-publisher";
   port = 8090;
   hostname = "calendar.newartisans.com";
+
+  # Retry the fetch rather than failing the day's run on one network blip.
+  #
+  # sac-cluster-ics pulls a public Google Sheet over HTTPS with a plain
+  # urllib.request.urlopen and a read timeout. On 2026-09-04 that timed out after
+  # ~30s and failed the unit, which alerted. It was purely transient: the five runs
+  # before it (08-30 .. 09-03) each completed in about ONE second, and a manual
+  # re-run the same afternoon succeeded immediately. So the failure mode being
+  # guarded is a momentary upstream stall, not a broken Sheet or a crash.
+  #
+  # WHY RETRY RATHER THAN A LONGER TIMEOUT: the timeout lives inside the upstream
+  # CLI and is not exposed as a flag, and a longer one would make a genuinely
+  # unreachable Sheet hang for minutes instead of failing. Three spaced attempts
+  # cost at most ~2 minutes against a daily job whose normal runtime is one second.
+  #
+  # NOT masking real failure: after three attempts this still exits non-zero, so a
+  # Sheet schema change or a persistent outage fails the unit exactly as before.
+  # Same shape as the mbsync wrapper, which retries Gmail's socket closes in-process
+  # rather than letting the unit enter `failed`.
+  #
+  # A failed run is already non-destructive -- it aborts before writing, leaving the
+  # previous day's .ics files served rather than truncating them -- so the cost of a
+  # miss is staleness, not an outage. That is why this is a retry and not an alarm.
+  publisher = pkgs.writeShellApplication {
+    name = "calendar-publisher-run";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      for attempt in 1 2 3; do
+        if ${pkgs.sac-cluster-ics}/bin/sac-cluster-ics --per-column ${publishDir}/; then
+          exit 0
+        fi
+        if [ "$attempt" -lt 3 ]; then
+          echo "sac-cluster-ics attempt $attempt/3 failed; retrying in 30s" >&2
+          sleep 30
+        fi
+      done
+      echo "sac-cluster-ics failed after 3 attempts" >&2
+      exit 1
+    '';
+  };
 in
 {
   # Sacramento Cluster calendar publisher.
@@ -45,7 +85,18 @@ in
       Type = "oneshot";
       User = "calendar-publisher";
       Group = "calendar-publisher";
-      ExecStart = "${pkgs.sac-cluster-ics}/bin/sac-cluster-ics --per-column ${publishDir}/";
+      ExecStart = lib.getExe publisher;
+
+      # Bounds the retry above. Worst case is three CLI attempts at ~30s of read
+      # timeout each plus two 30s sleeps == ~150s, so 5 minutes leaves headroom.
+      #
+      # This unit previously had TimeoutStartSec=infinity (measured, not assumed --
+      # `systemctl show calendar-publisher -p TimeoutStartUSec` returned `infinity`
+      # before this change). So the retry was never at risk of being cut short; what
+      # this adds is an upper bound that did not exist, so a fetch that hangs without
+      # the CLI's own read timeout firing cannot pin the unit indefinitely. Keep it
+      # comfortably above 150s if the retry count or sleep is ever changed.
+      TimeoutStartSec = "5min";
 
       NoNewPrivileges = true;
       PrivateTmp = true;

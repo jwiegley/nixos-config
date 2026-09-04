@@ -110,6 +110,49 @@ in
         StateDirectory = "open-source-secretary";
         StateDirectoryMode = "0700";
         ExecStart = "${pkg}/bin/oss-secretary";
+
+        # Publish a read-only snapshot of the triage DB into the Hermes state share,
+        # so the agent can answer ad-hoc questions ("what is awaiting my reply on
+        # ledger?") without a forge token in the VM and without the GitHub/Gitea MCP
+        # servers whose context cost got them deleted in 3af2dabfb.
+        #
+        # SNAPSHOT RATHER THAN SHARING THE LIVE FILE, deliberately. /var/lib/hermes is
+        # already a read-write virtiofs share into the guest, so a snapshot placed here
+        # needs no new microvm.shares entry -- worth avoiding, given how much of
+        # hermes-vm.nix documents shares behaving unexpectedly. More importantly, a
+        # reader inside the guest hitting the live file across virtiofs while this unit
+        # writes it can see a torn read; `.backup` is SQLite's own online-backup API and
+        # is safe against a database being written concurrently. (The DB is
+        # journal_mode=delete, not WAL, so WAL-over-network is not the specific hazard
+        # here -- but a snapshot removes the question entirely.)
+        #
+        # PREFIXES, both load-bearing. `+` runs this as root rather than oss-secretary
+        # (the service user cannot write into hermes:hermes 0750, and widening either
+        # directory to let it would be the wrong trade for a copy) and lifts the
+        # sandboxing that would otherwise make /var/lib/hermes unwritable under
+        # ProtectSystem=strict. `-` makes a non-zero exit non-fatal, so a snapshot
+        # failure never fails the email run -- the report is the product, this is a
+        # convenience view of it.
+        #
+        # NOT `|| true`: systemd Exec lines are not a shell, so that would be passed to
+        # the script as two literal argv entries rather than acting as a fallback. The
+        # script also ends in `exit 0` so the `-` is belt and braces.
+        ExecStartPost = "-+${pkgs.writeShellScript "oss-secretary-snapshot" ''
+          set -u
+          dest=/var/lib/hermes/oss-secretary
+          src=/var/lib/open-source-secretary/state.db
+          [ -r "$src" ] || exit 0
+          ${pkgs.coreutils}/bin/mkdir -p "$dest"
+          if ${pkgs.sqlite}/bin/sqlite3 "$src" ".backup '$dest/state.db.tmp'"; then
+            ${pkgs.coreutils}/bin/mv -f "$dest/state.db.tmp" "$dest/state.db"
+            ${pkgs.coreutils}/bin/chown -R hermes:hermes "$dest"
+            ${pkgs.coreutils}/bin/chmod 0640 "$dest/state.db"
+          else
+            echo "oss-secretary: snapshot failed; leaving previous snapshot in place" >&2
+            ${pkgs.coreutils}/bin/rm -f "$dest/state.db.tmp"
+          fi
+          exit 0
+        ''}";
         # LoadCredential copies each root:0400 secret into $CREDENTIALS_DIRECTORY
         # readable by the (non-root) service user — the correct way to hand a
         # root-owned secret to an unprivileged unit.

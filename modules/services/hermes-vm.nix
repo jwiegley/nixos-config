@@ -260,6 +260,30 @@ let
   # reads its key from its own config rather than trusting env
   # inheritance. ORG_CONFIG points at the khard-style config written by
   # hermes-tools-setup.
+  # Read-only view of the open-source-secretary triage database.
+  #
+  # The DAILY EMAIL STAYS DETERMINISTIC -- this exposes only the result of that work
+  # for ad-hoc questions ("what is awaiting my reply on ledger?"). open-source-secretary
+  # keeps doing its own forge API calls with its own SOPS tokens and uses Hermes purely
+  # as a completion endpoint, so no GitHub or Gitea credential enters this VM and the
+  # GitHub/Gitea MCP servers removed in 3af2dabfb for context cost stay removed.
+  #
+  # Reads a SNAPSHOT, not the live database: open-source-secretary.nix publishes one via
+  # sqlite3 .backup after each run into ${stateDir}/oss-secretary/, which is already the
+  # read-write state share, so this needs no microvm.shares entry. Answers are therefore
+  # "as of the last run" -- oss_snapshot_age exists so that can be stated rather than
+  # implied.
+  #
+  # Fixed parameterised queries only, never free-form SQL: a model able to compose
+  # arbitrary SQL can read every column, which defeats the point of curating the view.
+  # http_cache and meta are not exposed at all.
+  ossSecretaryMcpScript = ../../scripts/oss-secretary-mcp.py;
+  ossSecretaryMcpServer = pkgs.writeShellScript "oss-secretary-mcp" ''
+    set -eu
+    export OSS_SECRETARY_SNAPSHOT="${stateDir}/oss-secretary/state.db"
+    exec ${lightPython}/bin/python3 ${ossSecretaryMcpScript}
+  '';
+
   orgDbMcpScript = ../../scripts/org-db-mcp.py;
   orgDbMcpServer = pkgs.writeShellScript "org-db-mcp" ''
     set -eu
@@ -1181,6 +1205,15 @@ in
       # the gateway without relying on parent-process env inheritance.
       org-db = {
         command = "${orgDbMcpServer}";
+        args = [ ];
+      };
+
+      # GitHub/Gitea triage, answered from the secretary's daily snapshot rather than
+      # from the forges. See ossSecretaryMcpServer above for why this is not a forge
+      # client. Six read-only tools: oss_snapshot_age, oss_awaiting_reply,
+      # oss_open_threads, oss_stale_threads, oss_repo_summary, oss_search_titles.
+      oss-secretary = {
+        command = "${ossSecretaryMcpServer}";
         args = [ ];
       };
 

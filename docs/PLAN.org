@@ -4445,6 +4445,13 @@ Does NOT change the presence model: person.john_wiegley is still held home by th
     "author": "johnw",
     "text": "REVERTED 2026-09-03 in 598aec1af at the operator's direction. The fix was correct in\nisolation and broke the alarm; do not re-apply it without first clearing the blocker below.\n\nWHAT HAPPENED. Both occupants left that evening and the alarm did not arm.\nbinary_sensor.anyone_home never went off (unchanged since 09:45) because\nperson.nasim_wiegley stayed 'home'. Her WiFi tracker was correct throughout\n(opnsense_nasim_iphone not_home 18:46 -> 22:15); the GPS tracker lied.\n\nTHE BLOCKER. device_tracker.nasims_iphone reports ~1285 m from the house with\ngps_accuracy ~3712 m. Home Assistant treats a device as inside a zone when\n  distance - accuracy < radius\nso 1285 - 3712 < 200 resolves to 'home' PERMANENTLY, and HA's person entity prefers\nGPS once the stationary tracker leaves home. With the zone 9.3 km away that same\naccuracy computed to not_home, so the tracker was always wrong in the harmless\ndirection and the WiFi tracker governed. Correcting the zone turned it from\nharmlessly-wrong into actively-wrong, converting a false-ARM mode into a\nFAILURE-TO-ARM mode -- the worse of the two.\n\nPRECONDITION FOR ANY RETRY. Remove device_tracker.nasims_iphone from\nperson.nasim_wiegley (Settings -> People; person entities are UI-managed, there is no\n block in configuration.yaml, so this cannot be done from the repo). Only\nthen does correcting zone.home leave her presence riding the WiFi tracker alone.\nAlternatively rewrite the Anyone Home / Everyone Away templates\n(home-assistant.nix:872-886) to read the router/composite sensors instead of\nperson.*, bypassing HA's GPS preference entirely.\n\nNOT reopened as ready work: the operator has twice chosen WiFi-only presence, and\nwith the zone left wrong the GPS trackers stay uniformly not_home, which is the\nconfiguration that has worked for months. Recorded so a future session does not\nrediscover the zone offset and 'fix' it into the same outage.",
     "created_at": "2026-09-04T05:34:06Z"
+  },
+  {
+    "id": 69,
+    "issue_id": "nixos-h2a",
+    "author": "johnw",
+    "text": "Correction to the previous comment: one word was eaten by shell backtick expansion.\nThe sentence should read \"person entities are UI-managed, there is no  person:  block\nin configuration.yaml, so this cannot be done from the repo\".",
+    "created_at": "2026-09-04T05:34:29Z"
   }
 ]
 #+end_src

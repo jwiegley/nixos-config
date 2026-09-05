@@ -81,6 +81,25 @@ in
 
   systemd.services.calendar-publisher = {
     description = "Generate Sacramento Cluster .ics calendar files";
+
+    # Refresh the health metrics as soon as this unit settles, either way.
+    #
+    # calendar-publisher-health writes calendar_publisher.prom on its OWN daily timer
+    # (~05:01), i.e. the same cadence as the thing it observes. So a failure fixed at
+    # midday kept CalendarPublisherFailed (critical) firing on 05:01's stale sample
+    # until the next morning -- observed 2026-09-04, where the alert outlived the fix
+    # by roughly fourteen hours and had to be cleared by running the checker by hand.
+    #
+    # BOTH hooks, deliberately. onSuccess alone would refresh only the good case, and
+    # the failure case is the one that pages: without onFailure a real failure at 04:00
+    # would not be reflected in the metrics until 05:01 the NEXT day. ExecStartPost is
+    # not usable for this -- it is skipped entirely when ExecStart fails, which is
+    # exactly the path that needs it most.
+    #
+    # The daily health timer stays as the backstop for the case where this unit does
+    # not run at all.
+    onSuccess = [ "calendar-publisher-health.service" ];
+    onFailure = [ "calendar-publisher-health.service" ];
     serviceConfig = {
       Type = "oneshot";
       User = "calendar-publisher";

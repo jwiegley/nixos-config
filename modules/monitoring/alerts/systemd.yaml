@@ -336,3 +336,48 @@ groups:
             Check: systemctl status closure-drift-exporter, then run it by hand. The
             usual causes are nix-store failing to resolve /run/current-system and the
             unit losing the privileges it needs to readlink /proc/<pid>/exe.
+
+      # A daily report that silently stops arriving.
+      #
+      # THE GAP THIS CLOSES: neither open-source-secretary nor hermes-nightly-report was
+      # covered by ANY alert rule. Both are Type=oneshot timers that email a report;
+      # neither writes a .prom, so the TextfileCollectorStale* family cannot see them,
+      # and the CriticalServiceDown rule is an explicit 14-name regex containing neither.
+      # A unit that simply stops being triggered -- a masked timer, a failed dependency,
+      # a timer that never got re-enabled after a rebuild -- produced no signal at all.
+      # The failure mode is the worst kind: you stop receiving a daily email and assume
+      # there was nothing to report.
+      #
+      # WHY THE TIMER METRIC rather than a new exporter: node_exporter's systemd
+      # collector already publishes node_systemd_timer_last_trigger_seconds (341 series
+      # live over 30d), so this needs no new collector, no .prom, and no staleness-tier
+      # registration. It also measures the right thing -- whether the job was TRIGGERED --
+      # rather than whether some artefact looks fresh.
+      #
+      # THRESHOLD 48h against a measured 23h maximum observed gap for both timers over
+      # 30 days (max_over_time of time()-last_trigger, 1h resolution). Both are daily, so
+      # 48h means two consecutive missed runs and leaves >2x headroom over anything
+      # actually observed. Deliberately not 25h: a single skipped run after a reboot or a
+      # long rebuild is normal here and should not page.
+      #
+      # NOT a duplicate of SystemdServiceFailed, which fires when a run FAILS. This fires
+      # when a run does not happen -- the case that rule structurally cannot see.
+      - alert: DailyReportTimerStale
+        expr: |
+          time() - node_systemd_timer_last_trigger_seconds{
+            name=~"open-source-secretary\\.timer|hermes-nightly-report\\.timer"
+          } > 172800
+        for: 30m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "{{ $labels.name }} has not triggered in {{ $value | humanizeDuration }}"
+          description: |
+            A daily report timer has not fired for over 48 hours, i.e. at least two
+            consecutive runs were missed. The corresponding email has silently stopped
+            arriving, which is easy to mistake for "nothing to report".
+
+            Check: systemctl status {{ $labels.name }} and the matching .service. Common
+            causes are a masked or disabled timer, a failed dependency preventing the
+            trigger, or a timer that was not re-enabled after a rebuild.

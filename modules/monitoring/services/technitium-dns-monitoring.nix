@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -66,7 +67,7 @@ let
     fi
 
     # --- (2) PTR correctness: dig -x 192.168.1.2 must resolve to vulcan. ---
-    PTR_ANSWER=$(${dig} +time=3 +tries=1 +short -x 192.168.1.2 @127.0.0.1 2>/dev/null \
+    PTR_ANSWER=$(${dig} +time=3 +tries=1 +short -x ${hostPolicy.ipv4.lan} @127.0.0.1 2>/dev/null \
       | ${pkgs.coreutils}/bin/head -1) || PTR_ANSWER=""
     if [ -z "$PTR_ANSWER" ]; then
       PTR_OK=0

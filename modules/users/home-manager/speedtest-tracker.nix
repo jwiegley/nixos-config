@@ -12,6 +12,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -68,7 +69,7 @@
             "-e PUID=1000"
             "-e PGID=1000"
             "-e TZ=America/Los_Angeles"
-            "-e APP_URL=https://speedtracker.vulcan.lan"
+            "-e APP_URL=https://speedtracker.${hostPolicy.dnsName}"
             "-e APP_TIMEZONE=America/Los_Angeles"
             "-e DISPLAY_TIMEZONE=America/Los_Angeles"
             "-e DB_CONNECTION=pgsql"
@@ -85,7 +86,7 @@
             "-e MAIL_HOST=host.containers.internal"
             "-e MAIL_PORT=2525"
             "-e MAIL_ENCRYPTION=null"
-            "-e MAIL_FROM_ADDRESS=speedtest-tracker@vulcan.lan"
+            "-e MAIL_FROM_ADDRESS=speedtest-tracker@${hostPolicy.dnsName}"
             "-e MAIL_FROM_NAME=\"Speedtest Tracker\""
             "-v /var/lib/containers/speedtest-tracker/config:/config"
             "--env-file /run/secrets-speedtest-tracker/speedtest-tracker-secrets"

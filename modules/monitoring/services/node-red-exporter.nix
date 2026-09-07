@@ -1,5 +1,6 @@
 {
   config,
+  hostPolicy,
   ...
 }:
 
@@ -68,7 +69,7 @@
       ```
 
       ## Viewing in Grafana
-      1. Open Grafana: https://grafana.vulcan.lan
+      1. Open Grafana: https://grafana.${hostPolicy.dnsName}
       2. Create a new dashboard
       3. Add panel with PromQL query
       4. Example queries:

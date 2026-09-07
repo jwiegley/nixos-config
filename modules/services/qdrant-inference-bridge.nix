@@ -1,12 +1,14 @@
 {
   pkgs,
+  inputs,
+  hostRegistry,
   ...
 }:
 
 let
   bridgePort = 6335;
-  upstreamUrl = "http://127.0.0.1:4000/v1/embeddings";
-  models = import ../../models.nix;
+  upstreamUrl = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1/embeddings";
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   embeddingModel = models.embedding.primary.name;
 
   bridgeScript = pkgs.writeText "qdrant-inference-bridge.py" ''
@@ -20,7 +22,7 @@ let
 
     This bridge translates that to OpenAI-compatible:
       {"model": "${embeddingModel}", "input": ["..."]}
-    forwarded to the host LLM gateway on 127.0.0.1:4000, and returns
+    forwarded to the host LLM gateway on 127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}, and returns
     Qdrant's expected {"embeddings": [[...], ...]} format.
 
     Whatever model Qdrant asks for is mapped onto the single embedding model

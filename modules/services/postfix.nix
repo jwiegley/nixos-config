@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -19,10 +20,10 @@
     # Redirect system user mail to johnw
     # This prevents Dovecot UID errors for system users below first_valid_uid
     extraAliases = ''
-      root: johnw
-      postmaster: johnw
-      gitea: johnw
-      changedetection: johnw
+      root: ${hostPolicy.username}
+      postmaster: ${hostPolicy.username}
+      gitea: ${hostPolicy.username}
+      changedetection: ${hostPolicy.username}
     '';
 
     # Enable submission services for encrypted mail submission
@@ -55,14 +56,14 @@
     # These are processed before any transport, unlike extraAliases which only
     # work with the local transport (not LMTP)
     virtual = ''
-      root@vulcan.lan     johnw@vulcan.lan
-      root@localhost      johnw@localhost
-      postmaster@vulcan.lan    johnw@vulcan.lan
-      postmaster@localhost     johnw@localhost
-      gitea@vulcan.lan    johnw@vulcan.lan
-      gitea@localhost     johnw@localhost
-      changedetection@vulcan.lan    johnw@vulcan.lan
-      changedetection@localhost     johnw@localhost
+      root@${hostPolicy.dnsName}     ${hostPolicy.username}@${hostPolicy.dnsName}
+      root@localhost      ${hostPolicy.username}@localhost
+      postmaster@${hostPolicy.dnsName}    ${hostPolicy.username}@${hostPolicy.dnsName}
+      postmaster@localhost     ${hostPolicy.username}@localhost
+      gitea@${hostPolicy.dnsName}    ${hostPolicy.username}@${hostPolicy.dnsName}
+      gitea@localhost     ${hostPolicy.username}@localhost
+      changedetection@${hostPolicy.dnsName}    ${hostPolicy.username}@${hostPolicy.dnsName}
+      changedetection@localhost     ${hostPolicy.username}@localhost
     '';
 
     # Sender address rewriting for external mail relay.
@@ -115,8 +116,8 @@
       # Prevents delivery failures when Dovecot LMTP doesn't advertise SMTPUTF8
       smtputf8_enable = false;
 
-      myhostname = "vulcan.lan";
-      mydomain = "lan";
+      myhostname = hostPolicy.dnsName;
+      mydomain = hostPolicy.domain;
       myorigin = "$myhostname";
 
       mynetworks = [
@@ -146,8 +147,8 @@
       # TLS certificate configuration
       # Using modern smtpd_tls_chain_files instead of legacy cert/key files
       smtpd_tls_chain_files = [
-        "/var/lib/postfix-certs/smtp.vulcan.lan.key"
-        "/var/lib/postfix-certs/smtp.vulcan.lan.fullchain.crt"
+        "/var/lib/postfix-certs/smtp.${hostPolicy.dnsName}.key"
+        "/var/lib/postfix-certs/smtp.${hostPolicy.dnsName}.fullchain.crt"
       ];
 
       # TLS parameters

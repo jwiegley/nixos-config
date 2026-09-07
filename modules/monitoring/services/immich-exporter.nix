@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -78,13 +79,13 @@
       ```
 
       ## Viewing in Grafana
-      1. Open Grafana: https://grafana.vulcan.lan
+      1. Open Grafana: https://grafana.${hostPolicy.dnsName}
       2. Import the Immich dashboard from the provisioned dashboards
       3. Or search Grafana.com for community Immich dashboards
 
       ## Troubleshooting
       - **Metrics not showing**: Check Immich services are running: `systemctl status immich-server immich-machine-learning`
-      - **Scrape failures**: Check Prometheus targets page: https://prometheus.vulcan.lan/targets
+      - **Scrape failures**: Check Prometheus targets page: https://prometheus.${hostPolicy.dnsName}/targets
       - **Missing metrics**: Verify IMMICH_TELEMETRY_INCLUDE=all is set
 
       ## Related Files

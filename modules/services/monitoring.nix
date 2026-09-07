@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -494,8 +495,8 @@ in
     logwatch = {
       enable = true;
       range = "since 24 hours ago for those hours";
-      mailto = "johnw@vulcan.lan";
-      mailfrom = "logwatch@vulcan.lan";
+      mailto = "${hostPolicy.username}@${hostPolicy.dnsName}";
+      mailfrom = "logwatch@${hostPolicy.dnsName}";
       customServices = [
         {
           name = "ai-log-summary";

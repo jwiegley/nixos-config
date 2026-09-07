@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -10,12 +11,12 @@
     enable = true;
     port = 9093;
     listenAddress = "127.0.0.1";
-    webExternalUrl = "https://alertmanager.vulcan.lan";
+    webExternalUrl = "https://alertmanager.${hostPolicy.dnsName}";
 
     configuration = {
       global = {
         # Email configuration using local postfix
-        smtp_from = "alertmanager@vulcan.lan";
+        smtp_from = "alertmanager@${hostPolicy.dnsName}";
         smtp_smarthost = "localhost:25";
         smtp_require_tls = false;
       };
@@ -221,7 +222,7 @@
           name = "default-receiver";
           email_configs = [
             {
-              to = "johnw@vulcan.lan";
+              to = "${hostPolicy.username}@${hostPolicy.dnsName}";
               headers = {
                 # CommonLabels (not GroupLabels) so severity renders even
                 # though it isn't in this route's group_by — otherwise the
@@ -249,7 +250,7 @@
           name = "storage-receiver";
           email_configs = [
             {
-              to = "johnw@vulcan.lan";
+              to = "${hostPolicy.username}@${hostPolicy.dnsName}";
               headers = {
                 Subject = "[Storage] {{ .GroupLabels.alertname }} - {{ .Alerts | len }} alert(s)";
               };
@@ -281,7 +282,7 @@
           name = "critical-receiver";
           email_configs = [
             {
-              to = "johnw@vulcan.lan";
+              to = "${hostPolicy.username}@${hostPolicy.dnsName}";
               headers = {
                 Subject = "[CRITICAL] {{ .GroupLabels.alertname }} - IMMEDIATE ACTION REQUIRED";
                 Priority = "1";
@@ -625,10 +626,10 @@
   };
 
   # Keep the existing nginx configuration
-  services.nginx.virtualHosts."alertmanager.vulcan.lan" = {
+  services.nginx.virtualHosts."alertmanager.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/alertmanager.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/alertmanager.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/alertmanager.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/alertmanager.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://alertmanager/";
       recommendedProxySettings = true;

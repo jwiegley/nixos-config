@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -596,8 +597,8 @@ in
         country = "US";
 
         # Internal/external URLs for reverse proxy
-        internal_url = "https://hass.vulcan.lan";
-        external_url = "https://hass.vulcan.lan";
+        internal_url = "https://hass.${hostPolicy.dnsName}";
+        external_url = "https://hass.${hostPolicy.dnsName}";
 
         # Authentication providers: username/password only. (Trust for the nginx
         # reverse proxy is configured under http: below, not here.)
@@ -1247,10 +1248,10 @@ in
   };
 
   # Home Assistant local access
-  services.nginx.virtualHosts."hass.vulcan.lan" = {
+  services.nginx.virtualHosts."hass.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/hass.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/hass.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/hass.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/hass.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://home-assistant/"; # Use upstream instead of direct connection

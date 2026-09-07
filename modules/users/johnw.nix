@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -15,18 +16,18 @@ let
 in
 {
   users = {
-    groups.johnw = {
-      gid = 990;
+    groups.${hostPolicy.username} = {
+      gid = hostPolicy.gid;
     };
 
-    users.johnw = {
-      uid = 1000;
+    users.${hostPolicy.username} = {
+      uid = hostPolicy.uid;
       isNormalUser = true;
       description = "John Wiegley";
-      group = "johnw";
+      group = hostPolicy.username;
       extraGroups = [ "wheel" ];
       openssh.authorizedKeys.keys = authorizedKeys;
-      home = "/home/johnw";
+      home = hostPolicy.homeDirectory;
       shell = pkgs.zsh;
       # Packages that need to be available during system boot or are not
       # managed by home-manager are kept here. User-specific packages

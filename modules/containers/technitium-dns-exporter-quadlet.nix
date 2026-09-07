@@ -21,6 +21,7 @@
   lib,
   pkgs,
   secrets,
+  hostPolicy,
   ...
 }:
 
@@ -31,6 +32,7 @@ let
       lib
       pkgs
       secrets
+      hostPolicy
       ;
   };
   inherit (mkQuadletLib) mkQuadletService;

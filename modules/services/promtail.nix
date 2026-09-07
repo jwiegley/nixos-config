@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -783,10 +784,10 @@
   };
 
   # Nginx reverse proxy configuration for Promtail web UI
-  services.nginx.virtualHosts."promtail.vulcan.lan" = {
+  services.nginx.virtualHosts."promtail.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/promtail.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/promtail.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/promtail.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/promtail.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:${toString config.services.promtail.configuration.server.http_listen_port}";
       recommendedProxySettings = true;

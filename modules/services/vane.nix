@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -18,10 +19,10 @@ in
   ];
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."vane.vulcan.lan" = {
+  services.nginx.virtualHosts."vane.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/vane.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/vane.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/vane.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/vane.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:${toString vanePort}";

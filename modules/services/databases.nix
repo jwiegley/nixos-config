@@ -3,12 +3,13 @@
   lib,
   pkgs,
   secrets,
+  hostPolicy,
   ...
 }:
 
 let
   # Import helper functions
-  common = import ../lib/common.nix { inherit secrets; };
+  common = import ../lib/common.nix { inherit secrets hostPolicy; };
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
   inherit (mkPostgresLib) mkPostgresUserSetup;
 in
@@ -335,10 +336,10 @@ in
     };
   };
 
-  services.nginx.virtualHosts."postgres.vulcan.lan" = {
+  services.nginx.virtualHosts."postgres.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/postgres.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/postgres.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/postgres.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/postgres.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:5050/";
       proxyWebsockets = true;

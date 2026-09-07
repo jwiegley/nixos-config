@@ -3,11 +3,12 @@
   lib,
   pkgs,
   secrets,
+  hostPolicy,
   ...
 }:
 
 let
-  common = import ./common.nix { inherit secrets; };
+  common = import ./common.nix { inherit secrets hostPolicy; };
 in
 {
   # Creates a Podman quadlet container with common configuration patterns
@@ -87,7 +88,7 @@ in
       tmpfilesRules ? [ ], # Additional tmpfiles.d rules
     }:
     let
-      hostname = "${name}.vulcan.lan";
+      hostname = "${name}.${hostPolicy.dnsName}";
 
       # Build environment files list
       allEnvironmentFiles =

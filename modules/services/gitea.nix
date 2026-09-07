@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -188,10 +189,10 @@ in
   networking.firewall.allowedTCPPorts = [ 2222 ];
 
   # Nginx virtual host for Gitea
-  services.nginx.virtualHosts."gitea.vulcan.lan" = {
+  services.nginx.virtualHosts."gitea.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/gitea.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/gitea.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/gitea.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/gitea.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:3005";

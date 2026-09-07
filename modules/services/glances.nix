@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -166,10 +167,10 @@
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."glances.vulcan.lan" = {
+  services.nginx.virtualHosts."glances.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/glances.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/glances.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/glances.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/glances.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://glances/";
@@ -219,8 +220,8 @@
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/glances.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/glances.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/glances.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/glances.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -232,15 +233,15 @@
       fi
 
       # Create a self-signed certificate as a fallback
-      echo "Creating temporary self-signed certificate for glances.vulcan.lan"
+      echo "Creating temporary self-signed certificate for glances.${hostPolicy.dnsName}"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=glances.vulcan.lan" \
-        -addext "subjectAltName=DNS:glances.vulcan.lan"
+        -subj "/CN=glances.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:glances.${hostPolicy.dnsName}"
 
       # Set proper permissions
       chmod 644 "$CERT_FILE"

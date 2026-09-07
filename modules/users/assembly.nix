@@ -2,20 +2,24 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
+let
+  account = hostRegistry.userAccounts.vulcan.assembly;
+in
 {
   users = {
-    groups.assembly = {
-      gid = 1011;
+    groups.${account.username} = {
+      gid = account.gid;
     };
 
-    users.assembly = {
+    users.${account.username} = {
       isNormalUser = true;
-      uid = 1011;
-      group = "assembly";
-      home = "/home/assembly";
+      uid = account.uid;
+      group = account.username;
+      home = account.homeDirectory;
       description = "Assembly user";
     };
   };

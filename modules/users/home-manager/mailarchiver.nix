@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -45,11 +46,11 @@
 
           environments = {
             POSTGRES_HOST = "127.0.0.1";
-            APP_URL = "https://mailarchiver.vulcan.lan";
+            APP_URL = "https://mailarchiver.${hostPolicy.dnsName}";
             TimeZone__DisplayTimeZoneId = "America/Los_Angeles";
-            MAIL_HOST = "10.88.0.1";
+            MAIL_HOST = hostPolicy.ipv4.podman;
             MAIL_PORT = "25";
-            MAIL_FROM_ADDRESS = "mailarchiver@vulcan.lan";
+            MAIL_FROM_ADDRESS = "mailarchiver@${hostPolicy.dnsName}";
             MailSync__IgnoreSelfSignedCert = "true";
             # Reduced from Information to Warning to decrease log volume (~7,500 lines/day saved)
             Logging__LogLevel__Default = "Warning";

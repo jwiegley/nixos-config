@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -94,14 +95,14 @@ let
       #   goes to 0. (Textfile collectors DO need such a timestamp -- that is why
       #   TextfileCollectorStale exists -- but this is not one.)
       - alert: Aria2WebUiDown
-        expr: probe_success{job="blackbox_https_local", instance="https://aria.vulcan.lan"} == 0
+        expr: probe_success{job="blackbox_https_local", instance="https://aria.${hostPolicy.dnsName}"} == 0
         for: 5m
         labels:
           severity: warning
           service: aria2
         annotations:
           summary: "aria2 web interface is not accessible"
-          description: "The AriaNG web interface at https://aria.vulcan.lan is not responding. Check nginx configuration and certificate status."
+          description: "The AriaNG web interface at https://aria.${hostPolicy.dnsName} is not responding. Check nginx configuration and certificate status."
   '';
 in
 {

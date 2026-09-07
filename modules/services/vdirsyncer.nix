@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -303,10 +304,10 @@ in
   };
 
   # Nginx reverse proxy for status dashboard
-  services.nginx.virtualHosts."vdirsyncer.vulcan.lan" = {
+  services.nginx.virtualHosts."vdirsyncer.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/vdirsyncer.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/vdirsyncer.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/vdirsyncer.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/vdirsyncer.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:8089/";

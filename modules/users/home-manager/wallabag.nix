@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -51,7 +52,7 @@
             SYMFONY__ENV__DATABASE_NAME = "wallabag";
             SYMFONY__ENV__DATABASE_USER = "wallabag";
             SYMFONY__ENV__DATABASE_CHARSET = "utf8";
-            SYMFONY__ENV__DOMAIN_NAME = "https://wallabag.vulcan.lan";
+            SYMFONY__ENV__DOMAIN_NAME = "https://wallabag.${hostPolicy.dnsName}";
             SYMFONY__ENV__SERVER_NAME = "Wallabag";
             SYMFONY__ENV__FOSUSER_CONFIRMATION = "false";
             SYMFONY__ENV__TWOFACTOR_AUTH = "false";

@@ -14,6 +14,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   secrets,
   ...
 }:
@@ -69,10 +70,10 @@
   # Nginx Virtual Host
   # ============================================================================
 
-  services.nginx.virtualHosts."speedtracker.vulcan.lan" = {
+  services.nginx.virtualHosts."speedtracker.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/speedtracker.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/speedtracker.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/speedtracker.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/speedtracker.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:8765/";
       proxyWebsockets = true;
@@ -107,8 +108,8 @@
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/speedtracker.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/speedtracker.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/speedtracker.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/speedtracker.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -120,16 +121,16 @@
       fi
 
       # Create self-signed certificate as fallback for nginx
-      echo "Creating temporary self-signed certificate for speedtracker.vulcan.lan"
-      echo "Generate proper certificate with: sudo /etc/nixos/certs/renew-certificate.sh speedtracker.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner root:nginx"
+      echo "Creating temporary self-signed certificate for speedtracker.${hostPolicy.dnsName}"
+      echo "Generate proper certificate with: sudo /etc/nixos/certs/renew-certificate.sh speedtracker.${hostPolicy.dnsName} -o /var/lib/nginx-certs -d 365 --owner root:nginx"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=speedtracker.vulcan.lan" \
-        -addext "subjectAltName=DNS:speedtracker.vulcan.lan"
+        -subj "/CN=speedtracker.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:speedtracker.${hostPolicy.dnsName}"
 
       # Set proper permissions for nginx
       chmod 644 "$CERT_FILE"

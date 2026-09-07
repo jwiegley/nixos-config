@@ -1,11 +1,10 @@
 # /etc/nixos/modules/services/model-config.nix
 #
-# Deploys a JSON serialization of models.nix to /etc/models.json
-# for non-Nix consumers (Python scripts).
-{ pkgs, ... }:
+# Renders the shared Nix model policy at /etc/models.json for non-Nix consumers.
+{ inputs, pkgs, ... }:
 
 let
-  models = import ../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   modelsJson = pkgs.writeText "models.json" (builtins.toJSON models);
 in
 {

@@ -2,20 +2,24 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
+let
+  account = hostRegistry.userAccounts.vulcan.bia;
+in
 {
   users = {
-    groups.bia = {
-      gid = 1012;
+    groups.${account.username} = {
+      gid = account.gid;
     };
 
-    users.bia = {
+    users.${account.username} = {
       isNormalUser = true;
-      uid = 1012;
-      group = "bia";
-      home = "/home/bia";
+      uid = account.uid;
+      group = account.username;
+      home = account.homeDirectory;
       description = "BIA mirror user (john@bia.bahai.org)";
     };
   };

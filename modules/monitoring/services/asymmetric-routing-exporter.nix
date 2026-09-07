@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -44,7 +45,7 @@ let
             # These patterns mirror the verify loop in modules/core/networking.nix.
             present=1
             for prefix in 192.168.0.0/16 10.0.0.0/8; do
-              if ! echo "$rules" | grep -q "from 192.168.1.2 to $prefix lookup end0_return"; then
+              if ! echo "$rules" | grep -q "from ${hostPolicy.ipv4.lan} to $prefix lookup end0_return"; then
                 present=0
               fi
             done

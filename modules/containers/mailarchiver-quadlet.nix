@@ -22,6 +22,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   secrets,
   ...
 }:
@@ -41,10 +42,10 @@
   # ];
 
   # Nginx virtual host
-  services.nginx.virtualHosts."mailarchiver.vulcan.lan" = {
+  services.nginx.virtualHosts."mailarchiver.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/mailarchiver.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/mailarchiver.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/mailarchiver.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/mailarchiver.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:9097/";
       extraConfig = ''

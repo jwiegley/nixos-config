@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -25,10 +26,10 @@
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."atd.vulcan.lan" = {
+  services.nginx.virtualHosts."atd.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/atd.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/atd.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/atd.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/atd.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://atd/";
@@ -78,8 +79,8 @@
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/atd.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/atd.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/atd.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/atd.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -91,15 +92,15 @@
       fi
 
       # Create a self-signed certificate as a fallback
-      echo "Creating temporary self-signed certificate for atd.vulcan.lan"
+      echo "Creating temporary self-signed certificate for atd.${hostPolicy.dnsName}"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=atd.vulcan.lan" \
-        -addext "subjectAltName=DNS:atd.vulcan.lan"
+        -subj "/CN=atd.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:atd.${hostPolicy.dnsName}"
 
       # Set proper permissions
       chmod 644 "$CERT_FILE"

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -287,7 +288,7 @@ let
       <div class="card">
           <h2>ZIM Archives</h2>
           <p style="margin-bottom: 1rem; color: var(--text-muted);">
-              Browse archives with <a href="https://kiwix.vulcan.lan" style="color: var(--info);">Kiwix</a>
+              Browse archives with <a href="https://kiwix.${hostPolicy.dnsName}" style="color: var(--info);">Kiwix</a>
           </p>
           {% if archives %}
           <ul class="file-list">
@@ -1406,10 +1407,10 @@ in
 
   # Nginx reverse proxies
   services.nginx.virtualHosts = {
-    "zimit.vulcan.lan" = {
+    "zimit.${hostPolicy.dnsName}" = {
       forceSSL = true;
-      sslCertificate = "/var/lib/nginx-certs/zimit.vulcan.lan.crt";
-      sslCertificateKey = "/var/lib/nginx-certs/zimit.vulcan.lan.key";
+      sslCertificate = "/var/lib/nginx-certs/zimit.${hostPolicy.dnsName}.crt";
+      sslCertificateKey = "/var/lib/nginx-certs/zimit.${hostPolicy.dnsName}.key";
 
       locations."/" = {
         proxyPass = "http://127.0.0.1:${toString zimitPort}/";
@@ -1417,10 +1418,10 @@ in
       };
     };
 
-    "kiwix.vulcan.lan" = {
+    "kiwix.${hostPolicy.dnsName}" = {
       forceSSL = true;
-      sslCertificate = "/var/lib/nginx-certs/kiwix.vulcan.lan.crt";
-      sslCertificateKey = "/var/lib/nginx-certs/kiwix.vulcan.lan.key";
+      sslCertificate = "/var/lib/nginx-certs/kiwix.${hostPolicy.dnsName}.crt";
+      sslCertificateKey = "/var/lib/nginx-certs/kiwix.${hostPolicy.dnsName}.key";
 
       # Redirect URLs without cache-busters to URLs with them
       extraConfig = ''

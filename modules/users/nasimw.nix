@@ -2,22 +2,26 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
+let
+  account = hostRegistry.userAccounts.vulcan.nasimw;
+in
 {
   users = {
-    groups.nasimw = {
-      gid = 991;
+    groups.${account.username} = {
+      gid = account.gid;
     };
 
-    users.nasimw = {
-      uid = 1001;
+    users.${account.username} = {
+      uid = account.uid;
       isNormalUser = true;
       description = "Nasim Wiegley";
-      group = "nasimw";
+      group = account.username;
       extraGroups = [ ];
-      home = "/home/nasimw";
+      home = account.homeDirectory;
       shell = pkgs.bash;
       packages = with pkgs; [ ];
     };

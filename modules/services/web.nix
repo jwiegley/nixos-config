@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -68,12 +69,12 @@
           locations."/".return = "301 https://$host$request_uri";
         };
 
-        "vulcan.lan" = {
-          serverAliases = [ "vulcan" ];
+        "${hostPolicy.dnsName}" = {
+          serverAliases = [ hostPolicy.hostName ];
           forceSSL = true;
-          sslCertificate = "/var/lib/nginx-certs/vulcan.lan.crt";
-          sslCertificateKey = "/var/lib/nginx-certs/vulcan.lan.key";
-          locations."/".return = "301 https://glance.vulcan.lan$request_uri";
+          sslCertificate = "/var/lib/nginx-certs/${hostPolicy.dnsName}.crt";
+          sslCertificateKey = "/var/lib/nginx-certs/${hostPolicy.dnsName}.key";
+          locations."/".return = "301 https://glance.${hostPolicy.dnsName}$request_uri";
         };
       };
     };

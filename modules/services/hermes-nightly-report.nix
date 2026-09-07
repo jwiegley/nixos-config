@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 let
@@ -19,8 +20,8 @@ let
     ];
   } (builtins.readFile ../../scripts/agent_health_report.py);
 
-  recipient = "johnw@vulcan.lan";
-  sender = "hermes-health@vulcan.lan";
+  recipient = "${hostPolicy.username}@${hostPolicy.dnsName}";
+  sender = "hermes-health@${hostPolicy.dnsName}";
 
   # 06:15 local time daily — 15 min after openclaw so the two emails
   # don't land in the same minute.

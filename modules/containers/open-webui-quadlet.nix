@@ -10,11 +10,13 @@
   lib,
   pkgs,
   secrets,
+  hostPolicy,
+  hostRegistry,
   ...
 }:
 
 let
-  common = import ../lib/common.nix { inherit secrets; };
+  common = import ../lib/common.nix { inherit secrets hostPolicy; };
   mkPostgresLib = import ../lib/mkPostgresUserSetup.nix { inherit config lib pkgs; };
   inherit (mkPostgresLib) mkPostgresUserSetup;
 in
@@ -30,10 +32,10 @@ in
   ];
 
   # Nginx virtual host
-  services.nginx.virtualHosts."chat.vulcan.lan" = {
+  services.nginx.virtualHosts."chat.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/chat.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/chat.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/chat.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/chat.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:8084/";
       proxyWebsockets = true;
@@ -141,7 +143,7 @@ in
                  -- hermes-vm is an /etc/hosts name published by hermes-microvm.nix
                  -- from its vmAddr binding; 8080 must match apiServerPort in that
                  -- same file. NOT 127.0.0.1:8080 -- nothing listens there.
-                 '["http://127.0.0.1:4000/v1","http://hermes-vm:8080/v1"]'::json,
+                 '["http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1","http://hermes-vm:8080/v1"]'::json,
                  extract(epoch FROM now())::bigint),
                 ('openai.api_keys',
                  json_build_array('gateway-injects-real-key', \$hermes\$$key\$hermes\$),

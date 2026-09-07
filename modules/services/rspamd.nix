@@ -2,11 +2,14 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
+  inputs,
   ...
 }:
 
 let
-  models = import ../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
 
   # Shell script to call rspamc learn_spam
   learnSpamShellScript = pkgs.writeShellScript "rspamd-learn-spam.sh" ''
@@ -451,7 +454,7 @@ in
         ];
 
         neighbours {
-          server1 { host = "https://rspamd.vulcan.lan:443"; }
+          server1 { host = "https://rspamd.${hostPolicy.dnsName}:443"; }
         }
 
         # Custom local TLD file to recognize .lan domain
@@ -600,7 +603,7 @@ in
 
         # Host LLM gateway (nginx -> oMLX on hera), OpenAI-compatible.
         type = "openai";
-        url = "http://127.0.0.1:4000/v1/chat/completions";
+        url = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1/chat/completions";
         # Using an MLX quantized model for efficient inference.
         #
         # REGRESSION NOTE 2026-08-01: a LiteLLM guardrail ("harmony_filter",
@@ -693,8 +696,8 @@ in
         # Internal domain whitelist for phishing module
         # Format: one domain per line, supports wildcards with glob: prefix
         # These domains will not trigger phishing alerts
-        vulcan.lan
-        *.vulcan.lan
+        ${hostPolicy.dnsName}
+        *.${hostPolicy.dnsName}
       '';
 
       # Settings for whitelisting local domain mail
@@ -866,10 +869,10 @@ in
   ];
 
   # Nginx virtual host for Rspamd web UI
-  services.nginx.virtualHosts."rspamd.vulcan.lan" = {
+  services.nginx.virtualHosts."rspamd.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/rspamd.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/rspamd.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/rspamd.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/rspamd.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:11334/";

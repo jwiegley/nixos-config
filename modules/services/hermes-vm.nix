@@ -4,6 +4,7 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   inputs,
   system,
   apiServerPort,
@@ -19,14 +20,14 @@
   ...
 }:
 let
-  # Single source of truth for LLM selection: the `reasoning` tier in
-  # /etc/nixos/models.nix. Edit that file to change Hermes' model.
+  vulcan = hostRegistry.hosts.vulcan;
+  # The reasoning role is projected from the shared Nix model policy.
   #
   # NOT `llm.agent`. That tier existed for a second agent VM, had no consumer
   # once Hermes moved to `reasoning`, and was removed 2026-08-05 -- but two
   # comments here (including this one) had gone on naming it, so anyone
   # following them edited a value nothing read and saw no effect.
-  models = import ../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   agentModel = models.llm.reasoning.name;
 
   # System CA bundle inside the VM. security.pki.certificates (below) bakes
@@ -200,7 +201,7 @@ let
   # because it carries the gateway apiKey.
   vaneMcpScript = ../../scripts/vane-mcp.py;
   vaneMcpServer = pkgs.writeShellScript "vane-mcp" ''
-    export VANE_BASE_URL="https://vane.vulcan.lan"
+    export VANE_BASE_URL="https://vane.${vulcan.dnsName}"
     # 10 min HTTP timeout — Vane synthesis can take several minutes when the
     # focus_mode does deep retrieval.
     export VANE_TIMEOUT_S=600
@@ -212,7 +213,7 @@ let
   # heavy financialPython interpreter (yahooquery / py_vollib / pandas).
   stockTraderMcpScript = ../../scripts/stock-trader-mcp.py;
   stockTraderMcpServer = pkgs.writeShellScript "stock-trader-mcp" ''
-    export STOCK_TRADER_BASE_URL="https://trader.vulcan.lan"
+    export STOCK_TRADER_BASE_URL="https://trader.${vulcan.dnsName}"
     exec ${financialPython}/bin/python3 ${stockTraderMcpScript}
   '';
 
@@ -542,13 +543,13 @@ in
   # unused — the HA bridge connects to 127.0.0.1:8123 by IP via the DNAT.
   networking.hosts = {
     ${bridgeAddr} = [
-      "searxng.vulcan.lan" # SearXNG metasearch (native web backend, via nginx 443)
-      "vane.vulcan.lan" # Vane AI answer engine (via nginx 443)
-      "trader.vulcan.lan" # stock-trader service (via nginx 443)
-      "imap.vulcan.lan" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
-      "smtp.vulcan.lan" # Postfix SMTP (via DNAT 10.99.1.1:2525 → 127.0.0.1:2525)
-      "radicale.vulcan.lan" # Radicale CardDAV (via DNAT 10.99.1.1:5232 → 127.0.0.1:5232)
-      "hass.vulcan.lan" # Home Assistant (HA bridge uses 127.0.0.1:8123 directly)
+      "searxng.${vulcan.dnsName}" # SearXNG metasearch (native web backend, via nginx 443)
+      "vane.${vulcan.dnsName}" # Vane AI answer engine (via nginx 443)
+      "trader.${vulcan.dnsName}" # stock-trader service (via nginx 443)
+      "imap.${vulcan.dnsName}" # Dovecot IMAPS (via DNAT 10.99.1.1:993 → 127.0.0.1:993)
+      "smtp.${vulcan.dnsName}" # Postfix SMTP (via DNAT 10.99.1.1:2525 → 127.0.0.1:2525)
+      "radicale.${vulcan.dnsName}" # Radicale CardDAV (via DNAT 10.99.1.1:5232 → 127.0.0.1:5232)
+      "hass.${vulcan.dnsName}" # Home Assistant (HA bridge uses 127.0.0.1:8123 directly)
     ];
   };
 
@@ -838,7 +839,7 @@ in
         };
         embedding = {
           provider = "gateway";
-          # models.nix is the single source of truth. The gateway's inference
+          # The shared model policy is authoritative. The gateway's inference
           # bridge remaps whatever is asked for onto embedding.primary anyway,
           # but keeping them equal means the logs do not lie about what ran.
           model = models.embedding.primary.name;
@@ -965,7 +966,7 @@ in
       };
       # Model routing — Hermes consumes OPENROUTER_API_KEY and
       # OPENROUTER_BASE_URL from the env file. The model identifier is
-      # pulled from /etc/nixos/models.nix (`llm.reasoning.name`, via the
+      # projected from shared `models.nix` (`nixos.llm.reasoning.name`, via the
       # agentModel binding at the top of this file). This said `llm.agent.name`
       # until 2026-08-05, which was wrong: that tier had no reader at all, so
       # editing it to change Hermes' model did nothing.
@@ -1111,7 +1112,7 @@ in
         timeout = 600;
 
         env = {
-          VANE_BASE_URL = "https://vane.vulcan.lan";
+          VANE_BASE_URL = "https://vane.${vulcan.dnsName}";
           VANE_TIMEOUT_S = "600";
           # vane-mcp.py talks HTTPS to vane.vulcan.lan via `requests`, so it
           # needs the Vulcan CA bundle for the same reason as stock-trader
@@ -1137,7 +1138,7 @@ in
         command = "${stockTraderMcpServer}";
         args = [ ];
         env = {
-          STOCK_TRADER_BASE_URL = "https://trader.vulcan.lan";
+          STOCK_TRADER_BASE_URL = "https://trader.${vulcan.dnsName}";
           # Without these the `requests` calls in stock-trader-mcp.py reject
           # the Vulcan Step-CA cert (certifi's vendored bundle lacks it). See
           # the vulcanCaBundle note above. SSL_CERT_FILE does NOT work here.
@@ -1153,12 +1154,12 @@ in
         command = "${emailMcpServer}";
         args = [ ];
         env = {
-          IMAP_HOST = "imap.vulcan.lan";
+          IMAP_HOST = "imap.${vulcan.dnsName}";
           IMAP_PORT = "993";
-          SMTP_HOST = "smtp.vulcan.lan";
+          SMTP_HOST = "smtp.${vulcan.dnsName}";
           SMTP_PORT = "2525";
-          EMAIL_ADDRESS = "johnw@vulcan.lan";
-          EMAIL_USERNAME = "johnw";
+          EMAIL_ADDRESS = "${vulcan.username}@${vulcan.dnsName}";
+          EMAIL_USERNAME = vulcan.username;
           EMAIL_PASSWORD_FILE = "/run/hermes-secrets/imap-password";
           KHARD_CONFIG = "${stateDir}/.config/khard/khard.conf";
         };
@@ -1262,7 +1263,7 @@ in
     # Reaches the host SearXNG over 443 via the bridge DNAT; the SearXNG provider
     # GETs /search?format=json, which the host instance already enables. No API
     # key, no extra deps (uses core httpx).
-    SEARXNG_URL = "https://searxng.vulcan.lan";
+    SEARXNG_URL = "https://searxng.${vulcan.dnsName}";
     # Native search uses httpx, which reads Python's default trust from this
     # variable. The Vulcan CA is already embedded in this guest bundle.
     SSL_CERT_FILE = vulcanCaBundle;
@@ -1446,8 +1447,8 @@ in
 
       [storage radicale]
       type = "carddav"
-      url = "http://radicale.vulcan.lan:5232/"
-      username = "johnw"
+      url = "http://radicale.${vulcan.dnsName}:5232/"
+      username = "${vulcan.username}"
       password.fetch = ["command", "${pkgs.coreutils}/bin/cat", "/run/hermes-secrets/radicale-password"]
 
       [storage local]
@@ -1521,9 +1522,9 @@ in
       mkdir -p "$(dirname "$VDIR_LOG")"
       echo "=== vdirsyncer startup $(date -u) ===" | tee -a "$VDIR_LOG"
       if [ -r /run/hermes-secrets/radicale-password ]; then
-        echo "Testing Radicale at http://radicale.vulcan.lan:5232/ ..." | tee -a "$VDIR_LOG"
+        echo "Testing Radicale at http://radicale.${vulcan.dnsName}:5232/ ..." | tee -a "$VDIR_LOG"
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-          --connect-timeout 5 "http://radicale.vulcan.lan:5232/" 2>&1 || echo "CURL_FAILED")
+          --connect-timeout 5 "http://radicale.${vulcan.dnsName}:5232/" 2>&1 || echo "CURL_FAILED")
         echo "Radicale HTTP response: $HTTP_CODE" | tee -a "$VDIR_LOG"
 
         echo "Running vdirsyncer discover..." | tee -a "$VDIR_LOG"

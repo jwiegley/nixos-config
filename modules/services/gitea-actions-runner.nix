@@ -3,6 +3,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   system,
   ...
 }:
@@ -38,7 +39,7 @@
     instances.org-builder = {
       enable = true;
       name = "org-builder";
-      url = "https://gitea.vulcan.lan";
+      url = "https://gitea.${hostPolicy.dnsName}";
       tokenFile = config.sops.secrets."gitea-runner-token".path;
 
       # Labels for this runner

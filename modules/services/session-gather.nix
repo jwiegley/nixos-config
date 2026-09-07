@@ -2,6 +2,8 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   ...
 }:
 
@@ -31,8 +33,8 @@
 # docs-citation survey greps for `docs/<name>.md`, and naming it would recreate the
 # same dangle this comment exists to record.
 let
-  user = "johnw";
-  home = "/home/${user}";
+  user = hostPolicy.username;
+  home = hostPolicy.homeDirectory;
   checkout = "${home}/src/sessions";
   archive = "/tank/Backups/Sessions";
   configDir = "${home}/.config/sessions";
@@ -46,17 +48,20 @@ in
   # Keeping it here also means id_rsync is the only identity this job can offer.
   home-manager.users.${user}.xdg.configFile."sessions/ssh_config".text = ''
     Host hera
-      HostName hera.lan
+      HostName ${hostRegistry.hosts.hera.dnsName}
+      User ${hostRegistry.hosts.hera.username}
 
     # Clio moves between the LAN (192.168.1.39) and the VPN (10.6.0.2). Automated
     # gathering is wanted ONLY on the LAN address, so the address is pinned here
     # rather than resolved: off-LAN, the connection simply fails instead of
     # pulling a large tree over the tunnel. Do not replace this with a name.
     Host clio
-      HostName 192.168.1.39
+      HostName ${hostRegistry.hosts.clio.ipv4.lan}
+      User ${hostRegistry.hosts.clio.username}
 
     Host vps
-      HostName vps-b30dd5a8.vps.ovh.ca
+      HostName ${hostRegistry.hosts.vps.dnsName}
+      User ${hostRegistry.hosts.vps.username}
 
     # Andoria is not routable from vulcan; hera forwards to it. hera's
     # authorized_keys entry for id_rsync must carry port-forwarding and a
@@ -87,7 +92,8 @@ in
     # which is the tell that distinguishes a forwarding grant from a key
     # problem, and cost an hour to work out the first time.
     Host andoria-08
-      User jwiegley
+      HostName ${hostRegistry.hosts.andoria-08.dnsName}
+      User ${hostRegistry.hosts.andoria-08.username}
       ProxyJump hera
 
     # OpenSSH keeps the first value it obtains, so host-specific values above

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 let
@@ -18,7 +19,7 @@ in
     };
     recipient = lib.mkOption {
       type = lib.types.str;
-      default = "johnw@vulcan.lan";
+      default = "${hostPolicy.username}@${hostPolicy.dnsName}";
       description = "Email address the report is sent to.";
     };
     includePrivate = lib.mkOption {
@@ -85,7 +86,7 @@ in
 
       environment = {
         OSS_SECRETARY_TO = cfg.recipient;
-        OSS_SECRETARY_FROM = "oss-secretary@vulcan.lan";
+        OSS_SECRETARY_FROM = "oss-secretary@${hostPolicy.dnsName}";
         OSS_SECRETARY_SENDMAIL = "/run/wrappers/bin/sendmail";
         OSS_SECRETARY_STATE_DB = "/var/lib/open-source-secretary/state.db";
         OSS_SECRETARY_GITHUB_TOKEN_FILE = "%d/github-token";

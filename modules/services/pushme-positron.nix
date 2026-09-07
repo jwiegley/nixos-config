@@ -60,21 +60,23 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   inputs,
   system,
   ...
 }:
 let
-  user = "johnw";
+  user = hostPolicy.username;
   keyPath = config.sops.secrets."pushme/positron-ssh-private-key".path;
 
   # The jump identity. NOT in SOPS: it is johnw's own key, already present in
   # his home and already used interactively. Only the positron key -- which
   # this unit needs while running unattended as a service -- was moved into
   # SOPS.
-  jumpKey = "/home/${user}/.ssh/id_vulcan";
+  jumpKey = "${hostPolicy.homeDirectory}/.ssh/id_vulcan";
 
-  configDir = "/home/${user}/.config/pushme";
+  configDir = "${hostPolicy.homeDirectory}/.config/pushme";
 
   # rsync's --rsh must be ONE argv element. pushme passes each `Options` entry
   # through as a separate argument, so an inline `ssh -F ...` would either be
@@ -132,13 +134,13 @@ in
           # here; raise it only with evidence.
           MaxJobs: 1
           Variables:
-            home: /home/jwiegley
+            home: ${hostRegistry.hosts.andoria.homeDirectory}
           Options:
             # andoria's rsync is a Nix profile binary and is NOT on the PATH of
             # the non-login shell rsync-over-ssh gets. Measured on the host:
             # `command -v rsync` -> /home/jwiegley/.nix-profile/bin/rsync.
             # Without this the transfer dies with "rsync: command not found".
-            - "--rsync-path=/home/jwiegley/.nix-profile/bin/rsync"
+            - "--rsync-path=${hostRegistry.hosts.andoria.homeDirectory}/.nix-profile/bin/rsync"
             # Routes RSYNC's transport through the jump config below. This does
             # NOT cover pushme's own ssh calls -- that is what SshOptions is for.
             - "--rsh=${rshWrapper}"
@@ -378,8 +380,8 @@ in
         BatchMode yes
 
       Host pushme-jump
-        HostName hera.lan
-        User ${user}
+        HostName ${hostRegistry.hosts.hera.dnsName}
+        User ${hostRegistry.hosts.hera.username}
         IdentityFile ${jumpKey}
         IdentitiesOnly yes
         StrictHostKeyChecking accept-new
@@ -454,7 +456,7 @@ in
       Group = "users";
       # pushme reads ~/.config/pushme by default; setting HOME explicitly means
       # the unit and an interactive `pushme` run use the SAME files.
-      Environment = [ "HOME=/home/${user}" ];
+      Environment = [ "HOME=${hostPolicy.homeDirectory}" ];
       # A ceiling against a WEDGED transfer, not a target. The timer's own
       # overlap guard (systemd will not start a second instance while one runs)
       # handles the ordinary long-run case.

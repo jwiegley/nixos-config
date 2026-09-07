@@ -27,6 +27,9 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
+  inputs,
   ...
 }:
 
@@ -35,7 +38,7 @@ let
 
   # Shared model registry — the single source of truth for which model the
   # host LLM gateway on :4000 should be asked for.
-  models = import ../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
 
   # Bridge LoadCredential files into env vars expected by the runtime.
   # Each file under $CREDENTIALS_DIRECTORY is the plaintext API key,
@@ -166,7 +169,7 @@ in
         # metered external egress. That is an operator decision, not a
         # mechanical migration -- switch by clearing ANTHROPIC_BASE_URL and
         # setting ANTHROPIC_MODEL to a real Anthropic model id.
-        ANTHROPIC_BASE_URL = "http://127.0.0.1:4000";
+        ANTHROPIC_BASE_URL = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}";
         ANTHROPIC_MODEL = models.llm.primary.name;
 
         LOG_LEVEL = "INFO";
@@ -272,10 +275,10 @@ in
       '';
     };
 
-    services.nginx.virtualHosts."trader.vulcan.lan" = {
+    services.nginx.virtualHosts."trader.${hostPolicy.dnsName}" = {
       forceSSL = true;
-      sslCertificate = "/var/lib/nginx-certs/trader.vulcan.lan.crt";
-      sslCertificateKey = "/var/lib/nginx-certs/trader.vulcan.lan.key";
+      sslCertificate = "/var/lib/nginx-certs/trader.${hostPolicy.dnsName}.crt";
+      sslCertificateKey = "/var/lib/nginx-certs/trader.${hostPolicy.dnsName}.key";
 
       locations."/" = {
         # No trailing slash on the upstream URL — preserves the

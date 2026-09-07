@@ -6,7 +6,7 @@
   ...
 }:
 let
-  models = import ../../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   # Vane runs multi-step search-and-synthesis, so it uses the reasoning tier
   # (DeepSeek, 1M context) rather than the general `primary` model. Moved off
   # primary 2026-08-02 -- primary is shared with stock-trader and Open WebUI,

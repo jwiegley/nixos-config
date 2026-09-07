@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -308,7 +309,7 @@
         systemctl show prometheus -p LoadCredential
         ls -la /run/credentials/prometheus.service/
         ```
-      - **Grafana**: https://grafana.vulcan.lan — Copyparty dashboard. Query the
+      - **Grafana**: https://grafana.${hostPolicy.dnsName} — Copyparty dashboard. Query the
         `cpp_*` names above; the `copyparty_*` names in the old version of this
         document never existed.
 

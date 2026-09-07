@@ -116,7 +116,7 @@ systemd.timers.log-summarizer = {
 Verified against the script 2026-07-27:
 - **API URL**: `http://127.0.0.1:4000/v1/chat/completions`
 - **Model**: not hardcoded. The script loads a **model cascade** from
-  `/etc/models.json` (generated from `/etc/nixos/models.nix` by
+  `/etc/models.json` (generated from the shared `nixos` model-policy view by
   `modules/services/model-config.nix`) and walks it with exponential backoff,
   falling through to the next model when one fails. `--model` overrides the cascade.
   If `/etc/models.json` is missing the script exits 1 and tells you to rebuild.

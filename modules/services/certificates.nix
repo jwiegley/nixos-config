@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -35,9 +36,9 @@ in
       address = ":8443";
       insecureAddress = "";
       dnsNames = [
-        "vulcan"
-        "vulcan.lan"
-        "ca.vulcan.lan"
+        hostPolicy.hostName
+        hostPolicy.dnsName
+        "ca.${hostPolicy.dnsName}"
         "localhost"
       ];
       logger = {
@@ -197,7 +198,7 @@ in
 
         step ca init \
           --name='Vulcan Certificate Authority' \
-          --dns='vulcan,vulcan.lan,ca.vulcan.lan,localhost' \
+          --dns=${lib.escapeShellArg "${hostPolicy.hostName},${hostPolicy.dnsName},ca.${hostPolicy.dnsName},localhost"} \
           --address=':8443' \
           --provisioner='johnw@newartisans.com' \
           --password-file="$PASSFILE" \

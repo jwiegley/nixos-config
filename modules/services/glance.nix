@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 with lib;
@@ -129,59 +130,59 @@ with lib;
                         }
                         {
                           title = "DNS Management";
-                          url = "https://dns.vulcan.lan";
+                          url = "https://dns.${hostPolicy.dnsName}";
                         }
                         {
                           title = "PostgreSQL";
-                          url = "https://postgres.vulcan.lan";
+                          url = "https://postgres.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Radicale";
-                          url = "https://radicale.vulcan.lan";
+                          url = "https://radicale.${hostPolicy.dnsName}";
                         }
                         {
                           title = "vdirsyncer";
-                          url = "https://vdirsyncer.vulcan.lan";
+                          url = "https://vdirsyncer.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Home Assistant";
-                          url = "https://hass.vulcan.lan";
+                          url = "https://hass.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Node-RED";
-                          url = "https://nodered.vulcan.lan";
+                          url = "https://nodered.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Open WebUI";
-                          url = "https://chat.vulcan.lan";
+                          url = "https://chat.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Stock Trader";
-                          url = "https://trader.vulcan.lan";
+                          url = "https://trader.${hostPolicy.dnsName}";
                         }
                         {
                           title = "ATD Scheduler";
-                          url = "https://atd.vulcan.lan";
+                          url = "https://atd.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Zimit";
-                          url = "https://zimit.vulcan.lan";
+                          url = "https://zimit.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Kiwix";
-                          url = "https://kiwix.vulcan.lan";
+                          url = "https://kiwix.${hostPolicy.dnsName}";
                         }
                         {
                           title = "SearXNG";
-                          url = "https://searxng.vulcan.lan";
+                          url = "https://searxng.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Vane";
-                          url = "https://vane.vulcan.lan";
+                          url = "https://vane.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Qdrant";
-                          url = "https://qdrant.vulcan.lan";
+                          url = "https://qdrant.${hostPolicy.dnsName}";
                         }
                       ];
                     }
@@ -195,19 +196,19 @@ with lib;
                         }
                         {
                           title = "Mail Archiver";
-                          url = "https://mailarchiver.vulcan.lan";
+                          url = "https://mailarchiver.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Wallabag";
-                          url = "https://wallabag.vulcan.lan";
+                          url = "https://wallabag.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Immich";
-                          url = "https://immich.vulcan.lan";
+                          url = "https://immich.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Jellyfin";
-                          url = "https://jellyfin.vulcan.lan";
+                          url = "https://jellyfin.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Copyparty";
@@ -215,7 +216,7 @@ with lib;
                         }
                         {
                           title = "AriaNG";
-                          url = "https://aria.vulcan.lan";
+                          url = "https://aria.${hostPolicy.dnsName}";
                         }
                       ];
                     }
@@ -225,43 +226,43 @@ with lib;
                       links = [
                         {
                           title = "Grafana";
-                          url = "https://grafana.vulcan.lan";
+                          url = "https://grafana.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Glances";
-                          url = "https://glances.vulcan.lan";
+                          url = "https://glances.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Prometheus";
-                          url = "https://prometheus.vulcan.lan";
+                          url = "https://prometheus.${hostPolicy.dnsName}";
                         }
                         {
                           title = "VictoriaMetrics";
-                          url = "https://victoriametrics.vulcan.lan/vmui";
+                          url = "https://victoriametrics.${hostPolicy.dnsName}/vmui";
                         }
                         {
                           title = "Loki";
-                          url = "https://grafana.vulcan.lan/explore";
+                          url = "https://grafana.${hostPolicy.dnsName}/explore";
                         }
                         {
                           title = "Promtail";
-                          url = "https://promtail.vulcan.lan";
+                          url = "https://promtail.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Alertmanager";
-                          url = "https://alertmanager.vulcan.lan";
+                          url = "https://alertmanager.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Rspamd";
-                          url = "https://rspamd.vulcan.lan";
+                          url = "https://rspamd.${hostPolicy.dnsName}";
                         }
                         {
                           title = "Speedtest Tracker";
-                          url = "https://speedtracker.vulcan.lan";
+                          url = "https://speedtracker.${hostPolicy.dnsName}";
                         }
                         {
                           title = "ChangeDetection";
-                          url = "https://changes.vulcan.lan";
+                          url = "https://changes.${hostPolicy.dnsName}";
                         }
                       ];
                     }
@@ -271,7 +272,7 @@ with lib;
                       links = [
                         {
                           title = "OpenProject";
-                          url = "https://openproject.vulcan.lan";
+                          url = "https://openproject.${hostPolicy.dnsName}";
                         }
                       ]
                       # Gated so the dashboard does not advertise a tile that
@@ -280,12 +281,12 @@ with lib;
                       # 502 until then.
                       ++ optional config.services.grist.enable {
                         title = "Grist";
-                        url = "https://grist.vulcan.lan";
+                        url = "https://grist.${hostPolicy.dnsName}";
                       }
                       ++ [
                         {
                           title = "BudgetBoard";
-                          url = "https://budget.vulcan.lan";
+                          url = "https://budget.${hostPolicy.dnsName}";
                         }
                       ];
                     }
@@ -295,7 +296,7 @@ with lib;
                       links = [
                         {
                           title = "Gitea";
-                          url = "https://gitea.vulcan.lan";
+                          url = "https://gitea.${hostPolicy.dnsName}";
                         }
                         {
                           title = "GitHub";
@@ -559,10 +560,10 @@ with lib;
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."glance.vulcan.lan" = {
+  services.nginx.virtualHosts."glance.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/glance.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/glance.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/glance.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/glance.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:3050/";

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -113,8 +114,8 @@ in
           environments = {
             GRIST_HOST = "0.0.0.0";
             GRIST_PORT = "8484";
-            APP_HOME_URL = "https://grist.vulcan.lan";
-            GRIST_DOMAIN = "grist.vulcan.lan";
+            APP_HOME_URL = "https://grist.${hostPolicy.dnsName}";
+            GRIST_DOMAIN = "grist.${hostPolicy.dnsName}";
             # Single-org ("personal") mode: one team site rather than Grist's
             # multi-tenant SaaS layout, which is what makes sense for a
             # single-household install.

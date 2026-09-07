@@ -1,4 +1,4 @@
-{ secrets, ... }:
+{ secrets, hostPolicy, ... }:
 
 {
   # Common paths and variables used across multiple modules
@@ -46,15 +46,15 @@
   };
 
   # Common nginx SSL certificate paths for step-ca managed certificates
-  # hostname: the subdomain (e.g., "hass" for hass.vulcan.lan)
+  # hostname is the service subdomain.
   nginxSSLPaths = hostname: {
-    sslCertificate = "/var/lib/nginx-certs/${hostname}.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/${hostname}.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/${hostname}.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/${hostname}.${hostPolicy.dnsName}.key";
   };
 
   # Common PostgreSQL settings for containers
   postgresDefaults = {
-    host = "10.88.0.1"; # Podman bridge IP
+    host = hostPolicy.ipv4.podman;
     port = 5432;
   };
 }

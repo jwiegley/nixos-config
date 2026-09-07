@@ -2,6 +2,8 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   ...
 }:
 
@@ -15,9 +17,7 @@
   };
 
   networking = {
-    hostId = "671bf6f5";
-    hostName = "vulcan";
-    domain = "lan";
+    inherit (hostPolicy) hostId hostName domain;
 
     # Hard-code DNS servers to prevent DHCP from adding extras
     nameservers = [
@@ -31,13 +31,13 @@
 
     hosts = {
       "127.0.0.2" = [ ];
-      "192.168.1.2" = [
-        "vulcan.lan"
-        "vulcan"
+      "${hostPolicy.ipv4.lan}" = [
+        hostPolicy.dnsName
+        hostPolicy.hostName
       ];
       # Hera.local - Apple device, IP discovered via mDNS/Bonjour
       # This entry silences Postfix reverse DNS warnings when Hera connects
-      "192.168.3.6" = [ "Hera.local" ];
+      "${hostRegistry.hosts.hera.ipv4.mdns}" = [ hostRegistry.hosts.hera.mdnsName ];
     };
 
     # Enable NetworkManager for WiFi and Ethernet management
@@ -226,12 +226,12 @@
         sleep 1
       done
 
-      GATEWAY="192.168.1.1"
+      GATEWAY="${hostRegistry.networkPeers.router.ipv4.lan}"
 
       # Create return route table for end0
       # First, add direct route for the local subnet so local traffic doesn't go via gateway
-      ${pkgs.iproute2}/bin/ip route add 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return 2>/dev/null || \
-        ${pkgs.iproute2}/bin/ip route replace 192.168.1.0/24 dev end0 src 192.168.1.2 table end0_return
+      ${pkgs.iproute2}/bin/ip route add ${hostRegistry.networkRanges.lan} dev end0 src ${hostPolicy.ipv4.lan} table end0_return 2>/dev/null || \
+        ${pkgs.iproute2}/bin/ip route replace ${hostRegistry.networkRanges.lan} dev end0 src ${hostPolicy.ipv4.lan} table end0_return
 
       # Add route for container network (10.88.0.0/16) via podman0
       # This is critical: rule 51 routes traffic from 192.168.1.2 to 10.0.0.0/8 through this table
@@ -239,8 +239,8 @@
       # instead of to podman0, causing container DNS to fail
       # Only add if podman0 exists - it won't exist if no containers are running
       if ${pkgs.iproute2}/bin/ip link show podman0 &>/dev/null; then
-        ${pkgs.iproute2}/bin/ip route add 10.88.0.0/16 dev podman0 table end0_return 2>/dev/null || \
-          ${pkgs.iproute2}/bin/ip route replace 10.88.0.0/16 dev podman0 table end0_return
+        ${pkgs.iproute2}/bin/ip route add ${hostRegistry.networkRanges.podman} dev podman0 table end0_return 2>/dev/null || \
+          ${pkgs.iproute2}/bin/ip route replace ${hostRegistry.networkRanges.podman} dev podman0 table end0_return
       fi
 
       # Then add default route via gateway for cross-subnet traffic (e.g., to 192.168.3.x)
@@ -257,8 +257,8 @@
       # (Audit 2026-06-09: priority 50/51 rules were found absent post-boot.)
       add_rule_idempotent() {
         # $1=to-prefix  $2=priority
-        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from 192.168.1.2 to $1 lookup end0_return"; then
-          ${pkgs.iproute2}/bin/ip rule add from 192.168.1.2 to "$1" table end0_return priority "$2"
+        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from ${hostPolicy.ipv4.lan} to $1 lookup end0_return"; then
+          ${pkgs.iproute2}/bin/ip rule add from ${hostPolicy.ipv4.lan} to "$1" table end0_return priority "$2"
         fi
       }
       add_rule_idempotent 192.168.0.0/16 50
@@ -266,20 +266,20 @@
 
       # Verify both rules are present; fail the unit if not.
       for prefix in 192.168.0.0/16 10.0.0.0/8; do
-        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from 192.168.1.2 to $prefix lookup end0_return"; then
+        if ! ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "from ${hostPolicy.ipv4.lan} to $prefix lookup end0_return"; then
           echo "ERROR: asymmetric-routing rule for $prefix did not land" >&2
           exit 1
         fi
       done
 
-      echo "Asymmetric routing configured: all traffic from 192.168.1.2 routes via $GATEWAY"
+      echo "Asymmetric routing configured: all traffic from ${hostPolicy.ipv4.lan} routes via $GATEWAY"
     '';
 
     preStop = ''
-      ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 192.168.0.0/16 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip rule del from 192.168.1.2 to 10.0.0.0/8 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip route del 10.88.0.0/16 table end0_return 2>/dev/null || true
-      ${pkgs.iproute2}/bin/ip route del 192.168.1.0/24 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del from ${hostPolicy.ipv4.lan} to 192.168.0.0/16 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip rule del from ${hostPolicy.ipv4.lan} to 10.0.0.0/8 table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip route del ${hostRegistry.networkRanges.podman} table end0_return 2>/dev/null || true
+      ${pkgs.iproute2}/bin/ip route del ${hostRegistry.networkRanges.lan} table end0_return 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip route del default table end0_return 2>/dev/null || true
     '';
   };

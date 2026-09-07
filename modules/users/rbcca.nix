@@ -2,20 +2,24 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
+let
+  account = hostRegistry.userAccounts.vulcan.rbcca;
+in
 {
   users = {
-    groups.rbcca = {
-      gid = 1013;
+    groups.${account.username} = {
+      gid = account.gid;
     };
 
-    users.rbcca = {
+    users.${account.username} = {
       isNormalUser = true;
-      uid = 1013;
-      group = "rbcca";
-      home = "/home/rbcca";
+      uid = account.uid;
+      group = account.username;
+      home = account.homeDirectory;
       description = "RBCCA mirror user (jwiegley@rbcca.org)";
     };
   };

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -143,10 +144,10 @@ in
   # Metrics are pushed from Home Assistant via InfluxDB line protocol
 
   # Nginx reverse proxy for VictoriaMetrics
-  services.nginx.virtualHosts."victoriametrics.vulcan.lan" = {
+  services.nginx.virtualHosts."victoriametrics.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/victoriametrics.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/victoriametrics.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/victoriametrics.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/victoriametrics.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:8428/";
@@ -185,8 +186,8 @@ in
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/victoriametrics.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/victoriametrics.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/victoriametrics.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/victoriametrics.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -198,15 +199,15 @@ in
       fi
 
       # Create self-signed certificate as fallback
-      echo "Creating self-signed certificate for victoriametrics.vulcan.lan"
+      echo "Creating self-signed certificate for victoriametrics.${hostPolicy.dnsName}"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=victoriametrics.vulcan.lan" \
-        -addext "subjectAltName=DNS:victoriametrics.vulcan.lan"
+        -subj "/CN=victoriametrics.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:victoriametrics.${hostPolicy.dnsName}"
 
       # Set proper permissions
       chmod 644 "$CERT_FILE"
@@ -246,7 +247,7 @@ in
       (push-based) for high-performance metrics storage.
 
       ## Access
-      - Web UI: https://victoriametrics.vulcan.lan
+      - Web UI: https://victoriametrics.${hostPolicy.dnsName}
       - Local API: http://localhost:8428
 
       ## API Endpoints
@@ -294,7 +295,7 @@ in
       VictoriaMetrics is automatically provisioned as a Grafana datasource named
       "VictoriaMetrics" and is compatible with all Prometheus dashboards.
 
-      Access Grafana: https://grafana.vulcan.lan
+      Access Grafana: https://grafana.${hostPolicy.dnsName}
 
       ## Querying from Grafana
       VictoriaMetrics supports PromQL and MetricsQL (extended PromQL):

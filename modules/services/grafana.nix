@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -81,8 +82,8 @@ in
         http_port = 3000;
 
         # Configure for reverse proxy
-        domain = "grafana.vulcan.lan";
-        root_url = "https://grafana.vulcan.lan";
+        domain = "grafana.${hostPolicy.dnsName}";
+        root_url = "https://grafana.${hostPolicy.dnsName}";
         serve_from_sub_path = false;
 
         # Response compression
@@ -285,10 +286,10 @@ in
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."grafana.vulcan.lan" = {
+  services.nginx.virtualHosts."grafana.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/grafana.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/grafana.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/grafana.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/grafana.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://grafana/";
@@ -328,8 +329,8 @@ in
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/grafana.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/grafana.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/grafana.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/grafana.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -342,15 +343,15 @@ in
 
       # For now, create a self-signed certificate as a fallback
       # This will be replaced once step-ca certificate generation is working
-      echo "Creating temporary self-signed certificate for grafana.vulcan.lan"
+      echo "Creating temporary self-signed certificate for grafana.${hostPolicy.dnsName}"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=grafana.vulcan.lan" \
-        -addext "subjectAltName=DNS:grafana.vulcan.lan"
+        -subj "/CN=grafana.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:grafana.${hostPolicy.dnsName}"
 
       # Set proper permissions
       chmod 644 "$CERT_FILE"

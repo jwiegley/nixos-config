@@ -550,7 +550,13 @@ Daily email reports include:
 
 ### Directory Structure
 
-Two levels deep, as of 2026-07-27 (per-directory `.nix` counts in parentheses):
+Model choices and overrides are defined in `config/ai/models.nix` in the shared
+`nix-config` repository. This configuration consumes its `nixos` view and renders
+`/etc/models.json` for runtime clients. Publish shared policy changes and update
+the paired `nix-config` and `nix-config-ai` inputs before rebuilding.
+
+The following directory snapshot is from 2026-07-27, before model policy moved
+to the shared repository (per-directory `.nix` counts are in parentheses).
 
 ```
 /etc/nixos/

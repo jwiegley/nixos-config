@@ -32,6 +32,7 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
@@ -45,7 +46,7 @@ let
   # The assertion below fails the build closed if this ever reverts to the
   # REPLACE_ME placeholder.
   pinnedKnownHosts = pkgs.writeText "drafts-mcp-known-hosts" ''
-    hera.lan ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE92Mnzmx/CVS6GiGbJ1vGC0Sdf+D7/vSU/PN7f1Y1MV
+    ${hostRegistry.hosts.hera.dnsName} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE92Mnzmx/CVS6GiGbJ1vGC0Sdf+D7/vSU/PN7f1Y1MV
   '';
 
   pinnedPlaceholderPresent = lib.hasInfix "REPLACE_ME" (builtins.readFile pinnedKnownHosts);
@@ -91,7 +92,7 @@ let
       -o ConnectTimeout=10 \
       -o ServerAliveInterval=30 \
       -o ServerAliveCountMax=3 \
-      johnw@hera.lan
+      ${hostRegistry.hosts.hera.username}@${hostRegistry.hosts.hera.dnsName}
   '';
 in
 {
@@ -131,7 +132,7 @@ in
           services.drafts-mcp.enable is true but the pinned hera known_hosts
           in modules/services/drafts-mcp.nix still contains the REPLACE_ME
           placeholder. Capture the real key with
-          `ssh-keyscan -t ed25519 hera.lan` and paste it into pinnedKnownHosts
+          `ssh-keyscan -t ed25519 ${hostRegistry.hosts.hera.dnsName}` and paste it into pinnedKnownHosts
           before enabling (land it in the SAME commit as the enable flag).
         '';
       }

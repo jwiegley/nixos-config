@@ -30,13 +30,14 @@
 # old litellm-anthropic-fixup translation proxy is not carried forward) all answer.
 {
   config,
+  hostRegistry,
   ...
 }:
 
 let
-  listenPort = 4000;
-  upstreamHost = "hera.lan";
-  upstreamUrl = "https://${upstreamHost}:8443";
+  listenPort = hostRegistry.inferenceServices.llm-proxy.port;
+  upstreamHost = hostRegistry.hosts.hera.dnsName;
+  upstreamUrl = "https://${upstreamHost}:${toString hostRegistry.inferenceServices.omlx.gatewayPort}";
 
   # The rendered one-line nginx snippet holding the Authorization header.
   authSnippet = config.sops.templates."hera-llm-proxy-auth.conf".path;

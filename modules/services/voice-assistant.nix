@@ -30,6 +30,7 @@
   config,
   lib,
   pkgs,
+  hostRegistry,
   ...
 }:
 
@@ -68,7 +69,7 @@
         # Talk to the local LLM gateway. There is no alias layer: STT_MODELS
         # must be a REAL id from the oMLX backend. Verify with:
         #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
-        STT_OPENAI_URL = "http://127.0.0.1:4000/v1";
+        STT_OPENAI_URL = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1";
         STT_MODELS = "cohere-transcribe-03-2026-mlx-fp16";
       };
 

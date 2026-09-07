@@ -3,11 +3,12 @@
   lib,
   pkgs,
   secrets,
+  hostPolicy,
   ...
 }:
 
 let
-  common = import ../lib/common.nix { inherit secrets; };
+  common = import ../lib/common.nix { inherit secrets hostPolicy; };
 in
 {
   # BudgetBoard - Personal finance and budgeting application
@@ -233,10 +234,10 @@ in
   };
 
   # Nginx reverse proxy for HTTPS access
-  services.nginx.virtualHosts."budget.vulcan.lan" = {
+  services.nginx.virtualHosts."budget.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/budget.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/budget.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/budget.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/budget.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:6253";
@@ -265,8 +266,8 @@ in
       CERT_DIR="/var/lib/nginx-certs"
       mkdir -p "$CERT_DIR"
 
-      CERT_FILE="$CERT_DIR/budget.vulcan.lan.crt"
-      KEY_FILE="$CERT_DIR/budget.vulcan.lan.key"
+      CERT_FILE="$CERT_DIR/budget.${hostPolicy.dnsName}.crt"
+      KEY_FILE="$CERT_DIR/budget.${hostPolicy.dnsName}.key"
 
       # Check if certificate already exists and is valid
       if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
@@ -278,16 +279,16 @@ in
       fi
 
       # Create self-signed certificate as fallback for nginx
-      echo "Creating temporary self-signed certificate for budget.vulcan.lan"
-      echo "Generate proper certificate with: sudo /etc/nixos/certs/renew-certificate.sh budget.vulcan.lan -o /var/lib/nginx-certs -d 365 --owner root:nginx"
+      echo "Creating temporary self-signed certificate for budget.${hostPolicy.dnsName}"
+      echo "Generate proper certificate with: sudo /etc/nixos/certs/renew-certificate.sh budget.${hostPolicy.dnsName} -o /var/lib/nginx-certs -d 365 --owner root:nginx"
 
       ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -days 365 \
         -nodes \
-        -subj "/CN=budget.vulcan.lan" \
-        -addext "subjectAltName=DNS:budget.vulcan.lan"
+        -subj "/CN=budget.${hostPolicy.dnsName}" \
+        -addext "subjectAltName=DNS:budget.${hostPolicy.dnsName}"
 
       # Set proper permissions for nginx
       chmod 644 "$CERT_FILE"

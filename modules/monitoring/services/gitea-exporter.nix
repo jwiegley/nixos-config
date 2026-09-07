@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -69,7 +70,7 @@
       ```
 
       ## Viewing in Grafana
-      1. Open Grafana: https://grafana.vulcan.lan
+      1. Open Grafana: https://grafana.${hostPolicy.dnsName}
       2. Import Gitea dashboard (if available) or create custom dashboard
       3. Example PromQL queries:
          - `gitea_repositories`: Total repositories
@@ -84,7 +85,7 @@
 
       ## Troubleshooting
       - **Metrics not showing**: Check Gitea is running: `systemctl status gitea`
-      - **Scrape failures**: Check Prometheus targets page for error messages: https://prometheus.vulcan.lan/targets
+      - **Scrape failures**: Check Prometheus targets page for error messages: https://prometheus.${hostPolicy.dnsName}/targets
       - **Missing metrics**: Ensure `[metrics].ENABLED = true` in Gitea config
       - **Connection refused**: Verify Gitea is listening on localhost:3005
 

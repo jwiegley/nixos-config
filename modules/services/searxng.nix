@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -53,7 +54,7 @@ in
       server = {
         port = searxngPort;
         bind_address = "127.0.0.1";
-        base_url = "https://searxng.vulcan.lan/";
+        base_url = "https://searxng.${hostPolicy.dnsName}/";
         # Secret key loaded from the SOPS environment file (services.searx.
         # environmentFile above).
         #
@@ -400,10 +401,10 @@ in
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."searxng.vulcan.lan" = {
+  services.nginx.virtualHosts."searxng.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/searxng.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/searxng.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/searxng.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/searxng.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:${toString searxngPort}";

@@ -2,11 +2,13 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   inputs,
   ...
 }:
 let
-  models = import ../../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   defaultModel = models.llm.primary.name;
 in
 {
@@ -156,14 +158,14 @@ in
             # 2026-08-02 (this host must never serve models). Historically it was
             # vulcan's own llama-swap, which is why this container uses 8084 (and
             # the reason this container runs on PORT 8084).
-            OPENAI_API_BASE_URLS = "http://127.0.0.1:4000/v1;http://hermes-vm:8080/v1";
+            OPENAI_API_BASE_URLS = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1;http://hermes-vm:8080/v1";
 
             # Disable default Ollama integration (we use the LLM gateway on :4000)
             OLLAMA_BASE_URL = "";
 
             # WebUI configuration
             WEBUI_NAME = "Vulcan AI";
-            WEBUI_URL = "https://chat.vulcan.lan";
+            WEBUI_URL = "https://chat.${hostPolicy.dnsName}";
 
             # Data directory inside container
             DATA_DIR = "/app/backend/data";

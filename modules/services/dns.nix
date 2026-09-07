@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -27,7 +28,7 @@
       # been observed taking ~110-120s before :53 served.
       ExecStartPost = pkgs.writeShellScript "technitium-wait-ready" ''
         for _ in $(seq 1 200); do
-          ${pkgs.dnsutils}/bin/dig +short +timeout=1 +tries=1 @127.0.0.1 vulcan.lan A >/dev/null 2>&1 && exit 0
+          ${pkgs.dnsutils}/bin/dig +short +timeout=1 +tries=1 @127.0.0.1 ${hostPolicy.dnsName} A >/dev/null 2>&1 && exit 0
           sleep 1
         done
         echo "technitium-wait-ready: resolver did not answer within ~200s" >&2
@@ -43,10 +44,10 @@
     openFirewall = false;
   };
 
-  services.nginx.virtualHosts."dns.vulcan.lan" = {
+  services.nginx.virtualHosts."dns.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/dns.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/dns.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/dns.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/dns.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:5380/";
       proxyWebsockets = true;

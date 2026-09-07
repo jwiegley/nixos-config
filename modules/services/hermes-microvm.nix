@@ -19,21 +19,21 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   inputs,
   system,
   ...
 }:
 let
-  # Imported here (in addition to hermes-vm.nix) so the host service has
-  # something to key restart triggers on — changing models.nix should
-  # restart microvm@hermes during the next nixos-rebuild switch.
-  models = import ../../models.nix;
+  # Scope restart triggers to NixOS policy rather than unrelated client choices.
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
 
   bridgeName = "hermes-br0";
   tapName = "vm-hermes";
-  bridgeAddr = "10.99.1.1";
-  bridgeCidr = "${bridgeAddr}/30";
-  vmAddr = "10.99.1.2";
+  bridgeAddr = hostRegistry.networkPeers.hermes.ipv4.bridge;
+  bridgeCidr = "${bridgeAddr}/${toString hostRegistry.networkPeers.hermes.prefixLength}";
+  vmAddr = hostRegistry.networkPeers.hermes.ipv4.guest;
 
   # External NIC used for VM NAT: the host's physical interface on this
   # Asahi/aarch64 box. Note the host is multi-homed (end0 + WiFi) and this
@@ -93,7 +93,7 @@ let
     443
     993
     2525
-    4000
+    hostRegistry.inferenceServices.llm-proxy.port
     5232
     5432
     6333 # Qdrant HTTP REST — Hermes memory provider (REST only; NOT 6334/gRPC)
@@ -128,7 +128,7 @@ let
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header Host hermes.vulcan.lan;
+    proxy_set_header Host hermes.${hostPolicy.dnsName};
 
     # Hermes streams over SSE (not WebSockets -- Conduit uses
     # Accept: text/event-stream on this path). Buffering would hold a whole
@@ -236,10 +236,10 @@ in
   # instead of silently shipping the key in clear on every one. One header
   # reaches port 80 in that case; there is no way to prevent that server-side,
   # since any listener reads the request before it can answer.
-  services.nginx.virtualHosts."hermes.vulcan.lan" = {
+  services.nginx.virtualHosts."hermes.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/hermes.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/hermes.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/hermes.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/hermes.${hostPolicy.dnsName}.key";
 
     # ---- Proxied surface is an ALLOWLIST ----
     # Hermes does not authenticate everything. Verified live 2026-08-02 against
@@ -641,7 +641,7 @@ in
     '';
   };
 
-  # Restart the host's microvm@hermes service whenever models.nix changes,
+  # Restart microvm@hermes when the projected NixOS model policy changes,
   # so a `nixos-rebuild switch` propagates new model selections into the
   # running VM without manual intervention.
   systemd.services."microvm@hermes".restartTriggers = [
@@ -750,7 +750,7 @@ in
         inherit secretsStagingDir dnatPortList;
       };
     };
-    specialArgs = { inherit inputs system; };
+    specialArgs = { inherit inputs system hostRegistry; };
   };
 
   # Both the per-VM `autostart = true` (above) and this target list

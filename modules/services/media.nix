@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -54,7 +55,7 @@
       <NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <KnownProxies>
           <string>127.0.0.1</string>
-          <string>192.168.1.2</string>
+          <string>${hostPolicy.ipv4.lan}</string>
         </KnownProxies>
       </NetworkConfiguration>
       EOF
@@ -76,19 +77,19 @@
         fi
 
         # Add 192.168.1.2 if not present
-        if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='192.168.1.2']" "$NETWORK_XML" &>/dev/null; then
+        if ! ${pkgs.xmlstarlet}/bin/xmlstarlet sel -t -v "//KnownProxies/string[text()='${hostPolicy.ipv4.lan}']" "$NETWORK_XML" &>/dev/null; then
           ${pkgs.xmlstarlet}/bin/xmlstarlet ed -L \
-            -s "//KnownProxies" -t elem -n "string" -v "192.168.1.2" \
+            -s "//KnownProxies" -t elem -n "string" -v "${hostPolicy.ipv4.lan}" \
             "$NETWORK_XML"
         fi
       fi
     '';
   };
 
-  services.nginx.virtualHosts."jellyfin.vulcan.lan" = {
+  services.nginx.virtualHosts."jellyfin.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/jellyfin.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/jellyfin.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/jellyfin.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/jellyfin.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:8096/";
       proxyWebsockets = true;

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -13,7 +14,7 @@ let
     require ["fileinto", "envelope", "relational", "comparator-i;ascii-numeric"];
 
     # Never spam-file mail from local senders (monitoring, alerting, system services)
-    if address :domain :is "from" "vulcan.lan" {
+    if address :domain :is "from" "${hostPolicy.dnsName}" {
       stop;
     }
 
@@ -88,8 +89,8 @@ in
     mailLocation = "maildir:/var/mail/%u";
 
     # SSL/TLS certificate paths (will be created by step-ca)
-    sslServerCert = "/var/lib/dovecot-certs/imap.vulcan.lan.fullchain.crt";
-    sslServerKey = "/var/lib/dovecot-certs/imap.vulcan.lan.key";
+    sslServerCert = "/var/lib/dovecot-certs/imap.${hostPolicy.dnsName}.fullchain.crt";
+    sslServerKey = "/var/lib/dovecot-certs/imap.${hostPolicy.dnsName}.key";
 
     # Dovecot user and group
     user = "dovecot2";

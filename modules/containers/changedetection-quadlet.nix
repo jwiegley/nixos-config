@@ -7,6 +7,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   secrets,
   ...
 }:
@@ -25,10 +26,10 @@
   # ];
 
   # Nginx virtual host using "changes.vulcan.lan" instead of "changedetection.vulcan.lan"
-  services.nginx.virtualHosts."changes.vulcan.lan" = {
+  services.nginx.virtualHosts."changes.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/changes.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/changes.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/changes.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/changes.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:5055/";
       proxyWebsockets = true;

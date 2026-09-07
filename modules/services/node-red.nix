@@ -1,6 +1,7 @@
 {
   config,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -188,10 +189,10 @@ in
 
   # Nginx reverse proxy for Node-RED
   # Provides HTTPS access at https://nodered.vulcan.lan
-  services.nginx.virtualHosts."nodered.vulcan.lan" = {
+  services.nginx.virtualHosts."nodered.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/nodered.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/nodered.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/nodered.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/nodered.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://node-red/";

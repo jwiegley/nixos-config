@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -61,7 +62,7 @@
       ```
 
       ## Viewing in Grafana
-      1. Open Grafana: https://grafana.vulcan.lan
+      1. Open Grafana: https://grafana.${hostPolicy.dnsName}
       2. Create a new dashboard or use the vdirsyncer dashboard
       3. Add panels with PromQL queries
       4. Example queries:
@@ -71,10 +72,10 @@
          - `vdirsyncer_last_sync_duration_seconds` - Last sync duration
 
       ## Accessing vdirsyncer
-      - **Status Dashboard**: https://vdirsyncer.vulcan.lan
+      - **Status Dashboard**: https://vdirsyncer.${hostPolicy.dnsName}
       - **Metrics Endpoint**: http://localhost:8089/metrics
       - **API Endpoint**: http://localhost:8089/api/status
-      - **Local Radicale**: https://radicale.vulcan.lan
+      - **Local Radicale**: https://radicale.${hostPolicy.dnsName}
       - **Remote Fastmail**: https://carddav.fastmail.com
 
       ## Troubleshooting

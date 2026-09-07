@@ -190,7 +190,9 @@
   outputs =
     inputs:
     let
-      system = "aarch64-linux";
+      hostRegistry = import "${inputs.nix-config}/config/hosts.nix";
+      hostPolicy = hostRegistry.hosts.vulcan;
+      system = hostPolicy.system;
       # Pkgs with the local overlay applied — used to expose in-repo
       # packages (e.g. hermes-mcp) at the flake's top level so they can
       # be built standalone with `nix build .#<name>`.
@@ -234,7 +236,7 @@
       # nixfmt-tree = treefmt pre-configured with nixfmt: walks the git tree
       # itself, so it works with `nix fmt` on Nix >= 2.24 (which no longer
       # passes the tree root as an argument — bare nixfmt would read stdin).
-      formatter.aarch64-linux = userPkgs.nixfmt-tree;
+      formatter.${system} = userPkgs.nixfmt-tree;
 
       packages.${system} = {
         hermes-mcp = userPkgs.callPackage ./pkgs/hermes-mcp { };
@@ -333,13 +335,19 @@
         # reverse proxy to oMLX on hera, which serves its models under their
         # real ids. The equivalent check is now a one-liner:
         #   curl -s http://127.0.0.1:4000/v1/models | jq -r '.data[].id'
-        # compared against models.nix.
+        # compared against the shared models.nix NixOS projection.
       };
 
       nixosConfigurations.vulcan = inputs.nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
-          inherit system inputs userPkgs;
+          inherit
+            system
+            inputs
+            userPkgs
+            hostPolicy
+            hostRegistry
+            ;
           inherit (inputs) firmware secrets;
         };
         modules = [
@@ -425,6 +433,7 @@
           );
         in
         {
+          host-identity = pkgs.callPackage ./tests/host-identity.nix { inherit inputs; };
           vulcan-input-policy =
             assert toString vulcan.pkgs.path == toString inputs.nixpkgs.outPath;
             assert vulcanConfig.home-manager.useGlobalPkgs == false;

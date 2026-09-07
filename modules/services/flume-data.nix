@@ -17,6 +17,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -127,9 +128,9 @@ in
 
     emailTo = lib.mkOption {
       type = lib.types.str;
-      default = "johnw@vulcan.lan";
+      default = "${hostPolicy.username}@${hostPolicy.dnsName}";
       description = ''
-        Recipient of the weekly water report. Kept on the local vulcan.lan
+        Recipient of the weekly water report. Kept on the local ${hostPolicy.dnsName}
         domain so the message is delivered straight to Dovecot via LMTP
         (no Fastmail round-trip) and matches the Hermes/OpenClaw reports.
       '';
@@ -137,13 +138,13 @@ in
 
     reportFromAddress = lib.mkOption {
       type = lib.types.str;
-      default = "flume-data@vulcan.lan";
+      default = "flume-data@${hostPolicy.dnsName}";
       description = ''
         From: address on the weekly water report email. Uses the local
-        vulcan.lan domain so the Dovecot sieve_before whitelist
-        (`address :domain :is "from" "vulcan.lan"`) and the rspamd
+        ${hostPolicy.dnsName} domain so the Dovecot sieve_before whitelist
+        (`address :domain :is "from" "${hostPolicy.dnsName}"`) and the rspamd
         local_mail_whitelist exempt it from spam filing. NOTE: a
-        vulcan.lan sender only works for a vulcan.lan recipient — for an
+        ${hostPolicy.dnsName} sender only works for a ${hostPolicy.dnsName} recipient — for an
         external recipient, smtp_generic_maps rewrites it to gmail.
       '';
     };

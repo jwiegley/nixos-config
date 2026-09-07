@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -166,10 +167,10 @@
   };
 
   # Nginx reverse proxy configuration for Loki (optional external access)
-  services.nginx.virtualHosts."loki.vulcan.lan" = {
+  services.nginx.virtualHosts."loki.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/loki.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/loki.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/loki.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/loki.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://loki/";

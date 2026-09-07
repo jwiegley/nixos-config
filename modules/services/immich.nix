@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -156,10 +157,10 @@ in
   };
 
   # Nginx reverse proxy for Immich
-  services.nginx.virtualHosts."immich.vulcan.lan" = {
+  services.nginx.virtualHosts."immich.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/immich.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/immich.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/immich.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/immich.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://immich/";

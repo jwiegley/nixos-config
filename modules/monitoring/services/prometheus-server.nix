@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -33,7 +34,7 @@
     # Enable admin API and data durability features
     extraFlags = [
       "--web.enable-admin-api"
-      "--web.external-url=https://prometheus.vulcan.lan"
+      "--web.external-url=https://prometheus.${hostPolicy.dnsName}"
       # WAL compression reduces size ~50%, directly reducing WAL replay memory
       "--storage.tsdb.wal-compression"
       # Memory snapshot on shutdown: saves in-memory state to disk during graceful

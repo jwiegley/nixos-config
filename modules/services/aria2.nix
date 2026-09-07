@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -28,7 +29,7 @@ let
       var storageKey = 'AriaNg.RpcSettings';
       var defaultConfig = {
         "rpcAlias": "vulcan",
-        "rpcHost": "aria.vulcan.lan",
+        "rpcHost": "aria.${hostPolicy.dnsName}",
         "rpcPort": "443",
         "rpcInterface": "https",
         "protocol": "jsonrpc",
@@ -171,10 +172,10 @@ in
   };
 
   # AriaNG web interface served via nginx
-  services.nginx.virtualHosts."aria.vulcan.lan" = {
+  services.nginx.virtualHosts."aria.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/aria.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/aria.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/aria.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/aria.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       root = ariang;

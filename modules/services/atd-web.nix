@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -68,7 +69,7 @@ let
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ATD Job {job_id} Command - vulcan.lan</title>
+        <title>ATD Job {job_id} Command - ${hostPolicy.dnsName}</title>
         <style>
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -188,7 +189,7 @@ let
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="refresh" content="30">
-        <title>ATD Status - vulcan.lan</title>
+        <title>ATD Status - ${hostPolicy.dnsName}</title>
         <style>
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -281,7 +282,7 @@ let
     <body>
         <div class="header">
             <h1>⏰ ATD Status</h1>
-            <p>Job Scheduling Daemon - vulcan.lan</p>
+            <p>Job Scheduling Daemon - ${hostPolicy.dnsName}</p>
         </div>
 
         <div class="status-grid">
@@ -312,8 +313,8 @@ let
 
         <div class="footer">
             <p>Auto-refreshes every 30 seconds | Monitored by Prometheus</p>
-            <p><a href="https://grafana.vulcan.lan">View Metrics in Grafana</a> |
-               <a href="https://prometheus.vulcan.lan">Prometheus</a></p>
+            <p><a href="https://grafana.${hostPolicy.dnsName}">View Metrics in Grafana</a> |
+               <a href="https://prometheus.${hostPolicy.dnsName}">Prometheus</a></p>
         </div>
     </body>
     </html>"""

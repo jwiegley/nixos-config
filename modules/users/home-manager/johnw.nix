@@ -5,12 +5,13 @@
 
 {
   inputs,
+  hostPolicy,
   lib,
   ...
 }:
 
 {
-  home-manager.users.johnw =
+  home-manager.users.${hostPolicy.username} =
     {
       config,
       pkgs,
@@ -60,8 +61,7 @@
 
       home = {
         # NixOS-specific settings
-        username = "johnw";
-        homeDirectory = "/home/johnw";
+        inherit (hostPolicy) username homeDirectory;
 
         # Override EDITOR to vim on headless NixOS hosts
         sessionVariables.EDITOR = "vim";

@@ -385,14 +385,15 @@ zpool status    # Pool health
 
 ## Module Organization
 
-There is NO `configuration.nix` and NO root-level `secrets.yaml`. The only `.nix`
-files at the repo root are `flake.nix` and `models.nix`; the host configuration is
-`hosts/vulcan/default.nix`.
+There is no `configuration.nix` or root-level `secrets.yaml`. The host
+configuration is `hosts/vulcan/default.nix`, assembled by `flake.nix`.
+Model policy comes from the `nixos` view of `config/ai/models.nix` in the shared
+`nix-config` input. Edit that authority and update the paired inputs before
+rebuilding. `modules/services/model-config.nix` renders `/etc/models.json`.
 
 ```
 /etc/nixos/
 ├── flake.nix                # Main flake configuration (entry point)
-├── models.nix               # Shared LLM model registry (llm.reasoning.name, ...)
 ├── hosts/vulcan/
 │   ├── default.nix          # THE host configuration (the big `imports` list; stateVersion here)
 │   └── hardware-configuration.nix

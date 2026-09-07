@@ -7,6 +7,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -64,7 +65,7 @@
           # Environment configuration
           environments = {
             # Host configuration
-            OPENPROJECT_HOST__NAME = "openproject.vulcan.lan";
+            OPENPROJECT_HOST__NAME = "openproject.${hostPolicy.dnsName}";
             OPENPROJECT_HTTPS = "true";
             OPENPROJECT_HSTS = "true";
 

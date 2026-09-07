@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -22,7 +23,7 @@ let
       set -euo pipefail
 
       GITEA_TOKEN="$(cat /run/secrets/gitea-mirror-token)"
-      GITEA_URL="''${GITEA_URL:-https://gitea.vulcan.lan}"
+      GITEA_URL="''${GITEA_URL:-https://gitea.${hostPolicy.dnsName}}"
       GITEA_USER="''${GITEA_USER:-johnw}"
 
       echo "Triggering push mirror sync for all $GITEA_USER repos..."
@@ -225,7 +226,7 @@ in
 
     giteaUrl = lib.mkOption {
       type = lib.types.str;
-      default = "https://gitea.vulcan.lan";
+      default = "https://gitea.${hostPolicy.dnsName}";
       description = "Gitea instance URL (without trailing slash)";
     };
 

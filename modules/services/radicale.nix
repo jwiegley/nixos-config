@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -26,7 +27,7 @@ let
 
           # Configure Git user identity
           ${pkgs.git}/bin/git config user.name "radicale"
-          ${pkgs.git}/bin/git config user.email "radicale@vulcan.lan"
+          ${pkgs.git}/bin/git config user.email "radicale@${hostPolicy.dnsName}"
 
           # Create .gitignore for Radicale temporary files
           cat > .gitignore <<'EOF'
@@ -189,10 +190,10 @@ in
   };
 
   # Nginx reverse proxy configuration
-  services.nginx.virtualHosts."radicale.vulcan.lan" = {
+  services.nginx.virtualHosts."radicale.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/radicale.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/radicale.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/radicale.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/radicale.${hostPolicy.dnsName}.key";
 
     locations."/" = {
       proxyPass = "http://127.0.0.1:5232/";

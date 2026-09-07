@@ -7,6 +7,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   secrets,
   ...
 }:
@@ -26,10 +27,10 @@
   # ];
 
   # Nginx virtual host
-  services.nginx.virtualHosts."wallabag.vulcan.lan" = {
+  services.nginx.virtualHosts."wallabag.${hostPolicy.dnsName}" = {
     forceSSL = true;
-    sslCertificate = "/var/lib/nginx-certs/wallabag.vulcan.lan.crt";
-    sslCertificateKey = "/var/lib/nginx-certs/wallabag.vulcan.lan.key";
+    sslCertificate = "/var/lib/nginx-certs/wallabag.${hostPolicy.dnsName}.crt";
+    sslCertificateKey = "/var/lib/nginx-certs/wallabag.${hostPolicy.dnsName}.key";
     locations."/" = {
       proxyPass = "http://127.0.0.1:9091/";
       extraConfig = ''

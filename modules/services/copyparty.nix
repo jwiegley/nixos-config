@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -239,7 +240,7 @@ in
 
     domain = mkOption {
       type = types.str;
-      default = "copyparty.vulcan.lan";
+      default = "copyparty.${hostPolicy.dnsName}";
       description = "Domain name for nginx virtual host";
     };
   };

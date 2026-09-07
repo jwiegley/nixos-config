@@ -2,10 +2,11 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 let
-  models = import ../../models.nix;
+  models = (import "${inputs.nix-config}/config/ai/models.nix").nixos;
   cfg = config.services.hermesSelfHeal;
   daemonScript = pkgs.writeText "hermes-self-heal-daemon.py" (
     builtins.readFile ../../scripts/hermes-self-heal/daemon.py

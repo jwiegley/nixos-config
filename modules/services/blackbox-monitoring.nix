@@ -2,43 +2,13 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
+  hostRegistry,
   ...
 }:
 
 let
-  # Define host groups for better organization and configuration
-  hostGroups = {
-    # Local infrastructure hosts
-    local = [
-      "192.168.1.1" # Router/Gateway
-      "192.168.1.2" # Vulcan
-      "192.168.1.3" # Hera
-    ];
-
-    # DNS servers
-    dns = [
-      "8.8.8.8" # Google DNS Primary
-      "8.8.4.4" # Google DNS Secondary
-      "1.1.1.1" # Cloudflare DNS Primary
-      "1.0.0.1" # Cloudflare DNS Secondary
-      "208.67.222.222" # OpenDNS
-    ];
-
-    # Internet backbone/CDN
-    backbone = [
-      "google.com"
-      "cloudflare.com"
-      "amazon.com"
-      "github.com"
-    ];
-
-    # Custom remote hosts (add your specific hosts here)
-    remote = [
-      # Add your remote hosts here
-      # "example.com"
-      # "remote-server.company.com"
-    ];
-  };
+  hostGroups = hostRegistry.probeHostGroups;
 
   # Flatten all hosts into a single list
   allHosts = lib.flatten (lib.attrValues hostGroups);
@@ -209,7 +179,7 @@ let
         prober: dns
         timeout: 5s
         dns:
-          query_name: "vulcan.lan"
+          query_name: "${hostPolicy.dnsName}"
           query_type: "A"
           valid_rcodes:
             - NOERROR
@@ -433,8 +403,8 @@ in
               # host_group is attached by the relabel_configs below.
               {
                 targets = [
-                  "vulcan.lan" # 192.168.1.2
-                  "hera.lan" # 192.168.1.3
+                  hostPolicy.dnsName # Vulcan
+                  hostRegistry.hosts.hera.dnsName # Hera
                   # "clio.lan"                          # 192.168.1.39
 
                   "asus-bq16-pro-ap.lan" # 192.168.3.2
@@ -835,14 +805,14 @@ in
                   # redirect lands on a 200 in one hop. Verified before adding; if
                   # that redirect target ever stops returning 2xx this probe fails
                   # and the cause will not be obvious from the alert.
-                  "https://vulcan.lan"
-                  "https://glance.vulcan.lan"
-                  "https://192.168.1.1"
-                  "https://dns.vulcan.lan"
-                  "https://postgres.vulcan.lan"
-                  "https://hass.vulcan.lan"
-                  "https://nodered.vulcan.lan"
-                  "https://wallabag.vulcan.lan"
+                  "https://${hostPolicy.dnsName}"
+                  "https://glance.${hostPolicy.dnsName}"
+                  "https://${hostRegistry.networkPeers.router.ipv4.lan}"
+                  "https://dns.${hostPolicy.dnsName}"
+                  "https://postgres.${hostPolicy.dnsName}"
+                  "https://hass.${hostPolicy.dnsName}"
+                  "https://nodered.${hostPolicy.dnsName}"
+                  "https://wallabag.${hostPolicy.dnsName}"
                 ]
                 # Gated: probing a vhost that does not exist would return
                 # probe_success=0 forever and fire the generic probe alerts.
@@ -851,24 +821,24 @@ in
                 # feature request -- so this probe plus container_health_status
                 # is the whole of its monitoring, and there is deliberately no
                 # Grafana dashboard for it.
-                ++ lib.optional config.services.grist.enable "https://grist.vulcan.lan"
+                ++ lib.optional config.services.grist.enable "https://grist.${hostPolicy.dnsName}"
                 ++ [
-                  "https://jellyfin.vulcan.lan"
-                  "https://prometheus.vulcan.lan"
-                  "https://victoriametrics.vulcan.lan"
-                  "https://grafana.vulcan.lan"
-                  "https://glances.vulcan.lan"
-                  "https://alertmanager.vulcan.lan"
-                  "https://mailarchiver.vulcan.lan"
-                  "https://budget.vulcan.lan"
-                  "https://changes.vulcan.lan"
-                  "https://aria.vulcan.lan"
-                  "https://openproject.vulcan.lan"
-                  "https://chat.vulcan.lan"
-                  "https://searxng.vulcan.lan"
-                  "https://vane.vulcan.lan"
-                  "https://speedtracker.vulcan.lan"
-                  "https://trader.vulcan.lan"
+                  "https://jellyfin.${hostPolicy.dnsName}"
+                  "https://prometheus.${hostPolicy.dnsName}"
+                  "https://victoriametrics.${hostPolicy.dnsName}"
+                  "https://grafana.${hostPolicy.dnsName}"
+                  "https://glances.${hostPolicy.dnsName}"
+                  "https://alertmanager.${hostPolicy.dnsName}"
+                  "https://mailarchiver.${hostPolicy.dnsName}"
+                  "https://budget.${hostPolicy.dnsName}"
+                  "https://changes.${hostPolicy.dnsName}"
+                  "https://aria.${hostPolicy.dnsName}"
+                  "https://openproject.${hostPolicy.dnsName}"
+                  "https://chat.${hostPolicy.dnsName}"
+                  "https://searxng.${hostPolicy.dnsName}"
+                  "https://vane.${hostPolicy.dnsName}"
+                  "https://speedtracker.${hostPolicy.dnsName}"
+                  "https://trader.${hostPolicy.dnsName}"
 
                   # Previously-unprobed vhosts (coverage plan P1, web-blackbox).
                   # Each verified anonymous-GET 2xx/3xx through the blackbox
@@ -876,16 +846,16 @@ in
                   # so each currently reports probe_success=1. Auth-gated (401)
                   # and no-root-handler (404) vhosts go to blackbox_https_auth
                   # below instead.
-                  "https://atd.vulcan.lan"
-                  "https://gitea.vulcan.lan"
-                  "https://immich.vulcan.lan"
-                  "https://kiwix.vulcan.lan"
-                  "https://promtail.vulcan.lan"
-                  "https://qdrant.vulcan.lan"
-                  "https://radicale.vulcan.lan"
-                  "https://rspamd.vulcan.lan"
-                  "https://vdirsyncer.vulcan.lan"
-                  "https://zimit.vulcan.lan"
+                  "https://atd.${hostPolicy.dnsName}"
+                  "https://gitea.${hostPolicy.dnsName}"
+                  "https://immich.${hostPolicy.dnsName}"
+                  "https://kiwix.${hostPolicy.dnsName}"
+                  "https://promtail.${hostPolicy.dnsName}"
+                  "https://qdrant.${hostPolicy.dnsName}"
+                  "https://radicale.${hostPolicy.dnsName}"
+                  "https://rspamd.${hostPolicy.dnsName}"
+                  "https://vdirsyncer.${hostPolicy.dnsName}"
+                  "https://zimit.${hostPolicy.dnsName}"
                 ];
               }
             ];
@@ -929,7 +899,7 @@ in
             static_configs = [
               {
                 targets = [
-                  "https://loki.vulcan.lan"
+                  "https://loki.${hostPolicy.dnsName}"
                 ];
               }
             ];
@@ -984,7 +954,9 @@ in
             };
             static_configs = [
               {
-                targets = [ "https://hera.lan:8443/v1/models" ];
+                targets = [
+                  "https://${hostRegistry.hosts.hera.dnsName}:${toString hostRegistry.inferenceServices.omlx.gatewayPort}/v1/models"
+                ];
                 labels = {
                   service = "mlx-backend";
                   probe = "hera-qwen";
@@ -1066,14 +1038,14 @@ in
             static_configs = [
               {
                 targets = [
-                  "192.168.1.1"
-                  "192.168.1.2"
-                  "9.9.9.9"
-                  "149.112.112.112"
-                  "1.1.1.1"
-                  "1.0.0.1"
-                  "208.67.222.222"
-                  "208.67.220.220"
+                  hostRegistry.networkPeers.router.ipv4.lan
+                  hostPolicy.ipv4.lan
+                  hostRegistry.networkPeers.quad9Dns.ipv4.primary
+                  hostRegistry.networkPeers.quad9Dns.ipv4.secondary
+                  hostRegistry.networkPeers.cloudflareDns.ipv4.primary
+                  hostRegistry.networkPeers.cloudflareDns.ipv4.secondary
+                  hostRegistry.networkPeers.openDns.ipv4.primary
+                  hostRegistry.networkPeers.openDns.ipv4.secondary
                 ];
               }
             ];

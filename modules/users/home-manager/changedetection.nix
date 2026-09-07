@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   inputs,
   ...
 }:
@@ -48,7 +49,7 @@
 
           environments = {
             PORT = "5000";
-            BASE_URL = "https://changes.vulcan.lan";
+            BASE_URL = "https://changes.${hostPolicy.dnsName}";
             PLAYWRIGHT_DRIVER_URL = "ws://10.0.2.2:3008";
             FETCH_WORKERS = "10";
             LOGGER_LEVEL = "INFO";

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -185,7 +186,7 @@ in
       ```
 
       ### View in Prometheus
-      Access Prometheus: https://prometheus.vulcan.lan
+      Access Prometheus: https://prometheus.${hostPolicy.dnsName}
 
       Example queries:
       ```promql

@@ -38,6 +38,7 @@
 # itself, so this forwards whatever placeholder Vane sends.
 {
   pkgs,
+  hostRegistry,
   ...
 }:
 
@@ -45,7 +46,7 @@ let
   shimPort = 4001;
   # The gateway, deliberately, not hera directly -- so the gateway keeps owning auth
   # and TLS and this stays a body rewriter with no secrets.
-  upstreamBase = "http://127.0.0.1:4000/v1";
+  upstreamBase = "http://127.0.0.1:${toString hostRegistry.inferenceServices.llm-proxy.port}/v1";
 
   shimScript = pkgs.writeScript "vane-llm-shim.py" ''
     #!${pkgs.python3}/bin/python3

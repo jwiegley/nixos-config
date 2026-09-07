@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  hostPolicy,
   ...
 }:
 
@@ -152,10 +153,10 @@ in
     };
 
     # Nginx virtual host.
-    services.nginx.virtualHosts."grist.vulcan.lan" = {
+    services.nginx.virtualHosts."grist.${hostPolicy.dnsName}" = {
       forceSSL = true;
-      sslCertificate = "/var/lib/nginx-certs/grist.vulcan.lan.crt";
-      sslCertificateKey = "/var/lib/nginx-certs/grist.vulcan.lan.key";
+      sslCertificate = "/var/lib/nginx-certs/grist.${hostPolicy.dnsName}.crt";
+      sslCertificateKey = "/var/lib/nginx-certs/grist.${hostPolicy.dnsName}.key";
       locations."/" = {
         proxyPass = "http://127.0.0.1:8484/";
         # Grist is realtime: the document view holds a websocket open, and

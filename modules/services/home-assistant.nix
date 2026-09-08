@@ -1138,6 +1138,40 @@ in
 
             chmod 600 /var/lib/hass/secrets.yaml
 
+            # Strip the deprecated `http:` block from configuration.yaml.
+            #
+            # WHY HERE, and not simply by deleting it from services.home-assistant.config:
+            # configWritable = true, so the NixOS module deliberately does NOT overwrite an
+            # existing configuration.yaml -- that is the entire point of the setting.
+            # Removing the block from the Nix source therefore only changes what WOULD be
+            # generated on a fresh install, and leaves the live file untouched. Measured
+            # 2026-09-08: the source had zero http blocks while the deployed file still had
+            # one, and Home Assistant went on raising its repair issue. Runtime checks did
+            # not catch that, because "the block was removed and storage supplies the same
+            # values" and "nothing changed at all" look identical from outside.
+            #
+            # HA 2026.8 moved this integration into storage (Settings > System > Network),
+            # imports the existing block on first start after the upgrade, and then asks for
+            # its removal. Its config.py persists every key the old block set --
+            # CONF_SERVER_HOST, CONF_SERVER_PORT, CONF_TRUSTED_PROXIES,
+            # CONF_USE_X_FORWARDED_FOR -- so the imported values are what take effect. The
+            # YAML is ignored outright from 2027.2.
+            #
+            # STRUCTURAL AND IDEMPOTENT: deletes from `http:` up to the next top-level key,
+            # so it does not depend on line numbers, and is a no-op once the block is gone.
+            # Top-level keys are the only thing that can match ^[a-zA-Z_] here -- every key
+            # inside a block is indented -- which is what bounds the deletion correctly.
+            #
+            # Runs BEFORE the db_url injection below so that injection is the last thing to
+            # rewrite this file and its own invariants hold.
+            if [ -f /var/lib/hass/configuration.yaml ] && grep -q '^http:' /var/lib/hass/configuration.yaml; then
+              ${pkgs.gawk}/bin/awk '/^http:/ { skip = 1; next } skip && /^[a-zA-Z_]/ { skip = 0 } !skip { print }' \
+                /var/lib/hass/configuration.yaml > /var/lib/hass/configuration.yaml.nohttp
+
+              mv /var/lib/hass/configuration.yaml.nohttp /var/lib/hass/configuration.yaml
+              chmod 600 /var/lib/hass/configuration.yaml
+            fi
+
             # Inject database URL directly into configuration.yaml
             if [ -f ${
               config.sops.secrets."home-assistant/postgres-password".path

@@ -4652,20 +4652,37 @@ the app so it becomes PID 1).
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-07 Mon 20:03]
-:MODIFIED: [2026-09-07 Mon 20:03]
+:MODIFIED: [2026-09-07 Mon 20:07]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
 :END:
 
-The build driver re-locks nix-config, nix-config-ai, pi and obr before every ordinary rebuild (refresh_flake_inputs, build:245). As of 2026-09-07 that refresh pulls a nix-config revision whose closure needs ghc-9.10.3, which is NOT in cache.nixos.org and builds from source via ghc-binary-9.8.4 stage0 -- a multi-hour compile on aarch64.
+#+begin_example
+The nix-config revision now pinned in flake.lock has a closure that needs ghc-9.10.3, which is NOT in cache.nixos.org and builds from source via ghc-binary-9.8.4 stage0 -- a multi-hour compile on aarch64.
 
-Observed while deploying the Technitium 15.4.0 upgrade: './build build' sat on ghc-9.10.3.drv with real stage0 compiler processes (/build/ghc-9.10.3-source/_build/stage0/...). Confirmed attributable to the input refresh alone: after 'git checkout flake.lock' the same system built to completion with no GHC involved, so nothing in the Nix tree here requires it.
+TWO PATHS REACH IT, which is why the first diagnosis was incomplete:
+  1. The build driver re-locks nix-config, nix-config-ai, pi and obr before every
+     ordinary rebuild (refresh_flake_inputs, build:245), pulling that revision.
+  2. Commits 72a2b8722 + 1da17e0e4 ('Consume the shared model and host authorities',
+     'Merge current host changes with shared policy') BUMPED flake.lock to those same
+     revisions and pushed them. So the requirement is now committed to main.
 
-IMPACT: any plain './build switch' (the documented, normal invocation) blocks on this. Workaround used for the DNS upgrade was './build -- nixos-rebuild switch --flake /etc/nixos#vulcan', which skips the refresh (REFRESH_FLAKE_INPUTS=0 on the -- path).
+That second path is the important one: skipping the input refresh no longer avoids the
+GHC build. Verified by building the rebased tree with refresh disabled -- ghc-9.10.3.drv
+still builds. Building d478bcdfb + the technitium overlay alone, with flake.lock at its
+old revisions, completes with no GHC involvement, so nothing else in this tree wants it.
 
-Needs a decision: pin/blocklist the offending nix-config revision, get ghc-9.10.3 substitutable, or narrow what the refresh re-locks.
+IMPACT: any build of current main -- plain './build switch' or './build -- nixos-rebuild
+switch' alike -- blocks on a multi-hour GHC bootstrap.
+
+The Technitium 15.4.0 upgrade (8469994e9) was deployed from the pre-bump tree and is
+running and verified; it does not depend on this and is unaffected either way.
+
+Needs a decision: get ghc-9.10.3 substitutable (a cache or a binary-cache push from the
+nix-config side), or move the nix-config pin back to a revision whose closure is cached.
+#+end_example
 
 * DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:

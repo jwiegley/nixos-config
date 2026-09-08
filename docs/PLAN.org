@@ -4645,6 +4645,28 @@ reasoning, next to TimeoutStartSec where someone would reach to "fix" this.
 A real fix belongs upstream in the image's entrypoint (trap and forward, or exec
 the app so it becomes PID 1).
 
+* TODO [#B] Ordinary ./build switch triggers a multi-hour GHC 9.10.3 bootstrap
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-hit
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-07 Mon 20:03]
+:MODIFIED: [2026-09-07 Mon 20:03]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The build driver re-locks nix-config, nix-config-ai, pi and obr before every ordinary rebuild (refresh_flake_inputs, build:245). As of 2026-09-07 that refresh pulls a nix-config revision whose closure needs ghc-9.10.3, which is NOT in cache.nixos.org and builds from source via ghc-binary-9.8.4 stage0 -- a multi-hour compile on aarch64.
+
+Observed while deploying the Technitium 15.4.0 upgrade: './build build' sat on ghc-9.10.3.drv with real stage0 compiler processes (/build/ghc-9.10.3-source/_build/stage0/...). Confirmed attributable to the input refresh alone: after 'git checkout flake.lock' the same system built to completion with no GHC involved, so nothing in the Nix tree here requires it.
+
+IMPACT: any plain './build switch' (the documented, normal invocation) blocks on this. Workaround used for the DNS upgrade was './build -- nixos-rebuild switch --flake /etc/nixos#vulcan', which skips the refresh (REFRESH_FLAKE_INPUTS=0 on the -- path).
+
+Needs a decision: pin/blocklist the offending nix-config revision, get ghc-9.10.3 substitutable, or narrow what the refresh re-locks.
+
 * DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

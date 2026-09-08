@@ -358,6 +358,41 @@ in
     postgresql = final.postgresql_17;
   };
 
+  # Technitium DNS: stable is pinned at 14.0.0, four minor releases behind. Taken
+  # from nixpkgs-user (15.4.0) rather than waiting for the stable channel.
+  #
+  # WHY THE PACKAGE ONLY, NOT THE MODULE. The stable and nixpkgs-user NixOS modules
+  # were diffed before this change and their contract is identical: the same
+  # `ExecStart = "${cfg.package}/bin/technitium-dns-server $STATE_DIRECTORY"`, the same
+  # DynamicUser=true and StateDirectory=technitium-dns-server. Only the newer module
+  # adds WorkingDirectory=%S/..., which modules/services/dns.nix already mkForce-nulls.
+  # So swapping the package alone is sufficient and leaves the unit definition
+  # entirely on the stable module this host has been running.
+  #
+  # .NET 10 IS BUNDLED, which is the one upgrade note that mattered. Technitium's 15.0
+  # release notes say "you must install .NET 10 Runtime manually before upgrading" --
+  # that applies to hand-installed servers. This derivation carries
+  # dotnet-aspnetcore-runtime 10.0.11 as a dependency (verified, not assumed: the
+  # package's `dotnet-runtime.version` evaluates to 10.0.11 against 9.0.17 on stable),
+  # so there is no manual step and no runtime to drift out from under it.
+  #
+  # UPGRADE IS REVERSIBLE. Nothing in the 15.0-15.4 notes documents a one-way config
+  # migration or declares downgrade to 14.x unsupported; upstream states existing
+  # installations "work the same after the upgrade". Rollback is therefore an ordinary
+  # generation switch. A verified-restorable filesystem backup was taken immediately
+  # before the first deploy regardless.
+  #
+  # TWO BEHAVIOUR CHANGES TO KNOW ABOUT, neither breaking here: 15.3 drops the `Delete`
+  # permission from the DNS Administrators group by default and reimplements the
+  # built-in internal zones per RFC 6303/6761 (this host's reverse zones are
+  # user-created, not built-in, and were confirmed intact after the switch); 15.2
+  # renamed the Settings API field reverseProxyNetworkACL -> dnsReverseProxyNetworkACL,
+  # which the dns-exporter does not read -- it calls api/user/checkForUpdate and the
+  # dashboard stats endpoints.
+  #
+  # RETIRE THIS when nixos-25.11 ships technitium-dns-server >= 15.4.0.
+  technitium-dns-server = inputs.nixpkgs-user.legacyPackages.${system}.technitium-dns-server;
+
   # mcp-server-sequential-thinking: nix-config overrideAttrs's a base nixpkgs
   # package that this channel lacks, so take it from nixpkgs-unstable (which
   # has it), the same way JupyterLab/Immich pull newer packages from unstable.

@@ -8986,15 +8986,16 @@ container-health-exporter (6 in 48h) is the only genuinely live residue and is
 small; worth a look if it grows.
 #+end_example
 
-* TODO [#D] PG&E opower entry fails: 'MFA required' after opower 0.18.6 -> 0.20.0
+* DONE [#D] PG&E opower entry fails: 'MFA required' after opower 0.18.6 -> 0.20.0
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-y20
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-08 Tue 15:25]
-:MODIFIED: [2026-09-08 Tue 15:25]
+:MODIFIED: [2026-09-08 Tue 16:08]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 16:08]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -9020,6 +9021,21 @@ REALISTIC CHOICES, all operator decisions:
 NOTE FOR ANY FUTURE WORK HERE: opower entity_ids embed the utility ACCOUNT NUMBER
 (sensor.gas_account_<account>_*). Use aggregates, or redact digit runs in the same
 pipeline; never list these entity names raw.
+#+end_example
+
+** Close Reason
+
+#+begin_example
+Fixed by the operator, re-authenticating the PG&E opower entry with MFA. Confirmed independently:
+  - hass_config_entries{domain=opower} is now loaded=2; the setup_error entry is gone.
+  - All eight gas-account sensors report available (0 unavailable), verified by count only.
+  - The only two 'MFA required' log lines are both timestamped 13:59:53, the original
+    upgrade restart. No recurrence since.
+  - HomeAssistantConfigEntryFailed has cleared from Alertmanager.
+
+Side effect worth recording: hass_entity_unavailable_total is now 148, BELOW the 151
+pre-upgrade baseline, against an unchanged 1151 tracked entities. The 2026.9.1 upgrade
+ends net-positive on entity availability.
 #+end_example
 
 * DONE [#D] Decide whether HermesExtractFailing should alert on a single zero-success batch

@@ -1,5 +1,5 @@
 #!/run/current-system/sw/bin/bash
-# drafts-mcp-self-heal action: restart drafts-mcp.service.
+# drafts-mcp-self-heal action: restart drafts-mcp.service and VERIFY it recovered.
 #
 # Pure, idempotent transport restart — re-execs mcp-proxy's single shared ssh
 # child to hera, recovering the silent-green-zombie failure mode where the
@@ -7,15 +7,82 @@
 # Orthogonal to drafts_run_action: this touches ONLY the systemd unit, never a
 # Drafts tool call — so the "no autonomous remediator on hera" guarantee holds.
 #
+# WHY THIS VERIFIES RATHER THAN TRUSTING systemctl (2026-09-08).
+# drafts-mcp is Type=simple and mcp-proxy stays alive even when its stdio child
+# cannot reach hera. So `systemctl restart` exits 0, the unit sits "active
+# (running)", and NOTHING is bound to the SSE port — the same silent-green
+# zombie this action exists to clear, re-created by the action itself. The old
+# version reported {"ok": true, "notes": "drafts-mcp restarted"} on exactly that
+# outcome.
+#
+# Observed live: at 13:20:40 this action restarted the bridge, ssh to hera was
+# rejected one second later, mcp-proxy never bound its port, and the action
+# reported success. Alertmanager had already spent its notification, so no
+# further webhook arrived and the 300s debounce never came into play. The bridge
+# stayed dead for ~1h37m until it was restarted by hand.
+#
+# The port is READ FROM THE UNIT rather than hardcoded, so it cannot drift from
+# modules/services/drafts-mcp.nix (9082 today, also in docs/ports.txt).
+#
+# The health test is "is the SSE port bound", not an HTTP fetch of /sse: binding
+# is precisely the condition that separates healthy from zombie, because
+# mcp-proxy binds only AFTER its child is set up. /sse is a streaming endpoint,
+# so probing it means holding a connection open and reasoning about timeouts;
+# the listener check is exact and instant.
+#
 # Output: one line of JSON to stdout describing the result.
 set -euo pipefail
+
+SYSTEMCTL=/run/current-system/sw/bin/systemctl
+SS=/run/current-system/sw/bin/ss
+
+# Bounded so the whole action stays well inside the caller's 120s subprocess
+# timeout even when both attempts fail: 2 x (restart + 30s) plus slack.
+SETTLE_TRIES=15
+SETTLE_SLEEP=2
+
+port=$("$SYSTEMCTL" show drafts-mcp.service -p ExecStart --value 2>/dev/null |
+  grep -oE -- '--port [0-9]+' | awk '{print $2}' | head -1)
+port=${port:-9082}
+
+listening() {
+  "$SS" -tln 2>/dev/null | grep -qE "127\.0\.0\.1:${port}[[:space:]]"
+}
+
+settle() {
+  local i
+  for ((i = 0; i < SETTLE_TRIES; i++)); do
+    listening && return 0
+    sleep "$SETTLE_SLEEP"
+  done
+  return 1
+}
+
 start_ts=$(date +%s)
+attempts=0
 rc=0
-/run/current-system/sw/bin/systemctl restart drafts-mcp.service || rc=$?
+
+for attempt in 1 2; do
+  attempts=$attempt
+  rc=0
+  "$SYSTEMCTL" restart drafts-mcp.service || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    end_ts=$(date +%s)
+    printf '{"ok": false, "duration_s": %d, "attempts": %d, "notes": "systemctl restart returned %d"}\n' \
+      "$((end_ts - start_ts))" "$attempts" "$rc"
+    exit 0
+  fi
+  if settle; then
+    end_ts=$(date +%s)
+    printf '{"ok": true, "duration_s": %d, "attempts": %d, "notes": "drafts-mcp restarted; port %d bound"}\n' \
+      "$((end_ts - start_ts))" "$attempts" "$port"
+    exit 0
+  fi
+  # Came up green but deaf. A second restart is worth one try: the usual cause
+  # is a transient ssh rejection from hera (asleep, or sshd not yet ready), and
+  # the next attempt often lands after it has settled.
+done
+
 end_ts=$(date +%s)
-duration=$((end_ts - start_ts))
-if [ "$rc" -eq 0 ]; then
-  printf '{"ok": true, "duration_s": %d, "notes": "drafts-mcp restarted"}\n' "$duration"
-else
-  printf '{"ok": false, "duration_s": %d, "notes": "systemctl restart returned %d"}\n' "$duration" "$rc"
-fi
+printf '{"ok": false, "duration_s": %d, "attempts": %d, "notes": "restarted but port %d never bound; ssh to hera is likely failing"}\n' \
+  "$((end_ts - start_ts))" "$attempts" "$port"

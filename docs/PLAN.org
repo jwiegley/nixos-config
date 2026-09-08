@@ -8688,15 +8688,16 @@ particular should be John's call rather than a cleanup.
 ]
 #+end_src
 
-* TODO [#C] DraftsMcpBridgeDown: drafts-mcp /sse refusing connections
+* DONE [#C] DraftsMcpBridgeDown: drafts-mcp /sse refusing connections
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-wh9
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 15:00]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 15:00]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -8707,6 +8708,26 @@ Alert firing since 2026-09-08 20:20: 'drafts-mcp /sse not accepting connections 
 Corroborated independently from inside this Claude session: the drafts-hera MCP server failed to connect and all mcp__drafts-hera__* tools were withdrawn as unavailable. So this is a real endpoint outage, not just a probe artifact.
 
 The bridge fronts Drafts on the Mac (hera) over /sse, so the usual suspects are the far end being asleep/rebooted, the tunnel or port-forward being down, or the bridge process having exited on the hera side. Check reachability of the hera endpoint first, then whether anything on this host proxies it.
+
+** Close Reason
+
+Service restored and the underlying defect fixed.
+
+IMMEDIATE: the bridge was active-but-deaf -- unit 'active (running)', nothing bound to 9082, /sse refusing connections. A restart at 14:57 brought it back: port bound, /sse 200, Uvicorn running.
+
+ROOT CAUSE OF THE OUTAGE: a transient ssh rejection from hera. At 13:20:40 the self-heal restarted the bridge; at 13:20:41 ssh got 'johnw@hera.lan: Permission denied'. mcp-proxy binds its SSE port only AFTER its stdio child is set up, so the child's failure left the proxy running and unbound. hera itself was fine (ICMP ok, :22 open, host key verified, and the key is authorized -- a later probe connected).
+
+THE REAL DEFECT, now fixed: the self-heal action reported success for a restart that produced a dead bridge. drafts-mcp is Type=simple and mcp-proxy survives its child failing, so 'systemctl restart' exits 0 and the old action printed {"ok": true, "notes": "drafts-mcp restarted"} -- recreating the exact silent-green zombie it exists to clear. Alertmanager had already spent its notification, so no second webhook arrived and the 300s debounce never came into play. Dead for ~1h37m until restarted by hand.
+
+FIX (scripts/drafts-mcp-self-heal/actions/restart_drafts_mcp): after restarting, poll until the SSE port is actually bound; on failure restart once more and poll again; report ok:false honestly if it never binds. The port is read from the unit's ExecStart rather than hardcoded so it cannot drift from drafts-mcp.nix. Bounded at 2 x (restart + 30s) to stay inside the caller's 120s timeout.
+
+Health test is 'is the port bound', not an HTTP fetch of /sse: binding is exactly what separates healthy from zombie, and /sse is a streaming endpoint whose probe would need timeout reasoning.
+
+VERIFIED: ran the action for real -> {"ok": true, "duration_s": 2, "attempts": 1, "notes": "drafts-mcp restarted; port 9082 bound"}, unit active, /sse 200. Positive-controlled the detector so it is not a check that cannot fail: bound 9082 -> UP, unbound 9083 -> DOWN, and bare prefix '908' does NOT match (the whitespace anchor prevents substring hits).
+
+Takes effect immediately -- actionsDir is the live /etc/nixos path, not a store path, so no rebuild is required.
+
+REMAINING GAP, not addressed: if both attempts fail, nothing retries until Alertmanager next notifies. The action now reports ok:false rather than lying, so the condition is at least visible.
 
 * DONE [#D] SCRATCH obr flag-interaction test — delete me
 :PROPERTIES:

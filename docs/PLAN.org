@@ -568,6 +568,35 @@ NOT VERIFIED, and cannot be without a real failed backup: that it fires on an
 actual miss. What is verified is that it no longer fires on normal operation and
 that the metric and comparison are live.
 
+* DONE [#A] agent-cat-pi-extension e2e tests fail in the nix sandbox: spawn /usr/bin/env ENOENT
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-4o4
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 12:20]
+:MODIFIED: [2026-09-08 Tue 13:56]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 13:56]
+:CLOSE_REASON: Fixed upstream by the operator's nix-config update. The derivation hash changed (ziacz2hn -> r8vslfsy) and it now builds; a full nixos-rebuild build completed with zero builder failures.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Every nixos-rebuild on vulcan now FAILS (no longer hangs) because agent-cat-pi-extension-0.1.0 fails its own check phase, which cascades: hm-session-vars -> home-manager-path -> pi-gallery -> home-manager-generation -> user-environment -> etc -> nixos-system.
+
+4 failed | 3 passed in test/native-targets-e2e.test.ts, all four with:
+    Error: spawn /usr/bin/env ENOENT
+
+Failing tests: 'executes the real stub ACP target', 'streams declared stdin separately from fd-3 controls', 'executes the real stub agent-deck target', 'keeps Agent Deck prompt text out of argv and failure diagnostics'.
+
+CAUSE: /usr/bin/env does not exist inside the Nix build sandbox. These e2e tests spawn stub targets through a /usr/bin/env shebang, which resolves on a normal host but not under the sandbox. So the tests are not sandbox-safe, independent of anything on this host.
+
+The package comes from the 'pi' flake input, so the fix belongs upstream in that repo (patch the stub shebangs to an absolute interpreter, or exclude native-targets-e2e from the packaged checkPhase). A local escape hatch would be an overlay overriding doCheck / adding a vitest --exclude.
+
+IMPACT: P0 -- blocks ALL deploys, including the ready dns_ptr_correct exporter fix and the requested Home Assistant 2026.7.2 -> 2026.9.1 upgrade, which needs an iterative build-fix loop and therefore working builds.
+
 * DONE [#E] restic_last_check_timestamp_seconds HELP text claims it is an integrity-check time; it is the collector pass time
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2372,6 +2401,32 @@ Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional
 ]
 #+end_src
 
+* DONE [#C] pushme-positron.service failed: rsync broken pipe mid-transfer
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-a8e
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 14:02]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:02]
+:CLOSE_REASON: Recovered. pushme-positron is no longer in systemctl --failed and SystemdServiceFailed has cleared, consistent with the broken-pipe being a transient link drop that succeeded on its next run. Reopen if the signature recurs.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Failed 2026-09-08 20:04 (first seen this session; not present at the 12:2x health check).
+
+  rsync: [generator] write error: Broken pipe (32)
+  13:03:24 [INFO] andoria done (with errors)
+  Main process exited, code=exited, status=1/FAILURE
+
+Unit pulls andoria-08's home into /tank/Backups/Contracts/Positron/nfs. Consumed 24.8s CPU, 210MB peak, 13.3MB incoming before dying, so it transferred real data and then lost the connection rather than failing at startup.
+
+A broken pipe mid-transfer is usually the remote end or the link dropping, and often succeeds on a retry -- but it has NOT rerun, so the backup is currently stale. Determine whether this is a one-off (retry succeeds, leave it) or recurring (andoria reachability, NFS/ssh timeout, or an rsync arg needing --timeout / --partial). Check whether prior runs in the journal show the same signature.
+
 * DONE [#E] Threshold audit: 77 of 484 rules checked mechanically; method must account for for: clause
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -2860,6 +2915,53 @@ update that carries the new module breaks mail on switch.
 ]
 #+end_src
 
+* DONE [#A] nixos-rebuild hangs after evaluation; no switch can be deployed
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-cur
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 11:35]
+:MODIFIED: [2026-09-08 Tue 12:20]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 12:20]
+:CLOSE_REASON: Root-caused and fixed: four orphaned nix-daemon workers (parent dead, 0s CPU, ~3.8 days old) held a lock on pi-coding-agent-source-build-0.85.0-npm-deps since Sep 4, for a path whose output ALREADY existed. strace showed nix reopening the .lock and ppoll'ing every 4s forever. Killing the four workers freed it and the build immediately proceeded past that point. Deploys are no longer hung; they now fail fast on a real build error (see follow-up).
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Every nixos-rebuild build/switch on vulcan now hangs reproducibly. Signature is identical across attempts: nix evaluates, prints the derivation list it intends to build, then blocks forever. Consistently ~43-49s of CPU then nothing, process state Sl, ZERO writes under /nix/store for minutes, load falling to idle. Not slow -- stopped.
+
+Observed 2026-09-08 ~11:00-12:15 PDT over four attempts. The Technitium 15.4 switch the previous evening (19:57) completed normally, so this is new.
+
+HYPOTHESES TESTED AND DISPROVEN:
+  1. The dirty flake.lock nix-config bump (00311c79 -> a37a54da). Reverted flake.lock to
+     HEAD; identical hang at 49s CPU.
+  2. A stalled binary-cache fetch. One attempt did show a single TCP connection in
+     CLOSE-WAIT (peer hung up, nix still blocked on it), but a later attempt hung with NO
+     TCP connection at all.
+  3. Substituter queries generally. Re-ran with --option substituters '' -- identical hang.
+  4. Garbage collection holding gc.lock. nix-gc and nix-optimise are both inactive; last
+     nix-gc run was 2026-09-07 00:00. The build holds gc.lock itself, which is normal.
+
+Other observations: all 11 threads report wchan 0 (not in an identifiable kernel wait). The
+process holds /nix/var/nix/db/big-lock plus the sqlite db and its wal/shm. Several
+nix-daemon --stdio processes are extremely long-lived (3.8+ days), leftover from earlier
+sessions -- unexamined, worth checking as a possible lock holder.
+
+A partially-built system path was left behind and is NOT valid: switch-to-configuration is
+missing from it, so an interrupted build cannot simply be activated by hand.
+
+IMPACT: P0 because NOTHING can be deployed. The running system is healthy (0 failed units,
+DNS serving, Technitium 15.4 active) and unaffected, but any config change -- including the
+ready-and-verified dns_ptr_correct exporter fix -- is stuck in the working tree.
+
+Note the build driver's 4-hour lock wait: a hung build holds /etc/nixos/.nixos-build and
+will block another invocation for up to 4h unless its PID is provably dead.
+#+end_example
+
 * DONE [#D] vulcan re-declares nix-config's inputs by hand; mirror upstream's inputSet merge instead
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3014,6 +3116,48 @@ vectorchord.
 Follow-up scan found immich was the ONLY database left ahead of its binaries by that
 window; org sits at vector 0.8.2 against 0.8.6 available, which is the safe direction and
 verified working.
+
+* DONE [#C] Deploy the dns_ptr_correct exporter fix (DNSPTRBroken is a false positive)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-d4s
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 13:54]
+:MODIFIED: [2026-09-08 Tue 14:02]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:02]
+:CLOSE_REASON: Deployed and verified: dns_ptr_correct now reads 1 and the DNSPTRBroken alert has cleared.
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+DNSPTRBroken has been firing since 2026-09-08 01:20. Reverse DNS is NOT broken -- verified by hand, PTR resolves for this host and for the router.
+
+The exporter in modules/monitoring/services/technitium-dns-monitoring.nix exact-matched a single string:
+    elif [ "$PTR_ANSWER" = "vulcan." ]; then
+On 2026-09-07 the reverse zones were rewritten (every *.in-addr.arpa file re-serialised 23:17-23:19) and the record became the FQDN vulcan.lan., which is the more conventional PTR form. The gauge went 1 -> 0 at 23:21 and the alert fired.
+
+FIX IS WRITTEN AND VERIFIED AT SOURCE LEVEL but not deployed: accepts either spelling, with both derived from hostPolicy.hostName/dnsName instead of literals, so a future rename travels with policy. The generated shell was inspected (not just the Nix) and passes bash -n.
+
+Blocked only on deployment. DONE when the switch lands and dns_ptr_correct reads 1.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-d4s",
+    "depends_on_id": "nixos-4o4",
+    "type": "blocks",
+    "created_at": "2026-09-08T20:54:12.486043065Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
 
 * DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
 :PROPERTIES:
@@ -3191,6 +3335,35 @@ COST: the change is in the VM config, so the switch restarted the Hermes VM and 
   }
 ]
 #+end_src
+
+* TODO [#C] health_bridge fails to load: DeviceEntry has no attribute config_entry_id
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-eab
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 13:53]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Home Assistant config entry 'Health Bridge' has failed to set up since 2026-09-07 22:05, immediately after all files under /var/lib/hass/custom_components/health_bridge were rewritten at 22:04. One occurrence in 7 days -- introduced by that deployment, not a regression here.
+
+  AttributeError: 'DeviceEntry' object has no attribute 'config_entry_id'. Did you mean: 'config_entries'?
+
+Two genuine sites, both in __init__.py, both DeviceEntry accesses:
+  line 128:  if device.config_entry_id == health_entry_id
+  line 146:  or wrong_device.config_entry_id == health_entry_id
+Correct form is membership: health_entry_id in device.config_entries -- DeviceEntry.config_entries is set[str] (verified in HA 2026.7.2's helpers/device_registry.py:369), because a device can belong to several entries.
+
+DO NOT 'fix' the other matches: EntityEntry.config_entry_id (line 154) is valid, and every config_entry_id= keyword argument (135, 792, 1076, sensor.py) is correct API.
+
+This is the source of Node-RED's recurring 'HA Integration Health: evaluated entries=90 unhealthy=1' debug line -- that flow's node.warn is gated on unhealthy>0, so it stops on its own once this loads. It also keeps HomeAssistantConfigEntryFailed firing.
+
+OWNER: the operator. The component is not Nix-managed, has no .git, and no source tree was found on this host, so the fix belongs in whatever repo it is deployed from -- editing the live copy would be clobbered on the next deploy.
 
 * DONE [#E] meta-monitoring.yaml header says two textfile cadence tiers; there are three
 :PROPERTIES:
@@ -4683,6 +4856,26 @@ running and verified; it does not depend on this and is unaffected either way.
 Needs a decision: get ghc-9.10.3 substitutable (a cache or a binary-cache push from the
 nix-config side), or move the nix-config pin back to a revision whose closure is cached.
 #+end_example
+
+* TODO [#D] Confirm whether the GHC 9.10.3 bootstrap blocker is gone
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ho3
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-08 Tue 13:54]
+:MODIFIED: [2026-09-08 Tue 13:54]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+nixos-hit recorded that current main's flake.lock pinned a nix-config revision whose closure needed a from-source ghc-9.10.3 build -- a multi-hour aarch64 compile that blocked every rebuild.
+
+Later evidence suggests it resolved on its own: after nix-config advanced to a37a54da, a full build ran with NO GHC involvement (watched explicitly for ghc-9.10.3-source builder processes; none appeared). The operator has since updated nix-config again.
+
+This needs a positive confirmation rather than an assumption, because the earlier attribution was already wrong once (first blamed on the build driver's input refresh, actually committed in main's flake.lock). Verify a clean build from the current lock does not pull ghc-9.10.3, then close nixos-hit -- or reopen it properly if it does.
 
 * DOING [#C] VTherm eco setpoint does not reach the Nest; eco silently defeated for 10h on 08-17
 :PROPERTIES:
@@ -6217,6 +6410,47 @@ VERIFIED THIS CYCLE, including the instrument itself rather than just its output
 Threshold reasoning is recorded in the rule comment: the slowest legitimate unlisted cadence is weekly, so 14 days is two consecutive missed weekly runs -- unambiguously dead rather than late -- which follows the same 'detect dead, not skipped' logic the Hourly tier already documents. The negative match means new collectors are covered the moment they appear, and adding a file to a tier above tightens it here automatically.
 #+end_example
 
+* TODO [#B] Post-upgrade verification: Node-RED, MQTT, Prometheus, VictoriaMetrics against HA 2026.9.1
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-nhf
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 13:54]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+All four are currently 'active', but against the OLD HA 2026.7.2. Their health says nothing about compatibility with 2026.9.1 until it actually runs.
+
+After the switch, verify each rather than assuming:
+  - home-assistant starts; check the journal for integration setup errors; confirm all 9 custom components load (health_bridge will still fail for its own reason -- do not let that mask a new one).
+  - node-red: confirm the HA websocket connection re-establishes and the server-state-changed nodes still fire. The HA Integration Health tab's evaluate-health function reports entries=N unhealthy=M -- compare N against the pre-upgrade 90.
+  - mosquitto: confirm HA reconnects and discovery topics still populate.
+  - prometheus + victoriametrics: confirm the HA scrape target is up and hass_* series continue without a gap.
+Record the pre-upgrade baseline for each BEFORE switching, or the after-reading is not interpretable.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-nhf",
+    "depends_on_id": "nixos-sbk",
+    "type": "blocks",
+    "created_at": "2026-09-08T20:54:04.669563905Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DONE [#D] AIDE monitors the obr cache, so routine issue tracking raises AideChangesDetected
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -6374,6 +6608,44 @@ THE SIX REMAINING ITEMS:
  6. Live sync verified: hourly timer, last run 00:04:43 -> 00:16:42 exit 0 Result=success, with '[INFO] andoria done' every hour through the night. Destination exists with 35 top-level entries, mtime 2026-08-22 22:26, 876G under /tank/Backups/Contracts.
 
 No configuration change was needed; the work had been done and simply never verified or closed.
+#+end_example
+
+* TODO [#C] No alert covers a build blocked by a stale nix store lock
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-obc
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-08 Tue 12:48]
+:MODIFIED: [2026-09-08 Tue 12:48]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+The orphaned-lock incident (nixos-cur) blocked every nixos-rebuild on this host for an unknown period ending 2026-09-08, and NOTHING alerted. The lock file dated Sep 4, so deploys may have been silently impossible for up to four days. It was only found because a switch was attempted by hand and then strace'd.
+
+WHY NOTHING FIRED: the failure is invisible to every existing check. No unit fails (nixos-rebuild is run interactively, not by a timer), no metric moves, and the system keeps running the last-good generation perfectly healthily. Monitoring watches the RUNNING system; nothing watches whether the system can still be CHANGED.
+
+That is a real gap: a host that cannot deploy is one urgent security patch away from being a serious problem, and it looks completely healthy from the outside.
+
+POSSIBLE SHAPES (not yet decided):
+  - A periodic canary that runs 'nixos-rebuild dry-build' (or 'nix build --dry-run' on
+    the toplevel) on a timer, exporting success/failure plus duration to the textfile
+    collector. Catches stale locks, broken inputs and eval errors alike. Cost is one
+    evaluation per run; use a generous interval (daily) and a long TimeoutStartSec.
+  - Or narrower: an exporter counting 0-byte root-owned *.lock files under /nix/store
+    whose mtime is older than N hours AND which are currently held by a process whose
+    parent is dead. Cheap but only catches this one failure mode.
+  - Note the naive 'count *.lock files' version is WRONG: /nix/store legitimately
+    contains ~26 Cargo.lock files as package contents. Filter on 0-byte AND root-owned
+    AND a non-epoch mtime, which is what distinguishes a real build lock.
+
+The dry-build canary is the better buy -- it would also have caught the current
+agent-cat-pi-extension breakage (nixos-4o4) the day it appeared rather than when
+someone next tried to deploy.
 #+end_example
 
 * DONE [#B] hermes-heal could not read the Discord heartbeat, so self-heal could never resolve an incident
@@ -7424,6 +7696,55 @@ nginx would have refused to start referencing a missing cert. Issued with the
 documented script at 644/600 nginx:nginx.
 #+end_example
 
+* TODO [#B] Deploy and verify the Home Assistant 2026.9.1 upgrade
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-sbk
+:LABELS:   []
+:ISSUE_TYPE: epic
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 13:54]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+nixpkgs-unstable was bumped 241313f4 -> dc5d91f8 on 2026-09-08, taking Home Assistant 2026.7.2 -> 2026.9.1. Three build breakages were found and fixed (pybose PACKAGE_VERSION, thinqconnect redundant local patch, aioimaplib py3.14 stdlib tests). The full system build now has ZERO HA-related failures.
+
+NOT YET DEPLOYED. The unit still executes homeassistant-2026.7.2. Everything verified so far is BUILD-level only: nothing confirms HA starts, that entities load, or that anything downstream still talks to it.
+
+Immich was deliberately decoupled to its own nixpkgs-immich input (held at 3.0.3, verified bit-identical to the running store path) so this upgrade cannot trigger its irreversible extension-catalog migration.
+
+Uncommitted in the working tree: flake.nix, flake.lock, overlays/default.nix (+ deleted overlays/thinqconnect-x509req-fix.py), modules/monitoring/services/technitium-dns-monitoring.nix, docs/PLAN.org.
+
+DONE when: ./build switch completes, HA starts on 2026.9.1, all 9 custom components load, and the downstream checks pass.
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-sbk",
+    "depends_on_id": "nixos-4o4",
+    "type": "blocks",
+    "created_at": "2026-09-08T20:54:04.077416812Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  },
+  {
+    "issue_id": "nixos-sbk",
+    "depends_on_id": "nixos-zd4",
+    "type": "blocks",
+    "created_at": "2026-09-08T20:54:04.360594880Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DONE [#D] IoTDeviceChronicallyUnreachable summary inverted its own value
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -8302,6 +8623,26 @@ particular should be John's call rather than a cleanup.
 ]
 #+end_src
 
+* TODO [#C] DraftsMcpBridgeDown: drafts-mcp /sse refusing connections
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-wh9
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 13:53]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Alert firing since 2026-09-08 20:20: 'drafts-mcp /sse not accepting connections for 5 minutes'.
+
+Corroborated independently from inside this Claude session: the drafts-hera MCP server failed to connect and all mcp__drafts-hera__* tools were withdrawn as unavailable. So this is a real endpoint outage, not just a probe artifact.
+
+The bridge fronts Drafts on the Mac (hera) over /sse, so the usual suspects are the far end being asleep/rebooted, the tunnel or port-forward being down, or the bridge process having exited on the hera side. Check reachability of the hera endpoint first, then whether anything on this host proxies it.
+
 * DONE [#D] SCRATCH obr flag-interaction test — delete me
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -8965,6 +9306,46 @@ It fires 6+ times a day and acts on climate.upstairs_vtherm.
 
 Unresolved: is that coupling deliberate (pre-cooling upstairs when work starts) or leftover from the
 earlier office HVAC work? If leftover, the right fix is deleting the node rather than editing its preset.
+
+* DONE [#B] Review Home Assistant 2026.8 and 2026.9 breaking changes before deploying
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-zd4
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 13:58]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 13:58]
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Two releases of breaking changes have never been read. A successful Nix build cannot catch a removed service call, a renamed entity attribute, a changed websocket API, or a dropped integration -- it only proves the code compiles.
+
+Specifically at risk on this host:
+  - Node-RED, which drives HA through the websocket/API via node-red-contrib-home-assistant-websocket. An API change here breaks automations silently.
+  - The Prometheus exporter endpoint HA exposes, scraped into Prometheus and VictoriaMetrics.
+  - MQTT/mosquitto discovery topic conventions.
+  - The 9 custom components, which pin against HA internals (health_bridge already fails on a DeviceEntry API change, which is exactly this class of breakage).
+  - 54 extraComponents including lg_thinq, august/yale, immich, bose.
+
+Read the 2026.8.x and 2026.9.x release notes' breaking-changes sections and record anything affecting the above BEFORE the switch, so a post-deploy fault can be recognised rather than rediscovered.
+#+end_example
+
+** Close Reason
+
+Reviewed 2026.8 and 2026.9 breaking changes.
+
+2026.8 -- THE SIGNIFICANT ONE. Device registry overhaul, 'one device, one config entry', explicitly shipped WITHOUT a backwards-compatibility shim: a device can no longer be tied to more than one config subentry, and integrations attaching several subentries to one device must now create one device per subentry. Helper integrations must no longer add their config entry to the source entity's device or a user-selected device; the relevant helper functions now ALWAYS RETURN NONE, and entities are meant to link via self.device_entry instead. Also minor renames: advanced_options -> additional_options (DNS IP), advanced_settings -> additional_settings (History Stats).
+
+Directly implicates health_bridge (nixos-eab). Its failing function is literally _repair_health_device_ownership, i.e. code that manipulates device/config-entry ownership -- the exact model 2026.8 changed. The two DeviceEntry.config_entry_id -> config_entries fixes may therefore be necessary but NOT sufficient; that repair logic should be re-read against the new one-device-one-entry rule rather than just made to compile.
+
+2026.9 -- mild. (a) vacuum battery_level removed from the base entity; a custom integration still setting it silently stops reporting battery -- watch dreame_vacuum, add a separate battery sensor if it regresses. (b) Z-Wave lock user/credential actions now require an admin account; no Z-Wave on this host, so not applicable.
+
+Nothing here blocks the upgrade. All are post-deploy watch items.
 
 * DEFER [#D] Alert Notifier drops iPhone pushes when HA is unreachable instead of retrying
 :PROPERTIES:

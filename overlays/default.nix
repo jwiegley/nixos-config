@@ -69,18 +69,20 @@ let
       };
       doCheck = false;
     });
-    # thinqconnect: 1.0.13 builds its MQTT client-cert CSR with pyOpenSSL's
-    # crypto.X509Req, but X509Req was removed in pyOpenSSL 24.3.0 (HA now ships
-    # 25.x/26.x) → LG ThinQ fails at setup: "module 'OpenSSL.crypto' has no
-    # attribute 'X509Req'". Rewrite generate_csr() to use the `cryptography`
-    # library (build-time transform; the script asserts, so the build fails
-    # loudly if upstream changes the block). Keeps version 1.0.13 (what HA's
-    # lg_thinq manifest pins). Drop once thinqconnect migrates off pyOpenSSL.
-    thinqconnect = hasPyPrev.thinqconnect.overridePythonAttrs (old: {
-      postPatch = (old.postPatch or "") + ''
-        ${prev.python3.interpreter} ${./thinqconnect-x509req-fix.py}
-      '';
-    });
+    # thinqconnect's local X509Req fix was REMOVED on 2026-09-08: nixpkgs now carries
+    # the same fix itself, as csr-generation-fix.patch on python3xxPackages.thinqconnect
+    # (verified by reading the patch, not inferred from its name -- it makes the same
+    # OpenSSL.crypto.X509Req -> cryptography x509.CertificateSigningRequestBuilder
+    # rewrite, and additionally corrects install_requires from pyOpenSSL to
+    # cryptography, which the local version did not).
+    #
+    # Keeping ours would not have been merely redundant, it BROKE the build: the local
+    # transform asserted that it found `from OpenSSL import crypto`, and by the time it
+    # ran the upstream patch had already replaced that import, so the assert fired --
+    # "thinqconnect x509 fix: 'from OpenSSL import crypto' anchor not found". That
+    # loud-failure design worked exactly as intended; this is the drop it called for.
+    # (overlays/thinqconnect-x509req-fix.py deleted with it.)
+
     # Several packages mark disabled=true for Python 3.14 in nixpkgs-unstable,
     # but they work fine at runtime. HA 2026.x requires Python 3.14 and uses these.
     # Tests fail: asyncio.get_event_loop() raises RuntimeError in Python 3.14;
@@ -88,6 +90,43 @@ let
     reactivex = hasPyPrev.reactivex.overridePythonAttrs (_: {
       disabled = false;
       doCheck = false;
+    });
+    # aioimaplib: two tests fail under Python 3.14, and the fault is in CPython's
+    # stdlib rather than in this library. test_imapserver_imaplib.py drives
+    # aioimaplib's mock IMAP *server* using the stdlib `imaplib` client, and 3.14's
+    # imaplib now requires three arguments where the test supplies two:
+    #     elif command == 'STORE':
+    #         message_set, op, flags = args
+    #     ValueError: not enough values to unpack (expected 3, got 2)
+    # The traceback bottoms out inside imaplib itself, not aioimaplib.
+    #
+    # SAFE TO SKIP because Home Assistant never travels that path: the Mail and
+    # Packages integration uses aioimaplib's own async client (IMAP4_SSL), while
+    # these two tests exercise the stdlib synchronous client against the test
+    # server. 148 of 150 tests still run -- this is not doCheck = false.
+    #
+    # Scoped deliberately: "test_store" alone would already match both by substring,
+    # and both names are listed so the intent is legible. Checked that no OTHER test
+    # in the suite contains "store", so nothing else is silently deselected.
+    #
+    # test_imapserver_imaplib2.py::test_idle is excluded separately, and by exact node
+    # id rather than by name, for two reasons. It is FLAKY, not broken: it passed on
+    # the run before this override existed and failed with TimeoutError on the next,
+    # with nothing changed but test selection -- an IDLE test racing a timeout on a
+    # loaded aarch64 builder. And "test_idle" as a disabledTests substring would also
+    # swallow test_idle_start__exits_queue_get_without_timeout_error and
+    # test_idle_start__exits_queueget_with_keepalive_without_timeout_error, which are
+    # aioimaplib's own ASYNC tests -- exactly the client path Home Assistant uses, and
+    # the last thing that should be silently skipped. disabledTestPaths routes any
+    # entry containing "::" to pytest --deselect=, so this removes that one test only.
+    aioimaplib = hasPyPrev.aioimaplib.overridePythonAttrs (old: {
+      disabledTests = (old.disabledTests or [ ]) ++ [
+        "test_store"
+        "test_store_and_search_by_keyword"
+      ];
+      disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [
+        "tests/test_imapserver_imaplib2.py::test_idle"
+      ];
     });
     # aiounittest: redundant in Python 3.10+ (stdlib has IsolatedAsyncioTestCase)
     # but still works; needed as nativeBuildInput by yalexs (august/yale integration).
@@ -172,6 +211,24 @@ let
     };
 
     # pybose: Bose SoundTouch async client
+    #
+    # PACKAGE_VERSION is load-bearing. Upstream's setup.py reads the version from the
+    # environment and falls back to a placeholder:
+    #     version = os.getenv("PACKAGE_VERSION", "0.0.0")
+    # Their release pipeline sets it; a plain sdist build does not, so the built
+    # metadata says 0.0.0 while this derivation declares 2025.8.2. nixpkgs gained a
+    # check comparing the two and fails the build on a mismatch:
+    #     The 'pybose' derivation has version '2025.8.2' but .dist-info/METADATA
+    #     specifies version '0.0.0'.
+    # Setting the variable uses upstream's own mechanism, so the metadata comes out
+    # correct at the source rather than being rewritten afterwards.
+    #
+    # NOT pyprojectVersionPatchHook, which is the obvious-looking fix and does not
+    # work here: that hook edits pyproject.toml, and this sdist has none (setup.py
+    # plus setup.cfg only). It fails with FileNotFoundError: 'pyproject.toml'.
+    #
+    # This is the failure that kept nixpkgs-unstable pinned at 241313f4 from
+    # 2026-07-25 to 2026-09-08 -- the version check landed in the 2026-07-23 bump.
     pybose = hasPy.buildPythonPackage rec {
       pname = "pybose";
       version = "2025.8.2";
@@ -180,6 +237,7 @@ let
         inherit pname version;
         sha256 = "47c2a4c96b9c8ca59d0f275e6feaef30bb641b4c11c97d65d8c5f036d558f28a";
       };
+      env.PACKAGE_VERSION = version;
       build-system = with hasPy; [ setuptools ];
       dependencies = with hasPy; [
         zeroconf
@@ -590,10 +648,15 @@ in
   ccusage = inputs.llm-agents.packages.${system}.ccusage;
   droid = inputs.llm-agents.packages.${system}.droid;
 
-  # Immich follows the same nixpkgs-unstable input as Home Assistant and
-  # JupyterLab. The former dedicated 3.0.1 pin became an accidental downgrade
-  # once this input advanced to 3.0.3.
-  immich = inputs.nixpkgs-unstable.legacyPackages.${system}.immich;
+  # Immich comes from its OWN pinned input, not the shared nixpkgs-unstable one.
+  #
+  # It rode nixpkgs-unstable until 2026-09-08, when bumping that input to upgrade
+  # Home Assistant would also have carried Immich 3.0.3 -> 3.1.0 as a side effect.
+  # Immich migrates its extension catalog on startup and that migration does not
+  # reverse when the package is rolled back, so it is the one package here that
+  # must never move incidentally. flake.nix's nixpkgs-immich entry carries the full
+  # rationale and the procedure for upgrading it deliberately.
+  immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
 
   # Home Assistant - Update to latest from nixpkgs-unstable (2026.7.2 as of
   # 2026-07-27; this note originally anchored on 2026.4.1+)

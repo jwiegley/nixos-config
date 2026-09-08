@@ -173,15 +173,50 @@
     };
 
     # nixpkgs unstable for packages that need newer versions
-    # Used for: JupyterLab (4.5.0+), Home Assistant, and other packages needing unstable
     #
-    # Pinned to the 2026-07-19 rev (nixos-unstable branch tip at that date). The
-    # 2026-07-23 bump (e2587caef) broke several HA Python deps sourced from this
-    # channel: langfuse 4.0.2 pins wrapt<2.0 but the channel ships wrapt 2.2.2,
-    # and a new pyprojectVersionPatchHook rejects pybose's version metadata. This
-    # rev is the last one that built cleanly (matches vulcan gen at 3ef83cb).
-    # Re-float to `nixos-unstable` once nixpkgs' HA Python packages catch up.
+    # WHAT ACTUALLY COMES FROM HERE, all four verified by grepping the overlay and
+    # modules rather than assumed: home-assistant, immich, gogcli, and
+    # mcp-server-sequential-thinking. Bumping this rev moves all four, so an HA
+    # upgrade also moves Immich -- worth remembering, because Immich migrates its
+    # own extension catalog on startup and that is not reversible by rolling the
+    # package back (see the vectorchord/pgvector shim in overlays/default.nix).
+    #
+    # Pinned to an explicit rev, deliberately, rather than floating on the
+    # nixos-unstable branch: this channel feeds Home Assistant's Python set, where
+    # an upstream inconsistency in any one of ~100 transitive deps breaks the
+    # build. A float would make that arrive unannounced during an unrelated
+    # rebuild; an explicit rev makes each move a reviewed change.
+    #
+    # HISTORY. Held at 241313f4 (2026-07-19) from 2026-07-25 until 2026-09-08,
+    # because the 2026-07-23 bump (e2587caef) broke several HA Python deps here:
+    # langfuse 4.0.2 pinned wrapt<2.0 against a channel shipping wrapt 2.2.2, and
+    # a new pyprojectVersionPatchHook rejected pybose's version metadata.
+    #
+    # Now at dc5d91f8 (nixos-unstable tip 2026-09-08), taking Home Assistant from
+    # 2026.7.2 to 2026.9.1.
     nixpkgs-unstable = {
+      url = "github:NixOS/nixpkgs/dc5d91f840324650bac8c379428c7037a416959a";
+    };
+
+    # Immich, held at the rev nixpkgs-unstable sat on before 2026-09-08 (immich
+    # 3.0.3 -- the version this host is already running).
+    #
+    # WHY IMMICH GETS ITS OWN INPUT. It used to ride nixpkgs-unstable alongside
+    # Home Assistant, so bumping that input for an HA upgrade silently moved Immich
+    # too. That coupling is unusually expensive for this one package: Immich runs
+    # `ALTER EXTENSION ... UPDATE` on startup, migrating its VectorChord/pgvector
+    # catalog to the newest version the server offers. Rolling the PACKAGE back
+    # afterwards does not roll the CATALOG back, and Immich then refuses to start
+    # against the older .so files -- exactly the failure of 2026-09-01, which had to
+    # be repaired by building newer extensions from source (see vectorchord_1_1_1 /
+    # pgvector_0_8_6 in overlays/default.nix).
+    #
+    # So Immich must move as a DELIBERATE, one-at-a-time change with its extension
+    # requirements checked first, never as a side effect of an unrelated upgrade.
+    # To upgrade it: bump this rev on its own, confirm the VectorChord and pgvector
+    # versions the new release demands are the ones the cluster actually provides,
+    # then deploy that by itself.
+    nixpkgs-immich = {
       url = "github:NixOS/nixpkgs/241313f4e8e508cb9b13278c2b0fa25b9ca27163";
     };
 

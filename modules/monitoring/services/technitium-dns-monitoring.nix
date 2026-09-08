@@ -23,17 +23,33 @@ let
   #      i.e. validation is currently ACTIVE, so the gauge reads 1 and the
   #      DNSSECValidationInactive alert will NOT fire on deploy.
   #
-  #   2. Reverse (PTR) resolution. The local zone's reverse lookup for the host
-  #      itself must resolve. Live evidence (2026-06-10): `dig -x 192.168.1.2`
-  #      returns `vulcan.` (NOT `vulcan.lan.` — the host's own PTR is the bare
-  #      `vulcan`; the router uses `router.lan.`). We therefore match the
-  #      ACTUAL configured value `vulcan.` so the gauge reads 1 today and
-  #      DNSPTRBroken does not false-fire.
+  #   2. Reverse (PTR) resolution. The local zone's reverse lookup for this host's
+  #      LAN address must resolve to this host's own name. BOTH the bare
+  #      `vulcan.` and the FQDN `vulcan.lan.` count as correct, and both are
+  #      derived from hostPolicy rather than written here as literals.
+  #
+  #      WHY BOTH, given this originally pinned the single string `vulcan.`:
+  #      that literal matched the value configured on 2026-06-10, when the host's
+  #      own PTR was the bare name. On 2026-09-07 the reverse zones were rewritten
+  #      -- every *.in-addr.arpa zone file re-serialised at 23:17-23:19 -- and the
+  #      record became the FQDN, which is the more conventional way to write a PTR.
+  #      The gauge dropped to 0 on the next run (23:21) and DNSPTRBroken fired while
+  #      reverse resolution was in fact working: hand-verified afterwards, the PTR
+  #      for this host and for the router both answered normally.
+  #
+  #      So the exact match had quietly turned a correctness probe into a
+  #      change-detector for one of two equally valid spellings of this host's
+  #      identity. Accepting either preserves the signal the check exists for -- a
+  #      MISSING PTR, or one pointing at some OTHER host, still reads 0 -- while
+  #      removing that false positive. Deriving the two accepted forms from
+  #      hostPolicy.hostName/dnsName also means a future rename travels with the
+  #      policy instead of silently breaking the probe again.
   #
   # All lookups are local (@127.0.0.1) with a short 3s timeout and a single try
   # so the oneshot can never hang the timer. The collector emits, atomically:
   #   dns_dnssec_validation_active   1 iff dnssec-failed.org -> SERVFAIL
-  #   dns_ptr_correct                1 iff PTR(192.168.1.2) == vulcan.
+  #   dns_ptr_correct                1 iff PTR(this host's LAN address) is
+  #                                  either vulcan. or vulcan.lan.
   #   dns_correctness_probe_errors   count of dig invocations that errored
   #                                  (timeout / no reply / connection refused)
   #   dns_correctness_run_timestamp_seconds  last run (collector liveness)
@@ -66,13 +82,16 @@ let
       DNSSEC_VALID=0
     fi
 
-    # --- (2) PTR correctness: dig -x 192.168.1.2 must resolve to vulcan. ---
+    # --- (2) PTR correctness: the reverse lookup must name THIS host ---
+    # Either spelling is accepted; see the rationale above the script. Both come
+    # from hostPolicy, so neither is a literal that can drift out of date.
     PTR_ANSWER=$(${dig} +time=3 +tries=1 +short -x ${hostPolicy.ipv4.lan} @127.0.0.1 2>/dev/null \
       | ${pkgs.coreutils}/bin/head -1) || PTR_ANSWER=""
     if [ -z "$PTR_ANSWER" ]; then
       PTR_OK=0
       ERRORS=$((ERRORS + 1))
-    elif [ "$PTR_ANSWER" = "vulcan." ]; then
+    elif [ "$PTR_ANSWER" = "${hostPolicy.hostName}." ] \
+      || [ "$PTR_ANSWER" = "${hostPolicy.dnsName}." ]; then
       PTR_OK=1
     else
       PTR_OK=0
@@ -84,7 +103,7 @@ let
     # TYPE dns_dnssec_validation_active gauge
     dns_dnssec_validation_active $DNSSEC_VALID
 
-    # HELP dns_ptr_correct 1 if the reverse lookup of 192.168.1.2 returns vulcan. (PTR resolution correct), 0 if wrong/missing or no answer
+    # HELP dns_ptr_correct 1 if the reverse lookup of this host's LAN address names this host, as either vulcan. or vulcan.lan. (PTR resolution correct), 0 if it names something else, is missing, or did not answer
     # TYPE dns_ptr_correct gauge
     dns_ptr_correct $PTR_OK
 

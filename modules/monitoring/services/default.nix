@@ -23,6 +23,7 @@
     ./vmalert.nix # alerting on the VictoriaMetrics TSDB (HA-pushed series)
     ./system-age-exporter.nix # is-the-system-being-patched gauges
     ./closure-drift-exporter.nix # units stranded on an abandoned generation
+    ./deploy-canary-exporter.nix # can this host still evaluate and deploy at all?
     # P2 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 4)
     ./prometheus-rule-audit.nix # dead-rule detector
     ./hass-integration-exporter.nix # HA config-entry + integration health

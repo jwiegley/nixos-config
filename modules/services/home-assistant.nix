@@ -605,25 +605,36 @@ in
         }
       ];
 
-      # HTTP configuration for reverse proxy
-      http = {
-        # Use X-Forwarded-For headers from nginx
-        use_x_forwarded_for = true;
-        trusted_proxies = [
-          "127.0.0.1"
-          "::1"
-          "192.168.1.2" # vulcan's Ethernet IP
-          "192.168.3.16" # vulcan's WiFi IP
-        ];
-
-        # Loopback only. The Hermes VM reaches :8123 through its own two-stage
-        # DNAT, which rewrites the destination to the HOST's 127.0.0.1:8123
-        # (hermes-microvm.nix dnatPorts), so no bridge address needs binding.
-        server_host = [
-          "127.0.0.1"
-        ];
-        server_port = 8123;
-      };
+      # NO `http` BLOCK. Removed 2026-09-08 after Home Assistant 2026.8 moved this
+      # integration's configuration out of YAML and into storage, managed from
+      # Settings > System > Network. HA imports the existing block on first start after
+      # the upgrade and then raises a repair issue asking for its removal; the repair
+      # clears once the block is gone.
+      #
+      # WHAT USED TO BE HERE, so it can be restored or audited without archaeology:
+      #   use_x_forwarded_for = true
+      #   trusted_proxies     = 127.0.0.1, ::1, and vulcan's two host addresses
+      #   server_host         = 127.0.0.1   (LOOPBACK ONLY -- nginx fronts :8123)
+      #   server_port         = 8123
+      #
+      # VERIFIED BEFORE REMOVING, not assumed. homeassistant/components/http has no
+      # config_flow.py at all -- these settings are storage-backed -- and its config.py
+      # persists every key this block set: CONF_SERVER_HOST, CONF_SERVER_PORT,
+      # CONF_TRUSTED_PROXIES, CONF_USE_X_FORWARDED_FOR (plus ip_ban and ssl_*). So the
+      # import captures all of it. Community reports that the migration "loses"
+      # trusted_proxies are about the UI FORM not offering fields to EDIT them, which is
+      # a different thing from the imported values being dropped.
+      #
+      # server_host is the one that matters most: losing it would make HA bind all
+      # interfaces and serve :8123 on the LAN directly, bypassing nginx and TLS. That is
+      # checked after every deploy touching this -- `ss -tlnp` must show 8123 bound to
+      # 127.0.0.1 only, which needs no access to .storage.
+      #
+      # THE TRADE, stated plainly: a security-relevant binding has moved from this
+      # declarative file into HA's mutable storage, where a UI change would not be
+      # reverted by a rebuild. YAML here keeps working until 2027.2, so restoring the
+      # block above is a legitimate choice if declarative control is worth more than the
+      # repair notice.
 
       # Recorder - using PostgreSQL for better performance and memory efficiency
       recorder = {

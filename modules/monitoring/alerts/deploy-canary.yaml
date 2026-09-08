@@ -1,0 +1,86 @@
+groups:
+  - name: deploy-canary
+    rules:
+      # Can this host still be deployed to? See
+      # modules/monitoring/services/deploy-canary-exporter.nix for why this exists: on
+      # 2026-09-08 every rebuild had been blocked for up to four days with nothing
+      # firing, because all other monitoring watches whether the system is RUNNING.
+
+      - alert: DeployBlockedByStaleLock
+        expr: deploy_canary_stale_locks > 0
+        for: 30m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: >-
+            {{ $value }} stale nix store build lock(s) still held on {{ $labels.instance }}
+          description: >-
+            An old /nix/store build lock is STILL HELD by a live process. Every build that
+            needs that path will block on it indefinitely -- nix retries the lock every 4
+            seconds forever rather than failing -- so no deploy can complete. The running
+            system is unaffected and will look perfectly healthy.
+
+            This is CRITICAL despite nothing being visibly broken: the host cannot take a
+            change, including a security patch, until it is cleared.
+
+            Identify the derivation with deploy_canary_stale_lock, which carries a `drv`
+            label. Confirm the holder and that it is genuinely orphaned before killing
+            anything -- the 2026-09-08 holders were nix-daemon workers with a dead parent
+            and zero CPU time, sitting on a path whose output already existed:
+
+              for p in $(ls /proc | grep -E '^[0-9]+$'); do
+                sudo ls -l /proc/$p/fd 2>/dev/null | grep -q '<drv>.lock' && echo $p
+              done
+              ps -o pid=,ppid=,etimes=,time= -p <pid>
+
+            A holder that is actively building has real CPU time and a live parent; leave
+            that one alone and let it finish.
+
+      - alert: DeployPlanFailing
+        expr: deploy_canary_plan_success == 0
+        for: 2h
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "The system configuration on {{ $labels.instance }} no longer evaluates or builds"
+          description: >-
+            `nix build --dry-run` on the system toplevel failed or timed out. The running
+            system is fine, but the next deploy will not succeed: a broken or unbuildable
+            flake input, an evaluation error, or a package whose checks now fail.
+
+            This is the class that broke agent-cat-pi-extension on 2026-09-08 and went
+            unnoticed until someone tried to deploy days later.
+
+            Reproduce with the same command the collector runs:
+              nix build --dry-run --no-link /etc/nixos#nixosConfigurations.vulcan.config.system.build.toplevel
+
+            `for: 2h` because the collector runs daily: a single failed run should not page
+            before there is any chance of a second observation, and the condition is a
+            latch rather than a fluctuation.
+
+      # Collector work-floor. deploy_canary_plan_success alone cannot distinguish "the
+      # plan really failed" from "the collector never ran and this file is stale", and a
+      # canary that silently stops running is worse than none -- it reads as reassurance.
+      # Staleness proper is covered by TextfileCollectorStaleDaily in
+      # meta-monitoring.yaml, which this complements rather than duplicates: that one
+      # watches the file mtime, this one watches for a run that produced no verdict.
+      - alert: DeployCanaryVacuous
+        expr: |
+          deploy_canary_plan_success == 1 and deploy_canary_paths_to_build == -1
+        for: 3h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Deploy canary reports success without a usable plan on {{ $labels.instance }}"
+          description: >-
+            The plan check reported success but the derivation count is -1 (unknown),
+            which means its `nix build --dry-run --json` output could not be parsed. The
+            success gauge is then resting on the exit code alone.
+
+            That combination is most likely a nix version whose --json shape has moved.
+            Not urgent, but the canary is weaker than it looks until it is fixed: check
+            the parse in scripts/deploy-canary-exporter.py against what the current nix
+            actually emits.

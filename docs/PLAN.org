@@ -6688,15 +6688,16 @@ THE SIX REMAINING ITEMS:
 No configuration change was needed; the work had been done and simply never verified or closed.
 #+end_example
 
-* TODO [#C] No alert covers a build blocked by a stale nix store lock
+* DONE [#C] No alert covers a build blocked by a stale nix store lock
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-obc
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-08 Tue 12:48]
-:MODIFIED: [2026-09-08 Tue 12:48]
+:MODIFIED: [2026-09-08 Tue 15:50]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 15:50]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -6725,6 +6726,22 @@ The dry-build canary is the better buy -- it would also have caught the current
 agent-cat-pi-extension breakage (nixos-4o4) the day it appeared rather than when
 someone next tried to deploy.
 #+end_example
+
+** Close Reason
+
+Shipped: modules/monitoring/services/deploy-canary-exporter.nix + scripts/deploy-canary-exporter.py + alerts/deploy-canary.yaml, daily.
+
+TWO CHECKS, because the design I originally proposed in this issue WOULD NOT HAVE CAUGHT THE INCIDENT. A 'nix build --dry-run' canary catches eval errors and unbuildable inputs, but the nixos-cur hang was in REALISATION -- nix had already evaluated and printed its derivation list before blocking on a store lock -- and --dry-run stops before realising. So the collector also scans for stale build locks that are STILL HELD by a live process.
+
+Lock detection is precise, not a file count: zero-byte AND root-owned AND non-epoch mtime AND older than 6h AND currently held (resolved via /proc). The naive count would be wrong -- the store carries ~26 Cargo.lock files as ordinary package CONTENTS. Holder detection is one pass over /proc rather than the O(locks x processes) shape that measured over two minutes during the investigation.
+
+FOUND THREE MORE LATENT BLOCKERS ON ITS FIRST RUN, of exactly the incident's kind: nix-daemon workers 27-31 days old, reparented to init, ~0 CPU, holding locks on gettext-1.0, python3.14-idna-3.18 and pi-artifacts-0.9.1. Not blocking anything only because no current build needed those paths. My earlier ad-hoc check had reported 'no latent blocker' -- it was too narrow, and the systematic scan corrected it. Killed them; the detector went 3 -> 0 while stale_lock_candidates stayed 3, which is the intended distinction (files are harmless, held files are not) and doubles as a positive control that the check can actually fail.
+
+DEPLOY-TIME BUG FOUND AND FIXED: the unit failed in 0.028s where the standalone script took 35s. /etc/nixos is owned by johnw, so libgit2's ownership guard rejects it for this root-run unit, and ProtectHome=true hides root's ~/.gitconfig exemption. GIT_CONFIG_COUNT/KEY/VALUE and GIT_CONFIG_GLOBAL were both tried and neither works -- those are git-CLI mechanisms and nix fetches flakes with libgit2, which finds global config through $HOME. Fixed by pointing HOME at the unit's own CacheDirectory (also giving nix the writable cache it needs) and writing the safe.directory exemption there in ExecStartPre.
+
+VERIFIED END TO END: unit Result=success, plan_success=1 (161s cold cache, inside the 600s budget), stale_locks=0; all three alert rules load health=ok; the .prom is registered in TextfileCollectorStaleDaily AND excluded from TextfileCollectorUnclassifiedStale so the tiers still partition.
+
+Deliberately does NOT take /etc/nixos/.nixos-build: a monitor for 'cannot deploy' must not become a cause of it.
 
 * DONE [#B] hermes-heal could not read the Discord heartbeat, so self-heal could never resolve an incident
 :PROPERTIES:

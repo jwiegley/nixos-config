@@ -3172,15 +3172,16 @@ Blocked only on deployment. DONE when the switch lands and dns_ptr_correct reads
 ]
 #+end_src
 
-* TODO [#D] hass_entity_unavailable rose 151 -> 174 across the 2026.9.1 upgrade
+* DONE [#D] hass_entity_unavailable rose 151 -> 174 across the 2026.9.1 upgrade
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-d9x
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-08 Tue 14:03]
-:MODIFIED: [2026-09-08 Tue 14:03]
+:MODIFIED: [2026-09-08 Tue 15:25]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 15:25]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3200,6 +3201,20 @@ BENIGN CANDIDATES ALREADY SEEN in the journal: the LG webOS TV is simply powered
 WORTH CHECKING AGAINST 2026.9's breaking change: vacuum battery_level was removed from the base entity, so a custom integration still setting it silently stops reporting -- dreame_vacuum is the candidate on this host.
 
 Not urgent. Re-measure after a full poll cycle; if it stays at 174, identify which entities moved (the exporter buckets by category, not entity, so this needs the HA side).
+
+** Close Reason
+
+Resolved -- the metric anomaly is explained and has largely self-corrected.
+
+TRAJECTORY: 151 baseline -> 174 immediately post-upgrade -> 155 now. The bulk of the spike was ordinary post-restart reconnection, exactly as suspected but not then proven.
+
+RESIDUAL +4, fully accounted for. Ten entities went newly unavailable while six recovered elsewhere. Per-domain the only movement is sensor 108 -> 111 and media_player 2 -> 3; every other domain is identical to the baseline. The ten are: eight PG&E gas sensors from the opower integration, one vacuum stream-status sensor (was 'idle'), and one kitchen display (was already 'off'). The two device entities are benign states, not faults.
+
+The opower cluster is a real issue but not a metric problem, so it is split out to its own tracked item rather than left inside a counter anomaly. Not caused by any misconfiguration here: PG&E's forced MFA rollout, surfaced by the opower 0.18.6 -> 0.20.0 bump.
+
+The 2026.9 vacuum battery_level removal was considered as a suspect and is NOT implicated -- the affected vacuum entity is stream_status, and no battery entity moved.
+
+SECURITY NOTE recorded during this work: HA entity_ids from billing integrations embed the utility account number, and a raw entity listing leaked one. Future queries here must use aggregates or redact identifier-shaped digit runs in the same pipeline.
 
 * DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
 :PROPERTIES:
@@ -8952,6 +8967,42 @@ with a recent window before calling anything noisy.
 
 container-health-exporter (6 in 48h) is the only genuinely live residue and is
 small; worth a look if it grows.
+#+end_example
+
+* TODO [#D] PG&E opower entry fails: 'MFA required' after opower 0.18.6 -> 0.20.0
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-y20
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-08 Tue 15:25]
+:MODIFIED: [2026-09-08 Tue 15:25]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+One of the two opower config entries (the PG&E gas account) is in state=setup_error since 2026-09-08 13:59:53:
+
+    ERROR [homeassistant.components.opower.coordinator] Error during login: PG&E MFA required
+
+TRIGGERED BY, BUT NOT CAUSED BY, THE HA UPGRADE. The 2026.9.1 bump moved the opower library 0.18.6 -> 0.20.0 (old journal lines name python3.14-opower-0.18.6; the new closure has 0.20.0), and the newer login flow surfaces PG&E's multi-factor requirement. The underlying cause is PG&E's forced MFA rollout, which is a known and currently UNRESOLVED upstream problem -- home-assistant/core issues #149274 and #129033, and home-assistant.io #40094, report that PG&E enabled MFA for all accounts and that opower is effectively broken for PG&E as a result. Nothing about this host's configuration is wrong.
+
+It genuinely worked before: the gas sensors carried 303 real-valued recorder rows prior to the upgrade, so 0.18.6 was authenticating successfully as recently as 13:30 today.
+
+DOWNGRADING IS NOT A CLEAN OPTION. HA 2026.9.1's opower component pins 'opower==0.20.0' in its manifest, so holding the library at 0.18.6 fights HA's own declared requirement, and PG&E may have retired the old auth path regardless.
+
+REALISTIC CHOICES, all operator decisions:
+  - Leave it. The eight gas sensors stay unavailable; everything else is unaffected.
+  - Delete the PG&E config entry to stop the retry noise and the setup_error state,
+    keeping the working SMUD electric entry.
+  - Wait for upstream to support PG&E MFA.
+
+NOTE FOR ANY FUTURE WORK HERE: opower entity_ids embed the utility ACCOUNT NUMBER
+(sensor.gas_account_<account>_*). Use aggregates, or redact digit runs in the same
+pipeline; never list these entity names raw.
 #+end_example
 
 * DONE [#D] Decide whether HermesExtractFailing should alert on a single zero-success batch

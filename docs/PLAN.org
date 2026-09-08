@@ -4886,15 +4886,16 @@ reasoning, next to TimeoutStartSec where someone would reach to "fix" this.
 A real fix belongs upstream in the image's entrypoint (trap and forward, or exec
 the app so it becomes PID 1).
 
-* TODO [#B] Ordinary ./build switch triggers a multi-hour GHC 9.10.3 bootstrap
+* DONE [#B] Ordinary ./build switch triggers a multi-hour GHC 9.10.3 bootstrap
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-hit
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-07 Mon 20:03]
-:MODIFIED: [2026-09-07 Mon 20:07]
+:MODIFIED: [2026-09-08 Tue 16:22]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 16:22]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -4925,15 +4926,31 @@ Needs a decision: get ghc-9.10.3 substitutable (a cache or a binary-cache push f
 nix-config side), or move the nix-config pin back to a revision whose closure is cached.
 #+end_example
 
-* TODO [#D] Confirm whether the GHC 9.10.3 bootstrap blocker is gone
+** Close Reason
+
+Resolved, confirmed positively rather than by absence.
+
+TWO INDEPENDENT REASONS it can no longer block a rebuild:
+
+1. The current configuration does not need it. An ordinary rebuild -- with the driver's own input refresh applied first (nix flake update nix-config nix-config-ai pi obr, which reported NO changes, so the committed lock already IS the refreshed state) -- produces an EMPTY build plan. And the real ghc-9.10.3 store path is referenced ZERO times by the running system closure. (An earlier grep counted 4 'ghc-9.10.3' references, but those are dummy-ghc-9.10.3 and dummy-pkg-ghc-9.10.3 matching as substrings, not the 2.2G compiler.)
+
+2. Even if it were needed, it is no longer a from-source build. ghc-9.10.3 is NOW PRESENT in cache.nixos.org, so it would be substituted as a 2.2G download rather than bootstrapped through ghc-binary-9.8.4 stage0. That was the whole basis of the P1: the original report was 'NOT in cache.nixos.org and builds from source'. Upstream has since cached it.
+
+The cache check was positive-controlled rather than trusted: a path built only on this host (deploy-canary-exporter) correctly reports 'not cached' from the same query that reports ghc-9.10.3 as cached, so the test discriminates and is not vacuously green.
+
+INCIDENTAL: the local 2.2G /nix/store/2x7r5wkq...-ghc-9.10.3 is an unreferenced leftover from the builds killed during the investigation. Nothing roots it, so the next nix-gc reclaims the space; no action needed.
+
+* DONE [#D] Confirm whether the GHC 9.10.3 bootstrap blocker is gone
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-ho3
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-08 Tue 13:54]
-:MODIFIED: [2026-09-08 Tue 13:54]
+:MODIFIED: [2026-09-08 Tue 16:22]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 16:22]
+:CLOSE_REASON: Confirmation performed; see nixos-hit for the evidence. Empty build plan after an input refresh, zero closure references to the real ghc-9.10.3 path, and the derivation is now substitutable from cache.nixos.org (positive-controlled against a host-only path).
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

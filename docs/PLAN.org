@@ -2401,15 +2401,16 @@ Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional
 ]
 #+end_src
 
-* TODO [#C] pushme-positron.service failed: rsync broken pipe mid-transfer
+* DONE [#C] pushme-positron.service failed: rsync broken pipe mid-transfer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-a8e
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 14:07]
+:MODIFIED: [2026-09-08 Tue 14:52]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:52]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -2424,6 +2425,20 @@ Failed 2026-09-08 20:04 (first seen this session; not present at the 12:2x healt
 Unit pulls andoria-08's home into /tank/Backups/Contracts/Positron/nfs. Consumed 24.8s CPU, 210MB peak, 13.3MB incoming before dying, so it transferred real data and then lost the connection rather than failing at startup.
 
 A broken pipe mid-transfer is usually the remote end or the link dropping, and often succeeds on a retry -- but it has NOT rerun, so the backup is currently stale. Determine whether this is a one-off (retry succeeds, leave it) or recurring (andoria reachability, NFS/ssh timeout, or an rsync arg needing --timeout / --partial). Check whether prior runs in the journal show the same signature.
+
+** Close Reason
+
+Resolved. Root cause was NOT the transient link drop I first recorded, nor the missing remote rsync binary I recorded second.
+
+The chronic fault was unreadable __pycache__/*.pyc files under ~/Products on andoria: 137 of the job's 186 logged errors over 7 days, all readlink_stat(...) failed: Permission denied. That forces rsync exit 23 ('some files/attrs were not transferred', 16 occurrences) and pushme reports the whole run failed, even though the real data transferred. Failing roughly twice a day since at least 2026-09-03, interleaved with successes, which is why the alert only fired when a scrape happened to catch it in the failed state.
+
+The filter list had never covered them: it was copied verbatim from hera's and deliberately not extended (git log -S confirms neither Products nor __pycache__ ever appeared in this file). __pycache__ escaped the selection criterion because that ranked regenerable caches BY SIZE and bytecode caches are individually tiny; ~/Products was never a cache at all and its exclusion is an operator policy decision, made 2026-09-08.
+
+FIX: added '- /Products/' (anchored) and '- __pycache__/' (unanchored) to the Filters block in modules/services/pushme-positron.nix.
+
+VERIFIED: live run 14:40-14:45 completed with Result=success, zero permission-denied and zero __pycache__ errors, 0 failed units, SystemdServiceFailed cleared.
+
+Today's two acute failures were a separate and benign thing: the backup racing a nix profile rebuild on andoria, so the remote rsync briefly vanished (13:03 broken pipe mid-transfer, 14:04 'No such file'). Probed afterwards and the binary is present with the symlink intact. Operator decided to leave that unhandled -- the next hourly run simply succeeds.
 
 * DONE [#E] Threshold audit: 77 of 484 rules checked mechanically; method must account for for: clause
 :PROPERTIES:

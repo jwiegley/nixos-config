@@ -247,6 +247,33 @@ in
         # destination. rsync --delete only removes files absent from the source
         # AND not excluded, so the 55 GB already copied is now PROTECTED and
         # will persist until it is removed deliberately.
+        #
+        # ADDED 2026-09-08: /Products/ and __pycache__/. The original list was
+        # hera's, copied verbatim and deliberately not extended, so it only ever
+        # covered what hera happened to exclude -- neither of these had ever
+        # appeared in this file's history (checked with git log -S on both).
+        #
+        # __pycache__/ was invisible to the criterion that built the list, which
+        # ranked regenerable caches BY SIZE. Bytecode caches are tiny individually
+        # and never surfaced in that scan; they announced themselves as errors
+        # instead. Over the 7 days to 2026-09-08 they produced 137 of the job's 186
+        # logged errors, all of one shape:
+        #     rsync: [sender] readlink_stat(".../__pycache__/....pyc")
+        #           failed: Permission denied
+        # which makes rsync exit 23 ("some files/attrs were not transferred", 16
+        # occurrences) and pushme report the whole run as failed. The real data was
+        # transferring correctly throughout -- the job was being failed by
+        # unreadable build artifacts nobody wants backed up. Left unanchored with a
+        # trailing slash so it matches that directory at any depth.
+        #
+        # /Products/ is an operator policy decision, not a cache: it holds real
+        # work, so it could never have qualified under a "regenerable caches" rule.
+        # Excluded at the operator's request. Anchored, because it means ~/Products
+        # specifically rather than any nested directory of that name.
+        #
+        # Both are exclusions only. Per the note above, whatever they have already
+        # copied STAYS in the destination until removed deliberately; adding them
+        # here will not shrink the backup on its own.
         Filters: |
           - .autoagent/
           - .claude/worktrees/
@@ -271,8 +298,10 @@ in
           - /.partner-*/
           - /ares-gemma-4-runs/
           - /ares-rust-rinzler-cpp/stats/rinzler/stats/
+          - /Products/
           - /go/
           - /nix-cache
+          - __pycache__/
           - gen/
           - gen-*/
           - logs-rinzler-side-by-side/

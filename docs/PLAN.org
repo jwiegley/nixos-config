@@ -2401,17 +2401,15 @@ Remaining: nixos-0ar for the comment and documentation sweep. Nothing functional
 ]
 #+end_src
 
-* DONE [#C] pushme-positron.service failed: rsync broken pipe mid-transfer
+* TODO [#C] pushme-positron.service failed: rsync broken pipe mid-transfer
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-a8e
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 14:02]
+:MODIFIED: [2026-09-08 Tue 14:07]
 :CREATED_BY: johnw
-:FINISHED: [2026-09-08 Tue 14:02]
-:CLOSE_REASON: Recovered. pushme-positron is no longer in systemctl --failed and SystemdServiceFailed has cleared, consistent with the broken-pipe being a transient link drop that succeeded on its next run. Reopen if the signature recurs.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3159,6 +3157,35 @@ Blocked only on deployment. DONE when the switch lands and dns_ptr_correct reads
 ]
 #+end_src
 
+* TODO [#D] hass_entity_unavailable rose 151 -> 174 across the 2026.9.1 upgrade
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-d9x
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-08 Tue 14:03]
+:MODIFIED: [2026-09-08 Tue 14:03]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Pre-switch baseline was a flat 151 for at least 40 minutes. It stepped to 174 on the first sample after the 13:59 restart and has held there across 3 one-minute samples, so it is NOT a transient reconnect settling out.
+
+Breakdown by the exporter's category label:
+  other          134 -> 155  (+21)
+  duplicate_twin  17 ->  19  (+2)
+  mail_and_packages 0 -> 0
+
+CONTEXT THAT ARGUES IT IS MINOR: hass_entity_tracked_total is unchanged at 1151, and every config entry is in exactly the state it was pre-upgrade (same 8 non-loaded). So no integration failed to load; some entities within loaded integrations are reporting unavailable. 23 of 1151 is ~2%.
+
+BENIGN CANDIDATES ALREADY SEEN in the journal: the LG webOS TV is simply powered off, and Bluetooth lacks management permissions (bluetooth was already not_loaded pre-upgrade). Devices that were awake when the old instance was polling and asleep at restart would land here too.
+
+WORTH CHECKING AGAINST 2026.9's breaking change: vacuum battery_level was removed from the base entity, so a custom integration still setting it silently stops reporting -- dreame_vacuum is the candidate on this host.
+
+Not urgent. Re-measure after a full poll cycle; if it stays at 174, identify which entities moved (the exporter buckets by category, not entity, so this needs the HA side).
+
 * DONE [#C] git-annex unusable in /tank/Archives as johnw: chmod needs ownership, and crawl output arrives zimit-owned
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3336,15 +3363,16 @@ COST: the change is in the VM config, so the switch restarted the Hermes VM and 
 ]
 #+end_src
 
-* TODO [#C] health_bridge fails to load: DeviceEntry has no attribute config_entry_id
+* DONE [#C] health_bridge fails to load: DeviceEntry has no attribute config_entry_id
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-eab
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 13:53]
+:MODIFIED: [2026-09-08 Tue 14:07]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:07]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -3364,6 +3392,16 @@ DO NOT 'fix' the other matches: EntityEntry.config_entry_id (line 154) is valid,
 This is the source of Node-RED's recurring 'HA Integration Health: evaluated entries=90 unhealthy=1' debug line -- that flow's node.warn is gated on unhealthy>0, so it stops on its own once this loads. It also keeps HomeAssistantConfigEntryFailed firing.
 
 OWNER: the operator. The component is not Nix-managed, has no .git, and no source tree was found on this host, so the fix belongs in whatever repo it is deployed from -- editing the live copy would be clobbered on the next deploy.
+
+** Close Reason
+
+RESOLVED BY THE UPGRADE, and the fix I proposed would have been wrong.
+
+health_bridge's config entry is now state=loaded and HomeAssistantConfigEntryFailed has cleared, with zero AttributeErrors since the 2026.9.1 restart.
+
+Cause: HA 2026.8's device-registry overhaul ('one device, one config entry') RE-ADDED config_entry_id -- it is defined on BaseDeviceEntry (device_registry.py:382), which DeviceEntry inherits, with the docstring 'entry and subentry, available as config_entry_id and config_subentry_id'. It exists precisely BECAUSE a device now belongs to exactly one entry.
+
+So the component's device.config_entry_id was correct all along -- written against 2026.8+ semantics and running on 2026.7.2, where devices could belong to several entries and the attribute did not exist. Changing it to 'health_entry_id in device.config_entries' as I recommended would have been correct for 2026.7.2 and WRONG for 2026.9.1. Do not apply that edit.
 
 * DONE [#E] meta-monitoring.yaml header says two textfile cadence tiers; there are three
 :PROPERTIES:
@@ -6410,15 +6448,16 @@ VERIFIED THIS CYCLE, including the instrument itself rather than just its output
 Threshold reasoning is recorded in the rule comment: the slowest legitimate unlisted cadence is weekly, so 14 days is two consecutive missed weekly runs -- unambiguously dead rather than late -- which follows the same 'detect dead, not skipped' logic the Hourly tier already documents. The negative match means new collectors are covered the moment they appear, and adding a file to a tier above tightens it here automatically.
 #+end_example
 
-* TODO [#B] Post-upgrade verification: Node-RED, MQTT, Prometheus, VictoriaMetrics against HA 2026.9.1
+* DONE [#B] Post-upgrade verification: Node-RED, MQTT, Prometheus, VictoriaMetrics against HA 2026.9.1
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-nhf
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 13:54]
+:MODIFIED: [2026-09-08 Tue 14:03]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:03]
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
@@ -6434,6 +6473,15 @@ After the switch, verify each rather than assuming:
   - prometheus + victoriametrics: confirm the HA scrape target is up and hass_* series continue without a gap.
 Record the pre-upgrade baseline for each BEFORE switching, or the after-reading is not interpretable.
 #+end_example
+
+** Close Reason
+
+All four downstream checks pass against 2026.9.1.
+  node-red: HA websocket retried through the restart and reconnected at 13:59:53.
+  mosquitto: homeassistant client reconnected on 127.0.0.1:1883.
+  prometheus/victoriametrics: hass_* series continue; hass_entity_tracked_total 1151, identical to the pre-switch baseline.
+  config entries: byte-identical states before and after -- the same 8 non-loaded, health_bridge still setup_error for its own pre-existing reason.
+One residual observation split out to its own issue: hass_entity_unavailable rose 151 -> 174.
 
 ** Dependencies
 
@@ -7696,15 +7744,17 @@ nginx would have refused to start referencing a missing cert. Issued with the
 documented script at 644/600 nginx:nginx.
 #+end_example
 
-* TODO [#B] Deploy and verify the Home Assistant 2026.9.1 upgrade
+* DONE [#B] Deploy and verify the Home Assistant 2026.9.1 upgrade
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-sbk
 :LABELS:   []
 :ISSUE_TYPE: epic
 :CREATED:  [2026-09-08 Tue 13:53]
-:MODIFIED: [2026-09-08 Tue 13:54]
+:MODIFIED: [2026-09-08 Tue 14:03]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-08 Tue 14:03]
+:CLOSE_REASON: Deployed 2026-09-08 13:59 and verified. HA 2026.9.1 running, ActiveState=active, Result=success, NRestarts=0, vhost 200. Config-entry states are IDENTICAL pre- and post-upgrade (same 8 non-loaded entries), so no integration regressed. Committed and pushed as 2d549be3f.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

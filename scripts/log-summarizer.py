@@ -363,14 +363,24 @@ class AIAnalyzer:
         # digest is the product and the AI is an enhancement to it, so a slow
         # model should cost detail, never the whole email.
         overall_start = time.monotonic()
-        for model_name, max_seconds, initial_delay, max_delay in models:
+        for idx, (model_name, max_seconds, initial_delay,
+                  max_delay) in enumerate(models):
             self.model = model_name
             overall_left = AI_TOTAL_BUDGET_S - (time.monotonic() - overall_start)
             if overall_left <= 0:
                 print(f"AI budget of {AI_TOTAL_BUDGET_S:.0f}s exhausted; "
                       f"skipping remaining models", file=sys.stderr)
                 break
-            max_seconds = min(max_seconds, overall_left)
+            # FAIR SHARE, so a slow model cannot starve the ones behind it. A
+            # single greedy primary consuming the whole budget would leave its
+            # fallback unreachable, which defeats the point of configuring one:
+            # the cascade would only ever help when the primary fails FAST (a
+            # 4xx), never when it simply crawls. The last model takes whatever
+            # is left, since nothing follows it.
+            models_left = len(models) - idx
+            share = (overall_left if models_left == 1
+                     else max(120.0, overall_left / models_left))
+            max_seconds = min(max_seconds, share)
             start_time = time.monotonic()
             delay = initial_delay
             attempt = 0

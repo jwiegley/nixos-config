@@ -24,6 +24,25 @@ from typing import Dict, List, Tuple, Optional
 DEFAULT_HISTORY_DIR = "/var/log/logwatch-ai"
 HISTORY_RETENTION_DAYS = 14
 WISDOM_FILENAME = "known-conditions.prompt"
+# Ceiling for the entire AI stage. Deliberately well under
+# logwatch.service's TimeoutStartSec=45min (2700s) so the summarizer
+# degrades to a non-AI digest instead of being SIGKILLed mid-run with
+# nothing to show. See _analyze_with_ai. Observed 2026-09-09: a hung model
+# request held the unit for the full 45min at 0% CPU and it died with
+# Result=timeout, where the four prior daily runs took under 4m10s.
+AI_TOTAL_BUDGET_S = 1800.0  # 30 min
+
+
+class NonRetryableAPIError(Exception):
+    """A 4xx the backend will return again for the identical request.
+
+    Retrying one is pure waste, and it is what turned a fast rejection into a
+    45-minute unit timeout on 2026-09-09: the reasoning model answered every
+    attempt with HTTP 400 prefill_memory_exceeded, and the exponential-backoff
+    loop kept asking until systemd killed logwatch. 429 is deliberately EXCLUDED
+    -- rate limiting is exactly the case where waiting does help.
+    """
+
 WISDOM_DELIMITER = "===NEW_KNOWN_CONDITIONS==="
 
 
@@ -335,8 +354,23 @@ class AIAnalyzer:
         import time
         models = ([(self.override_model, 7200, 5, 60)] if self.override_model
                   else self.models)
+        # Overall ceiling across the WHOLE cascade, so the AI stage can never
+        # outlive the unit that invokes it. models.json defaults maxSeconds to
+        # 3600 per model while logwatch.service allows 2700s TOTAL, so even a
+        # single model could outlast its caller -- and a cascade trivially does.
+        # When this budget runs out the AI stage gives up and the caller falls
+        # back to _generate_fallback_summary, which is the right trade: the
+        # digest is the product and the AI is an enhancement to it, so a slow
+        # model should cost detail, never the whole email.
+        overall_start = time.monotonic()
         for model_name, max_seconds, initial_delay, max_delay in models:
             self.model = model_name
+            overall_left = AI_TOTAL_BUDGET_S - (time.monotonic() - overall_start)
+            if overall_left <= 0:
+                print(f"AI budget of {AI_TOTAL_BUDGET_S:.0f}s exhausted; "
+                      f"skipping remaining models", file=sys.stderr)
+                break
+            max_seconds = min(max_seconds, overall_left)
             start_time = time.monotonic()
             delay = initial_delay
             attempt = 0
@@ -345,8 +379,22 @@ class AIAnalyzer:
                 attempt += 1
                 elapsed = time.monotonic() - start_time
 
+                # Bound THIS request by the budget left for this model. Without
+                # it the urlopen used self.timeout (7200s / 2h) while
+                # logwatch.service allows 45min total, so a single hung model
+                # request could never return in time for the `remaining` check
+                # below to run -- systemd killed the unit first and the whole
+                # cascade, retries and fallback models alike, was unreachable.
+                # Observed 2026-09-09: logwatch sat 45min at 0% CPU on one
+                # established connection and died with Result=timeout, where its
+                # four prior daily runs took 3m37s-4m04s.
+                #
+                # Floor of 30s so a nearly-exhausted budget still makes one
+                # honest attempt rather than a guaranteed instant failure.
+                per_call = max(30.0, max_seconds - elapsed)
                 try:
-                    ai_response = self._call_ai_api(log_context, stats)
+                    ai_response = self._call_ai_api(log_context, stats,
+                                                    timeout=per_call)
                     if ai_response:
                         # Split report from new wisdom entries
                         if WISDOM_DELIMITER in ai_response:
@@ -356,6 +404,11 @@ class AIAnalyzer:
                         else:
                             report = ai_response
                         return report
+                except NonRetryableAPIError as e:
+                    print(f"AI rejected the request (model={model_name}, "
+                          f"{elapsed:.0f}s elapsed): {e} -- not retryable, "
+                          f"moving on", file=sys.stderr)
+                    break
                 except Exception as e:
                     print(f"AI analysis failed (model={model_name}, attempt {attempt}, "
                           f"{elapsed:.0f}s elapsed): {e}", file=sys.stderr)
@@ -403,7 +456,8 @@ class AIAnalyzer:
 
         return "\n".join(context_parts)
 
-    def _call_ai_api(self, log_context: str, stats: Dict) -> Optional[str]:
+    def _call_ai_api(self, log_context: str, stats: Dict,
+                     timeout: Optional[float] = None) -> Optional[str]:
         """Call the LLM gateway's OpenAI-compatible API for analysis"""
 
         system_prompt = """You are an expert system administrator analyzing server logs.
@@ -508,7 +562,11 @@ Provide a clear, actionable summary. Omit known conditions and recurring harmles
                 method='POST'
             )
 
-            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+            # Bounded by the caller's REMAINING model budget, not self.timeout.
+            # See the call site in _analyze_with_ai for why that distinction is
+            # what keeps logwatch.service alive.
+            call_timeout = timeout if timeout else self.timeout
+            with urllib.request.urlopen(req, timeout=call_timeout) as response:
                 result = json.loads(response.read().decode('utf-8'))
 
                 if "choices" in result and len(result["choices"]) > 0:
@@ -518,6 +576,20 @@ Provide a clear, actionable summary. Omit known conditions and recurring harmles
                     # reasoning models — never include it in the report.
                     return content if content else None
 
+        except urllib.error.HTTPError as e:
+            # LOG THE BODY. The previous version printed only "HTTP Error 400: Bad
+            # Request", which says nothing about why; the backend's actual message
+            # ("oMLX prefill memory guard rejected this prompt ... reduce context
+            # length", code=prefill_memory_exceeded) was the entire diagnosis and it
+            # was being discarded.
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                pass
+            print(f"API HTTP {e.code}: {body or e}", file=sys.stderr)
+            if 400 <= e.code < 500 and e.code != 429:
+                raise NonRetryableAPIError(f"HTTP {e.code}") from None
         except urllib.error.URLError as e:
             print(f"API connection error: {e}", file=sys.stderr)
         except Exception as e:

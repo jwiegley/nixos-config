@@ -437,7 +437,15 @@ let
     name = "logwatch-ai-summary";
     runtimeInputs = [ analyzeLogsScript ];
     text = ''
-      analyze-logs --quiet 2>/dev/null || true
+      # stderr is KEPT, deliberately. It used to go to /dev/null, which is a large
+      # part of why the 2026-09-09 failure took so long to diagnose: the unit timed
+      # out at 45min with the journal showing nothing but "Starting..." and "timed
+      # out", while the summarizer had been printing the actual cause on stderr the
+      # whole time (HTTP 400 prefill_memory_exceeded, retried under backoff). Volume
+      # is a handful of lines on a once-daily run, so this costs nothing against the
+      # journal-size concern noted below. `|| true` still keeps a summariser failure
+      # from failing the unit.
+      analyze-logs --quiet || true
     '';
   };
 in
@@ -456,9 +464,15 @@ in
   # TimeoutStartSec is ENFORCED, and setting a previously-ignored cap too tight has broken a
   # working unit on this host before -- see the RuntimeMaxSec regression.
   #
-  # This bounds the UNIT regardless of what the script does. The 7200s request timeout in
-  # log-summarizer.py is separately excessive and worth lowering, but that is a script change
-  # and this is the general safety net.
+  # This bounds the UNIT regardless of what the script does, and remains the general safety
+  # net. The script-side change this comment used to defer ("the 7200s request timeout in
+  # log-summarizer.py is separately excessive and worth lowering") WAS MADE on 2026-09-09,
+  # after the failure predicted here recurred: a hung model held logwatch for the full 45min
+  # at 0% CPU and it died with Result=timeout, where the four prior daily runs took 3m37s to
+  # 4m04s. log-summarizer.py now caps the whole AI stage at AI_TOTAL_BUDGET_S = 1800s and
+  # bounds each request by the budget REMAINING for that model, so it degrades to a non-AI
+  # digest instead of being killed with nothing to show. Keep this unit cap above that
+  # budget: 45min unit vs 30min AI leaves headroom for the perl digest on either side.
   # Raised 30min -> 45min on 2026-08-03 at the operator's request, after the cap
   # was actually hit twice in four days (timed out 04:30 on Aug 1 and Aug 3;
   # completed in 3m45s on Aug 2 and 7m56s on Jul 31). The comment above still

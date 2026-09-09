@@ -1,5 +1,6 @@
 {
   config,
+  hostRegistry,
   inputs,
   lib,
   pkgs,
@@ -26,18 +27,18 @@ let
         }
       );
 
-  devices = {
-    hera = {
-      id = "MDOPNSZ-WLGJBFD-4YUV4S3-QEUZGWP-TLIRRVK-ZXFJ7Q2-IJ3FRBO-ZQVRPAD";
-      addresses = [ "tcp://192.168.1.3:${toString syncPort}" ];
-      allowedNetworks = [ "192.168.1.3/32" ];
-      autoAcceptFolders = false;
-      introducer = false;
-      untrusted = false;
-      paused = false;
-      compression = "metadata";
-    };
-  };
+  nodes = hostRegistry.syncthing.nodes;
+  peerNames = builtins.filter (name: name != "vulcan") (builtins.attrNames nodes);
+  devices = lib.genAttrs peerNames (name: {
+    id = nodes.${name}.deviceID;
+    addresses = [ "tcp://${hostRegistry.hosts.${name}.ipv4.lan}:${toString syncPort}" ];
+    allowedNetworks = [ "${hostRegistry.hosts.${name}.ipv4.lan}/32" ];
+    autoAcceptFolders = false;
+    introducer = false;
+    untrusted = false;
+    paused = false;
+    compression = "metadata";
+  });
 
   folders = {
     documents = {
@@ -45,7 +46,7 @@ let
       path = "/tank/Documents";
       dataset = "tank/Documents";
       mode = "0700";
-      devices = [ "hera" ];
+      devices = peerNames;
       ignorePatterns = [
         "(?d).DS_Store"
         "(?d).direnv"
@@ -63,7 +64,7 @@ let
       path = "/tank/Desktop";
       dataset = "tank/Desktop";
       mode = "0700";
-      devices = [ "hera" ];
+      devices = peerNames;
       ignorePatterns = [ "(?d).DS_Store" ];
     };
   };
@@ -132,6 +133,13 @@ in
           scanProgressIntervalS = -1;
           maxConcurrentWrites = 4;
           disableFsync = false;
+          versioning = {
+            type = "staggered";
+            cleanupIntervalS = 3600;
+            fsPath = "";
+            fsType = "basic";
+            params.maxAge = "31536000";
+          };
           # The local POSIX ACL, not remote mode bits, keeps both the service
           # account and johnw able to work with newly received files.
           ignorePerms = true;
@@ -150,7 +158,7 @@ in
       ) folders;
       options = {
         listenAddresses = [ "tcp://192.168.1.2:${toString syncPort}" ];
-        alwaysLocalNets = [ "192.168.1.3/32" ];
+        alwaysLocalNets = lib.concatMap (name: devices.${name}.allowedNetworks) peerNames;
         reconnectionIntervalS = 5;
         globalAnnounceEnabled = false;
         globalAnnounceServers = [ ];

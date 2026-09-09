@@ -43,7 +43,7 @@
 138 0.0.0.0 :: NetBIOS Datagram Service (UDP)
 139 0.0.0.0 :: SMB over NetBIOS
 445 0.0.0.0 :: SMB Direct
-22000 192.168.1.2 Syncthing TCP transport (Hera-only peer allowlist)
+22000 192.168.1.2 Syncthing TCP transport (Hera and Clio peer allowlist)
 
 # Discovery Protocols
 1900 0.0.0.0 * SSDP (UDP)

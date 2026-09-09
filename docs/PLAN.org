@@ -1899,6 +1899,29 @@ NOT A MASKED CRASH: a crashing browser dies on its own signal (SIGSEGV -> 139, S
 
 DELIBERATELY NOT APPLIED TO nocobase, which fails the same nights with 137 (128+9, SIGKILL). That is podman giving up after the stop timeout because the image's PID 1 is a trap-less shell that never forwards SIGTERM. 137 records a genuinely ungraceful shutdown and should stay visible.
 
+* DONE [#C] Join Vulcan to Syncthing full mesh    :syncthing:
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-9ka
+:LABELS:   ["syncthing"]
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-09 Wed 15:14]
+:MODIFIED: [2026-09-09 Wed 15:28]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-09 Wed 15:28]
+:CLOSE_REASON: Vulcan now configures direct Hera and Clio peers from shared identity data, shares Documents/Desktop with both, and keeps one-year staggered versions. Focused evaluation and /etc/nixos/build build passed at nixos-system-vulcan-25.11.20260630.b6018f8. No activation performed.
+:EXTERNAL_REF: nix-mbdm
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+Configure Vulcan as a direct Syncthing peer of both Hera and Clio using shared nix-config host identity data. Share Documents and Desktop with both peers, admit direct LAN sources, retain send-receive semantics, and add staggered versions on Vulcan. Do not activate without separate authorization.
+
+** Acceptance Criteria
+
+Vulcan evaluates both peers and both folders, direct Clio LAN connectivity is allowed, staggered one-year versioning is configured, and /etc/nixos/build build passes without activation.
+
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

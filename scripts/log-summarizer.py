@@ -306,18 +306,29 @@ class AIAnalyzer:
                   file=sys.stderr)
             sys.exit(1)
         llm = data["llm"]
-        # The reasoning tier (DeepSeek, 1M context) rather than `primary`.
-        # Summarising 24h of journal is a long-context, analysis-heavy job, and
-        # `primary` is shared with stock-trader and Open WebUI, which stay on
-        # Qwen -- so this reads its own role rather than moving theirs.
-        # Falls back to primary if an older /etc/models.json predates the
-        # reasoning tier, so a stale generation degrades instead of crashing.
-        primary = llm.get("reasoning") or llm["primary"]
-        # Fallbacks are scoped to the reasoning ROLE, not the llm section.
-        # They briefly lived at llm.fallbacks, which read as a fallback list
-        # for primary and fast too; nesting them makes that misreading
-        # unrepresentable. llm.fallbacks is still honoured as a fallback path
-        # so an older /etc/models.json degrades instead of losing its cascade.
+        # The PRIMARY tier -- the non-thinking Qwen3.8-27B-oQ4e-mtp -- by operator
+        # policy set 2026-09-09: log analysis and spam detection use the
+        # non-thinking model, and GLM (the `reasoning` tier) is reserved for the
+        # Hermes agent, which needs full reasoning capability.
+        #
+        # This previously read `reasoning`, on the argument that summarising 24h
+        # of journal is a long-context analysis job. That argument is overridden
+        # deliberately, not forgotten: sharing the reasoning tier put this daily
+        # batch job in contention with the interactive agent, and on 2026-09-08
+        # GLM's memory guard rejected the digest outright while Hermes kept
+        # working. Batch summarisation does not need the scarcer model.
+        #
+        # `fast` is NOT used despite naming the same model: it carries
+        # maxSeconds=120, far too tight for a 24h digest. `primary` allows 3600.
+        #
+        # rspamd already reads llm.fast for spam classification, so it was
+        # already on the non-thinking model and needed no change.
+        primary = llm["primary"]
+        # Fallbacks are scoped to the ROLE they back, not to the llm section.
+        # They briefly lived at llm.fallbacks, which read as a fallback list for
+        # every model in the file; nesting them per-role makes that misreading
+        # unrepresentable. llm.fallbacks is still honoured so an older
+        # /etc/models.json degrades instead of losing its cascade outright.
         cascade = ([primary] + primary.get("fallbacks", [])
                    + llm.get("fallbacks", []))
         return [

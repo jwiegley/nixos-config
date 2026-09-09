@@ -17,11 +17,15 @@ Design (docs/MONITORING_DEFERRED_SPECS.md "Config-Drift Auditing", Option B):
       - flows.json   -> mtime of /var/lib/node-red/.flows.json.backup
                         (Node-RED rewrites the backup in lockstep on every
                         deploy, so a real deploy re-baselines silently).
-      - everything   -> system_current_generation_build_timestamp_seconds
-        else            (mtime of the system profile link, emitted by
-                        system-age-exporter.nix) — HA YAML + sshd_config +
-                        secrets.yaml all change via a nixos-rebuild / sops edit
-                        that the operator performed deliberately.
+      - everything   -> the mtime of ANY system generation link under
+        else            /nix/var/nix/profiles, read directly — HA YAML +
+                        sshd_config + secrets.yaml all change via a
+                        nixos-rebuild / sops edit the operator performed
+                        deliberately. See _generation_anchors() for why this is
+                        read from disk rather than from system-age-exporter's
+                        metric (that collector is daily, this window is 15
+                        minutes), and why every generation counts rather than
+                        only the newest.
     When a change is approved-by-deploy the baseline is silently updated and
     config_file_drift stays 0. Otherwise config_file_drift = 1 and the alert
     can page.
@@ -48,10 +52,6 @@ METRIC_PATH = os.path.join(TEXTFILE_DIR, "config_drift.prom")
 BASELINE_DIR = "/var/lib/config-drift"
 BASELINE_PATH = os.path.join(BASELINE_DIR, "baselines.json")
 
-# The system-age-exporter writes this; we read the generation build timestamp
-# from it as the default deploy anchor. Parsed as plain text (no PromQL).
-SYSTEM_AGE_PROM = os.path.join(TEXTFILE_DIR, "system_age.prom")
-
 # Grace window (seconds) around a deploy anchor within which an mtime change is
 # treated as approved-by-deploy. Generous, mirroring AIDE's 60s post-rebuild
 # update delay plus the activation-ordering slop noted in the spec.
@@ -59,6 +59,8 @@ DEPLOY_GRACE_SECONDS = 900  # 15 min
 
 # Node-RED writes this backup in lockstep with flows.json on every deploy.
 NR_BACKUP_ANCHOR = "/var/lib/node-red/.flows.json.backup"
+# Deploy anchors are read straight from here; see _generation_anchors().
+NIX_PROFILES_DIR = "/nix/var/nix/profiles"
 
 # Watched files. key = label emitted in the metric; path = file on disk.
 # normalize: optional callable(bytes) -> bytes applied before hashing.
@@ -151,31 +153,55 @@ def _is_store_backed(path: str) -> bool:
         return False
 
 
-def _generation_anchor() -> float | None:
-    """Read system_current_generation_build_timestamp_seconds from
-    system_age.prom (plain-text parse, no network)."""
+def _generation_anchors() -> list[float]:
+    """Mtimes of every system generation link, as deploy anchors.
+
+    READ DIRECTLY FROM THE PROFILES DIRECTORY, not from
+    system_current_generation_build_timestamp_seconds in system_age.prom, which
+    is what this used to do. That metric is written by system-age-exporter on a
+    DAILY timer while DEPLOY_GRACE_SECONDS is fifteen minutes, so the anchor
+    could be up to 24 hours stale and EVERY deploy after the daily run produced
+    a false "changed outside a deploy window" alert. Two collectors whose
+    cadences differ by two orders of magnitude cannot be chained like that.
+
+    Measured 2026-09-08: the metric read 2026-09-07 19:57 while the profile link
+    was 2026-09-08 16:15 -- twenty hours stale -- and two crown jewels were
+    flagged despite both having changed within thirty seconds of a real deploy.
+
+    ALL generations, not just the newest, and that is the second half of the fix.
+    A host that deploys several times a day moves the newest anchor away from
+    files written by an EARLIER deploy which legitimately have not been rewritten
+    since. automations.yaml was flagged exactly that way: written 27s after
+    generation 2637, untouched and correct, but 37 minutes from generation 2640.
+    Keeping every generation means a file is approved if it changed alongside any
+    real deploy, which is the actual question being asked.
+
+    Falls back to an empty list on any error, which flags rather than silently
+    approves -- failing closed is right for a tamper check.
+    """
+    anchors: list[float] = []
     try:
-        with open(SYSTEM_AGE_PROM, "r") as f:
-            for line in f:
-                if line.startswith("#"):
-                    continue
-                parts = line.split()
-                if (
-                    len(parts) == 2
-                    and parts[0]
-                    == "system_current_generation_build_timestamp_seconds"
+        with os.scandir(NIX_PROFILES_DIR) as it:
+            for e in it:
+                if e.name != "system" and not (
+                    e.name.startswith("system-") and e.name.endswith("-link")
                 ):
-                    return float(parts[1])
-    except (OSError, ValueError):
-        return None
-    return None
+                    continue
+                try:
+                    anchors.append(e.stat(follow_symlinks=False).st_mtime)
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    return anchors
 
 
-def _anchor_for(name: str, generation_ts: float | None) -> float | None:
+def _anchors_for(name: str, generation_anchors: list[float]) -> list[float]:
     spec = FILES[name]
     if spec["anchor"] == "nodered":
-        return _mtime(NR_BACKUP_ANCHOR)
-    return generation_ts
+        m = _mtime(NR_BACKUP_ANCHOR)
+        return [] if m is None else [m]
+    return generation_anchors
 
 
 def _load_baselines() -> dict:
@@ -278,7 +304,7 @@ def main() -> int:
 
     baselines = _load_baselines()
     first_run = len(baselines) == 0
-    generation_ts = _generation_anchor()
+    generation_anchors = _generation_anchors()
     now = time.time()
 
     rows = []
@@ -302,7 +328,7 @@ def main() -> int:
 
         prior = baselines.get(name, {})
         prior_sha = prior.get("sha256")
-        anchor = _anchor_for(name, generation_ts)
+        anchors = _anchors_for(name, generation_anchors)
         store_backed = _is_store_backed(path)
 
         drift = 0
@@ -323,11 +349,10 @@ def main() -> int:
             new_baselines[name] = {"sha256": sha, "baselined_at": now}
         else:
             # sha changed. Approved-by-deploy iff mtime within grace of anchor.
-            approved = (
-                anchor is not None
-                and mtime is not None
-                and (mtime - anchor) <= DEPLOY_GRACE_SECONDS
-                and (mtime - anchor) >= -DEPLOY_GRACE_SECONDS
+            # Approved if the mtime sits within grace of ANY real deploy,
+            # not merely the newest one -- see _generation_anchors().
+            approved = mtime is not None and any(
+                abs(mtime - a) <= DEPLOY_GRACE_SECONDS for a in anchors
             )
             if approved:
                 # Legitimate deploy churn — silently re-baseline.

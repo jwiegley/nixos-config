@@ -313,7 +313,13 @@ class AIAnalyzer:
         # Falls back to primary if an older /etc/models.json predates the
         # reasoning tier, so a stale generation degrades instead of crashing.
         primary = llm.get("reasoning") or llm["primary"]
-        cascade = [primary] + llm.get("fallbacks", [])
+        # Fallbacks are scoped to the reasoning ROLE, not the llm section.
+        # They briefly lived at llm.fallbacks, which read as a fallback list
+        # for primary and fast too; nesting them makes that misreading
+        # unrepresentable. llm.fallbacks is still honoured as a fallback path
+        # so an older /etc/models.json degrades instead of losing its cascade.
+        cascade = ([primary] + primary.get("fallbacks", [])
+                   + llm.get("fallbacks", []))
         return [
             (m["name"], m.get("maxSeconds", 3600),
              m.get("initialDelay", 5), m.get("maxDelay", 60))

@@ -24,13 +24,28 @@ from typing import Dict, List, Tuple, Optional
 DEFAULT_HISTORY_DIR = "/var/log/logwatch-ai"
 HISTORY_RETENTION_DAYS = 14
 WISDOM_FILENAME = "known-conditions.prompt"
-# Ceiling for the entire AI stage. Deliberately well under
-# logwatch.service's TimeoutStartSec=45min (2700s) so the summarizer
-# degrades to a non-AI digest instead of being SIGKILLed mid-run with
-# nothing to show. See _analyze_with_ai. Observed 2026-09-09: a hung model
-# request held the unit for the full 45min at 0% CPU and it died with
-# Result=timeout, where the four prior daily runs took under 4m10s.
-AI_TOTAL_BUDGET_S = 1800.0  # 30 min
+# Ceiling for the entire AI stage, sized against the ALERT rather than the
+# unit timeout. ServiceStuckActivating fires at for:15m, and logwatch's own
+# TimeoutStartSec is 45min -- so a budget between those two produces a unit
+# that is working correctly and paging anyway. It was briefly 1800s (30min)
+# and did exactly that on 2026-09-09 while a slow model ran normally at 0%
+# CPU for 20 minutes.
+#
+# 300s, sized from MEASUREMENT rather than arithmetic. 600s was tried first
+# on the assumption that the perl digest costs ~1min, and the run landed at
+# 14m09s -- succeeding, but with only 51s of margin before the alert. The
+# perl stage is not a constant: it varies with journal volume and disk, and
+# has been observed anywhere from ~1min to several. 300s puts a slow run near
+# 9min, leaving real headroom, and is still ~2x the 2m30s the AI stage takes
+# on a healthy day.
+# If the model cannot answer in ten minutes the summariser degrades to the
+# non-AI digest, which is the right trade: the digest is the product and the
+# AI is an enhancement to it.
+#
+# The original reason for a ceiling still holds -- without one a hung model
+# held the unit for the full 45min at 0% CPU and it died with
+# Result=timeout, where four prior daily runs took under 4m10s.
+AI_TOTAL_BUDGET_S = 300.0  # 5 min
 
 
 class NonRetryableAPIError(Exception):

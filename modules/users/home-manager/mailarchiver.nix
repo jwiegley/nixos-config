@@ -52,6 +52,15 @@
             MAIL_PORT = "25";
             MAIL_FROM_ADDRESS = "mailarchiver@${hostPolicy.dnsName}";
             MailSync__IgnoreSelfSignedCert = "true";
+            # Lock archived mail against deletion. The app ships
+            # appsettings.json with DeletionPolicy.DeletionAllowed=true, which
+            # unlocks archived emails and lets the UI delete them -- the app
+            # announces this at startup ("Archived emails are unlocked").
+            # An archive whose contents can be deleted from the archive UI is
+            # not an archive, so override the shipped default here. ASP.NET
+            # Core maps the `:` config separator to `__` in environment
+            # variables, and env wins over appsettings.json.
+            DeletionPolicy__DeletionAllowed = "false";
             # Reduced from Information to Warning to decrease log volume (~7,500 lines/day saved)
             Logging__LogLevel__Default = "Warning";
             Logging__LogLevel__Microsoft_AspNetCore = "Warning";

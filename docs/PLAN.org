@@ -6569,6 +6569,80 @@ One residual observation split out to its own issue: hass_entity_unavailable ros
 ]
 #+end_src
 
+* DEFER [#D] Rename openclaw -> hermes across live identifiers (not history)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-nm4
+:LABELS:   []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-09-09 Wed 23:46]
+:MODIFIED: [2026-09-09 Wed 23:46]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Legacy naming from the retired OpenClaw service. 2525 occurrences across 74 files, but only a small subset are LIVE identifiers; the majority is historical prose that must NOT be renamed.
+
+=== LIVE IDENTIFIERS TO RENAME ===
+
+SOPS secret keys (9) -- OPERATOR ONLY, cannot be done by the agent:
+  openclaw/config, openclaw/discord-token, openclaw/gateway-auth-token,
+  openclaw/gh-issues-api-key, openclaw/home-assistant-token,
+  openclaw/litellm-virtual-key, openclaw/org-db-password,
+  openclaw/perplexity-api-key, openclaw/probe-ssh-private-key
+  NOTE: hermes/env already exists -- check for collisions when moving to hermes/*.
+
+PostgreSQL:
+  role 'openclaw' (read-only on the org database)
+  pg_hba entry: host org openclaw <vm-subnet> scram-sha-256  (databases.nix:323)
+  databases.nix:70 user, :278 name, :417 postgresql-openclaw-org-grants
+
+systemd units:
+  postgresql-openclaw-setup.service
+  postgresql-openclaw-org-grants.service
+  (hermes-microvm.nix:529 references postgresql-openclaw-setup.service in an after=)
+
+Scripts / paths / docs:
+  bin/openclaw-config-drift-check
+  bin/openclaw-hermes-smoke
+  ~/.cache/openclaw-probe-key{,.pub}
+  docs/openclaw-hermes-integration.md
+  scripts/openclaw-config-drift-check.py (referenced by config-drift-exporter.nix)
+
+=== WHAT MUST NOT BE RENAMED ===
+
+Most of the 2525 occurrences are comments documenting the RETIRED OpenClaw service --
+e.g. 'the removed OpenClaw microVM module', and hermes-vm.nix's note that its
+org-db key handling mirrors 'how the removed OpenClaw microVM module's orgDbSearch
+reads its key rather than trusting env inheritance'. Renaming those makes the
+comments FALSE: they would describe a Hermes module that never existed, and erase
+why the current design looks the way it does. A blind sed over the tree is the wrong
+tool here.
+
+=== TWO HAZARDS ===
+
+1. SOPS/Nix mismatch. If Nix references are renamed before the secret keys are, or
+   vice versa, Hermes loses its Discord token, HA token, org-db password, gateway
+   key and perplexity key AT ONCE. The two halves must land together.
+
+2. ALTER ROLE openclaw RENAME TO hermes INVALIDATES the scram-sha-256 password.
+   The password must be re-set in the same maintenance window as the pg_hba and
+   grants changes, or org-db access breaks for the Hermes VM.
+
+=== SUGGESTED PHASING ===
+  1. Operator renames the 9 keys in secrets.yaml (openclaw/* -> hermes/*).
+  2. Agent updates all Nix references, unit names, scripts, paths and docs in one
+     commit; PG role rename + password re-set handled in the same window.
+  3. Historical comments left as-is, still naming the retired service OpenClaw.
+
+A smaller, independently-safe subset exists if the full rename is not wanted yet:
+the NON-SECRET surface (unit names, scripts, cache paths, docs) can be renamed
+without touching secrets.yaml or the PG role.
+#+end_example
+
 * DONE [#D] AIDE monitors the obr cache, so routine issue tracking raises AideChangesDetected
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

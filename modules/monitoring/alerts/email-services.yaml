@@ -297,3 +297,102 @@ groups:
         annotations:
           summary: "Email delivery latency is high"
           description: "95th percentile message size is {{ $value | humanize1024 }} bytes, indicating potential large message backlog or slow processing."
+
+      # ---------------------------------------------------------------------
+      # Mailbox maintenance (dovecot-archive.service)
+      #
+      # Added 2026-09-10 after the operator asked whether INBOX/Spam archiving was
+      # working at all. It was -- but answering that took manual doveadm counting,
+      # because nothing measured the job. Two gaps made it invisible:
+      #
+      #   * SystemdServiceFailed catches the unit FAILING. It cannot catch the unit
+      #     never running: a stopped timer leaves an inactive unit and no failed
+      #     state, so no series moves and nothing fires.
+      #   * The job is silent by design. `doveadm move` prints nothing on success,
+      #     so a healthy journal and a job that quietly stopped look identical.
+      #
+      # This job moves mail unattended at 03:00 and now also DELETES expired Trash,
+      # so "stopped without anyone noticing" is the failure mode that matters most.
+      - alert: DovecotArchiveStale
+        expr: time() - dovecot_archive_last_success_timestamp_seconds > 93600
+        for: 30m
+        labels:
+          severity: warning
+          category: email
+        annotations:
+          summary: "Dovecot mailbox maintenance has not succeeded in over 26 hours"
+          description: >-
+            dovecot-archive.service last completed every step successfully more than
+            26 hours ago. The timer runs daily at 03:00, so one missed window is
+            enough to fire this.
+
+            A single alert covers both failure shapes because the metric is a
+            TIMESTAMP, not a boolean: if the job runs and fails, the timestamp stops
+            advancing; if the timer stops entirely, nothing rewrites the file and the
+            timestamp also stops advancing while time() keeps moving. A boolean would
+            have stayed frozen at 1 and read as healthy in the second case.
+
+            Effects while this is firing: old INBOX mail stops moving to Archive, old
+            Spam stops moving to SpamArchive, and expired Trash stops being deleted.
+            None of that is urgent on a one-day scale, which is why this is a warning.
+
+            Check `journalctl -u dovecot-archive -n 50` for the per-step log lines,
+            and `dovecot_archive_step_ok` to see WHICH step failed.
+
+            26h rather than 24h so a delayed timer or a slow run does not page on the
+            boundary.
+
+      # Per-step visibility. The alert above says "something is wrong"; this says
+      # which mailbox rule broke. Separate because the steps are independent -- one
+      # failing no longer cancels the others (the script deliberately does not use
+      # `set -e`), so a single step can fail indefinitely while the others work.
+      - alert: DovecotArchiveStepFailing
+        expr: dovecot_archive_step_ok == 0
+        for: 1h
+        labels:
+          severity: warning
+          category: email
+        annotations:
+          summary: "Dovecot maintenance step {{ $labels.step }} is failing"
+          description: >-
+            The `{{ $labels.step }}` rule in dovecot-archive.service failed on its
+            last run while other steps may have succeeded.
+
+            Steps map to mailboxes: inbox_archive -> INBOX to Archive (sent >365d),
+            spam_archive -> Spam to SpamArchive (sent >30d), trash_expire -> permanent
+            deletion of Trash held >365d.
+
+            The usual cause is a missing destination mailbox or a Dovecot index
+            problem for that folder; `doveadm` writes the reason to the journal.
+
+      # Sanity check on the DESTRUCTIVE step. trash_expire deletes mail permanently
+      # and unattended, so a surprising bulk deletion should be visible after the
+      # fact even though it is allowed to proceed.
+      #
+      # Not a hard cap that blocks the deletion: a cap would silently stop Trash
+      # being cleaned at all, and the legitimate first real cleanup IS large -- this
+      # Trash holds a ~9,700-message bulk saved around 2025-11-14 that will all cross
+      # the one-year line together around 2026-11-14. Blocking that would be wrong;
+      # noticing it is right.
+      #
+      # Fires on the deliberately-unusual case: a run deleting more than 2,000
+      # messages. Normal steady-state runs delete a handful.
+      - alert: DovecotTrashExpiryUnusuallyLarge
+        expr: dovecot_archive_messages_processed{step="trash_expire"} > 2000
+        for: 5m
+        labels:
+          severity: info
+          category: email
+        annotations:
+          summary: "Trash expiry deleted {{ $value }} messages in one run"
+          description: >-
+            The last dovecot-archive run permanently deleted {{ $value }} messages
+            from Trash that had been there longer than a year. This is informational,
+            not a failure -- the deletion has already happened.
+
+            Expected once, around 2026-11-14, when the bulk of Trash saved in
+            November 2025 crosses the one-year threshold together. If it fires at
+            another time, or repeatedly, check that save dates are intact:
+            `doveadm search -u johnw mailbox Trash SAVEDBEFORE 365d | wc -l` should
+            be small in steady state. A rebuilt Dovecot index can reset save dates,
+            which would make far more mail look expired than truly is.

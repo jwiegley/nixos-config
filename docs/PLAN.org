@@ -597,6 +597,29 @@ The package comes from the 'pi' flake input, so the fix belongs upstream in that
 
 IMPACT: P0 -- blocks ALL deploys, including the ready dns_ptr_correct exporter fix and the requested Home Assistant 2026.7.2 -> 2026.9.1 upgrade, which needs an iterative build-fix loop and therefore working builds.
 
+* DONE [#D] Resolve dead error handling in the dovecot-archive script
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-4qy
+:LABELS:   []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-09-10 Thu 14:15]
+:MODIFIED: [2026-09-10 Thu 14:24]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-10 Thu 14:24]
+:CLOSE_REASON: Dropped -e, kept -u and pipefail. The three mailbox rules are independent janitorial operations on different folders, and set -e made them interdependent: a failure archiving INBOX skipped Spam archiving entirely. It also made the script's own error branch unreachable, since a failing doveadm aborted before the exit_code check -- the script could not report the one thing it tried to report. Now each step is checked explicitly, all steps always run, and the script exits non-zero if any failed. Verified against a live run: per-step log lines now report counts (81 spam messages moved) where the old script was silent.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+In dovecot-archive.nix the script sets `set -euo pipefail`, then captures `exit_code=$?` after the two doveadm calls and branches on it. Under set -e a failing doveadm aborts the script before that line, so the branch can only ever observe 0 and the ERROR log line is unreachable.
+
+Consequences worth deciding between, not just a cosmetic tidy:
+- set -e also means a failure of the INBOX move SKIPS the Spam move entirely.
+- Dropping set -e would let both run independently but would mask failures unless each is checked.
+
+Decide which behaviour is correct and make the code honest about it.
+
 * DONE [#E] restic_last_check_timestamp_seconds HELP text claims it is an integrity-check time; it is the collector pass time
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3153,6 +3176,27 @@ Follow-up scan found immich was the ONLY database left ahead of its binaries by 
 window; org sits at vector 0.8.2 against 0.8.6 available, which is the safe direction and
 verified working.
 
+* DONE [#C] Expire Trash mail older than one year
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-d45
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-09-10 Thu 14:15]
+:MODIFIED: [2026-09-10 Thu 14:24]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-10 Thu 14:24]
+:CLOSE_REASON: Added a third rule to dovecot-archive.nix expiring Trash held >365d, using SAVEDBEFORE (time in Trash) not SENTBEFORE (time since written). Measured on the same 10,488-message Trash: SENTBEFORE 365d matched 9276 messages, SAVEDBEFORE 365d matched 0. SENTBEFORE would have permanently destroyed 9,276 messages on the first run, including mail deleted yesterday that merely happened to be a year old. Verified: run completed exit 0, Trash delta 0.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+Nothing expires `Trash`: it holds 10,488 messages, 10,355 of them older than 30 days, and grows without bound. dovecot-archive.nix covers INBOX (365d) and Spam (30d) only.
+
+Add a third doveadm rule expiring Trash items older than one year. Operator asked for one year specifically.
+
+Use `doveadm expunge`, not `move` -- there is no destination; the point is deletion.
+
 * DONE [#C] Deploy the dns_ptr_correct exporter fix (DNSPTRBroken is a false positive)
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -3486,6 +3530,27 @@ audit for functional changes.
 Low priority -- it misleads a reader of the file, nothing more. But this header is exactly
 what someone consults before adding a new textfile collector, so a wrong tier count leads
 to a collector landing in the wrong cadence group.
+
+* DONE [#C] Add a freshness check for the dovecot-archive timer
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-egj
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-10 Thu 14:15]
+:MODIFIED: [2026-09-10 Thu 14:24]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-10 Thu 14:24]
+:CLOSE_REASON: dovecot-archive now emits dovecot_archive_{run,last_success}_timestamp_seconds plus per-step ok/count gauges, with three alerts in email-services.yaml. Used a last-success TIMESTAMP rather than a boolean because a boolean cannot distinguish 'failed' from 'never ran' -- a stopped timer leaves a boolean frozen at 1, reading as health, whereas time() keeps advancing past a frozen timestamp. One alert therefore covers both a stopped timer and a failing run. Deliberately not added to the Daily staleness allowlist: it carries its own last-success triad, which meta-monitoring.yaml documents as the valid reason a collector stays unlisted, and the 14d UnclassifiedStale backstop still covers it. Verified: 3 rules loaded health=ok state=inactive, metric ingested, carry-forward extraction tested.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+A silently stopped dovecot-archive timer would go unnoticed. SystemdServiceFailed catches the job FAILING (node_systemd_unit_state{state="failed"}), but nothing catches it simply never running -- the unit just sits inactive and no metric moves.
+
+This matters because the job moves mail unattended at 03:00; a stopped timer is invisible until folders visibly fill, which is how the operator found the 365d INBOX threshold in the first place.
+
+Emit a last-success timestamp and alert on staleness. Must be added to a textfile staleness tier AND excluded from TextfileCollectorUnclassifiedStale, since those tiers partition.
 
 * DONE [#C] session-gather needs id_rsync installed on hera, clio, vps and andoria
 :PROPERTIES:

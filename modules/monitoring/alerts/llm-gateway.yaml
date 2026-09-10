@@ -1,0 +1,98 @@
+groups:
+  - name: llm-gateway
+    rules:
+      # See modules/monitoring/services/llm-gateway-exporter.nix for why this exists:
+      # on 2026-09-09 a Hermes org-mode lookup failed with a 502 while every hermes_*
+      # metric read healthy, because they all ask "is Hermes up?" and none ask "does a
+      # tool call work?". The gateway had no coverage at all.
+
+      - alert: LLMGatewayUnreachable
+        expr: llm_gateway_reachable == 0
+        for: 20m
+        labels:
+          severity: warning
+          category: ai
+        annotations:
+          summary: "LLM gateway is not answering on {{ $labels.instance }}"
+          description: >-
+            GET /v1/models did not answer. Every Hermes MCP tool that reaches a model
+            goes through this gateway, so tool calls will fail -- typically surfacing
+            to the user as a 502, with Hermes' own health metrics still reading green.
+
+            The reason is on stderr: `journalctl -u llm-gateway-exporter`. Check the
+            gateway itself first (`curl -s http://127.0.0.1:4000/v1/models`), then
+            whether the upstream model host is up.
+
+            `for: 20m` because the collector is hourly and the upstream is restarted
+            deliberately from time to time; a single missed sample during planned
+            maintenance should not page.
+
+      - alert: LLMGatewayEmbeddingsFailing
+        expr: llm_gateway_embeddings_ok == 0 and llm_gateway_reachable == 1
+        for: 20m
+        labels:
+          severity: warning
+          category: ai
+        annotations:
+          summary: "LLM gateway is up but embeddings are failing on {{ $labels.instance }}"
+          description: >-
+            The gateway answers /v1/models but an actual embeddings request does not
+            return a vector. THIS IS THE INTERESTING CASE: the relay serves its model
+            roster from its own state, so it stays reachable while having no live
+            upstream for inference. That combination is precisely what produced the
+            2026-09-09 502 and precisely what a reachability-only check misses.
+
+            Direct user impact: org-mode search through Hermes (org_search shells
+            `org db search` against these embeddings) and anything else doing
+            retrieval. org_sql is unaffected -- it reaches PostgreSQL directly.
+
+            Guarded on reachable == 1 so this does not double-page alongside
+            LLMGatewayUnreachable; when the gateway is simply down, that rule owns it.
+
+      - alert: LLMConfiguredModelNotServed
+        expr: llm_gateway_configured_model_served == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: ai
+        annotations:
+          summary: >-
+            Model configured for role {{ $labels.role }} is not served by the gateway
+          description: >-
+            /etc/models.json names a model for the `{{ $labels.role }}` role that the
+            gateway does not advertise. Every caller of that role will fail, and it
+            fails silently: nothing else compares declared configuration against what
+            the upstream actually has loaded.
+
+            Usual causes are a rename on the model host, a retired model, or
+            models.nix and the host drifting apart. Compare
+            `jq .llm /etc/models.json` against
+            `curl -s http://127.0.0.1:4000/v1/models | jq -r .data[].id`.
+
+            Roles map to consumers: reasoning -> Hermes agent; primary -> the log
+            summariser, stock-trader and Open WebUI; fast -> rspamd spam
+            classification; embedding -> org_search and other retrieval.
+
+      # Collector work-floor. The gauges above cannot distinguish "the probe ran and
+      # everything is fine" from "the probe has not run and these are yesterday's
+      # numbers" -- and a monitor that silently stops is worse than none, because it
+      # reads as reassurance. Staleness proper is covered by
+      # TextfileCollectorStaleHourly in meta-monitoring.yaml; this catches the
+      # narrower case of a run that produced no verdict at all.
+      - alert: LLMGatewayProbeVacuous
+        expr: llm_gateway_reachable == 1 and llm_gateway_models_served == 0
+        for: 1h
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "LLM gateway probe reports reachable but zero models on {{ $labels.instance }}"
+          description: >-
+            /v1/models answered but advertised no models, so
+            llm_gateway_configured_model_served is 0 for every role for a reason that
+            has nothing to do with the roles. Most likely the response shape changed
+            and the parse no longer finds `.data[].id`.
+
+            Not urgent, but the model-roster check is dead weight until it is fixed:
+            verify what the gateway actually returns against the parse in
+            scripts/llm-gateway-exporter.py.

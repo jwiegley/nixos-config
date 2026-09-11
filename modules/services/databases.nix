@@ -32,8 +32,8 @@ in
     # sibling that is gone.)
     #
     # Grist keeps only its HOME database here -- orgs, workspaces, users, ACLs.
-    # The spreadsheets themselves are SQLite files under /var/lib/grist, so a
-    # PostgreSQL backup alone does NOT capture Grist documents.
+    # The spreadsheets themselves are SQLite files under /tank/Documents/Grist,
+    # so a PostgreSQL backup alone does NOT capture Grist documents.
     (
       { lib, ... }:
       lib.mkIf config.services.grist.enable (mkPostgresUserSetup {
@@ -252,9 +252,9 @@ in
         "wallabag"
       ]
       # Grist's HOME database only -- orgs, workspaces, users, ACLs. The
-      # spreadsheet documents are SQLite files under /var/lib/grist and are not
-      # in PostgreSQL, so this database being intact does not mean the documents
-      # are.
+      # spreadsheet documents are SQLite files under /tank/Documents/Grist and
+      # are not in PostgreSQL, so this database being intact does not mean the
+      # documents are.
       ++ lib.optional config.services.grist.enable "grist"
       ++ [
         "budgetboard"

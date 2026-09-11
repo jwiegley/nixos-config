@@ -147,7 +147,7 @@ in
         protected-mode = "no";
         maxmemory = "128mb";
         # Sessions are cache-like and safe to evict under pressure; the durable
-        # state is in PostgreSQL and /var/lib/grist.
+        # state is in PostgreSQL and /tank/Documents/Grist.
         maxmemory-policy = "allkeys-lru";
       };
     };
@@ -207,20 +207,105 @@ in
     # Storage for Grist's /persist -- documents, attachments and its own
     # bookkeeping.
     #
-    # `d`, never `D`: D EMPTIES the directory whenever systemd-tmpfiles --remove
-    # runs, i.e. on every boot and rebuild, and has destroyed data on this host
-    # twice (mail 2025-11-04, container databases 2025-11-09). `Z` then fixes
-    # ownership recursively without deleting anything, which matters because the
-    # container runs with PODMAN_USERNS=keep-id.
+    # /tank/Documents/Grist, moved off /var/lib/grist on 2026-09-11 at John's
+    # request. A plain directory inside the existing tank/Documents dataset, not
+    # a dataset of its own -- also his choice. What the move buys and what it
+    # costs, each item measured rather than assumed:
     #
-    # A plain /var/lib directory rather than a ZFS dataset, chosen by John on
-    # 2026-08-19. Note the tradeoff that came with that choice: this path is on
-    # the root pool and therefore gets neither ZFS snapshots nor the /tank
-    # backup sweep, so Grist documents are covered only by whatever backs up
-    # /var/lib.
+    #   * GAINED: hourly and archival ZFS snapshots on tank/Documents, and
+    #     offsite B2 through the existing `Documents` restic job at 04:25
+    #     (modules/storage/backups.nix). Note when reading that file that the
+    #     commented-out `mkBackup { path = "Documents"; }` near the top is STALE
+    #     -- the live call site is further down and has been running since
+    #     2026-08-14. Its excludes are .stfolder/.stignore/.stversions/Sessions,
+    #     none of which touch this directory.
+    #   * GAINED: Syncthing replication to the peers in
+    #     modules/services/syncthing.nix. John chose this deliberately on
+    #     2026-09-11, having been shown the hazard first: that folder is
+    #     `sendreceive`, so Syncthing can write a peer's copy back into a live
+    #     SQLite file that Grist holds open. If a document ever returns corrupt,
+    #     or a ~conflicted~ copy appears beside it, THIS is the cause, and the
+    #     fix is a "/Grist" entry in the documents folder's ignorePatterns --
+    #     not anything on the Grist side.
+    #   * LOST: the 4x-daily /var/lib rsync into /tank/Backups/Machines/Vulcan
+    #     (modules/services/local-backup.nix). That mirror DID cover the old
+    #     location, contrary to what this comment used to claim: grist is absent
+    #     from its exclude list and its `**/*.sqlite` globs never matched the
+    #     `.grist` suffix. The mirror runs with --delete, so the orphaned copy at
+    #     .../Vulcan/var/lib/grist clears itself on the next run -- nothing to
+    #     remove by hand.
+    #
+    # NOT systemd-tmpfiles, which is how the old location was created.
+    # systemd-tmpfiles runs before the ZFS import, so a `d` rule here would
+    # create the directory beneath an unmounted mountpoint and leave it shadowed
+    # once tank came up. The oneshot below is ordered on the mount unit instead,
+    # which is the pattern modules/services/immich.nix already uses for
+    # /tank/Photos/Immich.
+    #
+    # There is no `Z` rule any more either. A recursive chmod rewrites the POSIX
+    # ACL mask to `---`, which would leave syncthing's named ACL entry visibly
+    # present and silently ineffective on every boot -- the exact failure with
+    # the six-day post-mortem in modules/services/syncthing.nix. The subuid
+    # ownership problem `Z` was there to solve is handled properly by
+    # --userns=keep-id in modules/users/home-manager/grist.nix.
+    systemd.services.grist-storage-init = {
+      description = "Prepare Grist document storage under /tank/Documents";
+      after = [
+        "zfs.target"
+        "tank-Documents.mount"
+      ];
+      # Also (re)start when the dataset mounts, so a late or hand-recovered tank
+      # import is covered as well as an ordinary boot.
+      wantedBy = [
+        "tank-Documents.mount"
+        "multi-user.target"
+      ];
+      unitConfig = {
+        RequiresMountsFor = [ "/tank/Documents" ];
+        # RequiresMountsFor is a no-op against a runtime ZFS mount, so this is
+        # what actually makes the unit skip cleanly rather than fail when tank is
+        # absent. Mirrors immich.nix / aria2.nix / samba.nix.
+        ConditionPathIsMountPoint = "/tank/Documents";
+      };
+      path = [
+        pkgs.acl
+        pkgs.coreutils
+      ];
+      serviceConfig.Type = "oneshot";
+      script = ''
+        set -euo pipefail
+
+        install -d -m 0750 -o grist -g grist /tank/Documents/Grist
+
+        # /tank/Documents is other::--- , so grist cannot so much as traverse
+        # into it without a named entry. This is the same ancestor-grant
+        # mechanism syncthing-folder-acls applies to its own sub-folders.
+        setfacl -m u:grist:x /tank/Documents
+
+        # The mask is set on the SAME setfacl invocation as every named entry,
+        # and must stay that way. The install -d above rewrites it to r-x, which
+        # would leave u:syncthing as "#effective:r--" -- present in getfacl
+        # output, correct-looking, and unable to complete a pull. The full
+        # post-mortem of that bug is in modules/services/syncthing.nix.
+        setfacl -R \
+          -m u:grist:rwX \
+          -m u:syncthing:rwX \
+          -m u:johnw:rwX \
+          -m m::rwX \
+          /tank/Documents/Grist
+
+        # Defaults, so documents Grist creates later stay reachable by syncthing
+        # without waiting for the next sweep.
+        setfacl \
+          -m d:u:grist:rwX \
+          -m d:u:syncthing:rwX \
+          -m d:u:johnw:rwX \
+          -m d:m::rwX \
+          /tank/Documents/Grist
+      '';
+    };
+
     systemd.tmpfiles.rules = [
-      "d /var/lib/grist 0750 grist grist -"
-      "Z /var/lib/grist 0750 grist grist -"
       # Secrets drop directory, matching the convention every other container
       # user follows. The sops `path=` above writes the env file into it; there
       # is deliberately no L+ symlink.

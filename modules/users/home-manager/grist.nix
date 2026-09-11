@@ -18,8 +18,8 @@
 #   * TYPEORM_* is how Grist is pointed at PostgreSQL -- not DATABASE_URL, not
 #     PG*. Grist uses TypeORM for its home database (orgs, workspaces, users,
 #     ACLs); the spreadsheet documents themselves stay as SQLite files under
-#     /persist and are NOT in PostgreSQL. So losing /var/lib/grist loses the
-#     documents even with the database intact.
+#     /persist and are NOT in PostgreSQL. So losing /tank/Documents/Grist loses
+#     the documents even with the database intact.
 #
 #   * TYPEORM_HOST is 10.88.0.1, the pinned podman bridge address, NOT
 #     127.0.0.1 (which is the container's own loopback) and NOT
@@ -48,6 +48,40 @@ in
       pkgs,
       ...
     }:
+    let
+      # Two preconditions, in the order they can fail on a cold boot.
+      #
+      # This is a systemd USER unit, so RequiresMountsFor and
+      # ConditionPathIsMountPoint -- how immich.nix and grist-storage-init.service
+      # guard their /tank paths -- are unavailable to it: a user manager has no
+      # visibility of system mount units. Polling is the substitute.
+      preflight = pkgs.writeShellScript "grist-preflight" ''
+        set -euo pipefail
+
+        # /persist lives on tank/Documents. Starting before that dataset is
+        # mounted would hand the container an empty bind mount, and podman would
+        # create the directory root-owned beneath the mountpoint. Grist itself
+        # would come up looking healthy -- its home database is in PostgreSQL --
+        # with every document simply absent, which is the worst shape this
+        # failure could take.
+        for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+          if ${pkgs.util-linux}/bin/mountpoint -q /tank/Documents; then break; fi
+          ${pkgs.coreutils}/bin/sleep 2
+        done
+        ${pkgs.util-linux}/bin/mountpoint -q /tank/Documents
+        test -d /tank/Documents/Grist
+
+        # Poll for PostgreSQL rather than a single pg_isready -t 30: on a cold
+        # boot the database is often not accepting connections yet, and a
+        # one-shot check fails the unit outright. Every DB-dependent container
+        # here uses this idiom.
+        for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+          if ${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 2; then exit 0; fi
+          ${pkgs.coreutils}/bin/sleep 2
+        done
+        exit 1
+      '';
+    in
     {
       imports = [
         inputs.quadlet-nix.homeManagerModules.quadlet
@@ -92,21 +126,24 @@ in
           # configuration -- which was also true of nocobase (removed
           # 2026-08-31), whose /var/lib/nocobase was cleanly owned by
           # nocobase(945). Grist's image drops to uid 1000, and 1000
-          # maps into the user's SUBUID range instead: /var/lib/grist ended up
-          # owned by 2394760 (= grist's subuid base 2393760 + 1000).
+          # maps into the user's SUBUID range instead: the data directory ended
+          # up owned by 2394760 (= grist's subuid base 2393760 + 1000).
           #
-          # That is not cosmetic. The `Z /var/lib/grist 0750 grist grist` rule in
-          # modules/containers/grist-quadlet.nix recursively chowns the tree back
-          # to grist(899) on EVERY boot and every rebuild, and at 0750 the subuid
-          # then has no access at all -- so Grist would lose write access to its
-          # own documents at the next activation. Verified by running
+          # That was not cosmetic. A `Z /var/lib/grist 0750 grist grist` tmpfiles
+          # rule used to chown the tree back to grist(899) on EVERY boot and
+          # rebuild, and at 0750 the subuid then had no access at all, so Grist
+          # lost write access to its own documents at the next activation.
+          # Verified at the time by running
           # `systemd-tmpfiles --create --prefix=/var/lib/grist` by hand: it
           # rewrote 2394760 -> 899 exactly as predicted.
           #
-          # Fixing the mapping is the right half to change rather than dropping
-          # the tmpfiles rule: on-disk ownership then matches what every other
-          # service here assumes, and the data directory stays administrable as
-          # the grist user.
+          # Fixing the mapping was the right half to change, and since the
+          # 2026-09-11 move to /tank/Documents/Grist it is the ONLY half: that
+          # recursive rule is gone, because a recursive chmod there rewrites the
+          # POSIX ACL mask and would strip syncthing's access to the tree on
+          # every boot. keep-id now carries the whole job -- on-disk ownership
+          # matches what every other service here assumes, and the data
+          # directory stays administrable as the grist user.
           podmanArgs = [ "--userns=keep-id:uid=1000,gid=1000" ];
 
           # Non-secret configuration only. GRIST_SESSION_SECRET and
@@ -186,7 +223,11 @@ in
           environmentFiles = [ "/run/secrets-grist/grist-secrets" ];
 
           volumes = [
-            "/var/lib/grist:/persist"
+            # Prepared, and ACL-granted, by grist-storage-init.service in
+            # modules/containers/grist-quadlet.nix. The ExecStartPre below
+            # refuses to start the container until that directory exists on a
+            # mounted dataset.
+            "/tank/Documents/Grist:/persist"
           ];
         };
 
@@ -197,11 +238,7 @@ in
         };
 
         serviceConfig = {
-          # Poll for PostgreSQL rather than a single pg_isready -t 30: on a cold
-          # boot the database is often not accepting connections yet, and a
-          # one-shot check fails the unit outright. Every DB-dependent container
-          # here uses this idiom.
-          ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in {1..60}; do ${pkgs.postgresql}/bin/pg_isready -h 10.88.0.1 -p 5432 -t 2 && exit 0; ${pkgs.coreutils}/bin/sleep 2; done; exit 1'";
+          ExecStartPre = "${preflight}";
           Restart = "always";
           RestartSec = "10s";
           # First boot runs migrations against an empty home database, which is

@@ -311,8 +311,14 @@ groups:
       # for: 2h because a legitimate bulk import or restore can briefly exceed this
       # and is not worth waking anyone; the real event ran for seven days, so 2h
       # costs nothing in detection latency against the shape this exists to catch.
+      # `technitium` is excluded and carries its own rule below. It is the DNS
+      # query log: at the rate measured on 2026-09-11 -- 732,455 queries in 24h,
+      # ~10.5 q/s -- a row-per-query table grows on the order of 200-300 MB/day
+      # BY DESIGN. Leaving it in this rule would mean a permanently firing
+      # warning, which trains the reader to ignore the alert entirely; that is
+      # the exact failure mode this rule exists to prevent.
       - alert: PostgreSQLDatabaseGrowthSpike
-        expr: deriv(pg_database_size_bytes[6h]) * 86400 / 1024 / 1024 > 100
+        expr: deriv(pg_database_size_bytes{datname!="technitium"}[6h]) * 86400 / 1024 / 1024 > 100
         for: 2h
         labels:
           severity: warning
@@ -454,3 +460,61 @@ groups:
         annotations:
           summary: "PostgreSQL statement {{ $labels.queryid }} ({{ $labels.datname }}) dominates exec time and is slow"
           description: "queryid {{ $labels.queryid }} in {{ $labels.datname }} accounts for >50% of the top-N cumulative exec time AND averages >100ms/call, sustained 30m. Likely a missing index or runaway query — read its SQL: SELECT query FROM pg_stat_statements WHERE queryid = {{ $labels.queryid }}; (as postgres)."
+  - name: technitium_dns_log
+    rules:
+      # The DNS query log is the one database on this host whose job is to grow
+      # fast, so the 100 MB/day rule in the group above excludes it and this
+      # covers it at the right scale instead. Dropping coverage entirely would be
+      # wrong -- an unbounded log on a resolver is a real disk-exhaustion risk.
+      #
+      # 1500 MB/day is ~5-7x the expected 200-300 MB/day (derived from 732,455
+      # queries/24h measured 2026-09-11). That headroom absorbs a busy day
+      # without firing, while still catching the shapes that matter: retention
+      # silently not applying, a query flood from a misconfigured client or
+      # amplification attempt, or the app logging far more per row than expected.
+      - alert: TechnitiumDNSLogGrowingTooFast
+        expr: deriv(pg_database_size_bytes{datname="technitium"}[6h]) * 86400 / 1024 / 1024 > 1500
+        for: 3h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "Technitium DNS query log is growing at {{ $value | printf \"%.0f\" }} MB/day"
+          description: >-
+            The `technitium` database holds one row per DNS query, so steady growth
+            is expected -- roughly 200-300 MB/day at normal volume. This fires only
+            well above that.
+
+            Check retention first: the app's own config has `maxLogDays` and
+            `maxLogRecords`, and BOTH default to 0, meaning keep forever. If they
+            are still 0 the table never stops growing and that is the cause.
+
+            Otherwise look for a query flood:
+              sum(rate(dns_queries_total[5m]))
+            against the ~10.5 q/s baseline measured 2026-09-11. A large jump points
+            at a misconfigured client or an amplification attempt rather than a
+            database problem.
+
+      # Absolute-size backstop. The rate rule above cannot catch slow accumulation
+      # that never exceeds its threshold but never stops either -- which is exactly
+      # what `maxLogDays: 0` produces. At 250 MB/day, 40 GB is about five months of
+      # logging with no retention.
+      - alert: TechnitiumDNSLogOversized
+        expr: pg_database_size_bytes{datname="technitium"} / 1024 / 1024 / 1024 > 40
+        for: 1h
+        labels:
+          severity: warning
+          category: database
+          service: postgresql
+        annotations:
+          summary: "Technitium DNS query log has reached {{ $value | printf \"%.1f\" }} GB"
+          description: >-
+            The DNS query log has grown past 40 GB. This is a retention problem, not
+            a rate problem: set `maxLogDays` (or `maxLogRecords`) in the app config,
+            which ship as 0 = unlimited.
+
+            Old rows are removed by the app, not by anything in this repo, so
+            lowering the setting is what reclaims space. PostgreSQL will reuse the
+            freed pages; the file will not shrink without a VACUUM FULL, which is
+            normally not worth the exclusive lock.

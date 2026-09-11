@@ -66,6 +66,33 @@ in
       database = "speedtest_tracker";
       secretPath = config.sops.secrets."speedtest-tracker-db-password".path;
     })
+    # Technitium DNS query logging (2026-09-11). Sets the password for the
+    # `technitium` role used by the DNS server's PostgreSQL logging app.
+    #
+    # Ordered before technitium-dns-server so the role and its password exist
+    # before the DNS server's PostgreSQL logging app can try to connect.
+    #
+    # ORDERING ONLY, NEVER A REQUIREMENT -- this distinction is load-bearing.
+    # mkPostgresUserSetup emits `before = [ dependentService ]` and nothing else:
+    # no Requires=, no Wants=, no BindsTo=. So when both units are in the same
+    # boot transaction technitium waits for the database to be ready, but if this
+    # setup unit FAILS, technitium still starts and keeps resolving.
+    #
+    # That matters more here than for any other consumer of this helper.
+    # Technitium gates nss-lookup.target and takes ~125s to initialise, so name
+    # resolution for the whole host sits behind it; a hard dependency would let a
+    # broken PostgreSQL take DNS down with it. The delay is bounded: the helper's
+    # preStart polls pg_isready for at most 30s and then proceeds regardless.
+    #
+    # If you ever need DNS to come up completely independently of PostgreSQL,
+    # drop `dependentService` here -- query logging is an optional app inside the
+    # DNS server, enabled at runtime, not a startup precondition.
+    (mkPostgresUserSetup {
+      user = "technitium";
+      database = "technitium";
+      secretPath = config.sops.secrets."technitium-db-password".path;
+      dependentService = "technitium-dns-server.service";
+    })
     (mkPostgresUserSetup {
       user = "openclaw";
       database = "org";
@@ -237,6 +264,11 @@ in
         "speedtest_tracker"
         "nodered_events"
         "flume-data"
+        # Technitium's PostgreSQL DNS-logging app. The app creates its own
+        # table on first run, so all this must provide is the database, an
+        # owner role and a password. Name matches the role because
+        # ensureDBOwnership requires database name == user name.
+        "technitium"
       ];
       ensureUsers = [
         { name = "postgres"; }
@@ -282,6 +314,14 @@ in
         { name = "grafana"; }
         {
           name = "flume-data";
+          ensureDBOwnership = true;
+        }
+        # Owner of the DNS query log written by Technitium's "Log DNS requests
+        # and responses in PostgreSQL" app. The app issues its own DDL -- it
+        # creates the log table itself on first save of its config -- so it needs
+        # ownership, not merely INSERT.
+        {
+          name = "technitium";
           ensureDBOwnership = true;
         }
       ];

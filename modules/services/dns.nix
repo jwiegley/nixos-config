@@ -61,4 +61,25 @@
     ];
     allowedUDPPorts = lib.mkIf config.services.technitium-dns-server.enable [ 53 ];
   };
+
+  # Password for the `technitium` PostgreSQL role, used by the DNS server's
+  # "Log DNS requests and responses in PostgreSQL" app (Technitium 15.4+).
+  #
+  # Consumed ONLY by postgresql-technitium-setup.service, which reads it via
+  # systemd LoadCredential as root and runs `ALTER USER technitium WITH
+  # PASSWORD`. Technitium itself never reads this file: the app keeps its own
+  # connection string, containing the same password, inside its app config in
+  # the DNS server's state directory. So root:0400 is correct here -- there is
+  # no service user that needs read access, and the server runs DynamicUser=yes
+  # anyway, so its uid is not stable enough to own a file.
+  #
+  # restartUnits re-runs the setup service on rotation so the role password
+  # follows the secret. Rotating it also means updating the app config in the
+  # DNS web console, which is a manual step -- the two are not linked.
+  sops.secrets."technitium-db-password" = {
+    owner = "root";
+    mode = "0400";
+    restartUnits = [ "postgresql-technitium-setup.service" ];
+  };
+
 }

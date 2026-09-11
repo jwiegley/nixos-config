@@ -9169,6 +9169,100 @@ THE DURABLE INVARIANT, which is the real output of this work: NO SERVICE MAY REA
 
 Not determined: why loki's ruler began erroring at 21:13:51 specifically, given the modes predate it. Left unresolved deliberately — it no longer has any consequence, and the architectural fix makes it unable to recur.
 
+* TODO [#C] Home Assistant opens 56 idle PostgreSQL connections to flume-data, one per SQL sensor
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-unl
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-11 Fri 16:20]
+:MODIFIED: [2026-09-11 Fri 16:20]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+Home Assistant holds 56 permanently-idle PostgreSQL connections to the
+flume-data database -- 28% of max_connections (200), consumed by sensors that
+each run one cheap indexed query every 30 seconds.
+
+OBSERVED:
+
+  SELECT state, count(*), min/max age FROM pg_stat_activity WHERE datname='flume-data'
+    state=idle  count=56  youngest=23486s  oldest=23486s   user=hass, local socket
+
+  All 56 share an IDENTICAL backend age, i.e. they were opened in one burst.
+  That burst maps to 09:46:51 on 2026-09-11, which is exactly
+  home-assistant.service ActiveEnterTimestamp. They have been idle since.
+
+  Overall the cluster sits at 41.5% of max_connections, and flume-data alone is
+  56 of those; the next-largest consumer is openproject at 6.
+
+THE COUNT IS NOT A COINCIDENCE. modules/services/home-assistant-water-attribution.nix
+generates SQL sensors as fixtures x (3 cycles + 1 lifetime):
+
+  14 fixtures x 4 = 56 sensors = 56 connections, exactly.
+
+So it is one permanently-held connection per sensor, and it scales at +4
+connections per fixture added.
+
+WHY THIS LOOKS LIKE AN UPSTREAM BUG RATHER THAN DESIGN. Home Assistant's sql
+integration explicitly intends the opposite. In homeassistant/components/sql/util.py,
+async_create_sessionmaker caches one sessionmaker per db_url with the comment
+'If there is already a session maker for this db_url we can use that so we do
+not create a new engine for every sensor':
+
+    elif db_url in sql_data.session_makers_by_db_url:
+        sessmaker = sql_data.session_makers_by_db_url[db_url]
+    elif sessmaker := await hass.async_add_executor_job(
+        _validate_and_get_session_maker_for_db_url, db_url
+    ):
+        sql_data.session_makers_by_db_url[db_url] = sessmaker
+
+The cache READ and the cache WRITE are separated by an await. All 56 of our
+sensors share one db_url and are set up concurrently at startup, so every one of
+them can pass the 'not in cache' check before any of them writes -- a TOCTOU
+race that yields 56 engines instead of 1.
+
+Three independent observations fit that and nothing else does:
+  1. connection count is EXACTLY the sensor count (56 = 56);
+  2. a single shared engine could not produce this -- create_engine() uses the
+     default QueuePool, pool_size 5 + max_overflow 10 = 15 connections MAX, so
+     56 proves the engine is not shared;
+  3. all 56 were created at the same instant, consistent with a concurrent
+     startup race rather than lazy per-sensor growth.
+
+CONFIRMATION NOT YET DONE: read len(sql_data.session_makers_by_db_url) at
+runtime, or count distinct SQLAlchemy engines. The inference above is strong but
+circumstantial.
+
+IMPACT -- real but not urgent:
+  - 28% of max_connections held permanently by idle sessions.
+  - Scales +4 per fixture. Adding 10 more fixtures would take flume-data alone
+    to 96 connections and the cluster near 70% of max.
+  - Memory is NOT the 1975 MB that summing backend RSS suggests: shared_buffers
+    is 1 GB and every backend maps it, so most of that 35 MB mean is shared
+    pages, not private cost. Do not quote the RSS figure as real overhead.
+  - Nothing is broken today. No lock waits, no connection errors, and the
+    sensors work.
+
+OPTIONS, none obviously right yet:
+  (a) Accept and document, with an alert on flume-data connection count so the
+      scaling cliff is visible before it bites.
+  (b) Reduce sensor count -- the 3 cycle variants per fixture could plausibly
+      be one sensor with attributes, cutting 56 to 14.
+  (c) File upstream at home-assistant/core against the sql integration. The
+      race is small, well-localised and easy to describe from the above.
+  (d) Raise max_connections -- least attractive, treats the symptom.
+
+Discovered during routine health monitoring on 2026-09-11 while checking
+whether a 6.5h 'longest query' was an idle-in-transaction problem. It was not --
+that session is plain idle with no open transaction -- but the connection census
+that ruled it out surfaced this.
+#+end_example
+
 * DONE [#C] Verify the VTherm comfort fix on the next office trigger
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

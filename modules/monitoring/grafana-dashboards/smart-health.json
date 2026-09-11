@@ -764,8 +764,8 @@
     },
     {
       "type": "stat",
-      "title": "Self-test log",
-      "description": "Entries the drive is holding in its self-test log (a rolling table, typically 21 deep) and how many of them ended in error.",
+      "title": "Self-test log and progress",
+      "description": "Entries the drive is holding in its self-test log (a rolling table, typically 21 deep) and how many ended in error. While an extended test is in flight -- 23.5 hours on these drives -- its percent remaining appears here too, so a long run is visibly progressing rather than merely 'RUNNING'.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -833,6 +833,18 @@
           "range": true,
           "instant": false,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "smart_selftest_remaining_percent",
+          "legendFormat": "{{device}} % remaining",
+          "range": true,
+          "instant": false,
+          "refId": "C"
         }
       ]
     },

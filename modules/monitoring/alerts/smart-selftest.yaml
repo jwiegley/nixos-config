@@ -40,8 +40,14 @@ groups:
       # schedule that has genuinely stopped. A drive that has never been tested
       # reports its full service life here and trips this immediately, which is
       # intended.
+      #
+      # The `unless smart_selftest_running` guard excludes a drive with a test
+      # actually in flight. It is needed because age counts from the last
+      # CONCLUDED test: an extended run takes 23.5 hours, and a drive that was
+      # already near the threshold when its test started would otherwise page
+      # midway through the very test that is about to clear it.
       - alert: SmartSelfTestStale
-        expr: smart_selftest_age_hours > 1100
+        expr: smart_selftest_age_hours > 1100 unless on(device) smart_selftest_running == 1
         for: 1h
         labels:
           severity: warning

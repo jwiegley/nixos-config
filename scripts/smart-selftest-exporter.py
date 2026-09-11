@@ -32,7 +32,8 @@ Metrics emitted (labelled device="sdX"):
   smart_selftest_last_passed          1 = last completed test finished without error
   smart_selftest_last_failed          1 = last test hit a disk fault (status 3-8)
   smart_selftest_running              1 = a self-test is in progress right now
-  smart_selftest_last_status          raw ATA self-test status value (0 = clean)
+  smart_selftest_last_status          ATA execution status code, byte >> 4 (0 = clean)
+  smart_selftest_remaining_percent    percent of an in-progress test still to run
   smart_selftest_last_lifetime_hours  drive power-on hour at which the last test ran
   smart_selftest_power_on_hours       drive power-on hours now
   smart_selftest_age_hours            drive hours since the last test (the staleness signal)
@@ -54,19 +55,36 @@ OUT = os.environ.get(
     "/var/lib/prometheus-node-exporter-textfiles/smart_selftest.prom",
 )
 
-# ATA self-test status values. 0 is clean; 1-2 mean a host aborted or reset the test, which
+# ATA packs the self-test log status byte as TWO nibbles: bits 7:4 are the execution status
+# code, bits 3:0 are the percent remaining in 10% units. So the raw byte must be shifted
+# before it means anything. A completed clean test is 0x00, but a test with 90% remaining is
+# 0xF9 = 249 -- NOT 15. Comparing the raw byte against the status code silently misreported
+# a running test as "not running" until a real extended test was started on 2026-09-11 and
+# the collector reported status 249 with running=0.
+#
+# Status codes after shifting: 0 is clean; 1-2 mean a host aborted or reset the test, which
 # is an operational event and NOT a disk fault (a reboot mid-test lands here); 3-8 are real
 # drive faults; 15 means still running. Treating 1-2 as failure would page on every reboot
 # that interrupts a 23.5-hour extended test, so they are deliberately neither passed nor
 # failed -- they simply leave the previous verdict standing and let age_hours climb.
+#
+# smartctl's own `passed` field is NOT usable here: it reports true for an in-progress test,
+# which has not passed anything yet.
 STATUS_IN_PROGRESS = 15
 STATUS_FAULT_RANGE = range(3, 9)
+
+
+def status_code(raw: int) -> int:
+    """Decode the ATA self-test status byte to its execution status code."""
+    return raw >> 4 if raw >= 0 else -1
+
 
 HELP = {
     "smart_selftest_last_passed": ("1 if the last self-test completed without error", "gauge"),
     "smart_selftest_last_failed": ("1 if the last self-test ended in a drive fault", "gauge"),
     "smart_selftest_running": ("1 if a self-test is currently in progress", "gauge"),
-    "smart_selftest_last_status": ("Raw ATA self-test status value; 0 is clean", "gauge"),
+    "smart_selftest_last_status": ("ATA self-test execution status code (byte >> 4); 0 is clean", "gauge"),
+    "smart_selftest_remaining_percent": ("Percent of the in-progress self-test still remaining", "gauge"),
     "smart_selftest_last_lifetime_hours": ("Drive power-on hour at which the last test ran", "gauge"),
     "smart_selftest_power_on_hours": ("Drive power-on hours now", "gauge"),
     "smart_selftest_age_hours": ("Drive hours elapsed since the last self-test", "gauge"),
@@ -123,19 +141,45 @@ def collect(device: str) -> dict:
 
     # The table is ordered newest first.
     last = table[0]
-    value = last.get("status", {}).get("value", -1)
-    rows["smart_selftest_last_status"] = value
-    rows["smart_selftest_running"] = 1 if value == STATUS_IN_PROGRESS else 0
-    rows["smart_selftest_last_passed"] = 1 if value == 0 else 0
-    rows["smart_selftest_last_failed"] = 1 if value in STATUS_FAULT_RANGE else 0
+    status = last.get("status", {})
+    code = status_code(status.get("value", -1))
+    rows["smart_selftest_last_status"] = code
+    rows["smart_selftest_running"] = 1 if code == STATUS_IN_PROGRESS else 0
+    rows["smart_selftest_last_passed"] = 1 if code == 0 else 0
+    rows["smart_selftest_last_failed"] = 1 if code in STATUS_FAULT_RANGE else 0
+    if code == STATUS_IN_PROGRESS:
+        rows["smart_selftest_remaining_percent"] = status.get("remaining_percent", 0)
 
     lifetime = last.get("lifetime_hours")
     if lifetime is not None:
         rows["smart_selftest_last_lifetime_hours"] = lifetime
-        if poh is not None:
-            # Clamp at zero: a test logged in the current hour can read one hour ahead of
-            # the attribute, and a negative age would look like a clock fault downstream.
-            rows["smart_selftest_age_hours"] = max(0, poh - lifetime)
+
+    # Age is measured from the most recent CONCLUDED test, not merely the most recent log
+    # entry. A test that was aborted, interrupted or is still running did not read the
+    # surface, so it must not reset the staleness clock.
+    #
+    # Keying off the newest entry regardless of outcome would leave a real hole: if every
+    # monthly test were aborted -- by a reboot landing on the scheduled day, say -- each
+    # abort would push the reference forward and SmartSelfTestStale could never fire, even
+    # though no test had actually completed in years. That is precisely the silent-absence
+    # failure this collector exists to prevent, so it is worth the extra scan.
+    #
+    # An in-flight test is handled by the alert instead (it excludes running devices),
+    # which keeps a legitimate 23.5-hour run from tripping staleness without pretending the
+    # surface has already been read.
+    if poh is not None:
+        concluded = None
+        for entry in table:
+            entry_code = status_code(entry.get("status", {}).get("value", -1))
+            if entry_code in (1, 2, STATUS_IN_PROGRESS):
+                continue  # aborted, interrupted or still running: did not read the surface
+            if entry.get("lifetime_hours") is not None:
+                concluded = entry["lifetime_hours"]
+                break
+        # Clamp at zero: a test logged in the current hour can read one hour ahead of the
+        # attribute, and a negative age would look like a clock fault downstream. With no
+        # concluded test at all, the honest age is the drive's entire service life.
+        rows["smart_selftest_age_hours"] = max(0, poh - concluded) if concluded is not None else poh
 
     return rows
 

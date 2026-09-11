@@ -1547,7 +1547,7 @@ Blocks nixos-crb and nixos-5v4; both are symptoms.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-11 Fri 11:18]
-:MODIFIED: [2026-09-11 Fri 11:18]
+:MODIFIED: [2026-09-11 Fri 12:19]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1585,6 +1585,20 @@ this host fail together after a power loss, and if either lock is in that group
 the other five should be checked too.
 
 Discovered during routine health monitoring on 2026-09-11.
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 70,
+    "issue_id": "nixos-7c3",
+    "author": "johnw",
+    "text": "2026-09-11 12:20 health pass. The two locks have DIVERGED, which weakens the shared-cause theory in the original writeup:\n\n  august-lock-garage-door   89.82% -> 90.51%  (recovered above threshold, alert cleared)\n  august-lock-front-door    87.77% -> 85.36%  (degrading further, still firing)\n\nOnly the front door is still alerting, and it is trending down rather than\nflapping around a mean. That points at a device- or location-specific problem\n(radio/signal at that door) rather than a shared bridge, AP or power-group\ncause. Re-check whether the front lock's Home Assistant entities are still\nresponsive -- if they are, option (a) in the description (move to\nhost_group=iot-noping) applies to the garage lock but NOT necessarily to this\none, which may be genuinely degrading.",
+    "created_at": "2026-09-11T19:19:29Z"
+  }
+]
+#+end_src
 
 * DONE [#E] Verified: all 24 PostgreSQL dumps are structurally restorable, with data files and roles
 :PROPERTIES:

@@ -6037,6 +6037,55 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
+* TODO [#B] Technitium Query Logs (Sqlite) app fails to load Microsoft.Data.Sqlite
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-lu5
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-11 Fri 10:43]
+:MODIFIED: [2026-09-11 Fri 10:43]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The Technitium DNS 'Query Logs (Sqlite)' app returns, on every API call:
+
+  Could not load file or assembly 'Microsoft.Data.Sqlite, Version=..., Culture=neutral, PublicKeyToken=...'. Invalid assembly public key. (0x8013141E)
+
+Effect: DNS query logging collects nothing. dns-query-log-exporter has been
+polling a dead app since 2026-09-11 ~09:54 local; its Prometheus series
+(dns_queries_total, dns_query_log_last_row) are frozen and the Loki stream is
+empty. last_row is stuck at 12912.
+
+Timeline points at the SQLite -> PostgreSQL migration started the same morning:
+  09:48  commit 9d8b148ba provisioned the 'technitium' PostgreSQL role/database
+  09:51  apps/'Query Logs (PostgreSQL)' appears in the state dir
+  09:52  apps/'Query Logs (Sqlite)' re-extracted (zip mtime), assembly load broken
+  09:54  first exporter failure
+
+Note the app dir has mixed build dates: Microsoft.Data.Sqlite.dll is dated
+May 21 while the QueryLogsSqliteApp.* files are dated Jul 5, which is
+consistent with a partial or mismatched re-extraction.
+
+Decision needed from the operator, because the two paths diverge:
+
+  (a) Complete the migration. Enable 'Query Logs (PostgreSQL)' in the DNS web
+      console (the database side is already provisioned and verified), then
+      repoint the exporter: APP_NAME and CLASS_PATH at the top of
+      modules/monitoring/scripts/dns-query-log-exporter.py are hardcoded to
+      'Query Logs (Sqlite)' / 'QueryLogsSqlite.App'. Decide what happens to the
+      145 MB querylogs.db and to the exporter's row-number state file, whose
+      cursor is meaningless against a different backing store.
+
+  (b) Repair SQLite. Reinstall the app from the Technitium app store so the
+      assembly set is coherent, and leave the exporter as-is.
+
+Not fixed here: the exporter's misclassification of this error as an
+authentication failure was a separate defect and is fixed independently.
+
 * DEFER [#D] Three WiFi/RF devices degraded together on 08-19/08-20: side-door lock, Ring doorbell, outdoor plug
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

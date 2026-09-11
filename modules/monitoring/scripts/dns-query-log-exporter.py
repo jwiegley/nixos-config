@@ -152,12 +152,26 @@ def fetch_query_logs(page_number=1, entries_per_page=BATCH_SIZE):
         response.raise_for_status()
         data = response.json()
 
-        if data.get('status') != 'ok':
+        status = data.get('status')
+        if status != 'ok':
             error_msg = data.get('errorMessage', 'Unknown error')
-            print(f"API error: {error_msg}", file=sys.stderr)
+            print(f"API error: [{status}] {error_msg}", file=sys.stderr)
 
-            # Track authentication failures specifically
-            if 'token' in error_msg.lower() or 'session expired' in error_msg.lower() or 'invalid' in error_msg.lower():
+            # Technitium signals an authentication failure with a dedicated
+            # top-level status value, 'invalid-token'. Its own web console
+            # dispatches on this field rather than on errorMessage text (see
+            # www/js/common.js in the server package), so match it exactly.
+            #
+            # Substring-matching errorMessage for 'token' / 'invalid' was
+            # wrong, and not theoretically: on 2026-09-11 the Query Logs
+            # (Sqlite) app began returning "Could not load file or assembly
+            # 'Microsoft.Data.Sqlite, ... PublicKeyToken=...'. Invalid
+            # assembly public key." That message contains both needles, so a
+            # broken app was classified as an auth failure, tripped the
+            # fail-fast exit below, restart-looped the exporter 45 times in
+            # 6h, and raised a critical alert telling the operator to go check
+            # the API token -- which was never the problem.
+            if status == 'invalid-token':
                 authentication_failures_total.inc()
                 api_errors_total.labels(error_type='auth').inc()
                 current_consecutive_failures += 1

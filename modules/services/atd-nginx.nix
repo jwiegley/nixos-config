@@ -69,9 +69,25 @@
       pkgs.step-cli
     ];
 
+    # RemainAfterExit=false is LOAD-BEARING, do not "restore" it to true.
+    #
+    # This unit renews correctly (openssl -checkend 2592000 below, reissue
+    # under 30 days) but until 2026-09-10 it had no timer and
+    # RemainAfterExit=true, so it ran only at boot or on a definition change.
+    # This host is rebooted deliberately -- uptime was 68 days -- and the
+    # renewal has to land INSIDE the final 30 days, so there was often no
+    # trigger at all. Proof: the cert still carried its original 2025
+    # notBefore, and the unit's last run (2026-07-03) correctly skipped
+    # because ~119 days remained.
+    #
+    # With RemainAfterExit=true the unit stays `active` forever after its
+    # first run, and `systemctl start` on an active oneshot is a NO-OP --
+    # verified 2026-09-10, ExecMainExitTimestamp did not move. So a timer
+    # alone would have been worse than nothing: armed timer, "active" unit,
+    # and the script never running again.
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
+      RemainAfterExit = false;
       User = "root";
     };
 
@@ -109,5 +125,35 @@
 
       echo "Certificate generated successfully"
     '';
+  };
+
+  # Daily renewal check for the ATD certificate.
+  #
+  # The service is a no-op while the cert has more than 30 days left (its own
+  # `openssl -checkend 2592000` guard), so firing weekly costs one openssl call
+  # and issues nothing until renewal is genuinely due. That guard is what makes a
+  # frequent timer safe, and a frequent timer is what makes the guard reachable.
+  #
+  # NOT added to certs/renew-nginx-certs.sh instead: that script reissues
+  # unconditionally every month, so listing this domain there as well would
+  # double-issue. Its header documents the exclusion deliberately.
+  systemd.timers.atd-certificate = {
+    description = "Daily renewal check for the ATD TLS certificate";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # DAILY, not weekly. The service is a no-op above 30 days, so the cost is
+      # one openssl call. Weekly was measured against the real timeline and lost:
+      # budget.vulcan.lan crosses 30 days on 2026-09-30, but Monday firings land on
+      # 09-28 (32 days left, skips) and then 10-05, leaving ~5 days where
+      # CertificateExpiringSoon fires before the timer heals it. Daily closes that
+      # to under a day, which keeps the alert meaningful -- if it fires and persists,
+      # something really is wrong rather than just waiting for Monday.
+      OnCalendar = "daily";
+      # Catch up after downtime: the whole point is that this host may go a long
+      # time without a reboot, so a missed window must not be skipped silently.
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+      Unit = "atd-certificate.service";
+    };
   };
 }

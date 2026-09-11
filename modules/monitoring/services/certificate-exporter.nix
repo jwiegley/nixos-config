@@ -139,28 +139,27 @@ let
           check_certificate "${stepCaDir}/intermediate_ca.crt" "intermediate-ca" "ca"
         fi
 
-        # Genuinely-stale leftover cert files for services that no longer exist.
-        # The loop below scans every *.crt in nginxCertDir, so a leftover .crt
-        # from a removed service would keep emitting certificate_* series and
-        # would eventually trip CertificateExpiringSoon/CertificateExpired for a
-        # dead name. These were verified stale (no nginx vhost, no systemd unit,
-        # no repo reference) during the 2026-06 monitoring-coverage sweep:
-        #   - kibana.vulcan.lan      (Elastic/Kibana removed; zero git history)
-        #   - perplexica.vulcan.lan  (renamed to vane.vulcan.lan, commit 0360fd1;
-        #                             vane.vulcan.lan.crt is the live replacement)
-        # (copyparty.vulcan.lan is NOT listed, but note (2026-07-03 audit): no
-        #  host nginx vhost serves that name — requests fell through to the
-        #  default :443 server — so its cert in ${nginxCertDir} is currently an
-        #  orphan. Either wire up a host vhost for it or retire the cert; until
-        #  then the exporter legitimately tracks a cert nothing serves.)
-        # The leftover .crt files themselves still want manual removal from
-        # ${nginxCertDir}; this skip-list just stops them generating dead alerts.
-        skip_stale_cert() {
-          case "$1" in
-            kibana.vulcan.lan | perplexica.vulcan.lan) return 0 ;;
-            *) return 1 ;;
-          esac
-        }
+        # Leftover cert files for retired services used to be skipped here by name,
+        # because this loop globs every *.crt in nginxCertDir and a dead cert would
+        # eventually trip CertificateExpiringSoon/CertificateExpired for a name
+        # nothing serves.
+        #
+        # The skip-list is gone as of 2026-09-10 (nixos-im0) because the files were
+        # deleted instead -- which is exactly what the comment here used to ask for
+        # ("the leftover .crt files themselves still want manual removal"). A
+        # skip-list and a deleted file buy the same silence, but only the deletion
+        # also stops renew-nginx-certs.sh reissuing them and stops the next reader
+        # wondering whether the name is live.
+        #
+        # Removed: kibana and perplexica (had been skipped here), plus llama-swap,
+        # copyparty, notebook, syncthing and teable (were still emitting series).
+        # Each was verified to have no ssl_certificate reference in the LIVE
+        # nginx.conf, no process holding the file open, and no cert-path reference
+        # in the repo. copyparty and syncthing have running units and so looked
+        # live; neither used a cert from this directory.
+        #
+        # If a dead cert reappears, prefer deleting the file over reintroducing a
+        # skip-list: the glob then needs no allowlist to stay correct.
 
         # Check Nginx service certificates
         if [[ -d "${nginxCertDir}" ]]; then
@@ -169,10 +168,6 @@ let
               cert_name=$(basename "$cert_file" .crt)
               # Skip chain files
               if [[ "$cert_name" == *"chain"* || "$cert_name" == *"fullchain"* ]]; then
-                continue
-              fi
-              # Skip genuinely-stale dead-service cert leftovers (see above)
-              if skip_stale_cert "$cert_name"; then
                 continue
               fi
               check_certificate "$cert_file" "$cert_name" "nginx"

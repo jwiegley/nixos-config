@@ -21,10 +21,21 @@
 #     Note those are activation-time oneshots, not timers: both last ran at the
 #     2026-07-03 boot and are RemainAfterExit, so they renew on reboot rather
 #     than on a schedule. Adding them here as well would double-issue.
-#   llama-swap, copyparty, notebook, syncthing, openclaw -- certificates on disk
-#     with NO live vhost, left over from removed services. teable is the mirror
-#     image: still in DOMAINS below and renewed monthly, with no live vhost.
-#     Neither class is touched here; that is housekeeping, not renewal.
+# HOUSEKEEPING DONE 2026-09-10 (nixos-im0). The orphaned certs this header used
+# to list -- llama-swap, copyparty, notebook, syncthing, teable, plus the
+# kibana/perplexica pair the certificate exporter was skipping -- were deleted
+# from /var/lib/nginx-certs, and teable was removed from DOMAINS below (it was
+# being reissued monthly for a vhost that does not exist).
+#
+# Each was verified against four signals first, not just the vhost check above:
+# no `ssl_certificate` reference in the LIVE nginx.conf, no process holding the
+# file open, no cert-path reference anywhere in the repo, and no live vhost.
+# copyparty and syncthing DO have running units and nix references, so they
+# looked live -- but neither uses a cert from this directory, which is why their
+# removal was safe. Check all four before adding to this list.
+#
+# The exporter globs *.crt, so deleting a file removes its series cleanly rather
+# than tripping CertificateFileMissing.
 
 set -euo pipefail
 
@@ -57,7 +68,6 @@ DOMAINS=(
     "radicale.vulcan.lan"
     "rspamd.vulcan.lan"
     "speedtracker.vulcan.lan"
-    "teable.vulcan.lan"
     "trader.vulcan.lan"
     "vdirsyncer.vulcan.lan"
     "victoriametrics.vulcan.lan"

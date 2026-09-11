@@ -5408,6 +5408,38 @@ five climate entities at once. One of those is the likelier source. Worth a sepa
 look; it is cosmetic rather than harmful, and this retry does not depend on it.
 #+end_example
 
+* DONE [#D] Remove orphaned nginx certificates for retired services
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-im0
+:LABELS:   []
+:ISSUE_TYPE: chore
+:CREATED:  [2026-09-10 Thu 18:11]
+:MODIFIED: [2026-09-10 Thu 18:22]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-10 Thu 18:22]
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+Five certs sit in /var/lib/nginx-certs with NO live vhost, left over from retired services. Verified against the running nginx.conf, independently of the claim in the renew-nginx-certs.sh header: llama-swap, copyparty, notebook, teable, syncthing all have 0 server_name references.
+
+Two distinct consequences:
+1. Three cross the 30-day line soon and will fire CertificateExpiringSoon for services that no longer exist: llama-swap (expires 2026-10-25), copyparty (2026-11-05), notebook (2026-12-25).
+2. teable is the inverse waste -- still listed in DOMAINS in renew-nginx-certs.sh and REISSUED MONTHLY for a vhost that does not exist.
+
+The script header calls this 'housekeeping, not renewal' and out of its scope, which is why it was never done.
+
+CAUTION: check how the certificate exporter enumerates certs before deleting files. If it works from a hardcoded list, removing the files fires CertificateFileMissing (certificate_file_exists == 0) -- trading one bogus alert for another.
+
+** Close Reason
+
+Deleted 10 files (5 names x crt+key) from /var/lib/nginx-certs: llama-swap, copyparty, notebook, teable, syncthing. kibana and perplexica were already absent, so the exporter's skip-list for them was suppressing phantoms; that skip-list and its call site are now removed, and teable is out of DOMAINS in renew-nginx-certs.sh (it was being reissued monthly for a vhost that does not exist).
+
+Each name verified against four signals, not just the vhost check the script header documents: no live vhost, no ssl_certificate reference in the RUNNING nginx.conf, no process holding the file open, no cert-path reference in the repo. copyparty and syncthing have running units and nix references so they looked live -- neither used a cert from this directory, which is what made removal safe.
+
+Verified after: exporter exit 0, certs tracked 49 -> 44 (exactly the 5 removed), zero orphan series, zero certificate_file_exists==0 so CertificateFileMissing does not fire, nginx active, and five live vhosts still serve on both SNI and --resolve paths. Certs under 120 days are now only budget (49d) and atd (67d), both covered by nixos-ni7.
+
 * DONE [#D] docs/README.md index describes files and a script the Nagios removal deleted
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -6633,6 +6665,43 @@ One residual observation split out to its own issue: hass_entity_unavailable ros
   }
 ]
 #+end_src
+
+* DONE [#B] Live atd and budget certs have no scheduled renewer
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-ni7
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-10 Thu 18:11]
+:MODIFIED: [2026-09-10 Thu 18:22]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-10 Thu 18:22]
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+atd.vulcan.lan and budget.vulcan.lan are LIVE vhosts (2 server_name refs each in the running nginx.conf) whose certs have no working renewer.
+
+They are deliberately excluded from certs/renew-nginx-certs.sh as 'owned by their own units' (modules/services/atd-nginx.nix, modules/containers/budgetboard-quadlet.nix). Those units DO contain correct renewal logic -- openssl -checkend 2592000, reissue under 30 days -- but they are activation-time oneshots with RemainAfterExit=true and NO timer, so a nixos-rebuild switch will not re-run them. Only a reboot or a change to the unit definition will.
+
+Proof they are not renewing -- both certs still carry their ORIGINAL notBefore:
+  budget  notBefore=Oct 30 2025  notAfter=Oct 30 2026  (49 days left)
+  atd     notBefore=Nov 17 2025  notAfter=Nov 17 2026  (67 days left)
+budgetboard-certificate.service last ran 2026-07-03 and correctly skipped, since the cert then had ~119 days left.
+
+The renewal has to happen INSIDE the final 30 days, but the only trigger is a reboot, and this host is rebooted deliberately (uptime 68 days). If no reboot falls in that window, two live vhosts serve expired certs. CertificateExpiringSoon fires at 30d so it is not silent, but it needs manual action every year.
+
+Fix: give both units a weekly timer. Their internal 30-day guard makes this idempotent -- nothing is issued until a cert is genuinely under 30 days, so adding the timer issues nothing today. Do NOT add them to renew-nginx-certs.sh; that would double-issue.
+
+** Close Reason
+
+Added daily timers to atd-certificate and budgetboard-certificate and set RemainAfterExit=false on both.
+
+The RemainAfterExit change is the load-bearing half, not the timer. Verified empirically BEFORE the fix: systemctl start on the active RemainAfterExit=true oneshot left ExecMainExitTimestamp unchanged at 2026-08-31, i.e. a complete no-op. A timer alone would therefore have produced a fix that looked correct -- armed timer, 'active' unit -- while the renewal script never ran again. Verified AFTER: both units re-run on start (timestamp advances) and correctly log 'Certificate is still valid for more than 30 days', so nothing was reissued today.
+
+Daily rather than weekly, chosen against the real timeline: budget.vulcan.lan crosses 30 days on 2026-09-30, but Monday firings land 09-28 (32 days, skips) then 10-05, leaving ~5 days where CertificateExpiringSoon fires before the timer heals it. Daily closes that to under a day.
+
+Not added to renew-nginx-certs.sh, which reissues unconditionally monthly and would double-issue.
 
 * DEFER [#D] Rename openclaw -> hermes across live identifiers (not history)
 :PROPERTIES:

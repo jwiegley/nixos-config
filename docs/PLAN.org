@@ -3158,15 +3158,17 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
-* TODO [#C] Schedule SMART self-tests and surface results in Prometheus
+* DONE [#C] Schedule SMART self-tests and surface results in Prometheus
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-d2r
 :LABELS:   []
 :ISSUE_TYPE: feature
 :CREATED:  [2026-09-11 Fri 10:50]
-:MODIFIED: [2026-09-11 Fri 10:50]
+:MODIFIED: [2026-09-11 Fri 10:59]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-11 Fri 10:59]
+:CLOSE_REASON: Implemented and verified live: staggered smartd schedule (one drive/month, 23.5h tests never overlapping), smart-selftest-exporter textfile collector, 4 alert rules, and the SMART Disk Health Grafana dashboard. Scrutiny evaluated and rejected. Commit b35a89797.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0

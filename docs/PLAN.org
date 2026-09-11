@@ -3158,6 +3158,74 @@ rust-overlay behaved on 2026-08-15 (nixos-sil).
 ]
 #+end_src
 
+* TODO [#C] Schedule SMART self-tests and surface results in Prometheus
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-d2r
+:LABELS:   []
+:ISSUE_TYPE: feature
+:CREATED:  [2026-09-11 Fri 10:50]
+:MODIFIED: [2026-09-11 Fri 10:50]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+SMART COLLECTION already exists and is healthy: smartctl_exporter covers the
+four Exos X18s on 127.0.0.1:9633 (modules/monitoring/services/smartctl-exporter.nix)
+and a textfile collector covers the boot NVMe
+(modules/monitoring/services/nvme-smart-exporter.nix), with 14 alert rules across
+smart.yaml and nvme-smart.yaml and 100y Prometheus retention. That part is fine.
+
+THE GAP is that nothing ever TESTS the disks. services.smartd is not configured
+at all -- smartd.service does not exist on the host. Evidence:
+
+  sda  31138 power-on hours (1297 days)   1 self-test in log
+  sdb  31208 power-on hours (1300 days)   1 self-test in log
+  sdc  31138 power-on hours (1297 days)   1 self-test in log
+  sdd  31201 power-on hours (1300 days)   1 self-test in log
+
+Each of those single entries is 'Short offline ... LifeTime(hours) 2' -- the
+factory test. No self-test has run in 3.5 years of service.
+
+This matters because the attributes currently alerted on are REACTIVE.
+Reallocated_Sector_Ct and Current_Pending_Sector only move once the drive has
+already tripped over a bad sector during normal I/O. A long self-test reads the
+entire platter and surfaces latent bad sectors in cold data -- the ~390 GB of
+tank/Archives nobody has read in a year -- before a scrub or, far worse, a
+resilver has to read it under degraded redundancy.
+
+SECOND GAP: smartctl_exporter does NOT export self-test results. Its metric set
+(verified against the live /metrics endpoint) has no self-test family at all --
+closest is smartctl_device_error_log_count. So merely enabling smartd would run
+tests whose failures are invisible to Prometheus, and whose ABSENCE is equally
+invisible, which is the exact failure mode this issue exists to remove. A
+textfile collector is needed, following the nvme-smart-exporter.nix pattern
+already established here.
+
+THIRD GAP: none of the 9 provisioned Grafana dashboards covers SMART, so the
+retained history is not browsable.
+
+CONSTRAINT -- the UAS enclosure. Extended self-test polling time on these drives
+is 1412 minutes (~23.5 hours) each, so tests must be spaced days apart, not
+hours. Per project_tank_uas_enclosure_failure the OWC USB bridge hangs under
+load, and smartctl-exporter.nix already keeps its poll gentle for that reason.
+The self-test itself runs inside the drive firmware rather than over the bus, so
+it is not the same load shape as a scrub, but it does make the drive slower to
+answer, which is how bridge timeouts start. Schedule one drive at a time with
+days of margin, and keep clear of zfs-scrub.timer (monthly, 1st ~01:20).
+
+EVALUATED AND REJECTED: Scrutiny (https://github.com/AnalogJ/scrutiny). It has
+no Prometheus export and persists to InfluxDB as a hard dependency, so it would
+add a third time-series store holding data already in Prometheus, invisible to
+Alertmanager, with alerts arriving through its own notifier -- splitting the
+alert path the Nagios removal was meant to consolidate. It also does not run
+self-tests (its README lists performance testing as a future feature), so it
+does not close the actual gap. Its one genuine differentiator is thresholds
+informed by real-world failure rates, which is a modest delta over the 14 rules
+already in place.
+
 * DONE [#B] immich-server crash-looping: immich DB has vchord 1.1.1 / vector 0.8.6, stable postgres only ships 0.5.3 / 0.8.2
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

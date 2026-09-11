@@ -17,6 +17,8 @@
     ./alerting.nix # Auto-discovers alert rules from alerts/
     # P0 monitoring-coverage collectors (docs/MONITORING_COVERAGE_PLAN.md)
     ./smartctl-exporter.nix # SMART health of UAS disks + NVMe
+    ./smartd.nix # Scheduled SMART self-tests (staggered, one disk/week)
+    ./smart-selftest-exporter.nix # Self-test results + staleness -> textfile
     ./asymmetric-routing-exporter.nix # ip-rule presence gauge (post-boot drift)
     ./nodered-safety-exporter.nix # HA-safety-flow deadman (nodered_events)
     # P1 monitoring-coverage additions (docs/MONITORING_COVERAGE_PLAN.md phase 3)

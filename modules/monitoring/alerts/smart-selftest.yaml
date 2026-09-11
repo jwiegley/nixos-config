@@ -1,0 +1,81 @@
+groups:
+  - name: smart_selftest_alerts
+    interval: 60s
+    rules:
+      # A self-test that ended in a drive fault (ATA self-test status 3-8:
+      # fatal / unknown / electrical / servo / read / handling damage). This is
+      # the payoff for running tests at all: an extended test reads the WHOLE
+      # platter, so it finds latent bad sectors in cold data that normal I/O
+      # has not touched — before a scrub or, far worse, a resilver under
+      # degraded redundancy has to read them.
+      #
+      # Deliberately NOT firing on status 1-2 (aborted by host / interrupted by
+      # host reset). Those are operational events, not disk faults: a reboot in
+      # the middle of a 23.5-hour extended test lands there every time, and
+      # paging on it would train the reader to ignore this alert.
+      - alert: SmartSelfTestFailed
+        expr: smart_selftest_last_failed == 1
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+          service: smartd
+        annotations:
+          summary: "SMART self-test FAILED on {{ $labels.device }}"
+          description: "The last SMART self-test on {{ $labels.device }} ended in a drive fault. Inspect with `smartctl -l selftest /dev/{{ $labels.device }}`; the LBA of the first error is in that log. A read failure here means a latent bad sector that a resilver would hit with no redundancy to spare. Check Reallocated_Sector_Ct and Current_Pending_Sector, and plan a replacement."
+
+      # Self-tests stopped happening. This is the rule that exists because of
+      # how this gap was found: all four disks had run exactly ONE self-test —
+      # the factory 'Short offline' at LifeTime 2 hours — and then went 31,000+
+      # power-on hours untested, with nothing anywhere reporting it.
+      #
+      # Age is measured in DRIVE hours, not wall clock: the self-test log
+      # records the drive's power-on hour counter, never a timestamp. See the
+      # docstring in scripts/smart-selftest-exporter.py.
+      #
+      # Threshold: the schedule in smartd.nix tests each drive monthly, so a
+      # healthy drive should never exceed ~744 hours plus the 23.5-hour test
+      # itself. 1100 hours (~46 days) clears a normal cycle with room for a
+      # month-boundary slip or one interrupted run, and still catches a
+      # schedule that has genuinely stopped. A drive that has never been tested
+      # reports its full service life here and trips this immediately, which is
+      # intended.
+      - alert: SmartSelfTestStale
+        expr: smart_selftest_age_hours > 1100
+        for: 1h
+        labels:
+          severity: warning
+          category: storage
+          service: smartd
+        annotations:
+          summary: "{{ $labels.device }} has gone {{ $value | humanize }} drive-hours without a SMART self-test"
+          description: "No SMART self-test has completed on {{ $labels.device }} in {{ $value | humanize }} drive hours, against a monthly schedule. Either smartd is not running its schedule or every recent attempt was aborted. Check `systemctl status smartd` and `smartctl -l selftest /dev/{{ $labels.device }}`. Note that a host reboot aborts an in-flight extended test (23.5h on these drives), so repeated reboots near the scheduled day can starve a drive of tests without anything ever failing."
+
+      # The collector itself stopped working. Without this, an exporter that
+      # dies leaves the self-test series ABSENT — and an absent metric is
+      # indistinguishable from a healthy disk, which is the entire failure mode
+      # this work exists to remove. Mirrors NVMeSmartCollectorFailing.
+      - alert: SmartSelfTestCollectorFailing
+        expr: smart_selftest_collector_success == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: storage
+          service: smartd
+        annotations:
+          summary: "SMART self-test collector cannot read any disk"
+          description: "smart-selftest-exporter could not read a single one of the four tank disks. Self-test results are no longer being reported. Check `systemctl status smart-selftest-exporter` and `journalctl -u smart-selftest-exporter`. If the disks themselves are gone, SmartDeviceMissing will also be firing."
+
+      # The collector stopped RUNNING at all (as opposed to running and
+      # failing). The timer fires every 15 minutes; an hour of silence means
+      # the timer or the unit is broken. Mirrors NVMeSmartMetricsStale.
+      - alert: SmartSelfTestMetricsStale
+        expr: time() - smart_selftest_collector_timestamp_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+          category: storage
+          service: smartd
+        annotations:
+          summary: "SMART self-test metrics are stale"
+          description: "smart_selftest_collector_timestamp_seconds has not advanced in over an hour, against a 15-minute timer. Check `systemctl list-timers smart-selftest-exporter` and the unit's journal."

@@ -408,6 +408,29 @@ johnw breaks the crawler, making it all zimit breaks git-annex. Both have now
 happened.
 #+end_example
 
+* DONE [#B] mbsync HELP text mismatch breaks the textfile collector during failures
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-2vh
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-11 Fri 08:50]
+:MODIFIED: [2026-09-11 Fri 08:50]
+:CREATED_BY: johnw
+:FINISHED: [2026-09-11 Fri 08:50]
+:CLOSE_REASON: Unified the HELP text in both branches of mkMbsyncModule.nix. Verified end to end: all 4 .prom files now carry byte-identical HELP; node_textfile_scrape_error 1 -> 0; mbsync_last_sync_timestamp_seconds restored from 1 series (assembly only) to 4 (assembly, bia, johnw, rbcca) in Prometheus; TextfileCollectorScrapeError no longer firing; and the last 'inconsistent metric help' journal entry was 08:49:36 against the final file rewrite at 08:49:43, with zero errors after it.
+:SOURCE_REPO: .
+:ORIGINAL_SIZE: 0
+:END:
+
+modules/lib/mkMbsyncModule.nix wrote different HELP text for mbsync_last_sync_timestamp_seconds in its two branches: the success path said 'Timestamp of last successful sync', the failure path 'Timestamp of last sync attempt'.
+
+Prometheus allows exactly one HELP string per metric name across the WHOLE textfile directory. node_exporter rejects a conflicting redefinition with 'inconsistent metric help text', keeps whichever file it read first, and SILENTLY DROPS the rest.
+
+The bug is latent while all accounts agree, and only fires when accounts are in MIXED states -- i.e. precisely during an incident. On 2026-09-11 a WAN outage failed bia and rbcca while johnw and assembly succeeded, so the two wordings coexisted. Effects: node_textfile_scrape_error went to 1, and mbsync_last_sync_timestamp_seconds survived for 'assembly' ONLY. That blinded MbsyncNotRunRecently (health-checks.yaml:175, which filters account!="assembly") for the other three accounts at exactly the moment their sync was broken.
+
+Fix: unified both branches on 'Timestamp of last sync attempt', which is also the accurate wording -- both branches write $(date +%s) unconditionally, and all three mbsync alerts read this as 'did a run happen', pairing it with mbsync_last_sync_status when they care about outcome.
+
 * DONE [#B] 569 ZFS snapshots destroyed by a zfs-prune-snapshots m/M unit confusion; PG backup history cut to ~24h
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

@@ -167,7 +167,24 @@
 
                 # Update metrics for Prometheus textfile collector
                 METRICS_FILE="/var/lib/prometheus-node-exporter-textfiles/mbsync_${name}.prom"
-                echo "# HELP mbsync_last_sync_timestamp_seconds Timestamp of last successful sync" > "$METRICS_FILE.tmp"
+                # HELP text MUST match the failure branch below verbatim. Prometheus
+                # requires one HELP string per metric name across the WHOLE textfile
+                # directory; node_exporter rejects a conflicting redefinition with
+                # "inconsistent metric help text", keeps whichever file it read first,
+                # and SILENTLY DROPS the rest.
+                #
+                # That is not hypothetical. On 2026-09-11 a WAN outage failed two of the
+                # four accounts, so bia/rbcca wrote the failure branch's wording while
+                # johnw/assembly wrote this one. Result: node_textfile_scrape_error went
+                # to 1 and mbsync_last_sync_timestamp_seconds survived for `assembly`
+                # ONLY -- blinding MbsyncNotRunRecently for the other three accounts at
+                # exactly the moment their sync was broken.
+                #
+                # "attempt", not "successful", is also the accurate wording: BOTH branches
+                # write $(date +%s) unconditionally, and all three mbsync alerts read this
+                # as "did a run happen", pairing it with mbsync_last_sync_status when they
+                # care about the outcome.
+                echo "# HELP mbsync_last_sync_timestamp_seconds Timestamp of last sync attempt" > "$METRICS_FILE.tmp"
                 echo "# TYPE mbsync_last_sync_timestamp_seconds gauge" >> "$METRICS_FILE.tmp"
                 echo "mbsync_last_sync_timestamp_seconds{account=\"${name}\"} $(date +%s)" >> "$METRICS_FILE.tmp"
                 echo "# HELP mbsync_last_sync_status Status of last sync (1 = success, 0 = failure)" >> "$METRICS_FILE.tmp"

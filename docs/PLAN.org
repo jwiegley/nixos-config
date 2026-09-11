@@ -1540,6 +1540,52 @@ qdrant.nix, hermes-mcp.nix -- these may depend on unstable python.
 
 Blocks nixos-crb and nixos-5v4; both are symptoms.
 
+* TODO [#D] August door locks answer only ~88% of pings
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-7c3
+:LABELS:   []
+:ISSUE_TYPE: task
+:CREATED:  [2026-09-11 Fri 11:18]
+:MODIFIED: [2026-09-11 Fri 11:18]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+IoTDeviceChronicallyUnreachable is firing for both August locks, measured over
+24h against a healthy-peer baseline of 100%:
+
+  august-lock-front-door    87.77% of pings answered  (firing since 03:46 UTC)
+  august-lock-garage-door   89.82% of pings answered  (firing since 17:07 UTC)
+  healthy iot peers         100.00% (top 3)
+
+This is DEGRADATION rather than death. BlackboxICMPIoTDeviceDown needs a
+continuous hour at zero and will not fire for a device that flaps in bursts of
+minutes, which is why the chronic rule exists.
+
+IMPORTANT -- do not assume broken. The alert's own guidance is that ping is a
+poor health proxy for this class of device, and Home Assistant is the better
+instrument. The garage lock that motivated this rule reported 'locked' with zero
+unavailable entities while answering only 75% of pings.
+
+So the question to settle is which of these it is:
+
+  (a) The locks still WORK -- entities responsive in Home Assistant, lock/unlock
+      commands land. Then ICMP is simply not meaningful for them and the right
+      fix is to move both to host_group=iot-noping, NOT to raise the threshold.
+      That group already exists for exactly this case.
+  (b) The locks are genuinely degraded -- entities flapping unavailable. Then it
+      is a radio/signal problem at the door and worth chasing physically.
+
+Both locks degrading together is worth a thought: check whether they share a
+bridge or AP, and note project_power_off_sensitive_group -- seven devices on
+this host fail together after a power loss, and if either lock is in that group
+the other five should be checked too.
+
+Discovered during routine health monitoring on 2026-09-11.
+
 * DONE [#E] Verified: all 24 PostgreSQL dumps are structurally restorable, with data files and roles
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
@@ -1967,6 +2013,62 @@ Configure Vulcan as a direct Syncthing peer of both Hera and Clio using shared n
 ** Acceptance Criteria
 
 Vulcan evaluates both peers and both folders, direct Clio LAN connectivity is allowed, staggered one-year versioning is configured, and /etc/nixos/build build passes without activation.
+
+* TODO [#C] Matter node 0x1A is timing out CASE sessions continuously
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-9p5
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-11 Fri 11:18]
+:MODIFIED: [2026-09-11 Fri 11:18]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+MatterNodeSessionFailures has been firing since 2026-09-11 04:13 UTC and is NOT
+subsiding. Rate over the last 8 hours, per UTC hour:
+
+  03h 42   04h 30   05h 69   06h 72   07h 85   08h 67   09h 44   10h 45   11h 21
+
+Baseline on this host is zero per hour, so this is a real fabric fault.
+
+The failing node is identified. Over 6 hours:
+
+  374 timeouts   peer <000000000000001A, 1>   (node 0x1A, fabric 1)
+   11 timeouts   peer <0000000000000019, 1>   (node 0x19)
+
+One node dominates by 34x, so this is a single sick node rather than a
+fabric-wide collapse. Log line shape:
+
+  CASESession timed out while waiting for a response from peer
+  <000000000000001A, 1>. Current state was 4
+
+NOTE the matter-server journal timestamps are UTC while the host is PDT -- do
+not mix them when correlating (see feedback_timezone_mixing_in_incident_math).
+
+NEXT STEP, not yet done: map node 0x1A to a device in Home Assistant and
+determine whether it is a Thread node or a WiFi/LAN node. The two have
+completely different causes and the runbook in the alert is explicit that this
+classification comes first. Grepping the matter-server journal for a transport
+or address on that node returned nothing, so the mapping has to come from the
+Home Assistant Matter integration device page rather than from logs.
+
+  - Thread node (advertises an fd:: mesh ULA) -> points at the border router.
+    The Aqara Hub M3 is the ONLY Thread border router on this fabric and is a
+    known SPOF (project_matter_fabric_topology). Fix is physical.
+  - WiFi/LAN node (routable address) -> points at signal strength, AP
+    association or DHCP.
+
+DO NOT reflexively restart matter-server. Prior experience on this host is that
+it does not help, and the 2026-08-10 flap storm began at the moment of a
+matter-server restart.
+
+Discovered during routine health monitoring on 2026-09-11.
+#+end_example
 
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:
@@ -7132,6 +7234,51 @@ DEPLOY-TIME BUG FOUND AND FIXED: the unit failed in 0.028s where the standalone 
 VERIFIED END TO END: unit Result=success, plan_success=1 (161s cold cache, inside the 600s budget), stale_locks=0; all three alert rules load health=ok; the .prom is registered in TextfileCollectorStaleDaily AND excluded from TextfileCollectorUnclassifiedStale so the tiers still partition.
 
 Deliberately does NOT take /etc/nixos/.nixos-build: a monitor for 'cannot deploy' must not become a cause of it.
+
+* TODO [#C] Home Assistant flume config entry failed to set up (OAuth)
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-oqv
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-11 Fri 11:18]
+:MODIFIED: [2026-09-11 Fri 11:18]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+HomeAssistantConfigEntryFailed has been firing since 2026-09-11 for the flume
+integration: one config entry is in a failed state. The integration itself may
+still be loaded and other entries working, so this does not show up as
+HomeAssistantIntegrationDown.
+
+The usual cause on this host is an OAuth refresh token that has expired or been
+revoked. Before re-authenticating, check whether Flume's OAuth consent screen is
+still in 'Testing' publishing status: that expires refresh tokens every 7 DAYS,
+and re-auth then buys exactly another week.
+
+This host has already been bitten by that exact pattern TWICE:
+  - the four disabled rclone cloud remotes (project_cloud_drive_backup)
+  - the Schwab token for stock-trader, which dies every ~7 days
+    (project_stock_trader)
+
+So the durable fix is publishing the app, or making it Internal to a Workspace
+org -- not another round of re-auth.
+
+WHY THIS ONE MATTERS BEYOND THE ALERT: flume is the water-flow sensor that the
+pool autofill detector depends on (project_pool_autofill_flume_detection uses a
+GPM band of [1.3, 1.9] with window 5 / min 4 off the flume_data statistic). If
+the entry stays failed, autofill detection is silently blind, and that is not
+something the pool tab will tell you about on its own.
+
+Remediation is manual and in the UI: Settings > Devices & Services will show the
+failing entry with a Reconfigure or Re-authenticate banner.
+
+Discovered during routine health monitoring on 2026-09-11.
+#+end_example
 
 * DONE [#B] hermes-heal could not read the Discord heartbeat, so self-heal could never resolve an incident
 :PROPERTIES:

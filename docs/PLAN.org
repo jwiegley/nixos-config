@@ -1547,7 +1547,7 @@ Blocks nixos-crb and nixos-5v4; both are symptoms.
 :LABELS:   []
 :ISSUE_TYPE: task
 :CREATED:  [2026-09-11 Fri 11:18]
-:MODIFIED: [2026-09-11 Fri 12:19]
+:MODIFIED: [2026-09-11 Fri 20:18]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -1596,6 +1596,13 @@ Discovered during routine health monitoring on 2026-09-11.
     "author": "johnw",
     "text": "2026-09-11 12:20 health pass. The two locks have DIVERGED, which weakens the shared-cause theory in the original writeup:\n\n  august-lock-garage-door   89.82% -> 90.51%  (recovered above threshold, alert cleared)\n  august-lock-front-door    87.77% -> 85.36%  (degrading further, still firing)\n\nOnly the front door is still alerting, and it is trending down rather than\nflapping around a mean. That points at a device- or location-specific problem\n(radio/signal at that door) rather than a shared bridge, AP or power-group\ncause. Re-check whether the front lock's Home Assistant entities are still\nresponsive -- if they are, option (a) in the description (move to\nhost_group=iot-noping) applies to the garage lock but NOT necessarily to this\none, which may be genuinely degrading.",
     "created_at": "2026-09-11T19:19:29Z"
+  },
+  {
+    "id": 71,
+    "issue_id": "nixos-7c3",
+    "author": "johnw",
+    "text": "2026-09-11 20:17. BOTH locks have now RECOVERED and the alert has cleared:\n\n  august-lock-front-door    24h 91.24%   last 2h 100.00%\n  august-lock-garage-door   24h 90.41%   last 2h  94.58%\n\nThis supersedes my 12:20 comment, which read the front door as 'degrading\nrather than flapping around a mean' on a 87.77 -> 85.36 move. That reading was\nwrong: two samples were not enough to distinguish a trend from a dip, and the\nfront door has since gone to 100% over two hours. Both devices flap in bursts\nand recover, which is exactly the behaviour the alert's own guidance describes.\n\nThis strengthens option (a) in the description for BOTH locks: ICMP is a poor\nhealth proxy here and host_group=iot-noping is likely the right home for them,\nrather than chasing a radio problem that the evidence no longer supports. Still\nworth confirming the Home Assistant entities never went unavailable during the\ndips before moving them, since that is what distinguishes 'ping is meaningless\nfor this device' from 'the device really does drop off'.",
+    "created_at": "2026-09-12T03:18:02Z"
   }
 ]
 #+end_src
@@ -2035,7 +2042,7 @@ Vulcan evaluates both peers and both folders, direct Clio LAN connectivity is al
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-11 Fri 11:18]
-:MODIFIED: [2026-09-11 Fri 11:18]
+:MODIFIED: [2026-09-11 Fri 20:18]
 :CREATED_BY: johnw
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
@@ -2083,6 +2090,20 @@ matter-server restart.
 
 Discovered during routine health monitoring on 2026-09-11.
 #+end_example
+
+** Comments
+
+#+begin_src json
+[
+  {
+    "id": 72,
+    "issue_id": "nixos-9p5",
+    "author": "johnw",
+    "text": "2026-09-11 20:17. DETERIORATING, not stable. Timeouts per UTC hour over the\nlast 6h:\n\n  14h 27   15h 69   16h 79   17h 73   18h 99   19h 85   20h 19 (partial)\n\nCompare the 03h-11h range recorded at filing: 42 30 69 72 85 67 44 45 21. The\nfloor has risen -- early hours in the 27-45 band are now 69-99 -- so this is\ngetting worse rather than holding steady.\n\nPeer distribution has also narrowed. At filing it was 374 hits on node 0x1A and\n11 on 0x19 over 6h; it is now 451 on 0x1A over 6h and 0x19 has dropped off\nentirely. A single node is now responsible for every timeout, which makes the\nThread-vs-WiFi classification of 0x1A the whole question.\n\nStill NOT done: mapping 0x1A to a device in Home Assistant. That remains the\nblocking next step and cannot be done from the matter-server journal, which\nlogs no transport or address for the node.",
+    "created_at": "2026-09-12T03:18:02Z"
+  }
+]
+#+end_src
 
 * DONE [#C] pushme convergence: first sustained run in progress (3h+, ~1.5 MB/s)
 :PROPERTIES:

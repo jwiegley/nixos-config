@@ -2238,11 +2238,11 @@
     "nix-config": {
       "flake": false,
       "locked": {
-        "lastModified": 1789194145,
-        "narHash": "sha256-CxSiFwuXDGHgc4WcqSxXcSdT+WGJo36cDDzhfBSnM8c=",
+        "lastModified": 1789234889,
+        "narHash": "sha256-JH9ma6wERTyLdaSDQup8EDSxvbhabt9gdaBRBQs1WDk=",
         "ref": "refs/heads/main",
-        "rev": "c2ab7346de9a577d475de0c9f7908aeea31ee51c",
-        "revCount": 3687,
+        "rev": "c74d1e930f2dc2dcef86bde17b2b7e41640423c7",
+        "revCount": 3691,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -2271,11 +2271,11 @@
       },
       "locked": {
         "dir": "config/ai",
-        "lastModified": 1789194145,
-        "narHash": "sha256-CxSiFwuXDGHgc4WcqSxXcSdT+WGJo36cDDzhfBSnM8c=",
+        "lastModified": 1789234889,
+        "narHash": "sha256-JH9ma6wERTyLdaSDQup8EDSxvbhabt9gdaBRBQs1WDk=",
         "ref": "refs/heads/main",
-        "rev": "c2ab7346de9a577d475de0c9f7908aeea31ee51c",
-        "revCount": 3687,
+        "rev": "c74d1e930f2dc2dcef86bde17b2b7e41640423c7",
+        "revCount": 3691,
         "type": "git",
         "url": "ssh://gitea/johnw/nix-config"
       },
@@ -3040,11 +3040,11 @@
     "pi": {
       "flake": false,
       "locked": {
-        "lastModified": 1789148288,
-        "narHash": "sha256-08eOjrFdYFgWNaOiDrou4fK4Io6KLmDhsTZg6V1aU0o=",
+        "lastModified": 1789231987,
+        "narHash": "sha256-hGRA5W3A8di7Z8y7/bfGAPiLFEuM6kiTgbOM+47Qy1g=",
         "owner": "jwiegley",
         "repo": "pi",
-        "rev": "b20a8180b921f50900eef2a714066a6b39f0f09a",
+        "rev": "10998453bf8cd44487550290e32b6ccde77ad5c5",
         "type": "github"
       },
       "original": {
@@ -3121,11 +3121,11 @@
     "pi_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1789148288,
-        "narHash": "sha256-08eOjrFdYFgWNaOiDrou4fK4Io6KLmDhsTZg6V1aU0o=",
+        "lastModified": 1789231987,
+        "narHash": "sha256-hGRA5W3A8di7Z8y7/bfGAPiLFEuM6kiTgbOM+47Qy1g=",
         "owner": "jwiegley",
         "repo": "pi",
-        "rev": "b20a8180b921f50900eef2a714066a6b39f0f09a",
+        "rev": "10998453bf8cd44487550290e32b6ccde77ad5c5",
         "type": "github"
       },
       "original": {

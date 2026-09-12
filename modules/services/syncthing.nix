@@ -67,6 +67,42 @@ let
       devices = peerNames;
       ignorePatterns = [ "(?d).DS_Store" ];
     };
+    public = {
+      label = "Public";
+      path = "/tank/Public";
+      dataset = "tank/Public";
+      # 0755, NOT the 0700 used by the folders above. This one is deliberate and
+      # load-bearing: unlike Documents and Desktop, /tank/Public is not a private
+      # directory. It is a Samba share (samba.nix), the copyparty root
+      # (copyparty.nix), aria2's download target (aria2.nix), the dirscan-share
+      # destination, and a bind mount into both the copyparty and static-nginx
+      # containers. The ACL service below runs a literal `chmod ${mode}` on this
+      # path, so copying 0700 from a sibling would strip group and other access
+      # and break every one of those consumers at once.
+      #
+      # 0755 is exactly what the directory already carries (drwxr-xr-x, root:root),
+      # so this asserts the status quo rather than changing it. The ACL grants the
+      # service adds are additive -- group:: and other:: are untouched -- so the
+      # service owners of download/, pub/, files/ and private/ keep their access.
+      mode = "0755";
+      devices = peerNames;
+      # The operator asked for the whole tree, service-managed subdirectories
+      # included, so nothing here excludes download/, pub/ or the rest. These
+      # patterns only drop the macOS and Windows metadata that hera and clio
+      # would otherwise push -- the same set the folder's own pre-existing
+      # .stignore carried before /tank/Public left Syncthing in 2026-07.
+      ignorePatterns = [
+        "(?d).DS_Store"
+        "(?d)._*"
+        "(?d).Spotlight-V100"
+        "(?d).Trashes"
+        "(?d).fseventsd"
+        "(?d).TemporaryItems"
+        "(?d).localized"
+        "(?d)desktop.ini"
+        "(?d)Thumbs.db"
+      ];
+    };
   };
 
   folderList = lib.attrValues folders;

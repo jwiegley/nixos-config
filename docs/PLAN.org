@@ -6333,54 +6333,75 @@ dataset (12.5G) was reduced instead, which is easy to conflate with /tank/doc/Do
 Needs an answer from John. Note deletions will not free space until ZFS snapshots expire, and the restic
 repo will not shrink for ~7 days (--keep-daily 7).
 
-* TODO [#B] Technitium Query Logs (Sqlite) app fails to load Microsoft.Data.Sqlite
+* DONE [#B] Technitium Query Logs (Sqlite) app fails to load Microsoft.Data.Sqlite
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17
 :ID:       nixos-lu5
 :LABELS:   []
 :ISSUE_TYPE: bug
 :CREATED:  [2026-09-11 Fri 10:43]
-:MODIFIED: [2026-09-11 Fri 10:43]
+:MODIFIED: [2026-09-12 Sat 16:53]
 :CREATED_BY: johnw
+:FINISHED: [2026-09-12 Sat 16:53]
+:CLOSE_REASON: Exporter repointed to the PostgreSQL app; all three DnsQueryExporter alerts cleared. Original premise corrected: query logging never stopped, it migrated on 2026-09-11 and only the exporter was looking at the retired Sqlite app.
 :SOURCE_REPO: nixos
 :SOURCE_REPO_PATH: /etc/nixos
 :ORIGINAL_SIZE: 0
 :END:
 
-The Technitium DNS 'Query Logs (Sqlite)' app returns, on every API call:
+RESOLVED 2026-09-12, and the original diagnosis needs correcting.
 
-  Could not load file or assembly 'Microsoft.Data.Sqlite, Version=..., Culture=neutral, PublicKeyToken=...'. Invalid assembly public key. (0x8013141E)
+WHAT I GOT WRONG. This issue was filed claiming "DNS query logging collects
+nothing" and presenting a choice between completing the PostgreSQL migration or
+repairing the Sqlite app. The first half was false and the choice was therefore
+unreal.
 
-Effect: DNS query logging collects nothing. dns-query-log-exporter has been
-polling a dead app since 2026-09-11 ~09:54 local; its Prometheus series
-(dns_queries_total, dns_query_log_last_row) are frozen and the Loki stream is
-empty. last_row is stuck at 12912.
+Query logging never stopped. It MOVED. The PostgreSQL app has been logging
+continuously since the moment it was installed:
 
-Timeline points at the SQLite -> PostgreSQL migration started the same morning:
-  09:48  commit 9d8b148ba provisioned the 'technitium' PostgreSQL role/database
-  09:51  apps/'Query Logs (PostgreSQL)' appears in the state dir
-  09:52  apps/'Query Logs (Sqlite)' re-extracted (zip mtime), assembly load broken
-  09:54  first exporter failure
+  rows        730,328 -> 734,500 and climbing
+  oldest      2026-09-11 09:51   (exactly when the PG app appeared)
+  newest      live, lag 0s
+  last hour   23,093 rows  (~6.4/s, consistent with the ~10.5 q/s baseline
+                            recorded in commit 9d8b148ba)
 
-Note the app dir has mixed build dates: Microsoft.Data.Sqlite.dll is dated
-May 21 while the QueryLogsSqliteApp.* files are dated Jul 5, which is
-consistent with a partial or mismatched re-extraction.
+So the migration had ALREADY succeeded on 2026-09-11. The only thing still
+broken was this exporter, which kept polling the retired Sqlite app and getting
+"Could not load file or assembly 'Microsoft.Data.Sqlite'" back. I mistook an
+exporter pointing at the wrong place for an absence of data, because the
+exporter's metrics were the only thing I checked.
 
-Decision needed from the operator, because the two paths diverge:
+The lesson worth keeping: when a collector reports no data, confirm whether the
+SOURCE has data before concluding the pipeline is dead. Reading the technitium
+database directly would have settled this in one query on day one.
 
-  (a) Complete the migration. Enable 'Query Logs (PostgreSQL)' in the DNS web
-      console (the database side is already provisioned and verified), then
-      repoint the exporter: APP_NAME and CLASS_PATH at the top of
-      modules/monitoring/scripts/dns-query-log-exporter.py are hardcoded to
-      'Query Logs (Sqlite)' / 'QueryLogsSqlite.App'. Decide what happens to the
-      145 MB querylogs.db and to the exporter's row-number state file, whose
-      cursor is meaningless against a different backing store.
+THE FIX. modules/monitoring/scripts/dns-query-log-exporter.py now targets:
 
-  (b) Repair SQLite. Reinstall the app from the Technitium app store so the
-      assembly set is coherent, and leave the exporter as-is.
+  APP_NAME   = 'Query Logs (PostgreSQL)'
+  CLASS_PATH = 'QueryLogsPostgreSql.App'
 
-Not fixed here: the exporter's misclassification of this error as an
-authentication failure was a separate defect and is fixed independently.
+classPath is the app's namespace plus class, NOT the DLL name -- the Sqlite app
+ships QueryLogsSqliteApp.dll while its classPath is QueryLogsSqlite.App. The
+PostgreSQL value was inferred from the namespace strings in
+QueryLogsPostgreSqlApp.dll and then confirmed live.
+
+The stale row cursor was considered and needed no intervention. The state file
+held 12912 from the Sqlite store while PostgreSQL is at 734k, so the exporter's
+reset detection (latest_row < last_row) could not fire. The 10-page fetch cap
+bounds each cycle to 1000 entries and the cursor advances to the newest fetched
+row, so the ~717k backlog is skipped rather than dumped into Loki.
+
+VERIFIED LIVE after the switch: service active, NRestarts=0, no API errors,
+consecutive_failures 0, authentication_failures_total 0,
+api_errors{error_type="other"} 0, last_row advancing 733111 -> 734500,
+staleness 14s against a 300s threshold. All three alerts --
+DnsQueryExporterStaleData, DnsQueryExporterConsecutiveFailures and
+DnsQueryExporterHighAPIErrorRate -- have cleared.
+
+LEFT FOR THE OPERATOR: the broken "Query Logs (Sqlite)" app is still installed
+in the DNS web console, along with its 145 MB querylogs.db. Nothing reads either
+one now. Removing the app is a console action and is not urgent, but leaving it
+installed means the next person to look will find a permanently failing app.
 
 * DEFER [#D] Three WiFi/RF devices degraded together on 08-19/08-20: side-door lock, Ring doorbell, outdoor plug
 :PROPERTIES:

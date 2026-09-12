@@ -26,8 +26,25 @@ STATE_FILE = os.getenv('STATE_FILE', '/var/lib/dns-query-exporter/last_row.txt')
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '100'))  # entries per API call
 METRICS_PORT = int(os.getenv('METRICS_PORT', '9275'))  # Prometheus metrics port
 
-APP_NAME = 'Query Logs (Sqlite)'
-CLASS_PATH = 'QueryLogsSqlite.App'
+# Which Technitium app to read query logs from.
+#
+# Moved from the Sqlite app to the PostgreSQL one on 2026-09-12. The DNS server
+# was migrated to PostgreSQL query logging on 2026-09-11 09:51 (see commit
+# 9d8b148ba, which provisioned the database) and the PostgreSQL app has been
+# logging continuously ever since -- 730k rows and counting, with zero lag. The
+# Sqlite app was left installed but broken: it returns "Could not load file or
+# assembly 'Microsoft.Data.Sqlite'" on every call, which is what this exporter
+# kept polling.
+#
+# So the data never stopped being collected; only this exporter was looking in
+# the wrong place. Repointing it here is what completes that migration.
+#
+# classPath is the app's NAMESPACE plus the class, not the DLL name: the Sqlite
+# app ships QueryLogsSqliteApp.dll but its classPath is QueryLogsSqlite.App.
+# The PostgreSQL app follows the same shape, confirmed by the namespace strings
+# in QueryLogsPostgreSqlApp.dll.
+APP_NAME = 'Query Logs (PostgreSQL)'
+CLASS_PATH = 'QueryLogsPostgreSql.App'
 
 # Cache for IP to hostname lookups (avoid excessive DNS queries)
 hostname_cache = {}

@@ -7804,6 +7804,97 @@ direction. Each verified empirically rather than by rebuild-succeeded.
 
 Advance paired nix-config inputs to signed root revision 1e0d2f6e, advance direct Obr to b20b6f0, remove the obsolete direct rust-overlay workaround introduced for aa72, verify through the authoritative /etc/nixos build lock, publish the signed consumer revision, and activate Vulcan. Do not alter daemon policy, trust, CPU confinement, secrets, or service configuration beyond the evaluated system closure.
 
+* TODO [#D] PostgreSQLIdleInTransaction fires on transient transactions; no xmin pinning or vacuum impact
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-qot
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-12 Sat 12:21]
+:MODIFIED: [2026-09-12 Sat 12:21]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+#+begin_example
+PostgreSQLIdleInTransaction has been firing since 2026-09-12 11:46 local, but
+every DIRECT measurement of the database says there is no problem. The alert
+appears to be firing on a measurement artifact, not a real condition.
+
+THE RULE
+  expr: sum(pg_stat_activity_count{state="idle in transaction"}) > 5
+  for:  10m
+  description: "These pin xmin and block vacuum -- look for a client leaking
+                open transactions."
+
+EVIDENCE THAT NOTHING IS WRONG
+
+  1. Direct sampling of pg_stat_activity: 90 consecutive samples at 0.5s
+     intervals over 45 seconds returned ZERO every time. An earlier run of 15
+     samples at 2s intervals returned zero 14 times and 1 once, for 1.6s.
+     So the true count is ~0, occasionally 1, never sustained.
+
+  2. max(age(backend_xmin)) over all backends = 0. NOTHING is pinning the xmin
+     horizon. This directly contradicts the alert's stated consequence.
+
+  3. Autovacuum is current on every flume-data table (last runs 09-10 through
+     09-12), and dead-tuple ratios are modest (45k dead / 1.37M live on
+     flume_minute_samples, 3.3%). Vacuum is not being blocked.
+
+  4. Queried at the SAME INSTANT, psql and the exporter AGREE -- both returned
+     0, twice. The exporter is not lying about the instant it samples.
+
+WHAT I COULD NOT EXPLAIN
+
+Two query_range calls over the SAME wall-clock minutes returned completely
+different values: one showed a sustained 11-25 across 11:50-12:19, a later one
+showed 0-1 across 11:55-12:20. Stored samples do not change, so the difference
+must come from evaluation-instant alignment interacting with Prometheus's
+5-minute lookback on a gauge that is almost always 0 with brief spikes -- an
+evaluation landing just after a spike carries that spike forward for up to 5
+minutes, one landing elsewhere sees 0. I could not confirm that mechanism, and
+it should not be treated as established.
+
+WHY IT MATTERS ANYWAY. Whatever the mechanism, the rule's shape is fragile:
+an instantaneous, spiky, high-cardinality gauge summed with a bare sum() and
+gated on a count threshold. A count of transient transactions cannot
+distinguish "15 clients each holding a transaction for 1 second" (harmless)
+from "3 clients holding one for an hour" (the actual danger the rule exists to
+catch).
+
+SUGGESTED FIX: alert on transaction AGE rather than count, which is what the
+description actually claims to care about. Something like a rule over
+max(age of oldest idle-in-transaction), or on max(age(backend_xmin)) directly,
+since xmin pinning IS the harm. That would have stayed silent here and would
+still fire on a genuine leak.
+
+LIKELY CONTRIBUTING CAUSE: the 56 Home Assistant SQL sensors tracked in
+nixos-unl. They poll flume-data on a fixed cycle, so short transactions open
+and close constantly, which is exactly the traffic shape that makes a
+count-based instantaneous gauge noisy. Reducing that fan-out would likely
+quiet this alert as a side effect.
+
+Discovered during routine health monitoring on 2026-09-12.
+#+end_example
+
+** Dependencies
+
+#+begin_src json
+[
+  {
+    "issue_id": "nixos-qot",
+    "depends_on_id": "nixos-unl",
+    "type": "discovered-from",
+    "created_at": "2026-09-12T19:21:30.243512232Z",
+    "created_by": "johnw",
+    "metadata": "{}",
+    "thread_id": ""
+  }
+]
+#+end_src
+
 * DEFER [#C] Two certificates expire in ~33-34 days and neither is being renewed correctly
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

@@ -6941,6 +6941,74 @@ pushme-positron.service logged 1955 firing samples over the same 14 days, with
 hermes-fallback-counter at 669, logwatch at 644 and git-workspace-archive at 400.
 Filed separately.
 
+* TODO [#D] restic exclude '*.dtBase/Backup*' never matches .dtBase2, so 13.5 GB of DEVONthink internal backups go to B2
+:PROPERTIES:
+:OBR_SCHEMA_VERSION: 17
+:ID:       nixos-n1p
+:LABELS:   []
+:ISSUE_TYPE: bug
+:CREATED:  [2026-09-12 Sat 08:22]
+:MODIFIED: [2026-09-12 Sat 08:22]
+:CREATED_BY: johnw
+:SOURCE_REPO: nixos
+:SOURCE_REPO_PATH: /etc/nixos
+:ORIGINAL_SIZE: 0
+:END:
+
+The restic exclude for DEVONthink internal backups does not match the database
+format actually in use, so DEVONthink's own backups are being uploaded to B2.
+
+services.restic.backups.Databases excludes:
+
+    "*.dtBase/Backup*"    <-- .dtBase, the DEVONthink 2 format
+    "*.zim"
+    "slack*"
+    "Assembly"
+
+But every database under /tank/Databases is .dtBase2 (DEVONthink 3):
+
+    Files.dtBase2  Faith.dtBase2  Apple II.dtBase2  Haskell.dtBase2
+    Documents.dtBase2  Games.dtBase2  Articles.dtBase2  AI.dtBase2
+
+A restic exclude pattern is matched per path component, so "*.dtBase/Backup*"
+requires a component ending in exactly ".dtBase". ".dtBase2" does not match, and
+the exclude has therefore never had any effect on this data.
+
+CONSEQUENCE. DEVONthink writes full internal backups into the database bundle as
+"Backup <timestamp>" directories, and all of them are being backed up offsite:
+
+    16 Backup directories, 13.5 GB total
+
+Recent ones are dated 2026-09-05, 2026-09-09 (Files and Documents), so these
+accumulate on an ongoing basis rather than being a one-off. This is backup of a
+backup: B2 storage and egress paid for data that is already inside a dataset
+which is itself snapshotted by sanoid and mirrored locally.
+
+SUGGESTED FIX: change the pattern to cover both formats, e.g.
+
+    "*.dtBase2/Backup *"
+
+or more conservatively "*.dtBase*/Backup*" to catch both. Verify with
+`restic backup --dry-run` (or `--verbose` on the next run) that the Backup
+directories drop out, since getting this glob wrong is precisely how the
+current bug arose. Note the existing directories will NOT leave the repo until
+a forget+prune ages out every snapshot that references them.
+
+NOT THE CAUSE of the ResticRepositorySizeGrowing alert that surfaced this. That
+alert fired because the Databases repo jumped 58.97 -> 93.29 GB (+34.3 GB raw,
++45.3 GB unique content, +31,364 unique files) in the 2026-09-12 02:50 backup.
+That growth traces to Files.dtBase2 specifically -- 29,174 files / 34.0 GB with
+a ctime inside 3 days but OLD mtimes, which is the signature of a database
+rewrite rather than new authoring. Consistent with a DEVONthink rebuild or bulk
+import, i.e. operator activity and not a fault. Worth confirming with the
+operator, but nothing appears broken: restic_check_success is 1 and the
+snapshot count is steady at 11.
+
+Measurement note for anyone re-checking: `find -mtime` MISSES this entirely
+(only 91 files / 0.3 GB in 48h) because a rewrite preserves mtime. Use -ctime.
+
+Discovered during routine health monitoring on 2026-09-12.
+
 * DONE [#D] Textfile staleness guard has no coverage backstop: unclassified collectors freeze unnoticed
 :PROPERTIES:
 :OBR_SCHEMA_VERSION: 17

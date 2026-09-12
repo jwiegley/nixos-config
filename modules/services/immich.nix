@@ -338,4 +338,16 @@ in
   # the only other group-immich paths are /var/lib/immich (already 0755) and the
   # media tree itself.
   users.users.johnw.extraGroups = [ "immich" ];
+
+  # Command-line client for this server. Version-locked to the server via the
+  # overlay (see overlays/default.nix): both come from the nixpkgs-immich pin,
+  # so they are 3.0.3 together and a deliberate immich bump moves both at once.
+  #
+  # The CLI holds no credentials of its own here. It authenticates with a
+  # per-user API key created in the Immich web UI (Account Settings > API Keys)
+  # and stored by `immich login` in ~/.config/immich/auth.yml, mode 0600. That
+  # is deliberately NOT provisioned through SOPS: the key is per-person and
+  # revocable from the UI, and putting it in the system closure would make a
+  # user credential world-readable in the Nix store.
+  environment.systemPackages = [ pkgs.immich-cli ];
 }

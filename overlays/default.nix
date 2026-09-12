@@ -658,6 +658,15 @@ in
   # rationale and the procedure for upgrading it deliberately.
   immich = inputs.nixpkgs-immich.legacyPackages.${system}.immich;
 
+  # The CLI comes from the SAME pinned input as the server, deliberately.
+  # Immich's CLI talks to the server's REST API and upstream expects the two to
+  # be on the same release; taking it from nixpkgs (2.7.5) or nixpkgs-user
+  # (3.1.0) would pair a mismatched client with the pinned 3.0.3 server, and the
+  # pin exists precisely so this pairing cannot drift silently. Sourcing both
+  # from one input means a deliberate immich bump moves the CLI with it and
+  # nothing else can.
+  immich-cli = inputs.nixpkgs-immich.legacyPackages.${system}.immich-cli;
+
   # Home Assistant - Update to latest from nixpkgs-unstable (2026.7.2 as of
   # 2026-07-27; this note originally anchored on 2026.4.1+)
   # Stable nixpkgs-25.11 lags behind; unstable tracks HA releases closely.
